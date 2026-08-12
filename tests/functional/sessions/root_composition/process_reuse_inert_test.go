@@ -1,11 +1,13 @@
 package root_composition_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,6 +15,7 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -43,6 +46,48 @@ func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	second := runRootProcessCLIInvocation(t, fixture, 1, "run the failing session")
 	assertRootProcessFailure(t, second)
 	assertRootProcessReuse(t, fixture, first.session, second.session)
+}
+
+func TestRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T) {
+	t.Parallel()
+
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	const failureText = "injected direct JavaScript host failure"
+	var starterCalls atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			starterCalls.Add(1)
+			return errors.New(failureText)
+		},
+	})
+	support.CleanupProcess(t, process)
+
+	var stdout, stderr bytes.Buffer
+	err := process.Execute(root.Input{
+		Args: []string{
+			"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+		},
+		Env:              append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir()),
+		Stdin:            strings.NewReader(""),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          t.Context(),
+		WorkingDirectory: workingDirectory,
+	})
+	if err == nil || !strings.Contains(err.Error(), failureText) {
+		t.Fatalf("Process.Execute(direct JavaScript host failure) error = %v, want injected failure; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if starterCalls.Load() != 1 {
+		t.Fatalf("injected API server starter calls = %d, want exactly one", starterCalls.Load())
+	}
+	if strings.Contains(stdout.String(), "completed (SUCCEEDED)") {
+		t.Fatalf("direct JavaScript failure stdout = %q, want no success result", stdout.String())
+	}
 }
 
 type rootProcessReuseFixture struct {
