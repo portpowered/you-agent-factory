@@ -425,6 +425,7 @@ var safeFailureClassificationValues = map[string]struct{}{
 	"canceled":                    {},
 	"contradictory_completion":    {},
 	"missing_completion_evidence": {},
+	"missing_required_output":     {},
 	"parse":                       {},
 	"resource_limit":              {},
 	"storage":                     {},

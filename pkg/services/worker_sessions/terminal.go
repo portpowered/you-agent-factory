@@ -54,6 +54,14 @@ const (
 	// boundary returned a WorkResult classified as failed for an ordinary
 	// business or system reason, with no executor-panic evidence.
 	FailureCauseWorkersExecutionFailure FailureCauseKind = "WORKERS_EXECUTION_FAILURE"
+	// FailureCauseRejected reports that Workers cleanly completed with the
+	// business-level rejection outcome. The Work result remains a normal
+	// rejection for Factory routing; this classification only describes the
+	// terminal Worker Session projection.
+	FailureCauseRejected FailureCauseKind = "REJECTED"
+	// FailureCauseIncompleteOutput reports that Workers completed a readable
+	// attempt but did not produce the required final output contract.
+	FailureCauseIncompleteOutput FailureCauseKind = "INCOMPLETE_OUTPUT"
 	// FailureCauseAdapterFailure reports that the injected Workers boundary
 	// returned a failed WorkResult accompanied by a non-nil adapter error
 	// that is not executor-panic evidence.
@@ -70,11 +78,11 @@ const (
 	FailureCauseEventPublicationFailure FailureCauseKind = "EVENT_PUBLICATION_FAILURE"
 )
 
-// Valid reports whether k is one of the five bounded W2+W3 failure kinds.
+// Valid reports whether k is one of the seven bounded W2+W3 failure kinds.
 func (k FailureCauseKind) Valid() bool {
 	switch k {
-	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseAdapterFailure,
-		FailureCauseExecutorPanic, FailureCauseEventPublicationFailure:
+	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseRejected, FailureCauseAdapterFailure,
+		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure:
 		return true
 	default:
 		return false
@@ -239,7 +247,7 @@ func (r TerminalResult) Validate() error {
 
 var (
 	// ErrInvalidFailureCause reports a FailureCause naming a value outside
-	// the four bounded W2 failure kinds.
+	// the bounded W2+W3 failure kinds.
 	ErrInvalidFailureCause = errors.New("worker session: invalid failure cause")
 	// ErrInvalidTerminalResult reports a TerminalResult, or a terminal
 	// Session, whose Outcome/Cause combination violates the terminal

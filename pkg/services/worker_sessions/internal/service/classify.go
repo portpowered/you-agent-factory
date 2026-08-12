@@ -61,13 +61,29 @@ func classifyTerminal(
 			return terminalForDispatchResult(kind, detail, workResult, dispatchErr)
 		}
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
-	default: // workers.OutcomeRejected, workers.OutcomeFailed
+	case workers.OutcomeRejected:
+		// A cleanly completed rejection is a normal business result. Keep the
+		// Worker's rejection route and feedback untouched; Worker Sessions
+		// records the bounded classification so inspection does not confuse it
+		// with an execution failure.
+		if dispatchErr == nil && dispatchResult.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
+			return terminalForDispatchResult(
+				workersessions.FailureCauseRejected,
+				safeDetailForDispatchError(workersessions.FailureCauseRejected, workResult, nil, false),
+				workResult,
+				nil,
+			)
+		}
+		fallthrough
+	default: // workers.OutcomeFailed and contradictory/unknown outcomes
 		kind := workersessions.FailureCauseWorkersExecutionFailure
 		switch {
 		case isExecutorPanicEvidence(dispatchErr, workResult):
 			kind = workersessions.FailureCauseExecutorPanic
 		case dispatchErr != nil:
 			kind = workersessions.FailureCauseAdapterFailure
+		case isIncompleteOutputEvidence(workResult):
+			kind = workersessions.FailureCauseIncompleteOutput
 		}
 		return terminalForDispatchResult(
 			kind,
@@ -75,6 +91,23 @@ func classifyTerminal(
 			workResult,
 			dispatchErr,
 		)
+	}
+}
+
+// isIncompleteOutputEvidence recognizes only the Workers-owned structured
+// completion-validation facts. The raw WorkResult output and error are not
+// inspected here: a readable output-contract failure is classified by the
+// diagnostics emitted at the Worker boundary, while process and transcript
+// failures retain the ordinary execution-failure kind.
+func isIncompleteOutputEvidence(workResult workers.WorkResult) bool {
+	if strings.ToLower(strings.TrimSpace(diagnosticValue(workResult.Diagnostics, "failure_operation"))) != "completion_validation" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(diagnosticValue(workResult.Diagnostics, "failure_classification"))) {
+	case "contradictory_completion", "missing_completion_evidence", "missing_required_output":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -234,6 +267,8 @@ func rawDetail(err error) string {
 var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseStartFailure:            "the attempt could not be handed off to Workers",
 	workersessions.FailureCauseWorkersExecutionFailure: "the Workers execution result was not successful",
+	workersessions.FailureCauseRejected:                "the Workers result was rejected by the business review",
+	workersessions.FailureCauseIncompleteOutput:        "the Workers result did not include the required final output",
 	workersessions.FailureCauseAdapterFailure:          "the Workers adapter reported a failure",
 	workersessions.FailureCauseExecutorPanic:           "the Workers executor reported a panic",
 	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
@@ -400,6 +435,7 @@ var knownFailureClassifications = map[string]struct{}{
 	"canceled":                    {},
 	"contradictory_completion":    {},
 	"missing_completion_evidence": {},
+	"missing_required_output":     {},
 	"parse":                       {},
 	"resource_limit":              {},
 	"storage":                     {},

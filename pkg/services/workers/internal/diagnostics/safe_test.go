@@ -159,6 +159,33 @@ func TestSafeWorkDiagnosticsBoundsFailureMetadataAndKeepsCorrelation(t *testing.
 	}
 }
 
+func TestSafeWorkDiagnosticsPreservesIncompleteOutputClassification(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := &WorkDiagnostics{Provider: &ProviderDiagnostic{ResponseMetadata: map[string]string{
+		"failure_operation":      "completion_validation",
+		"failure_classification": "missing_required_output",
+	}}}
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	if safe == nil || safe.Provider == nil {
+		t.Fatalf("safe diagnostics = %#v, want provider diagnostics", safe)
+	}
+	if got := safe.Provider.ResponseMetadata["failure_classification"]; got != "missing_required_output" {
+		t.Fatalf("safe failure classification = %q, want missing_required_output", got)
+	}
+	payload, err := SafeWorkDiagnosticsEventPayload(safe)
+	if err != nil {
+		t.Fatalf("SafeWorkDiagnosticsEventPayload() error = %v", err)
+	}
+	replayed, err := WorkDiagnosticsFromSafeEventPayload(payload)
+	if err != nil {
+		t.Fatalf("WorkDiagnosticsFromSafeEventPayload() error = %v", err)
+	}
+	if replayed == nil || replayed.Provider == nil || replayed.Provider.ResponseMetadata["failure_classification"] != "missing_required_output" {
+		t.Fatalf("replayed diagnostics = %#v, want incomplete-output classification", replayed)
+	}
+}
+
 func TestWorkDiagnosticsFromSafeEventPayloadDecodesCamelCaseWireShape(t *testing.T) {
 	t.Parallel()
 	diagnostics, err := WorkDiagnosticsFromSafeEventPayload(json.RawMessage(`{

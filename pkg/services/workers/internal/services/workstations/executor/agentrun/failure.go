@@ -45,6 +45,44 @@ func agentRunDiagnostics(extra map[string]string) *workerexecution.WorkDiagnosti
 	return &workerexecution.WorkDiagnostics{Metadata: metadata}
 }
 
+// mergeAgentRunDiagnostics keeps the agent-run execution facts while
+// preserving structured result diagnostics emitted by an output validator.
+// In particular, decision-envelope validation facts must survive the
+// agent-run projection so Worker Sessions can classify a clean incomplete
+// response without inspecting the transcript.
+func mergeAgentRunDiagnostics(base, overlay *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
+	if base == nil {
+		return workerexecution.CloneWorkDiagnostics(overlay)
+	}
+	merged := workerexecution.CloneWorkDiagnostics(base)
+	if overlay == nil {
+		return merged
+	}
+	overlay = workerexecution.CloneWorkDiagnostics(overlay)
+	if overlay.RenderedPrompt != nil {
+		merged.RenderedPrompt = overlay.RenderedPrompt
+	}
+	if overlay.Provider != nil {
+		merged.Provider = overlay.Provider
+	}
+	if overlay.Invocation != nil {
+		merged.Invocation = overlay.Invocation
+	}
+	if overlay.Command != nil {
+		merged.Command = overlay.Command
+	}
+	if overlay.Panic != nil {
+		merged.Panic = overlay.Panic
+	}
+	for key, value := range overlay.Metadata {
+		if merged.Metadata == nil {
+			merged.Metadata = make(map[string]string)
+		}
+		merged.Metadata[key] = value
+	}
+	return merged
+}
+
 func failureClassForError(err error) string {
 	if err == nil {
 		return ""

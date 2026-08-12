@@ -17,6 +17,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+func TestMergeAgentRunDiagnosticsPreservesCompletionValidationFacts(t *testing.T) {
+	t.Parallel()
+
+	merged := mergeAgentRunDiagnostics(
+		agentRunDiagnostics(map[string]string{"tool_call_count": "1"}),
+		&workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataFailureOperation:      "completion_validation",
+				workerexecution.ProviderResponseMetadataFailureClassification: "missing_required_output",
+			},
+		}},
+	)
+	if merged == nil || merged.Metadata["execution_behavior"] != "agent_run" || merged.Metadata["tool_call_count"] != "1" {
+		t.Fatalf("merged agent-run diagnostics = %#v, want agent-run metadata", merged)
+	}
+	if merged.Provider == nil || merged.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureOperation] != "completion_validation" ||
+		merged.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataFailureClassification] != "missing_required_output" {
+		t.Fatalf("merged completion diagnostics = %#v, want completion-validation facts", merged)
+	}
+}
+
 func TestFailureClassForError_ModelhostLeaseDenied(t *testing.T) {
 	t.Parallel()
 

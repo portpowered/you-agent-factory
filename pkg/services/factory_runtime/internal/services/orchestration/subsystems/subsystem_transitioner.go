@@ -487,7 +487,9 @@ func resolveWorkResult(transition *petri.Transition, result *workerexecution.Wor
 		feedback:                    result.Feedback,
 		failureMetadata:             result.FailureMetadata,
 	}
-	if workstation, ok := runtimeWorkstation(transition.Name, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
+	if workstation, ok := runtimeWorkstation(transition.Name, runtimeConfig); ok && workstation != nil &&
+		len(workstation.StopWords) > 0 &&
+		strings.TrimSpace(workstation.OutcomeFormat) != interfaces.WorkstationOutcomeFormatDecisionEnvelope {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
 	}
 	return resolved

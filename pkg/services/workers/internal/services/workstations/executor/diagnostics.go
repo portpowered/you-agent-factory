@@ -105,6 +105,26 @@ func completionValidationDiagnostics(base *workerexecution.WorkDiagnostics, clas
 	return diagnostics
 }
 
+func validateWorkstationCompletion(
+	request workerexecution.WorkstationExecutionRequest,
+	result workerexecution.WorkResult,
+) workerexecution.WorkResult {
+	if result.Outcome == workerexecution.OutcomeFailed && result.FailureMetadata != nil &&
+		result.FailureMetadata.Type == workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
+		result.Diagnostics = completionValidationDiagnostics(result.Diagnostics, "missing_required_output")
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || request.OutputContract == "" {
+		return result
+	}
+	if contractErr := validateOutputContract(result.Output, request.OutputContract); contractErr != nil {
+		result.Outcome = workerexecution.OutcomeFailed
+		result.Error = "output contract failed: " + contractErr.Error()
+		result.FailureMetadata = structuredOutputFailureMetadata()
+		result.Diagnostics = completionValidationDiagnostics(result.Diagnostics, "missing_required_output")
+	}
+	return result
+}
+
 func setSafeFailureMetadata(diagnostics *workerexecution.WorkDiagnostics, err error) {
 	if diagnostics == nil || diagnostics.Provider == nil {
 		return

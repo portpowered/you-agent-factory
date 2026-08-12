@@ -128,6 +128,41 @@ func setPackagedReviewWorkerModel(t *testing.T, factoryDir, model string) {
 	}
 }
 
+func configurePackagedReviewRejectionClassification(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	path := filepath.Join(factoryDir, "factory.json")
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read materialized factory: %v", err)
+	}
+	var factory map[string]any
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode materialized factory: %v", err)
+	}
+	workstations, ok := factory["workstations"].([]any)
+	if !ok {
+		t.Fatal("materialized factory workstations are not an array")
+	}
+	for _, raw := range workstations {
+		workstation, ok := raw.(map[string]any)
+		if !ok || workstation["name"] != "review-review-work" {
+			continue
+		}
+		workstation["stopWords"] = []any{"COMPLETE"}
+		workstation["limits"] = map[string]any{"maxRetries": float64(3)}
+		updated, err := json.Marshal(factory)
+		if err != nil {
+			t.Fatalf("encode materialized factory: %v", err)
+		}
+		if err := os.WriteFile(path, updated, 0o644); err != nil {
+			t.Fatalf("write materialized factory: %v", err)
+		}
+		return
+	}
+	t.Fatal("materialized factory does not contain review-review-work workstation")
+}
+
 func assertPackagedReviewProviderInvocations(
 	t *testing.T,
 	requests []platformprocess.CommandRequest,

@@ -77,6 +77,26 @@ func TestNewService_DecisionEnvelopeContractThroughNestedOwner(t *testing.T) {
 	if result.Feedback != "Ship it." {
 		t.Fatalf("WorkResultFromDecisionEnvelopeJSONOrFailed() feedback = %q, want %q", result.Feedback, "Ship it.")
 	}
+
+	malformed := decisionEnvelopes.WorkResultFromDecisionEnvelopeJSONOrFailed(
+		"dispatch-incomplete",
+		"transition-incomplete",
+		"<COMPLETE>",
+	)
+	if malformed.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("incomplete envelope outcome = %q, want FAILED", malformed.Outcome)
+	}
+	if malformed.FailureMetadata == nil || malformed.FailureMetadata.Type != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("incomplete envelope failure metadata = %#v, want terminal unknown", malformed.FailureMetadata)
+	}
+	if malformed.Diagnostics == nil || malformed.Diagnostics.Provider == nil {
+		t.Fatalf("incomplete envelope diagnostics = %#v, want structured completion diagnostics", malformed.Diagnostics)
+	}
+	metadata := malformed.Diagnostics.Provider.ResponseMetadata
+	if metadata[workerexecution.ProviderResponseMetadataFailureOperation] != "completion_validation" ||
+		metadata[workerexecution.ProviderResponseMetadataFailureClassification] != "missing_required_output" {
+		t.Fatalf("incomplete envelope diagnostics = %#v, want bounded completion-validation facts", metadata)
+	}
 }
 
 func TestNewService_GoalRoutingDecisionEnvelopeThroughNestedOwner(t *testing.T) {

@@ -27,6 +27,8 @@ func TestFailureCauseKind_Valid(t *testing.T) {
 	valid := []workersessions.FailureCauseKind{
 		workersessions.FailureCauseStartFailure,
 		workersessions.FailureCauseWorkersExecutionFailure,
+		workersessions.FailureCauseRejected,
+		workersessions.FailureCauseIncompleteOutput,
 		workersessions.FailureCauseAdapterFailure,
 		workersessions.FailureCauseExecutorPanic,
 		workersessions.FailureCauseEventPublicationFailure,

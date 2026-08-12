@@ -29,6 +29,65 @@ type agentMockProvider struct {
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
 
+type decisionEnvelopeExecutorFixture struct {
+	result workerexecution.WorkResult
+}
+
+func (decisionEnvelopeExecutorFixture) UsesDecisionEnvelopeOutcome(*workerconfig.FactoryWorkstationConfig) bool {
+	return true
+}
+
+func (decisionEnvelopeExecutorFixture) UsesGoalRoutingDecisionEnvelope(*workerconfig.FactoryWorkstationConfig) bool {
+	return false
+}
+
+func (fixture decisionEnvelopeExecutorFixture) WorkResultFromDecisionEnvelopeJSONOrFailed(string, string, string) workerexecution.WorkResult {
+	return fixture.result
+}
+
+func (decisionEnvelopeExecutorFixture) WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(string, string, string) workerexecution.WorkResult {
+	return workerexecution.WorkResult{}
+}
+
+func TestDecisionEnvelopeWorkResultMergesCompletionValidationDiagnostics(t *testing.T) {
+	base := &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+		ResponseMetadata: map[string]string{
+			workerexecution.ProviderResponseMetadataFailureOperation: "provider_inference",
+		},
+	}}
+	parsed := workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeFailed,
+		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataFailureOperation:      "completion_validation",
+				workerexecution.ProviderResponseMetadataFailureClassification: "missing_required_output",
+			},
+		}},
+	}
+
+	result := decisionEnvelopeWorkResult(
+		decisionEnvelopeExecutorFixture{result: parsed},
+		workerexecution.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID:   "dispatch-incomplete",
+			TransitionID: "transition-review",
+		}},
+		workerexecution.InferenceResponse{Content: "<COMPLETE>"},
+		base,
+		0,
+		time.Now(),
+		time.Now,
+	)
+
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+		t.Fatalf("Diagnostics = %#v, want merged diagnostics", result.Diagnostics)
+	}
+	metadata := result.Diagnostics.Provider.ResponseMetadata
+	if metadata[workerexecution.ProviderResponseMetadataFailureOperation] != "completion_validation" ||
+		metadata[workerexecution.ProviderResponseMetadataFailureClassification] != "missing_required_output" {
+		t.Fatalf("completion diagnostics = %#v, want parser facts preserved over base diagnostics", metadata)
+	}
+}
+
 func TestAgentExecutor_UsesInjectedClockForWorkMetrics(t *testing.T) {
 	times := []time.Time{
 		time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC),
