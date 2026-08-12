@@ -280,9 +280,10 @@ func runWSRFT008FactoryWithProcess(
 }
 
 type wsrFT004RecordingProbe struct {
-	delegate     recordings.WorkerRecordingWriter
-	failOpening  bool
-	failPosition events.AggregateSequence
+	delegate          recordings.WorkerRecordingWriter
+	failOpening       bool
+	failPosition      events.AggregateSequence
+	failFailureMarker bool
 
 	mu           sync.Mutex
 	events       []string
@@ -519,6 +520,9 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecordingFailure(
 	ctx context.Context,
 	failure recordings.WorkerRecordingFailure,
 ) error {
+	if probe.failFailureMarker {
+		return errors.New("injected degradation-marker persistence failure")
+	}
 	writer, ok := probe.delegate.(recordings.WorkerRecordingFailureWriter)
 	if !ok {
 		return errors.New("durable Worker writer has no failure side")
