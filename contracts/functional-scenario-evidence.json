@@ -149,6 +149,12 @@
       ]
     },
     {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+      "stableIds": [
+        "rest/interruptWorkerSession"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"

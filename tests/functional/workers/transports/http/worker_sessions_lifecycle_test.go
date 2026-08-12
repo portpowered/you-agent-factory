@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -17,9 +18,11 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
+	"go.uber.org/zap"
 )
 
 func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
@@ -96,6 +99,77 @@ func TestWorkerSessionHTTPShutdownJoinsAdmittedWorker(t *testing.T) {
 	}
 	if runner.callCount() != 1 {
 		t.Fatalf("worker command calls = %d, want one during joined shutdown", runner.callCount())
+	}
+}
+
+func TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource(t *testing.T) {
+	gate := make(chan struct{})
+	runner := newFunctionalWorkerGate(gate)
+	server := startDirectWorkerSessionServer(t, runner)
+
+	start := postDirectWorkerSession(t, context.Background(), server.URL(), "interrupt-source-request", "interrupt-source", "interrupt-source-dispatch")
+	start.Body.Close()
+	if start.StatusCode != http.StatusAccepted {
+		t.Fatalf("POST /worker-sessions status = %d, want 202", start.StatusCode)
+	}
+	runner.waitStarted(t)
+
+	payload := factoryapi.WorkerSessionInterruptRequest{
+		RequestId:                "interrupt-request",
+		SuccessorWorkerSessionId: "interrupt-successor",
+		ReplacementMessage:       "replace the active work",
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal interrupt request: %v", err)
+	}
+	request, err := http.NewRequestWithContext(
+		t.Context(), http.MethodPost,
+		server.URL()+"/worker-sessions/interrupt-source/interrupt",
+		strings.NewReader(string(body)),
+	)
+	if err != nil {
+		t.Fatalf("construct interrupt request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	interrupt, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST Worker Session interrupt: %v", err)
+	}
+	defer interrupt.Body.Close()
+	if interrupt.StatusCode != http.StatusBadRequest {
+		responseBody, _ := io.ReadAll(interrupt.Body)
+		t.Fatalf("interrupt status = %d, want 400; body = %s", interrupt.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+	var result factoryapi.WorkerSessionInterruptError
+	if err := json.NewDecoder(interrupt.Body).Decode(&result); err != nil {
+		t.Fatalf("decode interrupt error: %v", err)
+	}
+	if result.Code != string(factoryapi.ErrorResponseCodeBADREQUEST) ||
+		result.Phase != factoryapi.WorkerSessionInterruptErrorPhaseValidation ||
+		result.RequestId == nil || *result.RequestId != payload.RequestId ||
+		result.SourceWorkerSessionId == nil || *result.SourceWorkerSessionId != "interrupt-source" ||
+		result.SuccessorWorkerSessionId == nil || *result.SuccessorWorkerSessionId != "interrupt-successor" ||
+		result.Source == nil || result.Source.State != factoryapi.WorkerSessionInterruptSnapshotStateRunning {
+		t.Fatalf("interrupt error = %#v, want validation snapshot for unassociated active source", result)
+	}
+	if runner.callCount() != 1 || runner.wasCanceled() {
+		t.Fatalf("provider command state after rejected interrupt = calls %d canceled=%t, want one active source", runner.callCount(), runner.wasCanceled())
+	}
+	functionalevidence.Covers(t, "rest/interruptWorkerSession")
+}
+
+func TestWorkerSessionHTTPControlRoutesReportUnavailableFromTopLevelServer(t *testing.T) {
+	server := transporthttp.NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	for _, action := range []string{"interrupt", "pause", "resume", "cancel", "terminate"} {
+		t.Run(action, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/worker-sessions/session-1/"+action, nil)
+			server.Handler().ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("POST Worker Session %s status = %d, want 500; body=%s", action, recorder.Code, recorder.Body.String())
+			}
+		})
 	}
 }
 
