@@ -190,7 +190,8 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 	total := 17
 	duration := int64(2500)
 	failure := &workersessions.FailureCause{
-		Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "provider exited with status 1",
+		Kind:                 workersessions.FailureCauseIncompleteOutput,
+		Detail:               "the Workers result did not include the required final output",
 		AgentRunFailureClass: workers.AgentRunFailureClassProvider,
 		ProviderFailureKind:  providers.ExecuteFailureKindDependency,
 	}
@@ -241,7 +242,8 @@ func assertFailureObservationIdentity(t *testing.T, response factoryapi.WorkerSe
 
 func assertFailureObservationCause(t *testing.T, response factoryapi.WorkerSessionObservation) {
 	t.Helper()
-	if response.Failure == nil || response.Failure.Detail != "provider exited with status 1" || response.Failure.ProviderFailureKind == nil ||
+	if response.Failure == nil || response.Failure.Kind != string(workersessions.FailureCauseIncompleteOutput) ||
+		response.Failure.Detail != "the Workers result did not include the required final output" || response.Failure.ProviderFailureKind == nil ||
 		response.Failure.AgentRunFailureClass == nil || *response.Failure.AgentRunFailureClass != workers.AgentRunFailureClassProvider {
 		t.Fatalf("failure = %#v, want structured failure diagnostics", response.Failure)
 	}

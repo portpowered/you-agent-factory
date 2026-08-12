@@ -120,6 +120,30 @@ func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) 
 	}
 }
 
+func TestBuildHistory_IncompleteOutputRemainsConsecutiveFailure(t *testing.T) {
+	consumed := []factorytoken.Token{{
+		Color: factorytoken.Color{WorkID: "review-1", WorkTypeID: "review"},
+		History: factorytoken.History{
+			ConsecutiveFailures: map[string]int{"review": 1},
+		},
+	}}
+
+	history := buildHistory(consumed, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeFailed,
+		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataFailureOperation:      "completion_validation",
+				workerexecution.ProviderResponseMetadataFailureClassification: "missing_required_output",
+			},
+		}},
+	}, "review-1")
+
+	if got := history.ConsecutiveFailures["review"]; got != 2 {
+		t.Fatalf("ConsecutiveFailures[review] = %d, want 2 for INCOMPLETE_OUTPUT", got)
+	}
+}
+
 func TestBuildHistory_ExcludesDifferentWorkOnSharedTrace(t *testing.T) {
 	const sharedTrace = "batch-trace"
 	consumed := []factorytoken.Token{

@@ -68,6 +68,8 @@ func classifyTerminal(
 			kind = workersessions.FailureCauseExecutorPanic
 		case dispatchErr != nil:
 			kind = workersessions.FailureCauseAdapterFailure
+		case isIncompleteOutputEvidence(workResult):
+			kind = workersessions.FailureCauseIncompleteOutput
 		}
 		return terminalForDispatchResult(
 			kind,
@@ -75,6 +77,23 @@ func classifyTerminal(
 			workResult,
 			dispatchErr,
 		)
+	}
+}
+
+// isIncompleteOutputEvidence recognizes only the Workers-owned structured
+// completion-validation facts. The raw WorkResult output and error are not
+// inspected here: a readable output-contract failure is classified by the
+// diagnostics emitted at the Worker boundary, while process and transcript
+// failures retain the ordinary execution-failure kind.
+func isIncompleteOutputEvidence(workResult workers.WorkResult) bool {
+	if strings.ToLower(strings.TrimSpace(diagnosticValue(workResult.Diagnostics, "failure_operation"))) != "completion_validation" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(diagnosticValue(workResult.Diagnostics, "failure_classification"))) {
+	case "contradictory_completion", "missing_completion_evidence", "missing_required_output":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -234,6 +253,7 @@ func rawDetail(err error) string {
 var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseStartFailure:            "the attempt could not be handed off to Workers",
 	workersessions.FailureCauseWorkersExecutionFailure: "the Workers execution result was not successful",
+	workersessions.FailureCauseIncompleteOutput:        "the Workers result did not include the required final output",
 	workersessions.FailureCauseAdapterFailure:          "the Workers adapter reported a failure",
 	workersessions.FailureCauseExecutorPanic:           "the Workers executor reported a panic",
 	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
@@ -400,6 +420,7 @@ var knownFailureClassifications = map[string]struct{}{
 	"canceled":                    {},
 	"contradictory_completion":    {},
 	"missing_completion_evidence": {},
+	"missing_required_output":     {},
 	"parse":                       {},
 	"resource_limit":              {},
 	"storage":                     {},

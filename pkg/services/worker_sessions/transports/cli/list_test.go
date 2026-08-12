@@ -27,11 +27,12 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 				WorkerSessionId: "worker-session-1", AttemptId: "attempt-1",
 				ProviderSessionAvailable: true,
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
-				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("COMPLETED"),
+				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
 				DurationBasis:  factoryapi.WorkerSessionObservationDurationBasis("RECORDED_TIMESTAMPS"),
 				Transcript:     factoryapi.WorkerSessionObservationTranscript("AVAILABLE"),
 				DurationMillis: int64Ptr(2500),
 				TokenUsage:     &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
+				Failure:        &factoryapi.WorkerSessionFailure{Kind: "INCOMPLETE_OUTPUT", Detail: "safe incomplete-output detail"},
 			},
 			{
 				WorkerSessionId: "worker-session-2", AttemptId: "attempt-2",
@@ -77,6 +78,9 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 	}
 	if got := string(document.Sessions[0]["tokenUsage"]); !strings.Contains(got, `"totalTokens":17`) {
 		t.Fatalf("session 1 tokenUsage = %s, want totalTokens 17", got)
+	}
+	if got := string(document.Sessions[0]["failure"]); !strings.Contains(got, `"kind":"INCOMPLETE_OUTPUT"`) {
+		t.Fatalf("session 1 failure = %s, want INCOMPLETE_OUTPUT", got)
 	}
 }
 
