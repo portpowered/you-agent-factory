@@ -124,7 +124,7 @@ func newTestRegistry(t *testing.T) *registry {
 	if err != nil {
 		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
 	}
-	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{})
+	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -602,6 +602,83 @@ func TestAppendDraft_InvalidDraft_ReturnsErrorAndAppendsNothing(t *testing.T) {
 	if _, err := r.appendDraft(context.Background(), workersessions.Topic("worker-1"), identity, "workers.draft.v1", workers.Draft{}); err == nil {
 		t.Fatal("appendDraft() error = nil, want a non-nil error for a zero-value Draft")
 	}
+}
+
+func TestPublishOpeningRecordWithoutWorkerRecordingArgumentStillOpensAndCloses(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+
+	if err := r.publishOpeningRecord(
+		context.Background(),
+		"worker-1",
+		"dispatch-1",
+		workers.SessionPayload{Status: string(workersessions.StateStarting)},
+		"codex",
+	); err != nil {
+		t.Fatalf("publishOpeningRecord() error = %v, want nil", err)
+	}
+	if err := r.publishTerminalRecord(
+		context.Background(),
+		"worker-1",
+		"dispatch-1",
+		workersessions.StateCompleted,
+		workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+	); err != nil {
+		t.Fatalf("publishTerminalRecord() error = %v, want nil", err)
+	}
+}
+
+func TestPublishOpeningRecordAwaitOpeningFailureClosesCapture(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	recording := &awaitOpeningFailureRecording{err: errors.New("opening barrier failed")}
+
+	err := r.publishOpeningRecord(
+		context.Background(),
+		"worker-1",
+		"dispatch-1",
+		workers.SessionPayload{Status: string(workersessions.StateStarting)},
+		"codex",
+		recording,
+	)
+	if !errors.Is(err, recording.err) {
+		t.Fatalf("publishOpeningRecord() error = %v, want %v", err, recording.err)
+	}
+	if !recording.closed {
+		t.Fatal("publishOpeningRecord() did not close the failed opening capture")
+	}
+}
+
+func TestPublishTerminalRecordMissingSessionReturnsNotFound(t *testing.T) {
+	r := newTestRegistry(t)
+	err := r.publishTerminalRecord(
+		context.Background(),
+		"missing",
+		"dispatch-1",
+		workersessions.StateCompleted,
+		workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+	)
+	if !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("publishTerminalRecord() error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+type awaitOpeningFailureRecording struct {
+	err    error
+	closed bool
+}
+
+func (recording *awaitOpeningFailureRecording) AwaitOpening(context.Context) error {
+	return recording.err
+}
+
+func (recording *awaitOpeningFailureRecording) Close(context.Context) error {
+	recording.closed = true
+	return nil
+}
+
+func (recording *awaitOpeningFailureRecording) Abort(ctx context.Context, _ error) error {
+	return recording.Close(ctx)
 }
 
 // TestPublishOutcomeLabel_CoversEveryOutcomeIncludingUnspecified proves the
@@ -1481,10 +1558,10 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
 	}
 
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}); !errors.Is(err, ErrMissingClock) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}, nil); !errors.Is(err, ErrMissingClock) {
 		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
 	}
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil); !errors.Is(err, ErrMissingProviderSessions) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil, nil); !errors.Is(err, ErrMissingProviderSessions) {
 		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
 	}
 

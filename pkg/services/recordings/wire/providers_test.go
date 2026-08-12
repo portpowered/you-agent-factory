@@ -33,6 +33,7 @@ func TestProviderBridgesConstructPublishedSurfaces(t *testing.T) {
 		nil,
 		time.Now,
 		"",
+		"",
 		nil,
 	)
 

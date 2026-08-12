@@ -65,7 +65,7 @@ func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t
 	if err != nil {
 		t.Fatalf("New events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(workersBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
+	workerSessions, err := workersessionswire.NewService(workersBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
@@ -259,7 +259,7 @@ func newInvokeWorkerTestFactory(
 	})
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	requireNoRootErr(t, err, "New events service")
-	sessions, err := workersessionswire.NewService(poolBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{})
+	sessions, err := workersessionswire.NewService(poolBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	requireNoRootErr(t, err, "New Worker Sessions service")
 
 	runtime, _, err := newTestFactoryWithScriptedLedger(

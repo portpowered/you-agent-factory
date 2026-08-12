@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 // ProviderRegistry is the narrow immutable provider identity projection
@@ -31,7 +30,8 @@ type Process struct {
 	initializer    processcontract.Initializer
 	providers      ProviderRegistry
 	lifecycle      ProcessLifecycle
-	acpServer      acp.Server
+	acpServer      processcontract.ACPServer
+	workerReader   processcontract.WorkerRecordingReader
 }
 
 func NewProcess(
@@ -39,7 +39,8 @@ func NewProcess(
 	initializer processcontract.Initializer,
 	providers ProviderRegistry,
 	lifecycle ProcessLifecycle,
-	acpServer acp.Server,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -53,6 +54,7 @@ func NewProcess(
 		providers:      providers,
 		lifecycle:      lifecycle,
 		acpServer:      acpServer,
+		workerReader:   workerReader,
 	}, nil
 }
 
@@ -78,11 +80,21 @@ func (p *Process) ProviderRegistry() ProviderRegistry {
 // same process's canonical Chat Sessions authority. It is exposed for
 // embedding and customer-scale verification; construction alone performs no
 // I/O, so returning it starts no connection.
-func (p *Process) ACPServer() acp.Server {
+func (p *Process) ACPServer() processcontract.ACPServer {
 	if p == nil {
 		return nil
 	}
 	return p.acpServer
+}
+
+// WorkerRecordingReader returns the neutral detached Worker snapshot reader
+// composed for this process. The application process does not depend on the
+// Recordings service; the root boundary owns decoding into its public value.
+func (p *Process) WorkerRecordingReader() processcontract.WorkerRecordingReader {
+	if p == nil {
+		return nil
+	}
+	return p.workerReader
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

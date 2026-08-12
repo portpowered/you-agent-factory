@@ -14,6 +14,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -40,6 +41,7 @@ func NewService(
 	logger logging.Logger,
 	clock platformclock.Source,
 	providerSessions providersessions.Service,
+	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
 	return internalservice.New(
 		boundary,
@@ -47,5 +49,6 @@ func NewService(
 		logger,
 		clock,
 		providerSessions,
+		recording,
 	)
 }

@@ -75,7 +75,6 @@ type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
 }
-
 type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
@@ -83,6 +82,7 @@ type runtimeConfig struct {
 	workerService             workers.WorkstationExecutionService
 	providerInvocation        workers.WorkstationRequestExecutor
 	workerSessionsFactory     factory.WorkerSessionsFactory
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
@@ -91,6 +91,7 @@ type runtimeConfig struct {
 	clock                     factory.Clock
 	workRequestIDs            work.RequestIDGenerator
 	eventHistory              recordings.RuntimeLedger
+	recordingID               string // runtime recording target propagated to Worker Sessions
 	worldStateProjector       factory.WorldStateProjector
 	providerSessions          providersessions.Service
 	submissionRecorder        recordings.SubmissionRecorder
@@ -123,6 +124,7 @@ func New(
 	workerService workers.WorkstationExecutionService,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -130,6 +132,7 @@ func New(
 	clock factory.Clock,
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
+	recordingID string,
 	worldStateProjector factory.WorldStateProjector,
 	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
@@ -168,6 +171,9 @@ func New(
 	if workerSessionsFactory == nil {
 		return nil, fmt.Errorf("a canonical Worker Sessions factory is required")
 	}
+	if workerPoolBoundaryFactory == nil {
+		return nil, fmt.Errorf("a canonical Workers pool-boundary factory is required")
+	}
 	if runtimeMode == "" {
 		runtimeMode = interfaces.RuntimeModeBatch
 	}
@@ -178,6 +184,7 @@ func New(
 		workerService:             workerService,
 		providerInvocation:        providerInvocation,
 		workerSessionsFactory:     workerSessionsFactory,
+		workerPoolBoundaryFactory: workerPoolBoundaryFactory,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -186,6 +193,7 @@ func New(
 		workRequestIDs:            workRequestIDs,
 		inlineDispatch:            inlineDispatch,
 		eventHistory:              eventHistory,
+		recordingID:               strings.TrimSpace(recordingID),
 		worldStateProjector:       worldStateProjector,
 		providerSessions:          providerSessions,
 		submissionRecorder:        submissionRecorder,
@@ -437,7 +445,7 @@ func configureRuntimeDispatch(
 	workers.WorkstationPoolBoundary,
 	error,
 ) {
-	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+	workersBoundary := cfg.workerPoolBoundaryFactory(workers.WorkstationPoolBoundaryConfig{
 		Service:            cfg.workerService,
 		Executors:          cfg.workerExecutors,
 		RouteNames:         runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),

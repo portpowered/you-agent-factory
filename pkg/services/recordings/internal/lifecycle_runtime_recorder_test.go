@@ -151,6 +151,15 @@ func newLifecycleRecorderForTest(
 	startedAt time.Time,
 	path string,
 ) *lifecycleRuntimeRecorder {
+	return newLifecycleRecorderWithIDForTest(t, startedAt, "", path)
+}
+
+func newLifecycleRecorderWithIDForTest(
+	t *testing.T,
+	startedAt time.Time,
+	recordingID string,
+	path string,
+) *lifecycleRuntimeRecorder {
 	t.Helper()
 	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
 		"id": "factory-1",
@@ -162,6 +171,7 @@ func newLifecycleRecorderForTest(
 		time.Hour,
 		nil,
 		func() time.Time { return startedAt },
+		recordingID,
 		path,
 		func(
 			factorydefinitions.FactorySnapshotSource,
@@ -186,15 +196,17 @@ func newLifecycleRecorderForTest(
 // when the initial Factory snapshot append fails after Begin has already
 // started it, rather than leaking it.
 type stubRecordingLifecycle struct {
-	beginResult recordings.RecordingLifecycleResult
-	beginErr    error
-	appendErr   error
-	appendCalls int
-	stopCalls   int
-	stopErr     error
+	beginResult  recordings.RecordingLifecycleResult
+	beginErr     error
+	beginRequest recordings.BeginRecordingRequest
+	appendErr    error
+	appendCalls  int
+	stopCalls    int
+	stopErr      error
 }
 
-func (s *stubRecordingLifecycle) Begin(recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
+func (s *stubRecordingLifecycle) Begin(request recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
+	s.beginRequest = request
 	return s.beginResult, s.beginErr
 }
 
@@ -267,6 +279,33 @@ func TestLifecycleRuntimeRecorderBindStopsPeriodicWorkOnInitialAppendFailure(t *
 	}
 	if recorderErr := recorder.Err(); !errors.Is(recorderErr, stopErr) {
 		t.Fatalf("recorder.Err() = %v, want it to observe the preserved stop cleanup cause", recorderErr)
+	}
+}
+
+func TestLifecycleRuntimeRecorderBindsConcreteRecordingIdentity(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 8, 4, 13, 0, 0, 0, time.UTC)
+	const recordingID recordings.LifecycleRecordingID = "runtime-recording-identity"
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{
+			Status: recordings.LifecycleStatus{RecordingID: recordingID},
+		},
+	}
+	recorder := newLifecycleRecorderWithIDForTest(
+		t, startedAt, string(recordingID), "identity-check.json",
+	)
+
+	if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{
+		FactorySessionID: "session-identity-check",
+	}); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
+	}
+	if lifecycle.beginRequest.RecordingID != recordingID {
+		t.Fatalf("Begin recording identity = %q, want %q", lifecycle.beginRequest.RecordingID, recordingID)
+	}
+	if recorder.recordingID != recordingID {
+		t.Fatalf("bound recording identity = %q, want %q", recorder.recordingID, recordingID)
 	}
 }
 

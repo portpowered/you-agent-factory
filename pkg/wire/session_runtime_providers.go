@@ -729,12 +729,14 @@ func provideRuntimeRecorderFactory(
 		flushInterval time.Duration,
 		loaded factorydefinitions.LoadedFactorySource,
 		now func() time.Time,
+		recordingID string,
 		recordPath string,
 	) (recordings.RuntimeRecorder, error) {
 		return recordingswire.NewLifecycleRuntimeRecorder(
 			flushInterval,
 			loaded,
 			now,
+			recordingID,
 			recordPath,
 			captureLoadedFactorySnapshot,
 		)

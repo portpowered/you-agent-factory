@@ -22,6 +22,8 @@ type controlledBoundary struct {
 
 	started      chan struct{}
 	startedOnce  sync.Once
+	admitted     chan struct{}
+	admittedOnce sync.Once
 	accept       workers.WorkstationDispatchAcceptFunc
 	request      workers.WorkstationDispatchRequest
 	cancelCalls  []workers.WorkstationDispatchCancelRequest
@@ -32,7 +34,11 @@ type controlledBoundary struct {
 var _ workers.WorkstationPoolBoundary = (*controlledBoundary)(nil)
 
 func newControlledBoundary() *controlledBoundary {
-	return &controlledBoundary{started: make(chan struct{}), cancelCalled: make(chan struct{}, 1)}
+	return &controlledBoundary{
+		started:      make(chan struct{}),
+		admitted:     make(chan struct{}),
+		cancelCalled: make(chan struct{}, 1),
+	}
 }
 
 func (*controlledBoundary) Start(context.Context) error { return nil }
@@ -49,6 +55,7 @@ func (b *controlledBoundary) PublishWithAdmission(_ context.Context, request wor
 	b.startedOnce.Do(func() { close(b.started) })
 	if admitted != nil {
 		admitted()
+		b.admittedOnce.Do(func() { close(b.admitted) })
 	}
 	return nil
 }
@@ -137,7 +144,7 @@ func startControlledSession(t *testing.T, registry workersessions.Service, bound
 		}
 		result <- started
 	}()
-	<-boundary.started
+	<-boundary.admitted
 	return result
 }
 

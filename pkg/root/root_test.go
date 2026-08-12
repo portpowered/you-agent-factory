@@ -18,9 +18,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestMain(m *testing.M) {
@@ -65,6 +67,136 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	if apiStarts != 0 {
 		t.Fatalf("construction failure started API lifecycle %d times, want zero", apiStarts)
 	}
+}
+
+func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
+	t.Parallel()
+
+	if reader := WorkerRecordingReaderFromProcess(nil); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(nil) = %#v, want nil", reader)
+	}
+	processWithoutReader, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(without reader) error = %v", err)
+	}
+	if reader := WorkerRecordingReaderFromProcess(processWithoutReader); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(without reader) = %#v, want nil", reader)
+	}
+
+	readerWriter := &rootWorkerRecordingReaderProbe{}
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: readerWriter,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(reader writer) error = %v", err)
+	}
+	got := WorkerRecordingReaderFromProcess(process)
+	if got == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if snapshot, err := got.LoadWorkerRecording(t.Context(), "root-recording"); err != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess.LoadWorkerRecording() error = %v", err)
+	} else if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
+		t.Fatalf("WorkerRecordingReaderFromProcess snapshot = %#v, want empty snapshot", snapshot)
+	}
+
+	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
+			return nil
+		}),
+	})
+	if writeOnlyProcess != nil {
+		t.Fatal("BuildProcess(write-only writer) returned a process")
+	}
+	if !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("BuildProcess(write-only writer) error = %v, want ErrMissingWorkerRecordingReader", err)
+	}
+}
+
+func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("worker recording reader unavailable")
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		rootWorkerProcessReader{err: wantErr},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	reader := WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if _, err := reader.LoadWorkerRecording(t.Context(), "root-recording"); !errors.Is(err, wantErr) {
+		t.Fatalf("LoadWorkerRecording() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	reader := WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if _, err := reader.LoadWorkerRecording(t.Context(), "root-recording"); err == nil ||
+		!strings.Contains(err.Error(), "decode Worker recording snapshot") {
+		t.Fatalf("LoadWorkerRecording() error = %v, want decode diagnostic", err)
+	}
+}
+
+type rootWorkerRecordingReaderProbe struct{}
+
+type rootWorkerProcessRegistry struct{}
+
+func (rootWorkerProcessRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+
+type rootWorkerProcessLifecycle struct{}
+
+func (rootWorkerProcessLifecycle) Close(context.Context) error { return nil }
+
+type rootWorkerProcessReader struct {
+	payload json.RawMessage
+	err     error
+}
+
+func (reader rootWorkerProcessReader) LoadWorkerRecording(context.Context, string) (json.RawMessage, error) {
+	return reader.payload, reader.err
+}
+
+func (*rootWorkerRecordingReaderProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (*rootWorkerRecordingReaderProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
 }
 
 func TestBuildProcessComposesInertModelsRuntimeHost(t *testing.T) {

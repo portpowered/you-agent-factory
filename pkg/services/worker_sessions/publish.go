@@ -590,13 +590,34 @@ func progressDraftProvenance(fragment workers.ProgressFragment) workers.Provenan
 	if nativeType == "" {
 		nativeType = strings.TrimSpace(fragment.Metadata["native_type"])
 	}
+	delivery := workers.DeliveryNativeStream
+	fidelity := workers.FidelityNormalized
+	representation := workers.RepresentationNotification
+	if isFinalOnlyProviderMessage(provider, nativeType) {
+		delivery = workers.DeliveryNativeFinal
+		fidelity = workers.FidelityFinalOnly
+		representation = workers.RepresentationSnapshot
+	} else if isFinalOnlyProviderLifecycle(provider, nativeType) {
+		delivery = workers.DeliverySynthesized
+		fidelity = workers.FidelityLifecycleOnly
+	}
 	return workers.Provenance{
-		Delivery:        workers.DeliveryNativeStream,
-		Fidelity:        workers.FidelityNormalized,
+		Delivery:        delivery,
+		Fidelity:        fidelity,
 		NativeEventType: nativeType,
 		Provider:        provider,
-		Representation:  workers.RepresentationNotification,
+		Representation:  representation,
 	}
+}
+
+func isFinalOnlyProviderMessage(provider, nativeType string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), workers.RunnerIDAntigravity) &&
+		strings.EqualFold(strings.TrimSpace(nativeType), "message.completed")
+}
+
+func isFinalOnlyProviderLifecycle(provider, nativeType string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), workers.RunnerIDAntigravity) &&
+		strings.HasPrefix(strings.ToLower(strings.TrimSpace(nativeType)), "run.")
 }
 
 // progressFactVocabulary resolves the fact's Kind and Phase from whichever of
