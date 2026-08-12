@@ -31,6 +31,8 @@ import (
 // Windows from becoming a test failure without slowing the success path.
 const functionalServerReadyTimeout = 15 * time.Second
 
+const workerSessionReplayPollInterval = 10 * time.Millisecond
+
 // FunctionalAPIServerConfig describes customer process inputs and replaceable
 // external boundaries. Product/runtime configuration is supplied through Args
 // exactly as it is for a real CLI invocation.
@@ -343,18 +345,64 @@ func GetWorkerSessionEventsByIDAt(t testing.TB, baseURL, workerSessionID string)
 	endpoint := strings.TrimSuffix(baseURL, "/") +
 		"/factory-sessions/" + factorysessions.DefaultSessionID +
 		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events?replayOnly=true"
+	events, err := waitForCompleteWorkerSessionReplay(ctx, endpoint)
+	if err != nil {
+		t.Fatalf("GET Worker Session events: %v", err)
+	}
+	return events
+}
+
+func waitForCompleteWorkerSessionReplay(
+	ctx context.Context,
+	endpoint string,
+) ([]factoryapi.WorkerSessionEvent, error) {
+	ticker := time.NewTicker(workerSessionReplayPollInterval)
+	defer ticker.Stop()
+	var lastSummary *factoryapi.WorkerSessionReplaySummary
+	for {
+		events, summary, err := readWorkerSessionReplay(ctx, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		lastSummary = summary
+		if summary != nil && summary.Complete {
+			return events, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf(
+				"waiting for complete replay at %s; last summary=%#v: %w",
+				endpoint,
+				lastSummary,
+				ctx.Err(),
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+func readWorkerSessionReplay(
+	ctx context.Context,
+	endpoint string,
+) ([]factoryapi.WorkerSessionEvent, *factoryapi.WorkerSessionReplaySummary, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		t.Fatalf("build Worker Session events request: %v", err)
+		return nil, nil, fmt.Errorf("build Worker Session events request: %w", err)
 	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		t.Fatalf("GET Worker Session events: %v", err)
+		return nil, nil, fmt.Errorf("GET Worker Session events: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET Worker Session events status = %d url = %s body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
+		return nil, nil, fmt.Errorf(
+			"GET Worker Session events status = %d url = %s body = %s",
+			response.StatusCode,
+			endpoint,
+			strings.TrimSpace(string(body)),
+		)
 	}
 
 	var events []factoryapi.WorkerSessionEvent
@@ -366,18 +414,20 @@ func GetWorkerSessionEventsByIDAt(t testing.TB, baseURL, workerSessionID string)
 		}
 		var event factoryapi.WorkerSessionEvent
 		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-			t.Fatalf("decode Worker Session event: %v", err)
+			return nil, nil, fmt.Errorf("decode Worker Session event: %w", err)
 		}
 		events = append(events, event)
 		if string(event.Delivery) == "REPLAY_SUMMARY" {
-			return events
+			if event.ReplaySummary == nil {
+				return nil, nil, fmt.Errorf("Worker Session replay summary is empty: %s", endpoint)
+			}
+			return events, event.ReplaySummary, nil
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		t.Fatalf("read Worker Session events: %v", err)
+		return nil, nil, fmt.Errorf("read Worker Session events: %w", err)
 	}
-	t.Fatalf("Worker Session event stream ended without REPLAY_SUMMARY: %s", endpoint)
-	return nil
+	return nil, nil, fmt.Errorf("Worker Session event stream ended without REPLAY_SUMMARY: %s", endpoint)
 }
 
 func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) FactoryEventsInvalidCursorError {
