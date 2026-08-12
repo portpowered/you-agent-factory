@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
 	"strings"
 	"time"
 )
@@ -295,6 +296,11 @@ type LiveChangeSessionState struct {
 	Factory           *factorydefinitions.FactorySnapshot
 }
 
+// LiveChangeStateProvider supplies the current lifecycle and revision
+// projection for one Factory Session. It is evaluated only after request
+// identity and replay checks permit a new admission attempt.
+type LiveChangeStateProvider func(context.Context, string) (LiveChangeSessionState, error)
+
 // LiveChangeApplicationRequest is the explicit application port input. The
 // application must mutate the running runtime atomically with its own resource
 // or orchestration policy and return the complete effective Factory snapshot.
@@ -345,6 +351,27 @@ type LiveChangePreflight interface {
 // acquisition; a nil implementation falls back to the session-local guard.
 type LiveChangeAdmission interface {
 	AcquireLiveChange(context.Context, string) (release func(), err error)
+}
+
+// LiveChangeOperation contains the runtime-scoped capabilities used by the
+// process-scoped live-change coordinator. The coordinator is constructed once
+// by Factory Sessions wire; state, event history, application behavior, clock,
+// and logging remain explicit for each live or durable session operation.
+type LiveChangeOperation struct {
+	StateProvider LiveChangeStateProvider
+	Events        LiveChangeEventLog
+	Application   LiveChangeApplication
+	Now           func() time.Time
+	Logger        *zap.Logger
+}
+
+// LiveChangeCoordinator is the owner-published admission capability shared by
+// live Factory Sessions and durable JavaScript execution. Implementations own
+// request normalization, idempotency, recovery, and canonical event closure;
+// callers supply only the runtime-specific operation ports.
+type LiveChangeCoordinator interface {
+	ApplyLiveChange(context.Context, string, LiveChangeRequest, LiveChangeOperation) (LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string, LiveChangeOperation) (LiveChangeResult, error)
 }
 
 // LiveChangeErrorCode identifies a safe, stable failure category.

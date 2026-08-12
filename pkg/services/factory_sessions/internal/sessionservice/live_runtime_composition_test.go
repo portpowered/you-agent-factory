@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
@@ -70,6 +71,14 @@ type liveRuntimeGatewayHost interface {
 }
 
 func newLiveRuntimeCompositionGateway(t *testing.T, host liveRuntimeGatewayHost) *factorysessionservice.Service {
+	return newLiveRuntimeCompositionGatewayWithCoordinator(t, host, livechange.NewCoordinator())
+}
+
+func newLiveRuntimeCompositionGatewayWithCoordinator(
+	t *testing.T,
+	host liveRuntimeGatewayHost,
+	coordinator factorysessions.LiveChangeCoordinator,
+) *factorysessionservice.Service {
 	t.Helper()
 	responseService, err := responsestreamwire.NewService(func() string { return "response-event-live-runtime" }, nil, newTestEventsServiceForSessionService(t))
 	if err != nil {
@@ -79,7 +88,61 @@ func newLiveRuntimeCompositionGateway(t *testing.T, host liveRuntimeGatewayHost)
 	if err != nil {
 		t.Fatalf("construct response-stream registry: %v", err)
 	}
-	return factorysessionservice.NewWithResponseService(host, host, host, registry, nil, nil, responseService)
+	return factorysessionservice.NewWithLiveChangeCoordinator(host, host, host, registry, nil, nil, responseService, coordinator)
+}
+
+type recordingLiveChangeCoordinator struct {
+	applyCalls   int
+	recoverCalls int
+}
+
+func (c *recordingLiveChangeCoordinator) ApplyLiveChange(
+	context.Context,
+	string,
+	factorysessions.LiveChangeRequest,
+	factorysessions.LiveChangeOperation,
+) (factorysessions.LiveChangeResult, error) {
+	c.applyCalls++
+	return factorysessions.LiveChangeResult{Outcome: factorysessions.LiveChangeOutcomeNoOp}, nil
+}
+
+func (c *recordingLiveChangeCoordinator) RecoverLiveChange(
+	context.Context,
+	string,
+	string,
+	factorysessions.LiveChangeOperation,
+) (factorysessions.LiveChangeResult, error) {
+	c.recoverCalls++
+	return factorysessions.LiveChangeResult{Outcome: factorysessions.LiveChangeOutcomeReplayed}, nil
+}
+
+func TestService_UsesInjectedLiveChangeCoordinator(t *testing.T) {
+	coordinator := &recordingLiveChangeCoordinator{}
+	const sessionID = "session-injected-coordinator"
+	factory := &gatewayLifecycleFactory{factoryState: "RUNNING"}
+	session := &livesession.LiveSession{
+		ID: sessionID,
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: factory,
+			Clock:   serviceTestClock,
+		},
+	}
+	host := &liveRuntimeEffectHost{
+		openTestHost: openTestHost{sessions: map[string]*livesession.LiveSession{sessionID: session}},
+		factory:      factory,
+	}
+	gateway := newLiveRuntimeCompositionGatewayWithCoordinator(t, host, coordinator)
+	result, err := gateway.ApplyLiveChange(
+		context.Background(),
+		sessionID,
+		factorysessions.LiveChangeRequest{RequestID: "request-injected-coordinator"},
+	)
+	if err != nil {
+		t.Fatalf("ApplyLiveChange: %v", err)
+	}
+	if result.Outcome != factorysessions.LiveChangeOutcomeNoOp || coordinator.applyCalls != 1 {
+		t.Fatalf("result = %#v, apply calls = %d, want injected coordinator", result, coordinator.applyCalls)
+	}
 }
 
 func TestNewWithResponseService_ComposesLiveRuntimeWithoutRegistryEffects(t *testing.T) {

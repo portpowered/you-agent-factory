@@ -17,18 +17,24 @@ import (
 	"go.uber.org/zap"
 )
 
-// StateProvider supplies the current lifecycle and revision projection for a
-// session. It is called only after request identity/replay checks permit a new
-// admission attempt.
-type StateProvider func(context.Context, string) (factorysessions.LiveChangeSessionState, error)
+// StateProvider is retained as the implementation-local spelling of the
+// Factory Sessions owner contract.
+type StateProvider = factorysessions.LiveChangeStateProvider
 
-// Service is the pure admission coordinator with injected clock and safe log
-// sink. It has no mutable request registry: canonical events are the recovery
-// source of truth.
+// Service is the pure admission coordinator with no mutable request registry:
+// canonical events are the recovery source of truth. Runtime-specific effects
+// are supplied through LiveChangeOperation for each call.
 type Service struct {
 	now    func() time.Time
 	logger *zap.Logger
 }
+
+var _ factorysessions.LiveChangeCoordinator = (*Service)(nil)
+
+// NewCoordinator constructs the process-scoped coordinator for the Factory
+// Sessions wire graph. Runtime-specific clocks and loggers are supplied at the
+// operation boundary rather than captured by this shared instance.
+func NewCoordinator() *Service { return &Service{} }
 
 // New constructs an admission coordinator with explicit process effects.
 func New(now func() time.Time, logger *zap.Logger) *Service {
@@ -41,10 +47,96 @@ func New(now func() time.Time, logger *zap.Logger) *Service {
 	return &Service{now: now, logger: logger}
 }
 
+// ApplyLiveChange applies one live change through the shared coordinator and
+// explicit runtime operation ports.
+func (s *Service) ApplyLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	operation factorysessions.LiveChangeOperation,
+) (factorysessions.LiveChangeResult, error) {
+	configured, err := s.forOperation(operation)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	return configured.apply(
+		ctx,
+		sessionID,
+		request,
+		operation.StateProvider,
+		operation.Events,
+		operation.Application,
+	)
+}
+
+// RecoverLiveChange closes one pending request through the shared coordinator
+// and explicit runtime operation ports.
+func (s *Service) RecoverLiveChange(
+	ctx context.Context,
+	sessionID string,
+	requestID string,
+	operation factorysessions.LiveChangeOperation,
+) (factorysessions.LiveChangeResult, error) {
+	configured, err := s.forOperation(operation)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	return configured.recover(
+		ctx,
+		sessionID,
+		requestID,
+		operation.StateProvider,
+		operation.Events,
+		operation.Application,
+	)
+}
+
+func (s *Service) forOperation(operation factorysessions.LiveChangeOperation) (*Service, error) {
+	if s == nil {
+		return nil, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordinator is unavailable",
+		}
+	}
+	now := operation.Now
+	if now == nil {
+		now = s.now
+	}
+	if now == nil {
+		return nil, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change clock is unavailable",
+		}
+	}
+	logger := operation.Logger
+	if logger == nil {
+		logger = s.logger
+	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &Service{now: now, logger: logger}, nil
+}
+
 // Apply validates, admits, applies, and closes one live change. A request
 // event is appended before application only after all pre-admission checks
 // succeed.
 func (s *Service) Apply(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	stateProvider StateProvider,
+	events factorysessions.LiveChangeEventLog,
+	application factorysessions.LiveChangeApplication,
+) (factorysessions.LiveChangeResult, error) {
+	return s.ApplyLiveChange(ctx, sessionID, request, factorysessions.LiveChangeOperation{
+		StateProvider: stateProvider,
+		Events:        events,
+		Application:   application,
+	})
+}
+
+func (s *Service) apply(
 	ctx context.Context,
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
@@ -195,6 +287,21 @@ func (s *Service) Recover(
 	events factorysessions.LiveChangeEventLog,
 	application factorysessions.LiveChangeApplication,
 ) (factorysessions.LiveChangeResult, error) {
+	return s.RecoverLiveChange(ctx, sessionID, requestID, factorysessions.LiveChangeOperation{
+		StateProvider: stateProvider,
+		Events:        events,
+		Application:   application,
+	})
+}
+
+func (s *Service) recover(
+	ctx context.Context,
+	sessionID string,
+	requestID string,
+	stateProvider StateProvider,
+	events factorysessions.LiveChangeEventLog,
+	application factorysessions.LiveChangeApplication,
+) (factorysessions.LiveChangeResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
@@ -241,7 +348,7 @@ func (s *Service) Recover(
 	if terminal != nil {
 		return s.replayTerminal(sessionID, pending.Request, *terminal)
 	}
-	return s.Apply(ctx, sessionID, pending.Request, stateProvider, events, application)
+	return s.apply(ctx, sessionID, pending.Request, stateProvider, events, application)
 }
 
 type requestRecord struct {

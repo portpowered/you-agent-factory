@@ -269,7 +269,7 @@ func newExecutionService(provider fse.ExecutionProvider, config executionService
 			config.WorkerSettings,
 			fixtureRecordingWriter(),
 			fixtureSessionID,
-			nil, nil,
+			nil, nil, nil,
 		)
 	default:
 		return nil, fse.NewValidationError("provider", "unsupported execution provider")
@@ -299,7 +299,7 @@ func newConfiguredJavaScriptRuntimeService(config runtimeServiceConfig) *fse.Jav
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		config.WorkerPresetIDs, config.WorkerSettings, fixtureRecordingWriter(),
 		fixtureSessionID,
-		nil, nil,
+		nil, nil, nil,
 	)
 }
 

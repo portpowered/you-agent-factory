@@ -31,6 +31,7 @@ func NewDurable(
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (*Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		persistencePolicy,
@@ -61,6 +62,7 @@ func NewDurable(
 		generateSessionID,
 		generateResponseEventID,
 		responseStreams,
+		liveChangeCoordinator,
 	)
 	if err != nil {
 		return nil, err
@@ -86,6 +88,7 @@ func NewStandalone(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (*Service, error) {
 	switch provider {
 	case factorysessions.ExecutionProviderFake:
@@ -127,6 +130,7 @@ func NewStandalone(
 			generateSessionID,
 			nil,
 			nil,
+			liveChangeCoordinator,
 		)
 		if err != nil {
 			return nil, err

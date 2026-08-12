@@ -42,12 +42,14 @@ func NewDurable(
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewDurable(
 		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
 		checkpointSummaries, workflows, orchestration, childValues,
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
+		liveChangeCoordinator,
 	)
 }
 
@@ -68,11 +70,12 @@ func NewStandalone(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
 		executor,
 		clock, syncWaits, checkpointSummaries, workflows, orchestration, childValues,
-		recordingWriter, generateSessionID, fixtureFiles,
+		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)
 }

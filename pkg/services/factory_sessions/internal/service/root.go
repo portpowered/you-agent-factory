@@ -31,6 +31,7 @@ type Root struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
+	liveChangeCoordinator        factorysessions.LiveChangeCoordinator
 }
 
 // NewRoot constructs the process-scoped Factory Sessions service without
@@ -50,6 +51,7 @@ func NewRoot(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (*Root, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -81,6 +83,9 @@ func NewRoot(
 	if responseStreams == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: response-stream service is required")
 	}
+	if liveChangeCoordinator == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
 	return &Root{
 		Service:                      &legacyservice.Service{},
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
@@ -97,6 +102,7 @@ func NewRoot(
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
 		responseStreams:              responseStreams,
+		liveChangeCoordinator:        liveChangeCoordinator,
 	}, nil
 }
 
@@ -128,6 +134,7 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessio
 		r.initialWorkFiles,
 		r.identity,
 		r.responseStreams,
+		r.liveChangeCoordinator,
 	)
 	if assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation rejected its dependencies")

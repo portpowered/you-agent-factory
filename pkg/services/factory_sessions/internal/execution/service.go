@@ -349,6 +349,7 @@ func NewJavaScriptExecutionService(
 	generateSessionID internalcontracts.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {
@@ -394,6 +395,7 @@ func NewJavaScriptExecutionService(
 		generateSessionID,
 		generateResponseEventID,
 		responseStreams,
+		liveChangeCoordinator,
 	), nil
 }
 

@@ -679,27 +679,24 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		defer release()
 	}
 	stateProvider := s.durableLiveChangeStateProvider(id, events)
-	coordinator := livechange.New(s.now, nil)
+	if s.liveChangeCoordinator == nil {
+		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordinator is unavailable",
+		}
+	}
+	operation := factorysessions.LiveChangeOperation{
+		StateProvider: stateProvider,
+		Events:        events,
+		Application:   application,
+		Now:           s.now,
+	}
 	var result factorysessions.LiveChangeResult
 	var applyErr error
 	if recoverRequestID != "" {
-		result, applyErr = coordinator.Recover(
-			ctx,
-			id,
-			recoverRequestID,
-			stateProvider,
-			events,
-			application,
-		)
+		result, applyErr = s.liveChangeCoordinator.RecoverLiveChange(ctx, id, recoverRequestID, operation)
 	} else {
-		result, applyErr = coordinator.Apply(
-			ctx,
-			id,
-			request,
-			stateProvider,
-			events,
-			application,
-		)
+		result, applyErr = s.liveChangeCoordinator.ApplyLiveChange(ctx, id, request, operation)
 	}
 	if applyErr == nil || result.Outcome == factorysessions.LiveChangeOutcomeReplayed {
 		if revision, ok := runtime.(workflowsource.ResourceCapacityRevisionService); ok && result.NewRevision >= 0 {

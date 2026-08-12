@@ -15,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -45,6 +46,12 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 	}
 }
 
+// NewLiveChangeCoordinator constructs the one process-scoped admission
+// coordinator shared by live and durable Factory Session execution.
+func NewLiveChangeCoordinator() factorysessions.LiveChangeCoordinator {
+	return livechange.NewCoordinator()
+}
+
 // NewService constructs an inert Factory Sessions root from construction and
 // process-edge ports. It composes the accepted root through parent-private
 // identity and response-stream owner construction without publishing owner types
@@ -66,6 +73,7 @@ func NewService(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -91,6 +99,9 @@ func NewService(
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
 	}
+	if liveChangeCoordinator == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
 	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
 	if err != nil {
 		return nil, err
@@ -115,6 +126,7 @@ func NewService(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
+		liveChangeCoordinator,
 	)
 	if err != nil {
 		return nil, err
@@ -144,6 +156,7 @@ func NewDurableExecution(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	eventsService events.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
 	if err != nil {
@@ -154,6 +167,7 @@ func NewDurableExecution(
 		checkpointSummaries, workflows, orchestration, workflows,
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
+		liveChangeCoordinator,
 	)
 }
 
@@ -174,11 +188,12 @@ func NewStandaloneExecution(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
 		executor,
 		clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
-		recordingWriter, generateSessionID, fixtureFiles,
+		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)
 }

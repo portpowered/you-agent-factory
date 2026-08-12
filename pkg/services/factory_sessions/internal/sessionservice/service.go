@@ -27,6 +27,7 @@ import (
 type Service struct {
 	host              Host
 	liveRuntime       liveruntime.Service
+	liveChange        factorysessions.LiveChangeCoordinator
 	streams           *stream.Manager
 	reconnects        factorysessions.ReconnectCursorValidator
 	results           factoryruntime.SessionResultProjectionOperation
@@ -86,6 +87,24 @@ func NewWithResponseService(
 	results factoryruntime.SessionResultProjectionOperation,
 	responseEvents responsestreamservice.Service,
 ) *Service {
+	return NewWithLiveChangeCoordinator(
+		host, sessions, observer, responseStreams, reconnects, results, responseEvents, nil,
+	)
+}
+
+// NewWithLiveChangeCoordinator constructs the session gateway with the
+// process-scoped coordinator supplied by Factory Sessions wire. Runtime state,
+// event history, application, clock, and logger remain operation inputs.
+func NewWithLiveChangeCoordinator(
+	host Host,
+	sessions stream.SessionResolver,
+	observer stream.Observer,
+	responseStreams *responsestream.Registry,
+	reconnects factorysessions.ReconnectCursorValidator,
+	results factoryruntime.SessionResultProjectionOperation,
+	responseEvents responsestreamservice.Service,
+	liveChange factorysessions.LiveChangeCoordinator,
+) *Service {
 	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil
 	}
@@ -103,6 +122,7 @@ func NewWithResponseService(
 	return &Service{
 		host:           host,
 		liveRuntime:    liveRuntime,
+		liveChange:     liveChange,
 		streams:        stream.NewManagerWithResponseService(sessions, observer, responseStreams, responseEvents),
 		reconnects:     reconnects,
 		results:        results,
@@ -240,20 +260,26 @@ func (s *Service) runLiveChange(
 		}
 	}
 	stateProvider := liveChangeStateProvider(runtime)
-	coordinator := livechange.New(runtime.Clock.Now, runtime.LiveChangeLogger)
-	if coordinator == nil {
+	if s.liveChange == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
 			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
 			Message: "live change coordinator is unavailable",
 		}
 	}
+	operation := factorysessions.LiveChangeOperation{
+		StateProvider: stateProvider,
+		Events:        runtime.LiveChangeEvents,
+		Application:   runtime.LiveChangeApplication,
+		Now:           runtime.Clock.Now,
+		Logger:        runtime.LiveChangeLogger,
+	}
 	canonicalID := livesession.CanonicalID(session)
 	var result factorysessions.LiveChangeResult
 	var applyErr error
 	if recoverRequestID != "" {
-		result, applyErr = coordinator.Recover(ctx, canonicalID, recoverRequestID, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+		result, applyErr = s.liveChange.RecoverLiveChange(ctx, canonicalID, recoverRequestID, operation)
 	} else {
-		result, applyErr = coordinator.Apply(ctx, canonicalID, request, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+		result, applyErr = s.liveChange.ApplyLiveChange(ctx, canonicalID, request, operation)
 	}
 	if applyErr == nil && (result.Outcome == factorysessions.LiveChangeOutcomeApplied || result.Outcome == factorysessions.LiveChangeOutcomeReplayed) {
 		if revision, ok := runtime.Factory.(factoryruntime.ResourceCapacityRevisionService); ok {

@@ -169,7 +169,7 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 		factory.JavaScriptWorkerSettings{},
 		boundaryRecordingWriter{},
 		func() string { return "dur-sess-boundary-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-		nil, nil,
+		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewJavaScriptExecutionService: %v", err)
@@ -288,7 +288,7 @@ func newHarness(config harnessConfig) (factorysessionexecution.Service, error) {
 			factory.JavaScriptWorkerSettings{},
 			config.RecordingWriter,
 			func() string { return "00000000-0000-4000-8000-000000000001" },
-			nil, nil,
+			nil, nil, nil,
 		), nil
 	default:
 		return nil, fmt.Errorf("durable execution test harness: unsupported mode %q", config.Mode)

@@ -225,6 +225,7 @@ type JavaScriptRuntimeService struct {
 	generateSessionID       internalcontracts.SessionIDGenerator
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
+	liveChangeCoordinator   factorysessions.LiveChangeCoordinator
 	// resolveWorkerInvoker is guarded by its own lock, not the session lock.
 	// It is bound once, after construction, and read on paths that already hold
 	// the session lock; sharing one mutex between them deadlocks.
@@ -268,6 +269,7 @@ func NewJavaScriptRuntimeService(
 	generateSessionID internalcontracts.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) *JavaScriptRuntimeService {
 	if generateSessionID == nil {
 		return nil
@@ -289,6 +291,7 @@ func NewJavaScriptRuntimeService(
 		generateSessionID:       generateSessionID,
 		generateResponseEventID: generateResponseEventID,
 		responseStreams:         responseStreams,
+		liveChangeCoordinator:   liveChangeCoordinator,
 		persistence:             persistence,
 		sessions:                make(map[string]*runtimeSessionState),
 		startReplay:             make(map[string]startReplayRecord),

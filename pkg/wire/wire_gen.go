@@ -281,7 +281,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v31 := provideFactorySessionInvocationInputReader(edges2)
 	v32 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v29, homeDirectoryResolver, v30, namedPathResolver, v31, v32, logicalTargetResolveSymlinks, eventsService)
+	liveChangeCoordinator := wire.NewLiveChangeCoordinator()
+	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v29, homeDirectoryResolver, v30, namedPathResolver, v31, v32, logicalTargetResolveSymlinks, eventsService, liveChangeCoordinator)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +296,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v35 := provideFactorySessionRuntimePersistenceStoreFactory(v34)
 	v36 := provideFactorySessionSyncWaitScheduler()
 	v37 := provideWorkerCommandRunnerAdapter()
-	v38 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v33, v35, v36, v29, responseEventIDGenerator, responseEventRetentionLimits, ptyAllocator, v37, edges2, eventsService)
+	v38 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v33, v35, v36, v29, responseEventIDGenerator, responseEventRetentionLimits, ptyAllocator, v37, edges2, eventsService, liveChangeCoordinator)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v39, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
@@ -419,7 +420,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v60 := provideFactorySessionContractFixtureReader(edges2)
-	v61 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v33, v35, v36, v29, v60)
+	v61 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v33, v35, v36, v29, v60, liveChangeCoordinator)
 	v62 := provideWorkerInvocationFactory(service, edges2)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v63 := provideFactorySessionExecutionOpeningFileSystem(edges2)
@@ -698,7 +699,7 @@ var servicesSet = wire4.NewSet(
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
-	provideProviderRegistryRebinder, wire4.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+	provideProviderRegistryRebinder, wire4.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, wire.NewLiveChangeCoordinator, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,

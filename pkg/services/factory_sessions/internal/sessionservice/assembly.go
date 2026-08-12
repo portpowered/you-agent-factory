@@ -29,6 +29,7 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      streamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
+	liveChangeCoordinator        factorysessions.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
 	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
@@ -66,8 +67,9 @@ func NewAssembly(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
+	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
 ) roles.RuntimeAssembly {
-	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil {
+	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil || liveChangeCoordinator == nil {
 		return nil
 	}
 	registry := sessionregistry.New()
@@ -82,6 +84,7 @@ func NewAssembly(
 		state:                        state,
 		streams:                      runtimebinding.NewStreamManager(state),
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
+		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
 		interpolation:                interpolation,
 		invocationWorkTypes:          invocationWorkTypes,
@@ -269,7 +272,7 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
-	gateway := NewWithResponseService(
+	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
 		a.state,
 		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
@@ -277,6 +280,7 @@ func (a *Assembly) Complete(
 		runtime.ReconnectCursorValidator(),
 		a.sessionResultProjection,
 		a.responseStreams,
+		a.liveChangeCoordinator,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)

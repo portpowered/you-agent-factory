@@ -9,6 +9,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
@@ -63,7 +64,8 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 	const sessionID = "dur-sess-live-capacity-admission"
 	runtime := newDurableLiveChangeAdmissionTestRuntime(t)
 	service := &JavaScriptRuntimeService{
-		clock: runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
+		clock:                 runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
+		liveChangeCoordinator: livechange.NewCoordinator(),
 		sessions: map[string]*runtimeSessionState{
 			sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
 		},
