@@ -38,7 +38,7 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	}
 }
 
-func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
+func TestWorkerCaptureAbortPersistsIncompleteSnapshot(t *testing.T) {
 	eventService := newRecordingEventsService()
 	recordingRoot := t.TempDir()
 	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
@@ -69,8 +69,8 @@ func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
-		t.Fatalf("aborted snapshot = %#v, want one FAILED Worker Session", snapshot)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("aborted snapshot = %#v, want one INCOMPLETE Worker Session", snapshot)
 	}
 }
 
@@ -166,11 +166,15 @@ func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
-		t.Fatalf("failed snapshot = %#v, want one FAILED Worker Session", snapshot)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("failed snapshot = %#v, want one INCOMPLETE Worker Session", snapshot)
 	}
-	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
-		t.Fatalf("ReplayWorkerRecording(failed) error = %v, want ErrWorkerRecordingIncomplete", err)
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("ReplayWorkerRecording(incomplete) status = %q, want INCOMPLETE", replayed.Projection.Status)
 	}
 }
 
@@ -206,8 +210,60 @@ func TestWorkerCaptureCloseCancellationIsNotCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
-		t.Fatalf("canceled snapshot = %#v, want one FAILED Worker Session", snapshot)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("canceled snapshot = %#v, want one INCOMPLETE Worker Session", snapshot)
+	}
+}
+
+func TestWorkerRecordingDurableLossWithAuthoritativeTerminalReopensAsDegraded(t *testing.T) {
+	const (
+		recordingID = "recording-degraded"
+		sessionID   = "worker-degraded"
+	)
+	topic := events.Topic("worker-session/worker-degraded/events")
+	recordingRoot := t.TempDir()
+	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opening := mustRecord(t, openingAppend(topic, sessionID), 1)
+	if err := writer.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{
+		RecordingID: recordingID, WorkerSessionID: sessionID, Record: opening,
+	}); err != nil {
+		t.Fatalf("PersistWorkerRecord(opening) error = %v", err)
+	}
+	if failureWriter, ok := writer.(recordings.WorkerRecordingFailureWriter); ok {
+		if err := failureWriter.PersistWorkerRecordingFailure(context.Background(), recordings.WorkerRecordingFailure{
+			RecordingID: recordingID, WorkerSessionID: sessionID, Topic: topic, Code: "PERSISTENCE_FAILED",
+			ExecutionTerminal: &recordings.WorkerRecordingTerminal{Phase: workers.PhaseCompleted, Status: "COMPLETED"},
+		}); err != nil {
+			t.Fatalf("PersistWorkerRecordingFailure() error = %v", err)
+		}
+	} else {
+		t.Fatal("FileWriter does not expose the failure writer contract")
+	}
+
+	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := reopened.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("FileWriter does not expose the durable reader")
+	}
+	snapshot, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording() error = %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusDegraded {
+		t.Fatalf("durable degraded snapshot = %#v, want DEGRADED", snapshot)
+	}
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording() error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusDegraded || replayed.Projection.Terminal != nil || replayed.Projection.ExecutionTerminal == nil {
+		t.Fatalf("replayed degraded projection = %#v, want authoritative terminal without fabricated record", replayed.Projection)
 	}
 }
 
@@ -279,7 +335,7 @@ func TestWorkerCaptureDuplicateDeliveryIsIdempotentOnlyWhenIdentical(t *testing.
 	}
 }
 
-func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
+func TestReplayWorkerRecordingReturnsIncompleteAndRejectsSkippedHistory(t *testing.T) {
 	topic := events.Topic("worker-session/worker-replay-invalid/events")
 	opening := mustRecord(t, openingAppend(topic, "worker-replay-invalid"), 1)
 	terminal := mustRecord(t, terminalAppend(topic, "worker-replay-invalid"), 2)
@@ -300,8 +356,12 @@ func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
 		Topic:           topic,
 		Records:         []events.Record{opening},
 	}}
-	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: incomplete}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
-		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v, want ErrWorkerRecordingIncomplete", err)
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: incomplete})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusIncomplete || replayed.Projection.Complete {
+		t.Fatalf("ReplayWorkerRecording(incomplete) projection = %#v, want INCOMPLETE and not complete", replayed.Projection)
 	}
 	skipped := snapshot
 	skipped.Sessions = []recordings.WorkerSessionRecordingSnapshot{{

@@ -24,19 +24,29 @@ type WorkerRecordingSnapshot struct {
 // WorkerSessionRecordingSnapshot contains one detached Worker topic history
 // in aggregate order.
 type WorkerSessionRecordingSnapshot struct {
-	WorkerSessionID string                   `json:"workerSessionId"`
-	Topic           events.Topic             `json:"topic,omitempty"`
-	Status          WorkerRecordingStatus    `json:"status,omitempty"`
-	LastPosition    events.AggregateSequence `json:"lastPosition,omitempty"`
-	Failure         string                   `json:"failure,omitempty"`
-	Records         []events.Record          `json:"records"`
+	WorkerSessionID   string                   `json:"workerSessionId"`
+	Topic             events.Topic             `json:"topic,omitempty"`
+	Status            WorkerRecordingStatus    `json:"status,omitempty"`
+	LastPosition      events.AggregateSequence `json:"lastPosition,omitempty"`
+	Failure           string                   `json:"failure,omitempty"`
+	ExecutionTerminal *WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
+	Records           []events.Record          `json:"records"`
 }
 
-// WorkerRecordingStatus is the durable capture state derived from the
-// accepted Worker history.
+// WorkerRecordingStatus is the durable recording-health state derived from
+// accepted Worker history and explicit durable loss evidence. It deliberately
+// does not describe the Worker execution outcome: a failed or canceled Worker
+// can still have COMPLETE recording health.
 type WorkerRecordingStatus string
 
 const (
+	WorkerRecordingStatusComplete   WorkerRecordingStatus = "COMPLETE"
+	WorkerRecordingStatusDegraded   WorkerRecordingStatus = "DEGRADED"
+	WorkerRecordingStatusIncomplete WorkerRecordingStatus = "INCOMPLETE"
+
+	// The following values are retained solely so older durable sidecars and
+	// callers can be recognized and mapped explicitly. New snapshots never
+	// write them.
 	WorkerRecordingStatusActive    WorkerRecordingStatus = "ACTIVE"
 	WorkerRecordingStatusCompleted WorkerRecordingStatus = "COMPLETED"
 	WorkerRecordingStatusFailed    WorkerRecordingStatus = "FAILED"
@@ -45,10 +55,12 @@ const (
 // WorkerRecordingHistory is the canonical, source-native input to the pure
 // Worker recording reducer.
 type WorkerRecordingHistory struct {
-	RecordingID     string
-	WorkerSessionID string
-	Topic           events.Topic
-	Records         []events.Record
+	RecordingID       string
+	WorkerSessionID   string
+	Topic             events.Topic
+	Failure           string
+	ExecutionTerminal *WorkerRecordingTerminal
+	Records           []events.Record
 }
 
 // WorkerRecordingTerminal is the detached terminal lifecycle fact derived by
@@ -60,18 +72,21 @@ type WorkerRecordingTerminal struct {
 }
 
 // WorkerRecordingProjection is the deterministic observable result of
-// reducing one Worker history. Active projections are valid live prefixes;
-// ReplayWorkerRecording only returns a projection after a legal terminal.
+// reducing one Worker history. INCOMPLETE projections are valid live or
+// durable prefixes; ReplayWorkerRecording returns them instead of hiding the
+// readable history behind a generic replay error.
 type WorkerRecordingProjection struct {
-	RecordingID     string
-	WorkerSessionID string
-	Topic           events.Topic
-	Status          WorkerRecordingStatus
-	Complete        bool
-	LastPosition    events.AggregateSequence
-	Opening         events.Record
-	Terminal        *WorkerRecordingTerminal
-	Records         []events.Record
+	RecordingID       string
+	WorkerSessionID   string
+	Topic             events.Topic
+	Status            WorkerRecordingStatus
+	Complete          bool
+	LastPosition      events.AggregateSequence
+	Opening           events.Record
+	Terminal          *WorkerRecordingTerminal
+	ExecutionTerminal *WorkerRecordingTerminal
+	Degradation       string
+	Records           []events.Record
 }
 
 // WorkerRecordingReplayRequest selects one Worker Session history from a
@@ -95,6 +110,7 @@ var (
 	ErrWorkerRecordingDuplicate      = errors.New("recordings: Worker recording duplicate conflicts")
 	ErrWorkerRecordingTerminal       = errors.New("recordings: Worker recording terminal lifecycle is invalid")
 	ErrWorkerRecordingIncomplete     = errors.New("recordings: Worker recording is incomplete")
+	ErrWorkerRecordingCompatibility  = errors.New("recordings: Worker recording compatibility is unsupported")
 	ErrWorkerRecordingReplay         = errors.New("recordings: Worker recording replay failed")
 )
 
@@ -125,15 +141,12 @@ func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory
 	if err := validateWorkerTopic(topic, history.WorkerSessionID); err != nil {
 		return WorkerRecordingProjection{}, err
 	}
-	if len(history.Records) == 0 {
-		return WorkerRecordingProjection{}, fmt.Errorf("%w: opening record is missing", ErrWorkerRecordingIncomplete)
-	}
-
 	projection := WorkerRecordingProjection{
 		RecordingID:     history.RecordingID,
 		WorkerSessionID: history.WorkerSessionID,
 		Topic:           topic,
-		Status:          WorkerRecordingStatusActive,
+		Status:          WorkerRecordingStatusIncomplete,
+		Degradation:     strings.TrimSpace(history.Failure),
 		Records:         make([]events.Record, 0, len(history.Records)),
 	}
 	identities := make(map[events.AppendIdentity]struct{}, len(history.Records))
@@ -142,11 +155,33 @@ func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory
 			return WorkerRecordingProjection{}, err
 		}
 	}
-	if projection.Terminal != nil {
-		projection.Status = WorkerRecordingStatusCompleted
-		projection.Complete = true
+	if history.ExecutionTerminal != nil {
+		if err := validateExecutionTerminal(*history.ExecutionTerminal); err != nil {
+			return WorkerRecordingProjection{}, err
+		}
+		projection.ExecutionTerminal = cloneWorkerRecordingTerminal(history.ExecutionTerminal)
+		if projection.Terminal != nil && !sameWorkerRecordingTerminal(projection.Terminal, history.ExecutionTerminal) {
+			return WorkerRecordingProjection{}, fmt.Errorf("%w: durable execution terminal disagrees with recorded terminal", ErrWorkerRecordingTerminal)
+		}
+	} else if projection.Terminal != nil {
+		projection.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.Terminal)
+	}
+	projection.Status = classifyWorkerRecordingStatus(projection, history.ExecutionTerminal != nil)
+	projection.Complete = projection.Status == WorkerRecordingStatusComplete
+	if projection.Status == WorkerRecordingStatusDegraded && projection.Degradation == "" {
+		projection.Degradation = "DURABLE_CAPTURE_LOSS"
 	}
 	return projection, nil
+}
+
+func classifyWorkerRecordingStatus(projection WorkerRecordingProjection, hasAuthoritativeTerminal bool) WorkerRecordingStatus {
+	if projection.ExecutionTerminal == nil {
+		return WorkerRecordingStatusIncomplete
+	}
+	if projection.Degradation != "" || (hasAuthoritativeTerminal && projection.Terminal == nil) {
+		return WorkerRecordingStatusDegraded
+	}
+	return WorkerRecordingStatusComplete
 }
 
 func reduceWorkerRecord(
@@ -205,8 +240,10 @@ func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.R
 	return nil
 }
 
-// ReplayWorkerRecording reduces one durable snapshot and rejects an active
-// or failed prefix so callers cannot mistake incomplete capture for replay.
+// ReplayWorkerRecording reduces one durable snapshot and returns every
+// readable health state. Incomplete and degraded projections are intentional
+// read results; callers must inspect Projection.Status instead of treating a
+// missing terminal as a generic replay failure.
 func (codec WorkerRecordingCodec) ReplayWorkerRecording(request WorkerRecordingReplayRequest) (WorkerRecordingReplayResult, error) {
 	if strings.TrimSpace(request.Snapshot.RecordingID) == "" {
 		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: recording identity is required", ErrWorkerRecordingReplay)
@@ -225,24 +262,84 @@ func (codec WorkerRecordingCodec) ReplayWorkerRecording(request WorkerRecordingR
 		if session.WorkerSessionID != sessionID {
 			continue
 		}
-		if session.Status == WorkerRecordingStatusFailed {
-			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: durable capture failed", ErrWorkerRecordingIncomplete)
+		legacyStatus, legacyFailure, err := normalizeWorkerRecordingStatus(session.Status)
+		if err != nil {
+			return WorkerRecordingReplayResult{}, err
+		}
+		failure := strings.TrimSpace(session.Failure)
+		if legacyFailure && failure == "" {
+			failure = "LEGACY_CAPTURE_FAILED"
 		}
 		projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
-			RecordingID:     request.Snapshot.RecordingID,
-			WorkerSessionID: session.WorkerSessionID,
-			Topic:           session.Topic,
-			Records:         session.Records,
+			RecordingID:       request.Snapshot.RecordingID,
+			WorkerSessionID:   session.WorkerSessionID,
+			Topic:             session.Topic,
+			Failure:           failure,
+			ExecutionTerminal: session.ExecutionTerminal,
+			Records:           session.Records,
 		})
 		if err != nil {
 			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: %w", ErrWorkerRecordingReplay, err)
 		}
-		if !projection.Complete {
-			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: no durable terminal record", ErrWorkerRecordingIncomplete)
+		if legacyStatus != "" && !isLegacyWorkerRecordingStatus(session.Status) && legacyStatus != projection.Status {
+			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: declared status %q disagrees with durable evidence %q", ErrWorkerRecordingCompatibility, session.Status, projection.Status)
 		}
 		return WorkerRecordingReplayResult{Projection: projection}, nil
 	}
 	return WorkerRecordingReplayResult{}, fmt.Errorf("%w: Worker Session %q was not found", ErrWorkerRecordingReplay, sessionID)
+}
+
+func normalizeWorkerRecordingStatus(status WorkerRecordingStatus) (WorkerRecordingStatus, bool, error) {
+	switch status {
+	case "":
+		return "", false, nil
+	case WorkerRecordingStatusComplete, WorkerRecordingStatusDegraded, WorkerRecordingStatusIncomplete:
+		return status, false, nil
+	case WorkerRecordingStatusActive:
+		return WorkerRecordingStatusIncomplete, false, nil
+	case WorkerRecordingStatusCompleted:
+		return WorkerRecordingStatusComplete, false, nil
+	case WorkerRecordingStatusFailed:
+		return WorkerRecordingStatusIncomplete, true, nil
+	default:
+		return "", false, fmt.Errorf("%w: status %q is not recognized; rewrite the Worker recording with a supported schema", ErrWorkerRecordingCompatibility, status)
+	}
+}
+
+func isLegacyWorkerRecordingStatus(status WorkerRecordingStatus) bool {
+	return status == WorkerRecordingStatusActive || status == WorkerRecordingStatusCompleted || status == WorkerRecordingStatusFailed
+}
+
+func validateExecutionTerminal(terminal WorkerRecordingTerminal) error {
+	if !isWorkerTerminalPhase(terminal.Phase) {
+		return fmt.Errorf("%w: authoritative terminal phase %q is not terminal", ErrWorkerRecordingTerminal, terminal.Phase)
+	}
+	if strings.TrimSpace(terminal.Status) == "" {
+		return fmt.Errorf("%w: authoritative terminal status is missing", ErrWorkerRecordingTerminal)
+	}
+	if terminal.Phase == workers.PhaseCanceled {
+		if terminal.Status != "CANCELED" && terminal.Status != "TERMINATED" {
+			return fmt.Errorf("%w: canceled authoritative terminal status %q is invalid", ErrWorkerRecordingTerminal, terminal.Status)
+		}
+	} else if terminal.Status != string(terminal.Phase) {
+		return fmt.Errorf("%w: authoritative terminal phase %q and status %q disagree", ErrWorkerRecordingTerminal, terminal.Phase, terminal.Status)
+	}
+	return nil
+}
+
+func sameWorkerRecordingTerminal(left, right *WorkerRecordingTerminal) bool {
+	if left == nil || right == nil || left.Phase != right.Phase || left.Status != right.Status {
+		return false
+	}
+	return left.Position == 0 || right.Position == 0 || left.Position == right.Position
+}
+
+func cloneWorkerRecordingTerminal(terminal *WorkerRecordingTerminal) *WorkerRecordingTerminal {
+	if terminal == nil {
+		return nil
+	}
+	clone := *terminal
+	return &clone
 }
 
 func canonicalWorkerTopic(sessionID string) events.Topic {

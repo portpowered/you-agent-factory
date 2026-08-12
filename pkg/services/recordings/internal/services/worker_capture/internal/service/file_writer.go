@@ -84,10 +84,12 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	}
 	history = append(history, record.Record.Detached())
 	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:     record.RecordingID,
-		WorkerSessionID: record.WorkerSessionID,
-		Topic:           session.Topic,
-		Records:         history,
+		RecordingID:       record.RecordingID,
+		WorkerSessionID:   record.WorkerSessionID,
+		Topic:             session.Topic,
+		Failure:           session.Failure,
+		ExecutionTerminal: session.ExecutionTerminal,
+		Records:           history,
 	})
 	if err != nil {
 		return err
@@ -95,6 +97,7 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	session.Topic = projection.Topic
 	session.Status = projection.Status
 	session.LastPosition = projection.LastPosition
+	session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
 	session.Records = projection.Records
 	data, err := json.Marshal(snapshot)
 	if err != nil {
@@ -108,8 +111,9 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 }
 
 // PersistWorkerRecordingFailure preserves a failed or interrupted capture as
-// an explicitly unavailable snapshot. The accepted source records remain for
-// diagnosis, but replay checks Status before exposing any projection.
+// durable loss evidence. The accepted source records remain readable, and the
+// shared reducer decides whether their execution truth makes the result
+// DEGRADED or INCOMPLETE.
 func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
 	if writer == nil {
 		return recordings.ErrMissingWorkerRecordingWriter
@@ -125,8 +129,24 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	if failure.Topic != "" {
 		session.Topic = failure.Topic
 	}
-	session.Status = recordings.WorkerRecordingStatusFailed
 	session.Failure = failure.Code
+	session.ExecutionTerminal = cloneWorkerRecordingTerminal(failure.ExecutionTerminal)
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:       snapshot.RecordingID,
+		WorkerSessionID:   session.WorkerSessionID,
+		Topic:             session.Topic,
+		Failure:           session.Failure,
+		ExecutionTerminal: session.ExecutionTerminal,
+		Records:           session.Records,
+	})
+	if err != nil {
+		return fmt.Errorf("classify failed Worker recording snapshot: %w", err)
+	}
+	session.Topic = projection.Topic
+	session.Status = projection.Status
+	session.LastPosition = projection.LastPosition
+	session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
+	session.Records = projection.Records
 	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return fmt.Errorf("encode failed Worker recording snapshot: %w", err)
@@ -138,10 +158,10 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	return nil
 }
 
-// LoadWorkerRecording reads the latest complete snapshot for one opaque
-// recording identity. It deliberately returns active prefixes as snapshots;
-// ReplayWorkerRecording applies the shared reducer and refuses to present
-// them as completed replay.
+// LoadWorkerRecording reads one opaque recording identity and derives each
+// session's health from its durable evidence before returning. This keeps
+// reopened sidecars on the same pure classification path as live capture and
+// portable replay.
 func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
 	if writer == nil {
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingWriter
@@ -179,6 +199,22 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, recordingID s
 			}
 		}
 	}
+	for index := range snapshot.Sessions {
+		session := &snapshot.Sessions[index]
+		result, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+			Snapshot:        snapshot,
+			WorkerSessionID: session.WorkerSessionID,
+		})
+		if err != nil {
+			return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("classify Worker recording snapshot: %w", err)
+		}
+		projection := result.Projection
+		session.Topic = projection.Topic
+		session.Status = projection.Status
+		session.LastPosition = projection.LastPosition
+		session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
+		session.Records = projection.Records
+	}
 	clone := cloneSnapshot(snapshot)
 	writer.mu.Lock()
 	writer.snapshots[recordingID] = cloneSnapshot(snapshot)
@@ -196,18 +232,27 @@ func cloneSnapshot(snapshot recordings.WorkerRecordingSnapshot) recordings.Worke
 	clone.Sessions = make([]recordings.WorkerSessionRecordingSnapshot, len(snapshot.Sessions))
 	for i, session := range snapshot.Sessions {
 		clone.Sessions[i] = recordings.WorkerSessionRecordingSnapshot{
-			WorkerSessionID: session.WorkerSessionID,
-			Topic:           session.Topic,
-			Status:          session.Status,
-			LastPosition:    session.LastPosition,
-			Failure:         session.Failure,
-			Records:         make([]events.Record, len(session.Records)),
+			WorkerSessionID:   session.WorkerSessionID,
+			Topic:             session.Topic,
+			Status:            session.Status,
+			LastPosition:      session.LastPosition,
+			Failure:           session.Failure,
+			ExecutionTerminal: cloneWorkerRecordingTerminal(session.ExecutionTerminal),
+			Records:           make([]events.Record, len(session.Records)),
 		}
 		for j, record := range session.Records {
 			clone.Sessions[i].Records[j] = record.Detached()
 		}
 	}
 	return clone
+}
+
+func cloneWorkerRecordingTerminal(terminal *recordings.WorkerRecordingTerminal) *recordings.WorkerRecordingTerminal {
+	if terminal == nil {
+		return nil
+	}
+	clone := *terminal
+	return &clone
 }
 
 func findOrCreateSession(

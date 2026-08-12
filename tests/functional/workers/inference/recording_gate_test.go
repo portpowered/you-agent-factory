@@ -86,7 +86,7 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording(%q) error = %v", recordingID, err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusCompleted {
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete {
 		t.Fatalf("durable Worker snapshot = %#v, want one completed session", snapshot)
 	}
 

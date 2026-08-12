@@ -90,6 +90,13 @@ func (service *Service) StartWorkerSessionRecording(
 		failure:      make(chan struct{}),
 		done:         make(chan struct{}),
 		identities:   make(map[events.AppendIdentity]events.Record),
+		projection: recordings.WorkerRecordingProjection{
+			RecordingID:     request.RecordingID,
+			WorkerSessionID: request.WorkerSessionID,
+			Topic:           request.Topic,
+			Status:          recordings.WorkerRecordingStatusIncomplete,
+			Records:         []events.Record{},
+		},
 	}
 	go capture.consume()
 	return capture, nil
@@ -258,8 +265,17 @@ func (capture *capture) fail(err error) {
 	capture.failed = err
 	close(capture.failure)
 	capture.stopOnce.Do(capture.stop)
-	capture.mu.Unlock()
 	code := workerRecordingFailureCode(err)
+	if projection, projectionErr := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:     capture.request.RecordingID,
+		WorkerSessionID: capture.request.WorkerSessionID,
+		Topic:           capture.request.Topic,
+		Failure:         code,
+		Records:         capture.history,
+	}); projectionErr == nil {
+		capture.projection = projection
+	}
+	capture.mu.Unlock()
 	if failureWriter, ok := capture.writer.(recordings.WorkerRecordingFailureWriter); ok {
 		capture.failureOnce.Do(func() {
 			if persistErr := failureWriter.PersistWorkerRecordingFailure(context.Background(), recordings.WorkerRecordingFailure{
@@ -342,6 +358,10 @@ func cloneWorkerProjection(projection recordings.WorkerRecordingProjection) reco
 		terminal := *projection.Terminal
 		clone.Terminal = &terminal
 	}
+	if projection.ExecutionTerminal != nil {
+		terminal := *projection.ExecutionTerminal
+		clone.ExecutionTerminal = &terminal
+	}
 	return clone
 }
 
@@ -399,7 +419,7 @@ func (capture *capture) WorkerRecordingProjection() (recordings.WorkerRecordingP
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	if capture.failed != nil {
-		return recordings.WorkerRecordingProjection{}, capture.failed
+		return cloneWorkerProjection(capture.projection), nil
 	}
 	return cloneWorkerProjection(capture.projection), nil
 }
