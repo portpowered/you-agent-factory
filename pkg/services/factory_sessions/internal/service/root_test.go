@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,18 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
-
-func TestNewRootRejectsMissingLiveChangeCoordinator(t *testing.T) {
-	t.Parallel()
-
-	root, err := newRootForTest(nil)
-	if root != nil {
-		t.Fatalf("NewRoot() = %#v, want nil root", root)
-	}
-	if err == nil || !strings.Contains(err.Error(), "live-change coordinator is required") {
-		t.Fatalf("NewRoot() error = %v, want missing live-change coordinator diagnostic", err)
-	}
-}
 
 func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
@@ -70,7 +57,6 @@ func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "initial Work reader", mutate: func(in *rootTestInputs) { in.initialWorkFiles = nil }},
 		{name: "identity service", mutate: func(in *rootTestInputs) { in.identity = nil }},
 		{name: "response-stream service", mutate: func(in *rootTestInputs) { in.responseStreams = nil }},
-		{name: "live-change coordinator", mutate: func(in *rootTestInputs) { in.liveChangeCoordinator = nil }},
 	}
 	for _, test := range tests {
 		test := test
@@ -112,6 +98,18 @@ func TestRootForRuntimeRequiresClockAndBindsRuntime(t *testing.T) {
 	}
 	if bound == nil {
 		t.Fatal("ForRuntime() returned nil bound service")
+	}
+}
+
+func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
+	t.Parallel()
+
+	root, err := newRootForTest(nil)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	if bound, err := root.ForRuntime(factorysessions.RuntimeBinding{Clock: rootTestClock{}}); bound != nil || err == nil {
+		t.Fatalf("ForRuntime() with missing live-change coordinator = (%#v, %v), want nil result and error", bound, err)
 	}
 }
 

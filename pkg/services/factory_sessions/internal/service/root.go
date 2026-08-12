@@ -84,9 +84,6 @@ func NewRoot(
 	if responseStreams == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: response-stream service is required")
 	}
-	if liveChangeCoordinator == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
-	}
 	return &Root{
 		Service:                      &legacyservice.Service{},
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,

@@ -313,6 +313,12 @@ func assertLiveCapacityReplayAndRejections(
 		t.Fatalf("stale revision response = %#v, want REVISION_CONFLICT", stale)
 	}
 	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "stale revision")
+
+	notFound := rejectLiveCapacityCLI(t, factoryDir, server.URL(), "~default", "missing-resource", 2, 1, "recorded-capacity-not-found", "submit capacity for an unknown resource")
+	if notFound.Code != factoryapi.ErrorResponseCodeNOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("unknown resource response = %#v, want typed NOT_FOUND", notFound)
+	}
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "unknown resource")
 }
 
 // TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren proves the
