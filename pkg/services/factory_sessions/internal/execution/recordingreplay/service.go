@@ -26,10 +26,11 @@ func (s *Service) Inspection() factorysessions.HistoricalReplayInspection {
 		return factorysessions.HistoricalReplayInspection{}
 	}
 	inspection := factorysessions.HistoricalReplayInspection{
-		Session:   s.projection.Session,
-		Events:    s.projection.Events,
-		Artifacts: s.projection.Artifacts,
-		Result:    s.projection.Result,
+		Session:       s.projection.Session,
+		Events:        s.projection.Events,
+		Artifacts:     s.projection.Artifacts,
+		Result:        s.projection.Result,
+		WorkerHistory: s.projection.WorkerHistory,
 		Redaction: factorysessions.HistoricalReplayRedaction{
 			RuntimeStateOmitted:        s.projection.Redaction.RuntimeStateOmitted,
 			CheckpointBodiesOmitted:    s.projection.Redaction.CheckpointBodiesOmitted,

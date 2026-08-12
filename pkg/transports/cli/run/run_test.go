@@ -26,9 +26,32 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
+
+func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	err := emitHistoricalReplayInspection(&output, factorysessions.HistoricalReplayInspection{
+		Session: factorysessions.SessionReadResult{
+			SessionID: "legacy-session", Status: factorysessions.LifecycleStatusFailed,
+			ResolvedSource: factorysessions.ResolvedSource{SourceRef: "workflow/legacy.js"},
+		},
+		WorkerHistory: recordings.PortableRecordingWorkerHistory{
+			Availability: recordings.PortableRecordingWorkerHistoryUnavailable,
+			Reason:       recordings.PortableRecordingWorkerHistoryReasonLegacySchema,
+		},
+	})
+	if err != nil {
+		t.Fatalf("emitHistoricalReplayInspection() error = %v", err)
+	}
+	want := "Worker history: UNAVAILABLE (reason=SCHEMA_DID_NOT_RECORD_CANONICAL_WORKER_HISTORY)"
+	if !strings.Contains(output.String(), want) {
+		t.Fatalf("historical replay output = %q, want %q", output.String(), want)
+	}
+}
 
 type stubFactoryService struct {
 	run                   func(context.Context) error

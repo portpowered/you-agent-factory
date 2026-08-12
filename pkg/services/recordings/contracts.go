@@ -146,6 +146,8 @@ type (
 	PortableRecordingCanonicalFacts                            = recordingcontracts.PortableRecordingCanonicalFacts
 	PortableRecordingCanonicalResult                           = recordingcontracts.PortableRecordingCanonicalResult
 	PortableRecordingCheckpointSummary                         = recordingcontracts.PortableRecordingCheckpointSummary
+	PortableRecordingCodec                                     = recordingcontracts.PortableRecordingCodec
+	PortableRecordingCompatibilityPolicy                       = recordingcontracts.PortableRecordingCompatibilityPolicy
 	PortableRecordingDiagnostic                                = recordingcontracts.PortableRecordingDiagnostic
 	PortableRecordingDiagnosticCode                            = recordingcontracts.PortableRecordingDiagnosticCode
 	PortableRecordingEventSummary                              = recordingcontracts.PortableRecordingEventSummary
@@ -154,6 +156,8 @@ type (
 	PortableRecordingResult                                    = recordingcontracts.PortableRecordingResult
 	PortableRecordingSessionSummary                            = recordingcontracts.PortableRecordingSessionSummary
 	PortableRecordingSourceSummary                             = recordingcontracts.PortableRecordingSourceSummary
+	PortableRecordingWorkerHistory                             = recordingcontracts.PortableRecordingWorkerHistory
+	PortableRecordingWorkerHistoryAvailability                 = recordingcontracts.PortableRecordingWorkerHistoryAvailability
 	PortableRecordingWriter                                    = recordingcontracts.PortableRecordingWriter
 	ProjectionService                                          = recordingcontracts.ProjectionService
 	ReadPortableArtifactRequest                                = recordingcontracts.ReadPortableArtifactRequest
@@ -324,12 +328,16 @@ const (
 	KindJavaScriptFactorySession                  = recordingcontracts.KindJavaScriptFactorySession
 	PortableArtifactIntegritySHA256               = recordingcontracts.PortableArtifactIntegritySHA256
 	PortableArtifactSchemaV1                      = recordingcontracts.PortableArtifactSchemaV1
+	PortableRecordingCurrentSchemaVersion         = recordingcontracts.PortableRecordingCurrentSchemaVersion
 	PortableRecordingCodeInvalidDigest            = recordingcontracts.PortableRecordingCodeInvalidDigest
 	PortableRecordingCodeInvalidIdentity          = recordingcontracts.PortableRecordingCodeInvalidIdentity
 	PortableRecordingCodeInvalidSummary           = recordingcontracts.PortableRecordingCodeInvalidSummary
 	PortableRecordingCodeInvalidOrder             = recordingcontracts.PortableRecordingCodeInvalidOrder
 	PortableRecordingCodeMalformedContract        = recordingcontracts.PortableRecordingCodeMalformedContract
 	PortableRecordingCodeUnsupportedVersion       = recordingcontracts.PortableRecordingCodeUnsupportedVersion
+	PortableRecordingReplayCompatibilityV1        = recordingcontracts.PortableRecordingReplayCompatibilityV1
+	PortableRecordingSchemaV1                     = recordingcontracts.PortableRecordingSchemaV1
+	PortableRecordingSchemaV2                     = recordingcontracts.PortableRecordingSchemaV2
 	RecordingActive                               = recordingcontracts.RecordingActive
 	RecordingFailed                               = recordingcontracts.RecordingFailed
 	RecordingFinalized                            = recordingcontracts.RecordingFinalized
@@ -348,6 +356,20 @@ const (
 	SubscriptionGap                               = recordingcontracts.SubscriptionGap
 	SubscriptionSequenceDiscontinuity             = recordingcontracts.SubscriptionSequenceDiscontinuity
 	WorldStateViewSchemaV1                        = recordingcontracts.WorldStateViewSchemaV1
+)
+
+const (
+	PortableRecordingCodeUnsupportedSchema          = recordingcontracts.PortableRecordingCodeUnsupportedSchema
+	PortableRecordingCompatibilityAction            = recordingcontracts.PortableRecordingCompatibilityAction
+	PortableRecordingSchemaV3                       = recordingcontracts.PortableRecordingSchemaV3
+	PortableRecordingWorkerHistoryReasonNotCaptured = recordingcontracts.PortableRecordingWorkerHistoryReasonNotCaptured
+)
+
+const (
+	PortableRecordingWorkerHistoryAvailable          = recordingcontracts.PortableRecordingWorkerHistoryAvailable
+	PortableRecordingWorkerHistoryUnavailable        = recordingcontracts.PortableRecordingWorkerHistoryUnavailable
+	PortableRecordingWorkerHistoryReasonLegacySchema = recordingcontracts.PortableRecordingWorkerHistoryReasonLegacySchema
+	PortableRecordingWorkerHistoryUnavailableReason  = recordingcontracts.PortableRecordingWorkerHistoryUnavailableReason
 )
 
 var (
@@ -394,9 +416,14 @@ var (
 	NewFactoryEvent                                    = recordingcontracts.NewFactoryEvent
 	BuildFactoryWorldWorkstationRequestProjectionSlice = recordingcontracts.BuildFactoryWorldWorkstationRequestProjectionSlice
 	BuildPortableRecording                             = recordingcontracts.BuildPortableRecording
+	CurrentPortableRecordingCodec                      = recordingcontracts.CurrentPortableRecordingCodec
 	DecodePortableRecording                            = recordingcontracts.DecodePortableRecording
+	DecodePortableRecordingWithVersions                = recordingcontracts.DecodePortableRecordingWithVersions
 	FactoryMetadataWarnings                            = recordingcontracts.FactoryMetadataWarnings
+	NormalizePortableRecordingWorkerHistory            = recordingcontracts.NormalizePortableRecordingWorkerHistory
+	NewPortableRecordingCodec                          = recordingcontracts.NewPortableRecordingCodec
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
+	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
 )
 
 // Service is the singular cross-service Recordings authority.

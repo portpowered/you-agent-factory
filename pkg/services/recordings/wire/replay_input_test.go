@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
@@ -44,6 +45,40 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 	}
 	if got := result.Portable.Session.ID; got != "session-js-001" {
 		t.Fatalf("Portable.Session.ID = %q, want session-js-001", got)
+	}
+}
+
+func TestReplayInputLoaderLoadsCurrentWorkerHistoryExport(t *testing.T) {
+	t.Parallel()
+
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v3-worker-history.json",
+	)
+	loader := recordingswire.NewReplayInputLoader(
+		recordings.RecordingReadFile(os.ReadFile),
+		func(string) (*recordings.ReplayArtifact, error) {
+			t.Fatal("legacy loader must not be called for a current portable recording")
+			return nil, nil
+		},
+		logging.NoopLogger{},
+	)
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if result.Portable == nil || result.Portable.SchemaVersion != recordings.PortableRecordingSchemaV3 {
+		t.Fatalf("Portable = %#v, want current schema", result.Portable)
+	}
+	history := result.Portable.WorkerHistory
+	if history == nil || history.Availability != recordings.PortableRecordingWorkerHistoryAvailable ||
+		history.WorkerPortableRecording == nil || len(history.Records) != 3 {
+		t.Fatalf("Worker history = %#v, want available ordered history", history)
+	}
+	if history.Correlation.FactorySessionID != result.Portable.Session.ID ||
+		history.Records[1].Provenance.Fidelity != workers.FidelityNormalized {
+		t.Fatalf("Worker correlation/fidelity = %#v", history)
 	}
 }
 
@@ -204,7 +239,7 @@ func TestReplayInputLoaderPublishesDetachedSafeDiagnostic(t *testing.T) {
 
 	loader := recordingswire.NewReplayInputLoader(
 		func(string) ([]byte, error) {
-			return []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","replayCompatibilityVersion":"99"}`), nil
+			return []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","schemaVersion":"2","replayCompatibilityVersion":"99"}`), nil
 		},
 		nil,
 		logging.NoopLogger{},
@@ -225,6 +260,29 @@ func TestReplayInputLoaderPublishesDetachedSafeDiagnostic(t *testing.T) {
 	second := requireReplayInputDiagnostic(t, err)
 	if second.Path == "mutated" || second.SupportedVersions[0] == "mutated" {
 		t.Fatalf("later diagnostic observed caller mutation: %#v", second)
+	}
+}
+
+func TestReplayInputLoaderClassifiesUnsupportedSchemaSeparately(t *testing.T) {
+	t.Parallel()
+
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			return []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","schemaVersion":"99","replayCompatibilityVersion":"1","secret":"provider output"}`), nil
+		},
+		nil,
+		logging.NoopLogger{},
+	)
+
+	_, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
+	diagnostic := requireReplayInputDiagnostic(t, err)
+	if diagnostic.Code != recordings.ReplayArtifactDiagnosticUnsupportedSchema ||
+		diagnostic.Area != "compatibility" || diagnostic.Path != "schemaVersion" ||
+		diagnostic.EncounteredVersion != "99" || diagnostic.Action != recordings.PortableRecordingCompatibilityAction {
+		t.Fatalf("diagnostic = %#v, want unsupported-schema compatibility facts", diagnostic)
+	}
+	if len(diagnostic.SupportedVersions) == 0 || strings.Contains(diagnostic.Message, "provider output") {
+		t.Fatalf("diagnostic = %#v, want supported versions without payload content", diagnostic)
 	}
 }
 
