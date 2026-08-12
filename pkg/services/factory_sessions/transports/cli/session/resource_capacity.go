@@ -43,6 +43,23 @@ type ResourceCapacityRejectedError struct {
 	Response   factoryapi.ErrorResponse
 }
 
+// CLIErrorCode preserves the server's typed capacity rejection code through
+// the root CLI process boundary.
+func (e *ResourceCapacityRejectedError) CLIErrorCode() string {
+	if e == nil || e.Response.Code == "" {
+		return "RESOURCE_CAPACITY_REQUEST_FAILED"
+	}
+	return string(e.Response.Code)
+}
+
+// CLIErrorMessage returns the safe, operation-scoped rejection diagnostic.
+func (e *ResourceCapacityRejectedError) CLIErrorMessage() string {
+	if e == nil {
+		return "resource capacity request rejected"
+	}
+	return e.Error()
+}
+
 func (e *ResourceCapacityRejectedError) Error() string {
 	if e == nil {
 		return ""

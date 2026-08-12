@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +17,9 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -55,7 +58,7 @@ func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
 	dir := scaffoldLiveCapacityFactory(t, 1)
 	server := startLiveCapacityServer(t, dir, runner)
 
-	first := submitLiveCapacityWork(t, server.URL(), liveCapacityInitialWorkName)
+	first := submitLiveCapacityWork(t, dir, server.URL(), liveCapacityInitialWorkName)
 	if first.WorkId == nil || *first.WorkId == "" {
 		t.Fatalf("first submit response = %#v, want work id", first)
 	}
@@ -65,8 +68,8 @@ func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
 	if before.Id == "" {
 		t.Fatal("default Factory Session has no durable identity")
 	}
-	submitLiveCapacityWork(t, server.URL(), liveCapacityQueuedWorkName)
-	submitLiveCapacityWork(t, server.URL(), liveCapacitySecondQueuedName)
+	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityQueuedWorkName)
+	submitLiveCapacityWork(t, dir, server.URL(), liveCapacitySecondQueuedName)
 
 	capacity := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 2, 0, liveCapacityRaiseRequestID, "raise functional throughput")
 	if capacity.ResourceId != liveCapacityResourceID || capacity.EffectiveCapacity != 2 ||
@@ -116,7 +119,7 @@ func TestLiveResourceCapacityReductionPreservesActiveWork(t *testing.T) {
 	dir := scaffoldLiveCapacityFactory(t, 3)
 	server := startLiveCapacityServer(t, dir, runner)
 
-	submitLiveCapacityWork(t, server.URL(), liveCapacityInitialWorkName)
+	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityInitialWorkName)
 	runner.waitForCall(t, 1)
 	before := support.GetDefaultSession(t, server.URL())
 
@@ -148,8 +151,8 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 	dir := scaffoldLiveCapacityFactory(t, 2)
 	server := startLiveCapacityServer(t, dir, runner)
 
-	submitLiveCapacityWork(t, server.URL(), liveCapacityInitialWorkName)
-	submitLiveCapacityWork(t, server.URL(), liveCapacityQueuedWorkName)
+	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityInitialWorkName)
+	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityQueuedWorkName)
 	runner.waitForCall(t, 2)
 
 	beforeEvents := server.GetFactoryEvents(t)
@@ -158,7 +161,7 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 		t.Fatal("active session has no resource usage projection")
 	}
 
-	errResponse := rejectLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 1, 0, "capacity-lower-rejected")
+	errResponse := rejectLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 1, 0, "capacity-lower-rejected", "reject unsafe capacity reduction")
 	if errResponse.Code != factoryapi.ErrorResponseCodeRESOURCECAPACITYINUSE || errResponse.ResourceCapacity == nil {
 		t.Fatalf("reduction rejection = %#v, want RESOURCE_CAPACITY_IN_USE details", errResponse)
 	}
@@ -282,9 +285,6 @@ func assertLiveCapacityReplayAndRejections(
 	changeID string,
 ) {
 	t.Helper()
-	// Successful customer flows use the public CLI above. These REST calls are
-	// intentionally limited to error-envelope assertions, where the HTTP status
-	// and typed ErrorResponse are the observable contract under test.
 	replayed := runLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
 	if replayed.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("REPLAYED") ||
 		replayed.ChangeId != changeID || replayed.Revision != 1 || replayed.EffectiveCapacity != 2 {
@@ -292,40 +292,23 @@ func assertLiveCapacityReplayAndRejections(
 	}
 	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "same-body replay")
 
-	conflictStatus, conflictBody := postLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-raise")
-	if conflictStatus != http.StatusConflict {
-		t.Fatalf("different-body request status = %d, want 409\n%s", conflictStatus, conflictBody)
-	}
-	var conflict factoryapi.ErrorResponse
-	if err := json.Unmarshal(conflictBody, &conflict); err != nil {
-		t.Fatalf("decode different-body conflict: %v\n%s", err, conflictBody)
-	}
-	if conflict.Code != factoryapi.ErrorResponseCodeBADREQUEST || !strings.Contains(conflict.Message, "different normalized body") {
-		t.Fatalf("different-body conflict = %#v, want typed bad-request conflict", conflict)
+	conflict := rejectLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-raise", "reuse request id with different body")
+	if conflict.Code != factoryapi.ErrorResponseCodeREQUESTCONFLICT ||
+		conflict.Family != factoryapi.ErrorFamilyConflict ||
+		!strings.Contains(conflict.Message, "different normalized body") {
+		t.Fatalf("different-body conflict = %#v, want typed request conflict", conflict)
 	}
 	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "different-body conflict")
 
-	noOpStatus, noOpBody := postLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 1, "recorded-capacity-noop")
-	if noOpStatus != http.StatusConflict {
-		t.Fatalf("exact no-op status = %d, want pre-admission conflict\n%s", noOpStatus, noOpBody)
-	}
-	var noOp factoryapi.ErrorResponse
-	if err := json.Unmarshal(noOpBody, &noOp); err != nil {
-		t.Fatalf("decode exact no-op response: %v\n%s", err, noOpBody)
-	}
-	if noOp.Code != factoryapi.ErrorResponseCodeBADREQUEST || !strings.Contains(noOp.Message, "would not alter") {
-		t.Fatalf("exact no-op response = %#v, want typed pre-admission no-op", noOp)
+	noOp := runLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 2, 1, "recorded-capacity-noop", "repeat current capacity for recording")
+	if noOp.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("NO_OP") ||
+		noOp.PreviousCapacity != 2 || noOp.RequestedCapacity != 2 ||
+		noOp.EffectiveCapacity != 2 || noOp.Revision != 1 {
+		t.Fatalf("exact no-op response = %#v, want typed NO_OP at revision 1", noOp)
 	}
 	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "exact no-op")
 
-	staleStatus, staleBody := postLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-stale")
-	if staleStatus != http.StatusConflict {
-		t.Fatalf("stale request status = %d, want 409\n%s", staleStatus, staleBody)
-	}
-	var stale factoryapi.ErrorResponse
-	if err := json.Unmarshal(staleBody, &stale); err != nil {
-		t.Fatalf("decode stale revision response: %v\n%s", err, staleBody)
-	}
+	stale := rejectLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-stale", "submit stale capacity revision")
 	if stale.Code != factoryapi.ErrorResponseCodeREVISIONCONFLICT {
 		t.Fatalf("stale revision response = %#v, want REVISION_CONFLICT", stale)
 	}
@@ -360,6 +343,10 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	if started.SessionId == "" {
 		t.Fatal("JavaScript capacity workflow has no durable session ID")
 	}
+	responseStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), started.SessionId),
+	)
 	provider.waitForCall(t, 1)
 	before := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
 
@@ -377,7 +364,18 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	}
 
 	close(provider.releaseBlocked)
-	waitForLiveCapacityDurableSessionTerminal(t, server.URL(), started.SessionId, liveCapacityTestTimeout)
+	terminalEvent := waitForLiveCapacityJavaScriptTerminal(t, responseStream, 2)
+	if terminalEvent.FactorySessionId != started.SessionId {
+		t.Fatalf(
+			"JavaScript terminal response event session = %q, want %q",
+			terminalEvent.FactorySessionId,
+			started.SessionId,
+		)
+	}
+	terminal := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
+	if terminal.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("JavaScript durable session status = %q, want SUCCEEDED", terminal.Status)
+	}
 	if provider.callCount() != 2 || provider.peakActive() != 2 {
 		t.Fatalf("JavaScript provider calls=%d peakActive=%d, want exactly two calls with two concurrent effects", provider.callCount(), provider.peakActive())
 	}
@@ -415,6 +413,10 @@ func startLiveCapacityJavaScriptWorkflow(
 	serverURL, workflowSource string,
 ) factoryapi.FactorySessionExecutionResponse {
 	t.Helper()
+	// API-owned exception: durable JavaScript Factory Session execution is
+	// exposed through POST /factory-sessions/async (and MCP), with no
+	// equivalent public CLI command. Ordinary Work submission and live
+	// capacity controls in this feature use Process.Execute below.
 	dialect := "you-workflow-v1"
 	inlineSource := factoryapi.FactoryOrchestratorJavaScriptInlineSource{
 		Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
@@ -474,35 +476,36 @@ func readLiveCapacityDurableSession(
 	return session
 }
 
-func waitForLiveCapacityDurableSessionTerminal(
+func waitForLiveCapacityJavaScriptTerminal(
 	t *testing.T,
-	serverURL, sessionID string,
-	timeout time.Duration,
-) factoryapi.FactorySessionDurableReadModel {
+	stream *support.FactoryResponseEventStream,
+	wantRuns int,
+) factoryapi.FactoryResponseEvent {
 	t.Helper()
-	session, err := support.WaitForObservation(
-		timeout,
-		func() (factoryapi.FactorySessionDurableReadModel, error) {
-			return readLiveCapacityDurableSession(t, serverURL, sessionID), nil
-		},
-		func(session factoryapi.FactorySessionDurableReadModel) bool {
-			switch session.Status {
-			case factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-				factoryapi.FactorySessionDurableLifecycleStatusFailed,
-				factoryapi.FactorySessionDurableLifecycleStatusCanceled,
-				factoryapi.FactorySessionDurableLifecycleStatusTimedOut,
-				factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
-				factoryapi.FactorySessionDurableLifecycleStatusTerminated:
-				return true
-			default:
-				return false
+	completedRuns := 0
+	for {
+		event := stream.NextFrame(liveCapacityTestTimeout).Event
+		switch event.Kind {
+		case factoryapi.FactoryResponseEventKindRun:
+			if event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
+				completedRuns++
+				if completedRuns >= wantRuns {
+					// The final RUN frame precedes durable session finalization. The
+					// response stream closes when the session-owned execution has
+					// drained, providing a deterministic lifecycle barrier without
+					// polling the durable projection.
+					stream.WaitClosed(liveCapacityTestTimeout)
+					return event
+				}
 			}
-		},
-	)
-	if err != nil {
-		t.Fatalf("waiting for durable Factory Session %q to become terminal: %v", sessionID, err)
+		case factoryapi.FactoryResponseEventKindError,
+			factoryapi.FactoryResponseEventKindSession:
+			if event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+				event.Phase == factoryapi.FactoryResponseEventPhaseCanceled {
+				t.Fatalf("JavaScript workflow terminal response event = %s/%s", event.Kind, event.Phase)
+			}
+		}
 	}
-	return session
 }
 
 func writeLiveCapacityJavaScriptGlobalConfig(t *testing.T) string {
@@ -577,77 +580,6 @@ func startLiveCapacityServer(t *testing.T, dir string, runner *liveCapacityBarri
 	return server
 }
 
-func setLiveCapacityREST(
-	t *testing.T,
-	serverURL, sessionID, resourceID string,
-	capacity, expectedRevision int,
-	requestID string,
-) factoryapi.FactorySessionResourceCapacityResponse {
-	t.Helper()
-	status, body := postLiveCapacityREST(t, serverURL, sessionID, resourceID, capacity, expectedRevision, requestID)
-	if status != http.StatusOK {
-		t.Fatalf("set resource capacity status = %d, want 200\n%s", status, body)
-	}
-	var response factoryapi.FactorySessionResourceCapacityResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		t.Fatalf("decode set resource capacity response: %v\n%s", err, body)
-	}
-	return response
-}
-
-func rejectLiveCapacityREST(
-	t *testing.T,
-	serverURL, sessionID, resourceID string,
-	capacity, expectedRevision int,
-	requestID string,
-) factoryapi.ErrorResponse {
-	t.Helper()
-	status, body := postLiveCapacityREST(t, serverURL, sessionID, resourceID, capacity, expectedRevision, requestID)
-	if status != http.StatusConflict {
-		t.Fatalf("rejected resource capacity status = %d, want 409\n%s", status, body)
-	}
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		t.Fatalf("decode rejected resource capacity response: %v\n%s", err, body)
-	}
-	return response
-}
-
-func postLiveCapacityREST(
-	t *testing.T,
-	serverURL, sessionID, resourceID string,
-	capacity, expectedRevision int,
-	requestID string,
-) (int, []byte) {
-	t.Helper()
-	reason := "functional live resource capacity test"
-	payload, err := json.Marshal(factoryapi.FactorySessionResourceCapacityRequest{
-		Capacity:         capacity,
-		ExpectedRevision: expectedRevision,
-		Reason:           &reason,
-		RequestId:        requestID,
-	})
-	if err != nil {
-		t.Fatalf("marshal resource capacity request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/resources/" + resourceID + "/capacity"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build resource capacity request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("POST resource capacity: %v", err)
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read resource capacity response: %v", err)
-	}
-	return response.StatusCode, body
-}
-
 func assertLiveCapacityUsage(t *testing.T, session factoryapi.FactorySession, name string, total, available int) {
 	t.Helper()
 	for _, usage := range session.Runtime.Usage.Resources {
@@ -670,13 +602,49 @@ func assertNoLiveCapacityInterruptions(t *testing.T, events []factoryapi.Factory
 	}
 }
 
-func submitLiveCapacityWork(t *testing.T, serverURL, name string) factoryapi.SubmitWorkResponse {
+func submitLiveCapacityWork(
+	t *testing.T,
+	factoryDir, serverURL, name string,
+) factoryapi.SubmitWorkResponse {
 	t.Helper()
-	return support.SubmitDefaultSessionWork(t, serverURL, factoryapi.SubmitWorkRequest{
-		Name:         stringPointer(name),
-		WorkTypeName: liveCapacityWorkType,
-		Payload:      map[string]any{"name": name},
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+
+	payloadPath := filepath.Join(t.TempDir(), "live-capacity-work.json")
+	payload, err := json.Marshal(map[string]string{"name": name})
+	if err != nil {
+		t.Fatalf("marshal live capacity Work payload: %v", err)
+	}
+	if err := os.WriteFile(payloadPath, payload, 0o600); err != nil {
+		t.Fatalf("write live capacity Work payload: %v", err)
+	}
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"--json",
+		"--server", serverURL,
+		"submit",
+		"--session", "~default",
+		"--name", name,
+		"--work-type-name", liveCapacityWorkType,
+		"--payload", payloadPath,
 	})
+	inputs.WorkingDirectory = factoryDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("you submit live capacity Work: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var confirmation submitcli.SubmitSuccessResult
+	if err := json.Unmarshal(bytes.TrimSpace([]byte(inputs.Stdout())), &confirmation); err != nil {
+		t.Fatalf("decode you submit live capacity Work JSON: %v\nstdout:\n%s", err, inputs.Stdout())
+	}
+	return factoryapi.SubmitWorkResponse{
+		Accepted:     true,
+		Name:         stringPointer(confirmation.Name),
+		SessionId:    stringPointer(confirmation.SessionID),
+		TraceId:      confirmation.TraceID,
+		WorkId:       confirmation.WorkID,
+		WorkTypeName: stringPointer(confirmation.WorkTypeName),
+	}
 }
 
 func runLiveCapacityCLI(
@@ -713,6 +681,37 @@ func runLiveCapacityCLI(
 		t.Fatalf("decode you session resource set JSON: %v\nstdout:\n%s", err, inputs.Stdout())
 	}
 	return response
+}
+
+func rejectLiveCapacityCLI(
+	t *testing.T,
+	factoryDir, serverURL, sessionID, resourceID string,
+	capacity, expectedRevision int,
+	requestID, reason string,
+) factoryapi.ErrorResponse {
+	t.Helper()
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"--json",
+		"--server", serverURL,
+		"session", "resource", "set",
+		resourceID, fmt.Sprintf("%d", capacity), sessionID,
+		"--request-id", requestID,
+		"--expected-revision", fmt.Sprintf("%d", expectedRevision),
+		"--reason", reason,
+	})
+	inputs.WorkingDirectory = factoryDir
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("you session resource set %s unexpectedly succeeded\nstdout:\n%s", requestID, inputs.Stdout())
+	}
+	var rejected *sessioncli.ResourceCapacityRejectedError
+	if !errors.As(err, &rejected) {
+		t.Fatalf("you session resource set %s error = %T (%v), want typed capacity rejection\nstderr:\n%s", requestID, err, err, inputs.Stderr())
+	}
+	return rejected.Response
 }
 
 func scaffoldLiveCapacityFactory(t *testing.T, capacity int) string {
