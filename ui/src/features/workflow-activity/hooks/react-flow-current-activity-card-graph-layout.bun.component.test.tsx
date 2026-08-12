@@ -130,15 +130,27 @@ describe("Current activity graph layout builder contract", () => {
     const buildLayout = mock<CurrentActivityGraphLayoutBuilder>(
       async () => explicitLayout,
     );
+    const replacementLayout: GraphLayout = {
+      ...explicitLayout,
+      nodes: explicitLayout.nodes.map((node) => ({
+        ...node,
+        nodeId: `${node.nodeId}:replacement`,
+      })),
+    };
+    const replacementBuilder = mock<CurrentActivityGraphLayoutBuilder>(
+      async () => replacementLayout,
+    );
 
-    const first = renderHook(() =>
-      useCurrentActivityGraphLayoutForFactory(
-        snapshot,
-        snapshot.factory,
-        new Set(),
-        "all",
-        buildLayout,
-      ),
+    const first = renderHook(
+      ({ builder }) =>
+        useCurrentActivityGraphLayoutForFactory(
+          snapshot,
+          snapshot.factory,
+          new Set(),
+          "all",
+          builder,
+        ),
+      { initialProps: { builder: buildLayout } },
     );
     const second = renderHook(() =>
       useCurrentActivityGraphLayoutForFactory(
@@ -156,5 +168,16 @@ describe("Current activity graph layout builder contract", () => {
     });
 
     expect(buildLayout).toHaveBeenCalledTimes(1);
+
+    first.rerender({ builder: replacementBuilder });
+
+    await waitFor(() => {
+      expect(first.result.current.nodes[0]?.nodeId).toBe(
+        "workstation:review:replacement",
+      );
+    });
+
+    expect(replacementBuilder).toHaveBeenCalledTimes(1);
+    expect(second.result.current).toEqual(explicitLayout);
   });
 });

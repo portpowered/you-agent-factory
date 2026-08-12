@@ -19,6 +19,11 @@ export type CurrentActivityGraphLayoutBuilder = (
 ) => Promise<GraphLayout>;
 
 const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
+const GRAPH_LAYOUT_BUILDER_IDS = new WeakMap<
+  CurrentActivityGraphLayoutBuilder,
+  number
+>();
+let nextGraphLayoutBuilderID = 1;
 
 export function resetCurrentActivityGraphLayoutCacheForTests(): void {
   GRAPH_LAYOUT_CACHE.inFlightByTopologyKey.clear();
@@ -36,6 +41,7 @@ export function useCurrentActivityGraphLayoutForFactory(
   const factory =
     factoryOverride === undefined ? snapshot.factory : factoryOverride;
   const hiddenClassesKey = [...hiddenNodeClasses].sort().join(",");
+  const builderCacheKey = getGraphLayoutBuilderCacheKey(buildLayout);
   const layoutSource = useMemo(
     () =>
       factory
@@ -69,8 +75,22 @@ export function useCurrentActivityGraphLayoutForFactory(
           )
         : Promise.resolve(EMPTY_GRAPH_LAYOUT),
     mapResolvedLayout: identityGraphLayout,
-    topologyKey: layoutSource.key,
+    topologyKey: `${layoutSource.key}|builder:${builderCacheKey}`,
   });
+}
+
+function getGraphLayoutBuilderCacheKey(
+  buildLayout: CurrentActivityGraphLayoutBuilder,
+): number {
+  const existingID = GRAPH_LAYOUT_BUILDER_IDS.get(buildLayout);
+  if (existingID !== undefined) {
+    return existingID;
+  }
+
+  const builderID = nextGraphLayoutBuilderID;
+  nextGraphLayoutBuilderID += 1;
+  GRAPH_LAYOUT_BUILDER_IDS.set(buildLayout, builderID);
+  return builderID;
 }
 
 function identityGraphLayout(layout: GraphLayout) {
