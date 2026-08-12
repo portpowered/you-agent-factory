@@ -34,7 +34,7 @@ func ownerFactoryDefinitionValidator() factorydefinitions.Validator {
 	return factoryvalidation.New(nil)
 }
 
-func ownerFactoryDefinitionPersistence() factorydefinitions.Persistence {
+func ownerFactoryDefinitionPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := ownerFactoryDefinitionValidator()
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}

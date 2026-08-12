@@ -60,12 +60,12 @@ function englishWorkstationIconLabel(kind: WorkstationSemanticKind): string {
       return "Cron workstation";
     case "POLLER":
       return "Poller workstation";
-    case "exhaustion":
-      return "Exhaustion rule";
     case "REPEATER":
       return "Repeater workstation";
     case "STANDARD":
       return "Standard workstation";
+    case "UNKNOWN":
+      return "Unknown workstation semantics";
   }
 }
 
@@ -75,12 +75,12 @@ function chineseWorkstationIconLabel(kind: WorkstationSemanticKind): string {
       return "Cron 工作站";
     case "POLLER":
       return "轮询器工作站";
-    case "exhaustion":
-      return "耗尽规则";
     case "REPEATER":
       return "重复器工作站";
     case "STANDARD":
       return "标准工作站";
+    case "UNKNOWN":
+      return "未知工作站语义";
   }
 }
 
@@ -101,8 +101,6 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "Doc";
           case "cron":
             return "Cron workstation";
-          case "exhaustion":
-            return "Exhaustion rule";
           case "failed":
             return "Failed state";
           case "limit":
@@ -157,8 +155,6 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "文档";
           case "cron":
             return "Cron 工作站";
-          case "exhaustion":
-            return "耗尽规则";
           case "failed":
             return "失败状态";
           case "limit":

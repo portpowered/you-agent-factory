@@ -22,7 +22,6 @@ describe("getActivityGraphMessages", () => {
       ["active-work", "Active work"],
       ["constraint", "Constraint"],
       ["cron", "Cron workstation"],
-      ["exhaustion", "Exhaustion rule"],
       ["failed", "Failed state"],
       ["limit", "Limit"],
       ["poller", "Poller workstation"],
@@ -40,7 +39,7 @@ describe("getActivityGraphMessages", () => {
       ["POLLER", "Poller workstation"],
       ["REPEATER", "Repeater workstation"],
       ["STANDARD", "Standard workstation"],
-      ["exhaustion", "Exhaustion rule"],
+      ["UNKNOWN", "Unknown workstation semantics"],
     ];
 
     for (const [kind, label] of semanticIconLabels) {
@@ -85,7 +84,6 @@ describe("getActivityGraphMessages", () => {
       ["active-work", "活动工作"],
       ["constraint", "约束"],
       ["cron", "Cron 工作站"],
-      ["exhaustion", "耗尽规则"],
       ["failed", "失败状态"],
       ["limit", "限制"],
       ["poller", "轮询器工作站"],
@@ -103,7 +101,7 @@ describe("getActivityGraphMessages", () => {
       ["POLLER", "轮询器工作站"],
       ["REPEATER", "重复器工作站"],
       ["STANDARD", "标准工作站"],
-      ["exhaustion", "耗尽规则"],
+      ["UNKNOWN", "未知工作站语义"],
     ];
 
     for (const [kind, label] of semanticIconLabels) {

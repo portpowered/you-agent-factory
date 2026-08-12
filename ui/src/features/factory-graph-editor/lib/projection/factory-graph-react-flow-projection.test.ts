@@ -887,7 +887,7 @@ describe("factory graph React Flow projection", () => {
     });
   });
 
-  it("projects poller workstation behavior into editor semantic icon metadata", () => {
+  it("projects authored poller semantics into the editor node", () => {
     const factoryWithPoller = {
       ...baseFactoryDefinition,
       workers: [
@@ -910,6 +910,7 @@ describe("factory graph React Flow projection", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(factoryWithPoller);
 
     const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: factoryWithPoller,
       topology,
       workstationResolver: createFactoryGraphWorkstationResolver(
         factoryWithPoller.workstations,
@@ -921,9 +922,53 @@ describe("factory graph React Flow projection", () => {
     );
 
     expect(pollerNode?.data).toMatchObject({
-      workstationSemanticBorderClassName: "border-dotted",
-      workstationSemanticIconKind: "poller",
-      workstationSemanticLabel: "Poller workstation",
+      workstationSemantics: {
+        controlRole: "UNKNOWN",
+        runtimeRole: "UNKNOWN",
+        runtimeType: "UNKNOWN",
+        schedulingBehavior: "POLLER",
+      },
+    });
+  });
+
+  it("does not join id-backed workstation semantics through a renamed name", () => {
+    const factoryWithStableWorkstation = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          id: "stable-workstation",
+          name: "Renamed process",
+          type: WorkstationType.AGENT_RUN,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology: FactoryGraphTopology = {
+      edges: [],
+      nodes: [
+        {
+          id: "workstation:old-workstation",
+          key: {
+            id: "old-workstation",
+            kind: "workstation",
+            name: "Renamed process",
+          },
+          kind: "workstation",
+          label: "Renamed process",
+        },
+      ],
+    };
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: factoryWithStableWorkstation,
+      topology,
+    });
+
+    expect(projection.nodes[0]?.data.workstationSemantics).toEqual({
+      controlRole: "UNKNOWN",
+      runtimeRole: "UNKNOWN",
+      runtimeType: "UNKNOWN",
+      schedulingBehavior: "UNKNOWN",
     });
   });
 });

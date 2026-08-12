@@ -1,6 +1,6 @@
-import { useId, useState } from "react";
 import { SurfacePanel } from "@you-agent-factory/components/layout";
 import { Label, Text } from "@you-agent-factory/components/primitives";
+import { useId, useState } from "react";
 import {
   DisclosureButton,
   type DisclosureButtonProps,
@@ -14,13 +14,10 @@ import {
 import type { FactoryGraphWorkStateType } from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-type";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
-  EXHAUSTION_WORKSTATION_ICON_METADATA,
-  SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart/lib/workstation-icon-metadata";
-import {
   GraphSemanticIcon,
   type GraphSemanticIconKind,
 } from "../../flowchart/components/graph-semantic-icon";
+import { SUPPORTED_WORKSTATION_ICON_METADATA } from "../../flowchart/lib/workstation-icon-metadata";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 
 export interface DashboardFlowAxisLegendEdgeItem {
@@ -120,11 +117,6 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
       iconClassName: "text-success",
       kind: "active-work",
       label: messages.iconLabels["active-work"],
-    },
-    {
-      iconClassName: EXHAUSTION_WORKSTATION_ICON_METADATA.className,
-      kind: EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind,
-      label: messages.iconLabels[EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind],
     },
   ];
 }

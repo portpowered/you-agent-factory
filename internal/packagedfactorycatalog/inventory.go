@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"gopkg.in/yaml.v3"
 )
@@ -105,7 +104,7 @@ func discoverDirectory(source fs.FS, root, slug string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	if err := validateCanonicalFactory(sourcePath, cfg); err != nil {
+	if err := validateCanonicalFactory(sourcePath, slug, cfg); err != nil {
 		return Entry{}, err
 	}
 
@@ -179,8 +178,8 @@ func isSupportedRootName(name string) bool {
 	}
 }
 
-func validateCanonicalFactory(sourcePath string, cfg *factorydefinitions.FactoryConfig) error {
-	if validation := factorydefinitionswirevalidation.ValidateFactoryDefinition(cfg); validation.HasBlockingTargets() {
+func validateCanonicalFactory(sourcePath, slug string, cfg *factorydefinitions.FactoryConfig) error {
+	if validation := validateFactoryDefinitionForCatalog(slug, cfg); validation.HasBlockingTargets() {
 		var findings []string
 		for _, target := range validation.BlockingTargets() {
 			findings = append(findings, fmt.Sprintf("%s %s: %s", target.Code, target.Path, target.Message))
