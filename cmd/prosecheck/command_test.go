@@ -17,6 +17,14 @@ type commandResult struct {
 	err    string
 }
 
+const mixedCrossAdapterGolden = `contracts/cli/commands.json:17:46 [B-CONTRACTION] descriptive: doesn't — Use the complete form instead of the contraction. (sha256:b16908890b2b74caa40231cbf8d779a37bcc4c06c076574e3bd220fbcb46b6ec)
+contracts/cli/commands.json:26:37 [B-CONTRACTION] procedural: doesn't — Use the complete form instead of the contraction. (sha256:44e0bec9761ea197fdf779e24b6b1196361547873ffa15a7cba2c6b86d1bef6d)
+contracts/cli/commands.json:32:33 [B-SEMICOLON] procedural: ; — Replace the semicolon with a full stop or separate the two ideas. (sha256:396f8e54707d485ce0f451850d2b8f550a31981e573e94a9c1f825c73dfded7f)
+contracts/cli/commands.json:66:51 [B-SEMICOLON] procedural: ; — Replace the semicolon with a full stop or separate the two ideas. (sha256:8b4a488a18edb0f85425a31169b62cf4695df8eb7a1e8b9c042abeca684f49e2)
+docs/guide.md:3:13 [B-CONTRACTION] descriptive: doesn't — Use the complete form instead of the contraction. (sha256:d0fa3040e1c1715b4b77170d6a44e734feb25d339c25df5c0e4eaa4d7085f7a6)
+docs/guide.md:3:25 [B-SEMICOLON] descriptive: ; — Replace the semicolon with a full stop or separate the two ideas. (sha256:844ec784321746a85031a8744b840756d2756b6a5d37f1b829dd9e613970b6f2)
+`
+
 func TestRunCrossAdapterFixtureHasStableMergedOutput(t *testing.T) {
 	standardPath, termsPath := writeCommandFixtures(t,
 		[]byte("# Guide\n\nThe service doesn't stop; now.\n"),
@@ -35,33 +43,8 @@ func TestRunCrossAdapterFixtureHasStableMergedOutput(t *testing.T) {
 		t.Fatalf("mixed fixture stdout = %q, want empty stdout", first.stdout)
 	}
 
-	standard, err := os.ReadFile(standardPath)
-	if err != nil {
-		t.Fatalf("read writing standard: %v", err)
-	}
-	terms, err := os.ReadFile(termsPath)
-	if err != nil {
-		t.Fatalf("read terminology register: %v", err)
-	}
-	policy, err := LoadPolicy(standard, terms)
-	if err != nil {
-		t.Fatalf("LoadPolicy(): %v", err)
-	}
-	manifest, err := os.ReadFile("contracts/cli/commands.json")
-	if err != nil {
-		t.Fatalf("read CLI fixture: %v", err)
-	}
-	markdown, err := os.ReadFile("docs/guide.md")
-	if err != nil {
-		t.Fatalf("read Markdown fixture: %v", err)
-	}
-	expectedFindings := append(AnalyzeCLIManifest("contracts/cli/commands.json", manifest, policy), AnalyzeMarkdown("docs/guide.md", markdown, policy)...)
-	var expected bytes.Buffer
-	if err := RenderFindings(&expected, expectedFindings); err != nil {
-		t.Fatalf("RenderFindings(expected): %v", err)
-	}
-	if first.stderr != expected.String() {
-		t.Fatalf("mixed fixture stderr differs from exact merged findings:\nwant=%q\ngot=%q", expected.String(), first.stderr)
+	if first.stderr != mixedCrossAdapterGolden {
+		t.Fatalf("mixed fixture stderr differs from independent golden:\nwant=%q\ngot=%q", mixedCrossAdapterGolden, first.stderr)
 	}
 
 	lines := strings.Split(strings.TrimSuffix(first.stderr, "\n"), "\n")
