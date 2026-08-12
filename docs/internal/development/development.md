@@ -204,22 +204,32 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make test-root-process-acceptance` is the focused rerun command for the hermetic root-process S24 acceptance package under `tests/functional/acceptance`. Each command invocation constructs an independent `root.BuildProcess`; the lane does not build a CLI executable. It runs the full behavioral acceptance corpus (including named-goal, stream, subagent, and local-model scenarios that skip under `-short`) and fails with scenario subtest names such as `s24-subagent` when the scenario matrix drifts from its documented customer-outcome mapping in `internal/builtcliacceptance/scenarios.go`.
 
-Every pull request begins with `Classify Verification`. The classifier is an additive ownership table: a mixed change runs the union of selected lanes rather than one exclusive bucket. `factory/**` is neutral, so factory-only changes select no product verification. `.github/workflows/**`, `scripts/ci/**`, `Makefile`, `go.mod`, `go.sum`, empty diffs, and unknown paths select every lane conservatively.
+Every pull request begins with `Classify Verification` and ends with `Verification Policy`. The classifier is an additive ownership table: a mixed change runs the union of selected lanes rather than one exclusive bucket. Job-level conditions skip unselected product work before a hosted runner is allocated.
 
 | Changed surface | Selected CI lanes | Direct local rerun |
 | --- | --- | --- |
 | `docs/reference/**`, `docs/README.md` | Docs Reference | `make docs-reference-smoke` |
 | `README.md` | README | `make readme-check` |
-| `factory/**` only or other internal docs | None | None |
-| `ui/**` | Frontend and Frontend Browser | `make typecheck ui-lint test-ui-coverage`; `make test-ui-browser-integration` |
-| `cmd/**`, `pkg/**`, `internal/**`, `tests/**` | Backend and UI Backend Integration | `make build test-backend-verification`; `make ui-durable-session-real-backend-integration-test` |
-| API contracts, HTTP transport/mapping, generated API output | Frontend, Frontend Browser, Backend, UI Backend Integration, API Package | the corresponding commands above plus `make api-package-verify` |
-| `packages/api/**` or API package scripts | API Package, Frontend, Frontend Browser, Backend, UI Backend Integration | `make api-package-verify` and the corresponding commands above |
-| Packaged Factories package | Packaged Factories Package and Backend | `make packaged-factory-package-verify`; `make build test-backend-verification` |
-| Model Providers package | Model Providers Package and Backend | `make model-provider-package-verify`; `make build test-backend-verification` |
-| Local inference ownership | Backend and Local Inference | `make build test-backend-verification`; `make verify-pr-inference` |
+| `factory/**` only or other `docs/**` paths | None | No product lane; use `make verify-pr` when a broad local pass is useful. |
+| `ui/**` | Frontend, Frontend Component, Frontend Coverage, Frontend Browser, Frontend Storybook | `make frontend-verification` |
+| `cmd/**`, `pkg/**`, `internal/**`, `tests/**`, or release scripts | Backend and UI Backend Integration | `make backend-verification`; `make ui-backend-integration` |
+| API contracts, HTTP transport or mapping, generated API output | Frontend, Backend, UI Backend Integration, API Package | `make frontend-verification`; `make backend-verification`; `make ui-backend-integration`; `make api-package-verify` |
+| `packages/api/**` or API package scripts | API Package plus the API consumer lanes | `make api-package-verify`; rerun the consumer commands above when needed. |
+| `packages/packaged-factories/**` or its package scripts | Packaged Factories Package and Backend | `make packaged-factory-package-verify`; `make backend-verification` |
+| `packages/model-providers/**` or provider package scripts | Model Providers Package and Backend | `make model-provider-package-verify`; `make backend-verification` |
+| Managed local inference ownership | Backend and Local Inference | `make backend-verification`; `make local-inference-verification` |
 
-`Verification Policy` is the stable required check. It validates selected results and publishes touched areas, selected and skipped lanes, reasons, and local rerun commands. Lane conditions are applied to jobs, so unselected work does not allocate a hosted runner. Development Package applies the same package ownership to validation and pull-request candidate artifacts; protected `main` still prepares every artifact needed by publication.
+The classifier also emits a reason for every lane. `factory/**` is neutral, so a factory-only change selects no product lane; a factory change mixed with an owned path contributes no extra lane. `.github/workflows/**`, `scripts/ci/**`, `Makefile`, `go.mod`, `go.sum`, an empty change set, and unknown paths select every lane through the conservative `make verify-pr` policy. Only the exact classifier value `false` disables a lane. Missing or malformed lane outputs therefore select work, while a failed or incomplete classifier also fails `Verification Policy`.
+
+### Package and policy behavior
+
+`Development Package` is a reusable workflow called by pull-request and protected-main CI. A selected API or Packaged Factories package runs its self-verification and pull-request candidate dry run. A selected Model Providers package runs self-verification; it has no candidate job because that package has no candidate publication path. Mixed package changes run the union. Unselected package jobs and candidates are skipped before runner allocation.
+
+The protected-main CI call verifies every package and does not build pull-request candidates. The separate protected-main publication path still prepares, publishes, and verifies every required development artifact. This keeps publication prerequisites intact without making unrelated pull requests build candidates.
+
+`Classify Verification` and `Verification Policy` are always-present control-plane jobs. `Verification Policy` waits for all possible product results, accepts an expected skip for an unselected lane, and fails for classifier failure, selected failure, cancellation, missing results, or unexpected execution of an unselected lane. Its summary lists the touched areas, each run or skip decision, the classifier reason, and the terminal result.
+
+The protected-branch ruleset requires the stable `Verification Policy` check. It does not require conditional product job names, because those names are absent by design for unselected lanes. A policy success means classification completed safely and every selected lane, package verification, and required pull-request candidate succeeded.
 
 The next table describes focused local verification targets. CI execution is the
 ownership table above; coverage runs as one job rather than a shard matrix.

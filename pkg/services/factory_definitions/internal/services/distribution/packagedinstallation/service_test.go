@@ -29,7 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
-func packagedInstallationTestPersistence() factorydefinitions.Persistence {
+func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
@@ -348,13 +348,13 @@ func TestInstallPackagedFactory_AcquisitionRacePreservesWinnerLease(t *testing.T
 }
 
 type blockingPackagedInstallationPersistence struct {
-	factorydefinitions.Persistence
+	factorydefinitions.PackagedFactoryPersistence
 	prepareStarted chan struct{}
 	allowPrepare   chan struct{}
 	prepareOnce    sync.Once
 }
 
-func (p *blockingPackagedInstallationPersistence) PrepareFactoryLayout(
+func (p *blockingPackagedInstallationPersistence) PreparePackagedFactoryLayout(
 	context.Context,
 	string,
 	[]byte,

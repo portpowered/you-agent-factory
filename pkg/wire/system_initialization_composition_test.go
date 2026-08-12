@@ -13,7 +13,7 @@ import (
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
-func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persistence {
+func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.PackagedFactoryPersistence {
 	t.Helper()
 
 	edges := serviceedges.Edges{}

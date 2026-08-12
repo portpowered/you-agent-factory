@@ -80,8 +80,6 @@ workTypes:
           type: INITIAL
         - name: quorum-context
           type: PROCESSING
-        - name: complete
-          type: TERMINAL
         - name: failed
           type: FAILED
     - name: quorum-branch-a

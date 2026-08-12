@@ -7,6 +7,7 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { WorkstationKind } from "../../../api/generated/openapi";
 import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
@@ -27,7 +28,6 @@ import {
   CRON_WORKSTATION_KIND,
   POLLER_WORKSTATION_KIND,
   REPEATER_WORKSTATION_KIND,
-  STANDARD_WORKSTATION_KIND,
 } from "../../flowchart/lib/workstation-icon-metadata";
 import { factoryBundledDocDisplayLabel } from "./factory-bundled-docs";
 
@@ -138,7 +138,7 @@ function workstationIOWorkType(io: LegacyFactoryWorkstationIO): string {
 
 function dashboardWorkstationKind(
   behavior: FactoryWorkstation["behavior"],
-): DashboardWorkstationKind {
+): DashboardWorkstationKind | undefined {
   switch (behavior) {
     case "CRON":
       return CRON_WORKSTATION_KIND;
@@ -147,8 +147,9 @@ function dashboardWorkstationKind(
     case "REPEATER":
       return REPEATER_WORKSTATION_KIND;
     case "STANDARD":
+      return WorkstationKind.STANDARD;
     case undefined:
-      return STANDARD_WORKSTATION_KIND;
+      return undefined;
   }
 }
 
@@ -611,11 +612,19 @@ export function findFactoryWorkstationByNodeId(
   factory: CanonicalFactoryDefinition | undefined,
   nodeId: string,
 ): DashboardWorkstationNode | null {
-  const workstation = (factory?.workstations ?? []).find(
-    (candidate) => candidate.id === nodeId || candidate.name === nodeId,
+  const workstation = (factory?.workstations ?? []).find((candidate) =>
+    factoryWorkstationMatchesNodeId(candidate, nodeId),
   );
 
   return workstation ? dashboardWorkstationFromFactory(workstation) : null;
+}
+
+function factoryWorkstationMatchesNodeId(
+  workstation: FactoryWorkstation,
+  nodeId: string,
+): boolean {
+  const authoredId = workstation.id?.trim();
+  return authoredId ? authoredId === nodeId : workstation.name === nodeId;
 }
 
 export async function buildCurrentActivityGraphLayoutFromFactory(

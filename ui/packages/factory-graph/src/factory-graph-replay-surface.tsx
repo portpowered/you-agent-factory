@@ -1,18 +1,17 @@
-import {
-  Background,
-  Controls,
-  ReactFlow,
-  type Edge,
-} from "@xyflow/react";
+import { Background, Controls, type Edge, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
 
-import type { FactoryGraphSource } from "./source.js";
+import type { FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 import {
   FACTORY_GRAPH_NODE_TYPES,
   type FactoryGraphNode,
 } from "./semantic-nodes.js";
-import type { FactoryGraphNodeHandle } from "./semantic-node-shell.js";
+import type { FactoryGraphSource } from "./source.js";
+import {
+  type FactoryGraphWorkstationSemanticProjection,
+  projectFactoryGraphWorkstationSemantics,
+} from "./workstation-semantics.js";
 
 export interface FactoryGraphReplaySurfaceProps {
   className?: string;
@@ -41,6 +40,7 @@ export function FactoryGraphReplaySurface({
         edgesFocusable={false}
         fitView
         fitViewOptions={{ padding: 0.12 }}
+        minZoom={0.25}
         nodes={flow.nodes}
         nodesConnectable={false}
         nodesDraggable={false}
@@ -72,13 +72,23 @@ export function projectFactoryGraphReplayFlow(
     ]),
   );
   const activeIds = replayActiveNodeIds(source);
-  const topologyNodes = source.runtime.topology.nodes.map((topologyNode, index) =>
-    semanticNode(topologyNode, {
-      active: activeIds.has(topologyNode.id),
-      position: positions.get(topologyNode.id) ?? fallbackPosition(index),
-      selected: topologyNode.id === selectedNodeId,
-      source,
-    }),
+  const workstationSemanticsByNodeId = new Map(
+    projectFactoryGraphWorkstationSemantics(source).map((projection) => [
+      projection.nodeId,
+      projection,
+    ]),
+  );
+  const topologyNodes = source.runtime.topology.nodes.map(
+    (topologyNode, index) =>
+      semanticNode(topologyNode, {
+        active: activeIds.has(topologyNode.id),
+        position: positions.get(topologyNode.id) ?? fallbackPosition(index),
+        selected: topologyNode.id === selectedNodeId,
+        source,
+        workstationProjection: workstationSemanticsByNodeId.get(
+          topologyNode.id,
+        ),
+      }),
   );
   const docs = (source.factory.supportingFiles?.bundledFiles ?? []).flatMap(
     (file, index) => {
@@ -125,6 +135,7 @@ function semanticNode(
     position: { x: number; y: number };
     selected: boolean;
     source: FactoryGraphSource;
+    workstationProjection?: FactoryGraphWorkstationSemanticProjection;
   },
 ): FactoryGraphNode {
   const handles = node.handles.map(toSemanticHandle);
@@ -197,12 +208,14 @@ function semanticNode(
         id: node.id,
         type: "statePosition",
       };
-    case "workstation":
+    case "workstation": {
+      const active =
+        input.active || Boolean(input.workstationProjection?.activity.active);
       return {
         ...base,
         data: {
-          active: input.active,
-          activeFlow: input.active,
+          active,
+          activeFlow: active,
           executions: [],
           factoryGraphNodeId: node.id,
           handles,
@@ -211,6 +224,7 @@ function semanticNode(
           selectedWorkID: null,
           selectedWorkstation: input.selected,
           summaryOnly: true,
+          workstationSemantics: input.workstationProjection,
           workstation: {
             node_id: node.id,
             transition_id: node.label,
@@ -220,6 +234,7 @@ function semanticNode(
         id: node.id,
         type: "workstation",
       };
+    }
   }
 }
 

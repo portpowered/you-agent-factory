@@ -7,6 +7,9 @@ export {
   type FactoryEventType,
   type operations,
   type paths,
+  WorkstationGuardType,
+  WorkstationKind,
+  WorkstationType,
 } from "./contracts.js";
 export {
   compareFactoryEvents,

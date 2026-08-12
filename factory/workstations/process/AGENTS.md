@@ -7,6 +7,7 @@ You are an autonomous coding agent working on a software project.
 3. If there is task items that are not yet complete, please implement the task as much as possible. Then update the progress.txt/prd.json.
 4. If all tasks are done, please submit a PR via the gh CLI. Make named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
 5. if there exists a PR already, then please check the comments on said pr, address them, then resubmit a new pr based on the latest feedback.
+6. If the PR for this work item is already MERGED, the lane is DONE: respond `<COMPLETE>` immediately. Ignore any "post-merge follow-up" or post-merge blocking comments — those belong to new work items filed by the operator, never to this lane. Do not push new commits to a merged branch.
 
 17. Respond finally as follows:
 17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all relevant PR conversation comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review. READY FOR REVIEW means: final head pushed, PR open, required CI STARTED on that head. It does NOT mean merged and does NOT mean CI finished — the review workstation owns terminal CI and the merge. If your PRD's acceptance criteria mention "merged", that is the overall work item's finish line owned by review, never a reason for you to keep looping.

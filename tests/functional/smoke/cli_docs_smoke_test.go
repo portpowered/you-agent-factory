@@ -98,7 +98,6 @@ func TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater(t *test
 	for _, want := range []string{
 		"### Built-in `@you/goal` repeater",
 		"goal:init",
-		"goal:execute",
 		"goal:complete",
 		"goal:blocked",
 		"goal:failed",
@@ -123,6 +122,7 @@ func TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater(t *test
 		"goal:plan",
 		"goal:review",
 		"goal:structured-review",
+		"goal:execute",
 	} {
 		if strings.Contains(output, stale) {
 			t.Fatalf("you docs authoring-factories contains stale goal topology %q:\n%s", stale, output)

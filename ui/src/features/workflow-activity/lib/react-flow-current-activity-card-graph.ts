@@ -1,4 +1,5 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: current activity graph projection helpers remain grouped around shared node and edge fixtures.
+import { resolveFactoryGraphWorkstationSemantics } from "@you-agent-factory/factory-graph";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -13,6 +14,7 @@ import {
   projectFactoryValidationTargets,
   validationNodeErrorForNode,
 } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
+import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import type {
   GraphLayout,
   PositionedDocNode,
@@ -21,7 +23,6 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import type { GraphNodePosition } from "./layout/graph-node-positions";
@@ -702,6 +703,14 @@ function buildWorkstationNode(
     node_id: runtimeWorkstationNodeId,
     transition_id: workstation.transition_id || runtimeWorkstationNodeId,
   };
+  const workstationSemantics = resolveFactoryGraphWorkstationSemantics(
+    factory?.workstations?.find((candidate) => {
+      const candidateID = candidate.id?.trim();
+      return candidateID
+        ? candidateID === runtimeWorkstationNodeId
+        : candidate.name === runtimeWorkstationNodeId;
+    }),
+  );
   const executions =
     input.activeExecutionsByWorkstationNodeID[runtimeWorkstationNodeId] ??
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ??
@@ -757,6 +766,7 @@ function buildWorkstationNode(
         input.selection?.kind === "node" &&
         input.selection.nodeId === runtimeWorkstationNodeId,
       workstation: normalizedWorkstation,
+      workstationSemantics,
     },
     draggable: true,
     height: positionedNode.height,

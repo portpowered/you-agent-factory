@@ -39,8 +39,8 @@ func TestBuildCatalogIsByteDeterministicAndComplete(t *testing.T) {
 	if !reflect.DeepEqual(first.Files, second.Files) {
 		t.Fatal("identical source produced different catalog bytes")
 	}
-	if len(first.Files) != 32 {
-		t.Fatalf("outputs = %d, want 32 (fifteen pairs, manifest, notice)", len(first.Files))
+	if len(first.Files) != 36 {
+		t.Fatalf("outputs = %d, want 36 (seventeen pairs, manifest, notice)", len(first.Files))
 	}
 	if !strings.HasPrefix(
 		string(first.Files["generated/README.md"]),

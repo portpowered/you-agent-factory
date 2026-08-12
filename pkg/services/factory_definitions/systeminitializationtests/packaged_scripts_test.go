@@ -34,7 +34,7 @@ type directoryEntrySnapshot struct {
 	IsDir    bool
 }
 
-func packagedScriptsTestPersistence() factorydefinitions.Persistence {
+func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}

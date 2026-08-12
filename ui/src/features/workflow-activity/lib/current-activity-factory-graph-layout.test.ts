@@ -124,4 +124,49 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
     });
   });
+
+  it("projects the shipped goal state inventory without the removed execute state", async () => {
+    const layout = await buildCurrentActivityGraphLayoutFromFactory({
+      name: "@you/goal",
+      workTypes: [
+        {
+          name: "goal",
+          states: [
+            { name: "init", type: "INITIAL" },
+            { name: "complete", type: "TERMINAL" },
+            { name: "blocked", type: "PROCESSING" },
+            { name: "failed", type: "FAILED" },
+          ],
+        },
+      ],
+      workers: [{ name: "goal-executor", type: "AGENT_WORKER" }],
+      workstations: [
+        {
+          inputs: [{ state: "init", workType: "goal" }],
+          name: "execute-goal",
+          outputs: [{ state: "complete", workType: "goal" }],
+          onFailure: [{ state: "failed", workType: "goal" }],
+          type: "AGENT_RUN",
+          worker: "goal-executor",
+        },
+        {
+          inputs: [{ state: "init", workType: "goal" }],
+          name: "goal-loop-breaker",
+          outputs: [{ state: "failed", workType: "goal" }],
+          type: "LOGICAL_MOVE",
+        },
+      ],
+    });
+
+    const nodeIDs = layout.nodes.map((node) => node.nodeId);
+    expect(nodeIDs).toEqual(
+      expect.arrayContaining([
+        "work-state:goal:init",
+        "work-state:goal:complete",
+        "work-state:goal:blocked",
+        "work-state:goal:failed",
+      ]),
+    );
+    expect(nodeIDs).not.toContain("work-state:goal:execute");
+  });
 });

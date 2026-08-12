@@ -24,6 +24,7 @@ import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
+  findFactoryWorkstationByNodeId,
 } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
@@ -115,6 +116,26 @@ describe("dashboardWorkstationFromFactory", () => {
       },
     ]);
   });
+
+  it("does not join an id-backed workstation through a renamed name", () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          id: "stable-workstation",
+          name: "Renamed process",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+
+    expect(findFactoryWorkstationByNodeId(factory, "Renamed process")).toBe(
+      null,
+    );
+    expect(
+      findFactoryWorkstationByNodeId(factory, "stable-workstation"),
+    ).toEqual(expect.objectContaining({ workstation_name: "Renamed process" }));
+  });
 });
 
 describe("current activity graph editor handles", () => {
@@ -176,6 +197,12 @@ describe("current activity graph editor handles", () => {
       activeFlow: true,
       selectedWorkstation: true,
       workstation: expect.objectContaining({ node_id: "draft" }),
+      workstationSemantics: {
+        controlRole: "NONE",
+        runtimeRole: "AGENT",
+        runtimeType: "MODEL_WORKSTATION",
+        schedulingBehavior: "UNKNOWN",
+      },
     });
   });
 

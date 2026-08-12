@@ -26,7 +26,7 @@ func Persistence(
 	persistenceFileSystem contracts.PersistenceFileSystem,
 	namedPaths contracts.NamedPathResolver,
 	replacement contracts.DirectoryReplacementStore,
-) (contracts.Persistence, error) {
+) (contracts.PackagedFactoryPersistence, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
 	writer := factoryauthoredlayout.NewWriter(
 		authoredmapping.RenderWorkerAgentsMarkdown,

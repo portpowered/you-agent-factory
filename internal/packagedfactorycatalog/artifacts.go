@@ -9,7 +9,6 @@ import (
 	"reflect"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -84,7 +83,7 @@ func generateArtifactPair(entry Entry, schema *jsonschema.Schema) (ArtifactPair,
 	if err := validateArtifactSchema(schema, yamlJSON); err != nil {
 		return ArtifactPair{}, fmt.Errorf("%s: validate YAML artifact against package Factory schema: %w", entry.SourcePath, err)
 	}
-	if err := validateArtifactEquivalence(entry.SourcePath, jsonPayload, yamlJSON); err != nil {
+	if err := validateArtifactEquivalence(entry.SourcePath, entry.Slug, jsonPayload, yamlJSON); err != nil {
 		return ArtifactPair{}, err
 	}
 
@@ -127,7 +126,7 @@ func validateArtifactSchema(schema *jsonschema.Schema, payload []byte) error {
 	return schema.Validate(document)
 }
 
-func validateArtifactEquivalence(sourcePath string, jsonPayload, yamlJSON []byte) error {
+func validateArtifactEquivalence(sourcePath, slug string, jsonPayload, yamlJSON []byte) error {
 	mapper := factorymapping.NewFactoryConfigMapper()
 	jsonFactory, err := mapper.Expand(jsonPayload)
 	if err != nil {
@@ -146,7 +145,7 @@ func validateArtifactEquivalence(sourcePath string, jsonPayload, yamlJSON []byte
 		)
 	}
 	for format, factory := range map[string]*factorydefinitions.FactoryConfig{"JSON": jsonFactory, "YAML": yamlFactory} {
-		if validation := factorydefinitionswirevalidation.ValidateFactoryDefinition(factory); validation.HasBlockingTargets() {
+		if validation := validateFactoryDefinitionForCatalog(slug, factory); validation.HasBlockingTargets() {
 			var findings []string
 			for _, target := range validation.BlockingTargets() {
 				findings = append(findings, fmt.Sprintf("%s %s: %s", target.Code, target.Path, target.Message))

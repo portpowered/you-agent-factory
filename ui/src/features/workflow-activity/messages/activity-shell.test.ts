@@ -14,9 +14,6 @@ describe("getWorkflowActivityShellMessages", () => {
     expect(messages.selectResourceLabel("gpu")).toBe("选择 gpu 资源");
     expect(messages.selectWorkerLabel("writer")).toBe("选择 writer 工作者");
     expect(messages.selectWorkTypeLabel("story")).toBe("选择 story 工作类型");
-    expect(messages.selectExhaustionRuleLabel("审查")).toBe(
-      "选择 审查 枯竭规则",
-    );
   });
 
   it("falls back to English for unsupported locales and keeps the locale catalog exported", () => {

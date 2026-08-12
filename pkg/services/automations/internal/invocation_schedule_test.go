@@ -184,7 +184,7 @@ func invocationScheduleFixture(t *testing.T) (*interfaces.FactoryConfig, interfa
 	}
 	config := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{
-			{Name: "loop-controller", States: []interfaces.StateConfig{{Name: "active", Type: interfaces.StateTypeInitial}, {Name: "stopped", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed}}},
+			{Name: "loop-controller", States: []interfaces.StateConfig{{Name: "active", Type: interfaces.StateTypeInitial}, {Name: "failed", Type: interfaces.StateTypeFailed}}},
 			{Name: "scheduled-execution", States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "skipped", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed}}},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{workstation},

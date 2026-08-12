@@ -46,8 +46,6 @@ workTypes:
     states:
       - name: init
         type: INITIAL
-      - name: execute
-        type: PROCESSING
       - name: complete
         type: TERMINAL
       - name: blocked
