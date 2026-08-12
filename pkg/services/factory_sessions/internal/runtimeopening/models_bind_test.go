@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -444,7 +445,6 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
 			ModelCacheDirectory: "/cache/models",
 		},
-		ExternalEffects{},
 		zap.NewNop(),
 	)
 	if !errors.Is(err, laterErr) {
@@ -498,7 +498,6 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
 			ModelCacheDirectory: "/cache/models",
 		},
-		ExternalEffects{},
 		zap.NewNop(),
 	)
 	if err == nil || !strings.Contains(err.Error(), "Automations factory returned nil service") {
@@ -529,10 +528,14 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 
 func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Factory {
 	t.Helper()
+	sessionsRoot := openingCoordinatorSessionsRoot{
+		RuntimeAssembly: openingCoordinatorBoundSessions{},
+	}
 	return &Factory{
 		durableExecutionFactory:        openingCoordinatorDurableExecution,
 		modelService:                   modelService,
-		factorySessionsService:         openingCoordinatorSessionsRoot{},
+		factorySessionsService:         sessionsRoot,
+		factorySessionsRuntimeAssembly: sessionsRoot,
 		recordingsProjectionFactory:    openingCoordinatorProjections,
 		runtimeLedgerFactory:           openingCoordinatorLedgerFactory,
 		runtimeRecorderFactory:         openingCoordinatorRecorder,
@@ -553,8 +556,12 @@ func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Fa
 }
 
 type openingCoordinatorFailure struct {
-	events *[]string
-	err    error
+	events          *[]string
+	err             error
+	wantRuntime     roles.CurrentRuntimeResolver
+	runtimeCalls    *int
+	runtimeMismatch *int
+	mu              *sync.Mutex
 }
 
 type openingCoordinatorWorker struct {
@@ -669,24 +676,36 @@ func (runtime openingCoordinatorWorkerRuntime) Close(context.Context) error {
 }
 
 func (failure *openingCoordinatorFailure) openWorkerExecution(
-	factoryruntime.RuntimeOpeningRequest,
-	workers.RuntimeOpeningRequest,
-	factoryruntime.Clock,
-	*zap.Logger,
-	workers.CommandRunner,
-	workers.CommandRunner,
-	workers.ProgressPublisher,
-	workers.PTYAllocator,
-	workers.Provider,
-	roles.CurrentRuntimeResolver,
-	models.Service,
-	models.RuntimeScopeRef,
-	work.Service,
-	WorkersRuntimeFactory,
-	[]operatorconfig.ACPIntegration,
-	func(workers.RuntimeService) bool,
+	_ factoryruntime.RuntimeOpeningRequest,
+	_ workers.RuntimeOpeningRequest,
+	_ factoryruntime.Clock,
+	_ *zap.Logger,
+	_ workers.CommandRunner,
+	_ workers.CommandRunner,
+	_ workers.ProgressPublisher,
+	_ workers.PTYAllocator,
+	_ workers.Provider,
+	runtime roles.CurrentRuntimeResolver,
+	_ models.Service,
+	_ models.RuntimeScopeRef,
+	_ work.Service,
+	_ WorkersRuntimeFactory,
+	_ []operatorconfig.ACPIntegration,
+	_ func(workers.RuntimeService) bool,
 ) (workers.RuntimeService, workers.SessionBuildFactory, error) {
-	*failure.events = append(*failure.events, "later-step-failed")
+	if failure.events != nil {
+		*failure.events = append(*failure.events, "later-step-failed")
+	}
+	if failure.mu != nil {
+		failure.mu.Lock()
+		if failure.runtimeCalls != nil {
+			(*failure.runtimeCalls)++
+		}
+		if failure.runtimeMismatch != nil && runtime != failure.wantRuntime {
+			(*failure.runtimeMismatch)++
+		}
+		failure.mu.Unlock()
+	}
 	return nil, nil, failure.err
 }
 
@@ -774,6 +793,7 @@ func openingCoordinatorAdaptCommandRunner(platformprocess.CommandRunner) workers
 
 type openingCoordinatorSessionsRoot struct {
 	factorysessions.Service
+	roles.RuntimeAssembly
 }
 
 type runtimeProductsSessionsRole struct {
@@ -783,7 +803,7 @@ type runtimeProductsSessionsRole struct {
 func (openingCoordinatorSessionsRoot) ForRuntime(
 	factorysessions.OpeningBindingRequest,
 ) (factorysessions.Service, error) {
-	return openingCoordinatorBoundSessions{}, nil
+	panic("runtime opening must use the injected Factory Sessions runtime assembly directly")
 }
 
 type openingCoordinatorBoundSessions struct {

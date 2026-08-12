@@ -29,14 +29,20 @@ import (
 func openRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	edges ExternalEffects,
 	baseLogger *zap.Logger,
+	clockEdge factoryruntime.Clock,
+	providerOverride workers.Provider,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	providerCommandRunner workers.CommandRunner,
+	scriptCommandRunner workers.CommandRunner,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
 	workFactory WorkFactory,
 	automationFactory AutomationFactory,
-	factorySessionsService factorysessions.Service,
+	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
 	recordingsServiceFactory RecordingsServiceFactory,
@@ -98,7 +104,7 @@ func openRuntime(
 		modelCacheDirectory,
 		operatorDefaults,
 		baseLogger,
-		edges,
+		clockEdge,
 		factoryDefinitionValidator,
 		namedPaths,
 		loadFactory,
@@ -162,11 +168,10 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
 	providerForDurable, err := resolveDurableExecutionProvider(
-		edges.ProviderOverride,
+		providerOverride,
 		configured.Workers.MockWorkers,
 		load.LoadedFactoryCfg,
-		edges.ProviderCommandRunner,
-		adaptWorkerCommandRunner,
+		providerCommandRunner,
 		workersMockCommandRunnerFactory,
 		providerFromCommandRunnerFactory,
 	)
@@ -188,20 +193,10 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	factorysessionexecutionService := durableExecution.Service
-	if factorySessionsService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service is required")
+	if factorySessionsRuntimeAssembly == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
 	}
-	boundService, err := factorySessionsService.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	if err != nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service: %w", err)
-	}
-	if boundService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service returned nil runtime view")
-	}
-	runtimeService, ok := boundService.(roles.RuntimeAssembly)
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions runtime view does not expose its private assembly")
-	}
+	runtimeService := factorySessionsRuntimeAssembly
 	currentRuntimeConfig := func() *models.RuntimeConfig {
 		runtime := runtimeService.CurrentRuntime()
 		if runtime != nil {
@@ -232,8 +227,6 @@ func openRuntime(
 	if workerExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: worker execution operation is required")
 	}
-	providerCommandRunner := adaptWorkerCommandRunner(edges.ProviderCommandRunner)
-	scriptCommandRunner := adaptWorkerCommandRunner(edges.ScriptCommandRunner)
 	var initialProgressPublisher workers.ProgressPublisher
 	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
 		initialProgressPublisher = inferenceProgressPublisherFactory(factorysessions.DefaultSessionID)
@@ -251,7 +244,7 @@ func openRuntime(
 		scriptCommandRunner,
 		initialProgressPublisher,
 		nil,
-		edges.ProviderOverride,
+		providerOverride,
 		runtimeService,
 		selectedModels, modelsBind.Scope, workService,
 		workersRuntimeFactory,
@@ -300,7 +293,7 @@ func openRuntime(
 			factorysessions.DefaultSessionID,
 			nil,
 			loadFactory,
-			edges.ProviderOverride,
+			providerOverride,
 			providerCommandRunner,
 			scriptCommandRunner,
 			configured.Workers.MockWorkers,
@@ -309,8 +302,8 @@ func openRuntime(
 			nil,
 			nil,
 			false,
-			edges.SubmissionRecorder,
-			edges.DispatchRecorder,
+			submissionRecorder,
+			dispatchRecorder,
 			configured.Runtime.LogDirectory,
 			configured.Runtime.LogConfig,
 			factoryruntime.RuntimeFileLoggingPolicy(configured.Runtime.FileLoggingPolicy),
@@ -400,7 +393,7 @@ func openRuntime(
 			return recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
 		},
 		recordingProjections.ReconstructFactoryWorldState,
-		edges.InvocationMetricsRecorder,
+		invocationMetricsRecorder,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -457,7 +450,7 @@ func openRuntime(
 			Host: configured.Session.Host.Host, Port: configured.Session.Host.Port,
 			AutoPort: configured.Session.Host.AutoPort,
 		},
-		edges.RuntimeHostObserver,
+		nil,
 		startupRuntime.RuntimeLogger(),
 	)
 	if err != nil {
@@ -495,6 +488,7 @@ func openRuntime(
 		configured.Session.BackendScopeID,
 		cleanup.Close,
 	)
+	opened.application.Resources.Clock = clock
 	return opened, nil
 }
 

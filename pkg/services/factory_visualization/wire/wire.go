@@ -9,6 +9,8 @@ package wire
 
 import (
 	"fmt"
+	"strconv"
+	"sync"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
@@ -18,6 +20,53 @@ import (
 	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
+
+// NewRuntimeSinkOwner constructs the typed Factory Visualization owner used
+// to retain transport-selected sinks. The owner is inert: registration only
+// retains a value and does not start visualization or touch the filesystem.
+func NewRuntimeSinkOwner() factoryvisualization.RuntimeSinkOwner {
+	return &runtimeSinkOwner{sinks: make(map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink)}
+}
+
+type runtimeSinkOwner struct {
+	mu     sync.RWMutex
+	nextID uint64
+	sinks  map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink
+}
+
+func (owner *runtimeSinkOwner) RegisterRuntimeSink(sink factoryvisualization.Sink) (factoryvisualization.RuntimeSinkID, error) {
+	if owner == nil {
+		return "", fmt.Errorf("register Factory Visualization sink: owner is required")
+	}
+	if sink == nil {
+		return "", fmt.Errorf("register Factory Visualization sink: sink is required")
+	}
+	owner.mu.Lock()
+	defer owner.mu.Unlock()
+	owner.nextID++
+	id := factoryvisualization.RuntimeSinkID("visualization-sink-" + strconv.FormatUint(owner.nextID, 10))
+	owner.sinks[id] = sink
+	return id, nil
+}
+
+func (owner *runtimeSinkOwner) RuntimeSink(id factoryvisualization.RuntimeSinkID) (factoryvisualization.Sink, bool) {
+	if owner == nil || id == "" {
+		return nil, false
+	}
+	owner.mu.RLock()
+	sink, ok := owner.sinks[id]
+	owner.mu.RUnlock()
+	return sink, ok
+}
+
+func (owner *runtimeSinkOwner) CloseRuntimeSink(id factoryvisualization.RuntimeSinkID) {
+	if owner == nil || id == "" {
+		return
+	}
+	owner.mu.Lock()
+	delete(owner.sinks, id)
+	owner.mu.Unlock()
+}
 
 // NewRoot constructs an inert Factory Visualization root from construction and
 // process-edge ports. It composes the accepted root through parent-private

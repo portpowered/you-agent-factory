@@ -3,15 +3,12 @@ package runtimeopening
 import (
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -20,28 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
-
-// ExternalEffects is the exact invocation-local effect set consumed while
-// opening Factory Session runtime state. Wire projects the process edge
-// aggregate into this owner-defined contract before it reaches a runtime
-// opening consumer.
-type ExternalEffects struct {
-	Clock                            factoryruntime.Clock
-	ProviderOverride                 workers.Provider
-	ModelPullMetricsRecorder         factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
-	ProviderCommandRunner            platformprocess.CommandRunner
-	ScriptCommandRunner              platformprocess.CommandRunner
-	SubmissionRecorder               recordings.SubmissionRecorder
-	DispatchRecorder                 recordings.DispatchRecorder
-	RuntimeHostObserver              factorysessions.RuntimeHostObserver
-	FactoryVisualizationSink         factoryvisualization.Sink
-	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	HostedClock                      automations.HostedLinearClock
-	HostedHTTPClient                 automations.HostedLinearHTTPDoer
-	HostedSecretResolver             automations.HostedLinearSecretResolver
-	HostedLinearEndpoint             string
-}
 
 // The factory roles below are consumed only while opening a Factory Session
 // runtime. Keeping them here makes the dependency direction explicit: Wire

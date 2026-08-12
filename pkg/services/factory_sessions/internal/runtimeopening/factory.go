@@ -31,8 +31,6 @@ type ApplicationRuntimeOpening interface {
 	OpenApplicationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		ExternalEffects,
-		*zap.Logger,
 	) (roles.OpenedApplicationRuntime, error)
 }
 
@@ -43,8 +41,6 @@ type InvocationRuntimeOpening interface {
 	OpenInvocationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		ExternalEffects,
-		*zap.Logger,
 	) (roles.OpenedInvocationRuntime, error)
 }
 
@@ -55,40 +51,25 @@ type ExecutionRuntimeOpening interface {
 	OpenExecutionRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		ExternalEffects,
-		*zap.Logger,
 	) (roles.OpenedExecutionRuntime, error)
 }
 
-// Dependencies is the Factory Sessions-owned construction input for the one
-// process-scoped runtime-opening factory. Groups are construction vocabulary:
-// they select fixed collaborators once in canonical Wire composition and do
-// not expose a runtime service locator or an alternate opening path.
-//
-// Validation walks groups and members in the declaration order below. That
-// stable order keeps incomplete composition failures deterministic and inert.
-type Dependencies struct {
-	ProviderSessions   *ProviderSessionsDependencies
-	FactoryRuntime     *FactoryRuntimeDependencies
-	FactoryDefinitions *FactoryDefinitionsDependencies
-	FactorySessions    *FactorySessionsDependencies
-	Work               *WorkDependencies
-	Automations        *AutomationsDependencies
-	Models             *ModelsDependencies
-	Recordings         *RecordingsDependencies
-	Webhooks           *WebhooksDependencies
-	Workers            *WorkersDependencies
-	OperatorSettings   *OperatorSettingsDependencies
-}
+// The owner-port contracts below are the Factory Sessions-owned construction
+// vocabulary for the one process-scoped runtime-opening factory. Each
+// contract names one owner and contains only the fixed collaborators selected
+// for that owner by canonical Wire composition. Runtime opening receives the
+// contracts as separate constructor arguments; there is no aggregate
+// dependency bag or secondary graph for an operation to consult.
 
-// ProviderSessionsDependencies contains the Provider Sessions-owned runtime
+// ProviderSessionsPorts contains the Provider Sessions-owned runtime
 // collaborators.
-type ProviderSessionsDependencies struct {
+type ProviderSessionsPorts struct {
 	Service providersessions.Service
 }
 
-// FactoryRuntimeDependencies contains Factory Runtime's opening collaborators.
-type FactoryRuntimeDependencies struct {
+// FactoryRuntimePorts contains Factory Runtime's opening collaborators.
+type FactoryRuntimePorts struct {
+	Logger                          *zap.Logger
 	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
 	WorkersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
@@ -97,11 +78,15 @@ type FactoryRuntimeDependencies struct {
 	FactoryRuntimeAssembler         FactoryRuntimeAssembler
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
+	Clock                           factoryruntime.Clock
+	ProviderOverride                workers.Provider
+	SubmissionRecorder              recordings.SubmissionRecorder
+	DispatchRecorder                recordings.DispatchRecorder
 }
 
-// FactoryDefinitionsDependencies contains Factory Definitions-owned opening
+// FactoryDefinitionsPorts contains Factory Definitions-owned opening
 // collaborators.
-type FactoryDefinitionsDependencies struct {
+type FactoryDefinitionsPorts struct {
 	Validator                     factorydefinitions.Validator
 	NamedPaths                    factorydefinitions.NamedPathResolver
 	Factory                       FactoryDefinitionsFactory
@@ -112,10 +97,10 @@ type FactoryDefinitionsDependencies struct {
 	CaptureLoadedFactorySnapshot  factorydefinitions.LoadedFactorySnapshotCapturer
 }
 
-// FactorySessionsDependencies contains Factory Sessions-owned opening
-// collaborators.
-type FactorySessionsDependencies struct {
+// FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
+type FactorySessionsPorts struct {
 	Service                        factorysessions.Service
+	RuntimeAssembly                roles.RuntimeAssembly
 	DurableExecutionFactory        DurableExecutionFactory
 	FactorySessionExecutionFactory FactorySessionExecutionFactory
 	FactoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
@@ -124,27 +109,34 @@ type FactorySessionsDependencies struct {
 	GenerateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                    factorysessions.HomeDirectoryResolver
 	ProviderIdentities             factorysessions.ProviderIdentityResolver
+	InvocationMetricsRecorder      roles.InvocationMetricsRecorder
 }
 
-// WorkDependencies contains Work-owned opening collaborators.
-type WorkDependencies struct {
+// WorkPorts contains Work-owned opening collaborators.
+type WorkPorts struct {
 	Factory             WorkFactory
 	ContentMaterializer work.ContentMaterializer
 }
 
-// AutomationsDependencies contains Automations-owned opening collaborators.
-type AutomationsDependencies struct {
+// AutomationsPorts contains Automations-owned opening collaborators.
+type AutomationsPorts struct {
 	Factory              AutomationFactory
 	HostedSourcesFactory AutomationHostedSourcesFactory
 }
 
-// ModelsDependencies contains the Models root used while opening a session.
-type ModelsDependencies struct {
+// WebhooksPorts contains the Webhooks root used to attach hosted delivery to
+// the runtime's canonical recording stream.
+type WebhooksPorts struct {
+	Service webhooks.Service
+}
+
+// ModelsPorts contains the Models root used while opening a session.
+type ModelsPorts struct {
 	Service models.Service
 }
 
-// RecordingsDependencies contains Recordings-owned opening collaborators.
-type RecordingsDependencies struct {
+// RecordingsPorts contains Recordings-owned opening collaborators.
+type RecordingsPorts struct {
 	ProjectionFactory      RecordingsProjectionFactory
 	ServiceFactory         RecordingsServiceFactory
 	LifecycleFactory       RecordingLifecycleFactory
@@ -155,29 +147,39 @@ type RecordingsDependencies struct {
 	ReplayInputs           recordings.ReplayInputLoader
 }
 
-// WebhooksDependencies contains the session-scoped outbound delivery root.
-type WebhooksDependencies struct {
-	Service webhooks.Service
-}
-
-// WorkersDependencies contains Workers-owned opening collaborators.
-type WorkersDependencies struct {
+// WorkersPorts contains Workers-owned opening collaborators.
+type WorkersPorts struct {
 	ExecutionFactory                 WorkerExecutionFactory
 	RuntimeFactory                   WorkersRuntimeFactory
 	LocalRuntimeHooksFactory         WorkersLocalRuntimeHooksFactory
 	AdaptCommandRunner               WorkerCommandRunnerAdapter
 	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
+	ProviderCommandRunner            ProviderCommandRunner
+	ScriptCommandRunner              ScriptCommandRunner
 }
 
-// OperatorSettingsDependencies contains the Operator Settings capability used
+// ProviderCommandRunner and ScriptCommandRunner are distinct Wire keys for
+// the two Workers-owned command ports. They expose the same narrow Workers
+// command contract without allowing Wire to bind one selected runner to both
+// effect owners.
+type ProviderCommandRunner interface {
+	workers.CommandRunner
+}
+
+type ScriptCommandRunner interface {
+	workers.CommandRunner
+}
+
+// OperatorSettingsPorts contains the Operator Settings capability used
 // to establish the session backend scope.
-type OperatorSettingsDependencies struct {
+type OperatorSettingsPorts struct {
 	EnsureBackendScope operatorsettings.BackendScopeEnsurer
 }
 
 // Factory is the process-scoped, inert Factory Session opening operation.
-// Wire selects all implementation functions once; OpenRuntime supplies only
-// invocation data and external edges.
+// Wire selects all implementation functions and fixed owner effects once.
+// Invocation and durable-execution openings receive only operation data;
+// application transport binding is composed by the canonical Wire adapter.
 type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
@@ -218,6 +220,7 @@ type Factory struct {
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
 	newSessionLogger                 factoryruntime.SessionLoggerFactory
+	baseLogger                       *zap.Logger
 	adaptWorkerCommandRunner         WorkerCommandRunnerAdapter
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 	processRuntimeFactory            roles.ProcessRuntimeFactory
@@ -225,6 +228,14 @@ type Factory struct {
 	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
+	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
+	clock                            factoryruntime.Clock
+	providerOverride                 workers.Provider
+	invocationMetricsRecorder        roles.InvocationMetricsRecorder
+	providerCommandRunner            workers.CommandRunner
+	scriptCommandRunner              workers.CommandRunner
+	submissionRecorder               recordings.SubmissionRecorder
+	dispatchRecorder                 recordings.DispatchRecorder
 }
 
 var (
@@ -233,51 +244,64 @@ var (
 	_ ExecutionRuntimeOpening   = (*Factory)(nil)
 )
 
-func NewFactory(dependencies Dependencies) (*Factory, error) {
-	if err := dependencies.validate(); err != nil {
+func NewFactory(
+	providerSessions *ProviderSessionsPorts,
+	factoryRuntime *FactoryRuntimePorts,
+	factoryDefinitions *FactoryDefinitionsPorts,
+	factorySessions *FactorySessionsPorts,
+	workPorts *WorkPorts,
+	automations *AutomationsPorts,
+	modelsPorts *ModelsPorts,
+	recordingsPorts *RecordingsPorts,
+	webhooksPorts *WebhooksPorts,
+	workersPorts *WorkersPorts,
+	operatorSettings *OperatorSettingsPorts,
+) (*Factory, error) {
+	if err := validateOwnerPorts(
+		providerSessions,
+		factoryRuntime,
+		factoryDefinitions,
+		factorySessions,
+		workPorts,
+		automations,
+		modelsPorts,
+		recordingsPorts,
+		webhooksPorts,
+		workersPorts,
+		operatorSettings,
+	); err != nil {
 		return nil, err
 	}
 
-	providerSessions := dependencies.ProviderSessions
-	factoryRuntime := dependencies.FactoryRuntime
-	factoryDefinitions := dependencies.FactoryDefinitions
-	factorySessions := dependencies.FactorySessions
-	workDependencies := dependencies.Work
-	automations := dependencies.Automations
-	modelsDependencies := dependencies.Models
-	recordingsDependencies := dependencies.Recordings
-	webhooksDependencies := dependencies.Webhooks
-	workersDependencies := dependencies.Workers
-	operatorSettings := dependencies.OperatorSettings
-
 	return &Factory{
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
-		workerExecutionFactory:           workersDependencies.ExecutionFactory,
-		modelService:                     modelsDependencies.Service,
-		workFactory:                      workDependencies.Factory,
+		workerExecutionFactory:           workersPorts.ExecutionFactory,
+		modelService:                     modelsPorts.Service,
+		workFactory:                      workPorts.Factory,
 		automationFactory:                automations.Factory,
 		factorySessionsService:           factorySessions.Service,
+		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
-		recordingsProjectionFactory:      recordingsDependencies.ProjectionFactory,
-		recordingsServiceFactory:         recordingsDependencies.ServiceFactory,
-		recordingLifecycleFactory:        recordingsDependencies.LifecycleFactory,
-		webhooksService:                  webhooksDependencies.Service,
-		runtimeLedgerFactory:             recordingsDependencies.RuntimeLedgerFactory,
-		runtimeRecorderFactory:           recordingsDependencies.RuntimeRecorderFactory,
-		replayClockFactory:               recordingsDependencies.ReplayClockFactory,
-		replayExecutionFactory:           recordingsDependencies.ReplayExecutionFactory,
-		workersRuntimeFactory:            workersDependencies.RuntimeFactory,
+		recordingsProjectionFactory:      recordingsPorts.ProjectionFactory,
+		recordingsServiceFactory:         recordingsPorts.ServiceFactory,
+		recordingLifecycleFactory:        recordingsPorts.LifecycleFactory,
+		webhooksService:                  webhooksPorts.Service,
+		runtimeLedgerFactory:             recordingsPorts.RuntimeLedgerFactory,
+		runtimeRecorderFactory:           recordingsPorts.RuntimeRecorderFactory,
+		replayClockFactory:               recordingsPorts.ReplayClockFactory,
+		replayExecutionFactory:           recordingsPorts.ReplayExecutionFactory,
+		workersRuntimeFactory:            workersPorts.RuntimeFactory,
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
 		automationHostedSourcesFactory:   automations.HostedSourcesFactory,
-		workersLocalRuntimeHooksFactory:  workersDependencies.LocalRuntimeHooksFactory,
+		workersLocalRuntimeHooksFactory:  workersPorts.LocalRuntimeHooksFactory,
 		factoryDefinitionsFactory:        factoryDefinitions.Factory,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
 		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
 		factoryRuntimeAssembler:          factoryRuntime.FactoryRuntimeAssembler,
-		workService:                      work.MaterializationService(workDependencies.ContentMaterializer),
+		workService:                      work.MaterializationService(workPorts.ContentMaterializer),
 		providerSessions:                 providerSessions.Service,
 		factoryDefinitionValidator:       factoryDefinitions.Validator,
 		namedPaths:                       factoryDefinitions.NamedPaths,
@@ -286,33 +310,56 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 		loadFactory:                      factoryDefinitions.LoadFactory,
 		newLoadedFactory:                 factoryDefinitions.NewLoadedFactory,
 		decodeReplayConfig:               factoryDefinitions.DecodeReplayConfig,
-		replayInputs:                     recordingsDependencies.ReplayInputs,
+		replayInputs:                     recordingsPorts.ReplayInputs,
 		captureLoadedFactorySnapshot:     factoryDefinitions.CaptureLoadedFactorySnapshot,
 		resolveClock:                     factoryRuntime.ResolveClock,
 		newSessionLogger:                 factoryRuntime.NewSessionLogger,
-		adaptWorkerCommandRunner:         workersDependencies.AdaptCommandRunner,
-		providerFromCommandRunnerFactory: workersDependencies.ProviderFromCommandRunnerFactory,
+		baseLogger:                       factoryRuntime.Logger,
+		adaptWorkerCommandRunner:         workersPorts.AdaptCommandRunner,
+		providerFromCommandRunnerFactory: workersPorts.ProviderFromCommandRunnerFactory,
 		processRuntimeFactory:            factorySessions.ProcessRuntimeFactory,
 		ensureOperatorBackendScope:       operatorSettings.EnsureBackendScope,
 		generateRuntimeInstanceID:        factorySessions.GenerateRuntimeInstanceID,
 		resolveHome:                      factorySessions.ResolveHome,
 		providerIdentities:               factorySessions.ProviderIdentities,
+		clock:                            factoryRuntime.Clock,
+		providerOverride:                 factoryRuntime.ProviderOverride,
+		invocationMetricsRecorder:        factorySessions.InvocationMetricsRecorder,
+		providerCommandRunner:            workersPorts.ProviderCommandRunner,
+		scriptCommandRunner:              workersPorts.ScriptCommandRunner,
+		submissionRecorder:               factoryRuntime.SubmissionRecorder,
+		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
 	}, nil
 }
 
-func (dependencies Dependencies) validate() error {
+// validateOwnerPorts checks the fixed owner contracts in declaration order.
+// It deliberately performs no collaborator calls, so an incomplete process
+// graph fails before any operation-scoped work can begin.
+func validateOwnerPorts(
+	providerSessions *ProviderSessionsPorts,
+	factoryRuntime *FactoryRuntimePorts,
+	factoryDefinitions *FactoryDefinitionsPorts,
+	factorySessions *FactorySessionsPorts,
+	workPorts *WorkPorts,
+	automations *AutomationsPorts,
+	modelsPorts *ModelsPorts,
+	recordingsPorts *RecordingsPorts,
+	webhooksPorts *WebhooksPorts,
+	workersPorts *WorkersPorts,
+	operatorSettings *OperatorSettingsPorts,
+) error {
 	for _, validate := range []func() error{
-		dependencies.validateProviderSessions,
-		dependencies.validateFactoryRuntime,
-		dependencies.validateFactoryDefinitions,
-		dependencies.validateFactorySessions,
-		dependencies.validateWork,
-		dependencies.validateAutomations,
-		dependencies.validateModels,
-		dependencies.validateRecordings,
-		dependencies.validateWebhooks,
-		dependencies.validateWorkers,
-		dependencies.validateOperatorSettings,
+		func() error { return validateProviderSessions(providerSessions) },
+		func() error { return validateFactoryRuntime(factoryRuntime) },
+		func() error { return validateFactoryDefinitions(factoryDefinitions) },
+		func() error { return validateFactorySessions(factorySessions) },
+		func() error { return validateWork(workPorts) },
+		func() error { return validateAutomations(automations) },
+		func() error { return validateModels(modelsPorts) },
+		func() error { return validateRecordings(recordingsPorts) },
+		func() error { return validateWebhooks(webhooksPorts) },
+		func() error { return validateWorkers(workersPorts) },
+		func() error { return validateOperatorSettings(operatorSettings) },
 	} {
 		if err := validate(); err != nil {
 			return err
@@ -321,9 +368,8 @@ func (dependencies Dependencies) validate() error {
 	return nil
 }
 
-func (dependencies Dependencies) validateProviderSessions() error {
-	group := dependencies.ProviderSessions
-	if err := requireRuntimeOpeningGroup("Provider Sessions", group); err != nil {
+func validateProviderSessions(group *ProviderSessionsPorts) error {
+	if err := requireRuntimeOpeningPorts("Provider Sessions", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Provider Sessions",
@@ -331,12 +377,12 @@ func (dependencies Dependencies) validateProviderSessions() error {
 	)
 }
 
-func (dependencies Dependencies) validateFactoryRuntime() error {
-	group := dependencies.FactoryRuntime
-	if err := requireRuntimeOpeningGroup("Factory Runtime", group); err != nil {
+func validateFactoryRuntime(group *FactoryRuntimePorts) error {
+	if err := requireRuntimeOpeningPorts("Factory Runtime", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Runtime",
+		runtimeOpeningRequirement{"logger", group.Logger},
 		runtimeOpeningRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
 		runtimeOpeningRequirement{"workflow preview operation", group.WorkflowPreview},
 		runtimeOpeningRequirement{"Workers runtime executors factory", group.WorkersRuntimeExecutorsFactory},
@@ -345,12 +391,12 @@ func (dependencies Dependencies) validateFactoryRuntime() error {
 		runtimeOpeningRequirement{"runtime assembler", group.FactoryRuntimeAssembler},
 		runtimeOpeningRequirement{"clock resolver", group.ResolveClock},
 		runtimeOpeningRequirement{"session logger factory", group.NewSessionLogger},
+		runtimeOpeningRequirement{"clock", group.Clock},
 	)
 }
 
-func (dependencies Dependencies) validateFactoryDefinitions() error {
-	group := dependencies.FactoryDefinitions
-	if err := requireRuntimeOpeningGroup("Factory Definitions", group); err != nil {
+func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
+	if err := requireRuntimeOpeningPorts("Factory Definitions", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Definitions",
@@ -365,13 +411,13 @@ func (dependencies Dependencies) validateFactoryDefinitions() error {
 	)
 }
 
-func (dependencies Dependencies) validateFactorySessions() error {
-	group := dependencies.FactorySessions
-	if err := requireRuntimeOpeningGroup("Factory Sessions", group); err != nil {
+func validateFactorySessions(group *FactorySessionsPorts) error {
+	if err := requireRuntimeOpeningPorts("Factory Sessions", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Sessions",
 		runtimeOpeningRequirement{"service", group.Service},
+		runtimeOpeningRequirement{"runtime assembly", group.RuntimeAssembly},
 		runtimeOpeningRequirement{"durable execution factory", group.DurableExecutionFactory},
 		runtimeOpeningRequirement{"session execution factory", group.FactorySessionExecutionFactory},
 		runtimeOpeningRequirement{"factory scaffold initializer", group.FactoryScaffoldInitializer},
@@ -383,9 +429,8 @@ func (dependencies Dependencies) validateFactorySessions() error {
 	)
 }
 
-func (dependencies Dependencies) validateWork() error {
-	group := dependencies.Work
-	if err := requireRuntimeOpeningGroup("Work", group); err != nil {
+func validateWork(group *WorkPorts) error {
+	if err := requireRuntimeOpeningPorts("Work", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Work",
@@ -394,9 +439,8 @@ func (dependencies Dependencies) validateWork() error {
 	)
 }
 
-func (dependencies Dependencies) validateAutomations() error {
-	group := dependencies.Automations
-	if err := requireRuntimeOpeningGroup("Automations", group); err != nil {
+func validateAutomations(group *AutomationsPorts) error {
+	if err := requireRuntimeOpeningPorts("Automations", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Automations",
@@ -405,9 +449,8 @@ func (dependencies Dependencies) validateAutomations() error {
 	)
 }
 
-func (dependencies Dependencies) validateModels() error {
-	group := dependencies.Models
-	if err := requireRuntimeOpeningGroup("Models", group); err != nil {
+func validateModels(group *ModelsPorts) error {
+	if err := requireRuntimeOpeningPorts("Models", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Models",
@@ -415,13 +458,13 @@ func (dependencies Dependencies) validateModels() error {
 	)
 }
 
-func (dependencies Dependencies) validateRecordings() error {
-	group := dependencies.Recordings
-	if err := requireRuntimeOpeningGroup("Recordings", group); err != nil {
+func validateRecordings(group *RecordingsPorts) error {
+	if err := requireRuntimeOpeningPorts("Recordings", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Recordings",
 		runtimeOpeningRequirement{"projection factory", group.ProjectionFactory},
+		runtimeOpeningRequirement{"service factory", group.ServiceFactory},
 		runtimeOpeningRequirement{"lifecycle factory", group.LifecycleFactory},
 		runtimeOpeningRequirement{"runtime ledger factory", group.RuntimeLedgerFactory},
 		runtimeOpeningRequirement{"runtime recorder factory", group.RuntimeRecorderFactory},
@@ -431,19 +474,8 @@ func (dependencies Dependencies) validateRecordings() error {
 	)
 }
 
-func (dependencies Dependencies) validateWebhooks() error {
-	group := dependencies.Webhooks
-	if err := requireRuntimeOpeningGroup("Webhooks", group); err != nil {
-		return err
-	}
-	return validateRuntimeOpeningRequirements("Webhooks",
-		runtimeOpeningRequirement{"service", group.Service},
-	)
-}
-
-func (dependencies Dependencies) validateWorkers() error {
-	group := dependencies.Workers
-	if err := requireRuntimeOpeningGroup("Workers", group); err != nil {
+func validateWorkers(group *WorkersPorts) error {
+	if err := requireRuntimeOpeningPorts("Workers", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Workers",
@@ -452,12 +484,22 @@ func (dependencies Dependencies) validateWorkers() error {
 		runtimeOpeningRequirement{"local runtime hooks factory", group.LocalRuntimeHooksFactory},
 		runtimeOpeningRequirement{"command runner adapter", group.AdaptCommandRunner},
 		runtimeOpeningRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
+		runtimeOpeningRequirement{"provider command runner", group.ProviderCommandRunner},
+		runtimeOpeningRequirement{"script command runner", group.ScriptCommandRunner},
 	)
 }
 
-func (dependencies Dependencies) validateOperatorSettings() error {
-	group := dependencies.OperatorSettings
-	if err := requireRuntimeOpeningGroup("Operator Settings", group); err != nil {
+func validateWebhooks(group *WebhooksPorts) error {
+	if err := requireRuntimeOpeningPorts("Webhooks", group); err != nil {
+		return err
+	}
+	return validateRuntimeOpeningRequirements("Webhooks",
+		runtimeOpeningRequirement{"service", group.Service},
+	)
+}
+
+func validateOperatorSettings(group *OperatorSettingsPorts) error {
+	if err := requireRuntimeOpeningPorts("Operator Settings", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Operator Settings",
@@ -470,9 +512,9 @@ type runtimeOpeningRequirement struct {
 	value  any
 }
 
-func requireRuntimeOpeningGroup(owner string, group any) error {
-	if missingRuntimeOpeningDependency(group) {
-		return fmt.Errorf("Factory Sessions runtime-opening %s group is required", owner)
+func requireRuntimeOpeningPorts(owner string, ports any) error {
+	if missingRuntimeOpeningDependency(ports) {
+		return fmt.Errorf("Factory Sessions runtime-opening %s owner ports are required", owner)
 	}
 	return nil
 }
@@ -502,17 +544,23 @@ func missingRuntimeOpeningDependency(value any) bool {
 func (f *Factory) openRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
 	logger *zap.Logger,
 ) (runtimeProducts, error) {
 	return openRuntime(
-		ctx, request, effects, logger,
+		ctx, request, logger,
+		f.clock,
+		f.providerOverride,
+		f.invocationMetricsRecorder,
+		f.providerCommandRunner,
+		f.scriptCommandRunner,
+		f.submissionRecorder,
+		f.dispatchRecorder,
 		f.durableExecutionFactory,
 		f.workerExecutionFactory,
 		f.modelService,
 		f.workFactory,
 		f.automationFactory,
-		f.factorySessionsService,
+		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
 		f.recordingsServiceFactory,
@@ -561,10 +609,8 @@ func (f *Factory) openRuntime(
 func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
-	logger *zap.Logger,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, effects, logger)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger)
 	return opened.application, err
 }
 
@@ -582,10 +628,8 @@ func (f *Factory) ModelsRoot() models.Service {
 func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
-	logger *zap.Logger,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, effects, logger)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger)
 	return opened.invocation, err
 }
 
@@ -594,9 +638,7 @@ func (f *Factory) OpenInvocationRuntime(
 func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
-	logger *zap.Logger,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, effects, logger)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger)
 	return opened.execution, err
 }

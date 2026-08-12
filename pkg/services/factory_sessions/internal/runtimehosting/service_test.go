@@ -201,6 +201,62 @@ func TestServiceRunReadinessFailureTransitionsRuntimeStartupFailure(t *testing.T
 	}
 }
 
+func TestServiceRunDoesNotDuplicateTerminalBindFailureInLogger(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zapcore.ErrorLevel)
+	logger := zap.New(core)
+	bindErr := &platformhttpserver.BindError{
+		Host: "127.0.0.1", PreferredPort: 8123,
+		Cause: errors.New("address already in use"),
+	}
+	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
+	err := New(func(context.Context, platformhttpserver.StartRequest) error {
+		return bindErr
+	}).Run(
+		context.Background(), http.NewServeMux(), runtime, logger,
+		factorysessions.RuntimeHostRequest{
+			RuntimeMode: interfaces.RuntimeModeService,
+			WorkFile:    "work.json",
+			Port:        8123,
+		},
+		nil,
+	)
+	if !errors.Is(err, runtime.failErr) {
+		t.Fatalf("Run() error = %v, want %v", err, runtime.failErr)
+	}
+	if entries := observed.All(); len(entries) != 0 {
+		t.Fatalf("bind failure log entries = %d, want no duplicate logger entry", len(entries))
+	}
+}
+
+func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zapcore.ErrorLevel)
+	logger := zap.New(core)
+	apiErr := errors.New("unexpected API starter failure")
+	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
+	err := New(func(context.Context, platformhttpserver.StartRequest) error {
+		return apiErr
+	}).Run(
+		context.Background(), http.NewServeMux(), runtime, logger,
+		factorysessions.RuntimeHostRequest{
+			RuntimeMode: interfaces.RuntimeModeService,
+			WorkFile:    "work.json",
+			Port:        8123,
+		},
+		nil,
+	)
+	if !errors.Is(err, runtime.failErr) {
+		t.Fatalf("Run() error = %v, want %v", err, runtime.failErr)
+	}
+	entries := observed.FilterMessage("API server error").All()
+	if len(entries) != 1 {
+		t.Fatalf("non-bind API failure log entries = %d, want 1", len(entries))
+	}
+}
+
 func TestServiceRunReportsNonCancellationRuntimeFailure(t *testing.T) {
 	t.Parallel()
 

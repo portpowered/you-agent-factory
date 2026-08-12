@@ -74,6 +74,7 @@ func NewService(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
+	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
@@ -99,6 +100,9 @@ func NewService(
 	}
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
+	}
+	if clock == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
 	}
 	if liveChangeCoordinator == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
@@ -127,6 +131,7 @@ func NewService(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
+		clock,
 		liveChangeCoordinator,
 	)
 	if err != nil {

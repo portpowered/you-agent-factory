@@ -109,7 +109,6 @@ func runBootstrapModelInvocation(
 			FactoryDir:       cfg.FactoryDir,
 			HomeDir:          cfg.HomeDir,
 			OperatorDefaults: cfg.OperatorDefaults,
-			Logger:           cfg.Logger,
 			Verbose:          cfg.Verbose,
 		},
 		modelName,

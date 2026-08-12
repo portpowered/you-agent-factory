@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/google/uuid"
@@ -44,7 +43,6 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 	return func(
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,
-		observer factorysessions.RuntimeHostObserver,
 	) factorysessionwire.ApplicationOpeningRequest {
 		logDirectory := cfg.RuntimeLogDir
 		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
@@ -106,57 +104,31 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			ModelCacheDirectory: cfg.ModelCacheDir,
 			OperatorDefaults:    cfg.OperatorDefaults,
 		}
-		return factorysessionwire.ApplicationOpeningRequest{
-			Runtime: request,
-			Ports: factorysessionwire.ApplicationOpeningPorts{
-				InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
-				RuntimeHostObserver:       observer,
-			},
-		}
+		return factorysessionwire.ApplicationOpeningRequest{Runtime: request}
 	}
 }
 
-// provideRuntimeInputResolver merges process edges into the exact opening
-// effect ports. Per-operation selections are already owner-bounded by the
-// canonical injector mapper.
-func provideRuntimeInputResolver(
-	defaultEdges serviceedges.Edges,
-	resolveClock factoryruntime.ClockResolver,
-) factorysessionwire.ApplicationRuntimeInputResolver {
+// provideRuntimeInputResolver copies transport-owned request values into the
+// stable application-opening input. External effects are selected by the
+// process graph and are not projected from this operation callback.
+func provideRuntimeInputResolver() factorysessionwire.ApplicationRuntimeInputResolver {
 	return func(
 		ctx context.Context,
 		request *factorysessions.RuntimeOpeningRequest,
-		ports factorysessionwire.ApplicationOpeningPorts,
-		logger *zap.Logger,
 	) (factorysessionwire.ApplicationRuntimeInputs, error) {
-		edges := defaultEdges
-		if ports.InvocationMetricsRecorder != nil {
-			edges.InvocationMetricsRecorder = ports.InvocationMetricsRecorder
-		}
-		if ports.RuntimeHostObserver != nil {
-			edges.RuntimeHostObserver = ports.RuntimeHostObserver
-		}
-		if resolveClock != nil {
-			edges.Clock = resolveClock(edges.Clock)
-		}
-		effects := projectRuntimeOpeningExternalEffects(edges)
-		if err := validateResolvedRuntimeInputs(ctx, request, effects, logger); err != nil {
+		if err := validateRuntimeOpeningInputs(ctx, request); err != nil {
 			return factorysessionwire.ApplicationRuntimeInputs{}, err
 		}
 		configured := *request
 		return factorysessionwire.ApplicationRuntimeInputs{
 			Request: &configured,
-			Effects: effects,
-			Logger:  logger,
 		}, nil
 	}
 }
 
-func validateResolvedRuntimeInputs(
+func validateRuntimeOpeningInputs(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects factorysessionwire.RuntimeOpeningExternalEffects,
-	logger *zap.Logger,
 ) error {
 	switch {
 	case ctx == nil:
@@ -165,150 +137,105 @@ func validateResolvedRuntimeInputs(
 		return ctx.Err()
 	case request == nil:
 		return errors.New("runtime opening request is required")
-	case logger == nil:
-		return errors.New("runtime logger is required")
-	case isNilRuntimeInput(effects.Clock):
-		return errors.New("runtime clock edge is required")
 	default:
 		return nil
 	}
 }
 
-func isNilRuntimeInput(value any) bool {
-	if value == nil {
-		return true
+// The following providers select the process-owned external effects once for
+// the long-lived runtime-opening Factory. Operation calls receive only
+// invocation data and observation fallbacks; they do not re-read Edges or
+// manufacture replacement runners.
+func provideFactoryRuntimeClock(edges serviceedges.Edges) factoryruntime.Clock {
+	if edges.Clock != nil {
+		return edges.Clock
 	}
-	reflected := reflect.ValueOf(value)
-	switch reflected.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflected.IsNil()
-	default:
-		return false
+	return platformclock.Real{}
+}
+
+func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) workers.Provider {
+	return edges.ProviderOverride
+}
+
+func provideFactoryRuntimeSubmissionRecorder(edges serviceedges.Edges) recordings.SubmissionRecorder {
+	return edges.SubmissionRecorder
+}
+
+func provideFactoryRuntimeDispatchRecorder(edges serviceedges.Edges) recordings.DispatchRecorder {
+	return edges.DispatchRecorder
+}
+
+func provideFactorySessionInvocationMetricsRecorder(edges serviceedges.Edges) factorysessionwire.InvocationMetricsRecorder {
+	return edges.InvocationMetricsRecorder
+}
+
+func provideFactoryRuntimeProviderCommandRunner(
+	edges serviceedges.Edges,
+) (factorysessionwire.ProviderCommandRunner, error) {
+	if edges.ProviderCommandRunner != nil {
+		return workers.AdaptCommandRunner(edges.ProviderCommandRunner), nil
 	}
+	runner, err := providePlatformProcessCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	return workers.AdaptCommandRunner(runner), nil
+}
+
+func provideFactoryRuntimeScriptCommandRunner(
+	edges serviceedges.Edges,
+) (factorysessionwire.ScriptCommandRunner, error) {
+	if edges.ScriptCommandRunner != nil {
+		return workers.AdaptCommandRunner(edges.ScriptCommandRunner), nil
+	}
+	runner, err := providePlatformProcessCommandRunner(edges)
+	if err != nil {
+		return nil, err
+	}
+	return workers.AdaptCommandRunner(runner), nil
 }
 
 func provideSessionExecutionOpeningFactory(
 	runtimes factorysessionwire.ExecutionRuntimeOpening,
-	edges serviceedges.Edges,
+	providerCommandRunner factorysessionwire.ProviderCommandRunner,
 	build factorysessionwire.StandaloneSessionExecutionFactory,
 	invocation factorysessionwire.WorkerInvocationFactory,
 	resolveClock factoryruntime.ClockResolver,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	paths factorysessionwire.ExecutionOpeningFileSystem,
 	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 ) (*factorysessionwire.ExecutionOpeningFactory, error) {
-	workerEdges, err := withStandaloneWorkerProductionEdges(edges)
-	if err != nil {
-		return nil, err
-	}
 	return factorysessionwire.NewExecutionOpeningFactory(
-		runtimes, projectRuntimeOpeningExternalEffects(workerEdges), adaptRunner(workerEdges.ProviderCommandRunner), allocator,
-		build, invocation, resolveClock, artifactRoots, adaptRunner, paths, logger,
+		runtimes, providerCommandRunner, allocator,
+		build, invocation, resolveClock, artifactRoots, paths, logger,
 	)
 }
 
 func provideInvocationOperation(
 	openRuntime factorysessionwire.InvocationRuntimeOpening,
 	modelsRoot models.Service,
-	edges serviceedges.Edges,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter modelswire.InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (factorysessionwire.InvocationOperation, error) {
 	return factorysessionwire.NewInvocationOperation(
 		openRuntime,
 		modelsRoot,
-		projectRuntimeOpeningExternalEffects(edges),
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,
 		modelTimeout,
 		artifactRoots,
 		generateSessionID,
+		logger,
+		presentations,
 	)
-}
-
-// projectRuntimeOpeningExternalEffects is the sole selection from the process
-// edge aggregate into the effects consumed by Factory Session runtime opening.
-func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessionwire.RuntimeOpeningExternalEffects {
-	providerRunner := edges.ProviderCommandRunner
-	scriptRunner := edges.ScriptCommandRunner
-	if providerRunner == nil || scriptRunner == nil {
-		if defaultRunner, err := providePlatformProcessCommandRunner(edges); err == nil && defaultRunner != nil {
-			if providerRunner == nil {
-				providerRunner = defaultRunner
-			}
-			if scriptRunner == nil {
-				scriptRunner = defaultRunner
-			}
-		}
-	}
-	return factorysessionwire.RuntimeOpeningExternalEffects{
-		Clock:                            edges.Clock,
-		ProviderOverride:                 edges.ProviderOverride,
-		ModelPullMetricsRecorder:         adaptModelPullMetricsRecorder(edges.ModelPullMetricsRecorder),
-		InvocationMetricsRecorder:        edges.InvocationMetricsRecorder,
-		ProviderCommandRunner:            providerRunner,
-		ScriptCommandRunner:              scriptRunner,
-		SubmissionRecorder:               edges.SubmissionRecorder,
-		DispatchRecorder:                 edges.DispatchRecorder,
-		RuntimeHostObserver:              edges.RuntimeHostObserver,
-		FactoryVisualizationSink:         edges.FactoryVisualizationSink,
-		FactoryVisualizationRootObserver: edges.FactoryVisualizationRootObserver,
-		HostedClock:                      edges.HostedClock,
-		HostedHTTPClient:                 edges.HostedHTTPClient,
-		HostedSecretResolver:             edges.HostedSecretResolver,
-		HostedLinearEndpoint:             edges.HostedLinearEndpoint,
-	}
-}
-
-type factorySessionModelPullMetricsAdapter struct {
-	next interface {
-		RecordModelPullMetric(serviceedges.PullMetric)
-	}
-}
-
-func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
-	metric factorysessions.InvocationMetric,
-) {
-	if adapter.next == nil {
-		return
-	}
-	labels := make(map[string]string, len(metric.Labels))
-	for key, value := range metric.Labels {
-		labels[key] = value
-	}
-	adapter.next.RecordModelPullMetric(serviceedges.PullMetric{
-		Name:   metric.Name,
-		Labels: labels,
-	})
-}
-
-func adaptModelPullMetricsRecorder(
-	recorder interface {
-		RecordModelPullMetric(serviceedges.PullMetric)
-	},
-) factorysessionwire.ModelPullMetricsRecorder {
-	if recorder == nil {
-		return nil
-	}
-	return factorySessionModelPullMetricsAdapter{next: recorder}
-}
-
-func withStandaloneWorkerProductionEdges(overrides serviceedges.Edges) (serviceedges.Edges, error) {
-	commandRunner, err := providePlatformProcessCommandRunner(overrides)
-	if err != nil {
-		return serviceedges.Edges{}, err
-	}
-	return serviceedges.Merge(serviceedges.Edges{
-		ProviderCommandRunner: commandRunner,
-		ScriptCommandRunner:   commandRunner,
-	}, overrides), nil
 }
 
 func provideAgyPTYAllocator(edges serviceedges.Edges) (workers.PTYAllocator, error) {

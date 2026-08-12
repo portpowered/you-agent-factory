@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -523,34 +524,50 @@ func provideRuntimeArtifactPathReserver() (platformruntimeartifact.Reserver, err
 	return platformruntimeartifact.NewReserver(platformfilesystem.Local{})
 }
 
-func provideRuntimeLogSinkFactory(
+func provideRuntimeLogOwner(
+	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
-) (factoryruntime.RuntimeLogSinkFactory, error) {
+) (factoryruntime.RuntimeLogOwner, error) {
 	opener, err := logging.NewRuntimeLogOpener(paths)
 	if err != nil {
 		return nil, err
 	}
-	return func(
-		base *zap.Logger,
-		runtimeInstanceID string,
-		rootDir string,
-		config factoryruntime.RuntimeLogStorageConfig,
-	) (factoryruntime.RuntimeLogSink, error) {
-		opened, err := opener.Open(logging.RuntimeLogOpeningRequest{
-			BaseLogger: base, RuntimeInstanceID: runtimeInstanceID,
-			RootDirectory: rootDir, StartTimeUTC: clock(), CollisionID: newID(),
-			Config: logging.RuntimeLogConfig{
-				MaxSize: config.MaxSize, MaxBackups: config.MaxBackups,
-				MaxAge: config.MaxAge, Compress: config.Compress,
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-		return runtimeLogSinkAdapter{sink: opened}, nil
+	if baseLogger == nil {
+		return nil, errors.New("runtime log owner base logger is required")
+	}
+	return runtimeLogOwner{
+		baseLogger: baseLogger, opener: opener, clock: clock, newID: newID,
 	}, nil
+}
+
+type runtimeLogOwner struct {
+	baseLogger *zap.Logger
+	opener     *logging.RuntimeLogOpener
+	clock      runtimeArtifactClock
+	newID      runtimeArtifactIDGenerator
+}
+
+func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
+	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
+		return nil, nil
+	}
+	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
+		return nil, errors.New("runtime log owner is not configured")
+	}
+	opened, err := owner.opener.Open(logging.RuntimeLogOpeningRequest{
+		BaseLogger: owner.baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
+		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
+		Config: logging.RuntimeLogConfig{
+			MaxSize: request.Config.MaxSize, MaxBackups: request.Config.MaxBackups,
+			MaxAge: request.Config.MaxAge, Compress: request.Config.Compress,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return runtimeLogSinkAdapter{sink: opened}, nil
 }
 
 type runtimeLogSinkAdapter struct{ sink *logging.RuntimeLogSink }
@@ -568,42 +585,52 @@ func (adapter runtimeLogSinkAdapter) Artifact() factoryruntime.RuntimeLogArtifac
 	}
 }
 
-func provideRuntimeMetricsSinkFactory(
+func provideRuntimeMetricsOwner(
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
-) (factoryruntime.RuntimeMetricsSinkFactory, error) {
+) (factoryruntime.RuntimeMetricsOwner, error) {
 	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths)
 	if err != nil {
 		return nil, err
 	}
-	return func(
-		scope factoryruntime.RuntimeMetricsScope,
-		rootDir string,
-		config factoryruntime.RuntimeMetricsStorageConfig,
-	) (factoryruntime.RuntimeMetricsSink, error) {
-		writer, err := opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
-			SessionID: scope.SessionID, RuntimeInstanceID: scope.RuntimeInstanceID,
-			FolderPath: scope.FolderPath, FactoryDirectory: scope.FactoryDir,
-			RootDirectory: rootDir, StartTimeUTC: clock(), CollisionID: newID(),
-			Config: platformmetrics.RuntimeMetricsConfig{
-				MaxSize: config.MaxSize, MaxBackups: config.MaxBackups,
-				MaxAge: config.MaxAge, Compress: config.Compress,
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-		return factoryruntime.NewRuntimeMetricsSink(
-			runtimeMetricRecordWriterAdapter{writer: writer},
-			scope,
-			clock,
-			factoryruntime.RuntimeMetricsArtifact{
-				Path: writer.Path(), RootDir: writer.RootDir(),
-				StartTimeUTC: writer.StartTimeUTC(),
-			},
-		)
-	}, nil
+	return runtimeMetricsOwner{opener: opener, clock: clock, newID: newID}, nil
+}
+
+type runtimeMetricsOwner struct {
+	opener *platformmetrics.RuntimeMetricsOpener
+	clock  runtimeArtifactClock
+	newID  runtimeArtifactIDGenerator
+}
+
+func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {
+	if request.Policy == factoryruntime.RuntimeMetricsPolicyDisabled {
+		return nil, nil
+	}
+	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
+		return nil, errors.New("runtime metrics owner is not configured")
+	}
+	writer, err := owner.opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
+		SessionID: request.Scope.SessionID, RuntimeInstanceID: request.Scope.RuntimeInstanceID,
+		FolderPath: request.Scope.FolderPath, FactoryDirectory: request.Scope.FactoryDir,
+		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
+		Config: platformmetrics.RuntimeMetricsConfig{
+			MaxSize: request.Config.MaxSize, MaxBackups: request.Config.MaxBackups,
+			MaxAge: request.Config.MaxAge, Compress: request.Config.Compress,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return factoryruntime.NewRuntimeMetricsSink(
+		runtimeMetricRecordWriterAdapter{writer: writer},
+		request.Scope,
+		owner.clock,
+		factoryruntime.RuntimeMetricsArtifact{
+			Path: writer.Path(), RootDir: writer.RootDir(),
+			StartTimeUTC: writer.StartTimeUTC(),
+		},
+	)
 }
 
 type runtimeMetricRecordWriterAdapter struct {
@@ -622,6 +649,7 @@ func (a runtimeMetricRecordWriterAdapter) Close() error {
 }
 
 func provideApplicationRuntimeAdapter(
+	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
 	httpHandler *httpapplication.Handler,
 	newRunner lifecycle.RunnerFactory,
@@ -629,11 +657,15 @@ func provideApplicationRuntimeAdapter(
 	if visualizationFactory == nil || httpHandler == nil || newRunner == nil {
 		return nil, errors.New("Factory visualization, HTTP handler, and lifecycle component operations are required")
 	}
+	fixedSink := edges.FactoryVisualizationSink
+	fixedRootObserver := edges.FactoryVisualizationRootObserver
 	return func(
 		opened factorysessionwire.OpenedApplicationRuntime,
-		effects factorysessionwire.RuntimeOpeningExternalEffects,
 		sink factoryvisualization.Sink,
 	) (factorysessions.BoundProcessComponents, error) {
+		if fixedSink != nil {
+			sink = fixedSink
+		}
 		var visualization lifecycle.Component
 		var err error
 		if sink != nil {
@@ -642,7 +674,7 @@ func provideApplicationRuntimeAdapter(
 				logger = zap.NewNop()
 			}
 			visualized, err := visualizationFactory(
-				opened.Visualization.Reader, opened.Visualization.Projections, effects.Clock, sink,
+				opened.Visualization.Reader, opened.Visualization.Projections, opened.Resources.Clock, sink,
 				func(err error) {
 					logger.Error("Factory visualization failed", zap.Error(err))
 				},
@@ -650,8 +682,8 @@ func provideApplicationRuntimeAdapter(
 			if err != nil {
 				return factorysessions.BoundProcessComponents{}, err
 			}
-			if effects.FactoryVisualizationRootObserver != nil {
-				effects.FactoryVisualizationRootObserver(visualized)
+			if fixedRootObserver != nil {
+				fixedRootObserver(visualized)
 			}
 			// Factory Session lifecycle must not auto-activate Visualization.
 			// Peers leave the composed root inert until explicit Activate.
@@ -769,30 +801,74 @@ func stdioLifecycleOpening(
 }
 
 type stdioApplicationOpener struct {
-	open factorysessionwire.StdioOpeningOperation
+	open          factorysessionwire.StdioOpeningOperation
+	presentations factorysessions.OpeningPresentationOwner
 }
 
 func (adapter stdioApplicationOpener) OpenStdio(
 	ctx context.Context,
 	intent processcontract.MCPIntent,
 ) (initializer.RunApplication, error) {
-	return adapter.open.OpenStdio(ctx, factorysessions.StdioOpeningRequest{
+	request := factorysessions.StdioOpeningRequest{
 		FixtureCatalogPath: intent.FixtureCatalogPath,
 		RuntimeBacked:      intent.RuntimeBacked,
 		ProjectRoot:        intent.ProjectRoot,
 		SystemConfigHome:   intent.HomeDir,
-		Input:              intent.Stdin,
-		Output:             intent.Stdout,
-	})
+	}
+	var scopeID factorysessions.OpeningScopeID
+	var err error
+	if adapter.presentations != nil {
+		scopeID, err = adapter.presentations.RegisterStdio(factorysessions.StdioOpeningScope{
+			Input: intent.Stdin, Output: intent.Stdout,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("register stdio opening presentation: %w", err)
+		}
+		request.ScopeID = scopeID
+	}
+	application, err := adapter.open.OpenStdio(
+		ctx,
+		request,
+	)
+	if err != nil {
+		if adapter.presentations != nil {
+			adapter.presentations.Close(scopeID)
+		}
+		return nil, err
+	}
+	if application == nil {
+		if adapter.presentations != nil {
+			adapter.presentations.Close(scopeID)
+		}
+		return nil, errors.New("stdio opening returned nil application")
+	}
+	if adapter.presentations == nil {
+		return application, nil
+	}
+	return scopedRunApplication{
+		application: application,
+		close:       func() { adapter.presentations.Close(scopeID) },
+	}, nil
+}
+
+type scopedRunApplication struct {
+	application initializer.RunApplication
+	close       func()
+}
+
+func (application scopedRunApplication) Run(ctx context.Context) error {
+	defer application.close()
+	return application.application.Run(ctx)
 }
 
 func provideStdioApplicationOpener(
 	open factorysessionwire.StdioOpeningOperation,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (processcontract.StdioApplicationOpener, error) {
 	if open == nil {
 		return nil, errors.New("Factory Session stdio opening operation is required")
 	}
-	return stdioApplicationOpener{open: open}, nil
+	return stdioApplicationOpener{open: open, presentations: presentations}, nil
 }
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
@@ -803,6 +879,8 @@ func provideRunOpener(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
 ) runcli.Opener {
 	return func(
 		ctx context.Context,
@@ -811,9 +889,9 @@ func provideRunOpener(
 		invocation runcli.InvocationOperation,
 		presentation factoryvisualization.ResponsePresentation,
 	) (*runcli.Operation, error) {
-		return runcli.Open(
+		return runcli.OpenWithVisualizationOwner(
 			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest,
+			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
 }
@@ -837,36 +915,12 @@ func provideRunSelectionFactory(
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
 	buildApplication initializer.RuntimeRunnerBuilder,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
 		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
+		presentations,
 	)
-}
-
-func provideRunRuntimeRunnerBuilder(
-	build initializer.RuntimeRunnerBuilder,
-	open *factorysessionwire.ApplicationService,
-) (runcli.RuntimeRunnerBuilder, error) {
-	if build == nil || open == nil {
-		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
-	}
-	return func(
-		ctx context.Context,
-		request factorysessionwire.ApplicationOpeningRequest,
-		logger *zap.Logger,
-		sink factoryvisualization.Sink,
-	) (initializer.LocalRuntimeRunner, error) {
-		return build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request, logger, sink)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			return initializer.OpenedApplication{
-				Plan:        opened.Plan,
-				Diagnostics: runtimeartifact.Diagnostics(opened.Diagnostics),
-			}, nil
-		})
-	}, nil
 }
 
 func provideFactorySessionHTTPRequestPreparation(
@@ -891,28 +945,27 @@ func provideDirectJavaScriptHostAdapter(
 	httpHandler *httpapplication.Handler,
 	start platformhttpserver.Starter,
 	newRunner lifecycle.RunnerFactory,
+	logger *zap.Logger,
 ) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
-	if httpHandler == nil || start == nil || newRunner == nil {
+	if httpHandler == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
 	}
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
-		request factorysessions.DirectJavaScriptRunRequest,
+		host factorysessions.RuntimeHostRequest,
+		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
-		if request.Host == nil {
-			return nil, errors.New("direct JavaScript host request is required")
-		}
-		handler, err := httpHandler.BindDurableExecution(execution, request.Logger)
+		handler, err := httpHandler.BindDurableExecution(execution, logger)
 		if err != nil {
 			return nil, err
 		}
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
-				Handler: handler, Host: request.Host.Host, Port: request.Host.Port,
-				AutoPort: request.Host.AutoPort, Logger: request.Logger,
+				Handler: handler, Host: host.Host, Port: host.Port,
+				AutoPort: host.AutoPort, Logger: logger,
 				OnBound: func(binding platformhttpserver.Binding) {
-					if request.RuntimeHostObserver != nil {
-						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
+					if observer != nil {
+						observer(factorysessions.RuntimeHostBinding{
 							Host: binding.Host, Port: binding.Port,
 						})
 					}

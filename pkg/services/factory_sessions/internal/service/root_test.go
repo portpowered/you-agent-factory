@@ -105,11 +105,8 @@ func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 
 	root, err := newRootForTest(nil)
-	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
-	}
-	if bound, err := root.ForRuntime(factorysessions.RuntimeBinding{Clock: rootTestClock{}}); bound != nil || err == nil {
-		t.Fatalf("ForRuntime() with missing live-change coordinator = (%#v, %v), want nil result and error", bound, err)
+	if root != nil || err == nil {
+		t.Fatalf("NewRoot() with missing live-change coordinator = (%#v, %v), want nil root and error", root, err)
 	}
 }
 
@@ -132,6 +129,7 @@ type rootTestInputs struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
+	clock                        factoryruntime.Clock
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 }
 
@@ -151,6 +149,7 @@ func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) 
 		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		identity:                identityService,
 		responseStreams:         responseStreams,
+		clock:                   rootTestClock{},
 		liveChangeCoordinator:   coordinator,
 	}
 }
@@ -171,6 +170,7 @@ func (in rootTestInputs) call() (*Root, error) {
 		in.initialWorkFiles,
 		in.identity,
 		in.responseStreams,
+		in.clock,
 		in.liveChangeCoordinator,
 	)
 }

@@ -18,7 +18,6 @@ import (
 //   - ExecutionValidationError names ValidationError for peer-facing clarity
 //   - ErrDurableSessionNotFound is the durable missing-session sentinel
 //   - ErrExecutionServiceNotConfigured names the durable service configuration failure
-//   - ExecutionFactoryEventConsumer names FactoryEventConsumer for durable sync observation
 //
 // Helper functions ApplySessionListScope, EvaluateLifecycleControl,
 // MaterializeEventReadStream, and related lifecycle/listing helpers are also

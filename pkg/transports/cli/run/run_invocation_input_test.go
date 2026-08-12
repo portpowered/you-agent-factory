@@ -140,7 +140,7 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 		_ context.Context,
 		_ factorysessions.InvocationTarget,
 		request factorysessions.InvocationRequest,
-		_ factorysessions.FactoryEventConsumer,
+		_ func([]interfaces.FactoryEvent),
 	) (factorysessions.FactoryInvocationOutcome, error) {
 		captured = request
 		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
@@ -158,6 +158,7 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 		*apiRequest,
 		operation,
 		testResponsePresentation(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runFactoryInvocation: %v", err)
@@ -186,7 +187,7 @@ func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(
 		_ context.Context,
 		_ factorysessions.InvocationTarget,
 		request factorysessions.InvocationRequest,
-		_ factorysessions.FactoryEventConsumer,
+		_ func([]interfaces.FactoryEvent),
 	) (factorysessions.FactoryInvocationOutcome, error) {
 		captured = request
 		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
@@ -204,6 +205,7 @@ func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(
 		*apiRequest,
 		operation,
 		testResponsePresentation(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runFactoryInvocation: %v", err)
@@ -235,7 +237,7 @@ func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterRe
 		context.Context,
 		factorysessions.InvocationTarget,
 		factorysessions.InvocationRequest,
-		factorysessions.FactoryEventConsumer,
+		func([]interfaces.FactoryEvent),
 	) (factorysessions.FactoryInvocationOutcome, error) {
 		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
 			RequestID: "request-cleanup",
@@ -250,8 +252,8 @@ func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterRe
 		JSONOutput:           true, Output: &output,
 	}
 	err := runFactoryInvocation(
-		context.Background(), cfg, invocationTarget(cfg, nil, nil),
-		factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+		context.Background(), cfg, invocationTarget(cfg, nil),
+		factoryapi.InvocationRequest{}, operation, testResponsePresentation(), nil,
 	)
 	if err == nil || !errors.Is(err, cleanupErr) {
 		t.Fatalf("runFactoryInvocation error = %v, want it to preserve the post-result cleanup failure %v", err, cleanupErr)
@@ -284,7 +286,7 @@ func TestRunFactoryInvocationRejectsUndeterminedResultWithNilError(t *testing.T)
 		context.Context,
 		factorysessions.InvocationTarget,
 		factorysessions.InvocationRequest,
-		factorysessions.FactoryEventConsumer,
+		func([]interfaces.FactoryEvent),
 	) (factorysessions.FactoryInvocationOutcome, error) {
 		return factorysessions.FactoryInvocationOutcome{}, nil
 	}}
@@ -293,8 +295,8 @@ func TestRunFactoryInvocationRejectsUndeterminedResultWithNilError(t *testing.T)
 		JSONOutput:           true, Output: &output,
 	}
 	err := runFactoryInvocation(
-		context.Background(), cfg, invocationTarget(cfg, nil, nil),
-		factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+		context.Background(), cfg, invocationTarget(cfg, nil),
+		factoryapi.InvocationRequest{}, operation, testResponsePresentation(), nil,
 	)
 	if err == nil {
 		t.Fatal("runFactoryInvocation error = nil, want a non-nil error when no terminal result was ever determined")

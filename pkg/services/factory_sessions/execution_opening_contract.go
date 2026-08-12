@@ -3,9 +3,6 @@ package factorysessions
 import (
 	"errors"
 	"fmt"
-	"io"
-
-	"go.uber.org/zap"
 )
 
 // ProviderIdentityResolver resolves one authored provider selection through
@@ -20,27 +17,27 @@ type ExecutionRuntimeOpeningRequest struct {
 }
 
 // StdioOpeningRequest carries only invocation-edge values into the Factory
-// Sessions-owned stdio opening policy.
+// Sessions-owned stdio opening policy. Transport streams stay on the explicit
+// presentation boundary below so durable selection cannot retain protocol
+// handles.
 type StdioOpeningRequest struct {
 	FixtureCatalogPath string
 	RuntimeBacked      bool
 	ProjectRoot        string
 	SystemConfigHome   string
-	Input              io.Reader
-	Output             io.Writer
+	ScopeID            OpeningScopeID
 }
 
 // DirectJavaScriptRunRequest carries customer-edge values for one raw
 // JavaScript workflow invocation. Source resolution and execution policy stay
-// behind DirectJavaScriptRunOperation.
+// behind DirectJavaScriptRunOperation. Protocol output and host observation are
+// owner-private state selected by ScopeID.
 type DirectJavaScriptRunRequest struct {
-	SourcePath          string
-	MockWorkersEnabled  bool
-	JSONOutput          bool
-	Output              io.Writer
-	Host                *RuntimeHostRequest
-	RuntimeHostObserver RuntimeHostObserver
-	Logger              *zap.Logger
+	SourcePath         string
+	MockWorkersEnabled bool
+	JSONOutput         bool
+	Host               *RuntimeHostRequest
+	ScopeID            OpeningScopeID
 }
 
 // --- merged from opening_contract.go ---

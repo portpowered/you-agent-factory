@@ -72,13 +72,22 @@ type RuntimeMetricsStorageConfig struct {
 	Compress   bool
 }
 
-// RuntimeMetricsSinkFactory opens one runtime-scoped sink. Wire selects the
-// policy-free writer implementation.
-type RuntimeMetricsSinkFactory func(
-	RuntimeMetricsScope,
-	string,
-	RuntimeMetricsStorageConfig,
-) (RuntimeMetricsSink, error)
+// RuntimeMetricsScopeRequest contains the value selections for one private
+// metrics scope. The owner retains the clock, ID, path, and filesystem
+// effects; callers provide only correlation values and destination policy.
+type RuntimeMetricsScopeRequest struct {
+	Scope         RuntimeMetricsScope
+	RootDirectory string
+	Policy        RuntimeMetricsPolicy
+	Config        RuntimeMetricsStorageConfig
+}
+
+// RuntimeMetricsOwner is the process-scoped observability root for runtime
+// metrics. Open returns one operation-private sink; the owner itself is not
+// closed when a session finishes.
+type RuntimeMetricsOwner interface {
+	Open(RuntimeMetricsScopeRequest) (RuntimeMetricsSink, error)
+}
 
 type projectedRuntimeMetricsSink struct {
 	writer   RuntimeMetricRecordWriter

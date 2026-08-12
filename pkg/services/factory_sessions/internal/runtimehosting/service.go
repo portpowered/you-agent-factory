@@ -72,7 +72,7 @@ func (service *Service) Run(
 	if err := runtime.CompleteStartup(ctx); err != nil {
 		return err
 	}
-	if binding.Port > 0 && observer != nil {
+	if observer != nil {
 		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
 	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
@@ -106,7 +106,11 @@ func (service *Service) startAPI(
 		})
 		exit <- err
 		close(exit)
-		if err != nil && logger != nil {
+		// Terminal listener-binding failures are translated into the public
+		// SERVER_BIND_FAILED response by the caller. Logging the raw starter
+		// error here as well duplicates that response on the CLI's stderr now
+		// that the process-scoped runtime logger is injected during opening.
+		if err != nil && logger != nil && !platformhttpserver.IsBindError(err) {
 			logger.Error("API server error", zap.Error(err))
 		}
 	}()

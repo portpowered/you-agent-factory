@@ -3,9 +3,13 @@ package runtimeopening
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -48,30 +52,64 @@ func (materializerStub) MaterializeContentURL(_ context.Context, rawURL string) 
 	return "/tmp/runtimeopening.png", func() {}, nil
 }
 
-func TestNewFactoryRejectsEveryMissingRuntimeOpeningGroup(t *testing.T) {
+// runtimeOpeningFixture is test-only assembly syntax. Production callers use
+// the ten separate owner-port arguments exposed by NewFactory; keeping this
+// fixture aggregate local makes omission and identity cases concise without
+// reintroducing an aggregate production contract.
+type runtimeOpeningFixture struct {
+	ProviderSessions   *ProviderSessionsPorts
+	FactoryRuntime     *FactoryRuntimePorts
+	FactoryDefinitions *FactoryDefinitionsPorts
+	FactorySessions    *FactorySessionsPorts
+	Work               *WorkPorts
+	Automations        *AutomationsPorts
+	Models             *ModelsPorts
+	Recordings         *RecordingsPorts
+	Webhooks           *WebhooksPorts
+	Workers            *WorkersPorts
+	OperatorSettings   *OperatorSettingsPorts
+}
+
+func (fixture runtimeOpeningFixture) newFactory() (*Factory, error) {
+	return NewFactory(
+		fixture.ProviderSessions,
+		fixture.FactoryRuntime,
+		fixture.FactoryDefinitions,
+		fixture.FactorySessions,
+		fixture.Work,
+		fixture.Automations,
+		fixture.Models,
+		fixture.Recordings,
+		fixture.Webhooks,
+		fixture.Workers,
+		fixture.OperatorSettings,
+	)
+}
+
+func TestNewFactoryRejectsEveryMissingRuntimeOpeningOwnerPorts(t *testing.T) {
 	t.Parallel()
 
 	tests := []runtimeOpeningDependencyOmission{
-		{"Provider Sessions group", func(dependencies *Dependencies) { dependencies.ProviderSessions = nil }},
-		{"Factory Runtime group", func(dependencies *Dependencies) { dependencies.FactoryRuntime = nil }},
-		{"Factory Definitions group", func(dependencies *Dependencies) { dependencies.FactoryDefinitions = nil }},
-		{"Factory Sessions group", func(dependencies *Dependencies) { dependencies.FactorySessions = nil }},
-		{"Work group", func(dependencies *Dependencies) { dependencies.Work = nil }},
-		{"Automations group", func(dependencies *Dependencies) { dependencies.Automations = nil }},
-		{"Models group", func(dependencies *Dependencies) { dependencies.Models = nil }},
-		{"Recordings group", func(dependencies *Dependencies) { dependencies.Recordings = nil }},
-		{"Webhooks group", func(dependencies *Dependencies) { dependencies.Webhooks = nil }},
-		{"Workers group", func(dependencies *Dependencies) { dependencies.Workers = nil }},
-		{"Operator Settings group", func(dependencies *Dependencies) { dependencies.OperatorSettings = nil }},
+		{"Provider Sessions owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.ProviderSessions = nil }},
+		{"Factory Runtime owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.FactoryRuntime = nil }},
+		{"Factory Definitions owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.FactoryDefinitions = nil }},
+		{"Factory Sessions owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.FactorySessions = nil }},
+		{"Work owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Work = nil }},
+		{"Automations owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Automations = nil }},
+		{"Models owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Models = nil }},
+		{"Recordings owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Recordings = nil }},
+		{"Webhooks owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Webhooks = nil }},
+		{"Workers owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Workers = nil }},
+		{"Operator Settings owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.OperatorSettings = nil }},
 	}
 
 	for _, test := range tests {
 		t.Run(test.requirement, func(t *testing.T) {
 			calls := 0
-			dependencies := validRuntimeOpeningDependencies(&calls)
+			dependencies := validRuntimeOpeningOwnerPorts(&calls)
 			test.omit(&dependencies)
 
-			factory, err := NewFactory(dependencies)
+			factory, err := dependencies.newFactory()
 			if factory != nil {
 				t.Fatalf("NewFactory() = %#v, want nil factory", factory)
 			}
@@ -91,10 +129,10 @@ func TestNewFactoryRejectsEveryMissingRuntimeOpeningMember(t *testing.T) {
 	for _, test := range runtimeOpeningMemberOmissions() {
 		t.Run(test.requirement, func(t *testing.T) {
 			calls := 0
-			dependencies := validRuntimeOpeningDependencies(&calls)
+			dependencies := validRuntimeOpeningOwnerPorts(&calls)
 			test.omit(&dependencies)
 
-			factory, err := NewFactory(dependencies)
+			factory, err := dependencies.newFactory()
 			if factory != nil {
 				t.Fatalf("NewFactory() = %#v, want nil factory", factory)
 			}
@@ -112,15 +150,15 @@ func TestNewFactoryUsesStableFirstMissingRequirementAndRemainsInert(t *testing.T
 	t.Parallel()
 
 	calls := 0
-	dependencies := validRuntimeOpeningDependencies(&calls)
+	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	dependencies.ProviderSessions = nil
 	dependencies.FactoryRuntime = nil
 
-	factory, err := NewFactory(dependencies)
+	factory, err := dependencies.newFactory()
 	if factory != nil {
 		t.Fatalf("NewFactory() = %#v, want nil factory", factory)
 	}
-	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions group is required"; got != want {
+	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions owner ports are required"; got != want {
 		t.Fatalf("NewFactory() error = %q, want first stable requirement %q", got, want)
 	}
 	if calls != 0 {
@@ -132,10 +170,10 @@ func TestNewFactoryConstructsInertFactoryWithExactModelsRoot(t *testing.T) {
 	t.Parallel()
 
 	calls := 0
-	dependencies := validRuntimeOpeningDependencies(&calls)
+	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	wantModels := dependencies.Models.Service
 
-	factory, err := NewFactory(dependencies)
+	factory, err := dependencies.newFactory()
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
@@ -154,11 +192,11 @@ func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
 	t.Parallel()
 
 	calls := 0
-	dependencies := validRuntimeOpeningDependencies(&calls)
+	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	materializer := &identityConstructionMaterializer{}
 	dependencies.Work.ContentMaterializer = materializer
 
-	factory, err := NewFactory(dependencies)
+	factory, err := dependencies.newFactory()
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
@@ -166,17 +204,17 @@ func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
 		t.Fatal("NewFactory() = nil, want factory")
 	}
 
-	assertProviderSessionsDependenciesRetained(t, factory, dependencies)
-	assertFactoryRuntimeDependenciesRetained(t, factory, dependencies)
-	assertFactoryDefinitionsDependenciesRetained(t, factory, dependencies)
-	assertFactorySessionsDependenciesRetained(t, factory, dependencies)
-	assertWorkDependenciesRetained(t, factory, dependencies, materializer)
-	assertAutomationsDependenciesRetained(t, factory, dependencies)
-	assertModelsDependenciesRetained(t, factory, dependencies)
-	assertRecordingsDependenciesRetained(t, factory, dependencies)
-	assertWebhooksDependenciesRetained(t, factory, dependencies)
-	assertWorkersDependenciesRetained(t, factory, dependencies)
-	assertOperatorSettingsDependenciesRetained(t, factory, dependencies)
+	assertProviderSessionsPortsRetained(t, factory, dependencies)
+	assertFactoryRuntimePortsRetained(t, factory, dependencies)
+	assertFactoryDefinitionsPortsRetained(t, factory, dependencies)
+	assertFactorySessionsPortsRetained(t, factory, dependencies)
+	assertWorkPortsRetained(t, factory, dependencies, materializer)
+	assertAutomationsPortsRetained(t, factory, dependencies)
+	assertModelsPortsRetained(t, factory, dependencies)
+	assertRecordingsPortsRetained(t, factory, dependencies)
+	assertWebhooksPortsRetained(t, factory, dependencies)
+	assertWorkersPortsRetained(t, factory, dependencies)
+	assertOperatorSettingsPortsRetained(t, factory, dependencies)
 	if calls != 0 {
 		t.Fatalf("NewFactory() invoked %d collaborator functions, want inert construction", calls)
 	}
@@ -191,7 +229,7 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	}
 	var events []string
 	calls := 0
-	dependencies := validRuntimeOpeningDependencies(&calls)
+	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	replayInputs := &historicalReplayInputsRecorder{portable: portable, events: &events}
 	dependencies.Recordings.ReplayInputs = replayInputs
 	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
@@ -203,7 +241,7 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 		return zap.NewNop()
 	}
 
-	factory, err := NewFactory(dependencies)
+	factory, err := dependencies.newFactory()
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
@@ -213,8 +251,6 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 			Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "recording.json"},
 		},
-		ExternalEffects{},
-		zap.NewNop(),
 	)
 	if err != nil {
 		t.Fatalf("OpenApplicationRuntime() error = %v", err)
@@ -236,12 +272,12 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	}
 }
 
-func assertProviderSessionsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertProviderSessionsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	assertRuntimeOpeningDependencyIdentity(t, "Provider Sessions service", factory.providerSessions, dependencies.ProviderSessions.Service)
 }
 
-func assertFactoryRuntimeDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertFactoryRuntimePortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.FactoryRuntime
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime workflows", factory.factoryWorkflows, group.FactoryWorkflows)
@@ -251,10 +287,12 @@ func assertFactoryRuntimeDependenciesRetained(t *testing.T, factory *Factory, de
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime mock runner", factory.workersMockCommandRunnerFactory, group.WorkersMockCommandRunnerFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime assembler", factory.factoryRuntimeAssembler, group.FactoryRuntimeAssembler)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime clock", factory.resolveClock, group.ResolveClock)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime selected clock", factory.clock, group.Clock)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime base logger", factory.baseLogger, group.Logger)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime logger", factory.newSessionLogger, group.NewSessionLogger)
 }
 
-func assertFactoryDefinitionsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertFactoryDefinitionsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.FactoryDefinitions
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions validator", factory.factoryDefinitionValidator, group.Validator)
@@ -267,10 +305,11 @@ func assertFactoryDefinitionsDependenciesRetained(t *testing.T, factory *Factory
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions snapshot capturer", factory.captureLoadedFactorySnapshot, group.CaptureLoadedFactorySnapshot)
 }
 
-func assertFactorySessionsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertFactorySessionsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.FactorySessions
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions service", factory.factorySessionsService, group.Service)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions runtime assembly", factory.factorySessionsRuntimeAssembly, group.RuntimeAssembly)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions durable execution", factory.durableExecutionFactory, group.DurableExecutionFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions execution", factory.factorySessionExecutionFactory, group.FactorySessionExecutionFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions scaffold", factory.factoryScaffoldInitializer, group.FactoryScaffoldInitializer)
@@ -281,10 +320,10 @@ func assertFactorySessionsDependenciesRetained(t *testing.T, factory *Factory, d
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions provider identities", factory.providerIdentities, group.ProviderIdentities)
 }
 
-func assertWorkDependenciesRetained(
+func assertWorkPortsRetained(
 	t *testing.T,
 	factory *Factory,
-	dependencies Dependencies,
+	dependencies runtimeOpeningFixture,
 	materializer *identityConstructionMaterializer,
 ) {
 	t.Helper()
@@ -299,22 +338,23 @@ func assertWorkDependenciesRetained(
 	}
 }
 
-func assertAutomationsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertAutomationsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Automations
 	assertRuntimeOpeningDependencyIdentity(t, "Automations factory", factory.automationFactory, group.Factory)
 	assertRuntimeOpeningDependencyIdentity(t, "Automations hosted sources", factory.automationHostedSourcesFactory, group.HostedSourcesFactory)
 }
 
-func assertModelsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertModelsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	assertRuntimeOpeningDependencyIdentity(t, "Models service", factory.modelService, dependencies.Models.Service)
 }
 
-func assertRecordingsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertRecordingsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Recordings
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings projections", factory.recordingsProjectionFactory, group.ProjectionFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Recordings service factory", factory.recordingsServiceFactory, group.ServiceFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings lifecycle", factory.recordingLifecycleFactory, group.LifecycleFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings ledger", factory.runtimeLedgerFactory, group.RuntimeLedgerFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings recorder", factory.runtimeRecorderFactory, group.RuntimeRecorderFactory)
@@ -323,12 +363,12 @@ func assertRecordingsDependenciesRetained(t *testing.T, factory *Factory, depend
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay inputs", factory.replayInputs, group.ReplayInputs)
 }
 
-func assertWebhooksDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertWebhooksPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	assertRuntimeOpeningDependencyIdentity(t, "Webhooks service", factory.webhooksService, dependencies.Webhooks.Service)
 }
 
-func assertWorkersDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertWorkersPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Workers
 	assertRuntimeOpeningDependencyIdentity(t, "Workers execution", factory.workerExecutionFactory, group.ExecutionFactory)
@@ -336,9 +376,11 @@ func assertWorkersDependenciesRetained(t *testing.T, factory *Factory, dependenc
 	assertRuntimeOpeningDependencyIdentity(t, "Workers hooks", factory.workersLocalRuntimeHooksFactory, group.LocalRuntimeHooksFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers command adapter", factory.adaptWorkerCommandRunner, group.AdaptCommandRunner)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers provider adapter", factory.providerFromCommandRunnerFactory, group.ProviderFromCommandRunnerFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Workers provider command runner", factory.providerCommandRunner, group.ProviderCommandRunner)
+	assertRuntimeOpeningDependencyIdentity(t, "Workers script command runner", factory.scriptCommandRunner, group.ScriptCommandRunner)
 }
 
-func assertOperatorSettingsDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+func assertOperatorSettingsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	assertRuntimeOpeningDependencyIdentity(
 		t,
@@ -368,65 +410,73 @@ func assertRuntimeOpeningDependencyIdentity(t *testing.T, name string, got, want
 
 type runtimeOpeningDependencyOmission struct {
 	requirement string
-	omit        func(*Dependencies)
+	omit        func(*runtimeOpeningFixture)
 }
 
 func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 	return []runtimeOpeningDependencyOmission{
-		{"Provider Sessions service", func(d *Dependencies) { d.ProviderSessions.Service = nil }},
-		{"Factory Runtime JavaScript workflow definitions", func(d *Dependencies) { d.FactoryRuntime.FactoryWorkflows = nil }},
-		{"Factory Runtime workflow preview operation", func(d *Dependencies) { d.FactoryRuntime.WorkflowPreview = nil }},
-		{"Factory Runtime Workers runtime executors factory", func(d *Dependencies) { d.FactoryRuntime.WorkersRuntimeExecutorsFactory = nil }},
-		{"Factory Runtime provider-invocation executor factory", func(d *Dependencies) { d.FactoryRuntime.ProviderInvocationFactory = nil }},
-		{"Factory Runtime Workers mock command runner factory", func(d *Dependencies) { d.FactoryRuntime.WorkersMockCommandRunnerFactory = nil }},
-		{"Factory Runtime runtime assembler", func(d *Dependencies) { d.FactoryRuntime.FactoryRuntimeAssembler = nil }},
-		{"Factory Runtime clock resolver", func(d *Dependencies) { d.FactoryRuntime.ResolveClock = nil }},
-		{"Factory Runtime session logger factory", func(d *Dependencies) { d.FactoryRuntime.NewSessionLogger = nil }},
-		{"Factory Definitions validator", func(d *Dependencies) { d.FactoryDefinitions.Validator = nil }},
-		{"Factory Definitions named path resolver", func(d *Dependencies) { d.FactoryDefinitions.NamedPaths = nil }},
-		{"Factory Definitions factory", func(d *Dependencies) { d.FactoryDefinitions.Factory = nil }},
-		{"Factory Definitions initial factory snapshot factory", func(d *Dependencies) { d.FactoryDefinitions.InitialFactorySnapshotFactory = nil }},
-		{"Factory Definitions loaded factory loader", func(d *Dependencies) { d.FactoryDefinitions.LoadFactory = nil }},
-		{"Factory Definitions loaded factory source factory", func(d *Dependencies) { d.FactoryDefinitions.NewLoadedFactory = nil }},
-		{"Factory Definitions replay runtime config decoder", func(d *Dependencies) { d.FactoryDefinitions.DecodeReplayConfig = nil }},
-		{"Factory Definitions loaded factory snapshot capturer", func(d *Dependencies) { d.FactoryDefinitions.CaptureLoadedFactorySnapshot = nil }},
-		{"Factory Sessions service", func(d *Dependencies) { d.FactorySessions.Service = nil }},
-		{"Factory Sessions durable execution factory", func(d *Dependencies) { d.FactorySessions.DurableExecutionFactory = nil }},
-		{"Factory Sessions session execution factory", func(d *Dependencies) { d.FactorySessions.FactorySessionExecutionFactory = nil }},
-		{"Factory Sessions factory scaffold initializer", func(d *Dependencies) { d.FactorySessions.FactoryScaffoldInitializer = nil }},
-		{"Factory Sessions editable factory validator", func(d *Dependencies) { d.FactorySessions.EditableFactoryValidator = nil }},
-		{"Factory Sessions process runtime factory", func(d *Dependencies) { d.FactorySessions.ProcessRuntimeFactory = nil }},
-		{"Factory Sessions runtime instance ID generator", func(d *Dependencies) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
-		{"Factory Sessions home directory resolver", func(d *Dependencies) { d.FactorySessions.ResolveHome = nil }},
-		{"Factory Sessions provider identity resolver", func(d *Dependencies) { d.FactorySessions.ProviderIdentities = nil }},
-		{"Work factory", func(d *Dependencies) { d.Work.Factory = nil }},
-		{"Work content materializer", func(d *Dependencies) { d.Work.ContentMaterializer = nil }},
-		{"Automations factory", func(d *Dependencies) { d.Automations.Factory = nil }},
-		{"Automations hosted sources factory", func(d *Dependencies) { d.Automations.HostedSourcesFactory = nil }},
-		{"Models service", func(d *Dependencies) { d.Models.Service = nil }},
-		{"Recordings projection factory", func(d *Dependencies) { d.Recordings.ProjectionFactory = nil }},
-		{"Webhooks service", func(d *Dependencies) { d.Webhooks.Service = nil }},
-		{"Recordings lifecycle factory", func(d *Dependencies) { d.Recordings.LifecycleFactory = nil }},
-		{"Recordings runtime ledger factory", func(d *Dependencies) { d.Recordings.RuntimeLedgerFactory = nil }},
-		{"Recordings runtime recorder factory", func(d *Dependencies) { d.Recordings.RuntimeRecorderFactory = nil }},
-		{"Recordings replay clock factory", func(d *Dependencies) { d.Recordings.ReplayClockFactory = nil }},
-		{"Recordings replay execution factory", func(d *Dependencies) { d.Recordings.ReplayExecutionFactory = nil }},
-		{"Recordings replay input loader", func(d *Dependencies) { d.Recordings.ReplayInputs = nil }},
-		{"Workers execution factory", func(d *Dependencies) { d.Workers.ExecutionFactory = nil }},
-		{"Workers runtime factory", func(d *Dependencies) { d.Workers.RuntimeFactory = nil }},
-		{"Workers local runtime hooks factory", func(d *Dependencies) { d.Workers.LocalRuntimeHooksFactory = nil }},
-		{"Workers command runner adapter", func(d *Dependencies) { d.Workers.AdaptCommandRunner = nil }},
-		{"Workers provider-from-command-runner factory", func(d *Dependencies) { d.Workers.ProviderFromCommandRunnerFactory = nil }},
-		{"Operator Settings backend scope ensurer", func(d *Dependencies) { d.OperatorSettings.EnsureBackendScope = nil }},
+		{"Provider Sessions service", func(d *runtimeOpeningFixture) { d.ProviderSessions.Service = nil }},
+		{"Factory Runtime logger", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Logger = nil }},
+		{"Factory Runtime JavaScript workflow definitions", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryWorkflows = nil }},
+		{"Factory Runtime workflow preview operation", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkflowPreview = nil }},
+		{"Factory Runtime Workers runtime executors factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkersRuntimeExecutorsFactory = nil }},
+		{"Factory Runtime provider-invocation executor factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.ProviderInvocationFactory = nil }},
+		{"Factory Runtime Workers mock command runner factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkersMockCommandRunnerFactory = nil }},
+		{"Factory Runtime runtime assembler", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryRuntimeAssembler = nil }},
+		{"Factory Runtime clock resolver", func(d *runtimeOpeningFixture) { d.FactoryRuntime.ResolveClock = nil }},
+		{"Factory Runtime session logger factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.NewSessionLogger = nil }},
+		{"Factory Runtime clock", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Clock = nil }},
+		{"Factory Definitions validator", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Validator = nil }},
+		{"Factory Definitions named path resolver", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NamedPaths = nil }},
+		{"Factory Definitions factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Factory = nil }},
+		{"Factory Definitions initial factory snapshot factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.InitialFactorySnapshotFactory = nil }},
+		{"Factory Definitions loaded factory loader", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.LoadFactory = nil }},
+		{"Factory Definitions loaded factory source factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NewLoadedFactory = nil }},
+		{"Factory Definitions replay runtime config decoder", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.DecodeReplayConfig = nil }},
+		{"Factory Definitions loaded factory snapshot capturer", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.CaptureLoadedFactorySnapshot = nil }},
+		{"Factory Sessions service", func(d *runtimeOpeningFixture) { d.FactorySessions.Service = nil }},
+		{"Factory Sessions runtime assembly", func(d *runtimeOpeningFixture) { d.FactorySessions.RuntimeAssembly = nil }},
+		{"Factory Sessions durable execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.DurableExecutionFactory = nil }},
+		{"Factory Sessions session execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.FactorySessionExecutionFactory = nil }},
+		{"Factory Sessions factory scaffold initializer", func(d *runtimeOpeningFixture) { d.FactorySessions.FactoryScaffoldInitializer = nil }},
+		{"Factory Sessions editable factory validator", func(d *runtimeOpeningFixture) { d.FactorySessions.EditableFactoryValidator = nil }},
+		{"Factory Sessions process runtime factory", func(d *runtimeOpeningFixture) { d.FactorySessions.ProcessRuntimeFactory = nil }},
+		{"Factory Sessions runtime instance ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
+		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
+		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
+		{"Work factory", func(d *runtimeOpeningFixture) { d.Work.Factory = nil }},
+		{"Work content materializer", func(d *runtimeOpeningFixture) { d.Work.ContentMaterializer = nil }},
+		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
+		{"Automations hosted sources factory", func(d *runtimeOpeningFixture) { d.Automations.HostedSourcesFactory = nil }},
+		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
+		{"Recordings projection factory", func(d *runtimeOpeningFixture) { d.Recordings.ProjectionFactory = nil }},
+		{"Recordings service factory", func(d *runtimeOpeningFixture) { d.Recordings.ServiceFactory = nil }},
+		{"Recordings lifecycle factory", func(d *runtimeOpeningFixture) { d.Recordings.LifecycleFactory = nil }},
+		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
+		{"Recordings runtime ledger factory", func(d *runtimeOpeningFixture) { d.Recordings.RuntimeLedgerFactory = nil }},
+		{"Recordings runtime recorder factory", func(d *runtimeOpeningFixture) { d.Recordings.RuntimeRecorderFactory = nil }},
+		{"Recordings replay clock factory", func(d *runtimeOpeningFixture) { d.Recordings.ReplayClockFactory = nil }},
+		{"Recordings replay execution factory", func(d *runtimeOpeningFixture) { d.Recordings.ReplayExecutionFactory = nil }},
+		{"Recordings replay input loader", func(d *runtimeOpeningFixture) { d.Recordings.ReplayInputs = nil }},
+		{"Workers execution factory", func(d *runtimeOpeningFixture) { d.Workers.ExecutionFactory = nil }},
+		{"Workers runtime factory", func(d *runtimeOpeningFixture) { d.Workers.RuntimeFactory = nil }},
+		{"Workers local runtime hooks factory", func(d *runtimeOpeningFixture) { d.Workers.LocalRuntimeHooksFactory = nil }},
+		{"Workers command runner adapter", func(d *runtimeOpeningFixture) { d.Workers.AdaptCommandRunner = nil }},
+		{"Workers provider-from-command-runner factory", func(d *runtimeOpeningFixture) { d.Workers.ProviderFromCommandRunnerFactory = nil }},
+		{"Workers provider command runner", func(d *runtimeOpeningFixture) { d.Workers.ProviderCommandRunner = nil }},
+		{"Workers script command runner", func(d *runtimeOpeningFixture) { d.Workers.ScriptCommandRunner = nil }},
+		{"Operator Settings backend scope ensurer", func(d *runtimeOpeningFixture) { d.OperatorSettings.EnsureBackendScope = nil }},
 	}
 }
 
-func validRuntimeOpeningDependencies(calls *int) Dependencies {
-	return Dependencies{
-		ProviderSessions: &ProviderSessionsDependencies{
+func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
+	factorySessionsRoot := &factorySessionsConstructionStub{}
+	return runtimeOpeningFixture{
+		ProviderSessions: &ProviderSessionsPorts{
 			Service: providerSessionsConstructionStub{},
 		},
-		FactoryRuntime: &FactoryRuntimeDependencies{
+		FactoryRuntime: &FactoryRuntimePorts{
+			Logger:                          zap.NewNop(),
 			FactoryWorkflows:                workflowDefinitionsConstructionStub{},
 			WorkflowPreview:                 workflowPreviewConstructionStub{},
 			WorkersRuntimeExecutorsFactory:  inertRuntimeOpeningFunction[factoryruntime.WorkersRuntimeExecutorsFactory](calls),
@@ -435,8 +485,9 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 			FactoryRuntimeAssembler:         factoryRuntimeAssemblerConstructionStub{},
 			ResolveClock:                    inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
 			NewSessionLogger:                inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
+			Clock:                           openingCoordinatorClock{},
 		},
-		FactoryDefinitions: &FactoryDefinitionsDependencies{
+		FactoryDefinitions: &FactoryDefinitionsPorts{
 			Validator:                     validatorConstructionStub{},
 			NamedPaths:                    namedPathsConstructionStub{},
 			Factory:                       inertRuntimeOpeningFunction[FactoryDefinitionsFactory](calls),
@@ -446,8 +497,9 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 			DecodeReplayConfig:            inertRuntimeOpeningFunction[factorydefinitions.ReplayRuntimeConfigDecoder](calls),
 			CaptureLoadedFactorySnapshot:  inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		},
-		FactorySessions: &FactorySessionsDependencies{
-			Service:                        factorySessionsConstructionStub{},
+		FactorySessions: &FactorySessionsPorts{
+			Service:                        factorySessionsRoot,
+			RuntimeAssembly:                factorySessionsRoot,
 			DurableExecutionFactory:        inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
 			FactorySessionExecutionFactory: inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),
 			FactoryScaffoldInitializer:     inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
@@ -457,17 +509,18 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 			ResolveHome:                    inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
 			ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
 		},
-		Work: &WorkDependencies{
+		Work: &WorkPorts{
 			Factory:             inertRuntimeOpeningFunction[WorkFactory](calls),
 			ContentMaterializer: constructionMaterializer{calls: calls},
 		},
-		Automations: &AutomationsDependencies{
+		Automations: &AutomationsPorts{
 			Factory:              inertRuntimeOpeningFunction[AutomationFactory](calls),
 			HostedSourcesFactory: inertRuntimeOpeningFunction[AutomationHostedSourcesFactory](calls),
 		},
-		Models: &ModelsDependencies{Service: &modelsConstructionStub{}},
-		Recordings: &RecordingsDependencies{
+		Models: &ModelsPorts{Service: &modelsConstructionStub{}},
+		Recordings: &RecordingsPorts{
 			ProjectionFactory:      inertRuntimeOpeningFunction[RecordingsProjectionFactory](calls),
+			ServiceFactory:         inertRuntimeOpeningFunction[RecordingsServiceFactory](calls),
 			LifecycleFactory:       inertRuntimeOpeningFunction[RecordingLifecycleFactory](calls),
 			RuntimeLedgerFactory:   inertRuntimeOpeningFunction[RuntimeLedgerFactory](calls),
 			RuntimeRecorderFactory: inertRuntimeOpeningFunction[recordings.RuntimeRecorderFactory](calls),
@@ -475,17 +528,17 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 			ReplayExecutionFactory: inertRuntimeOpeningFunction[recordings.ReplayExecutionFactory](calls),
 			ReplayInputs:           replayInputsConstructionStub{},
 		},
-		Webhooks: &WebhooksDependencies{
-			Service: webhooksConstructionStub{},
-		},
-		Workers: &WorkersDependencies{
+		Webhooks: &WebhooksPorts{Service: webhooksConstructionStub{}},
+		Workers: &WorkersPorts{
 			ExecutionFactory:                 inertRuntimeOpeningFunction[WorkerExecutionFactory](calls),
 			RuntimeFactory:                   inertRuntimeOpeningFunction[WorkersRuntimeFactory](calls),
 			LocalRuntimeHooksFactory:         inertRuntimeOpeningFunction[WorkersLocalRuntimeHooksFactory](calls),
 			AdaptCommandRunner:               inertRuntimeOpeningFunction[WorkerCommandRunnerAdapter](calls),
 			ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
+			ProviderCommandRunner:            workersRootBindingProbeRunner{tag: "provider"},
+			ScriptCommandRunner:              workersRootBindingProbeRunner{tag: "script"},
 		},
-		OperatorSettings: &OperatorSettingsDependencies{
+		OperatorSettings: &OperatorSettingsPorts{
 			EnsureBackendScope: inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),
 		},
 	}
@@ -515,7 +568,10 @@ type validatorConstructionStub struct{ factorydefinitions.Validator }
 type namedPathsConstructionStub struct {
 	factorydefinitions.NamedPathResolver
 }
-type factorySessionsConstructionStub struct{ factorysessions.Service }
+type factorySessionsConstructionStub struct {
+	factorysessions.Service
+	roles.RuntimeAssembly
+}
 type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
 type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
@@ -561,3 +617,124 @@ func (recorder *historicalReplayInputsRecorder) LoadReplayInput(
 }
 
 var _ recordings.ReplayInputLoader = (*historicalReplayInputsRecorder)(nil)
+
+// TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot proves the
+// operation path consumes the process root's private runtime capability
+// directly. The compatibility ForRuntime method deliberately returns an
+// error, so any accidental child-service construction fails this test.
+func TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot(t *testing.T) {
+	t.Parallel()
+
+	root := &concurrentFactorySessionsRoot{}
+	modelsRoot := &concurrentModelsRoot{}
+	factory := newOpeningCoordinatorFactory(t, modelsRoot)
+	factory.factorySessionsService = root
+	factory.factorySessionsRuntimeAssembly = root
+
+	wantFailure := errors.New("worker opening failed")
+	var runtimeCalls, runtimeMismatches int
+	failure := &openingCoordinatorFailure{
+		err:             wantFailure,
+		wantRuntime:     root,
+		runtimeCalls:    &runtimeCalls,
+		runtimeMismatch: &runtimeMismatches,
+		mu:              &sync.Mutex{},
+	}
+	factory.workerExecutionFactory = failure.openWorkerExecution
+
+	requests := []*factorysessions.RuntimeOpeningRequest{
+		{
+			FactoryDefinition:   factoryDefinitionRequest(t.TempDir()),
+			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "scope-first"},
+			ModelCacheDirectory: "/cache/first",
+		},
+		{
+			FactoryDefinition:   factoryDefinitionRequest(t.TempDir()),
+			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "scope-second"},
+			ModelCacheDirectory: "/cache/second",
+		},
+	}
+	results := make(chan error, len(requests))
+	var wait sync.WaitGroup
+	for _, request := range requests {
+		request := request
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := factory.openRuntime(context.Background(), request, zap.NewNop())
+			results <- err
+		}()
+	}
+	wait.Wait()
+	close(results)
+
+	for err := range results {
+		if !errors.Is(err, wantFailure) {
+			t.Fatalf("concurrent openRuntime() error = %v, want worker failure", err)
+		}
+	}
+	if runtimeCalls != len(requests) {
+		t.Fatalf("worker runtime-root calls = %d, want %d", runtimeCalls, len(requests))
+	}
+	if runtimeMismatches != 0 {
+		t.Fatalf("worker runtime-root mismatches = %d, want none", runtimeMismatches)
+	}
+	if got := root.forRuntimeCalls.Load(); got != 0 {
+		t.Fatalf("compatibility ForRuntime calls = %d, want none", got)
+	}
+	if got := modelsRoot.opens.Load(); got != int32(len(requests)) {
+		t.Fatalf("Models root open calls = %d, want %d", got, len(requests))
+	}
+	if got := modelsRoot.closes.Load(); got != int32(len(requests)) {
+		t.Fatalf("Models root close calls = %d, want one private close per failed session", got)
+	}
+}
+
+func factoryDefinitionRequest(directory string) factorydefinitions.RuntimeOpeningRequest {
+	return factorydefinitions.RuntimeOpeningRequest{Directory: directory}
+}
+
+type concurrentFactorySessionsRoot struct {
+	factorysessions.Service
+	roles.RuntimeAssembly
+	forRuntimeCalls atomic.Int32
+}
+
+func (root *concurrentFactorySessionsRoot) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
+	root.forRuntimeCalls.Add(1)
+	return nil, errors.New("ForRuntime must not be called")
+}
+
+func (root *concurrentFactorySessionsRoot) CurrentRuntime() *factorysessions.LiveRuntime {
+	return nil
+}
+
+func (root *concurrentFactorySessionsRoot) InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher {
+	return nil
+}
+
+type concurrentModelsRoot struct {
+	models.Service
+	opens  atomic.Int32
+	closes atomic.Int32
+}
+
+func (root *concurrentModelsRoot) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	sequence := root.opens.Add(1)
+	scope, err := (models.RuntimeScopeRef{}).Parse(fmt.Sprintf("factory-session:concurrent:%d", sequence))
+	if err != nil {
+		return models.OpenRuntimeScopeResult{}, err
+	}
+	return models.OpenRuntimeScopeResult{Scope: scope}, nil
+}
+
+func (root *concurrentModelsRoot) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	root.closes.Add(1)
+	return models.CloseRuntimeScopeResult{Closed: true}, nil
+}

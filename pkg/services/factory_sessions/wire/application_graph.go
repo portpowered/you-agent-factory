@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"fmt"
+
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -19,7 +21,9 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
 	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
 )
 
 // The aliases in this file are the service-owned construction vocabulary used
@@ -36,6 +40,7 @@ type (
 	InvocationMetricsRecorder            = roles.InvocationMetricsRecorder
 	RuntimeResolver                      = roles.RuntimeResolver
 	CurrentRuntimeResolver               = roles.CurrentRuntimeResolver
+	RuntimeAssembly                      = roles.RuntimeAssembly
 	RuntimeReader                        = roles.RuntimeReader
 	OwnedExecutionService                = roles.OwnedExecutionService
 	ExecutionServiceBuilder              = roles.ExecutionServiceBuilder
@@ -66,8 +71,8 @@ type (
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
 	LiveChangeCoordinator                = factorysessionwirecontracts.LiveChangeCoordinator
-	ApplicationOpeningPorts              = roles.ApplicationOpeningPorts
 	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
+	OpeningPresentationOwner             = factorysessions.OpeningPresentationOwner
 	RuntimeResources                     = roles.RuntimeResources
 	RuntimeHTTPServices                  = roles.RuntimeHTTPServices
 	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
@@ -91,53 +96,69 @@ type (
 	ProcessLifecycleFactory = processlifecycle.Factory
 	RuntimeHostService      = runtimehosting.Service
 
-	RuntimeOpeningExternalEffects                = runtimeopening.ExternalEffects
-	RuntimeOpeningDependencies                   = runtimeopening.Dependencies
-	ApplicationRuntimeOpening                    = runtimeopening.ApplicationRuntimeOpening
-	InvocationRuntimeOpening                     = runtimeopening.InvocationRuntimeOpening
-	ExecutionRuntimeOpening                      = runtimeopening.ExecutionRuntimeOpening
-	ProviderSessionsRuntimeOpeningDependencies   = runtimeopening.ProviderSessionsDependencies
-	FactoryRuntimeOpeningDependencies            = runtimeopening.FactoryRuntimeDependencies
-	FactoryDefinitionsRuntimeOpeningDependencies = runtimeopening.FactoryDefinitionsDependencies
-	FactorySessionsRuntimeOpeningDependencies    = runtimeopening.FactorySessionsDependencies
-	WorkRuntimeOpeningDependencies               = runtimeopening.WorkDependencies
-	AutomationsRuntimeOpeningDependencies        = runtimeopening.AutomationsDependencies
-	ModelsRuntimeOpeningDependencies             = runtimeopening.ModelsDependencies
-	RecordingsRuntimeOpeningDependencies         = runtimeopening.RecordingsDependencies
-	WebhooksRuntimeOpeningDependencies           = runtimeopening.WebhooksDependencies
-	WorkersRuntimeOpeningDependencies            = runtimeopening.WorkersDependencies
-	OperatorSettingsRuntimeOpeningDependencies   = runtimeopening.OperatorSettingsDependencies
-	WorkFactory                                  = runtimeopening.WorkFactory
-	AutomationFactory                            = runtimeopening.AutomationFactory
-	FactorySessionExecutionFactory               = runtimeopening.FactorySessionExecutionFactory
-	ConductorInvocationWithProgressFactory       = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory                  = runtimeopening.RecordingsProjectionFactory
-	RecordingsServiceFactory                     = runtimeopening.RecordingsServiceFactory
-	RecordingLifecycleFactory                    = runtimeopening.RecordingLifecycleFactory
-	RuntimeLedgerFactory                         = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory                           = runtimeopening.ReplayClockFactory
-	WorkersRuntimeFactory                        = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory               = runtimeopening.AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory              = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory                    = runtimeopening.FactoryDefinitionsFactory
-	DurableExecutionFactory                      = runtimeopening.DurableExecutionFactory
-	DurableExecution                             = runtimeopening.DurableExecution
-	WorkerExecutionFactory                       = runtimeopening.WorkerExecutionFactory
-	WorkerCommandRunnerAdapter                   = runtimeopening.WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory             = runtimeopening.ProviderFromCommandRunnerFactory
-	FactoryRuntimeAssembler                      = runtimeopening.FactoryRuntimeAssembler
-	RuntimeOpening                               = runtimeopening.Factory
-	RuntimeRoot                                  = runtimeopening.RuntimeRoot
-	ModelPullMetricsRecorder                     = factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationArtifactFileSystem                 = factorysessioncontracts.InvocationArtifactFileSystem
-	InvocationArtifactExporter                   = factorysessioncontracts.InvocationArtifactExporter
+	ApplicationRuntimeOpening              = runtimeopening.ApplicationRuntimeOpening
+	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
+	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
+	ProviderSessionsRuntimeOpeningPorts    = runtimeopening.ProviderSessionsPorts
+	FactoryRuntimeOpeningPorts             = runtimeopening.FactoryRuntimePorts
+	FactoryDefinitionsRuntimeOpeningPorts  = runtimeopening.FactoryDefinitionsPorts
+	FactorySessionsRuntimeOpeningPorts     = runtimeopening.FactorySessionsPorts
+	WorkRuntimeOpeningPorts                = runtimeopening.WorkPorts
+	AutomationsRuntimeOpeningPorts         = runtimeopening.AutomationsPorts
+	ModelsRuntimeOpeningPorts              = runtimeopening.ModelsPorts
+	RecordingsRuntimeOpeningPorts          = runtimeopening.RecordingsPorts
+	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
+	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
+	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
+	WorkFactory                            = runtimeopening.WorkFactory
+	AutomationFactory                      = runtimeopening.AutomationFactory
+	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
+	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
+	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
+	RecordingsServiceFactory               = runtimeopening.RecordingsServiceFactory
+	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
+	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
+	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
+	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
+	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
+	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
+	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
+	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
+	DurableExecution                       = runtimeopening.DurableExecution
+	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
+	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderCommandRunner                  = runtimeopening.ProviderCommandRunner
+	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
+	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
+	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
+	RuntimeOpening                         = runtimeopening.Factory
+	RuntimeRoot                            = runtimeopening.RuntimeRoot
+	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
 	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService
+	RuntimeVisualizationSinkOwner       = factoryvisualization.RuntimeSinkOwner
 )
+
+// RuntimeAssemblyFromService narrows the one Wire-constructed Factory
+// Sessions root to its owner-private runtime capability. The assertion is
+// performed once during process composition; runtime operations never ask the
+// public root to construct or discover another service.
+func RuntimeAssemblyFromService(service factorysessions.Service) (RuntimeAssembly, error) {
+	if service == nil {
+		return nil, fmt.Errorf("Factory Sessions runtime assembly requires the service root")
+	}
+	assembly, ok := service.(RuntimeAssembly)
+	if !ok || assembly == nil {
+		return nil, fmt.Errorf("Factory Sessions service root does not expose its runtime capability")
+	}
+	return assembly, nil
+}
 
 var (
 	NewCursorFileStore         = persistence.NewFileStore
@@ -151,8 +172,32 @@ var (
 	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
-func NewRuntimeOpening(deps RuntimeOpeningDependencies) (*RuntimeOpening, error) {
-	return runtimeopening.NewFactory(deps)
+func NewRuntimeOpening(
+	providerSessions *ProviderSessionsRuntimeOpeningPorts,
+	factoryRuntime *FactoryRuntimeOpeningPorts,
+	factoryDefinitions *FactoryDefinitionsRuntimeOpeningPorts,
+	factorySessions *FactorySessionsRuntimeOpeningPorts,
+	workPorts *WorkRuntimeOpeningPorts,
+	automations *AutomationsRuntimeOpeningPorts,
+	modelsPorts *ModelsRuntimeOpeningPorts,
+	recordingsPorts *RecordingsRuntimeOpeningPorts,
+	webhooksPorts *WebhooksRuntimeOpeningPorts,
+	workersPorts *WorkersRuntimeOpeningPorts,
+	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
+) (*RuntimeOpening, error) {
+	return runtimeopening.NewFactory(
+		providerSessions,
+		factoryRuntime,
+		factoryDefinitions,
+		factorySessions,
+		workPorts,
+		automations,
+		modelsPorts,
+		recordingsPorts,
+		webhooksPorts,
+		workersPorts,
+		operatorSettings,
+	)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {
@@ -164,31 +209,34 @@ func NewApplicationService(
 	openRuntime ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle LifecyclePlanOperation,
+	visualization RuntimeVisualizationSinkOwner,
 ) (*ApplicationService, error) {
-	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle)
+	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle, visualization)
 }
 
 func NewInvocationOperation(
 	openRuntime InvocationRuntimeOpening,
 	modelsRoot models.Service,
-	effects RuntimeOpeningExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
+	presentations OpeningPresentationOwner,
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
 		modelsRoot,
-		effects,
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,
 		modelTimeout,
 		artifactRoots,
 		generateSessionID,
+		logger,
+		presentations,
 	)
 }
 
@@ -201,14 +249,16 @@ func NewDirectJavaScriptRunOperation(
 	runSync DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
 	host roles.DirectJavaScriptHostAdapter,
+	presentations OpeningPresentationOwner,
 ) (DirectJavaScriptRunOperation, error) {
-	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host)
+	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host, presentations)
 }
 
 func NewStdioOpeningService(
 	opening StdioExecutionOpening,
 	buildFixture FixtureStdioApplicationBuilder,
 	buildRuntime RuntimeStdioApplicationBuilder,
+	presentations OpeningPresentationOwner,
 ) (*StdioOpeningService, error) {
-	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime)
+	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime, presentations)
 }

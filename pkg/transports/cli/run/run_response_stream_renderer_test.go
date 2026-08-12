@@ -35,11 +35,12 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 	}{{name: "live"}, {name: "replay", replayPath: "recording.json"}} {
 		t.Run(source.name, func(t *testing.T) {
 			var output bytes.Buffer
-			operation := testInvocationOperation{invokeFactory: func(
+			owner := newTestOpeningPresentationOwner()
+			operation := testInvocationOperation{presentations: owner, invokeFactory: func(
 				_ context.Context,
 				target factorysessions.InvocationTarget,
 				_ factorysessions.InvocationRequest,
-				consume factorysessions.FactoryEventConsumer,
+				consume func([]interfaces.FactoryEvent),
 			) (factorysessions.FactoryInvocationOutcome, error) {
 				if target.ReplayPath != source.replayPath {
 					t.Fatalf("ReplayPath = %q, want %q", target.ReplayPath, source.replayPath)
@@ -61,8 +62,8 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				JSONOutput:           true, Output: &output, ReplayPath: source.replayPath,
 			}
 			if err := runFactoryInvocation(
-				context.Background(), cfg, invocationTarget(cfg, nil, nil),
-				factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+				context.Background(), cfg, invocationTarget(cfg, nil),
+				factoryapi.InvocationRequest{}, operation, testResponsePresentation(), owner,
 			); err != nil {
 				t.Fatalf("run Factory invocation: %v", err)
 			}
@@ -466,11 +467,12 @@ func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *test
 	published := make(chan struct{})
 	release := make(chan struct{})
 	events := canonicalJavaScriptFactoryEvents()
-	operation := testInvocationOperation{invokeFactory: func(
+	owner := newTestOpeningPresentationOwner()
+	operation := testInvocationOperation{presentations: owner, invokeFactory: func(
 		_ context.Context,
 		_ factorysessions.InvocationTarget,
 		_ factorysessions.InvocationRequest,
-		consume factorysessions.FactoryEventConsumer,
+		consume func([]interfaces.FactoryEvent),
 	) (factorysessions.FactoryInvocationOutcome, error) {
 		consume(events[:1])
 		close(published)
@@ -488,8 +490,8 @@ func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *test
 	done := make(chan error, 1)
 	go func() {
 		done <- runFactoryInvocation(
-			context.Background(), cfg, invocationTarget(cfg, nil, nil),
-			factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+			context.Background(), cfg, invocationTarget(cfg, nil),
+			factoryapi.InvocationRequest{}, operation, testResponsePresentation(), owner,
 		)
 	}()
 

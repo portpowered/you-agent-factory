@@ -20,7 +20,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -174,6 +174,7 @@ func openInvocation(
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	mockWorkersConfig *workers.MockWorkersConfig,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (*Operation, error) {
 	if invocation == nil {
 		return nil, fmt.Errorf("construct factory invocation: operation is required")
@@ -183,9 +184,10 @@ func openInvocation(
 	}
 	return &Operation{
 		cfg: cfg, logger: logger, invocationRequest: request,
-		invocationTarget: invocationTarget(cfg, logger, mockWorkersConfig),
+		invocationTarget: invocationTarget(cfg, mockWorkersConfig),
 		invocation:       invocation, presentation: presentation,
 		invocationMode: true, recordPath: recordPath,
+		openingPresentations: presentations,
 	}, nil
 }
 
@@ -275,6 +277,101 @@ func wrapInvocationInputError(err error) error {
 	}
 }
 
+// hostedInvocationOperation keeps the already-opened application runtime at
+// the CLI composition edge. InvocationTarget remains detached configuration;
+// the hosted capability itself is an operation-valued result from application
+// opening rather than a service table retained in the opening request.
+type hostedInvocationOperation struct {
+	delegate      InvocationOperation
+	hosted        HostedInvocationOperation
+	logger        *zap.Logger
+	presentations factorysessions.OpeningPresentationOwner
+}
+
+func (operation *hostedInvocationOperation) InvokeModel(
+	ctx context.Context,
+	target factorysessions.InvocationTarget,
+	modelName string,
+	request models.Request,
+) (models.Result, error) {
+	return operation.delegate.InvokeModel(ctx, target, modelName, request)
+}
+
+func (operation *hostedInvocationOperation) ResolveModelInvocationFactoryDir(dir string) (string, error) {
+	return operation.delegate.ResolveModelInvocationFactoryDir(dir)
+}
+
+func (operation *hostedInvocationOperation) ExportModelInvocationArtifact(sourcePath, destinationPath string) error {
+	return operation.delegate.ExportModelInvocationArtifact(sourcePath, destinationPath)
+}
+
+func (operation *hostedInvocationOperation) InvokeFactory(
+	ctx context.Context,
+	target factorysessions.InvocationTarget,
+	request factorysessions.InvocationRequest,
+) (factorysessions.FactoryInvocationOutcome, error) {
+	if operation == nil || operation.delegate == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is required")
+	}
+	hosted := operation.hosted
+	if hosted == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is incomplete")
+	}
+	if projectionReader, ok := hosted.(interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	}); ok {
+		projection, projectionErr := projectionReader.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+		if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+			return operation.delegate.InvokeFactory(ctx, target, request)
+		}
+	}
+	var bridge interface {
+		Finish(context.Context, factoryEventReader, factorysessions.FactoryInvocationOutcome) error
+	}
+	if target.EventScopeID != "" {
+		if operation.presentations == nil {
+			return factorysessions.FactoryInvocationOutcome{}, errors.New("invocation presentation owner is required")
+		}
+		var bridgeErr error
+		bridge, bridgeErr = operation.presentations.StartFactoryEventBridge(ctx, hosted, target.EventScopeID)
+		if bridgeErr != nil {
+			return factorysessions.FactoryInvocationOutcome{}, bridgeErr
+		}
+	}
+	invocationResult, invokeErr := hosted.InvokeFactorySession(
+		ctx, factorysessions.DefaultSessionID, request,
+	)
+	outcome := factorysessions.FactoryInvocationOutcome{
+		Result: factoryInvocationResultFromSessionInvocation(invocationResult),
+	}
+	if bridge == nil {
+		return outcome, invokeErr
+	}
+	postResultErr := bridge.Finish(ctx, hosted, outcome)
+	if postResultErr != nil && outcome.Result.Status != "" {
+		if operation.logger != nil {
+			operation.logger.Warn(
+				"invocation post-result step failed after terminal result was determined",
+				zap.Error(postResultErr),
+			)
+		}
+		return outcome, invokeErr
+	}
+	return outcome, errors.Join(invokeErr, postResultErr)
+}
+
+func factoryInvocationResultFromSessionInvocation(
+	result factorysessions.InvocationResult,
+) interfaces.FactoryInvocationResult {
+	return interfaces.FactoryInvocationResult{
+		RequestID: result.RequestID, TraceID: result.TraceID,
+		Status:        interfaces.InvocationTerminalStatus(result.Status),
+		PrimaryResult: result.PrimaryResult, ErrorCode: result.ErrorCode,
+		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
+		WorkName: result.WorkName, WorkState: result.WorkState,
+	}
+}
+
 func runFactoryInvocation(
 	ctx context.Context,
 	cfg RunConfig,
@@ -282,6 +379,7 @@ func runFactoryInvocation(
 	request factoryapi.InvocationRequest,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
+	presentations factorysessions.OpeningPresentationOwner,
 ) error {
 	if invocation == nil {
 		return fmt.Errorf("run factory invocation: operation is required")
@@ -305,10 +403,15 @@ func runFactoryInvocation(
 	if streamRenderer != nil {
 		defer streamRenderer.StopProgressRendering()
 	}
-
-	var consume factorysessions.FactoryEventConsumer
-	if streamRenderer != nil {
-		consume = streamRenderer.PresentFactoryEvents
+	if streamRenderer != nil && presentations != nil {
+		scopeID, registerErr := presentations.RegisterInvocationEvents(factorysessions.InvocationEventScope{
+			Consume: streamRenderer.PresentFactoryEvents,
+		})
+		if registerErr != nil {
+			return fmt.Errorf("register invocation event presentation: %w", registerErr)
+		}
+		defer presentations.Close(scopeID)
+		target.EventScopeID = scopeID
 	}
 	invocationRequest := factorysessionmapping.InvocationRequestFromAPI(request)
 	if cfg.PreparedInvocationInput != nil {
@@ -317,7 +420,7 @@ func runFactoryInvocation(
 		invocationRequest.ContentProvided = false
 		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
 	}
-	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest, consume)
+	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest)
 	result := outcome.Result
 	if result.Status == "" {
 		if err == nil {
@@ -379,7 +482,6 @@ func (writer *responseStreamCancelOnWriteError) Write(payload []byte) (int, erro
 
 func invocationTarget(
 	cfg RunConfig,
-	logger *zap.Logger,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) factorysessions.InvocationTarget {
 	return factorysessions.InvocationTarget{
@@ -391,7 +493,6 @@ func invocationTarget(
 		OperatorDefaults:      cfg.OperatorDefaults,
 		ExecutionBaseDir:      cfg.ExecutionBaseDir,
 		HomeDir:               cfg.HomeDir,
-		Logger:                logger,
 		Verbose:               cfg.Verbose,
 		RecordPath:            cfg.RecordPath,
 		ReplayPath:            cfg.ReplayPath,
@@ -410,7 +511,6 @@ func invocationTarget(
 		WorkflowID:              cfg.Workflow,
 		MockWorkersConfig:       mockWorkersConfig,
 		SkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
-		MetricsRecorder:         cfg.InvocationMetricsRecorder,
 	}
 }
 
@@ -469,86 +569,6 @@ func (e invocationCLIError) responseMessage() string {
 		message = "clean invocation failed"
 	}
 	return message + e.contextSuffix()
-}
-
-func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
-	return invocationCLIError{
-		Code:      strings.TrimSpace(result.ErrorCode),
-		Message:   strings.TrimSpace(result.Message),
-		SessionID: strings.TrimSpace(result.SessionID),
-		WorkID:    strings.TrimSpace(result.WorkID),
-		WorkName:  strings.TrimSpace(result.WorkName),
-		WorkState: strings.TrimSpace(result.WorkState),
-	}
-}
-
-func writeInvocationFailure(
-	cfg RunConfig,
-	result apisurface.FactoryInvocationResult,
-	streamRenderer visualizationcli.FactoryEventRenderer,
-) error {
-	if streamRenderer != nil {
-		if err := streamRenderer.WriteFinalInvocationResult(result); err != nil {
-			return err
-		}
-	} else if cfg.JSONOutput {
-		if err := writeInvocationJSON(cfg, result); err != nil {
-			return err
-		}
-	}
-	return invocationResultFailure(result)
-}
-
-func writeInvocationSuccess(
-	cfg RunConfig,
-	result apisurface.FactoryInvocationResult,
-	streamRenderer visualizationcli.FactoryEventRenderer,
-) error {
-	if streamRenderer != nil {
-		return streamRenderer.WriteFinalInvocationResult(result)
-	}
-	if cfg.JSONOutput {
-		return writeInvocationJSON(cfg, result)
-	}
-
-	text, err := invocationPrimaryResultText(result.PrimaryResult)
-	if err != nil {
-		return err
-	}
-	output := cfg.Output
-	if output == nil {
-		return fmt.Errorf("write invocation result: process output is required")
-	}
-	_, err = fmt.Fprint(output, text)
-	return err
-}
-
-func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	output := cfg.Output
-	if output == nil {
-		return fmt.Errorf("write invocation JSON: process output is required")
-	}
-	encoded, err := json.Marshal(apisurface.InvocationResponseFromResult(result))
-	if err != nil {
-		return fmt.Errorf("marshal invocation response: %w", err)
-	}
-	_, err = fmt.Fprintln(output, string(encoded))
-	return err
-}
-
-func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {
-	if len(parts) == 0 {
-		return "", fmt.Errorf("invocation primary result is empty")
-	}
-
-	textParts := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part.Type.Normalized() != work.WorkContentPartTypeText {
-			return "", fmt.Errorf("invocation primary result is not plain text; use --json")
-		}
-		textParts = append(textParts, part.Text)
-	}
-	return strings.Join(textParts, "\n"), nil
 }
 
 func waitForRemoteInvocationResult(

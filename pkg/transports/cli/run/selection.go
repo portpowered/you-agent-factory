@@ -18,14 +18,17 @@ type InvocationOperation interface {
 	InvokeModel(context.Context, factorysessions.InvocationTarget, string, models.Request) (models.Result, error)
 	ResolveModelInvocationFactoryDir(string) (string, error)
 	ExportModelInvocationArtifact(string, string) error
-	InvokeFactory(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (factorysessions.FactoryInvocationOutcome, error)
+	InvokeFactory(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest) (factorysessions.FactoryInvocationOutcome, error)
 }
 
 // DirectJavaScriptRunOperation is the exact direct-workflow capability
 // consumed by CLI selection.
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
+	Open(
+		context.Context,
+		factorysessions.DirectJavaScriptRunRequest,
+	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 // SessionInvoker retains the historical CLI name while using the Factory
@@ -54,16 +57,21 @@ func NewSelectionFactory(
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript DirectJavaScriptRunOperation,
 	buildApplication initializer.RuntimeRunnerBuilder,
+	presentations ...factorysessions.OpeningPresentationOwner,
 ) (SelectionFactory, error) {
 	if open == nil || buildRunner == nil || invocation == nil || presentation == nil ||
 		directJavaScript == nil || buildApplication == nil {
 		return nil, fmt.Errorf("run transport operations are required")
 	}
+	var presentationOwner factorysessions.OpeningPresentationOwner
+	if len(presentations) > 0 {
+		presentationOwner = presentations[0]
+	}
 	return func(cfg RunConfig) processcontract.RunSelection {
 		return &selection{
 			cfg: cfg, open: open, buildRunner: buildRunner, invocation: invocation,
 			presentation: presentation, directJavaScript: directJavaScript,
-			buildApplication: buildApplication,
+			buildApplication: buildApplication, presentations: presentationOwner,
 		}
 	}, nil
 }
@@ -76,6 +84,7 @@ type selection struct {
 	presentation     factoryvisualization.ResponsePresentation
 	directJavaScript DirectJavaScriptRunOperation
 	buildApplication initializer.RuntimeRunnerBuilder
+	presentations    factorysessions.OpeningPresentationOwner
 }
 
 func (s *selection) Open(
@@ -92,23 +101,65 @@ func (s *selection) Open(
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
 		request := factorysessions.DirectJavaScriptRunRequest{
 			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
-			JSONOutput: cfg.JSONOutput, Output: cfg.Output, Logger: cfg.Logger,
+			JSONOutput: cfg.JSONOutput,
 		}
+		var observer factorysessions.RuntimeHostObserver
 		if intent.APIEnabled {
 			request.Host = &factorysessions.RuntimeHostRequest{
 				Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
 			}
-			request.RuntimeHostObserver = newRuntimeHostObserver(
+			observer = newRuntimeHostObserver(
 				ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
 				func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
 			)
 		}
-		return s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
+		var scopeID factorysessions.OpeningScopeID
+		if s.presentations != nil {
+			scopeID, err = s.presentations.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{
+				Output: cfg.Output, RuntimeHostObserver: observer,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("register direct JavaScript presentation: %w", err)
+			}
+			request.ScopeID = scopeID
+		}
+		runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
 			opened, err := s.directJavaScript.Open(openCtx, request)
+			if err != nil && s.presentations != nil {
+				s.presentations.Close(scopeID)
+			}
 			return initializer.OpenedApplication{Plan: opened.Plan}, err
 		})
+		if err != nil {
+			if s.presentations != nil {
+				s.presentations.Close(scopeID)
+			}
+			return nil, err
+		}
+		if runner == nil {
+			if s.presentations != nil {
+				s.presentations.Close(scopeID)
+			}
+			return nil, fmt.Errorf("direct JavaScript application builder returned nil runner")
+		}
+		if s.presentations == nil {
+			return runner, nil
+		}
+		return closeOnRun{application: runner, close: func() {
+			s.presentations.Close(scopeID)
+		}}, nil
 	}
 	return s.open(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
+}
+
+type closeOnRun struct {
+	application initializer.LocalRuntimeRunner
+	close       func()
+}
+
+func (application closeOnRun) Run(ctx context.Context) error {
+	defer application.close()
+	return application.application.Run(ctx)
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {

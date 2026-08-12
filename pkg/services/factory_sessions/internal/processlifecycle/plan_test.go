@@ -198,79 +198,6 @@ func TestRuntimeLifecycleOwnsActivationAndReverseShutdown(t *testing.T) {
 	}
 }
 
-func TestRunCompletionStopsAndJoinsOwnedTransport(t *testing.T) {
-	runtime := &planRuntime{}
-	transport := &blockingPlanComponent{
-		started: make(chan struct{}),
-		stopped: make(chan struct{}),
-	}
-	completed := make(chan struct{})
-	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
-		Runtime: runtime,
-		Components: factorysessions.BoundProcessComponents{
-			Transport: transport,
-		},
-		Completion: func(ctx context.Context) error {
-			select {
-			case <-transport.started:
-				close(completed)
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildLifecyclePlan: %v", err)
-	}
-	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	select {
-	case <-completed:
-	default:
-		t.Fatal("terminal completion did not run after transport activation")
-	}
-	select {
-	case <-transport.stopped:
-	default:
-		t.Fatal("terminal completion did not join the owned transport")
-	}
-}
-
-func TestRunTransportFailureCancelsWaitingCompletion(t *testing.T) {
-	transportErr := errors.New("listener startup failed")
-	runtime := &planRuntime{}
-	transport := &blockingPlanComponent{
-		started: make(chan struct{}),
-		stopped: make(chan struct{}),
-		waitErr: transportErr,
-	}
-	completionCanceled := make(chan struct{})
-	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
-		Runtime: runtime,
-		Components: factorysessions.BoundProcessComponents{
-			Transport: transport,
-		},
-		Completion: func(ctx context.Context) error {
-			<-ctx.Done()
-			close(completionCanceled)
-			return ctx.Err()
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildLifecyclePlan: %v", err)
-	}
-	if err := lifecycle.NewManager().Run(t.Context(), plan); !errors.Is(err, transportErr) {
-		t.Fatalf("Run error = %v, want %v", err, transportErr)
-	}
-	select {
-	case <-completionCanceled:
-	default:
-		t.Fatal("listener failure did not cancel the waiting completion")
-	}
-}
-
 func TestRuntimeLifecycleLeavesRuntimeUnwindAvailableAfterWorkerStartFailure(t *testing.T) {
 	sentinel := errors.New("workers failed")
 	runtime := &planRuntime{workerErr: sentinel}
@@ -510,6 +437,68 @@ func TestDirectJavaScriptLifecycleRejectsMissingCompletion(t *testing.T) {
 	}
 	if operation := NewLifecyclePlanOperation(); operation == nil {
 		t.Fatal("NewLifecyclePlanOperation returned nil")
+	}
+}
+
+func TestLifecycleStateRejectsDuplicateStartsAndNoopStops(t *testing.T) {
+	runtime := &planRuntime{}
+	state := &applicationRuntimeLifecycle{runtime: runtime}
+	ctx := context.Background()
+
+	if err := state.startWorkers(ctx); err == nil || !strings.Contains(err.Error(), "runtime is not started") {
+		t.Fatalf("startWorkers before runtime = %v, want runtime-not-started", err)
+	}
+	if err := state.stopWorkers(ctx); err != nil {
+		t.Fatalf("stopWorkers without acquisition: %v", err)
+	}
+	if err := state.startRuntime(ctx); err != nil {
+		t.Fatalf("startRuntime: %v", err)
+	}
+	if err := state.startRuntime(ctx); err == nil || !strings.Contains(err.Error(), "already started") {
+		t.Fatalf("duplicate startRuntime = %v, want already-started", err)
+	}
+	if err := state.startWorkers(ctx); err != nil {
+		t.Fatalf("startWorkers: %v", err)
+	}
+	if err := state.startWorkers(ctx); err == nil || !strings.Contains(err.Error(), "already started") {
+		t.Fatalf("duplicate startWorkers = %v, want already-started", err)
+	}
+	if err := state.stopWorkers(ctx); err != nil {
+		t.Fatalf("stopWorkers: %v", err)
+	}
+	if err := state.stopWorkers(ctx); err != nil {
+		t.Fatalf("second stopWorkers: %v", err)
+	}
+	if err := state.stopRuntime(ctx); err != nil {
+		t.Fatalf("stopRuntime: %v", err)
+	}
+	if err := state.stopRuntime(ctx); err != nil {
+		t.Fatalf("second stopRuntime: %v", err)
+	}
+}
+
+func TestJoinCompletionTransportResultsPreservesOperationalErrors(t *testing.T) {
+	transportErr := errors.New("transport failed")
+	completionErr := errors.New("completion failed")
+	err := joinCompletionTransportResults(
+		completionTransportResult{name: "transport", err: transportErr},
+		completionTransportResult{name: "completion", err: context.Canceled},
+	)
+	if !errors.Is(err, transportErr) || strings.Contains(err.Error(), "completion failed") {
+		t.Fatalf("joined error = %v, want transport failure without cancellation", err)
+	}
+	err = joinCompletionTransportResults(
+		completionTransportResult{name: "transport", err: transportErr},
+		completionTransportResult{name: "completion", err: completionErr},
+	)
+	if !errors.Is(err, transportErr) || !errors.Is(err, completionErr) {
+		t.Fatalf("joined errors = %v, want both operational failures", err)
+	}
+}
+
+func TestIsNilHandlesNonNilValue(t *testing.T) {
+	if isNil(42) {
+		t.Fatal("isNil(42) = true, want false")
 	}
 }
 

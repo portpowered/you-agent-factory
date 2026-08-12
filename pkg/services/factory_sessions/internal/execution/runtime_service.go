@@ -383,6 +383,13 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 }
 
 func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
+	return s.startSync(ctx, req)
+}
+
+func (s *JavaScriptRuntimeService) startSync(
+	ctx context.Context,
+	req StartRequest,
+) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SyncStartResult{}, err
 	}
@@ -424,7 +431,6 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	}
 	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
 	defer stopObservingFactoryEvents()
-
 	s.mu.Lock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
 		s.mu.Unlock()

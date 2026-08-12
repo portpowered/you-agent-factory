@@ -443,7 +443,6 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
 	s.mu.Unlock()
-	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
 	go s.runAsyncSession(
 		runCtx,
@@ -491,7 +490,6 @@ func (s *JavaScriptRuntimeService) completeImmediateSyncStart(
 		return SyncStartResult{}, err
 	}
 	s.mu.Unlock()
-	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {

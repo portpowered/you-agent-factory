@@ -8,7 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"go.uber.org/zap"
 	"io"
 	"testing"
 )
@@ -75,7 +74,7 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 		Worktree:              "feature-login",
 		Port:                  7437,
 		WorkerReasoningEffort: "xhigh",
-	}, zap.NewNop(), nil)
+	}, nil)
 	if target.FactoryDir != "/tmp/factory" {
 		t.Fatalf("FactoryDir = %q, want /tmp/factory", target.FactoryDir)
 	}

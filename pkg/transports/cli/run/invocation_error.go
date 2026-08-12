@@ -18,10 +18,13 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factoryconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
@@ -106,6 +109,86 @@ func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
 
 func isResponseStreamOutputMode(mode string) bool {
 	return strings.TrimSpace(mode) == InvocationOutputResponseStream
+}
+
+func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
+	return invocationCLIError{
+		Code:      strings.TrimSpace(result.ErrorCode),
+		Message:   strings.TrimSpace(result.Message),
+		SessionID: strings.TrimSpace(result.SessionID),
+		WorkID:    strings.TrimSpace(result.WorkID),
+		WorkName:  strings.TrimSpace(result.WorkName),
+		WorkState: strings.TrimSpace(result.WorkState),
+	}
+}
+
+func writeInvocationFailure(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer visualizationcli.FactoryEventRenderer,
+) error {
+	if streamRenderer != nil {
+		if err := streamRenderer.WriteFinalInvocationResult(result); err != nil {
+			return err
+		}
+	} else if cfg.JSONOutput {
+		if err := writeInvocationJSON(cfg, result); err != nil {
+			return err
+		}
+	}
+	return invocationResultFailure(result)
+}
+
+func writeInvocationSuccess(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer visualizationcli.FactoryEventRenderer,
+) error {
+	if streamRenderer != nil {
+		return streamRenderer.WriteFinalInvocationResult(result)
+	}
+	if cfg.JSONOutput {
+		return writeInvocationJSON(cfg, result)
+	}
+
+	text, err := invocationPrimaryResultText(result.PrimaryResult)
+	if err != nil {
+		return err
+	}
+	output := cfg.Output
+	if output == nil {
+		return fmt.Errorf("write invocation result: process output is required")
+	}
+	_, err = fmt.Fprint(output, text)
+	return err
+}
+
+func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+	output := cfg.Output
+	if output == nil {
+		return fmt.Errorf("write invocation JSON: process output is required")
+	}
+	encoded, err := json.Marshal(apisurface.InvocationResponseFromResult(result))
+	if err != nil {
+		return fmt.Errorf("marshal invocation response: %w", err)
+	}
+	_, err = fmt.Fprintln(output, string(encoded))
+	return err
+}
+
+func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {
+	if len(parts) == 0 {
+		return "", fmt.Errorf("invocation primary result is empty")
+	}
+
+	textParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.Type.Normalized() != work.WorkContentPartTypeText {
+			return "", fmt.Errorf("invocation primary result is not plain text; use --json")
+		}
+		textParts = append(textParts, part.Text)
+	}
+	return strings.Join(textParts, "\n"), nil
 }
 
 const (

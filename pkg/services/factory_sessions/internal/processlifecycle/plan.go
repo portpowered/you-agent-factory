@@ -60,9 +60,6 @@ func BuildLifecyclePlan(request roles.LifecyclePlanRequest) (lifecycle.Plan, err
 		})
 	}
 	transport := request.Components.Transport
-	if request.Completion != nil {
-		transport = newCompletionTransport(transport, request.Completion)
-	}
 	components = append(components, lifecycle.NamedComponent{
 		Name: transportComponentName, Component: transport, Primary: true,
 	})

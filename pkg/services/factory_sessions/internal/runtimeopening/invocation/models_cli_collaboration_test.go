@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
 )
 
 func TestResolvedOperatorDefaultsFromPresentationPreservesModelDefaults(t *testing.T) {
@@ -106,7 +107,6 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 	op, err := NewOperation(
 		&runtimeopening.Factory{},
 		nil,
-		runtimeopening.ExternalEffects{},
 		workingDirectoryStub{dir: factoryDir},
 		func(root string) (string, error) {
 			return filepath.Join(root, factorydefinitions.FactoryDir, "active"), nil
@@ -115,6 +115,8 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 		factorysessions.DefaultModelInvocationTimeout,
 		func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
 		func() string { return "presentation-scope-test" },
+		zap.NewNop(),
+		invocationPresentationOwnerStub{},
 	)
 	if err != nil {
 		t.Fatalf("NewOperation() error = %v", err)

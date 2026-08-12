@@ -118,6 +118,7 @@ func buildOpenedRunner(
 			errors.New("build application: managed application factory returned nil"),
 		)
 	}
+	runner.SetRuntimeHostReady(opened.Ready)
 	return runner, nil
 }
 

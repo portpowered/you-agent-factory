@@ -11,14 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 )
 
 // TestInvokeFactorySessionReusesTheCachedRuntime proves InvokeFactorySession
@@ -765,7 +763,7 @@ func TestConcurrentCancelAndCloseLeavesNoReplacementRuntime(t *testing.T) {
 	replacementLifecycle := &fakeLifecycle{}
 	var openerMu sync.Mutex
 	openCount := 0
-	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error) {
+	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
 		openerMu.Lock()
 		openCount++
 		call := openCount
@@ -1068,7 +1066,7 @@ func TestCloseTearsDownEveryTrackedRuntime(t *testing.T) {
 	firstLifecycle := &fakeLifecycle{}
 	secondLifecycle := &fakeLifecycle{}
 	openCount := 0
-	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error) {
+	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
 		openCount++
 		lifecycle := firstLifecycle
 		if openCount == 2 {
@@ -1344,14 +1342,12 @@ func TestServiceViaTargetExecutionCapabilityRejectsUnsupportedTarget(t *testing.
 // to return a distinct opened runtime (fakeOpener always returns the same
 // fixed one).
 type funcOpener struct {
-	open func(context.Context, *factorysessions.RuntimeOpeningRequest, runtimeopening.ExternalEffects, *zap.Logger) (roles.OpenedInvocationRuntime, error)
+	open func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error)
 }
 
 func (f *funcOpener) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects runtimeopening.ExternalEffects,
-	logger *zap.Logger,
 ) (roles.OpenedInvocationRuntime, error) {
-	return f.open(ctx, request, effects, logger)
+	return f.open(ctx, request)
 }

@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,9 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -81,6 +84,40 @@ func provideRemoteInvocationOperation(
 	transport standardCLIHTTPProtocol,
 ) runcli.RemoteInvocationOperation {
 	return runcli.NewRemoteInvocation(transport.Protocol)
+}
+
+func provideRunRuntimeRunnerBuilder(
+	build initializer.RuntimeRunnerBuilder,
+	open *factorysessionwire.ApplicationService,
+) (runcli.RuntimeRunnerBuilder, error) {
+	if build == nil || open == nil {
+		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
+	}
+	return func(
+		ctx context.Context,
+		request factorysessionwire.ApplicationOpeningRequest,
+	) (initializer.LocalRuntimeRunner, error) {
+		var replay *factorysessions.HistoricalReplayInspection
+		var hostedInvocation runcli.HostedInvocationOperation
+		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
+			opened, err := open.OpenApplication(openCtx, request)
+			if err != nil {
+				return initializer.OpenedApplication{}, err
+			}
+			replay = opened.HistoricalReplay
+			hostedInvocation = opened.HostedInvocation
+			return initializer.OpenedApplication{
+				Plan:        opened.Plan,
+				Diagnostics: runtimeartifact.Diagnostics(opened.Diagnostics),
+				Ready:       opened.Ready,
+			}, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		runner = runcli.WithHostedInvocation(runner, hostedInvocation)
+		return runcli.WithHistoricalReplay(runner, replay), nil
+	}, nil
 }
 
 func provideExtendedCLIHTTPProtocol() (extendedCLIHTTPProtocol, error) {

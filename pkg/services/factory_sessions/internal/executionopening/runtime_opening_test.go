@@ -7,7 +7,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"go.uber.org/zap"
 )
@@ -63,8 +62,6 @@ type executionRuntimeOpeningStub struct {
 func (stub *executionRuntimeOpeningStub) OpenExecutionRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ runtimeopening.ExternalEffects,
-	_ *zap.Logger,
 ) (roles.OpenedExecutionRuntime, error) {
 	stub.calls++
 	stub.request = request

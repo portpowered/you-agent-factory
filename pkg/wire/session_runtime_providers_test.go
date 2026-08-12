@@ -177,7 +177,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		responseEventRetentionLimits,
 		allocator,
 		adaptRunner,
-		edges,
+		provideFactoryRuntimeProviderOverride(edges),
 		eventsService,
 		factorysessionwire.NewLiveChangeCoordinator(),
 	)
@@ -246,7 +246,6 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 	var opening factorysessionwire.InvocationRuntimeOpening = &factorysessionwire.RuntimeOpening{}
 	factoryTarget, err := factorysessionwire.NewOnDemandFactoryTargetService(
 		opening,
-		factorysessionwire.RuntimeOpeningExternalEffects{},
 		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 			return factorysessions.RuntimeOpeningRequest{}, nil
 		},

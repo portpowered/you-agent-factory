@@ -289,7 +289,9 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, err
 	}
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
-	a.Service = gateway
+	// The per-runtime gateway is returned to the operation caller. The
+	// process-scoped root keeps its original stable service slot so concurrent
+	// session completions cannot replace or race the shared root.
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, nil
 }
 

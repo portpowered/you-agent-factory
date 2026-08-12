@@ -109,6 +109,7 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		func(path string) (string, error) { return path, nil },
 		eventsService,
+		&wireTestClock{},
 		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 	if err != nil {

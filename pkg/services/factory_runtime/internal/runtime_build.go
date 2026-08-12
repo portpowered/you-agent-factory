@@ -287,7 +287,6 @@ func buildBundle(
 		runtimeMetricsDir,
 		runtimeMetricsConfig,
 		loadedFactoryCfg,
-		spec.BaseLogger,
 		spec.RuntimeInstanceID,
 		strings.TrimSpace(backendScopeID),
 		spec.Clock,

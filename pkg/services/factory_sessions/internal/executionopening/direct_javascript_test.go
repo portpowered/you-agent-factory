@@ -67,7 +67,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			}
 			operation, err := NewDirectJavaScriptRunOperation(
 				builder, runSync, func() string { return "direct-test-id" },
-				func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+				func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 					return nil, nil
 				},
 			)
@@ -75,10 +75,27 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 				t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
 			}
 			source := filepath.Join(t.TempDir(), "workflow.mjs")
-			opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
-				SourcePath: source, MockWorkersEnabled: testCase.mockWorkers,
-				JSONOutput: true, Output: output,
-			})
+			owner := &openingOwnerStub{}
+			scopeID, err := owner.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{Output: output})
+			if err != nil {
+				t.Fatalf("RegisterDirectJavaScript: %v", err)
+			}
+			operation, err = NewDirectJavaScriptRunOperation(
+				builder, runSync, func() string { return "direct-test-id" },
+				func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+					return nil, nil
+				}, owner,
+			)
+			if err != nil {
+				t.Fatalf("NewDirectJavaScriptRunOperation with owner: %v", err)
+			}
+			opened, err := operation.Open(
+				context.Background(),
+				factorysessions.DirectJavaScriptRunRequest{
+					SourcePath: source, MockWorkersEnabled: testCase.mockWorkers,
+					JSONOutput: true, ScopeID: scopeID,
+				},
+			)
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
@@ -113,7 +130,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 			return runFailure
 		},
 		func() string { return "direct-test-id" },
-		func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+		func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 			return nil, nil
 		},
 	)
@@ -147,10 +164,10 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 			return nil
 		},
 		func() string { return "direct-test-id" },
-		func(_ roles.OwnedExecutionService, request factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+		func(_ roles.OwnedExecutionService, host factorysessions.RuntimeHostRequest, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 			return lifecycle.NewRunner(func(ctx context.Context) error {
 				ready.Store(true)
-				request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: request.Host.Port})
+				observer(factorysessions.RuntimeHostBinding{Port: host.Port})
 				<-ctx.Done()
 				return ctx.Err()
 			}), nil
@@ -159,9 +176,38 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 	if err != nil {
 		t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
 	}
+	owner := &openingOwnerStub{}
+	scopeID, err := owner.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {},
+	})
+	if err != nil {
+		t.Fatalf("RegisterDirectJavaScript: %v", err)
+	}
+	operation, err = NewDirectJavaScriptRunOperation(
+		func(context.Context, string, string, string, string) (roles.OwnedExecutionService, error) {
+			return owned, nil
+		},
+		func(context.Context, durableexecution.Service, factorysessions.StartRequest, bool, io.Writer) error {
+			if !ready.Load() {
+				t.Fatal("direct JavaScript completion started before listener readiness")
+			}
+			return nil
+		},
+		func() string { return "direct-test-id" },
+		func(_ roles.OwnedExecutionService, host factorysessions.RuntimeHostRequest, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+			return lifecycle.NewRunner(func(ctx context.Context) error {
+				ready.Store(true)
+				observer(factorysessions.RuntimeHostBinding{Port: host.Port})
+				<-ctx.Done()
+				return ctx.Err()
+			}), nil
+		}, owner,
+	)
+	if err != nil {
+		t.Fatalf("NewDirectJavaScriptRunOperation with owner: %v", err)
+	}
 	opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
-		SourcePath: "workflow.js",
-		Host:       &factorysessions.RuntimeHostRequest{Port: 7437},
+		SourcePath: "workflow.js", Host: &factorysessions.RuntimeHostRequest{Port: 7437}, ScopeID: scopeID,
 	})
 	if err != nil {
 		t.Fatalf("Open: %v", err)

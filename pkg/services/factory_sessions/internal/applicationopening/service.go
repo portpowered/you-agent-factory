@@ -6,29 +6,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	"go.uber.org/zap"
 )
 
-// RuntimeInputs are the resolved operation inputs selected by the canonical
-// injector. They contain values and exact external effects only.
+// RuntimeInputs are the resolved invocation values selected by the canonical
+// injector.
 type RuntimeInputs struct {
 	Request *factorysessions.RuntimeOpeningRequest
-	Effects runtimeopening.ExternalEffects
-	Logger  *zap.Logger
 }
 
 type RuntimeInputResolver func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	roles.ApplicationOpeningPorts,
-	*zap.Logger,
 ) (RuntimeInputs, error)
 
 // RuntimeAdapter binds the exact HTTP and optional visualization components
@@ -36,18 +30,18 @@ type RuntimeInputResolver func(
 // lifecycle selection or ordering policy.
 type RuntimeAdapter func(
 	roles.OpenedApplicationRuntime,
-	runtimeopening.ExternalEffects,
 	factoryvisualization.Sink,
 ) (factorysessions.BoundProcessComponents, error)
 
 // Service is constructed once by Wire. OpenApplication supplies only
-// invocation values and exact external-effect replacements to the already-selected
-// runtime-opening and application-binding operations.
+// invocation values to the already-selected runtime-opening and
+// application-binding operations.
 type Service struct {
 	resolveInputs RuntimeInputResolver
 	openRuntime   runtimeopening.ApplicationRuntimeOpening
 	adaptRuntime  RuntimeAdapter
 	planLifecycle roles.LifecyclePlanOperation
+	visualization factoryvisualization.RuntimeSinkOwner
 }
 
 func New(
@@ -55,6 +49,7 @@ func New(
 	openRuntime runtimeopening.ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle roles.LifecyclePlanOperation,
+	visualization factoryvisualization.RuntimeSinkOwner,
 ) (*Service, error) {
 	switch {
 	case resolveInputs == nil:
@@ -65,12 +60,15 @@ func New(
 		return nil, errors.New("construct application opener: application adapter is required")
 	case planLifecycle == nil:
 		return nil, errors.New("construct application opener: lifecycle plan operation is required")
+	case visualization == nil:
+		return nil, errors.New("construct application opener: Factory Visualization sink owner is required")
 	default:
 		return &Service{
 			resolveInputs: resolveInputs,
 			openRuntime:   openRuntime,
 			adaptRuntime:  adaptRuntime,
 			planLifecycle: planLifecycle,
+			visualization: visualization,
 		}, nil
 	}
 }
@@ -78,37 +76,49 @@ func New(
 func (service *Service) OpenApplication(
 	ctx context.Context,
 	request roles.ApplicationOpeningRequest,
-	logger *zap.Logger,
-	visualizationSink factoryvisualization.Sink,
 ) (roles.OpenedProcessApplication, error) {
-	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
+	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil || service.visualization == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
-	ports, completion := gateCompletionOnRuntimeHost(request.Ports, request.Completion)
-	inputs, err := service.resolveInputs(ctx, request.Runtime, ports, logger)
-	if err != nil {
-		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
-	}
-	opened, err := service.openRuntime.OpenApplicationRuntime(
-		ctx, inputs.Request, inputs.Effects, inputs.Logger,
-	)
+	opened, err := service.openRuntimeForRequest(ctx, request)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
 	if opened.HistoricalReplay != nil {
-		if ports.HistoricalReplayBound != nil {
-			ports.HistoricalReplayBound(*opened.HistoricalReplay)
-		}
 		return service.openHistoricalReplayApplication(opened)
 	}
-	if ports.RuntimeHTTPServicesBound != nil {
-		ports.RuntimeHTTPServicesBound(opened.HTTP)
+	return service.bindLiveApplication(opened, request.VisualizationSinkID)
+}
+
+func (service *Service) openRuntimeForRequest(
+	ctx context.Context,
+	request roles.ApplicationOpeningRequest,
+) (roles.OpenedApplicationRuntime, error) {
+	inputs, err := service.resolveInputs(ctx, request.Runtime)
+	if err != nil {
+		return roles.OpenedApplicationRuntime{}, fmt.Errorf("resolve runtime inputs: %w", err)
 	}
-	effectiveSink := visualizationSink
-	if inputs.Effects.FactoryVisualizationSink != nil {
-		effectiveSink = inputs.Effects.FactoryVisualizationSink
+	opened, err := service.openRuntime.OpenApplicationRuntime(ctx, inputs.Request)
+	if err != nil {
+		return roles.OpenedApplicationRuntime{}, err
 	}
-	components, err := service.adaptRuntime(opened, inputs.Effects, effectiveSink)
+	return opened, nil
+}
+
+func (service *Service) bindLiveApplication(
+	opened roles.OpenedApplicationRuntime,
+	sinkID factorysessions.VisualizationSinkID,
+) (roles.OpenedProcessApplication, error) {
+	var visualizationSink factoryvisualization.Sink
+	if sinkID != "" {
+		var ok bool
+		visualizationSink, ok = service.visualization.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID))
+		if !ok {
+			err := closeOpenedRuntime(opened, fmt.Errorf("Factory Visualization sink %q is unavailable", sinkID))
+			return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
+		}
+	}
+	components, err := service.adaptRuntime(opened, visualizationSink)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
@@ -117,15 +127,16 @@ func (service *Service) OpenApplication(
 		Runtime:    opened.Process,
 		Components: components,
 		Close:      opened.Resources.Close,
-		Completion: completion,
 	})
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
-		Plan:        plan,
-		Diagnostics: opened.Resources.Diagnostics,
+		Plan:             plan,
+		Diagnostics:      opened.Resources.Diagnostics,
+		Ready:            runtimeReady(opened.Process),
+		HostedInvocation: hostedInvocation(opened.HTTP.FactorySessions),
 	}, nil
 }
 
@@ -144,37 +155,29 @@ func (service *Service) openHistoricalReplayApplication(
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session historical replay lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
-		Plan:        plan,
-		Diagnostics: opened.Resources.Diagnostics,
+		Plan:             plan,
+		Diagnostics:      opened.Resources.Diagnostics,
+		HistoricalReplay: opened.HistoricalReplay,
 	}, nil
 }
 
-func gateCompletionOnRuntimeHost(
-	ports roles.ApplicationOpeningPorts,
-	completion func(context.Context) error,
-) (roles.ApplicationOpeningPorts, func(context.Context) error) {
-	if completion == nil {
-		return ports, nil
+func hostedInvocation(service factorysessions.Service) roles.HostedInvocationOperation {
+	if service == nil {
+		return nil
 	}
-	ready := make(chan struct{})
-	observer := ports.RuntimeHostObserver
-	var publish sync.Once
-	ports.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
-		publish.Do(func() {
-			if observer != nil {
-				observer(binding)
-			}
-			close(ready)
-		})
+	operation, _ := service.(roles.HostedInvocationOperation)
+	return operation
+}
+
+type runtimeReadySource interface {
+	RuntimeHostReady() <-chan factorysessions.RuntimeHostBinding
+}
+
+func runtimeReady(process roles.ProcessRuntime) <-chan factorysessions.RuntimeHostBinding {
+	if source, ok := process.(runtimeReadySource); ok {
+		return source.RuntimeHostReady()
 	}
-	return ports, func(ctx context.Context) error {
-		select {
-		case <-ready:
-			return completion(ctx)
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	return nil
 }
 
 func closeOpenedRuntime(opened roles.OpenedApplicationRuntime, cause error) error {

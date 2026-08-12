@@ -8,47 +8,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T) {
+func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}
 	request := invocationRequestFromText("summarize the dispatch")
 
 	operation, err := openHostedRuntime(
 		t.Context(),
-		RunConfig{Output: io.Discard},
+		RunConfig{Output: io.Discard, WithServer: true},
 		zap.NewNop(),
 		request,
 		resolvedRunRecordPath{},
-		testInvocationOperation{invokeFactory: func(
-			_ context.Context,
-			target factorysessions.InvocationTarget,
-			_ factorysessions.InvocationRequest,
-			_ factorysessions.FactoryEventConsumer,
-		) (factorysessions.FactoryInvocationOutcome, error) {
-			hosted := target.HostedLiveInvocation
-			if hosted == nil {
-				t.Fatal("hosted live invocation = nil")
-			}
-			if hosted.Sessions != sessions {
-				t.Fatalf("hosted live sessions = %T, want Factory Sessions runtime service", hosted.Sessions)
-			}
-			invoker, ok := hosted.Invoker.(*hostedInvocationCapabilityFake)
-			if !ok || invoker != sessions {
-				t.Fatalf("hosted invoker = %T, want the bound Factory Sessions invocation capability", hosted.Invoker)
-			}
-			return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
-				Status: interfaces.InvocationTerminalStatusCompleted,
-				PrimaryResult: []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "completed",
-				}},
-			}}, nil
-		}},
+		testInvocationOperation{},
 		nil,
 		nil,
 		nil,
@@ -56,19 +31,15 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 		0,
 		func(
 			_ context.Context,
-			opening factorysessions.ApplicationOpeningRequest,
-			_ *zap.Logger,
-			_ factoryvisualization.Sink,
+			_ factorysessions.ApplicationOpeningRequest,
 		) (initializer.LocalRuntimeRunner, error) {
-			if opening.Ports.RuntimeHTTPServicesBound == nil {
-				t.Fatal("runtime HTTP services binding = nil")
-			}
-			opening.Ports.RuntimeHTTPServicesBound(factorysessions.RuntimeHTTPServices{FactorySessions: sessions})
-			return stubFactoryService{run: opening.Completion}, nil
+			return WithHostedInvocation(hostedInvocationCompletionRunner{}, sessions), nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig, factorysessions.RuntimeHostObserver) factorysessions.ApplicationOpeningRequest {
+		func(RunConfig, *workers.MockWorkersConfig) factorysessions.ApplicationOpeningRequest {
 			return factorysessions.ApplicationOpeningRequest{}
 		},
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("openHostedRuntime() error = %v", err)
@@ -76,8 +47,55 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 	if err := operation.Run(t.Context()); err != nil {
 		t.Fatalf("Operation.Run() error = %v", err)
 	}
+	if !sessions.invoked {
+		t.Fatal("hosted Factory Sessions invocation was not used")
+	}
+}
+
+type hostedInvocationCompletionRunner struct{}
+
+func (hostedInvocationCompletionRunner) Run(context.Context) error { return nil }
+
+func (hostedInvocationCompletionRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	return completion(ctx)
 }
 
 type hostedInvocationCapabilityFake struct {
-	factorysessions.Service
+	invoked bool
 }
+
+func (fake *hostedInvocationCapabilityFake) InvokeFactorySession(
+	context.Context,
+	string,
+	factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	fake.invoked = true
+	return factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "completed",
+		}},
+	}, nil
+}
+
+func (*hostedInvocationCapabilityFake) SubscribeFactoryEventsForSession(
+	context.Context,
+	string,
+	*interfaces.FactoryEventReconnectCursor,
+) (*interfaces.FactoryEventStream, error) {
+	return nil, nil
+}
+
+func (*hostedInvocationCapabilityFake) ReadDurableFactorySessionEventStream(
+	context.Context,
+	string,
+	factorysessions.EventReconnectRequest,
+) (*interfaces.FactoryEventStream, error) {
+	return nil, nil
+}
+
+var _ HostedInvocationOperation = (*hostedInvocationCapabilityFake)(nil)

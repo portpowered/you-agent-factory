@@ -250,14 +250,11 @@ type cleanInvocationWorkTarget struct {
 }
 
 // RuntimeRunnerBuilder is the CLI edge adapter for one owner-bounded Factory
-// Sessions request. Wire converts the request and presentation sink into an
-// initializer.ApplicationOpeningOperation before invoking the neutral
-// Initializer builder.
+// Sessions request. Presentation state is registered with the process-scoped
+// opening owner before this value-only request is built.
 type RuntimeRunnerBuilder func(
 	context.Context,
 	factorysessions.ApplicationOpeningRequest,
-	*zap.Logger,
-	factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error)
 
 // RuntimeOpeningRequestFactory is the Wire-selected mapping from CLI values
@@ -265,7 +262,6 @@ type RuntimeRunnerBuilder func(
 type RuntimeOpeningRequestFactory func(
 	RunConfig,
 	*workers.MockWorkersConfig,
-	factorysessions.RuntimeHostObserver,
 ) factorysessions.ApplicationOpeningRequest
 
 type Opener func(
@@ -328,8 +324,11 @@ type Operation struct {
 	prepareWorkTarget    work.SingleWorkTargetPreparation
 	invocationMode       bool
 	recordPath           resolvedRunRecordPath
-	hostedLiveInvocation *factorysessions.HostedLiveInvocation
+	hostedInvocation     HostedInvocationOperation
 	historicalReplay     *factorysessions.HistoricalReplayInspection
+	openingPresentations factorysessions.OpeningPresentationOwner
+	visualizations       factoryvisualization.RuntimeSinkOwner
+	visualizationSinkID  factoryvisualization.RuntimeSinkID
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -343,6 +342,46 @@ func Open(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	presentations ...factorysessions.OpeningPresentationOwner,
+) (*Operation, error) {
+	var presentationOwner factorysessions.OpeningPresentationOwner
+	if len(presentations) > 0 {
+		presentationOwner = presentations[0]
+	}
+	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
+		loadMockWorkers, buildRuntimeRequest, presentationOwner, nil)
+}
+
+// OpenWithVisualizationOwner is the canonical CLI composition entrypoint.
+// Visualization sink state is retained by its own owner and represented in
+// the application-opening request by an opaque value ID.
+func OpenWithVisualizationOwner(
+	ctx context.Context,
+	cfg RunConfig,
+	buildRunner RuntimeRunnerBuilder,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigLoader,
+	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
+) (*Operation, error) {
+	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
+		loadMockWorkers, buildRuntimeRequest, presentations, visualizations)
+}
+
+func open(
+	ctx context.Context,
+	cfg RunConfig,
+	buildRunner RuntimeRunnerBuilder,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigLoader,
+	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	presentationOwner factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (*Operation, error) {
 	canonicalReasoningEffort, err := NormalizeWorkerReasoningEffort(cfg.WorkerReasoningEffort)
 	if err != nil {
@@ -378,13 +417,14 @@ func Open(
 			invocation,
 			presentation,
 			mockWorkersConfig,
+			presentationOwner,
 		)
 	}
 
 	return openHostedRuntime(
 		ctx, cfg, logger, invocationRequest, recordPath, invocation, presentation,
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
-		buildRunner, buildRuntimeRequest,
+		buildRunner, buildRuntimeRequest, presentationOwner, visualizations,
 	)
 }
 
@@ -398,136 +438,13 @@ func NormalizeWorkerReasoningEffort(value string) (string, error) {
 	return canonical, nil
 }
 
-func openHostedRuntime(
-	ctx context.Context,
-	cfg RunConfig,
-	logger *zap.Logger,
-	invocationRequest *factoryapi.InvocationRequest,
-	recordPath resolvedRunRecordPath,
-	invocation InvocationOperation,
-	presentation factoryvisualization.ResponsePresentation,
-	prepareWorkTarget work.SingleWorkTargetPreparation,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	invocationMode bool,
-	requestedPort int,
-	buildRunner RuntimeRunnerBuilder,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
-) (*Operation, error) {
-	if buildRunner == nil {
-		return nil, errors.New("construct local runtime: injected runtime runner builder is required")
-	}
-	if buildRuntimeRequest == nil {
-		return nil, errors.New("construct local runtime: runtime opening request factory is required")
-	}
-	operation, runtimeCfg, err := prepareHostedInvocation(
-		ctx, cfg, logger, invocationRequest, recordPath, invocation,
-		presentation, mockWorkersConfig, invocationMode,
-	)
-	if err != nil {
-		return nil, err
-	}
-	var factorySvc initializer.LocalRuntimeRunner
-	onBound := newRuntimeHostObserver(
-		ctx, cfg, recordPath, requestedPort,
-		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
-	)
-	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig, onBound)
-	openingRequest.Completion = hostedInvocationCompletion(operation)
-	var historicalReplay *factorysessions.HistoricalReplayInspection
-	openingRequest.Ports.HistoricalReplayBound = func(inspection factorysessions.HistoricalReplayInspection) {
-		inspectionCopy := inspection
-		historicalReplay = &inspectionCopy
-	}
-	if invocationMode && operation != nil {
-		openingRequest.Ports.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
-			operation.hostedLiveInvocation = &factorysessions.HostedLiveInvocation{
-				Sessions: http.FactorySessions,
-				Invoker:  http.FactorySessions,
-			}
-		}
-	}
-	if cfg.Port <= 0 {
-		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
-	}
-	visualizationSink := runVisualizationSink(cfg, presentation)
-	factorySvc, err = buildRunner(ctx, openingRequest, logger, visualizationSink)
-	if err != nil {
-		return nil, err
-	}
-	if factorySvc == nil {
-		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
-	}
-	if operation != nil {
-		operation.runner = factorySvc
-		operation.historicalReplay = historicalReplay
-		return operation, nil
-	}
-
-	return &Operation{
-		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		prepareWorkTarget: prepareWorkTarget, historicalReplay: historicalReplay,
-	}, nil
-}
-
-func prepareHostedInvocation(
-	ctx context.Context,
-	cfg RunConfig,
-	logger *zap.Logger,
-	request *factoryapi.InvocationRequest,
-	recordPath resolvedRunRecordPath,
-	invocation InvocationOperation,
-	presentation factoryvisualization.ResponsePresentation,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	invocationMode bool,
-) (*Operation, RunConfig, error) {
-	if !invocationMode {
-		return nil, cfg, nil
-	}
-	operation, err := openInvocation(
-		ctx, cfg, logger, request, recordPath, invocation, presentation, mockWorkersConfig,
-	)
-	if err != nil {
-		return nil, RunConfig{}, err
-	}
-	// The hosted runtime remains alive until the invocation reaches its
-	// terminal result; the customer-visible run is still one-shot.
-	runtimeCfg := cfg
-	runtimeCfg.Continuously = true
-	return operation, runtimeCfg, nil
-}
-
-func newRuntimeHostObserver(
-	ctx context.Context,
-	cfg RunConfig,
-	recordPath resolvedRunRecordPath,
-	requestedPort int,
-	diagnostics func() runtimeartifact.Diagnostics,
-) factorysessions.RuntimeHostObserver {
-	return func(binding factorysessions.RuntimeHostBinding) {
-		resolved := cfg
-		if strings.TrimSpace(binding.Host) != "" {
-			resolved.BindHost = binding.Host
-		}
-		resolved.Port = binding.Port
-		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
-		emitStartupMessages(resolved, diagnostics())
-		if shouldOpenDashboard(resolved) {
-			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
-		}
-	}
-}
-
-func hostedInvocationCompletion(operation *Operation) func(context.Context) error {
-	if operation == nil {
-		return nil
-	}
-	return operation.runInvocation
-}
-
 // Run activates an operation that was opened successfully.
 func (operation *Operation) Run(ctx context.Context) error {
 	if operation == nil {
 		return fmt.Errorf("run local operation: operation is required")
+	}
+	if operation.visualizations != nil {
+		defer operation.visualizations.CloseRuntimeSink(operation.visualizationSinkID)
 	}
 	if operation.historicalReplay != nil {
 		if operation.runner == nil {
@@ -540,6 +457,9 @@ func (operation *Operation) Run(ctx context.Context) error {
 	}
 	if operation.invocationMode {
 		if operation.runner != nil {
+			if runner, ok := operation.runner.(initializer.CompletionRuntimeRunner); ok {
+				return runner.RunWithCompletion(ctx, operation.runInvocation)
+			}
 			return operation.runner.Run(ctx)
 		}
 		return operation.runInvocation(ctx)
@@ -631,12 +551,16 @@ func (operation *Operation) runInvocation(ctx context.Context) error {
 		return fmt.Errorf("run factory invocation: operation is required")
 	}
 	target := operation.invocationTarget
-	if operation.hostedLiveInvocation != nil {
-		target.HostedLiveInvocation = operation.hostedLiveInvocation
+	invocation := operation.invocation
+	if operation.hostedInvocation != nil {
+		invocation = &hostedInvocationOperation{
+			delegate: invocation, hosted: operation.hostedInvocation,
+			logger: operation.logger, presentations: operation.openingPresentations,
+		}
 	}
 	return runFactoryInvocation(
 		ctx, operation.cfg, target, *operation.invocationRequest,
-		operation.invocation, operation.presentation,
+		invocation, operation.presentation, operation.openingPresentations,
 	)
 }
 

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -64,7 +64,7 @@ func TestServiceDelegatesDurableExecutionContract(t *testing.T) {
 	if !service.IsNonLiveReplay() {
 		t.Fatal("IsNonLiveReplay = false, want forwarded replay capability")
 	}
-	if err := service.RecordPetriTokenMutations(started.SessionID, []factorydefinitions.TokenMutationRecord{{}}); err != nil {
+	if err := service.RecordPetriTokenMutations(started.SessionID, []interfaces.TokenMutationRecord{{}}); err != nil {
 		t.Fatalf("RecordPetriTokenMutations: %v", err)
 	}
 	if stub.calls != 6 {
@@ -105,7 +105,7 @@ func (s *executionStub) ReadEvents(context.Context, string, factorysessions.Even
 
 func (s *executionStub) IsNonLiveReplay() bool { return s.replay }
 
-func (s *executionStub) RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error {
+func (s *executionStub) RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error {
 	s.calls++
 	return nil
 }

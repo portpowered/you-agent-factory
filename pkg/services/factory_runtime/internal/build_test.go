@@ -50,7 +50,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, zap.NewNop(), "runtime-recordings-root", "", clockwork.NewFakeClock(),
+		loaded, "runtime-recordings-root", "", clockwork.NewFakeClock(),
 		"/recordings/session.json", recorder, nil, nil, nil, nil, nil,
 		ledgerFactory,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
@@ -92,7 +92,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, zap.NewNop(), "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
@@ -135,7 +135,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, zap.NewNop(), "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
@@ -178,7 +178,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled,
 		metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, zap.NewNop(), "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
@@ -449,7 +449,7 @@ func testOrchestrationCompilation() factory.OrchestrationCompilation {
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory, nil, nil,
+		nil, nil, outputAsPayloadPolicy(), nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil, testRuntimePoolBoundaryFactory,
@@ -458,8 +458,8 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 
 func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory,
-		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
+		nil, nil, outputAsPayloadPolicy(), nil, nil, zap.NewNop(), testRuntimeLoggerFactory,
+		newTestRuntimeLogOwner(logDir), newTestRuntimeMetricsOwner(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil, testRuntimePoolBoundaryFactory,
@@ -493,13 +493,17 @@ func (sink *testRuntimeLogSink) Logger() *zap.Logger                  { return s
 func (sink *testRuntimeLogSink) Artifact() factory.RuntimeLogArtifact { return sink.artifact }
 func (sink *testRuntimeLogSink) Close() error                         { return nil }
 
-func testRuntimeLogFactory(root string) factory.RuntimeLogSinkFactory {
-	return func(base *zap.Logger, _ string, _ string, config factory.RuntimeLogStorageConfig) (factory.RuntimeLogSink, error) {
-		return &testRuntimeLogSink{logger: base, artifact: factory.RuntimeLogArtifact{
-			Path: filepath.Join(root, "runtime.log"), RootDir: root,
-			StartTimeUTC: time.Now().UTC(), Config: config,
-		}}, nil
-	}
+type testRuntimeLogOwner struct{ root string }
+
+func (owner testRuntimeLogOwner) Open(request factory.RuntimeLogScopeRequest) (factory.RuntimeLogSink, error) {
+	return &testRuntimeLogSink{logger: zap.NewNop(), artifact: factory.RuntimeLogArtifact{
+		Path: filepath.Join(owner.root, request.RuntimeInstanceID+".runtime.log"), RootDir: owner.root,
+		StartTimeUTC: time.Now().UTC(), Config: request.Config,
+	}}, nil
+}
+
+func newTestRuntimeLogOwner(root string) factory.RuntimeLogOwner {
+	return testRuntimeLogOwner{root: root}
 }
 
 type testRuntimeMetricsSink struct {
@@ -521,17 +525,17 @@ func (s *testRuntimeMetricsSink) Artifact() factory.RuntimeMetricsArtifact {
 	return s.artifact
 }
 
-func testRuntimeMetricsFactory(root string) factory.RuntimeMetricsSinkFactory {
-	return func(
-		factory.RuntimeMetricsScope,
-		string,
-		factory.RuntimeMetricsStorageConfig,
-	) (factory.RuntimeMetricsSink, error) {
-		return &testRuntimeMetricsSink{artifact: factory.RuntimeMetricsArtifact{
-			Path: filepath.Join(root, "runtime-metrics.log"), RootDir: root,
-			StartTimeUTC: time.Now().UTC(),
-		}}, nil
-	}
+type testRuntimeMetricsOwner struct{ root string }
+
+func (owner testRuntimeMetricsOwner) Open(request factory.RuntimeMetricsScopeRequest) (factory.RuntimeMetricsSink, error) {
+	return &testRuntimeMetricsSink{artifact: factory.RuntimeMetricsArtifact{
+		Path: filepath.Join(owner.root, request.Scope.RuntimeInstanceID+".runtime-metrics.log"), RootDir: owner.root,
+		StartTimeUTC: time.Now().UTC(),
+	}}, nil
+}
+
+func newTestRuntimeMetricsOwner(root string) factory.RuntimeMetricsOwner {
+	return testRuntimeMetricsOwner{root: root}
 }
 
 type runtimeRecordingsRecorderStub struct{}

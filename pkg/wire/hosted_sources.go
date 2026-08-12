@@ -28,22 +28,26 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 		}
 	}
 	factory := automationswire.NewHostedSourcesFactory(checkpointStore)
+	clock := edges.HostedClock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
+	}
+	httpClient := edges.HostedHTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: automations.HostedLinearDefaultRequestTimeout}
+	}
+	secretResolver := edges.HostedSecretResolver
+	if secretResolver == nil {
+		secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
+	}
+	linearEndpoint := edges.HostedLinearEndpoint
 	return func(
 		logger *zap.Logger,
-		clock automations.HostedLinearClock,
-		httpClient automations.HostedLinearHTTPDoer,
-		secretResolver automations.HostedLinearSecretResolver,
-		linearEndpoint string,
+		_ automations.HostedLinearClock,
+		_ automations.HostedLinearHTTPDoer,
+		_ automations.HostedLinearSecretResolver,
+		_ string,
 	) automations.HostedPollers {
-		if clock == nil {
-			clock = clockwork.NewRealClock()
-		}
-		if httpClient == nil {
-			httpClient = &http.Client{Timeout: automations.HostedLinearDefaultRequestTimeout}
-		}
-		if secretResolver == nil {
-			secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
-		}
 		return factory(logger, clock, httpClient, secretResolver, linearEndpoint)
 	}, nil
 }

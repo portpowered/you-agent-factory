@@ -17,6 +17,40 @@ import (
 	"go.uber.org/zap"
 )
 
+type invocationPresentationOwnerStub struct{}
+
+func (invocationPresentationOwnerStub) RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
+	return "", nil
+}
+
+func (invocationPresentationOwnerStub) DirectJavaScript(factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, bool) {
+	return factorysessions.DirectJavaScriptRunScope{}, false
+}
+
+func (invocationPresentationOwnerStub) RegisterStdio(factorysessions.StdioOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return "", nil
+}
+
+func (invocationPresentationOwnerStub) Stdio(factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
+	return factorysessions.StdioOpeningScope{}, false
+}
+
+func (invocationPresentationOwnerStub) RegisterInvocationEvents(factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	return "", nil
+}
+
+func (invocationPresentationOwnerStub) InvocationEvents(factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	return nil, false
+}
+
+func (invocationPresentationOwnerStub) StartFactoryEventBridge(context.Context, roles.FactoryEventReader, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return nil, nil
+}
+
+func (invocationPresentationOwnerStub) Close(factorysessions.OpeningScopeID) {}
+
 type workingDirectoryStub struct {
 	dir string
 	err error
@@ -79,7 +113,7 @@ func TestNewOperation_RequiresModelInvocationBoundaryDependencies(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := NewOperation(openRuntime, nil, runtimeopening.ExternalEffects{}, test.workingDir, test.resolver, test.exporter, test.timeout, func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, func() string { return "session-test-id" })
+			_, err := NewOperation(openRuntime, nil, test.workingDir, test.resolver, test.exporter, test.timeout, func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, func() string { return "session-test-id" }, zap.NewNop(), nil)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewOperation() error = %v, want %q", err, test.want)
 			}
@@ -99,7 +133,6 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 	invocation, err := NewOperation(
 		opening,
 		nil,
-		runtimeopening.ExternalEffects{},
 		workingDirectoryStub{},
 		factorydefinitions.CurrentFactoryDirectoryResolver(func(root string) (string, error) { return root, nil }),
 		artifactExporterStub{},
@@ -108,6 +141,8 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 			return factoryruntime.RuntimeArtifactRoots{Logs: "logs", Metrics: "metrics"}
 		},
 		func() string { return "session-id" },
+		zap.NewNop(),
+		invocationPresentationOwnerStub{},
 	)
 	if err != nil {
 		t.Fatalf("NewOperation: %v", err)
@@ -147,8 +182,6 @@ type invocationRuntimeOpeningStub struct {
 func (stub *invocationRuntimeOpeningStub) OpenInvocationRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ runtimeopening.ExternalEffects,
-	_ *zap.Logger,
 ) (roles.OpenedInvocationRuntime, error) {
 	stub.calls++
 	stub.request = request

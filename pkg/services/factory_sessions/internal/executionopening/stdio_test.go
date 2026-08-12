@@ -16,6 +16,11 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 	owned := &ownedExecutionStub{}
 	opening := &stdioExecutionOpeningStub{execution: owned}
 	application := stdioApplicationStub{}
+	owner := &openingOwnerStub{}
+	scopeID, err := owner.RegisterStdio(factorysessions.StdioOpeningScope{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatalf("RegisterStdio: %v", err)
+	}
 	operation, err := NewStdioOpeningService(
 		opening,
 		func(_ context.Context, got durableexecution.Service, _ io.Reader, _ io.Writer) (roles.StdioApplication, error) {
@@ -25,14 +30,16 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 			return application, nil
 		},
 		runtimeStdioBuilderNotCalled(t),
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 
 	input, output := &bytes.Buffer{}, &bytes.Buffer{}
+	owner.stdio = factorysessions.StdioOpeningScope{Input: input, Output: output}
 	got, err := operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: "fixtures.json", Input: input, Output: output,
+		FixtureCatalogPath: "fixtures.json", ScopeID: scopeID,
 	})
 	if err != nil {
 		t.Fatalf("OpenStdio: %v", err)
@@ -46,6 +53,11 @@ func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
 	opened := roles.OpenedExecutionRuntime{Execution: &ownedExecutionStub{}}
 	opening := &stdioExecutionOpeningStub{resolvedRoot: "resolved", opened: opened}
 	application := stdioApplicationStub{}
+	owner := &openingOwnerStub{}
+	scopeID, err := owner.RegisterStdio(factorysessions.StdioOpeningScope{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatalf("RegisterStdio: %v", err)
+	}
 	operation, err := NewStdioOpeningService(
 		opening,
 		fixtureStdioBuilderNotCalled(t),
@@ -55,6 +67,7 @@ func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
 			}
 			return application, nil
 		},
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
@@ -62,7 +75,7 @@ func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
 
 	got, err := operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
 		RuntimeBacked: true, ProjectRoot: "project", SystemConfigHome: "home",
-		Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
+		ScopeID: scopeID,
 	})
 	if err != nil {
 		t.Fatalf("OpenStdio: %v", err)
@@ -75,18 +88,24 @@ func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
 func TestStdioOpeningServiceClosesFixtureWhenApplicationBuildFails(t *testing.T) {
 	buildErr, closeErr := errors.New("build failed"), errors.New("close failed")
 	owned := &ownedExecutionStub{closeErr: closeErr}
+	owner := &openingOwnerStub{}
+	scopeID, err := owner.RegisterStdio(factorysessions.StdioOpeningScope{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatalf("RegisterStdio: %v", err)
+	}
 	operation, err := NewStdioOpeningService(
 		&stdioExecutionOpeningStub{execution: owned},
 		func(context.Context, durableexecution.Service, io.Reader, io.Writer) (roles.StdioApplication, error) {
 			return nil, buildErr
 		},
 		runtimeStdioBuilderNotCalled(t),
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: "fixtures.json", Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
+		FixtureCatalogPath: "fixtures.json", ScopeID: scopeID,
 	})
 	if !errors.Is(err, buildErr) || !errors.Is(err, closeErr) || !owned.closed {
 		t.Fatalf("OpenStdio error = %v, closed = %v", err, owned.closed)
@@ -96,6 +115,11 @@ func TestStdioOpeningServiceClosesFixtureWhenApplicationBuildFails(t *testing.T)
 func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T) {
 	buildErr := errors.New("build failed")
 	closeCount := 0
+	owner := &openingOwnerStub{}
+	scopeID, err := owner.RegisterStdio(factorysessions.StdioOpeningScope{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatalf("RegisterStdio: %v", err)
+	}
 	opening := &stdioExecutionOpeningStub{
 		resolvedRoot: "resolved",
 		opened: roles.OpenedExecutionRuntime{
@@ -115,13 +139,13 @@ func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T)
 			}
 			return nil, buildErr
 		},
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		RuntimeBacked: true, ProjectRoot: "project",
-		Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
+		RuntimeBacked: true, ProjectRoot: "project", ScopeID: scopeID,
 	})
 	if !errors.Is(err, buildErr) || closeCount != 1 {
 		t.Fatalf("OpenStdio error = %v, close count = %d, want build error and one close", err, closeCount)
@@ -130,18 +154,24 @@ func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T)
 
 func TestStdioOpeningServiceRejectsNilApplications(t *testing.T) {
 	owned := &ownedExecutionStub{}
+	owner := &openingOwnerStub{}
+	scopeID, err := owner.RegisterStdio(factorysessions.StdioOpeningScope{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
+	if err != nil {
+		t.Fatalf("RegisterStdio: %v", err)
+	}
 	operation, err := NewStdioOpeningService(
 		&stdioExecutionOpeningStub{execution: owned},
 		func(context.Context, durableexecution.Service, io.Reader, io.Writer) (roles.StdioApplication, error) {
 			return nil, nil
 		},
 		runtimeStdioBuilderNotCalled(t),
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: "fixtures.json", Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
+		FixtureCatalogPath: "fixtures.json", ScopeID: scopeID,
 	})
 	if err == nil || !owned.closed {
 		t.Fatalf("OpenStdio error = %v, closed = %v, want fail-closed nil fixture application", err, owned.closed)

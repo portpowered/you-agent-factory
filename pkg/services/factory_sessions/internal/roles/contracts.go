@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -23,14 +24,29 @@ import (
 
 type InvocationMetricsRecorder = factorysessions.InvocationMetricsRecorder
 
-type ApplicationOpeningPorts = factorysessions.ApplicationOpeningPorts
-
 type ApplicationOpeningRequest = factorysessions.ApplicationOpeningRequest
+
+// FactoryEventReader is the private presentation-bridge reader capability.
+// It is an alias to an unnamed interface so the Factory Sessions root does not
+// publish another named service interface.
+type FactoryEventReader = interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
+}
+
+// HostedInvocationOperation is the operation-valued result retained by the
+// hosted CLI path after opening. It is intentionally private to implementation
+// roles rather than part of the Factory Sessions root interface inventory.
+type HostedInvocationOperation interface {
+	factorysessions.InvocationService
+	FactoryEventReader
+}
 
 type RuntimeResources struct {
 	Directory         string
 	RuntimeInstanceID string
 	BackendScopeID    string
+	Clock             factoryruntime.Clock
 	Diagnostics       factoryruntime.RuntimeLogDiagnostics
 	Logger            *zap.Logger
 	Close             func() error
@@ -54,6 +70,11 @@ type OpenedApplicationRuntime struct {
 type OpenedProcessApplication struct {
 	Plan        lifecycle.Plan
 	Diagnostics factoryruntime.RuntimeLogDiagnostics
+	Ready       <-chan initializer.RuntimeHostBinding
+	// HostedInvocation is a narrow operation result for the hosted CLI path;
+	// it is not the opened runtime's HTTP service table.
+	HostedInvocation HostedInvocationOperation
+	HistoricalReplay *factorysessions.HistoricalReplayInspection
 }
 
 type OpenedInvocationRuntime struct {
@@ -135,17 +156,24 @@ type StdioExecutionOpening interface {
 }
 
 type StdioOpeningOperation interface {
-	OpenStdio(context.Context, factorysessions.StdioOpeningRequest) (StdioApplication, error)
+	OpenStdio(
+		context.Context,
+		factorysessions.StdioOpeningRequest,
+	) (StdioApplication, error)
 }
 
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
+	Open(
+		context.Context,
+		factorysessions.DirectJavaScriptRunRequest,
+	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
-	factorysessions.DirectJavaScriptRunRequest,
+	factorysessions.RuntimeHostRequest,
+	factorysessions.RuntimeHostObserver,
 ) (lifecycle.Component, error)
 
 type DirectJavaScriptSyncRunner func(
@@ -217,7 +245,6 @@ type LifecyclePlanRequest struct {
 	Runtime    ProcessRuntime
 	Components factorysessions.BoundProcessComponents
 	Close      func() error
-	Completion func(context.Context) error
 }
 
 type LifecyclePlanOperation func(LifecyclePlanRequest) (lifecycle.Plan, error)
@@ -238,7 +265,7 @@ type ModelInvocationOperation interface {
 
 type InvocationOperation interface {
 	ModelInvocationOperation
-	InvokeFactory(context.Context, InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (FactoryInvocationOutcome, error)
+	InvokeFactory(context.Context, InvocationTarget, factorysessions.InvocationRequest) (FactoryInvocationOutcome, error)
 }
 
 type InvocationTarget = factorysessions.InvocationTarget
