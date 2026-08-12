@@ -2,16 +2,20 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/internal/providerpackages"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -81,6 +85,74 @@ func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *test
 	}
 }
 
+func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	tests := []struct {
+		canonical string
+		aliases   []string
+	}{
+		{canonical: "pi-acp"},
+		{canonical: "openclaw-acp"},
+		{canonical: "gemini-acp"},
+		{canonical: "cursor-acp"},
+		{canonical: "copilot-acp"},
+		{canonical: "droid-acp", aliases: []string{"factory-droid", "factorydroid"}},
+		{canonical: "fast-agent-acp"},
+		{canonical: "grok-build-acp"},
+		{canonical: "iflow-acp"},
+		{canonical: "kilocode-acp"},
+		{canonical: "kimi-acp"},
+		{canonical: "kiro-acp"},
+		{canonical: "mux-acp"},
+		{canonical: "opencode-acp"},
+		{canonical: "pool-acp"},
+		{canonical: "qoder-acp"},
+		{canonical: "qwen-acp"},
+		{canonical: "reasonix-acp"},
+		{canonical: "trae-acp"},
+		{canonical: "zeroclaw-acp"},
+	}
+	for _, test := range tests {
+		t.Run(test.canonical, func(t *testing.T) {
+			canonical, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID(test.canonical)})
+			if err != nil {
+				t.Fatalf("GetProvider(%q) error = %v", test.canonical, err)
+			}
+			if canonical.Provider.ID.String() != test.canonical {
+				t.Fatalf("GetProvider(%q) ID = %q", test.canonical, canonical.Provider.ID)
+			}
+			if canonical.Provider.Readiness != providers.ReadinessUnverified {
+				t.Fatalf("GetProvider(%q) readiness = %q, want unverified", test.canonical, canonical.Provider.Readiness)
+			}
+			wantCapabilities := []providers.Capability{providers.CapabilityPromptSubmission}
+			if test.canonical == "cursor-acp" {
+				wantCapabilities = append(
+					wantCapabilities,
+					providers.CapabilityImageInput,
+					providers.CapabilityPermissionBypass,
+				)
+			}
+			if !reflect.DeepEqual(canonical.Provider.Capabilities, wantCapabilities) {
+				t.Fatalf("GetProvider(%q) capabilities = %v, want %v", test.canonical, canonical.Provider.Capabilities, wantCapabilities)
+			}
+			for _, alias := range test.aliases {
+				resolved, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID(alias)})
+				if err != nil {
+					t.Fatalf("GetProvider(%q) error = %v", alias, err)
+				}
+				if resolved.Provider.ID.String() != test.canonical {
+					t.Fatalf("GetProvider(%q) ID = %q, want %q", alias, resolved.Provider.ID, test.canonical)
+				}
+			}
+		})
+	}
+}
+
 func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	root, err := NewService()
 	if err != nil {
@@ -92,6 +164,79 @@ func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	)
 	if err != nil || len(result.Providers) == 0 {
 		t.Fatalf("ListProviders() = (%#v, %v), want catalog entries", result, err)
+	}
+}
+
+const generatedExecutableHelperEnvironment = "YOU_TEST_GENERATED_EXECUTABLE_HELPER"
+
+func TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly(t *testing.T) {
+	if os.Getenv(generatedExecutableHelperEnvironment) != "" {
+		os.Exit(0)
+	}
+
+	wantExecutable := `agent'\tool`
+	wantArguments := []string{"hello world", "semi;colon"}
+	source := fstest.MapFS{
+		"packages/model-providers/providers/generated-acp/provider.yaml": &fstest.MapFile{Data: []byte(`id: generated-acp
+aliases: []
+implementationAvailability: externally-supplied
+harness: {kind: acp, acpSupport: {support: supported, evidenceRefs: [fixture]}}
+modelCatalogPosture: unknown
+harnessRoutes: [{direction: input, modality: text, support: supported, transport: inline, evidenceRefs: [fixture]}]
+evidence: [{id: fixture, kind: conformance_fixture, verifiedOn: "2026-08-11", factRefs: [harness/acp, harness/input/text]}]
+models: []
+tools: []
+knownLimits: []
+discovery: {prerequisites: [{kind: executable, name: generated-acp, description: Install the generated ACP executable.}]}
+`)},
+		"packages/model-providers/providers/generated-acp/harness.yaml": &fstest.MapFile{Data: []byte(`implementation: {kind: acp_agent, profile: cursor-acp}
+launch: {posture: installed_executable, transport: stdio, command: 'agent''\tool', arguments: ["hello world", "semi;colon"]}
+`)},
+	}
+	packages, err := providerpackages.Validate(source, []providerpackages.RuntimeProfile{{ID: "cursor-acp"}})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	document, err := json.Marshal(providerpackages.RuntimeProjection(packages))
+	if err != nil {
+		t.Fatalf("marshal runtime projection: %v", err)
+	}
+	integrations, err := ACPIntegrationsFromRuntimeCatalog(document)
+	if err != nil {
+		t.Fatalf("load generated runtime projection: %v", err)
+	}
+
+	var gotExecutable string
+	var gotArguments []string
+	commandFactory := func(name string, arguments ...string) *exec.Cmd {
+		gotExecutable = name
+		gotArguments = append([]string(nil), arguments...)
+		return exec.Command(os.Args[0], "-test.run=^TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly$")
+	}
+	root, err := NewService(
+		WithACPIntegrations(integrations...),
+		WithCommandFactory(commandFactory),
+		WithExecutableLocator(fakeExecutableLocator{wantExecutable: wantExecutable}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:           "generated-acp",
+		AttemptID:          "generated-executable-round-trip",
+		UserMessage:        "exercise generated executable",
+		WorkingDirectory:   t.TempDir(),
+		ProcessEnvironment: append(os.Environ(), generatedExecutableHelperEnvironment+"=1"),
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want helper process to terminate before ACP initialize")
+	}
+	if gotExecutable != wantExecutable {
+		t.Fatalf("command executable = %q, want %q", gotExecutable, wantExecutable)
+	}
+	if !reflect.DeepEqual(gotArguments, wantArguments) {
+		t.Fatalf("command arguments = %#v, want %#v", gotArguments, wantArguments)
 	}
 }
 
@@ -118,6 +263,19 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	)
 	if len(replaced) != 1 || replaced[0].ID != "replacement" {
 		t.Fatalf("effectiveACPIntegrations(replacement) = %#v", replaced)
+	}
+	legacySaved := effectiveACPIntegrations(
+		[]providers.ACPIntegration{{
+			ID: "entry-1", Name: "cursor-acp", Aliases: []string{"cursor"},
+			Transport: "stdio", Command: "cursor-agent acp", Arguments: []string{"acp"},
+			RuntimePosture: "installed_executable", ImplementationProfile: "cursor-acp",
+		}},
+		[]providers.ACPIntegration{{
+			ID: "saved-entry", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+		}},
+	)
+	if len(legacySaved) != 1 || legacySaved[0].ImplementationProfile != "cursor-acp" || legacySaved[0].RuntimePosture != "installed_executable" || !reflect.DeepEqual(legacySaved[0].Arguments, []string{"acp"}) || !reflect.DeepEqual(legacySaved[0].Aliases, []string{"cursor"}) {
+		t.Fatalf("effectiveACPIntegrations(legacy package command) = %#v, want package runtime metadata preserved", legacySaved)
 	}
 
 	factory := NewFactory(nil)
@@ -504,20 +662,6 @@ func (r *inertWorkersCommandRunner) Run(
 	panic("workers command runner invoked during inert construction")
 }
 
-type inertTemporaryFileSystem struct {
-	calls int
-}
-
-func (f *inertTemporaryFileSystem) CreateTemp(string, string) (platformfilesystem.TemporaryFile, error) {
-	f.calls++
-	panic("cursor temporary file creation during inert construction")
-}
-
-func (f *inertTemporaryFileSystem) Remove(string) error {
-	f.calls++
-	panic("cursor temporary file remove during inert construction")
-}
-
 type inertPTYAllocator struct {
 	calls int
 }
@@ -571,60 +715,6 @@ func (r *recordingWorkersCommandRunner) Run(
 ) (workers.CommandResult, error) {
 	r.calls++
 	return workers.CommandResult{}, nil
-}
-
-type recordingTemporaryFileSystem struct {
-	mu        sync.Mutex
-	file      *recordingTemporaryFile
-	created   int
-	directory string
-	pattern   string
-	removes   int
-}
-
-func newRecordingTemporaryFileSystem(path string) *recordingTemporaryFileSystem {
-	return &recordingTemporaryFileSystem{
-		file: &recordingTemporaryFile{path: path},
-	}
-}
-
-func (f *recordingTemporaryFileSystem) CreateTemp(directory, pattern string) (platformfilesystem.TemporaryFile, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.created++
-	f.directory = directory
-	f.pattern = pattern
-	return f.file, nil
-}
-
-func (f *recordingTemporaryFileSystem) Remove(path string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.removes++
-	return nil
-}
-
-type recordingTemporaryFile struct {
-	mu      sync.Mutex
-	path    string
-	content string
-	closes  int
-}
-
-func (f *recordingTemporaryFile) Name() string { return f.path }
-
-func (f *recordingTemporaryFile) WriteString(value string) (int, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.content = value
-	return len(value), nil
-}
-
-func (f *recordingTemporaryFile) Close() error {
-	f.mu.Lock()
-	f.closes++
-	f.mu.Unlock()
-	return nil
 }
 
 type recordingPTYAllocator struct {

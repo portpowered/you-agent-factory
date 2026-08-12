@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: kiro-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: kiro-cli-chat
+  arguments:
+    - acp

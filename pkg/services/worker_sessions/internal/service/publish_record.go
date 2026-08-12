@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -247,6 +248,22 @@ func (r *registry) prepareInvocation(
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
 	)
+	workerRecording, err := r.startWorkerRecording(ctx, req)
+	if err != nil {
+		r.logger.Info(
+			"worker session recording opening rejected",
+			"sessionID", req.ID,
+			"attemptID", attemptID,
+			"outcome", "failed",
+			"error", err.Error(),
+		)
+		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+		return invocationPreparation{
+			session:  final,
+			terminal: true,
+			failure:  workersessions.ErrStartOpeningPublication,
+		}, nil
+	}
 
 	if err := r.publishOpeningRecord(
 		ctx,
@@ -254,6 +271,7 @@ func (r *registry) prepareInvocation(
 		attemptID,
 		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution),
 		providerIdentityForExecution(req.Execution.Execution),
+		workerRecording,
 	); err != nil {
 		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
 		return invocationPreparation{
@@ -501,6 +519,9 @@ type publication struct {
 	// turnID is retained only to correlate a provider-bound SESSION/UPDATED
 	// record when the opening did not yet know the provider.
 	turnID string
+	// recording is the Recordings-owned capture that must remain live until
+	// the terminal Worker record has been durably consumed.
+	recording recordings.WorkerSessionRecording
 }
 
 // publicationFor returns the publication registered for id, or nil if id was
@@ -827,10 +848,17 @@ func isTerminalLifecycleRecord(record events.Record) bool {
 // the append itself has committed: no PublishRecord call can be accepted for
 // id until this succeeds. A non-nil return means no record was committed and
 // the window stays closed: Start must not proceed to Workers handoff.
-func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string, payload workers.SessionPayload, provider string) error {
+func (r *registry) publishOpeningRecord(
+	ctx context.Context,
+	id,
+	attemptID string,
+	payload workers.SessionPayload,
+	provider string,
+	recordingsForSession ...recordings.WorkerSessionRecording,
+) error {
 	pub := r.publicationFor(id)
 	pub.mu.Lock()
-	defer pub.mu.Unlock()
+	recording := firstWorkerRecording(recordingsForSession)
 
 	// SessionPayload contains only JSON value fields, so json.Marshal cannot
 	// fail here; the error is intentionally discarded rather than defended
@@ -851,80 +879,49 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 		SourceEventID:  openingSourceEventID,
 	}
 	if _, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft); err != nil {
+		openingErr := fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingOpening, err)
+		if recording != nil {
+			if abortErr := recording.Abort(context.WithoutCancel(ctx), openingErr); abortErr != nil {
+				r.logger.Info(
+					"worker session recording opening cleanup failed",
+					"sessionID", id,
+					"attemptID", attemptID,
+					"outcome", "cleanup_failed",
+				)
+			}
+		}
+		pub.mu.Unlock()
 		return err
 	}
+	if recording != nil {
+		if err := recording.AwaitOpening(ctx); err != nil {
+			if abortErr := recording.Abort(context.WithoutCancel(ctx), err); abortErr != nil {
+				r.logger.Info(
+					"worker session recording opening cleanup failed",
+					"sessionID", id,
+					"attemptID", attemptID,
+					"outcome", "cleanup_failed",
+				)
+			}
+			pub.mu.Unlock()
+			return err
+		}
+	}
 	pub.open = true
+	pub.recording = recording
 	pub.provider = workers.CanonicalProviderSessionProvider(provider)
 	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
 	pub.accepted = make(map[events.AppendIdentity]struct{})
+	pub.mu.Unlock()
 	return nil
 }
 
-// terminalSessionPayload is the SESSION KindSession payload committed for
-// the W3 terminal record. It always decodes as a valid workers.SessionPayload
-// (Status is the one field that type declares), so validation and any reader
-// that only knows about workers.SessionPayload continue to work unchanged;
-// FailureCause/FailureDetail are additive fields present only on a FAILED
-// terminal record, carrying the already-computed, already-safe
-// FailureCause.Kind/Detail worker_sessions itself derives rather than any
-// new free-form text.
-type terminalSessionPayload struct {
-	Status        string `json:"status,omitempty"`
-	FailureCause  string `json:"failureCause,omitempty"`
-	FailureDetail string `json:"failureDetail,omitempty"`
-}
-
-// terminalPhase is the pure mapping from a committed Worker Session State to
-// its terminal projection Phase: COMPLETED and FAILED map one-to-one, and
-// the W1 CANCELED/TERMINATED states -- neither reachable through Start until
-// W6 adds controls -- share the existing PhaseCanceled pair per the W3 scope
-// note that no new phase is introduced. Any other state has no terminal
-// projection.
-func terminalPhase(state workersessions.State) (workers.Phase, error) {
-	switch state {
-	case workersessions.StateCompleted:
-		return workers.PhaseCompleted, nil
-	case workersessions.StateFailed:
-		return workers.PhaseFailed, nil
-	case workersessions.StateCanceled, workersessions.StateTerminated:
-		return workers.PhaseCanceled, nil
-	default:
-		return "", fmt.Errorf("worker sessions: state %q has no terminal projection phase", state)
+func firstWorkerRecording(recordingsForSession []recordings.WorkerSessionRecording) recordings.WorkerSessionRecording {
+	if len(recordingsForSession) == 0 {
+		return nil
 	}
-}
-
-// terminalDraft is the pure mapping from a committed Worker Session
-// State+TerminalResult to the one KindSession terminal workers.Draft W3
-// projects after prior output. terminalDraft is side-effect free so every
-// state, including the CANCELED/TERMINATED cases Start cannot yet produce, is
-// directly unit-testable without a live session or Events call.
-func terminalDraft(state workersessions.State, result workersessions.TerminalResult, attemptID string) (workers.Draft, error) {
-	phase, err := terminalPhase(state)
-	if err != nil {
-		return workers.Draft{}, err
-	}
-	if state == workersessions.StateCompleted || state == workersessions.StateFailed {
-		if err := result.Validate(); err != nil {
-			return workers.Draft{}, err
-		}
-	}
-	payload := terminalSessionPayload{Status: string(state)}
-	if result.Cause != nil {
-		payload.FailureCause = string(result.Cause.Kind)
-		payload.FailureDetail = result.Cause.Detail
-	}
-	// terminalSessionPayload has only string fields, so json.Marshal cannot
-	// fail to encode; the error is intentionally discarded rather than
-	// defended against.
-	payloadJSON, _ := json.Marshal(payload)
-	return workers.Draft{
-		Kind:       workers.KindSession,
-		Phase:      phase,
-		Provenance: lifecycleProvenance(""),
-		Payload:    payloadJSON,
-		DispatchID: attemptID,
-	}, nil
+	return recordingsForSession[0]
 }
 
 // publishTerminalRecord commits the one terminal KindSession workers.Draft
@@ -948,11 +945,13 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		return workersessions.ErrSessionNotFound
 	}
 	pub.mu.Lock()
-	defer pub.mu.Unlock()
 	if !pub.open {
+		pub.mu.Unlock()
 		return workersessions.ErrPublicationNotOpen
 	}
 	pub.open = false
+	recording := pub.recording
+	pub.recording = nil
 	draft.Provenance = lifecycleProvenance(pub.provider)
 
 	identity := events.AppendIdentity{
@@ -962,6 +961,12 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		SourceEventID:  terminalSourceEventID,
 	}
 	_, err = r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	pub.mu.Unlock()
+	if recording != nil {
+		if closeErr := recording.Close(context.WithoutCancel(ctx)); err == nil {
+			err = closeErr
+		}
+	}
 	return err
 }
 

@@ -81,6 +81,7 @@ func NewLifecycleRuntimeRecorder(
 	flushInterval time.Duration,
 	loaded factorydefinitions.LoadedFactorySource,
 	now func() time.Time,
+	recordingID string,
 	recordPath string,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 ) (recordings.RuntimeRecorder, error) {
@@ -88,6 +89,7 @@ func NewLifecycleRuntimeRecorder(
 		flushInterval,
 		loaded,
 		now,
+		recordingID,
 		recordPath,
 		captureLoadedFactorySnapshot,
 	)

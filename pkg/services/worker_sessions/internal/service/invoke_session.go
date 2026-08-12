@@ -17,9 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// InvokeSession and the attempt loop it drives live beside the controls they
-// race with, but in their own file: one Worker Session's attempts are a single
-// concern, and reading them next to Pause/Resume/Cancel obscures both.
+// InvokeSession and its attempt loop live beside the controls they race with.
 
 // InvokeSession supervises one resolved execution through the same preparation
 // and attempt driver used by asynchronous Start. The boundary is the sole
@@ -27,11 +25,8 @@ import (
 // remains authoritative for terminal Workers output, so control cannot
 // fabricate a Factory Runtime result.
 //
-// req.Execution.WorkstationName is a route into the runtime-binding snapshot
-// Workers already assembled. InvokeSession never selects, constructs, or
-// injects an executor of its own -- the route is the whole of its say in what
-// runs -- which is what lets a Petri Worker and a JavaScript workflow child
-// share this one operation.
+// req.Execution.WorkstationName routes into the runtime binding already
+// assembled by Workers, allowing Petri and JavaScript children to share it.
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {

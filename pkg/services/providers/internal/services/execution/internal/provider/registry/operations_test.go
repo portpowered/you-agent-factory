@@ -55,8 +55,8 @@ func TestRegistryStaticQueriesAreNormalizedDeterministicDetachedAndInert(t *test
 	if !slices.IsSorted(identities) {
 		t.Fatalf("Entries() identities = %v, want canonical order", identities)
 	}
-	if len(entries) != 3 {
-		t.Fatalf("Entries() count = %d, want 3", len(entries))
+	if len(entries) != 23 {
+		t.Fatalf("Entries() count = %d, want 23", len(entries))
 	}
 
 	codexEntry := findEntry(t, entries, "codex")

@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"sync"
@@ -29,22 +31,23 @@ type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
-	quorumPolicy             interfaces.QuorumPolicyService
-	outputShaping            interfaces.InvocationOutputShapingService
-	workPropagation          interfaces.WorkPropagationPolicyService
-	workService              work.Service
-	decisionEnvelopes        interfaces.DecisionEnvelopeService
-	baseLogger               *zap.Logger
-	loggerFactory            factory.RuntimeLoggerFactory
-	runtimeLogs              factory.RuntimeLogOwner
-	runtimeMetrics           factory.RuntimeMetricsOwner
-	newID                    factory.IDGenerator
-	workRequestIDs           work.RequestIDGenerator
-	runtimeDirs              factory.RuntimeDirectoryFileSystem
-	inputFiles               factory.InputFileSystem
-	inputDirectoryWalker     factory.InputDirectoryWalker
-	orchestrationCompilation factory.OrchestrationCompilation
-	providerSessions         providersessions.Service
+	quorumPolicy              interfaces.QuorumPolicyService
+	outputShaping             interfaces.InvocationOutputShapingService
+	workPropagation           interfaces.WorkPropagationPolicyService
+	workService               work.Service
+	decisionEnvelopes         interfaces.DecisionEnvelopeService
+	baseLogger                *zap.Logger
+	loggerFactory             factory.RuntimeLoggerFactory
+	runtimeLogs               factory.RuntimeLogOwner
+	runtimeMetrics            factory.RuntimeMetricsOwner
+	newID                     factory.IDGenerator
+	workRequestIDs            work.RequestIDGenerator
+	runtimeDirs               factory.RuntimeDirectoryFileSystem
+	inputFiles                factory.InputFileSystem
+	inputDirectoryWalker      factory.InputDirectoryWalker
+	orchestrationCompilation  factory.OrchestrationCompilation
+	providerSessions          providersessions.Service
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
 }
 
 func NewRuntimeFactory(
@@ -64,24 +67,26 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		quorumPolicy:             quorumPolicy,
-		outputShaping:            outputShaping,
-		workPropagation:          workPropagation,
-		workService:              workService,
-		decisionEnvelopes:        decisionEnvelopes,
-		baseLogger:               baseLogger,
-		loggerFactory:            loggerFactory,
-		runtimeLogs:              runtimeLogs,
-		runtimeMetrics:           runtimeMetrics,
-		newID:                    newID,
-		workRequestIDs:           workRequestIDs,
-		runtimeDirs:              runtimeDirs,
-		inputFiles:               inputFiles,
-		inputDirectoryWalker:     inputDirectoryWalker,
-		orchestrationCompilation: orchestrationCompilation,
-		providerSessions:         providerSessions,
+		quorumPolicy:              quorumPolicy,
+		outputShaping:             outputShaping,
+		workPropagation:           workPropagation,
+		workService:               workService,
+		decisionEnvelopes:         decisionEnvelopes,
+		baseLogger:                baseLogger,
+		loggerFactory:             loggerFactory,
+		runtimeLogs:               runtimeLogs,
+		runtimeMetrics:            runtimeMetrics,
+		newID:                     newID,
+		workRequestIDs:            workRequestIDs,
+		runtimeDirs:               runtimeDirs,
+		inputFiles:                inputFiles,
+		inputDirectoryWalker:      inputDirectoryWalker,
+		orchestrationCompilation:  orchestrationCompilation,
+		providerSessions:          providerSessions,
+		workerPoolBoundaryFactory: workerPoolBoundaryFactory,
 	}
 }
 
@@ -179,6 +184,10 @@ func (f *RuntimeFactory) Build(
 		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("Worker Sessions factory is required")
 	}
+	if f.workerPoolBoundaryFactory == nil {
+		_ = logSink.Close()
+		return nil, fmt.Errorf("Workstation pool boundary factory is required")
+	}
 	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
 		runtimeMetricsPolicy,
@@ -233,6 +242,7 @@ func (f *RuntimeFactory) Build(
 		workerService,
 		providerInvocation,
 		workerSessionsFactory,
+		f.workerPoolBoundaryFactory,
 		f.providerSessions,
 		f.workService,
 		f.quorumPolicy,
@@ -287,6 +297,7 @@ func assembleRuntimeBundle(
 	workerService runtimeWorkstationService,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 	providerSessions providersessions.Service,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
@@ -332,6 +343,7 @@ func assembleRuntimeBundle(
 		workerService,
 		providerInvocation,
 		workerSessionsFactory,
+		workerPoolBoundaryFactory,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,
@@ -339,6 +351,7 @@ func assembleRuntimeBundle(
 		clock,
 		inlineDispatch,
 		eventHistory,
+		workerRecordingIdentity(runtimeInstanceID, recordPath),
 		worldStateProjector,
 		providerSessions,
 		effectiveSubmissionRecorder,
@@ -368,6 +381,23 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
+}
+
+// workerRecordingIdentity keeps the Worker source-native recording identity
+// distinct from the user-facing artifact path. Artifact paths are allowed to
+// be absolute and may contain platform-specific separators or spaces, while
+// Events source identities must remain portable opaque tokens. The identity is
+// derived from the concrete runtime/Recording lifecycle identity, so all
+// Worker Sessions captured by one Factory recording share one durable snapshot
+// identity without allowing later recordings at the same path to collide.
+func workerRecordingIdentity(recordingID, recordPath string) string {
+	recordPath = strings.TrimSpace(recordPath)
+	recordingID = strings.TrimSpace(recordingID)
+	if recordPath == "" || recordingID == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(recordingID))
+	return "worker-recording-" + hex.EncodeToString(digest[:])
 }
 
 func ensureRuntimeInputsDir(

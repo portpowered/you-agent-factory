@@ -157,10 +157,20 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 		if err != nil || len(parts) == 0 {
 			return fmt.Errorf("configure ACP provider %q: invalid command", integration.Name)
 		}
+		commandArgs := parts[1:]
+		if integration.Arguments != nil {
+			if !slices.Equal(commandArgs, integration.Arguments) {
+				return fmt.Errorf("configure ACP provider %q: command arguments drift from its runtime projection", integration.Name)
+			}
+			commandArgs = append([]string(nil), integration.Arguments...)
+		}
+		if integration.RuntimePosture == "catalog_only" {
+			return fmt.Errorf("configure ACP provider %q: catalog-only integrations are not selectable", integration.Name)
+		}
 		if _, exists := values[integration.Name]; exists {
 			return fmt.Errorf("configure ACP provider %q: duplicate identity", integration.Name)
 		}
-		commands[integration.Name] = Command{Name: parts[0], Args: append([]string(nil), parts[1:]...)}
+		commands[integration.Name] = Command{Name: parts[0], Args: commandArgs}
 		values[integration.Name] = integration
 		aliases[strings.ToLower(integration.Name.String())] = integration.Name
 		for _, alias := range integration.Aliases {

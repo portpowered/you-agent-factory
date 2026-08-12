@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -256,14 +257,14 @@ func NewService(options ...Option) (providers.Service, error) {
 			option.apply(&config)
 		}
 	}
-	packaged, err := builtinswire.NewService()
+	packaged, err := PackagedACPIntegrations()
 	if err != nil {
 		return nil, err
 	}
-	acp := effectiveACPIntegrations(packaged.ACPIntegrations(), config.acpIntegrations)
-	descriptors := make([]providers.Descriptor, 0, len(acp))
-	for _, integration := range acp {
-		descriptors = append(descriptors, acpDescriptor(integration))
+	acp := effectiveACPIntegrations(packaged, config.acpIntegrations)
+	descriptors, err := packagedACPDescriptors(acp)
+	if err != nil {
+		return nil, err
 	}
 	for _, registration := range config.registrations {
 		descriptors = append(descriptors, registrationDescriptor(registration.Manifest))
@@ -291,11 +292,43 @@ func NewService(options ...Option) (providers.Service, error) {
 	)
 }
 
+func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]providers.Descriptor, error) {
+	catalog, err := modelproviders.Catalog()
+	if err != nil {
+		return nil, fmt.Errorf("load packaged provider catalog for ACP descriptors: %w", err)
+	}
+	published := make(map[string]struct{}, len(catalog.Providers))
+	for _, manifest := range catalog.Providers {
+		published[manifest.Id] = struct{}{}
+	}
+	descriptors := make([]providers.Descriptor, 0, len(integrations))
+	for _, integration := range integrations {
+		if _, exists := published[integration.Name.String()]; exists {
+			continue
+		}
+		descriptors = append(descriptors, acpDescriptor(integration))
+	}
+	return descriptors, nil
+}
+
 // PackagedACPIntegrations returns the detached data-backed ACP defaults used by
 // Providers. Composition uses this exact source when materializing a new
 // operator configuration so init and runtime discovery cannot drift.
 func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
 	packaged, err := builtinswire.NewService()
+	if err != nil {
+		return nil, err
+	}
+	return packaged.ACPIntegrations(), nil
+}
+
+// ACPIntegrationsFromRuntimeCatalog projects a generated package-owned
+// runtime catalog into detached Providers integrations. The production
+// catalog uses RuntimeACPJSON; the parameter keeps the composition boundary
+// able to validate and diagnose alternate generated documents without starting
+// any provider process.
+func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegration, error) {
+	packaged, err := builtinswire.NewServiceFromRuntimeCatalog(document)
 	if err != nil {
 		return nil, err
 	}
@@ -492,7 +525,26 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 		found := false
 		for i := range values {
 			if values[i].Name == value.Name {
-				values[i] = value.Clone()
+				replacement := value.Clone()
+				if replacement.Command == values[i].Command {
+					// Persisted operator settings predate the generated runtime
+					// projection and only carry the legacy command shape. Preserve
+					// package-owned runtime facts when the saved command is still
+					// the reviewed package command.
+					if replacement.Aliases == nil {
+						replacement.Aliases = append([]string(nil), values[i].Aliases...)
+					}
+					if replacement.Arguments == nil {
+						replacement.Arguments = append([]string(nil), values[i].Arguments...)
+					}
+					if replacement.RuntimePosture == "" {
+						replacement.RuntimePosture = values[i].RuntimePosture
+					}
+					if replacement.ImplementationProfile == "" {
+						replacement.ImplementationProfile = values[i].ImplementationProfile
+					}
+				}
+				values[i] = replacement
 				found = true
 				break
 			}
@@ -505,7 +557,7 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 }
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
-	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityPermissionBypass, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
+	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.

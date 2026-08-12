@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,14 +17,15 @@ import (
 // tests. Keeping the peer as raw JSON-RPC also prevents shared SDK types from
 // hiding wire-compatibility failures.
 type functionalRPCPeer struct {
-	mode       string
-	scanner    *bufio.Scanner
-	writer     *bufio.Writer
-	stderr     io.Writer
-	modelSet   bool
-	sessionID  string
-	sessions   int
-	nextCallID int
+	mode         string
+	scanner      *bufio.Scanner
+	writer       *bufio.Writer
+	stderr       io.Writer
+	modelSet     bool
+	sessionID    string
+	sessions     int
+	nextCallID   int
+	retryAttempt int
 }
 
 func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -34,9 +36,17 @@ func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer
 	if mode == "eof" {
 		return nil
 	}
+	retryAttempt := 0
+	if mode == "retry-resume" {
+		var err error
+		retryAttempt, err = currentRetryAttempt()
+		if err != nil {
+			return err
+		}
+	}
 	peer := &functionalRPCPeer{
 		mode: mode, scanner: bufio.NewScanner(stdin), writer: bufio.NewWriter(stdout), stderr: stderr,
-		sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"),
+		sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"), retryAttempt: retryAttempt,
 	}
 	if peer.sessionID == "" {
 		peer.sessionID = "acp-session-functional-1"
@@ -45,6 +55,32 @@ func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer
 		_, _ = fmt.Fprintln(stderr, "agent diagnostic token="+os.Getenv("ACP_TEST_API_TOKEN"))
 	}
 	return peer.serve()
+}
+
+func currentRetryAttempt() (int, error) {
+	directory := os.Getenv(acpRetryAttemptDirectoryEnvironment)
+	if directory == "" {
+		return 0, fmt.Errorf("retry-resume mode requires %s", acpRetryAttemptDirectoryEnvironment)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return 0, fmt.Errorf("read retry attempt directory: %w", err)
+	}
+	latest := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		attempt, err := strconv.Atoi(entry.Name())
+		if err != nil || attempt <= latest {
+			continue
+		}
+		latest = attempt
+	}
+	if latest == 0 {
+		return 0, fmt.Errorf("retry attempt directory %q has no process phase", directory)
+	}
+	return latest, nil
 }
 
 func (p *functionalRPCPeer) serve() error {
@@ -133,7 +169,7 @@ func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
 		return err
 	}
 	config := `[]`
-	if p.mode == "model" {
+	if p.mode == "model" || p.mode == "package-conformance" {
 		config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 	}
 	p.sessions++
@@ -177,10 +213,8 @@ func (p *functionalRPCPeer) rejectUnexpectedNewSession() error {
 	if p.mode != "retry-resume" {
 		return nil
 	}
-	if _, err := os.Stat(os.Getenv(acpRetryMarkerEnvironment)); err == nil {
-		return fmt.Errorf("unexpected session/new after retryable ACP failure - the retry must resume through session/load")
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("inspect ACP retry marker: %w", err)
+	if p.retryAttempt != 1 {
+		return fmt.Errorf("unexpected session/new on retry attempt %d - the retry must resume through session/load", p.retryAttempt)
 	}
 	return nil
 }
@@ -189,8 +223,8 @@ func (p *functionalRPCPeer) assertExactRetryResume(sessionID string) error {
 	if p.mode != "retry-resume" {
 		return nil
 	}
-	if _, err := os.Stat(os.Getenv(acpRetryMarkerEnvironment)); err != nil {
-		return fmt.Errorf("session/load before first retryable prompt failure: %w", err)
+	if p.retryAttempt != 2 {
+		return fmt.Errorf("session/load on retry attempt %d, want the second ACP process", p.retryAttempt)
 	}
 	if sessionID != p.sessionID {
 		return fmt.Errorf("session/load id = %q, want original %q", sessionID, p.sessionID)
@@ -212,17 +246,13 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	if p.mode == "retry-resume" {
-		marker := os.Getenv(acpRetryMarkerEnvironment)
-		if marker == "" {
-			return fmt.Errorf("retry-resume mode requires %s", acpRetryMarkerEnvironment)
-		}
-		if _, err := os.Stat(marker); os.IsNotExist(err) {
-			if err := os.WriteFile(marker, []byte("first prompt failed"), 0o600); err != nil {
-				return err
-			}
+		switch p.retryAttempt {
+		case 1:
 			return p.respondError(request.ID, -32001, "temporarily unavailable", nil)
-		} else if err != nil {
-			return fmt.Errorf("inspect ACP retry marker: %w", err)
+		case 2:
+			break
+		default:
+			return fmt.Errorf("unexpected retry-resume prompt on ACP process attempt %d", p.retryAttempt)
 		}
 	}
 	if p.mode == "serialize" && p.sessions == 1 {
@@ -259,7 +289,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	if err := p.validatePromptPayload(request); err != nil {
 		return err
 	}
-	if p.mode == "model" && !p.modelSet {
+	if (p.mode == "model" || p.mode == "package-conformance") && !p.modelSet {
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "advertised model was not applied"})
 	}
 	if p.mode == "unsupported" {

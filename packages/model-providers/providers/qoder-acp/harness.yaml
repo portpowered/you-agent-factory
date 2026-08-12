@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: qoder-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: qodercli
+  arguments:
+    - --acp

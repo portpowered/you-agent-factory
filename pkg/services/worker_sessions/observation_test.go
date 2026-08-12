@@ -302,6 +302,18 @@ func assertProgressProvenance(t *testing.T) {
 	}); got.NativeEventType != "message.delta" {
 		t.Fatalf("metadata native event type = %q, want message.delta", got.NativeEventType)
 	}
+	if got := progressDraftProvenance(workers.ProgressFragment{
+		Provider: workers.RunnerIDAntigravity,
+		Type:     "message.completed",
+	}); got.Delivery != workers.DeliveryNativeFinal || got.Fidelity != workers.FidelityFinalOnly || got.Representation != workers.RepresentationSnapshot {
+		t.Fatalf("Antigravity final message provenance = %#v, want native-final/final-only/snapshot", got)
+	}
+	if got := progressDraftProvenance(workers.ProgressFragment{
+		Provider: workers.RunnerIDAntigravity,
+		Type:     "run.completed",
+	}); got.Delivery != workers.DeliverySynthesized || got.Fidelity != workers.FidelityLifecycleOnly || got.Representation != workers.RepresentationNotification {
+		t.Fatalf("Antigravity lifecycle provenance = %#v, want synthesized/lifecycle-only/notification", got)
+	}
 }
 
 func TestPublisher_CanonicalPublicationErrorPolicy(t *testing.T) {

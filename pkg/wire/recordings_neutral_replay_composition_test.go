@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -15,6 +17,37 @@ import (
 
 type neutralReplayCompositionLedger struct {
 	recordings.Ledger
+}
+
+func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
+	t.Parallel()
+
+	reader := workerRecordingReaderCompositionProbe{}
+	got, err := provideWorkerRecordingReader(reader)
+	if err != nil {
+		t.Fatalf("provideWorkerRecordingReader() error = %v", err)
+	}
+	payload, err := got.LoadWorkerRecording(t.Context(), "wire-reader")
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording() error = %v", err)
+	}
+	var snapshot recordings.WorkerRecordingSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		t.Fatalf("decode Worker recording snapshot: %v", err)
+	}
+	if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
+		t.Fatalf("snapshot = %#v, want empty snapshot", snapshot)
+	}
+}
+
+type workerRecordingReaderCompositionProbe struct{}
+
+func (workerRecordingReaderCompositionProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (workerRecordingReaderCompositionProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
 }
 
 // TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory proves the

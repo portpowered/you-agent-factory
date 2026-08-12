@@ -1285,6 +1285,7 @@ type RuntimeRecorderFactory func(
 	interfaces.LoadedFactorySource,
 	func() time.Time,
 	string,
+	string,
 ) (RuntimeRecorder, error)
 
 // ReplayExecutionFactory constructs the replay-specific provider, command

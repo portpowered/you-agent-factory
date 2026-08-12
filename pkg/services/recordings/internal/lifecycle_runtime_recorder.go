@@ -21,6 +21,7 @@ import (
 type lifecycleRuntimeRecorder struct {
 	mu            sync.Mutex
 	lifecycle     recordings.RecordingLifecycle
+	requestedID   recordings.LifecycleRecordingID
 	recordingID   recordings.LifecycleRecordingID
 	scope         recordings.CanonicalEventScope
 	target        recordings.LifecycleArtifactReference
@@ -49,6 +50,7 @@ func NewLifecycleRuntimeRecorder(
 	flushInterval time.Duration,
 	loaded factorydefinitions.LoadedFactorySource,
 	now func() time.Time,
+	recordingID string,
 	recordPath string,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 ) (recordings.RuntimeRecorder, error) {
@@ -80,6 +82,7 @@ func NewLifecycleRuntimeRecorder(
 		return nil, err
 	}
 	return &lifecycleRuntimeRecorder{
+		requestedID:   recordings.LifecycleRecordingID(strings.TrimSpace(recordingID)),
 		target:        recordings.LifecycleArtifactReference(recordPath),
 		flushInterval: flushInterval,
 		now:           now,
@@ -112,6 +115,7 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	}
 	result, err := lifecycle.Begin(recordings.BeginRecordingRequest{
 		Enabled:       true,
+		RecordingID:   recorder.requestedID,
 		Scope:         recordings.LifecycleScope{FactorySessionID: scope.FactorySessionID},
 		Artifact:      recorder.target,
 		FlushInterval: recorder.flushInterval,

@@ -2215,6 +2215,3073 @@
           "support": "supported"
         }
       ]
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "GitHub Copilot ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "copilot"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the GitHub Copilot ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "copilot"
+          },
+          {
+            "description": "Authenticate the GitHub Copilot ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "GitHub Copilot ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "copilot-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "copilot-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "copilot-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "copilot-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "copilot-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Cursor ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "cursor-agent"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Cursor ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "cursor-agent"
+          },
+          {
+            "description": "Authenticate the Cursor ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Cursor ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/image",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "cursor-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "cursor-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "implemented",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "cursor-acp-protocol"
+          ],
+          "modality": "image",
+          "support": "supported",
+          "transport": "acp_resource"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "cursor-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "cursor-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "cursor-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": true,
+        "permissionBypass": true,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [
+        "factory-droid",
+        "factorydroid"
+      ],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Droid ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "droid"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Droid ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "droid"
+          },
+          {
+            "description": "Authenticate the Droid ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Droid ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "droid-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "droid-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "droid-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "droid-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "droid-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Fast Agent ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "uvx"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Fast Agent ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "uvx"
+          },
+          {
+            "description": "Authenticate the Fast Agent ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Fast Agent ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "fast-agent-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "fast-agent-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "fast-agent-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "fast-agent-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "fast-agent-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Gemini ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "gemini"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Gemini ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "gemini"
+          },
+          {
+            "description": "Authenticate the Gemini ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Gemini ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "gemini-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "gemini-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "gemini-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "gemini-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "gemini-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Grok Build ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "grok"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Grok Build ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "grok"
+          },
+          {
+            "description": "Authenticate the Grok Build ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Grok Build ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "grok-build-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "grok-build-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "grok-build-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "grok-build-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "grok-build-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "iFlow ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "iflow"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the iFlow ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "iflow"
+          },
+          {
+            "description": "Authenticate the iFlow ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "iFlow ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "iflow-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "iflow-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "iflow-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "iflow-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "iflow-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kilo Code ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "npx"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Kilo Code ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "npx"
+          },
+          {
+            "description": "Authenticate the Kilo Code ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kilo Code ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "kilocode-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "kilocode-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "kilocode-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "kilocode-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "kilocode-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kimi ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "kimi"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Kimi ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "kimi"
+          },
+          {
+            "description": "Authenticate the Kimi ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kimi ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "kimi-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "kimi-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "kimi-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "kimi-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "kimi-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kiro ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "kiro-cli-chat"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Kiro ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "kiro-cli-chat"
+          },
+          {
+            "description": "Authenticate the Kiro ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Kiro ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "kiro-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "kiro-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "kiro-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "kiro-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "kiro-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Mux ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "mux"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Mux ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "mux"
+          },
+          {
+            "description": "Authenticate the Mux ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Mux ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "mux-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "mux-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "mux-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "mux-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "mux-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenClaw ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "openclaw"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the OpenClaw ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "openclaw"
+          },
+          {
+            "description": "Authenticate the OpenClaw ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenClaw ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "openclaw-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "openclaw-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "openclaw-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "openclaw-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "openclaw-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenCode ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "npx"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the OpenCode ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "npx"
+          },
+          {
+            "description": "Authenticate the OpenCode ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "OpenCode ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "opencode-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "opencode-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "opencode-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "opencode-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "opencode-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Pi ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "npx"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Pi ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "npx"
+          },
+          {
+            "description": "Authenticate the Pi ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Pi ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "pi-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "pi-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "pi-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "pi-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "pi-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Pool ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "pool"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Pool ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "pool"
+          },
+          {
+            "description": "Authenticate the Pool ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Pool ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "pool-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "pool-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "pool-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "pool-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "pool-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Qoder ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "qodercli"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Qoder ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "qodercli"
+          },
+          {
+            "description": "Authenticate the Qoder ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Qoder ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "qoder-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "qoder-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "qoder-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "qoder-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "qoder-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Qwen ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "qwen"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Qwen ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "qwen"
+          },
+          {
+            "description": "Authenticate the Qwen ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Qwen ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "qwen-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "qwen-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "qwen-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "qwen-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "qwen-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Reasonix ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "reasonix"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Reasonix ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "reasonix"
+          },
+          {
+            "description": "Authenticate the Reasonix ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Reasonix ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "reasonix-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "reasonix-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "reasonix-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "reasonix-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "reasonix-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Trae ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "traecli"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the Trae ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "traecli"
+          },
+          {
+            "description": "Authenticate the Trae ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Trae ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "trae-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "trae-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "trae-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "trae-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "trae-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
+    },
+    {
+      "aliases": [],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "ZeroClaw ACP is a package-owned ACP stdio integration."
+      },
+      "discovery": {
+        "configurationKeys": [],
+        "endpointKinds": [
+          "stdio"
+        ],
+        "executableNames": [
+          "zeroclaw"
+        ],
+        "prerequisites": [
+          {
+            "description": "Install the ZeroClaw ACP launch executable before execution.",
+            "kind": "executable",
+            "name": "zeroclaw"
+          },
+          {
+            "description": "Authenticate the ZeroClaw ACP account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "Select a writable workspace before execution.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
+        ]
+      },
+      "displayName": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "ZeroClaw ACP"
+      },
+      "documentation": [
+        {
+          "kind": "reference",
+          "url": "https://github.com/agentclientprotocol/registry"
+        }
+      ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/acp",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "zeroclaw-acp-protocol",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-11"
+        }
+      ],
+      "harness": {
+        "acpSupport": {
+          "evidenceRefs": [
+            "zeroclaw-acp-protocol"
+          ],
+          "protocolVersion": "1",
+          "resourceDelivery": "unknown",
+          "support": "supported"
+        },
+        "kind": "acp"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "zeroclaw-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "zeroclaw-acp-protocol"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "id": "zeroclaw-acp",
+      "implementationAvailability": "externally-supplied",
+      "knownLimits": [],
+      "maximumExecutionCapabilities": {
+        "imageInput": false,
+        "permissionBypass": false,
+        "promptSubmission": true,
+        "sessionResume": false,
+        "structuredOutput": false,
+        "toolExecution": false,
+        "workingDirectory": false,
+        "worktree": false
+      },
+      "maximumResponseFidelityCapabilities": {
+        "fileChanges": false,
+        "messageDeltas": false,
+        "messageSnapshots": false,
+        "nativeStreaming": false,
+        "plans": false,
+        "providerReconnect": false,
+        "reasoningSummaries": false,
+        "stableItemIds": false,
+        "toolLifecycle": false,
+        "toolOutputDeltas": false,
+        "usage": false
+      },
+      "modelCatalogPosture": "unknown",
+      "models": [],
+      "technicalSupportLevel": "experimental",
+      "tools": []
     }
   ]
 }

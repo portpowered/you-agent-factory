@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: mux-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: mux
+  arguments:
+    - acp

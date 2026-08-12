@@ -154,9 +154,10 @@ func openRuntime(
 		flushInterval time.Duration,
 		loaded factorydefinitions.LoadedFactorySource,
 		now func() time.Time,
+		recordingID string,
 		recordPath string,
 	) (recordings.RuntimeRecorder, error) {
-		recorder, err := runtimeRecorderFactory(flushInterval, loaded, now, recordPath)
+		recorder, err := runtimeRecorderFactory(flushInterval, loaded, now, recordingID, recordPath)
 		if err != nil || recorder == nil {
 			return recorder, err
 		}

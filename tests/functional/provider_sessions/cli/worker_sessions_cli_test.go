@@ -541,11 +541,16 @@ func submitWork(t *testing.T, ctx context.Context, process support.Process, env 
 
 func waitForWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
 	t.Helper()
+	waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, workID, "")
+}
 
-	// Work admission and the first Worker Session opening record are separate
-	// asynchronous runtime steps. Synchronize through the customer-facing list
-	// projection so stream starts only after its session identity is observable;
-	// a fixed sleep would make this coverage slower and still race under CI.
+func waitForWorkerSessionState(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID, expectedState string) workerSessionJSON {
+	t.Helper()
+
+	// Work admission, opening, and terminal projection are separate asynchronous
+	// runtime steps. Synchronize through the customer-facing list projection so
+	// each assertion observes the requested lifecycle state; a fixed sleep would
+	// make this coverage slower and still race under CI.
 	deadline := time.NewTimer(15 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -562,7 +567,14 @@ func waitForWorkerSession(t *testing.T, ctx context.Context, process support.Pro
 		if err := process.Execute(inputs.Input); err == nil {
 			var listed workerSessionListJSON
 			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &listed); decodeErr == nil && len(listed.Sessions) > 0 {
-				return
+				if len(listed.Sessions) != 1 {
+					t.Fatalf("Worker Session count for Work %s = %d, want 1: %#v", workID, len(listed.Sessions), listed)
+				}
+				for _, session := range listed.Sessions {
+					if expectedState == "" || session.State == expectedState {
+						return session
+					}
+				}
 			}
 			lastOutput = inputs.Stdout()
 		} else {
@@ -573,23 +585,16 @@ func waitForWorkerSession(t *testing.T, ctx context.Context, process support.Pro
 		select {
 		case <-ticker.C:
 		case <-deadline.C:
-			t.Fatalf("timed out waiting for Worker Session for Work %s: err=%v stdout=%s", workID, lastErr, lastOutput)
+			t.Fatalf("timed out waiting for Worker Session for Work %s to reach state %q: err=%v stdout=%s", workID, expectedState, lastErr, lastOutput)
 		case <-ctx.Done():
-			t.Fatalf("waiting for Worker Session for Work %s canceled: %v", workID, ctx.Err())
+			t.Fatalf("waiting for Worker Session for Work %s to reach state %q canceled: %v", workID, expectedState, ctx.Err())
 		}
 	}
 }
 
 func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
 	t.Helper()
-	listInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "list", "--work-id", workID, "--output", "json")
-	var listed workerSessionListJSON
-	decodeCLIJSON(t, listInputs, &listed)
-	if len(listed.Sessions) != 1 {
-		t.Fatalf("successful Work session count = %d, want 1: %#v", len(listed.Sessions), listed)
-	}
-	session := listed.Sessions[0]
+	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, workID, "COMPLETED")
 	assertWorkerSessionIdentity(t, session, workerSessionsCodexSuccessID, workID)
 	if session.State != "COMPLETED" || session.AttemptID == "" || session.DurationMillis == nil || *session.DurationMillis < 0 {
 		t.Fatalf("successful session lifecycle projection = %#v", session)
@@ -627,14 +632,7 @@ func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process su
 
 func assertFailedWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
 	t.Helper()
-	listInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "list", "--work-id", workID, "--output", "json")
-	var listed workerSessionListJSON
-	decodeCLIJSON(t, listInputs, &listed)
-	if len(listed.Sessions) != 1 {
-		t.Fatalf("failed Work session count = %d, want 1: %#v", len(listed.Sessions), listed)
-	}
-	session := listed.Sessions[0]
+	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, workID, "FAILED")
 	assertWorkerSessionIdentity(t, session, workerSessionsCodexFailureID, workID)
 	if session.State != "FAILED" || session.AttemptID == "" || session.DurationMillis == nil || *session.DurationMillis < 0 {
 		t.Fatalf("failed session lifecycle projection = %#v", session)
@@ -787,19 +785,51 @@ func assertWorkerSessionIdentity(t *testing.T, session workerSessionJSON, provid
 
 func streamWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, providerID, terminalState string) {
 	t.Helper()
-	inputs := support.FakeInputs(ctx, []string{
-		"you", "--server", baseURL, "worker-sessions", "stream",
-		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
-	})
-	inputs.Input.Env = append([]string(nil), env...)
-	inputs.Input.WorkingDirectory = factoryDir
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	select {
-	case <-command.Done():
-	case <-ctx.Done():
-		command.Stop(t)
-		t.Fatalf("worker-sessions stream %s timed out: %v", providerID, ctx.Err())
+
+	// The list projection can observe the opening before the stream's
+	// provider-session lookup has installed its in-memory association. Retry the
+	// same public stream operation while that lookup reports not-found; once the
+	// stream opens, any other error remains an actionable test failure.
+	deadline := time.NewTimer(15 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	var inputs *support.CapturedInputs
+	var command *support.ProcessCommand
+	for {
+		inputs = support.FakeInputs(ctx, []string{
+			"you", "--server", baseURL, "worker-sessions", "stream",
+			"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
+		})
+		inputs.Input.Env = append([]string(nil), env...)
+		inputs.Input.WorkingDirectory = factoryDir
+		command = support.StartProcessCommand(t, process, inputs.Input)
+		select {
+		case <-command.Done():
+			err := command.Err()
+			if err == nil {
+				goto streamReady
+			}
+			if !strings.Contains(inputs.Stderr()+err.Error(), "WORKER_SESSION_NOT_FOUND") {
+				t.Fatalf("worker-sessions stream %s: %v\nstdout:\n%s\nstderr:\n%s", providerID, err, inputs.Stdout(), inputs.Stderr())
+			}
+			command.AcceptError()
+		case <-ctx.Done():
+			command.Stop(t)
+			t.Fatalf("worker-sessions stream %s timed out: %v", providerID, ctx.Err())
+		}
+
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for worker-sessions stream %s: stdout=%s stderr=%s", providerID, inputs.Stdout(), inputs.Stderr())
+		case <-ctx.Done():
+			t.Fatalf("waiting for worker-sessions stream %s canceled: %v", providerID, ctx.Err())
+		}
 	}
+
+streamReady:
 	if err := command.Err(); err != nil {
 		t.Fatalf("worker-sessions stream %s: %v\nstdout:\n%s\nstderr:\n%s", providerID, err, inputs.Stdout(), inputs.Stderr())
 	}

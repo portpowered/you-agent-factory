@@ -1,0 +1,11 @@
+implementation:
+  kind: acp_agent
+  profile: opencode-acp
+launch:
+  posture: package_runner
+  transport: stdio
+  command: npx
+  arguments:
+    - -y
+    - opencode-ai
+    - acp

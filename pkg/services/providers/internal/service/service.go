@@ -97,6 +97,12 @@ func (s *Service) ListProviders(
 		return listed, nil
 	}
 	for _, integration := range s.acp.Integrations() {
+		if _, err := s.catalog.RegistrationProvider(integration.Name); err == nil {
+			// Packaged ACP metadata is authored in the provider package and was
+			// already returned by Catalog. Do not replace it with a generic
+			// runtime-only descriptor.
+			continue
+		}
 		descriptor := acpDescriptor(integration)
 		if index, exists := byID[descriptor.ID]; exists {
 			listed.Providers[index] = descriptor
@@ -114,6 +120,9 @@ func (s *Service) GetProvider(
 ) (providers.GetProviderResult, error) {
 	if s.acp != nil {
 		if canonical, ok := s.acp.Resolve(request.ID); ok {
+			if descriptor, err := s.catalog.GetProvider(ctx, providers.GetProviderRequest{ID: canonical}); err == nil {
+				return descriptor, nil
+			}
 			for _, integration := range s.acp.Integrations() {
 				if integration.Name == canonical {
 					return providers.GetProviderResult{Provider: acpDescriptor(integration)}, nil
@@ -524,6 +533,13 @@ func (s *Service) validatePermissionBypass(provider providers.ID, requested bool
 func (s *Service) permissionDescriptor(provider providers.ID) (providers.Descriptor, error) {
 	if s.acp != nil {
 		if canonical, ok := s.acp.Resolve(provider); ok {
+			// A package-owned catalog descriptor is the authoritative static
+			// capability fact for a packaged ACP integration. The conservative
+			// runtime fallback below is only for operator-configured integrations
+			// that have no published catalog entry.
+			if descriptor, err := s.catalog.RegistrationProvider(canonical); err == nil {
+				return descriptor, nil
+			}
 			for _, integration := range s.acp.Integrations() {
 				if integration.Name == canonical {
 					return acpDescriptor(integration), nil
@@ -631,7 +647,25 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 		replaced := false
 		for index := range values {
 			if values[index].Name == integration.Name {
-				values[index] = integration.Clone()
+				replacement := integration.Clone()
+				if replacement.Command == values[index].Command {
+					// Persisted settings carry the legacy command-only shape. Keep
+					// the reviewed package runtime binding when that command still
+					// identifies the package-owned launch.
+					if replacement.Aliases == nil {
+						replacement.Aliases = append([]string(nil), values[index].Aliases...)
+					}
+					if replacement.Arguments == nil {
+						replacement.Arguments = append([]string(nil), values[index].Arguments...)
+					}
+					if replacement.RuntimePosture == "" {
+						replacement.RuntimePosture = values[index].RuntimePosture
+					}
+					if replacement.ImplementationProfile == "" {
+						replacement.ImplementationProfile = values[index].ImplementationProfile
+					}
+				}
+				values[index] = replacement
 				replaced = true
 				break
 			}
@@ -646,8 +680,8 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{
 		ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(),
-		Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady,
-		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityPermissionBypass, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage},
+		Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified,
+		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume},
 	}
 }
 

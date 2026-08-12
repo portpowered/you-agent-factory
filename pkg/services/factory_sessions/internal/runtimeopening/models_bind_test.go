@@ -742,6 +742,7 @@ func openingCoordinatorRecorder(
 	factorydefinitions.LoadedFactorySource,
 	func() time.Time,
 	string,
+	string,
 ) (recordings.RuntimeRecorder, error) {
 	return nil, nil
 }

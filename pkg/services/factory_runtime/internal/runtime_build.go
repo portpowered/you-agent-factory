@@ -225,6 +225,7 @@ func buildBundle(
 		recordFlushInterval,
 		loadedFactoryCfg,
 		spec.Clock.Now,
+		spec.RuntimeInstanceID,
 		spec.RecordPath,
 	)
 	if err != nil {

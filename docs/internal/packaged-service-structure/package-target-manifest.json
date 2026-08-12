@@ -292,6 +292,7 @@
     "pkg/services/factory_sessions/internal/sessionvalidation",
     "pkg/services/factory_sessions/internal/stream",
     "pkg/services/factory_sessions/internal/testing/eventsstub",
+    "pkg/services/factory_sessions/transports/cli",
     "pkg/services/factory_sessions/transports/cli/session",
     "pkg/services/factory_sessions/transports/cli/sessionexecution",
     "pkg/services/factory_sessions/transports/http",
@@ -443,6 +444,9 @@
     "pkg/services/recordings/internal/services/replay",
     "pkg/services/recordings/internal/services/replay/internal/service",
     "pkg/services/recordings/internal/services/replay/wire",
+    "pkg/services/recordings/internal/services/worker_capture",
+    "pkg/services/recordings/internal/services/worker_capture/internal/service",
+    "pkg/services/recordings/internal/services/worker_capture/wire",
     "pkg/services/recordings/transports/cli",
     "pkg/services/recordings/transports/http",
     "pkg/services/recordings/transports/mcp",
@@ -1841,6 +1845,11 @@
       "destination": "factory_sessions"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/transports/cli/session",
       "disposition": "retain",
       "destination": "factory_sessions"
@@ -2594,6 +2603,21 @@
       "packagePath": "pkg/services/recordings/internal/services/replay/wire",
       "disposition": "retain",
       "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/worker_capture",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/worker_capture/internal/service",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/worker_capture/wire",
+      "disposition": "retain",
+      "destination": "recordings"
     },
     {
       "packagePath": "pkg/services/recordings/transports/cli",

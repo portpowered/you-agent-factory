@@ -14,8 +14,11 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -2541,8 +2544,9 @@ func assertNoProviderSessionHistory(t *testing.T, read events.ReadResult, forwar
 	assertLifecycleDraft(t, opening, workers.PhaseStarted, "", "opening")
 	assertLifecycleDraft(t, binding, workers.PhaseUpdated, "antigravity", "binding")
 	if output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted || output.Provenance.Provider != "antigravity" ||
-		output.Provenance.Fidelity != workers.FidelityNormalized || output.Provenance.Delivery != workers.DeliveryNativeStream {
-		t.Fatalf("output = %#v, want normalized antigravity MESSAGE/COMPLETED", output)
+		output.Provenance.Fidelity != workers.FidelityFinalOnly || output.Provenance.Delivery != workers.DeliveryNativeFinal ||
+		output.Provenance.Representation != workers.RepresentationSnapshot {
+		t.Fatalf("output = %#v, want final-only antigravity MESSAGE/COMPLETED snapshot", output)
 	}
 	assertLifecycleDraft(t, terminal, workers.PhaseCompleted, "antigravity", "terminal")
 	if forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
@@ -2670,3 +2674,303 @@ func assertCanonicalTerminal(t *testing.T, draft workers.Draft) {
 		t.Fatalf("terminal = %#v, want terminal-last synthesized codex lifecycle record", draft)
 	}
 }
+
+func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) {
+	execution := succeedingExecution()
+	recording := newControlledRecording()
+	registry, err := service.New(
+		executionBoundary{execution: execution},
+		newEventsAppender(),
+		logging.NoopLogger{},
+		platformclock.Real{},
+		unavailableProviderSessionsForCapture{},
+		recording,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resultCh := make(chan workersessions.InvokeSessionResult, 1)
+	errCh := make(chan error, 1)
+	request := validStartRequest("worker-capture", "dispatch-capture")
+	request.Execution.Execution.RecordingID = "recording-capture"
+	go func() {
+		result, err := registry.InvokeSession(context.Background(), request)
+		resultCh <- result
+		errCh <- err
+	}()
+	<-recording.started
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("provider calls before durable opening = %d, want 0", got)
+	}
+	close(recording.release)
+	if err := <-errCh; err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	result := <-resultCh
+	if result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("InvokeSession() state = %q, want COMPLETED", result.Session.State)
+	}
+	if got := execution.callCount(); got != 1 {
+		t.Fatalf("provider calls after durable opening = %d, want 1", got)
+	}
+	if !recording.closed() {
+		t.Fatal("Worker recording was not closed after terminal publication")
+	}
+}
+
+func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) {
+	execution := succeedingExecution()
+	openingErr := errors.New("durable opening rejected")
+	recording := &failingRecordingService{err: openingErr}
+	registry, err := service.New(
+		executionBoundary{execution: execution},
+		newEventsAppender(),
+		logging.NoopLogger{},
+		platformclock.Real{},
+		unavailableProviderSessionsForCapture{},
+		recording,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validStartRequest("worker-failure", "dispatch-failure")
+	request.Execution.Execution.RecordingID = "recording-failure"
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil terminal result", err)
+	}
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("InvokeSession() state = %q, want FAILED", result.Session.State)
+	}
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("provider calls after opening failure = %d, want 0", got)
+	}
+}
+
+func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification(t *testing.T) {
+	execution := succeedingExecution()
+	eventService := newEventsAppender()
+	appender := &failOnNthAppendEventsAppender{Service: eventService, n: 1}
+	writer := &recordingFailureWriter{}
+	workerRecorder := &recordingFailureService{writer: writer}
+	observedRecorder := &observedRecordingService{delegate: workerRecorder}
+	registry, err := service.New(
+		executionBoundary{execution: execution},
+		appender,
+		logging.NoopLogger{},
+		platformclock.Real{},
+		unavailableProviderSessionsForCapture{},
+		observedRecorder,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := validStartRequest("worker-opening-append-failure", "dispatch-opening-append-failure")
+	request.Execution.Execution.RecordingID = "recording-opening-append-failure"
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil terminal result", err)
+	}
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("InvokeSession() state = %q, want FAILED", result.Session.State)
+	}
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("provider calls after opening append failure = %d, want 0", got)
+	}
+	failure, ok := writer.failure()
+	if !ok {
+		t.Fatal("opening append failure was not durably classified")
+	}
+	if failure.RecordingID != request.Execution.Execution.RecordingID || failure.WorkerSessionID != request.ID {
+		t.Fatalf("persisted failure identity = %#v, want recording/session identity", failure)
+	}
+	if failure.Code != "OPENING_INVALID" {
+		t.Fatalf("persisted failure code = %q, want OPENING_INVALID", failure.Code)
+	}
+	handle := observedRecorder.recording()
+	if handle == nil {
+		t.Fatal("recording service did not retain the started capture handle")
+	}
+	if closeErr := handle.Close(context.Background()); !errors.Is(closeErr, recordings.ErrWorkerRecordingOpening) {
+		t.Fatalf("capture Close() after opening append failure = %v, want ErrWorkerRecordingOpening", closeErr)
+	}
+}
+
+type controlledRecordingService struct {
+	started chan struct{}
+	release chan struct{}
+	handle  *controlledRecording
+}
+
+func newControlledRecording() *controlledRecordingService {
+	handle := &controlledRecording{release: make(chan struct{}), closedCh: make(chan struct{})}
+	return &controlledRecordingService{started: make(chan struct{}), release: handle.release, handle: handle}
+}
+
+func (service *controlledRecordingService) StartWorkerSessionRecording(
+	context.Context,
+	recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	close(service.started)
+	return service.handle, nil
+}
+
+type controlledRecording struct {
+	release   chan struct{}
+	closedCh  chan struct{}
+	closeOnce sync.Once
+}
+
+type observedRecordingService struct {
+	delegate recordings.WorkerSessionRecordingService
+	mu       sync.Mutex
+	handle   recordings.WorkerSessionRecording
+}
+
+// recordingFailureService is a Worker Sessions test double for the
+// Recordings-owned capture contract. The capture package owns the real
+// subscription and durable-classification behavior; this test only verifies
+// that an opening append failure reaches the injected Abort lifecycle.
+type recordingFailureService struct {
+	writer *recordingFailureWriter
+	mu     sync.Mutex
+	handle *recordingFailure
+}
+
+func (service *recordingFailureService) StartWorkerSessionRecording(
+	_ context.Context,
+	request recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	handle := &recordingFailure{writer: service.writer, request: request}
+	service.mu.Lock()
+	service.handle = handle
+	service.mu.Unlock()
+	return handle, nil
+}
+
+type recordingFailure struct {
+	writer    *recordingFailureWriter
+	request   recordings.WorkerSessionRecordingRequest
+	closeOnce sync.Once
+}
+
+func (*recordingFailure) AwaitOpening(context.Context) error {
+	return recordings.ErrWorkerRecordingOpening
+}
+
+func (recording *recordingFailure) Close(context.Context) error {
+	return recordings.ErrWorkerRecordingOpening
+}
+
+func (recording *recordingFailure) Abort(ctx context.Context, _ error) error {
+	recording.closeOnce.Do(func() {
+		_ = recording.writer.PersistWorkerRecordingFailure(ctx, recordings.WorkerRecordingFailure{
+			RecordingID:     recording.request.RecordingID,
+			WorkerSessionID: recording.request.WorkerSessionID,
+			Topic:           recording.request.Topic,
+			Code:            "OPENING_INVALID",
+		})
+	})
+	return recordings.ErrWorkerRecordingOpening
+}
+
+func (service *observedRecordingService) StartWorkerSessionRecording(
+	ctx context.Context,
+	request recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	handle, err := service.delegate.StartWorkerSessionRecording(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	service.handle = handle
+	service.mu.Unlock()
+	return handle, nil
+}
+
+func (service *observedRecordingService) recording() recordings.WorkerSessionRecording {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return service.handle
+}
+
+type recordingFailureWriter struct {
+	mu       sync.Mutex
+	failures []recordings.WorkerRecordingFailure
+}
+
+func (*recordingFailureWriter) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (writer *recordingFailureWriter) PersistWorkerRecordingFailure(_ context.Context, failure recordings.WorkerRecordingFailure) error {
+	writer.mu.Lock()
+	writer.failures = append(writer.failures, failure)
+	writer.mu.Unlock()
+	return nil
+}
+
+func (writer *recordingFailureWriter) failure() (recordings.WorkerRecordingFailure, bool) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if len(writer.failures) == 0 {
+		return recordings.WorkerRecordingFailure{}, false
+	}
+	return writer.failures[len(writer.failures)-1], true
+}
+
+func (recording *controlledRecording) AwaitOpening(ctx context.Context) error {
+	select {
+	case <-recording.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (recording *controlledRecording) Close(context.Context) error {
+	recording.closeOnce.Do(func() { close(recording.closedCh) })
+	return nil
+}
+
+func (recording *controlledRecording) Abort(ctx context.Context, _ error) error {
+	return recording.Close(ctx)
+}
+
+func (service *controlledRecordingService) closed() bool {
+	select {
+	case <-service.handle.closedCh:
+		return true
+	default:
+		return false
+	}
+}
+
+type failingRecordingService struct{ err error }
+
+func (service *failingRecordingService) StartWorkerSessionRecording(
+	context.Context,
+	recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	return nil, service.err
+}
+
+type unavailableProviderSessionsForCapture struct {
+	providersessions.Service
+}
+
+func (unavailableProviderSessionsForCapture) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
+}
+
+var _ recordings.WorkerSessionRecordingService = (*controlledRecordingService)(nil)
+
+var _ recordings.WorkerSessionRecordingService = (*failingRecordingService)(nil)
+
+var _ workers.WorkstationPoolBoundary = executionBoundary{}
+
+var _ platformclock.Source = platformclock.Real{}
+
+var _ logging.Logger = logging.NoopLogger{}

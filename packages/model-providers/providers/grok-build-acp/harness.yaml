@@ -1,0 +1,10 @@
+implementation:
+  kind: acp_agent
+  profile: grok-build-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: grok
+  arguments:
+    - agent
+    - stdio

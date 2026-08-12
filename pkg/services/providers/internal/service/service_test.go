@@ -65,8 +65,8 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 3 {
-		t.Fatalf("len(Providers) = %d, want 3", len(list.Providers))
+	if len(list.Providers) != 23 {
+		t.Fatalf("len(Providers) = %d, want 23", len(list.Providers))
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
@@ -374,7 +374,16 @@ func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool,
 func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+		ID:           "cursor-acp",
+		DisplayName:  "Cursor ACP",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessUnverified,
+		Capabilities: []providers.Capability{
+			providers.CapabilityPromptSubmission,
+			providers.CapabilityPermissionBypass,
+		},
+	}))
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
