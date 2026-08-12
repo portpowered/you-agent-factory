@@ -60,6 +60,13 @@ properties:
             the Factory input compatibility mapper.
         items:
             $ref: './FactoryInvocationExample.yaml'
+    webhooks:
+        type: array
+        description: >-
+            Optional outbound webhook subscriptions. Existing Factory definitions
+            without this field do not start outbound delivery work.
+        items:
+            $ref: './FactoryWebhook.yaml'
     guards:
         type: array
         description: Root-level guards that apply across the factory instead of one specific workstation or input.

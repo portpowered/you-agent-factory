@@ -21,3 +21,18 @@ func WithProbeQuery(query catalog.ProbeQuery) Option {
 		s.probe = query
 	}
 }
+
+// WithCapabilityOverrides supplies route-specific static capability facts.
+// The owning service validates that every override targets an existing
+// catalog provider before it returns a constructed catalog.
+func WithCapabilityOverrides(overrides ...catalog.CapabilityOverride) Option {
+	return func(s *service) {
+		for _, override := range overrides {
+			cloned := catalog.CapabilityOverride{
+				Provider:     override.Provider,
+				Capabilities: append([]providers.Capability(nil), override.Capabilities...),
+			}
+			s.capabilityOverrides = append(s.capabilityOverrides, cloned)
+		}
+	}
+}

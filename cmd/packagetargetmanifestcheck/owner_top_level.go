@@ -101,6 +101,10 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 		owner:          "worker_sessions",
 		expectedRetain: []string{"internal", "transports", "wire"},
 	},
+	"webhooks": {
+		owner:          "webhooks",
+		expectedRetain: []string{"internal", "wire"},
+	},
 }
 
 func productOwnerTopLevelSpecsList() []ownerTopLevelSpec {

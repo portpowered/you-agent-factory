@@ -491,6 +491,10 @@ func dispatchJavaScriptToAPI(javascript *factorysessionexecution.DispatchJavaScr
 	if mode := strings.TrimSpace(javascript.ExecutionMode); mode != "" {
 		out.ExecutionMode = &mode
 	}
+	if javascript.SkipPermissions {
+		skipPermissions := true
+		out.SkipPermissions = &skipPermissions
+	}
 	return &out
 }
 

@@ -15,6 +15,9 @@ var WithProbeQuery = catalogservice.WithProbeQuery
 // WithDescriptors contributes customer-configured provider descriptors.
 var WithDescriptors = catalogservice.WithDescriptors
 
+// WithCapabilityOverrides supplies route-specific static capability facts.
+var WithCapabilityOverrides = catalogservice.WithCapabilityOverrides
+
 // NewService constructs an inert catalog over the accepted standardized
 // provider catalog publication.
 func NewService(options ...Option) (catalog.Service, error) {

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	platformrollingfile "github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	"gopkg.in/natefinch/lumberjack.v2"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -70,11 +70,11 @@ var errRuntimeLogSinkClosed = errors.New("runtime log sink closed")
 
 type runtimeLogWriter struct {
 	mu     sync.Mutex
-	writer *lumberjack.Logger
+	writer *platformrollingfile.Writer
 	closed bool
 }
 
-func newRuntimeLogWriter(writer *lumberjack.Logger) *runtimeLogWriter {
+func newRuntimeLogWriter(writer *platformrollingfile.Writer) *runtimeLogWriter {
 	return &runtimeLogWriter{writer: writer}
 }
 
@@ -275,7 +275,7 @@ func (opener *RuntimeLogOpener) Open(request RuntimeLogOpeningRequest) (*Runtime
 	}
 
 	runtimeLogConfig := normalizeRuntimeLogConfig(request.Config)
-	rollingWriter := &lumberjack.Logger{
+	rollingWriter := &platformrollingfile.Writer{
 		Filename:   path,
 		MaxSize:    runtimeLogConfig.MaxSize,
 		MaxBackups: runtimeLogConfig.MaxBackups,

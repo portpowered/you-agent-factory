@@ -89,6 +89,7 @@ export type ProviderEffort = "minimal" | "low" | "medium" | "high" | "xhigh" | "
 /** Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness. */
 export type ProviderExecutionCapabilities = {
   readonly imageInput: boolean;
+  readonly permissionBypass: boolean;
   readonly promptSubmission: boolean;
   readonly sessionResume: boolean;
   readonly structuredOutput: boolean;

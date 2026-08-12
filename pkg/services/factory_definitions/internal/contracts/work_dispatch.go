@@ -57,8 +57,9 @@ type FactorySessionDispatchPetriState struct {
 
 // FactorySessionDispatchJavaScriptState carries JavaScript-specific dispatch projection fields.
 type FactorySessionDispatchJavaScriptState struct {
-	TaskKind  string `json:"taskKind"`
-	TaskLabel string `json:"taskLabel,omitempty"`
+	TaskKind        string `json:"taskKind"`
+	TaskLabel       string `json:"taskLabel,omitempty"`
+	SkipPermissions bool   `json:"skipPermissions,omitempty"`
 }
 
 // FactorySessionArtifactState carries one orchestrator-aware artifact projection

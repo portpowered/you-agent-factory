@@ -829,7 +829,7 @@ func TestJavaScriptRuntimeService_NonResumedFakeChild_PreservesShippedTransportS
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
-	wantDispatch := assertAgentRunFakeChildSessionRead(t, read)
+	wantDispatch := assertAgentRunFakeChildSessionRead(t, read, false)
 	assertNonResumedLifecycleLineage(t, read)
 	assertAgentRunFakeChildDispatch(t, service, completed.SessionID, wantDispatch)
 	assertAgentRunFakeChildArtifact(t, service, completed.SessionID)

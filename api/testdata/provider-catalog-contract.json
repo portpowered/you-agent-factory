@@ -28,6 +28,7 @@
         "imageInput": false,
         "sessionResume": true,
         "structuredOutput": true,
+        "permissionBypass": false,
         "toolExecution": true,
         "workingDirectory": true,
         "worktree": false
@@ -204,6 +205,7 @@
         "imageInput": true,
         "sessionResume": true,
         "structuredOutput": true,
+        "permissionBypass": true,
         "toolExecution": true,
         "workingDirectory": true,
         "worktree": true

@@ -23,6 +23,10 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
    - approve only when the change is correct, adequately tested, and within the defined expectations
    - for PRs that change functional tests under `tests/functional/...`, apply the construction preferences from [general-backend-standards.md §6](../../../docs/internal/standards/code/general-backend-standards.md#6-testing-strategy-and-test-pyramid) and request changes (`BLOCKING`) when any preference is violated without a documented, in-scope exception:
 4. Run: gh pr diff $prNumber  — to see the full diff
+4.1. If the diff contains `prd.json` or `progress.txt`, that is BLOCKING:
+   these are untracked worktree scaffolding (deleted from main 2026-08-11,
+   PR #1886) and must be removed from the branch (`git rm` during rebase)
+   before merge. State this as the exact fix in your comment.
 5. Read the changed files to understand the implementation in full
 6. Read surrounding codebase code (the code the PR touches) to check for pattern conformance
 
@@ -46,9 +50,24 @@ If the change involves modification to the website, you should use the playwrigh
 
 ### Step 2.1 — Reconcile CI state before commenting
 - Check the live required PR checks on the current head with `gh pr view --json headRefOid,mergeStateStatus,statusCheckRollup` and `gh pr checks`.
-- If required checks are still `PENDING`, `QUEUED`, or `IN_PROGRESS`, do not post a new PR conversation comment yet just to say CI is still running.
-- Wait for CI to complete before posting the review summary unless you already found a concrete code or acceptance-criteria issue that is independent of the unfinished CI state.
-- If a required workflow appears stale or frozen for an unusually long time on the same step, verify that from the live GitHub run surfaces first. In that case, do not submit a new review comment just to narrate the wait; leave the branch on the review loop until CI reaches a terminal state or there is real review feedback to deliver.
+- If required checks are still `PENDING`, `QUEUED`, or `IN_PROGRESS`, WAIT for
+  them in this session with ONE bounded watcher: `gh pr checks <n> --watch
+  --interval 180` (give it up to ~45 minutes). Do your code reading (Steps 1,
+  3, 4) while it runs. Do not post a comment just to say CI is running, and do
+  not end the session with `<REJECTED>` merely because CI was pending when you
+  started — that routes the work back to the processor, which has nothing to
+  do, and burns a process/review round trip.
+- Only if checks are STILL non-terminal after the bounded wait: end with
+  `<REJECTED>` without posting a comment, so the loop re-enters review later.
+- Known-baseline flake policy: if a required check fails ONLY on a test in a
+  package the PR diff does not touch, and that test is a known baseline flake
+  (see the deflake lane list in docs/temp/scale-program-rules.md in the root
+  repo, or verify it reproduces on the base SHA), rerun the failed jobs ONCE
+  (`gh run rerun <id> --failed`) and watch again. If it greens, proceed. If
+  the same untouched-package flake fails twice, post ONE comment naming the
+  test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
+  REQUIRED — waiting on baseline deflake", and end `<REJECTED>`. Never demand
+  code changes for a baseline flake in a package the diff does not touch.
 
 ### Step 3 — Verify project acceptance criteria
 

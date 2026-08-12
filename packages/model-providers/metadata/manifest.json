@@ -9,7 +9,7 @@
     "catalog": {
       "path": "generated/catalog.json",
       "family": "model-providers",
-      "artifactHash": "4054176acd6d4c7f36143b37e61cd366e2081d4726d4e009f6c914385df9b1b2",
+      "artifactHash": "3982db23b727d1b83e98957693e7843ddd2bee9bab9cbf67a4f83f016ae21d42",
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "catalog",
@@ -27,7 +27,7 @@
           "generated/catalog.json"
         ],
         "visibility": "public",
-        "sourceHash": "4054176acd6d4c7f36143b37e61cd366e2081d4726d4e009f6c914385df9b1b2"
+        "sourceHash": "3982db23b727d1b83e98957693e7843ddd2bee9bab9cbf67a4f83f016ae21d42"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -39,7 +39,7 @@
     "provider-catalog-schema": {
       "path": "generated/provider-catalog.schema.json",
       "family": "model-providers",
-      "artifactHash": "ca244620486c4b0790a00a7dceb087a689f7c60045784729d07c06be5624046e",
+      "artifactHash": "e60b8f5836920ae971652e8c77463e619121b94988b1d6c38d59d9f36839d0d1",
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "provider-catalog-schema",
@@ -57,7 +57,7 @@
           "generated/provider-catalog.schema.json"
         ],
         "visibility": "public",
-        "sourceHash": "ca244620486c4b0790a00a7dceb087a689f7c60045784729d07c06be5624046e"
+        "sourceHash": "e60b8f5836920ae971652e8c77463e619121b94988b1d6c38d59d9f36839d0d1"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -69,7 +69,7 @@
     "provider-manifest-schema": {
       "path": "generated/provider-manifest.schema.json",
       "family": "model-providers",
-      "artifactHash": "36fecba1c443c5d9b2e4db8f3ca7cf02fdf2cf23f8c7876cc1f47ead04b5635b",
+      "artifactHash": "8bee749cfadbb0703226ae7e99885eff849fc12a51a754ebe405c55743200ecc",
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "provider-manifest-schema",
@@ -87,7 +87,7 @@
           "generated/provider-manifest.schema.json"
         ],
         "visibility": "public",
-        "sourceHash": "36fecba1c443c5d9b2e4db8f3ca7cf02fdf2cf23f8c7876cc1f47ead04b5635b"
+        "sourceHash": "8bee749cfadbb0703226ae7e99885eff849fc12a51a754ebe405c55743200ecc"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
