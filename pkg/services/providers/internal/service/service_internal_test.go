@@ -38,6 +38,22 @@ func TestServiceInternalDelegationCoverage(t *testing.T) {
 	}
 }
 
+func TestEffectiveACPIntegrationsPreservesUnchangedPackageRuntimeBinding(t *testing.T) {
+	packaged := []providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Aliases: []string{"factory-cursor"},
+		Transport: "stdio", Command: "cursor-agent acp", Arguments: []string{"acp"},
+		RuntimePosture: "installed_executable", ImplementationProfile: "cursor-acp",
+	}}
+	configured := []providers.ACPIntegration{{
+		ID: "saved-entry", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}
+
+	got := effectiveACPIntegrations(packaged, configured)
+	if len(got) != 1 || got[0].ImplementationProfile != "cursor-acp" || got[0].RuntimePosture != "installed_executable" || len(got[0].Arguments) != 1 || got[0].Arguments[0] != "acp" || len(got[0].Aliases) != 1 || got[0].Aliases[0] != "factory-cursor" {
+		t.Fatalf("effectiveACPIntegrations() = %#v, want package runtime binding preserved", got)
+	}
+}
+
 type internalCatalogStub struct{}
 
 func (internalCatalogStub) ResolveProviderID(id providers.ID) (providers.ID, error) {

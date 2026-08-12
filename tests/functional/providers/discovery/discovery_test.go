@@ -11,6 +11,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -59,6 +60,62 @@ func TestProvidersListThroughRootBuildProcess(t *testing.T) {
 	functionalevidence.Covers(t, "cli/you.providers.list")
 }
 
+func TestPackagedACPProjectionRejectsInvalidRuntimeBindings(t *testing.T) {
+	const base = `{
+  "acp": [{
+    "name": "cursor-acp",
+    "transport": "stdio",
+    "executable": "cursor-agent",
+    "command": "cursor-agent acp",
+    "arguments": ["acp"],
+    "posture": "installed_executable",
+    "implementation": {"kind": "acp_agent", "profile": "cursor-acp"}
+  }]
+}`
+	tests := []struct {
+		name   string
+		mutate func(string) string
+		want   string
+	}{
+		{
+			name: "unknown runtime profile",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"profile": "cursor-acp"`, `"profile": "missing-profile"`, 1)
+			},
+			want: "unknown runtime profile",
+		},
+		{
+			name: "unsupported transport",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"transport": "stdio"`, `"transport": "tcp"`, 1)
+			},
+			want: "unsupported transport",
+		},
+		{
+			name: "argument drift",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"arguments": ["acp"]`, `"arguments": ["wrong"]`, 1)
+			},
+			want: "command arguments drift",
+		},
+		{
+			name: "canonical alias",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"transport": "stdio",`, "\"aliases\": [\"cursor-acp\"],\n    \"transport\": \"stdio\",", 1)
+			},
+			want: "duplicates its canonical identity",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := providerswire.ACPIntegrationsFromRuntimeCatalog([]byte(test.mutate(base)))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("packaged runtime validation error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
 type countingCommandRunner struct {
 	calls atomic.Int32
 }
@@ -85,7 +142,7 @@ func execute(t *testing.T, process support.Process, args []string) (string, stri
 
 func assertHumanFacts(t *testing.T, output string) {
 	t.Helper()
-	for _, providerID := range []string{"antigravity", "claude", "codex"} {
+	for _, providerID := range expectedProviderIDs() {
 		if count := strings.Count(output, providerID+"\t"); count != 1 {
 			t.Fatalf("human output provider %q count = %d, want exactly once\n%s", providerID, count, output)
 		}
@@ -110,6 +167,7 @@ func assertHumanFacts(t *testing.T, output string) {
 		"add_dir_workspace [behavior, flag] value=--add-dir",
 		"effort_selection [behavior, model_id] value=model_id",
 		"print_timeout [default, seconds] default=300",
+		"droid-acp\tDroid ACP\tselectable\tunverified",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("human output missing %q\n%s", want, output)
@@ -122,13 +180,16 @@ type listOutput struct {
 }
 
 type providerOutput struct {
-	ID            string               `json:"id"`
-	Availability  string               `json:"availability"`
-	Readiness     string               `json:"readiness"`
-	Models        []modelOutput        `json:"models"`
-	Prerequisites []prerequisiteOutput `json:"prerequisites"`
-	Tools         []any                `json:"tools"`
-	KnownLimits   []limitOutput        `json:"knownLimits"`
+	ID                         string               `json:"id"`
+	Aliases                    []string             `json:"aliases"`
+	Availability               string               `json:"availability"`
+	Readiness                  string               `json:"readiness"`
+	ImplementationAvailability string               `json:"implementationAvailability"`
+	Capabilities               []string             `json:"capabilities"`
+	Models                     []modelOutput        `json:"models"`
+	Prerequisites              []prerequisiteOutput `json:"prerequisites"`
+	Tools                      []any                `json:"tools"`
+	KnownLimits                []limitOutput        `json:"knownLimits"`
 }
 
 type prerequisiteOutput struct {
@@ -175,8 +236,9 @@ func decodeJSONOutput(t *testing.T, output string) listOutput {
 
 func assertJSONProviderInventory(t *testing.T, decoded listOutput) map[string]providerOutput {
 	t.Helper()
-	if len(decoded.Providers) == 0 {
-		t.Fatal("providers list JSON returned no providers")
+	wantIDs := expectedProviderIDs()
+	if len(decoded.Providers) != len(wantIDs) {
+		t.Fatalf("provider count = %d, want %d", len(decoded.Providers), len(wantIDs))
 	}
 	ids := make([]string, 0, len(decoded.Providers))
 	byID := make(map[string]providerOutput, len(decoded.Providers))
@@ -189,6 +251,11 @@ func assertJSONProviderInventory(t *testing.T, decoded listOutput) map[string]pr
 	}
 	if !sort.StringsAreSorted(ids) {
 		t.Fatalf("provider IDs are not deterministic: %v", ids)
+	}
+	for _, providerID := range wantIDs {
+		if _, ok := byID[providerID]; !ok {
+			t.Fatalf("provider %q is missing from %v", providerID, ids)
+		}
 	}
 	for _, providerID := range []string{"antigravity", "claude", "codex"} {
 		provider, ok := byID[providerID]
@@ -207,7 +274,62 @@ func assertJSONProviderInventory(t *testing.T, decoded listOutput) map[string]pr
 			}
 		}
 	}
+	for _, providerID := range expectedACPProviderIDs() {
+		provider := byID[providerID]
+		if provider.Availability != "selectable" || provider.Readiness != "unverified" {
+			t.Fatalf("ACP provider %q availability/readiness = %q/%q, want selectable/unverified", providerID, provider.Availability, provider.Readiness)
+		}
+		if provider.ImplementationAvailability != "externally-supplied" {
+			t.Fatalf("ACP provider %q implementation availability = %q, want externally-supplied", providerID, provider.ImplementationAvailability)
+		}
+		if provider.Models == nil || len(provider.Models) != 0 || provider.Tools == nil || len(provider.Tools) != 0 || provider.KnownLimits == nil || len(provider.KnownLimits) != 0 {
+			t.Fatalf("ACP provider %q published unverified model/tool/limit facts = %#v", providerID, provider)
+		}
+		wantCapabilities := []string{"prompt_submission"}
+		if providerID == "cursor-acp" {
+			wantCapabilities = []string{"image_input", "permission_bypass", "prompt_submission"}
+		}
+		if !sameStrings(provider.Capabilities, wantCapabilities) {
+			t.Fatalf("ACP provider %q capabilities = %v, want %v", providerID, provider.Capabilities, wantCapabilities)
+		}
+		if len(provider.Prerequisites) != 4 {
+			t.Fatalf("ACP provider %q prerequisites = %#v, want stdio, executable, authentication, and workspace", providerID, provider.Prerequisites)
+		}
+		for _, prerequisite := range provider.Prerequisites {
+			if prerequisite.Status != "required" {
+				t.Fatalf("ACP provider %q prerequisite status = %q, want required", providerID, prerequisite.Status)
+			}
+		}
+	}
+	if droid := byID["droid-acp"]; !sameStrings(droid.Aliases, []string{"factory-droid", "factorydroid"}) {
+		t.Fatalf("Droid aliases = %v, want factory-droid and factorydroid", droid.Aliases)
+	}
 	return byID
+}
+
+func expectedProviderIDs() []string {
+	return append([]string{"antigravity", "claude", "codex"}, expectedACPProviderIDs()...)
+}
+
+func expectedACPProviderIDs() []string {
+	return []string{
+		"copilot-acp", "cursor-acp", "droid-acp", "fast-agent-acp", "gemini-acp",
+		"grok-build-acp", "iflow-acp", "kilocode-acp", "kimi-acp", "kiro-acp",
+		"mux-acp", "openclaw-acp", "opencode-acp", "pi-acp", "pool-acp",
+		"qoder-acp", "qwen-acp", "reasonix-acp", "trae-acp", "zeroclaw-acp",
+	}
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func assertJSONCodexFacts(t *testing.T, codex providerOutput) {

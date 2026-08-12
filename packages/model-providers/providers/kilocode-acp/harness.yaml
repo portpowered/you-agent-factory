@@ -1,0 +1,11 @@
+implementation:
+  kind: acp_agent
+  profile: kilocode-acp
+launch:
+  posture: package_runner
+  transport: stdio
+  command: npx
+  arguments:
+    - -y
+    - "@kilocode/cli"
+    - acp

@@ -20,6 +20,9 @@ var providerManifestSchemaJSON []byte
 //go:embed generated/provider-catalog.schema.json
 var providerCatalogSchemaJSON []byte
 
+//go:embed generated/runtime-acp.json
+var runtimeACPJSON []byte
+
 // CatalogJSON returns a detached copy of the published Provider Catalog bytes.
 func CatalogJSON() []byte {
 	return bytes.Clone(catalogJSON)
@@ -35,6 +38,13 @@ func ProviderManifestSchemaJSON() []byte {
 // Catalog JSON Schema bytes.
 func ProviderCatalogSchemaJSON() []byte {
 	return bytes.Clone(providerCatalogSchemaJSON)
+}
+
+// RuntimeACPJSON returns the generated ACP launch projection used by the
+// Providers composition boundary. It is detached so callers cannot mutate
+// later construction.
+func RuntimeACPJSON() []byte {
+	return bytes.Clone(runtimeACPJSON)
 }
 
 // Catalog parses and returns a fresh Provider Catalog value. Every call owns

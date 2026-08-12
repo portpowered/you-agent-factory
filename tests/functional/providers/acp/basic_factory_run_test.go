@@ -3,9 +3,12 @@ package acp_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,8 +22,8 @@ import (
 )
 
 const (
-	acpHelperEnvironment      = "YOU_TEST_ACP_AGENT_HELPER"
-	acpRetryMarkerEnvironment = "YOU_TEST_ACP_RETRY_MARKER"
+	acpHelperEnvironment                = "YOU_TEST_ACP_AGENT_HELPER"
+	acpRetryAttemptDirectoryEnvironment = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
 )
 
 func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
@@ -57,32 +60,46 @@ func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 // fresh session only before it writes the failure marker, then accepts only
 // session/load with the original opaque id. A passing run therefore proves the
 // worker retry kept its Provider Session and called Providers.Continue rather
-// than silently opening a new ACP session.
+// than silently opening a new ACP session. The fixture uses an operator-
+// configured ACP integration because packaged ACP profiles may truthfully omit
+// session resume; packaged behavior is covered by the package conformance
+// matrix and capability tests.
 func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	const sessionID = "acp-session-retry-resume"
+	const providerID = "retry-acp"
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry ACP through its prior session"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, providerID)
 	t.Setenv(acpHelperEnvironment, "retry-resume")
-	t.Setenv(acpRetryMarkerEnvironment, filepath.Join(t.TempDir(), "first-prompt-failed"))
+	retryAttemptDir := t.TempDir()
+	t.Setenv(acpRetryAttemptDirectoryEnvironment, retryAttemptDir)
 	t.Setenv("YOU_TEST_ACP_SESSION_ID", sessionID)
 
 	var processStarts atomic.Int32
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
+	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: retryACPCommandFactory(&processStarts, retryAttemptDir),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second)
+	}, 20*time.Second, func(home string) {
+		configDir := filepath.Join(home, ".you-agent-factory")
+		if err := os.MkdirAll(configDir, 0o700); err != nil {
+			t.Fatalf("create operator config directory: %v", err)
+		}
+		config := []byte(`{"workers":{"acp":{"integrations":[{"id":"retry-entry","name":"retry-acp","transport":"stdio","command":"custom-agent acp"}]}}}`)
+		if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+			t.Fatalf("write operator config: %v", err)
+		}
+	})
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
+		t.Fatalf("completed work = %d, want 1; %s", got, acpFailureDiagnostics(events))
 	}
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0; events=%#v", got, events)
+		t.Fatalf("failed work = %d, want 0; %s", got, acpFailureDiagnostics(events))
 	}
 	if got := processStarts.Load(); got != 2 {
 		t.Fatalf("ACP process starts = %d, want 2 for the failed attempt and resumed retry", got)
 	}
-	assertProviderSessionID(t, events, "cursor-acp", sessionID)
+	assertProviderSessionID(t, events, providerID, sessionID)
 }
 
 func TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility(t *testing.T) {
@@ -258,6 +275,64 @@ func acpHelperCommandFactory(starts *atomic.Int32) platformprocess.CommandFactor
 	}
 }
 
+func retryACPCommandFactory(starts *atomic.Int32, attemptDir string) platformprocess.CommandFactory {
+	return func(name string, args ...string) *exec.Cmd {
+		if name != "custom-agent" || !sameStringSlice(args, []string{"acp"}) {
+			return exec.Command(name, args...)
+		}
+		attempt := starts.Add(1)
+		// The Providers ACP service replaces the command's environment with the
+		// invocation environment before Start, so the attempt phase is carried
+		// through a pre-start filesystem edge instead of cmd.Env. The helper reads
+		// the highest phase file after the process has started; this makes the
+		// first failure and resumed second process deterministic without a prompt
+		// marker race.
+		_ = os.WriteFile(filepath.Join(attemptDir, strconv.Itoa(int(attempt))), []byte("started"), 0o600)
+		return exec.Command(os.Args[0], "-test.run=^TestACPAgentHelperProcess$")
+	}
+}
+
+func acpFailureDiagnostics(events []factoryapi.FactoryEvent) string {
+	var failures []string
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
+			continue
+		}
+		payload, err := event.Payload.AsModelResponseEventPayload()
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("model response decode failed: %v", err))
+			continue
+		}
+		if payload.FailureDetail == nil {
+			continue
+		}
+		providerSession := "<none>"
+		if payload.ProviderSession != nil {
+			provider := "<unknown>"
+			if payload.ProviderSession.Provider != nil {
+				provider = *payload.ProviderSession.Provider
+			}
+			sessionID := "<unknown>"
+			if payload.ProviderSession.Id != nil {
+				sessionID = *payload.ProviderSession.Id
+			}
+			providerSession = provider + "/" + sessionID
+		}
+		failures = append(failures, fmt.Sprintf(
+			"event=%s attempt=%d session=%s reason=%s message=%q",
+			event.Id,
+			payload.Attempt,
+			providerSession,
+			payload.FailureDetail.Reason,
+			payload.FailureDetail.Message,
+		))
+	}
+	if len(failures) == 0 {
+		return fmt.Sprintf("ACP model-response failure detail unavailable (event count=%d)", len(events))
+	}
+	return "ACP model-response failures: " + strings.Join(failures, "; ")
+}
+
 type legacyProvider struct {
 	calls    atomic.Int32
 	response workers.InferenceResponse
@@ -281,7 +356,7 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" {
 		return
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {

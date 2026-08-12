@@ -2,6 +2,7 @@ package wire
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -11,26 +12,63 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 	first := service.ACPIntegrations()
-	want := []string{
-		"pi-acp", "openclaw-acp", "gemini-acp",
-		"cursor-acp", "copilot-acp", "droid-acp", "fast-agent-acp",
-		"grok-build-acp", "iflow-acp", "kilocode-acp", "kimi-acp", "kiro-acp",
-		"mux-acp", "opencode-acp", "pool-acp", "qoder-acp", "qwen-acp",
-		"reasonix-acp", "trae-acp", "zeroclaw-acp",
+	want := []struct {
+		name      string
+		aliases   []string
+		transport string
+		command   string
+	}{
+		{name: "copilot-acp", transport: "stdio", command: "copilot --acp --stdio"},
+		{name: "cursor-acp", transport: "stdio", command: "cursor-agent acp"},
+		{name: "droid-acp", aliases: []string{"factory-droid", "factorydroid"}, transport: "stdio", command: "droid exec --output-format acp"},
+		{name: "fast-agent-acp", transport: "stdio", command: "uvx fast-agent-mcp acp"},
+		{name: "gemini-acp", transport: "stdio", command: "gemini --acp"},
+		{name: "grok-build-acp", transport: "stdio", command: "grok agent stdio"},
+		{name: "iflow-acp", transport: "stdio", command: "iflow --experimental-acp"},
+		{name: "kilocode-acp", transport: "stdio", command: "npx -y @kilocode/cli acp"},
+		{name: "kimi-acp", transport: "stdio", command: "kimi acp"},
+		{name: "kiro-acp", transport: "stdio", command: "kiro-cli-chat acp"},
+		{name: "mux-acp", transport: "stdio", command: "mux acp"},
+		{name: "openclaw-acp", transport: "stdio", command: "openclaw acp"},
+		{name: "opencode-acp", transport: "stdio", command: "npx -y opencode-ai acp"},
+		{name: "pi-acp", transport: "stdio", command: "npx pi-acp"},
+		{name: "pool-acp", transport: "stdio", command: "pool acp"},
+		{name: "qoder-acp", transport: "stdio", command: "qodercli --acp"},
+		{name: "qwen-acp", transport: "stdio", command: "qwen --acp"},
+		{name: "reasonix-acp", transport: "stdio", command: "reasonix acp"},
+		{name: "trae-acp", transport: "stdio", command: "traecli acp serve"},
+		{name: "zeroclaw-acp", transport: "stdio", command: "zeroclaw acp"},
 	}
-	got := make([]string, len(first))
+	if len(first) != len(want) {
+		t.Fatalf("packaged ACP count = %d, want %d", len(first), len(want))
+	}
 	for index, integration := range first {
-		got[index] = integration.Name.String()
+		if integration.Name.String() != want[index].name || integration.ID != want[index].name || integration.Transport != want[index].transport || integration.Command != want[index].command || !reflect.DeepEqual(integration.Aliases, want[index].aliases) {
+			t.Fatalf("packaged ACP integration[%d] = %#v, want name=%q aliases=%v transport=%q command=%q", index, integration, want[index].name, want[index].aliases, want[index].transport, want[index].command)
+		}
+		if got := integration.Arguments; !reflect.DeepEqual(got, strings.Fields(want[index].command)[1:]) {
+			t.Fatalf("packaged ACP integration[%d] arguments = %#v, want command arguments %#v", index, got, strings.Fields(want[index].command)[1:])
+		}
+		if integration.ImplementationProfile != integration.Name.String() {
+			t.Fatalf("packaged ACP integration[%d] profile = %q, want %q", index, integration.ImplementationProfile, integration.Name)
+		}
+		if integration.RuntimePosture != wantPosture(integration.Name.String()) {
+			t.Fatalf("packaged ACP integration[%d] posture = %q, want %q", index, integration.RuntimePosture, wantPosture(integration.Name.String()))
+		}
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("packaged ACP identities = %#v, want %#v", got, want)
-	}
-	if len(first[5].Aliases) != 2 || first[5].Aliases[0] != "factory-droid" || first[5].Aliases[1] != "factorydroid" {
-		t.Fatalf("droid aliases = %#v", first[5].Aliases)
-	}
-	first[5].Aliases[0] = "mutated"
+	droidIndex := 2
+	first[droidIndex].Aliases[0] = "mutated"
 	second := service.ACPIntegrations()
-	if second[5].Aliases[0] != "factory-droid" {
-		t.Fatalf("catalog retained caller mutation: %#v", second[5].Aliases)
+	if second[droidIndex].Aliases[0] != "factory-droid" {
+		t.Fatalf("catalog retained caller mutation: %#v", second[droidIndex].Aliases)
+	}
+}
+
+func wantPosture(name string) string {
+	switch name {
+	case "fast-agent-acp", "kilocode-acp", "opencode-acp", "pi-acp":
+		return "package_runner"
+	default:
+		return "installed_executable"
 	}
 }

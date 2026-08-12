@@ -1,0 +1,11 @@
+implementation:
+  kind: acp_agent
+  profile: droid-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: droid
+  arguments:
+    - exec
+    - --output-format
+    - acp

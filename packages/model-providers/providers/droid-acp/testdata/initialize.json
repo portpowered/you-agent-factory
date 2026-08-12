@@ -1,0 +1,6 @@
+{
+  "protocol": "acp",
+  "protocolVersion": "1",
+  "provider": "droid-acp",
+  "fixture": "initialize-conformance"
+}

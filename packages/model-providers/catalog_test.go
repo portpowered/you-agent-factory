@@ -52,10 +52,10 @@ func TestCatalogReturnsGeneratedContractProjection(t *testing.T) {
 	if catalog.FormatVersion != generated.ProviderCatalogFormatVersionV1 {
 		t.Fatalf("FormatVersion = %q, want %q", catalog.FormatVersion, generated.ProviderCatalogFormatVersionV1)
 	}
-	if len(catalog.Providers) != 3 {
-		t.Fatalf("provider count = %d, want 3", len(catalog.Providers))
+	if len(catalog.Providers) != 23 {
+		t.Fatalf("provider count = %d, want 23", len(catalog.Providers))
 	}
-	if catalog.Providers[0].Id != "antigravity" || catalog.Providers[len(catalog.Providers)-1].Id != "codex" {
+	if catalog.Providers[0].Id != "antigravity" || catalog.Providers[len(catalog.Providers)-1].Id != "zeroclaw-acp" {
 		t.Fatalf("providers are not in canonical ID order: first = %q, last = %q", catalog.Providers[0].Id, catalog.Providers[len(catalog.Providers)-1].Id)
 	}
 }
@@ -69,6 +69,9 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 	}
 	byID := make(map[string]generated.ProviderManifest, len(catalog.Providers))
 	for _, provider := range catalog.Providers {
+		if provider.Harness == nil || provider.Harness.Kind != generated.NativeCli {
+			continue
+		}
 		byID[provider.Id] = provider
 		if len(derefSlice(provider.Models)) == 0 || len(derefSlice(provider.Tools)) == 0 {
 			t.Fatalf("provider %q does not publish model and tool facts", provider.Id)
@@ -167,7 +170,7 @@ func TestCatalogPublishesEvidencedNativeCapabilityFacts(t *testing.T) {
 	observedSupport := make(map[string]bool)
 	for _, provider := range catalog.Providers {
 		if provider.Harness == nil || provider.Harness.Kind != generated.NativeCli {
-			t.Fatalf("provider %q harness = %#v, want native_cli", provider.Id, provider.Harness)
+			continue
 		}
 		if provider.ModelCatalogPosture == nil || *provider.ModelCatalogPosture != generated.ProviderModelCatalogPostureExact {
 			t.Fatalf("provider %q model catalog posture = %#v, want exact", provider.Id, provider.ModelCatalogPosture)

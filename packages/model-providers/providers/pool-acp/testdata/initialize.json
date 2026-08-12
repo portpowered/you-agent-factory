@@ -1,0 +1,6 @@
+{
+  "protocol": "acp",
+  "protocolVersion": "1",
+  "provider": "pool-acp",
+  "fixture": "initialize-conformance"
+}
