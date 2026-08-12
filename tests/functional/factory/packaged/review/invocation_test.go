@@ -66,6 +66,45 @@ func TestPackagedReviewRejectionCarriesFeedback(t *testing.T) {
 	}
 }
 
+// TestPackagedReviewThreeCleanRejectionsDoNotTripFailureBreaker proves that
+// explicit, cleanly exited reviewer decisions remain on the authored
+// rejection route even when legacy stop words and a consecutive-failure limit
+// are present on the materialized workstation configuration.
+func TestPackagedReviewThreeCleanRejectionsDoNotTripFailureBreaker(t *testing.T) {
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("first candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the release date"}`)},
+		platformprocess.CommandResult{Stdout: []byte("second candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the owner"}`)},
+		platformprocess.CommandResult{Stdout: []byte("third candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the rollback plan"}`)},
+		platformprocess.CommandResult{Stdout: []byte("fourth candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved fourth candidate"}`)},
+	)
+
+	response := runPackagedReviewCLIJSONInvocationWithFactorySetup(
+		t,
+		runner,
+		configurePackagedReviewRejectionClassification,
+		"write the release notes",
+	)
+	assertPackagedReviewCompletedWithText(t, response, "approved fourth candidate")
+	if got := runner.CallCount(); got != 8 {
+		t.Fatalf("provider invocation count = %d, want four work/review round trips", got)
+	}
+
+	requests := runner.Requests()
+	for index, wantFeedback := range map[int]string{
+		2: "add the release date",
+		4: "add the owner",
+		6: "add the rollback plan",
+	} {
+		if prompt := providerCommandPrompt(requests[index]); !strings.Contains(prompt, wantFeedback) {
+			t.Fatalf("work prompt %d = %q, want reviewer feedback %q", index, prompt, wantFeedback)
+		}
+	}
+}
+
 // TestPackagedReviewRejectionHonorsMaterializedAndFlaggedProviderSettings proves
 // packaged @you/review rejection-then-approval through the public CLI honors
 // materialized worker model configuration and default worker model provider
