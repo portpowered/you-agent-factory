@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -392,7 +393,7 @@ func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *tes
 	}
 }
 
-func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndLimit(t *testing.T) {
+func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndPreservesHistory(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-recorded-race"
 	dispatchID := "dispatch-recorded-race"
@@ -450,14 +451,135 @@ func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndLimit(t *tes
 		t.Fatalf("StreamObservations() error = %v", err)
 	}
 	defer subscription.Close()
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.SourceID != "race-request" {
+		t.Fatalf("durable request delivery = %#v, want the oldest retained record", delivery)
+	}
 	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.SourceID != "race-association" {
-		t.Fatalf("bounded retained delivery = %#v, want association after dropping the oldest retained record", delivery)
+		t.Fatalf("durable association delivery = %#v, want association after the request", delivery)
 	}
 	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminalReplay || delivery.Event.SourceID != "race-response" {
 		t.Fatalf("atomic terminal delivery = %#v, want TERMINAL_REPLAY from the subscription snapshot", delivery)
 	}
 	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryClosed {
 		t.Fatalf("delivery after terminal snapshot = %#v, want CLOSED", delivery)
+	}
+}
+
+func TestRecordedWorkerSessionObservationCursorResumePreservesDurableHistoryBeyondLiveLimit(t *testing.T) {
+	dispatchID := "dispatch-recorded-long-resume"
+	workerSessionID := "worker-recorded-long-resume"
+	events := make([]interfaces.FactoryEvent, 66)
+	for sequence := 1; sequence <= len(events); sequence++ {
+		eventType := interfaces.FactoryEventTypeDispatchQueued
+		sourceID := "recorded-long-" + strconv.Itoa(sequence)
+		if sequence == 1 {
+			eventType = interfaces.FactoryEventTypeDispatchRequest
+			sourceID = "recorded-long-request"
+		}
+		if sequence == 2 {
+			eventType = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
+			sourceID = "recorded-long-association"
+		}
+		if sequence == len(events) {
+			eventType = interfaces.FactoryEventTypeDispatchResponse
+			sourceID = "recorded-long-terminal"
+		}
+		events[sequence-1] = interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{
+				Sequence:   sequence,
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+			},
+			Id:   sourceID,
+			Type: eventType,
+		}
+	}
+	events[1].Payload = mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: workerSessionID})
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	service := newRecordedWorkerSessionObservation(nil, ledger, nil, platformclock.Real{}, nil).(*recordedWorkerSessionObservation)
+
+	subscription, _, err := service.streamRecordedFact(
+		context.Background(),
+		recordedDispatchObservation{dispatchID: dispatchID, workerSessionID: workerSessionID},
+		workersessions.DefaultObservationStreamLimit,
+		false,
+		&workersessions.ObservationCursor{WorkerSessionID: workerSessionID, Position: 1},
+	)
+	if err != nil {
+		t.Fatalf("streamRecordedFact() error = %v", err)
+	}
+	defer subscription.Close()
+
+	for wantPosition := uint64(2); wantPosition <= uint64(len(events)); wantPosition++ {
+		delivery := subscription.Next(context.Background())
+		if delivery.Kind != workersessions.ObservationDeliveryRecord && delivery.Kind != workersessions.ObservationDeliveryTerminalReplay {
+			t.Fatalf("durable delivery at position %d = %#v, want a record", wantPosition, delivery)
+		}
+		if delivery.Event.Position != wantPosition {
+			t.Fatalf("durable delivery at index %d = %#v, want position %d", wantPosition-2, delivery.Event, wantPosition)
+		}
+	}
+	if closed := subscription.Next(context.Background()); closed.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after long durable resume = %#v, want CLOSED", closed)
+	}
+}
+
+func TestRecordedWorkerSessionObservationReplayOnlyDrainsActiveHighWater(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	dispatchID := "dispatch-recorded-replay-only-active"
+	workerSessionID := "worker-recorded-replay-only-active"
+	workID := "work-recorded-replay-only-active"
+	event := func(sequence int, id string, eventType interfaces.FactoryEventType) interfaces.FactoryEvent {
+		return interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{
+				Sequence:   sequence,
+				EventTime:  base.Add(time.Duration(sequence) * time.Second),
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+				WorkIDs:    stringSliceForRecordedTest([]string{workID}),
+			},
+			Id:   id,
+			Type: eventType,
+		}
+	}
+	events := []interfaces.FactoryEvent{
+		event(1, "replay-only-request", interfaces.FactoryEventTypeDispatchRequest),
+		event(2, "replay-only-association", interfaces.FactoryEventTypeDispatchWorkerSessionAssoc),
+		event(3, "replay-only-queued", interfaces.FactoryEventTypeDispatchQueued),
+	}
+	events[1].Payload = mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: workerSessionID})
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	service := newRecordedWorkerSessionObservation(
+		nil,
+		ledger,
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+				dispatchID: {DispatchID: dispatchID, StartedAt: base, WorkItemIDs: []string{workID}},
+			}}, nil
+		},
+		platformclock.Real{},
+		nil,
+	)
+
+	subscription, err := service.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+		Limit:           1,
+		ReplayOnly:      true,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservationsByWorkerSessionID(replay-only active) error = %v", err)
+	}
+	defer subscription.Close()
+	for index, wantID := range []string{"replay-only-request", "replay-only-association", "replay-only-queued"} {
+		delivery := subscription.Next(context.Background())
+		if delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.SourceID != wantID {
+			t.Fatalf("active replay-only delivery %d = %#v, want record %q", index, delivery, wantID)
+		}
+	}
+	summary := subscription.Next(context.Background())
+	if summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil || summary.Summary.Complete {
+		t.Fatalf("active replay-only summary = %#v, want finite incomplete summary", summary)
+	}
+	if closed := subscription.Next(context.Background()); closed.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after active replay-only summary = %#v, want CLOSED", closed)
 	}
 }
 

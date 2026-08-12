@@ -697,7 +697,7 @@ func (s *recordedWorkerSessionObservation) streamRecorded(
 	if err := s.validateRecordingHealth(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, true, err
 	}
-	return s.streamRecordedFact(ctx, fact, req.Limit, req.Cursor)
+	return s.streamRecordedFact(ctx, fact, req.Limit, req.ReplayOnly, req.Cursor)
 }
 
 func (s *recordedWorkerSessionObservation) streamRecordedByWorkerSessionID(
@@ -720,13 +720,14 @@ func (s *recordedWorkerSessionObservation) streamRecordedByWorkerSessionID(
 	if err := s.validateRecordingHealth(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, true, err
 	}
-	return s.streamRecordedFact(ctx, fact, req.Limit, req.Cursor)
+	return s.streamRecordedFact(ctx, fact, req.Limit, req.ReplayOnly, req.Cursor)
 }
 
 func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	ctx context.Context,
 	fact recordedDispatchObservation,
 	limit int,
+	replayOnly bool,
 	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, bool, error) {
 	streamContext := ctx
@@ -755,9 +756,9 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 		}
 		return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSourceUnavailable
 	}
-	source.History = boundedRecordedObservationHistory(source.History, fact.dispatchID, limit, cursor)
+	source.History = recordedObservationHistory(source.History, fact.dispatchID, cursor)
 	terminalReplay := recordedObservationHistoryHasTerminal(source.History, fact.dispatchID)
-	finite := fact.state.Terminal() || terminalReplay
+	finite := replayOnly || fact.state.Terminal() || terminalReplay
 	var summary *workersessions.ReplaySummary
 	if finite {
 		health := workerRecordingHealth{}
@@ -781,13 +782,11 @@ func observationStreamLimit(limit int) int {
 	return limit
 }
 
-func boundedRecordedObservationHistory(
+func recordedObservationHistory(
 	events []interfaces.FactoryEvent,
 	dispatchID string,
-	limit int,
 	cursor *workersessions.ObservationCursor,
 ) []interfaces.FactoryEvent {
-	limit = observationStreamLimit(limit)
 	ordered := make([]interfaces.FactoryEvent, 0, len(events))
 	for _, event := range cloneAndSortFactoryEvents(events) {
 		if stringPointerValue(event.Context.DispatchID) == dispatchID &&
@@ -795,10 +794,7 @@ func boundedRecordedObservationHistory(
 			ordered = append(ordered, event)
 		}
 	}
-	if len(ordered) <= limit {
-		return ordered
-	}
-	return ordered[len(ordered)-limit:]
+	return ordered
 }
 
 func validateRecordedObservationCursor(

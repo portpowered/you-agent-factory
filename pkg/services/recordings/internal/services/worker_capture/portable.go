@@ -440,13 +440,20 @@ func validatePortableHeader(recording WorkerPortableRecording) error {
 	if err := validatePortableIdentity(recording.Identity); err != nil {
 		return err
 	}
-	if recording.Lifecycle.Status != WorkerRecordingStatusComplete || recording.Lifecycle.Terminal == nil {
+	if !portableRecordingLifecycleIsComplete(recording.Lifecycle.Status) || recording.Lifecycle.Terminal == nil {
 		return portableDiagnostic(WorkerPortableCodeInvalidLifecycle, "lifecycle", "portable Worker recording must be completed and contain a terminal", ErrWorkerPortableRecordingLifecycle)
 	}
 	if len(recording.Records) == 0 {
 		return portableDiagnostic(WorkerPortableCodeInvalidOrder, "records", "at least one opening record is required", ErrWorkerPortableRecordingOrder)
 	}
 	return nil
+}
+
+func portableRecordingLifecycleIsComplete(status WorkerRecordingStatus) bool {
+	// Schema v1 was emitted with the legacy capture-state spelling
+	// COMPLETED. Keep that pinned portable vocabulary readable while all new
+	// exports use the recording-health spelling COMPLETE.
+	return status == WorkerRecordingStatusComplete || status == WorkerRecordingStatusCompleted
 }
 
 func reducePortableHistory(recording WorkerPortableRecording) ([]workers.Draft, WorkerRecordingProjection, error) {
