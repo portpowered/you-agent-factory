@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"slices"
 	"strconv"
@@ -243,7 +244,13 @@ func readCoverageManifestFile(filename string, lane string, measuredPackages []s
 }
 
 func checkCoverageManifest(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string) []string {
+	failures, _ := checkCoverageManifestWithEpsilon(manifest, totals, manifestPath, 0)
+	return failures
+}
+
+func checkCoverageManifestWithEpsilon(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string, epsilon float64) ([]string, []string) {
 	failures := make([]string, 0)
+	warnings := make([]string, 0)
 	for _, entry := range manifest.Packages {
 		if entry.Exception != nil {
 			continue
@@ -258,12 +265,34 @@ func checkCoverageManifest(manifest coverageManifest, totals map[string]packageC
 			actualPercent = float64(actual.coveredStatements) * 100 / float64(actual.totalStatements)
 		}
 		expectedPercent := float64(minimum) / 100
+		if coverageFloorDriftWithinEpsilon(minimum, actual, epsilon) {
+			warnings = append(warnings, fmt.Sprintf(
+				"package coverage warning: tolerated drift: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points epsilon=%.4f percentage-points",
+				entry.Package, manifest.Lane, minimum.String(), actualPercent, actualPercent-expectedPercent, epsilon,
+			))
+			continue
+		}
 		failures = append(failures, fmt.Sprintf(
 			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points; restore coverage before running `go run ./cmd/gocoveragecheck -suite %s -profile <coverage-profile> -update-manifest %s`",
 			entry.Package, manifest.Lane, minimum.String(), actualPercent, actualPercent-expectedPercent, manifest.Lane, manifestPath,
 		))
 	}
-	return failures
+	return failures, warnings
+}
+
+func coverageFloorDriftWithinEpsilon(minimum coverageFloor, actual packageCoverageTotals, epsilon float64) bool {
+	if actual.totalStatements <= 0 || epsilon <= 0 {
+		return false
+	}
+
+	expected := new(big.Rat).SetFrac64(int64(minimum), 100)
+	measured := new(big.Rat).SetFrac64(int64(actual.coveredStatements)*100, int64(actual.totalStatements))
+	drift := new(big.Rat).Sub(expected, measured)
+	epsilonRatio, ok := new(big.Rat).SetString(strconv.FormatFloat(epsilon, 'f', -1, 64))
+	if !ok {
+		return false
+	}
+	return drift.Cmp(epsilonRatio) <= 0
 }
 
 func validateCoverageLane(lane string) error {

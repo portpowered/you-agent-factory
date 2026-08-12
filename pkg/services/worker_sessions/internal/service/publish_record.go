@@ -187,6 +187,8 @@ func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) erro
 // preparation and supervision state machine.
 type invocationPreparationOptions struct {
 	serverOwned      bool
+	direct           bool
+	continuation     bool
 	requestID        string
 	verifyTopicReady bool
 }
@@ -247,6 +249,7 @@ func (r *registry) prepareInvocation(
 		attemptID,
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
+		options.direct,
 	)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
@@ -344,6 +347,7 @@ func (r *registry) registerInvocationSupervision(
 	}
 	supervision.mu.Lock()
 	supervision.retryBudget = req.Retry.Attempts()
+	supervision.continuing = options.continuation
 	supervision.mu.Unlock()
 	return invocationPreparation{supervision: supervision}, nil
 }
@@ -357,6 +361,7 @@ func (r *registry) startReserved(ctx context.Context, req workersessions.StartRe
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: req.Execution, Retry: req.Retry},
 		invocationPreparationOptions{
 			serverOwned:      true,
+			direct:           true,
 			requestID:        req.RequestID,
 			verifyTopicReady: true,
 		},

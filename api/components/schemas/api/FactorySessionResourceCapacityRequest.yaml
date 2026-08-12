@@ -1,0 +1,22 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - expectedRevision
+  - capacity
+properties:
+  requestId:
+    type: string
+    minLength: 1
+    description: Caller-owned idempotency identity for this capacity request.
+  expectedRevision:
+    type: integer
+    minimum: 0
+    description: Effective Factory revision observed before admission.
+  capacity:
+    type: integer
+    minimum: 0
+    description: Requested total resource capacity. Zero is valid only when no units are in use.
+  reason:
+    type: string
+    description: Optional safe operator reason retained with the canonical change request.

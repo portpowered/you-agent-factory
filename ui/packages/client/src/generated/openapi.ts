@@ -17,13 +17,97 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /**
+     * List top-level Worker Session observations
+     * @description Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+     */
+    get: operations["listWorkerSessions"];
     put?: never;
     /**
      * Start one directly resolved Worker Session
      * @description Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
      */
     post: operations["startWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one top-level Worker Session observation
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+     */
+    get: operations["getWorkerSessionObservationByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/continue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Continue one terminal Worker Session
+     * @description Reserves one distinct successor Worker Session for a terminal source Worker Session and resumes the exact Provider Session association recorded by the server. The requestId and successor identity are idempotent inputs. A 202 response is returned only after the successor opening event is readable/subscribable and Workers has admitted the continuation; terminal output remains asynchronous.
+     */
+    post: operations["continueWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream top-level Worker Session events
+     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+     */
+    get: operations["streamWorkerSessionEventsByTopLevelWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one top-level Worker Session transcript
+     * @description Returns the normalized transcript for a terminal Worker Session by its stable identity. Provider Session association and projection are resolved by the Worker Sessions service; callers cannot substitute a provider, kind, or provider-issued id tuple.
+     */
+    get: operations["readWorkerSessionTranscriptByWorkerSessionId"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -646,6 +730,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/resources/{resource_id}/capacity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Set one Factory Session resource capacity
+     * @description Changes the effective capacity of one live Factory Session resource by stable Resource.id. The operation is revisioned and idempotent. It does not cancel, interrupt, terminate, restart, or admit work directly; a capacity increase wakes waiting runtime dispatches.
+     */
+    post: operations["setFactorySessionResourceCapacity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/artifacts": {
     parameters: {
       query?: never;
@@ -1151,6 +1255,8 @@ export interface components {
     ListWorkerSessionsResponse: {
       /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
+      /** @description Bounded pagination context for top-level Worker Session observation queries. */
+      paginationContext?: components["schemas"]["PaginationContext"];
     };
     /** @description One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload. */
     WorkerSessionStartRequest: {
@@ -1173,6 +1279,32 @@ export interface components {
       accepted: boolean;
       /** @enum {string} */
       state: WorkerSessionStartResponseState;
+      /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
+      eventTopic: string;
+    };
+    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input. */
+    WorkerSessionContinueRequest: {
+      /** @description Required caller idempotency key for this continuation. */
+      requestId: string;
+      /** @description Distinct Worker Session identity to reserve for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Non-empty follow-up input delivered to the resumed Provider Session. */
+      followUpInput: string;
+    };
+    /** @description Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs. */
+    WorkerSessionContinueResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Stable terminal Worker Session identity used as the source. */
+      sourceWorkerSessionId: string;
+      /** @description Stable Worker Session identity reserved for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId. */
+      predecessorWorkerSessionId: string;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      /** @enum {string} */
+      state: WorkerSessionContinueResponseState;
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
@@ -1260,6 +1392,8 @@ export interface components {
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
+      direct: boolean;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
@@ -1642,6 +1776,8 @@ export interface components {
       code: ErrorResponseCode;
       /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
       targets?: components["schemas"]["FactoryValidationTarget"][];
+      /** @description Resource accounting for a rejected capacity reduction. */
+      resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
     };
     ErrorTarget: {
       /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -3114,6 +3250,59 @@ export interface components {
       /** @description Inspection links for session, results, dispatches, and artifacts. */
       links?: components["schemas"]["FactorySessionLifecycleControlLinks"];
     };
+    FactorySessionResourceCapacityRequest: {
+      /** @description Caller-owned idempotency identity for this capacity request. */
+      requestId: string;
+      /** @description Effective Factory revision observed before admission. */
+      expectedRevision: number;
+      /** @description Requested total resource capacity. Zero is valid only when no units are in use. */
+      capacity: number;
+      /** @description Optional safe operator reason retained with the canonical change request. */
+      reason?: string;
+    };
+    /** @description Accounting details explaining why a resource-capacity reduction was rejected. */
+    FactorySessionResourceCapacityErrorDetails: {
+      /** @description Stable authored Resource.id. */
+      resourceId: string;
+      currentCapacity: number;
+      requestedCapacity: number;
+      inUseCount: number;
+      availableCount: number;
+      minimumCapacity: number;
+    };
+    /**
+     * @description Terminal capacity decision outcome.
+     * @enum {string}
+     */
+    FactorySessionResourceCapacityOutcome: FactorySessionResourceCapacityOutcome;
+    /** @description Canonical relative links for inspecting the affected Factory Session and its events. */
+    FactorySessionResourceCapacityLinks: {
+      /** @description Relative URL for the affected Factory Session. */
+      session?: string;
+      /** @description Relative URL for the session's canonical Factory Events. */
+      events?: string;
+      /** @description Relative URL for the session status projection. */
+      status?: string;
+    };
+    FactorySessionResourceCapacityResponse: {
+      sessionId: string;
+      /** @description Stable authored Resource.id. This is the only resource identity used by the operation. */
+      resourceId: string;
+      /** @description Current display label, provided for presentation only. */
+      resourceName?: string;
+      previousCapacity: number;
+      requestedCapacity: number;
+      effectiveCapacity: number;
+      inUseCount: number;
+      availableCount: number;
+      /** @description Lowest capacity currently safe to admit without interrupting in-use work. */
+      minimumCapacity: number;
+      outcome: components["schemas"]["FactorySessionResourceCapacityOutcome"];
+      revision: number;
+      requestId: string;
+      changeId: string;
+      links?: components["schemas"]["FactorySessionResourceCapacityLinks"];
+    };
     LoadableProviderSessionRef: {
       provider: components["schemas"]["LoadableProviderSessionProvider"];
       kind: components["schemas"]["LoadableProviderSessionKind"];
@@ -3514,6 +3703,8 @@ export interface components {
         | components["schemas"]["RunRequestEventPayload"]
         | components["schemas"]["InitialStructureRequestEventPayload"]
         | components["schemas"]["FactoryChangeEventPayload"]
+        | components["schemas"]["FactoryChangeRequestEventPayload"]
+        | components["schemas"]["FactoryChangeFailedEventPayload"]
         | components["schemas"]["WorkRequestEventPayload"]
         | components["schemas"]["RelationshipChangeRequestEventPayload"]
         | components["schemas"]["DispatchRequestEventPayload"]
@@ -3617,6 +3808,30 @@ export interface components {
       runnerId?: components["schemas"]["RunnerID"];
       runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
     };
+    /** @description Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state. */
+    FactoryResourceCapacityChange: {
+      /** @description Stable authored Resource.id whose capacity changed. */
+      resourceId: string;
+      /** @description Optional display name retained for inspection only. */
+      resourceName?: string;
+      /** @description Capacity immediately before the change. */
+      previousCapacity: number;
+      /** @description Capacity requested by the operator. */
+      requestedCapacity: number;
+      /** @description Capacity effective after the change. */
+      effectiveCapacity: number;
+      /** @description Number of leases in use at the decision boundary. */
+      inUseCount: number;
+      /** @description Number of currently available capacity units. */
+      availableCount: number;
+      /** @description Lowest capacity permitted by the current in-use count. */
+      minimumCapacity: number;
+      /**
+       * @description Terminal capacity decision recorded by the runtime.
+       * @enum {string}
+       */
+      outcome: FactoryResourceCapacityChangeOutcome;
+    };
     RunRequestEventPayload: {
       /** Format: date-time */
       recordedAt: string;
@@ -3633,8 +3848,53 @@ export interface components {
     /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
     FactoryChangeEventPayload: {
       factory: components["schemas"]["Factory"];
+      /** @description Stable live-change identity when this is a revisioned change boundary. */
+      changeId?: string;
+      /** @description Normalized live-change operation name. */
+      operation?: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId?: string;
+      /** @description Effective Factory revision immediately before this change. */
+      previousRevision?: number;
+      /** @description Effective Factory revision created by this change. */
+      newRevision?: number;
+      /** @description Canonical Factory Event sequence at which this change became effective. */
+      effectiveSequence?: number;
+      /** @description Detached resource-capacity accounting for a capacity change. */
+      resourceCapacity?: components["schemas"]["FactoryResourceCapacityChange"];
       sourceDirectory?: string;
       metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context. */
+    FactoryChangeRequestEventPayload: {
+      /** @description Stable identity of the requested live change. */
+      changeId: string;
+      /** @description Effective Factory revision the operator observed before admission. */
+      expectedRevision: number;
+      /** @description Normalized live-change operation name. */
+      operation: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId: string;
+      /** @description Canonical JSON value requested by the operation. */
+      requestedValue: unknown;
+      /** @description Safe actor identity supplied by the caller. */
+      actor?: string;
+      /** @description Safe source label such as cli or api. */
+      source?: string;
+      /** @description Optional normalized safe operator reason. */
+      reason?: string;
+    };
+    /** @description Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded. */
+    FactoryChangeFailedEventPayload: {
+      changeId: string;
+      operation: string;
+      targetId: string;
+      expectedRevision: number;
+      previousRevision: number;
+      /** @description Stable safe failure category. */
+      failureCode: string;
+      /** @description Bounded safe failure explanation. */
+      failureMessage: string;
     };
     /** @description Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted. */
     WorkRequestEventPayload: {
@@ -6485,6 +6745,24 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. */
+    WorkerSessionContinuationConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session continuation could not cross its event-readiness or Workers-admission barrier. */
+    WorkerSessionContinuationUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -6493,6 +6771,17 @@ export interface components {
       content: {
         "application/json":
           | components["schemas"]["FactorySessionLifecycleControlResponse"]
+          | components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
+    FactorySessionResourceCapacityConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json":
+          | components["schemas"]["FactorySessionResourceCapacityResponse"]
           | components["schemas"]["ErrorResponse"];
       };
     };
@@ -6538,6 +6827,8 @@ export interface components {
     SessionID: string;
     /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
     WorkerSessionID: string;
+    /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
+    ResourceID: string;
     /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
     MaxResults: number;
     /** @description Optional base64-encoded token ID cursor. */
@@ -6597,6 +6888,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  listWorkerSessions: {
+    parameters: {
+      query?: {
+        /** @description Origin scope to inspect. Direct is the safe default. */
+        scope?: PathsWorkerSessionsGetParametersQueryScope;
+        /** @description Optional repeated Worker Session lifecycle state filters. */
+        state?: PathsWorkerSessionsGetParametersQueryState[];
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+        maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered top-level Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   startWorkerSession: {
     parameters: {
       query?: never;
@@ -6622,6 +6944,127 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       409: components["responses"]["WorkerSessionStartConflict"];
       503: components["responses"]["WorkerSessionStartUnavailable"];
+    };
+  };
+  getWorkerSessionObservationByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One top-level Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  continueWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionContinueRequest"];
+      };
+    };
+    responses: {
+      /** @description The successor Worker Session was admitted and is observable. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionContinueResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionContinuationConflict"];
+      503: components["responses"]["WorkerSessionContinuationUnavailable"];
+    };
+  };
+  streamWorkerSessionEventsByTopLevelWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain retained history without registering a live follower. */
+        replayOnly?: boolean;
+      };
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  readWorkerSessionTranscriptByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
     };
   };
   listWorkBySessionId: {
@@ -7583,6 +8026,39 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  setFactorySessionResourceCapacity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
+        resource_id: components["parameters"]["ResourceID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionResourceCapacityRequest"];
+      };
+    };
+    responses: {
+      /** @description Capacity was applied, was an exact no-op, or replayed an identical request. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionResourceCapacityResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionResourceCapacityConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listFactorySessionArtifacts: {
     parameters: {
       query?: never;
@@ -8124,6 +8600,25 @@ export interface operations {
     };
   };
 }
+export const PathsWorkerSessionsGetParametersQueryScope = {
+  direct: "direct",
+  factory: "factory",
+  all: "all",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryScope =
+  (typeof PathsWorkerSessionsGetParametersQueryScope)[keyof typeof PathsWorkerSessionsGetParametersQueryScope];
+export const PathsWorkerSessionsGetParametersQueryState = {
+  RESERVED: "RESERVED",
+  STARTING: "STARTING",
+  RUNNING: "RUNNING",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELED: "CANCELED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryState =
+  (typeof PathsWorkerSessionsGetParametersQueryState)[keyof typeof PathsWorkerSessionsGetParametersQueryState];
 export const InvocationInputSourceKind = {
   // Text supplied in canonical WorkContent.
   InvocationInputSourceKindText: "text",
@@ -8206,6 +8701,18 @@ export const WorkerSessionStartResponseState = {
 } as const;
 export type WorkerSessionStartResponseState =
   (typeof WorkerSessionStartResponseState)[keyof typeof WorkerSessionStartResponseState];
+export const WorkerSessionContinueResponseState = {
+  WorkerSessionContinueResponseStateReserved: "RESERVED",
+  WorkerSessionContinueResponseStateStarting: "STARTING",
+  WorkerSessionContinueResponseStateRunning: "RUNNING",
+  WorkerSessionContinueResponseStatePaused: "PAUSED",
+  WorkerSessionContinueResponseStateCompleted: "COMPLETED",
+  WorkerSessionContinueResponseStateFailed: "FAILED",
+  WorkerSessionContinueResponseStateCanceled: "CANCELED",
+  WorkerSessionContinueResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionContinueResponseState =
+  (typeof WorkerSessionContinueResponseState)[keyof typeof WorkerSessionContinueResponseState];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -8358,6 +8865,8 @@ export const ErrorResponseCode = {
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
+  // A live-change requestId was reused with a different normalized request body.
+  REQUEST_CONFLICT: "REQUEST_CONFLICT",
   // Worker Session start requestId was reused with different normalized inputs.
   WORKER_SESSION_START_REQUEST_ID_CONFLICT:
     "WORKER_SESSION_START_REQUEST_ID_CONFLICT",
@@ -8370,9 +8879,28 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
+  // Worker Session continuation requestId was reused with different inputs.
+  WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT",
+  // The Worker Session continuation conflicts with source lifecycle or successor lineage.
+  WORKER_SESSION_CONTINUATION_CONFLICT: "WORKER_SESSION_CONTINUATION_CONFLICT",
+  // The recorded Provider Session cannot be resumed for this Worker Session continuation.
+  WORKER_SESSION_PROVIDER_CONTINUATION_INVALID:
+    "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID",
+  // Workers could not admit the Worker Session continuation.
+  WORKER_SESSION_CONTINUATION_ADMISSION_FAILED:
+    "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
+  // Requested resource capacity is below the number of units currently in use.
+  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
+  // The caller's expected Factory revision is no longer current.
+  REVISION_CONFLICT: "REVISION_CONFLICT",
+  // The Factory Session lifecycle does not admit the requested change.
+  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
+  // A live change was admitted but its runtime application failed.
+  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
   // The Factory Response Event reconnect cursor is invalid.
   INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
   // A Factory Response Event filter is invalid.
@@ -8724,6 +9252,13 @@ export const FactorySessionLifecycleControlOutcome = {
 } as const;
 export type FactorySessionLifecycleControlOutcome =
   (typeof FactorySessionLifecycleControlOutcome)[keyof typeof FactorySessionLifecycleControlOutcome];
+export const FactorySessionResourceCapacityOutcome = {
+  APPLIED: "APPLIED",
+  NO_OP: "NO_OP",
+  REPLAYED: "REPLAYED",
+} as const;
+export type FactorySessionResourceCapacityOutcome =
+  (typeof FactorySessionResourceCapacityOutcome)[keyof typeof FactorySessionResourceCapacityOutcome];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",
@@ -8809,6 +9344,10 @@ export const FactoryEventType = {
   FactoryEventTypeInitialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
   // The running factory definition changed and a canonical replacement topology is now active.
   FactoryEventTypeFactoryChange: "FACTORY_CHANGE",
+  // A normalized live Factory Session change request was admitted before application.
+  FactoryEventTypeFactoryChangeRequest: "FACTORY_CHANGE_REQUEST",
+  // An admitted live Factory Session change could not become effective and was closed with a safe failure.
+  FactoryEventTypeFactoryChangeFailed: "FACTORY_CHANGE_FAILED",
   // Work entered the factory as a normalized request.
   FactoryEventTypeWorkRequest: "WORK_REQUEST",
   // A relationship-change request between work items was recorded.
@@ -8882,6 +9421,12 @@ export const WorkStateChangeSource = {
 } as const;
 export type WorkStateChangeSource =
   (typeof WorkStateChangeSource)[keyof typeof WorkStateChangeSource];
+export const FactoryResourceCapacityChangeOutcome = {
+  APPLIED: "APPLIED",
+  NO_OP: "NO_OP",
+} as const;
+export type FactoryResourceCapacityChangeOutcome =
+  (typeof FactoryResourceCapacityChangeOutcome)[keyof typeof FactoryResourceCapacityChangeOutcome];
 export const InferenceOutcome = {
   // The provider attempt returned a successful response.
   InferenceOutcomeSucceeded: "SUCCEEDED",

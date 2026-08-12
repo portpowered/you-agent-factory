@@ -69,6 +69,8 @@ type factoryImpl struct {
 	resumeDrainPending          bool
 	workerSessionControlMu      sync.Mutex
 	workerSessionControlResults map[workerSessionControlKey]factory.WorkerSessionControlResult
+	capacitySnapshotMu          sync.Mutex
+	effectiveFactoryConfig      *interfaces.FactoryConfig
 }
 
 type appliedOperatorMove struct {

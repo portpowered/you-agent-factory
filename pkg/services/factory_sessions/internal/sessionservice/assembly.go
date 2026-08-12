@@ -17,6 +17,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,7 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      streamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
+	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
 	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
@@ -66,8 +68,9 @@ func NewAssembly(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) roles.RuntimeAssembly {
-	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil {
+	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil || liveChangeCoordinator == nil {
 		return nil
 	}
 	registry := sessionregistry.New()
@@ -82,6 +85,7 @@ func NewAssembly(
 		state:                        state,
 		streams:                      runtimebinding.NewStreamManager(state),
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
+		liveChangeCoordinator:        liveChangeCoordinator,
 		sessionResultProjection:      sessionResultProjection,
 		interpolation:                interpolation,
 		invocationWorkTypes:          invocationWorkTypes,
@@ -217,9 +221,14 @@ func (a *Assembly) Complete(
 	}
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
-		Factory:        startupRuntime.RuntimeService(),
-		BackendScopeID: startupRuntime.BackendScope(),
-		RuntimeConfig:  runtimeConfig,
+		Factory:               startupRuntime.RuntimeService(),
+		Clock:                 clock,
+		BackendScopeID:        startupRuntime.BackendScope(),
+		RuntimeConfig:         runtimeConfig,
+		LiveChangeEvents:      runtimebinding.NewLiveChangeEventLog(startupRuntime.RecordingLedger()),
+		LiveChangeApplication: runtimebinding.NewLiveChangeApplication(startupRuntime.RuntimeService()),
+		LiveChangeAdmission:   runtimebinding.NewLiveChangeAdmission(startupRuntime.RuntimeService()),
+		LiveChangeLogger:      startupRuntime.RuntimeLogger(),
 	}
 	startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
 		if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {
@@ -264,7 +273,7 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
-	gateway := NewWithResponseService(
+	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
 		a.state,
 		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
@@ -272,6 +281,7 @@ func (a *Assembly) Complete(
 		runtime.ReconnectCursorValidator(),
 		a.sessionResultProjection,
 		a.responseStreams,
+		a.liveChangeCoordinator,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)

@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -31,6 +32,7 @@ func NewDurable(
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		persistencePolicy,
@@ -61,6 +63,7 @@ func NewDurable(
 		generateSessionID,
 		generateResponseEventID,
 		responseStreams,
+		liveChangeCoordinator,
 	)
 	if err != nil {
 		return nil, err
@@ -86,6 +89,7 @@ func NewStandalone(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Service, error) {
 	switch provider {
 	case factorysessions.ExecutionProviderFake:
@@ -127,6 +131,7 @@ func NewStandalone(
 			generateSessionID,
 			nil,
 			nil,
+			liveChangeCoordinator,
 		)
 		if err != nil {
 			return nil, err

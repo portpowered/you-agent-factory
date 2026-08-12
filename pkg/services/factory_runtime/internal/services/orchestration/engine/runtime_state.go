@@ -118,6 +118,11 @@ func deepCopyTokenMutationRecord(m interfaces.TokenMutationRecord) interfaces.To
 }
 
 func (e *FactoryEngine) tickOnce(ctx context.Context) (bool, bool, error) {
+	release, err := e.AcquireResourceCapacityAdmission(ctx)
+	if err != nil {
+		return false, false, err
+	}
+	defer release()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.tick(ctx)
@@ -140,11 +145,16 @@ func (e *FactoryEngine) finishTerminationDrain() bool {
 // Tick executes a single tick synchronously. Drains all pending channel events
 // first, then runs the full tick cycle. For deterministic testing.
 func (e *FactoryEngine) Tick(ctx context.Context) error {
+	release, err := e.AcquireResourceCapacityAdmission(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	e.drainChannels()
-	_, _, err := e.tick(ctx)
+	_, _, err = e.tick(ctx)
 	return err
 }
 

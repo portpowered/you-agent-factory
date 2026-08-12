@@ -31,6 +31,7 @@ const (
 	responseEventsStableID                       = "sse/getFactoryResponseEventsBySessionId"
 	workerSessionEventsStableID                  = "sse/streamWorkerSessionEventsBySessionId"
 	workerSessionEventsByWorkerSessionIDStableID = "sse/streamWorkerSessionEventsByWorkerSessionId"
+	topLevelWorkerSessionEventsStableID          = "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
 
 	sessionEventsScope       = "session Factory Event stream, including recovery after malformed JSON data"
 	workerSessionEventsScope = "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
@@ -118,6 +119,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneShort, "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess", InterfaceCLI)
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
+	case "cli/you.session.resource.set":
+		markCovered(scenario, LaneShort, "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch", InterfaceCLI)
 	case "cli/you.serve.acp":
 		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":
@@ -134,6 +137,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal", InterfaceCLI)
 	case "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream":
 		markCovered(scenario, LaneLong, "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI", InterfaceCLI)
+	case "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.continue":
+		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage", InterfaceCLI)
 	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
 		markCovered(scenario, LaneShort, "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":
@@ -177,6 +182,9 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	case workerSessionEventsByWorkerSessionIDStableID:
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceSSE)
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
+	case topLevelWorkerSessionEventsStableID:
+		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect", InterfaceSSE)
 		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	}
 }
@@ -335,6 +343,8 @@ func validateSSE(prefix string, scenario Scenario) error {
 	case workerSessionEventsStableID:
 		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
 	case workerSessionEventsByWorkerSessionIDStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
+	case topLevelWorkerSessionEventsStableID:
 		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
 	default:
 		return fmt.Errorf("%s: unknown public SSE operation; add a reviewed required or non-required disposition", prefix)

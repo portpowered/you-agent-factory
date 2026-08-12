@@ -416,6 +416,7 @@ async function verifyJSONArtifactSemantics({
 }
 
 function requireFactoryEventSchema(document, specifier) {
+	const factoryEventVariantCount = 34;
 	const schema = requireObject(
 		document,
 		`[api-package-consumer] export is not a Factory Event schema object: ${specifier}`,
@@ -426,9 +427,10 @@ function requireFactoryEventSchema(document, specifier) {
 		!schema.required?.includes("type") ||
 		!schema.required?.includes("context") ||
 		!schema.required?.includes("payload") ||
-		schema.oneOf?.length !== 32 ||
+		schema.oneOf?.length !== factoryEventVariantCount ||
 		schema.discriminator?.propertyName !== "type" ||
-		Object.keys(schema.discriminator?.mapping ?? {}).length !== 32 ||
+		Object.keys(schema.discriminator?.mapping ?? {}).length !==
+			factoryEventVariantCount ||
 		schema.discriminator?.mapping?.DISPATCH_WORKER_SESSION_ASSOCIATION !==
 			"#/$defs/DispatchWorkerSessionAssociationEventPayload"
 	) {

@@ -325,6 +325,12 @@ func (s *preHandoffFailedWorkerSessionsService) GetObservationByWorkerSessionID(
 	return workersessions.Observation{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) ListWorkerSessionObservations(
+	context.Context, workersessions.ListWorkerSessionObservationsRequest,
+) (workersessions.ListWorkerSessionObservationsResult, error) {
+	return workersessions.ListWorkerSessionObservationsResult{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) StreamObservations(
 	context.Context, workersessions.StreamObservationsRequest,
 ) (workersessions.ObservationSubscription, error) {
@@ -339,6 +345,12 @@ func (s *preHandoffFailedWorkerSessionsService) StreamObservationsByWorkerSessio
 
 func (s *preHandoffFailedWorkerSessionsService) ReadTranscript(
 	context.Context, workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) ReadTranscriptByWorkerSessionID(
+	context.Context, workersessions.ReadTranscriptByWorkerSessionIDRequest,
 ) (workersessions.ReadTranscriptResult, error) {
 	return workersessions.ReadTranscriptResult{}, nil
 }
@@ -370,6 +382,12 @@ func (s *preHandoffFailedWorkerSessionsService) Start(
 		Retry:     req.Retry,
 	})
 	return workersessions.StartResult{Session: result.Session}, err
+}
+
+func (s *preHandoffFailedWorkerSessionsService) Continue(
+	context.Context, workersessions.ContinueRequest,
+) (workersessions.ContinueResult, error) {
+	return workersessions.ContinueResult{}, nil
 }
 
 func (s *preHandoffFailedWorkerSessionsService) PublishRecord(

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -119,6 +120,43 @@ func TestWorkerExecutorRequestAdapterExecuteSuccessUnaffected(t *testing.T) {
 	}
 	if result.Outcome != want.Outcome {
 		t.Fatalf("Execute() result = %#v, want %#v", result, want)
+	}
+}
+
+type poolBoundaryResolvedExecutor struct {
+	request WorkstationExecutionRequest
+}
+
+func (e *poolBoundaryResolvedExecutor) Execute(context.Context, work.WorkDispatch) (WorkResult, error) {
+	return WorkResult{Outcome: OutcomeFailed, Error: "legacy request path used"}, nil
+}
+
+func (e *poolBoundaryResolvedExecutor) ExecuteResolved(_ context.Context, request WorkstationExecutionRequest) (WorkResult, error) {
+	e.request = request
+	return WorkResult{Outcome: OutcomeAccepted}, nil
+}
+
+func TestWorkerExecutorRequestAdapterPreservesResolvedContinuation(t *testing.T) {
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-1",
+	}
+	executor := &poolBoundaryResolvedExecutor{}
+	adapter := workerExecutorRequestAdapter{executors: map[string]WorkerExecutor{"swe": executor}}
+	request := poolBoundaryDispatchRequest("dispatch-resume", "transition-resume", "swe")
+	request.ResumeSession = &reference
+
+	result, err := adapter.Execute(context.Background(), request)
+
+	if err != nil {
+		t.Fatalf("Execute() err = %v, want nil", err)
+	}
+	if result.Outcome != OutcomeAccepted {
+		t.Fatalf("Execute() result = %#v, want accepted resolved path", result)
+	}
+	if executor.request.ResumeSession == nil || *executor.request.ResumeSession != reference {
+		t.Fatalf("resolved request ResumeSession = %#v, want %#v", executor.request.ResumeSession, reference)
 	}
 }
 

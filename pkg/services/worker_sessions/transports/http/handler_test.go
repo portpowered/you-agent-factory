@@ -240,6 +240,65 @@ func TestListWorkerSessionsBySessionIDReturnsNotFoundForMissingWork(t *testing.T
 	}
 }
 
+func TestListWorkerSessionsProjectsTopLevelScopeFiltersAndPagination(t *testing.T) {
+	scope := factoryapi.ListWorkerSessionsParamsScope("direct")
+	states := []factoryapi.ListWorkerSessionsParamsState{factoryapi.ListWorkerSessionsParamsState("COMPLETED")}
+	maxResults := 1
+	nextToken := "Y3Vyc29yLTE="
+	duration := 1500 * time.Millisecond
+	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{
+		Observations: []workersessions.Observation{{
+			WorkerSessionID: "direct-1", Direct: true, ProviderSessionAvailable: true,
+			ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-1"},
+			AttemptID:       "attempt-1", State: workersessions.StateCompleted, Duration: &duration,
+			DurationBasis: workersessions.DurationBasisRecordedTimestamps, Transcript: workersessions.TranscriptAvailabilityAvailable,
+		}},
+		MaxResults: 1, NextToken: "Y3Vyc29yLTI=",
+	}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions", nil), factoryapi.ListWorkerSessionsParams{
+		Scope: &scope, State: &states, MaxResults: &maxResults, NextToken: &nextToken,
+	})
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := service.topLevelRequest.Scope; got != workersessions.ObservationScopeDirect {
+		t.Fatalf("scope = %q, want direct", got)
+	}
+	if len(service.topLevelRequest.States) != 1 || service.topLevelRequest.States[0] != workersessions.StateCompleted || service.topLevelRequest.MaxResults != 1 || service.topLevelRequest.NextToken != nextToken {
+		t.Fatalf("top-level request = %#v, want translated filters and cursor", service.topLevelRequest)
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Sessions) != 1 || !response.Sessions[0].Direct {
+		t.Fatalf("sessions = %#v, want one direct observation", response.Sessions)
+	}
+	if response.PaginationContext == nil || response.PaginationContext.MaxResults != 1 || response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != "Y3Vyc29yLTI=" {
+		t.Fatalf("pagination = %#v, want bounded continuation context", response.PaginationContext)
+	}
+}
+
+func TestListWorkerSessionsReturnsTopLevelEmptyCollection(t *testing.T) {
+	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{}, MaxResults: 50}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions", nil), factoryapi.ListWorkerSessionsParams{})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Sessions == nil || len(response.Sessions) != 0 {
+		t.Fatalf("sessions = %#v, want non-nil empty collection", response.Sessions)
+	}
+}
+
 func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *testing.T) {
 	total := 17
 	duration := int64(2500)
@@ -730,6 +789,9 @@ type fakeObservationService struct {
 	result                     workersessions.ListObservationsResult
 	listErr                    error
 	listCalled                 bool
+	topLevelResult             workersessions.ListWorkerSessionObservationsResult
+	topLevelErr                error
+	topLevelRequest            workersessions.ListWorkerSessionObservationsRequest
 	getResult                  workersessions.Observation
 	getErr                     error
 	getCalled                  bool
@@ -742,6 +804,10 @@ type fakeObservationService struct {
 	readErr                    error
 	readCalled                 bool
 	readProviderSession        providers.SessionRef
+	readByWorkerResult         workersessions.ReadTranscriptResult
+	readByWorkerErr            error
+	readByWorkerCalled         bool
+	readByWorkerSessionID      string
 	streamSubscription         *fakeObservationSubscription
 	streamRequest              workersessions.StreamObservationsRequest
 	streamErr                  error
@@ -753,11 +819,20 @@ type fakeObservationService struct {
 	startErr                   error
 	startCalled                bool
 	startRequest               workersessions.StartRequest
+	continueResult             workersessions.ContinueResult
+	continueErr                error
+	continueCalled             bool
+	continueRequest            workersessions.ContinueRequest
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
 	f.listCalled = true
 	return f.result, f.listErr
+}
+
+func (f *fakeObservationService) ListWorkerSessionObservations(_ context.Context, request workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+	f.topLevelRequest = request
+	return f.topLevelResult, f.topLevelErr
 }
 
 func (f *fakeObservationService) GetObservation(_ context.Context, request workersessions.GetObservationRequest) (workersessions.Observation, error) {
@@ -778,6 +853,12 @@ func (f *fakeObservationService) ReadTranscript(_ context.Context, request worke
 	return f.readResult, f.readErr
 }
 
+func (f *fakeObservationService) ReadTranscriptByWorkerSessionID(_ context.Context, request workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error) {
+	f.readByWorkerCalled = true
+	f.readByWorkerSessionID = request.WorkerSessionID
+	return f.readByWorkerResult, f.readByWorkerErr
+}
+
 func (f *fakeObservationService) StreamObservations(_ context.Context, request workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
 	f.streamRequest = request
 	if f.streamSubscription == nil {
@@ -793,6 +874,12 @@ func (f *fakeObservationService) Start(_ context.Context, request workersessions
 	f.startCalled = true
 	f.startRequest = request
 	return f.startResult, f.startErr
+}
+
+func (f *fakeObservationService) Continue(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+	f.continueCalled = true
+	f.continueRequest = request
+	return f.continueResult, f.continueErr
 }
 
 func (f *fakeObservationService) StreamObservationsByWorkerSessionID(_ context.Context, request workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {

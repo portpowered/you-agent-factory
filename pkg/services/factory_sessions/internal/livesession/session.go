@@ -4,6 +4,7 @@ package livesession
 import (
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -33,6 +34,7 @@ type LiveSession struct {
 	RuntimeFactorySessionID string
 	ResponseEvents          *responseeventstore.SessionResponseEventStore
 	JavaScriptCheckpoints   factoryruntime.JavaScriptCheckpointStore
+	LiveChangeMu            sync.Mutex
 }
 
 // CompleteResponseEvents marks the session-owned response-event publication

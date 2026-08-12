@@ -3,6 +3,7 @@ package commandregistry_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -410,6 +411,72 @@ func TestSessionLifecycleRemotePlacementDoesNotUseLocalFallback(t *testing.T) {
 	)
 	if err := handlers.ResolvedRunE(&cobra.Command{Use: "pause"}, inputs, remoteGlobals); err == nil || err.Error() != "session pause service is required for remote placement" {
 		t.Fatalf("remote placement with only local service error = %v, want explicit missing remote service", err)
+	}
+}
+
+func TestSessionResourceSetResolvedHandlerMapsStableInputs(t *testing.T) {
+	var got sessioncli.ResourceCapacityConfig
+	var diagnostics bytes.Buffer
+	handlers := commandregistry.BindSessionResolvedHandlers(
+		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			SetResourceCapacity: func(cfg sessioncli.ResourceCapacityConfig) error {
+				got = cfg
+				return nil
+			},
+		}, nil, func(*cobra.Command) io.Writer { return &diagnostics }),
+	)
+	ctx := context.WithValue(context.Background(), struct{}{}, "session-resource-set")
+	var output bytes.Buffer
+	cmd := &cobra.Command{Use: "set"}
+	cmd.SetContext(ctx)
+	cmd.SetOut(&output)
+	inputs := resolvedTestInputs(t, resourceSetResolvedInputValues(t)...)
+	inherited := resolvedFactoryGlobals(t, true, false, true)
+	if err := handlers.ResourceSet(cmd, inputs, inherited); err != nil {
+		t.Fatalf("ResourceSet() error = %v", err)
+	}
+	if got.Context != ctx || got.Server != "http://localhost:7437" || got.SessionID != "session-beta" ||
+		got.ResourceID != "reviewers" || got.Capacity != 8 || got.ExpectedRevision != 3 ||
+		got.RequestID != "raise-reviewers-001" || got.Reason != "operator capacity increase" ||
+		!got.JSON || !got.Debug || !got.Verbose || got.Output != &output {
+		t.Fatalf("resource capacity config = %#v, want stable-input mapping", got)
+	}
+	if got.Diagnostics != &diagnostics {
+		t.Fatalf("diagnostics writer = %T, want injected writer", got.Diagnostics)
+	}
+}
+
+func TestSessionResourceSetResolvedHandlerRejectsMissingInputs(t *testing.T) {
+	handlers := commandregistry.BindSessionResolvedHandlers(
+		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			SetResourceCapacity: func(sessioncli.ResourceCapacityConfig) error { return nil },
+		}, nil, func(*cobra.Command) io.Writer { return io.Discard }),
+	)
+	cmd := &cobra.Command{Use: "set"}
+	inherited := resolvedFactoryGlobals(t, true, false, true)
+	base := resourceSetResolvedInputValues(t)
+	for _, omitted := range []string{
+		"you.session.resource.set.arg.0",
+		"you.session.resource.set.arg.1",
+		"you.session.resource.set.flag.request-id",
+		"you.session.resource.set.flag.expected-revision",
+		"you.session.resource.set.flag.reason",
+	} {
+		if err := handlers.ResourceSet(cmd, resolvedTestInputsWithout(t, base, omitted), inherited); err == nil {
+			t.Fatalf("ResourceSet() with %s omitted = nil, want stable input error", omitted)
+		}
+	}
+}
+
+func resourceSetResolvedInputValues(t *testing.T) []resolvedTestValue {
+	t.Helper()
+	return []resolvedTestValue{
+		{id: "you.session.resource.set.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("reviewers")},
+		{id: "you.session.resource.set.arg.1", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.IntValue(8)},
+		{id: "you.session.resource.set.arg.2", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("session-beta")},
+		{id: "you.session.resource.set.flag.request-id", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("raise-reviewers-001")},
+		{id: "you.session.resource.set.flag.expected-revision", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(3)},
+		{id: "you.session.resource.set.flag.reason", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("operator capacity increase")},
 	}
 }
 

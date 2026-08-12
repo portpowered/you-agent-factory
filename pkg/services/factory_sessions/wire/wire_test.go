@@ -34,6 +34,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
 		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
 		{name: "clock", mutate: func(in *newServiceInputs) { in.clock = nil }},
+		{name: "live-change coordinator", mutate: func(in *newServiceInputs) { in.liveChangeCoordinator = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -272,6 +273,7 @@ type newServiceInputs struct {
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
 	eventsService                events.Service
 	clock                        factoryruntime.Clock
+	liveChangeCoordinator        LiveChangeCoordinator
 }
 
 func validNewServiceInputs() newServiceInputs {
@@ -288,6 +290,7 @@ func validNewServiceInputs() newServiceInputs {
 		resolveSymlinks:         func(path string) (string, error) { return path, nil },
 		eventsService:           eventsService,
 		clock:                   &recordingClock{},
+		liveChangeCoordinator:   NewLiveChangeCoordinator(),
 	}
 }
 
@@ -309,6 +312,7 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.resolveSymlinks,
 		in.eventsService,
 		in.clock,
+		in.liveChangeCoordinator,
 	)
 }
 

@@ -15,6 +15,8 @@ var canonicalFactoryEventTypeValues = []string{
 	"RUN_REQUEST",
 	"INITIAL_STRUCTURE_REQUEST",
 	"FACTORY_CHANGE",
+	"FACTORY_CHANGE_REQUEST",
+	"FACTORY_CHANGE_FAILED",
 	"WORK_REQUEST",
 	"RELATIONSHIP_CHANGE_REQUEST",
 	"DISPATCH_REQUEST",
@@ -46,16 +48,6 @@ var canonicalFactoryEventTypeValues = []string{
 	"ARTIFACT_CREATED",
 }
 
-var retiredFactoryEventTypeValues = []string{
-	"RUN_STARTED",
-	"INITIAL_STRUCTURE",
-	"RELATIONSHIP_CHANGE",
-	"DISPATCH_CREATED",
-	"DISPATCH_COMPLETED",
-	"FACTORY_STATE_CHANGE",
-	"RUN_FINISHED",
-}
-
 var bundledFactoryEventContractSchemaNames = []string{
 	"FactoryEvent",
 	"FactoryEventContext",
@@ -82,6 +74,8 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"RunRequestEventPayload",
 	"InitialStructureRequestEventPayload",
 	"FactoryChangeEventPayload",
+	"FactoryChangeRequestEventPayload",
+	"FactoryChangeFailedEventPayload",
 	"WorkRequestEventPayload",
 	"RelationshipChangeRequestEventPayload",
 	"DispatchRequestEventPayload",
@@ -127,6 +121,8 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/RunRequestEventPayload",
 	"#/components/schemas/InitialStructureRequestEventPayload",
 	"#/components/schemas/FactoryChangeEventPayload",
+	"#/components/schemas/FactoryChangeRequestEventPayload",
+	"#/components/schemas/FactoryChangeFailedEventPayload",
 	"#/components/schemas/WorkRequestEventPayload",
 	"#/components/schemas/RelationshipChangeRequestEventPayload",
 	"#/components/schemas/DispatchRequestEventPayload",
@@ -162,6 +158,8 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"RUN_REQUEST":                         "RunRequestEventPayload",
 	"INITIAL_STRUCTURE_REQUEST":           "InitialStructureRequestEventPayload",
 	"FACTORY_CHANGE":                      "FactoryChangeEventPayload",
+	"FACTORY_CHANGE_REQUEST":              "FactoryChangeRequestEventPayload",
+	"FACTORY_CHANGE_FAILED":               "FactoryChangeFailedEventPayload",
 	"WORK_REQUEST":                        "WorkRequestEventPayload",
 	"RELATIONSHIP_CHANGE_REQUEST":         "RelationshipChangeRequestEventPayload",
 	"DISPATCH_REQUEST":                    "DispatchRequestEventPayload",

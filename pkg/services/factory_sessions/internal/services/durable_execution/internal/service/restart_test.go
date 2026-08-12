@@ -167,7 +167,7 @@ func newRestartBackedExecution(
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
 		func() string { return "dur-sess-restart-owner-aaaaaaaaaaaaaaaaaaaaaaaa" },
-		nil, nil,
+		nil, nil, nil,
 	)
 }
 

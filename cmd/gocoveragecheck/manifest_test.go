@@ -262,3 +262,78 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckCoverageManifestAppliesRawStatementEpsilon(t *testing.T) {
+	t.Parallel()
+
+	importPath := modulePath + "/pkg/config"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "unit",
+		Packages: []coverageManifestEntry{
+			{Package: importPath, Minimum: json.RawMessage("80.00")},
+		},
+	}
+	cases := []struct {
+		name             string
+		totals           packageCoverageTotals
+		epsilon          float64
+		wantFailure      bool
+		wantWarningDelta string
+	}{
+		{
+			name:             "inside epsilon",
+			totals:           packageCoverageTotals{coveredStatements: 319, totalStatements: 400},
+			epsilon:          0.25,
+			wantWarningDelta: "delta=-0.2500 percentage-points",
+		},
+		{
+			name:        "beyond epsilon",
+			totals:      packageCoverageTotals{coveredStatements: 318, totalStatements: 400},
+			epsilon:     0.25,
+			wantFailure: true,
+		},
+		{
+			name:    "exact floor",
+			totals:  packageCoverageTotals{coveredStatements: 4, totalStatements: 5},
+			epsilon: 0.25,
+		},
+		{
+			name:        "strict zero",
+			totals:      packageCoverageTotals{coveredStatements: 319, totalStatements: 400},
+			epsilon:     0,
+			wantFailure: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			failures, warnings := checkCoverageManifestWithEpsilon(
+				manifest,
+				map[string]packageCoverageTotals{importPath: tc.totals},
+				"minimums.json",
+				tc.epsilon,
+			)
+			if got := len(failures) > 0; got != tc.wantFailure {
+				t.Fatalf("failures = %v, want failure=%t", failures, tc.wantFailure)
+			}
+			if tc.wantWarningDelta == "" {
+				if len(warnings) != 0 {
+					t.Fatalf("warnings = %v, want none", warnings)
+				}
+				return
+			}
+			if len(warnings) != 1 || !strings.Contains(warnings[0], tc.wantWarningDelta) {
+				t.Fatalf("warnings = %v, want one warning containing %q", warnings, tc.wantWarningDelta)
+			}
+			if !strings.Contains(warnings[0], "package="+importPath+" lane=unit expected-minimum=80.00% actual=79.7500%") ||
+				!strings.Contains(warnings[0], "epsilon=0.2500 percentage-points") {
+				t.Fatalf("warning = %q, want package, lane, floor, actual, and epsilon", warnings[0])
+			}
+			if !strings.Contains(warnings[0], "warning") || strings.Contains(warnings[0], "update-manifest") {
+				t.Fatalf("warning = %q, did not expect update remediation", warnings[0])
+			}
+		})
+	}
+}

@@ -148,30 +148,36 @@ const (
 	sessionVerboseInputID = "you.flag.verbose"
 	sessionDebugInputID   = "you.flag.debug"
 
-	sessionCreateDirInputID        = "you.session.create.flag.dir"
-	sessionCreateInitInputID       = "you.session.create.flag.init-new-factory"
-	sessionCreatePortInputID       = "you.session.create.flag.port"
-	sessionCreateTargetKindInputID = "you.session.create.flag.target-kind"
-	sessionCreateTargetNameInputID = "you.session.create.flag.target-name"
-	sessionCreateValidateInputID   = "you.session.create.flag.validate-only"
-	sessionDeleteIDInputID         = "you.session.delete.arg.0"
-	sessionDeletePortInputID       = "you.session.delete.flag.port"
-	sessionListPortInputID         = "you.session.list.flag.port"
-	sessionListScopeInputID        = "you.session.list.flag.scope"
-	sessionShowIDInputID           = "you.session.show.arg.0"
-	sessionShowPortInputID         = "you.session.show.flag.port"
-	sessionDispatchesIDInputID     = "you.session.dispatches.arg.0"
-	sessionDispatchesPortInputID   = "you.session.dispatches.flag.port"
-	sessionDispatchesPhaseInputID  = "you.session.dispatches.flag.phase"
-	sessionDispatchesStatusInputID = "you.session.dispatches.flag.status"
-	sessionPauseIDInputID          = "you.session.pause.arg.0"
-	sessionPausePortInputID        = "you.session.pause.flag.port"
-	sessionResumeIDInputID         = "you.session.resume.arg.0"
-	sessionResumePortInputID       = "you.session.resume.flag.port"
-	sessionCancelIDInputID         = "you.session.cancel.arg.0"
-	sessionCancelPortInputID       = "you.session.cancel.flag.port"
-	sessionTerminateIDInputID      = "you.session.terminate.arg.0"
-	sessionTerminatePortInputID    = "you.session.terminate.flag.port"
+	sessionCreateDirInputID                   = "you.session.create.flag.dir"
+	sessionCreateInitInputID                  = "you.session.create.flag.init-new-factory"
+	sessionCreatePortInputID                  = "you.session.create.flag.port"
+	sessionCreateTargetKindInputID            = "you.session.create.flag.target-kind"
+	sessionCreateTargetNameInputID            = "you.session.create.flag.target-name"
+	sessionCreateValidateInputID              = "you.session.create.flag.validate-only"
+	sessionDeleteIDInputID                    = "you.session.delete.arg.0"
+	sessionDeletePortInputID                  = "you.session.delete.flag.port"
+	sessionListPortInputID                    = "you.session.list.flag.port"
+	sessionListScopeInputID                   = "you.session.list.flag.scope"
+	sessionShowIDInputID                      = "you.session.show.arg.0"
+	sessionShowPortInputID                    = "you.session.show.flag.port"
+	sessionDispatchesIDInputID                = "you.session.dispatches.arg.0"
+	sessionDispatchesPortInputID              = "you.session.dispatches.flag.port"
+	sessionDispatchesPhaseInputID             = "you.session.dispatches.flag.phase"
+	sessionDispatchesStatusInputID            = "you.session.dispatches.flag.status"
+	sessionPauseIDInputID                     = "you.session.pause.arg.0"
+	sessionPausePortInputID                   = "you.session.pause.flag.port"
+	sessionResumeIDInputID                    = "you.session.resume.arg.0"
+	sessionResumePortInputID                  = "you.session.resume.flag.port"
+	sessionCancelIDInputID                    = "you.session.cancel.arg.0"
+	sessionCancelPortInputID                  = "you.session.cancel.flag.port"
+	sessionTerminateIDInputID                 = "you.session.terminate.arg.0"
+	sessionTerminatePortInputID               = "you.session.terminate.flag.port"
+	sessionResourceSetResourceIDInputID       = "you.session.resource.set.arg.0"
+	sessionResourceSetCapacityInputID         = "you.session.resource.set.arg.1"
+	sessionResourceSetSessionIDInputID        = "you.session.resource.set.arg.2"
+	sessionResourceSetRequestIDInputID        = "you.session.resource.set.flag.request-id"
+	sessionResourceSetExpectedRevisionInputID = "you.session.resource.set.flag.expected-revision"
+	sessionResourceSetReasonInputID           = "you.session.resource.set.flag.reason"
 )
 
 // SessionResolvedServices are the explicit local and remote Factory Session
@@ -231,15 +237,16 @@ type SessionResolvedHandler struct {
 // SessionResolvedHandlers supplies typed handlers for every runnable Session
 // command. Generic manifest projection maps them through stable handler IDs.
 type SessionResolvedHandlers struct {
-	Create     ResolvedRunE
-	Delete     ResolvedRunE
-	List       ResolvedRunE
-	Show       ResolvedRunE
-	Dispatches ResolvedRunE
-	Pause      ResolvedRunE
-	Resume     ResolvedRunE
-	Cancel     ResolvedRunE
-	Terminate  ResolvedRunE
+	Create      ResolvedRunE
+	Delete      ResolvedRunE
+	List        ResolvedRunE
+	Show        ResolvedRunE
+	Dispatches  ResolvedRunE
+	Pause       ResolvedRunE
+	Resume      ResolvedRunE
+	Cancel      ResolvedRunE
+	Terminate   ResolvedRunE
+	ResourceSet ResolvedRunE
 }
 
 // BindSessionResolvedHandlers adapts the injected Factory Session operations
@@ -251,6 +258,7 @@ func BindSessionResolvedHandlers(services SessionResolvedServices) SessionResolv
 		Show: handler.Show, Dispatches: handler.Dispatches,
 		Pause: handler.Pause, Resume: handler.Resume,
 		Cancel: handler.Cancel, Terminate: handler.Terminate,
+		ResourceSet: handler.ResourceSet,
 	}
 }
 
@@ -261,15 +269,16 @@ func NewSessionResolvedRegistry(
 ) (*Registry, error) {
 	handlers := BindSessionResolvedHandlers(services)
 	bindings := map[string]ResolvedRunE{
-		"you.session.create":     handlers.Create,
-		"you.session.delete":     handlers.Delete,
-		"you.session.list":       handlers.List,
-		"you.session.show":       handlers.Show,
-		"you.session.dispatches": handlers.Dispatches,
-		"you.session.pause":      handlers.Pause,
-		"you.session.resume":     handlers.Resume,
-		"you.session.cancel":     handlers.Cancel,
-		"you.session.terminate":  handlers.Terminate,
+		"you.session.create":       handlers.Create,
+		"you.session.delete":       handlers.Delete,
+		"you.session.list":         handlers.List,
+		"you.session.show":         handlers.Show,
+		"you.session.dispatches":   handlers.Dispatches,
+		"you.session.pause":        handlers.Pause,
+		"you.session.resume":       handlers.Resume,
+		"you.session.cancel":       handlers.Cancel,
+		"you.session.terminate":    handlers.Terminate,
+		"you.session.resource.set": handlers.ResourceSet,
 	}
 	registry := NewRegistry()
 	for commandID, binding := range bindings {
@@ -633,6 +642,51 @@ func (h *SessionResolvedHandler) Terminate(
 		sessionTerminateIDInputID, sessionTerminatePortInputID,
 		"terminate",
 	)
+}
+
+func (h *SessionResolvedHandler) ResourceSet(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.services.remote() == nil {
+		return fmt.Errorf("session resource capacity service is required")
+	}
+	resourceID, err := inputs.String(sessionResourceSetResourceIDInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	capacity, err := inputs.Int(sessionResourceSetCapacityInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	sessionID, err := optionalSessionID(inputs, sessionResourceSetSessionIDInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	requestID, err := inputs.String(sessionResourceSetRequestIDInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	expectedRevision, err := inputs.Int(sessionResourceSetExpectedRevisionInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	reason, err := inputs.String(sessionResourceSetReasonInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	globals, diagnostics, err := h.base(cmd, inherited)
+	if err != nil {
+		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
+	}
+	return h.services.remote().SetResourceCapacity(sessioncli.ResourceCapacityConfig{
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+		ResourceID: resourceID, Capacity: capacity, ExpectedRevision: expectedRevision,
+		RequestID: requestID, Reason: reason, JSON: globals.json,
+		Verbose: globals.verbose, Debug: globals.debug,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
+	})
 }
 
 // NewRepresentativeRegistry registers handwritten handlers for the representative

@@ -21,19 +21,20 @@ import (
 
 // ShowConfig holds parameters for the Worker Sessions show command.
 type ShowConfig struct {
-	Context      context.Context
-	Server       string
-	SessionID    string
-	Provider     string
-	Kind         string
-	ID           string
-	OutputFormat string
-	JSON         bool
-	Verbose      bool
-	Debug        bool
-	Output       io.Writer
-	Diagnostics  io.Writer
-	HTTP         clihttp.Protocol
+	Context         context.Context
+	Server          string
+	SessionID       string
+	WorkerSessionID string
+	Provider        string
+	Kind            string
+	ID              string
+	OutputFormat    string
+	JSON            bool
+	Verbose         bool
+	Debug           bool
+	Output          io.Writer
+	Diagnostics     io.Writer
+	HTTP            clihttp.Protocol
 }
 
 // NewShow returns the composition-facing show operation bound to one HTTP
@@ -49,6 +50,7 @@ func show(config ShowConfig) error {
 	config.Provider = strings.TrimSpace(config.Provider)
 	config.Kind = strings.TrimSpace(config.Kind)
 	config.ID = strings.TrimSpace(config.ID)
+	config.WorkerSessionID = strings.TrimSpace(config.WorkerSessionID)
 	if err := validateShowConfig(config); err != nil {
 		return emitShowCLIError(config, config.JSON || strings.EqualFold(config.OutputFormat, "json"), err)
 	}
@@ -57,13 +59,13 @@ func show(config ShowConfig) error {
 		return emitShowCLIError(config, config.JSON, err)
 	}
 	jsonOutput := config.JSON || format == "json"
-	endpoint, err := workerSessionDetailEndpoint(config.Server, config.SessionID, config.Provider, config.Kind, config.ID)
+	endpoint, err := workerSessionDetailEndpoint(config.Server, config.SessionID, config.WorkerSessionID, config.Provider, config.Kind, config.ID)
 	if err != nil {
 		return emitShowCLIError(config, jsonOutput, err)
 	}
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
-		"worker sessions show request endpointPath=%s endpoint=%s server=%s session=%s provider=%s kind=%s id=%s",
-		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.Provider, config.Kind, config.ID)
+		"worker sessions show request endpointPath=%s endpoint=%s server=%s session=%s workerSessionID=%s provider=%s kind=%s id=%s",
+		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.WorkerSessionID, config.Provider, config.Kind, config.ID)
 
 	var observation factoryapi.WorkerSessionObservation
 	response, requestErr := config.HTTP.GetJSON(config.Context, endpoint.String(), &observation)
@@ -101,6 +103,13 @@ func validateShowConfig(config ShowConfig) error {
 	config.Provider = strings.TrimSpace(config.Provider)
 	config.Kind = strings.TrimSpace(config.Kind)
 	config.ID = strings.TrimSpace(config.ID)
+	config.WorkerSessionID = strings.TrimSpace(config.WorkerSessionID)
+	if config.WorkerSessionID != "" {
+		if config.Provider != "" || config.Kind != "" || config.ID != "" {
+			return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--worker-session-id cannot be combined with --provider, --kind, or --id", nil)
+		}
+		return nil
+	}
 	if config.Provider == "" {
 		return newCLIError("PROVIDER_REQUIRED", "--provider is required", nil)
 	}
@@ -119,14 +128,21 @@ func validateShowConfig(config ShowConfig) error {
 	return nil
 }
 
-func workerSessionDetailEndpoint(server, sessionID, provider, kind, id string) (url.URL, error) {
-	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsDetailPath(sessionID))
+func workerSessionDetailEndpoint(server, sessionID, workerSessionID, provider, kind, id string) (url.URL, error) {
+	path := sessionpath.WorkerSessionsDetailPath(sessionID)
+	if strings.TrimSpace(workerSessionID) != "" {
+		path = sessionpath.TopLevelWorkerSessionDetailPath(workerSessionID)
+	}
+	endpointURL, err := cliserver.RequestURL(server, path)
 	if err != nil {
 		return url.URL{}, err
 	}
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
 		return url.URL{}, fmt.Errorf("parse Worker Sessions show endpoint: %w", err)
+	}
+	if strings.TrimSpace(workerSessionID) != "" {
+		return *endpoint, nil
 	}
 	query := endpoint.Query()
 	query.Set("provider", provider)
@@ -195,7 +211,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		}
 	}
 	return listJSONObservation{
-		AttemptID: session.AttemptId, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
+		AttemptID: session.AttemptId, Direct: session.Direct, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
 		EndedAt: session.EndedAt, Failure: session.Failure, Parse: session.Parse,
 		ProviderSession: session.ProviderSession, ProviderSessionAvailable: session.ProviderSessionAvailable,
 		StartedAt: session.StartedAt, State: session.State, TokenUsage: tokenUsage,
@@ -223,7 +239,7 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		provider, kind, id = session.ProviderSession.Provider, session.ProviderSession.Kind, session.ProviderSession.Id
 	}
 	fields := []struct{ label, value string }{
-		{"Worker Session ID", session.WorkerSessionId}, {"Provider", provider}, {"Kind", kind}, {"Provider Session ID", id},
+		{"Worker Session ID", session.WorkerSessionId}, {"Direct", fmt.Sprintf("%t", session.Direct)}, {"Provider", provider}, {"Kind", kind}, {"Provider Session ID", id},
 		{"Work IDs", joinOrDash(session.WorkIds)}, {"Turn ID", stringOrDash(session.TurnId)}, {"Attempt ID", session.AttemptId},
 		{"State", stringOrDashPtr(string(session.State))}, {"Started", formatTime(session.StartedAt)}, {"Ended", formatTime(session.EndedAt)},
 		{"Duration", formatDuration(session.DurationMillis)}, {"Duration basis", stringOrDashPtr(string(session.DurationBasis))},

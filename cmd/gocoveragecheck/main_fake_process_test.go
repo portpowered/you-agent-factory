@@ -14,6 +14,10 @@ func fakeGoCoverageCommand(invocation commandInvocation) (string, string, error)
 	return fakeGoCommandByScenario("coverage-default", invocation.name, invocation.args...)
 }
 
+func fakeGoCoverageCommandWithMeasuredZeroConfig(invocation commandInvocation) (string, string, error) {
+	return fakeGoCommandByScenario("coverage-measured-zero-config", invocation.name, invocation.args...)
+}
+
 func fakeGoCoverageCommandPassing(invocation commandInvocation) (string, string, error) {
 	return fakeGoCommandByScenario("coverage-passing", invocation.name, invocation.args...)
 }
@@ -93,7 +97,7 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 			return "", "", fmt.Errorf("missing -coverprofile")
 		}
 		switch scenario {
-		case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-temp-profile", "coverage-test-fails-without-detail":
+		case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-measured-zero-config", "coverage-temp-profile", "coverage-test-fails-without-detail":
 			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
 				"mode: count",
 				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
@@ -101,6 +105,15 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 				"",
 			}, "\n")); err != nil {
 				return "", "", err
+			}
+			if scenario == "coverage-measured-zero-config" {
+				if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
+					"mode: count",
+					modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+					"",
+				}, "\n")); err != nil {
+					return "", "", err
+				}
 			}
 		case "coverage-with-coverpkg-ok-summary", "coverage-with-ok-summary", "coverage-default":
 			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
@@ -116,7 +129,7 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 		}
 
 		switch scenario {
-		case "coverage-passing":
+		case "coverage-passing", "coverage-measured-zero-config":
 			return modulePath + "/pkg/config\t\tcoverage: 75.0% of statements\n", "", nil
 		case "coverage-temp-profile":
 			if err := writeTempProfileMarkerOrErr(profilePath); err != nil {
@@ -151,7 +164,7 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 	}
 
 	switch scenario {
-	case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-temp-profile":
+	case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-measured-zero-config", "coverage-temp-profile":
 		return modulePath + "/pkg/config\t\tcoverage: 100.0% of statements\n" +
 			modulePath + "/pkg/service\t\tcoverage: 100.0% of statements\n", "", nil
 	case "coverage-test-fails-without-detail":

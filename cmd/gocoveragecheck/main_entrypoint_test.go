@@ -118,6 +118,180 @@ func TestMainReportsPassingCoverageWithoutFailing(t *testing.T) {
 	}
 }
 
+func TestMainPackageManifestEpsilonCases(t *testing.T) {
+	configPackage := modulePath + "/pkg/config"
+	cases := []struct {
+		name        string
+		minimum     string
+		epsilon     string
+		wantExit    int
+		wantWarning bool
+		wantFailure bool
+	}{
+		{name: "default boundary warning", minimum: "0.25", wantWarning: true},
+		{name: "beyond default epsilon", minimum: "0.26", wantExit: 1, wantFailure: true},
+		{name: "strict zero", minimum: "0.25", epsilon: "0", wantExit: 1, wantFailure: true},
+		{name: "exact floor", minimum: "0.00"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			manifestPath := writePackageMinimumManifest(t, "unit", configPackage, tc.minimum)
+			args := []string{
+				"-min=0",
+				"-suite=unit",
+				"-package-manifest=" + manifestPath,
+				"-coverpkg=" + configPackage,
+				"-packages=./pkg/config",
+			}
+			if tc.epsilon != "" {
+				args = append(args, "-package-floor-epsilon="+tc.epsilon)
+			}
+			_, stderr, exitCode := runMainForTest(t, args, fakeGoCoverageCommandWithMeasuredZeroConfig)
+
+			if exitCode != tc.wantExit {
+				t.Fatalf("main() exit code = %d, want %d; stderr=%q", exitCode, tc.wantExit, stderr)
+			}
+			if tc.wantWarning {
+				got := stderr
+				for _, want := range []string{
+					"package coverage warning: tolerated drift",
+					"package=" + configPackage,
+					"lane=unit",
+					"expected-minimum=0.25%",
+					"actual=0.0000%",
+					"delta=-0.2500 percentage-points",
+					"epsilon=0.2500 percentage-points",
+				} {
+					if !strings.Contains(got, want) {
+						t.Fatalf("main() stderr = %q, want warning containing %q", got, want)
+					}
+				}
+				if strings.Contains(got, "update-manifest") {
+					t.Fatalf("main() stderr = %q, did not expect failure remediation", got)
+				}
+			} else if stderr != "" && !tc.wantFailure {
+				t.Fatalf("main() stderr = %q, want empty stderr", stderr)
+			}
+			if tc.wantFailure {
+				got := stderr
+				if !strings.Contains(got, "package coverage regression: package="+configPackage) || !strings.Contains(got, "-update-manifest") {
+					t.Fatalf("main() stderr = %q, want regression and remediation", got)
+				}
+				if strings.Contains(got, "drift tolerated") {
+					t.Fatalf("main() stderr = %q, did not expect tolerated warning", got)
+				}
+			}
+		})
+	}
+}
+
+func TestMainRejectsNegativePackageFloorEpsilonBeforeCoverageWork(t *testing.T) {
+	called := false
+	_, stderr, exitCode := runMainForTest(t, []string{"-package-floor-epsilon=-0.01"}, func(commandInvocation) (string, string, error) {
+		called = true
+		return "", "", nil
+	})
+
+	if called {
+		t.Fatal("main() started coverage work for invalid epsilon")
+	}
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr, "finite non-negative percentage-point value") || !strings.Contains(stderr, "set it to 0 or greater") {
+		t.Fatalf("main() stderr = %q, want actionable epsilon diagnostic", stderr)
+	}
+}
+
+func TestMainUpdateManifestIgnoresEpsilonForRejectAndRaise(t *testing.T) {
+	configPackage := modulePath + "/pkg/config"
+	cases := []struct {
+		name       string
+		minimum    string
+		command    commandRunnerFunc
+		wantExit   int
+		wantStatus string
+	}{
+		{name: "rejects decrease at epsilon boundary", minimum: "0.25", command: fakeGoCoverageCommandWithMeasuredZeroConfig, wantExit: 1, wantStatus: "status=rejected"},
+		{name: "raises improved floor", minimum: "80.00", command: fakeGoCoverageCommandPassing, wantStatus: "status=raised"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			manifestPath := writePackageMinimumManifest(t, "unit", configPackage, tc.minimum)
+			before, err := os.ReadFile(manifestPath)
+			if err != nil {
+				t.Fatalf("read manifest before update: %v", err)
+			}
+			args := []string{
+				"-min=0",
+				"-suite=unit",
+				"-update-manifest=" + manifestPath,
+				"-package-floor-epsilon=0.25",
+				"-coverpkg=" + configPackage,
+				"-packages=./pkg/config",
+			}
+			stdout, stderr, exitCode := runMainForTest(t, args, tc.command)
+
+			if exitCode != tc.wantExit {
+				t.Fatalf("main() exit code = %d, want %d; stderr=%q", exitCode, tc.wantExit, stderr)
+			}
+			if !strings.Contains(stdout, tc.wantStatus) {
+				t.Fatalf("main() stdout = %q, want %q", stdout, tc.wantStatus)
+			}
+			after, err := os.ReadFile(manifestPath)
+			if err != nil {
+				t.Fatalf("read manifest after update: %v", err)
+			}
+			if tc.wantExit == 1 {
+				if string(after) != string(before) {
+					t.Fatalf("rejected update mutated manifest:\n%s\n---\n%s", before, after)
+				}
+				return
+			}
+			if !strings.Contains(string(after), `"minimum": 100.00`) {
+				t.Fatalf("raised manifest = %s, want 100.00 floor", after)
+			}
+		})
+	}
+}
+
+func runMainForTest(t *testing.T, args []string, runner commandRunnerFunc) (string, string, int) {
+	t.Helper()
+	originalArgs := os.Args
+	originalFlagSet := flag.CommandLine
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	originalExit := exitFunc
+	defer func() {
+		os.Args = originalArgs
+		flag.CommandLine = originalFlagSet
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+		exitFunc = originalExit
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := 0
+	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
+	os.Args = append([]string{"gocoveragecheck"}, args...)
+	commandRunner = runner
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+
+	main()
+	return stdout.String(), stderr.String(), exitCode
+}
+
 func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine

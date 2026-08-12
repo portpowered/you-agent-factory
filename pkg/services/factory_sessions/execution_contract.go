@@ -610,6 +610,7 @@ type StartRequest struct {
 	RequestedPolicy map[string]any
 	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
+	EventConsumer   FactoryEventConsumer `json:"-"`
 }
 
 // SyncOutcome reports how a sync start wait ended.
@@ -638,6 +639,9 @@ type WaitOptions struct {
 
 // ExecutionValidationError is the published root name for durable start/input validation failures.
 type ExecutionValidationError = ValidationError
+
+// ExecutionFactoryEventConsumer is the published root name for durable sync event observation.
+type ExecutionFactoryEventConsumer = FactoryEventConsumer
 
 const (
 	LifecycleStatusQueued           LifecycleStatus = "QUEUED"

@@ -936,3 +936,29 @@ func assertStubChildResult(t *testing.T, value any, wantLabel, wantDispatchID st
 		t.Fatalf("child output text = %#v, want %q", output["text"], wantText)
 	}
 }
+
+func TestRun_ResourceBoundChildPreservesResourceDeclaration(t *testing.T) {
+	var captured factory.JavaScriptChildExecutionRequest
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:    `return agent.run({prompt: "review", label: "reviewer", resourceId: "reviewers"});`,
+		SessionID: "session-resource-bound-child",
+	}, factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(_ string, _ factory.JavaScriptChildRecordSink, _ workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+				captured = req
+				return factory.JavaScriptChildExecutionResult{
+					DispatchID: "dispatch-resource",
+					ChildIndex: 1,
+					Status:     factory.JavaScriptChildDispatchStatusCompleted,
+					Request:    req,
+				}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	if captured.ResourceID != "reviewers" {
+		t.Fatalf("captured resource id = %q, want reviewers", captured.ResourceID)
+	}
+}

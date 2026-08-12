@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/dop251/goja"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
@@ -151,8 +150,7 @@ func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	concurrency := g.effectiveParallelConcurrency(dispatchableCount)
-	results, err := g.executeParallel(items, concurrency)
+	results, err := g.executeParallel(items)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -211,17 +209,6 @@ func (g *runtimeGlobals) classifyParallelItem(index int, value goja.Value) (para
 	return parallelItem{}, fmt.Errorf("parallel() items must be agent run specs or functions")
 }
 
-func (g *runtimeGlobals) effectiveParallelConcurrency(itemCount int) int {
-	concurrency := g.policy.Concurrency
-	if concurrency < 1 {
-		concurrency = 1
-	}
-	if itemCount < concurrency {
-		return itemCount
-	}
-	return concurrency
-}
-
 // normalizeParallelAgentSpecs applies the runtime child contract before policy
 // accounts for dispatchable parallel work. Invalid object specs remain in the
 // result set as failures, but do not consume fanout budget or dispatch identity.
@@ -245,7 +232,7 @@ func (g *runtimeGlobals) normalizeParallelAgentSpecs(items []parallelItem) int {
 	return dispatchableCount
 }
 
-func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) ([]any, error) {
+func (g *runtimeGlobals) executeParallel(items []parallelItem) ([]any, error) {
 	results := make([]any, len(items))
 	if len(items) == 0 {
 		return results, nil
@@ -272,15 +259,14 @@ func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) 
 		}
 	}
 	if len(specItems) > 0 {
-		if err := g.executeParallelAgentSpecs(specItems, concurrency, results); err != nil {
+		if err := g.executeParallelAgentSpecs(specItems, results); err != nil {
 			return nil, err
 		}
 	}
 	return results, nil
 }
 
-func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurrency int, results []any) error {
-	sem := make(chan struct{}, concurrency)
+func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, results []any) error {
 	var wg sync.WaitGroup
 
 	identityByIndex := make(map[int]*ChildDispatchIdentity, len(items))
@@ -296,16 +282,13 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 		wg.Add(1)
 		go func(item parallelItem) {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			if err := g.ctx.Err(); err != nil {
-				results[item.index] = failedChildResultValue("", "", err)
+			select {
+			case g.parallelGate <- struct{}{}:
+				defer func() { <-g.parallelGate }()
+			case <-g.ctx.Done():
+				results[item.index] = failedChildResultValue("", "", g.ctx.Err())
 				return
 			}
-
-			// Lower-index items wait longer so completion order can differ from input order.
-			time.Sleep(time.Duration(len(results)-item.index) * time.Millisecond)
 
 			if err := g.ctx.Err(); err != nil {
 				results[item.index] = failedChildResultValue("", "", err)

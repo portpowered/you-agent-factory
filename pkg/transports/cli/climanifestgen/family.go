@@ -27,6 +27,8 @@ var SessionFamilyCommandIDs = []string{
 	"you.session.cancel",
 	"you.session.terminate",
 	"you.session.dispatches",
+	"you.session.resource",
+	"you.session.resource.set",
 }
 
 // IsSessionFamilyCommandID reports whether id belongs to the canonical session family.
@@ -85,6 +87,8 @@ var WorkersFamilyCommandIDs = []string{
 // observation on one Factory Session.
 var WorkerSessionsFamilyCommandIDs = []string{
 	"you.worker-sessions",
+	"you.worker-sessions.invoke",
+	"you.worker-sessions.continue",
 	"you.worker-sessions.list",
 	"you.worker-sessions.read",
 	"you.worker-sessions.show",

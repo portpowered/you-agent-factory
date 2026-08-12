@@ -113,6 +113,42 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 		call func(*httptest.ResponseRecorder)
 	}{
 		{
+			name: "start",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StartWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+			},
+		},
+		{
+			name: "continue",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ContinueWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("source-missing"))
+			},
+		},
+		{
+			name: "top-level list",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.ListWorkerSessionsParams{})
+			},
+		},
+		{
+			name: "top-level show",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.GetWorkerSessionObservationByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+			},
+		},
+		{
+			name: "top-level read",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ReadWorkerSessionTranscriptByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+			},
+		},
+		{
+			name: "top-level stream",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsByTopLevelWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"), factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{})
+			},
+		},
+		{
 			name: "list",
 			call: func(recorder *httptest.ResponseRecorder) {
 				srv.ListWorkerSessionsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ListWorkerSessionsBySessionIdParams{})

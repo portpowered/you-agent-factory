@@ -22,6 +22,11 @@ type Session struct {
 	// explicit absence: Worker Sessions never synthesizes it from a runner,
 	// model, current provider, or bare session ID.
 	ProviderSessionAssociation *ProviderSessionAssociation
+	// PredecessorWorkerSessionID and SuccessorWorkerSessionID expose the
+	// server-owned continuation lineage. Empty values mean that the session is
+	// respectively the first or latest link in its chain.
+	PredecessorWorkerSessionID string
+	SuccessorWorkerSessionID   string
 }
 
 // Validate reports whether s has a non-empty stable identity, exactly one
@@ -57,6 +62,44 @@ func (s Session) Validate() error {
 		}
 		if s.ProviderSessionAssociation.WorkerSessionID != s.ID {
 			return fmt.Errorf("%w: provider session association worker session id disagrees", ErrInvalidProviderSessionAssociation)
+		}
+	}
+	if err := validateLineage(s.ID, s.PredecessorWorkerSessionID, s.SuccessorWorkerSessionID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Clone returns a detached immutable snapshot. Session is otherwise a value,
+// but Result and ProviderSessionAssociation contain pointers that must not
+// alias registry-owned state across a continuation replay.
+func (s Session) Clone() Session {
+	clone := s
+	if s.Result != nil {
+		result := *s.Result
+		if s.Result.Cause != nil {
+			cause := *s.Result.Cause
+			result.Cause = &cause
+		}
+		clone.Result = &result
+	}
+	if s.ProviderSessionAssociation != nil {
+		association := *s.ProviderSessionAssociation
+		association.Reference = s.ProviderSessionAssociation.Reference.Clone()
+		clone.ProviderSessionAssociation = &association
+	}
+	return clone
+}
+
+func validateLineage(id, predecessor, successor string) error {
+	if predecessor != "" {
+		if !validSessionID(predecessor) || predecessor == id {
+			return ErrInvalidContinuationLineage
+		}
+	}
+	if successor != "" {
+		if !validSessionID(successor) || successor == id {
+			return ErrInvalidContinuationLineage
 		}
 	}
 	return nil

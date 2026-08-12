@@ -67,6 +67,49 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 	}
 }
 
+func TestShowByWorkerSessionIDUsesTopLevelIdentityRoute(t *testing.T) {
+	var gotPath string
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{
+			WorkerSessionId: "direct-1", Direct: true, ProviderSessionAvailable: false,
+			AttemptId: "attempt-1", State: generated.WorkerSessionObservationStateRunning,
+			DurationBasis: generated.WorkerSessionObservationDurationBasisACTIVECLOCK,
+			Transcript:    generated.WorkerSessionObservationTranscriptUNAVAILABLE,
+		})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(), Server: server.URL, WorkerSessionID: "direct-1", OutputFormat: "json", Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Show() error = %v", err)
+	}
+	if gotPath != "/worker-sessions/direct-1" || gotQuery != "" {
+		t.Fatalf("request = path=%q query=%q, want top-level identity path without provider tuple", gotPath, gotQuery)
+	}
+	if !strings.Contains(output.String(), `"direct":true`) {
+		t.Fatalf("output = %q, want direct origin", output.String())
+	}
+}
+
+func TestShowRejectsMixedIdentityModes(t *testing.T) {
+	var output bytes.Buffer
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(), Server: "http://127.0.0.1:1", WorkerSessionID: "direct-1",
+		Provider: "codex", Kind: "session_id", ID: "provider-1", OutputFormat: "json", Output: &output,
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_MODE_CONFLICT" {
+		t.Fatalf("error = %v, want identity mode conflict", err)
+	}
+}
+
 func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

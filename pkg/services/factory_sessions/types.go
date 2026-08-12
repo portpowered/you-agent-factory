@@ -37,9 +37,14 @@ type ResponseEventIDGenerator func() string
 // Factory Session. Process hosts retain their private lifecycle handles, while
 // application services operate through this bounded domain view.
 type LiveRuntime struct {
-	Factory        factory.Service
-	BackendScopeID string
-	RuntimeConfig  interfaces.LoadedFactorySource
+	Factory               factory.Service
+	Clock                 factory.Clock
+	BackendScopeID        string
+	RuntimeConfig         interfaces.LoadedFactorySource
+	LiveChangeEvents      LiveChangeEventLog
+	LiveChangeApplication LiveChangeApplication
+	LiveChangeAdmission   LiveChangeAdmission
+	LiveChangeLogger      *zap.Logger
 }
 
 type compatibilityError string

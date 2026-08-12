@@ -170,6 +170,96 @@ func assertPublicFactoryChangeEvent(t *testing.T, publicEvents []factoryapi.Fact
 	}
 }
 
+func TestFactoryEventHistory_RevisionedLiveChangeAppendPreservesCorrelationAndReconnect(t *testing.T) {
+	history, requestEvent, successEvent := appendRevisionedLiveChangeHistory(t)
+	assertRevisionedLiveChangeOrdering(t, requestEvent, successEvent)
+	assertRevisionedLiveChangePayload(t, successEvent)
+
+	sequence := 0
+	replay, err := BuildCanonicalReconnectReplay(history.CanonicalEvents(), interfaces.FactoryEventReconnectCursor{AfterSequence: &sequence}, interfaces.FactoryEventReconnectScope{SessionID: "session-live-change"})
+	if err != nil || len(replay) != 1 || replay[0].Type != interfaces.FactoryEventTypeFactoryChange {
+		t.Fatalf("reconnect replay = %#v error=%v, want only terminal live-change event", replay, err)
+	}
+	generated := generatedHistoryEvents(t, history)
+	if _, err := generated[0].Payload.AsFactoryChangeRequestEventPayload(); err != nil {
+		t.Fatalf("generated request payload: %v", err)
+	}
+	if _, err := generated[1].Payload.AsFactoryChangeEventPayload(); err != nil {
+		t.Fatalf("generated success payload: %v", err)
+	}
+}
+
+func appendRevisionedLiveChangeHistory(t *testing.T) (*FactoryEventHistory, interfaces.FactoryEvent, interfaces.FactoryEvent) {
+	recordedAt := time.Date(2026, 8, 10, 20, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return recordedAt })
+	sessionID := "session-live-change"
+	requestID := "request-live-change"
+	changeID := "live-change/request-live-change"
+	requestPayload, err := json.Marshal(interfaces.FactoryChangeRequestEventPayload{
+		ChangeID: changeID, ExpectedRevision: 0, Operation: "resource.capacity.set", TargetID: "reviewers",
+		RequestedValue: json.RawMessage("8"), Source: "test",
+	})
+	if err != nil {
+		t.Fatalf("marshal request payload: %v", err)
+	}
+	requestEvent, err := history.AppendRecordedEventWithResult(interfaces.FactoryEvent{
+		Id:   "factory-event/factory-change-request/" + changeID,
+		Type: interfaces.FactoryEventTypeFactoryChangeRequest,
+		Context: interfaces.FactoryEventContext{
+			EventTime: recordedAt, SessionID: stringPtr(sessionID), RequestID: stringPtr(requestID), Source: stringPtr("test"),
+		},
+		Payload: requestPayload,
+	})
+	if err != nil {
+		t.Fatalf("append live-change request: %v", err)
+	}
+
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{"name": "updated", "capacity": 8})
+	if err != nil {
+		t.Fatalf("create updated snapshot: %v", err)
+	}
+	previous, next := 0, 1
+	successPayload, err := json.Marshal(interfaces.FactoryChangeEventPayload{
+		Factory: snapshot, ChangeID: changeID, Operation: "resource.capacity.set", TargetID: "reviewers",
+		PreviousRevision: &previous, NewRevision: &next,
+	})
+	if err != nil {
+		t.Fatalf("marshal success payload: %v", err)
+	}
+	successEvent, err := history.AppendRecordedEventWithResult(interfaces.FactoryEvent{
+		Id:   "factory-event/factory-change/" + changeID,
+		Type: interfaces.FactoryEventTypeFactoryChange,
+		Context: interfaces.FactoryEventContext{
+			EventTime: recordedAt.Add(time.Second), SessionID: stringPtr(sessionID), RequestID: stringPtr(requestID), Source: stringPtr("test"),
+		},
+		Payload: successPayload,
+	})
+	if err != nil {
+		t.Fatalf("append live-change success: %v", err)
+	}
+	return history, requestEvent, successEvent
+}
+
+func assertRevisionedLiveChangeOrdering(t *testing.T, requestEvent, successEvent interfaces.FactoryEvent) {
+	t.Helper()
+	if requestEvent.Context.Sequence != 0 || successEvent.Context.Sequence != 1 ||
+		requestEvent.Context.SessionSequence == nil || *requestEvent.Context.SessionSequence != 0 ||
+		successEvent.Context.SessionSequence == nil || *successEvent.Context.SessionSequence != 1 {
+		t.Fatalf("event ordering = request %#v success %#v, want global 0/1 and session 0/1", requestEvent.Context, successEvent.Context)
+	}
+}
+
+func assertRevisionedLiveChangePayload(t *testing.T, successEvent interfaces.FactoryEvent) {
+	t.Helper()
+	var effective interfaces.FactoryChangeEventPayload
+	if err := successEvent.DecodePayload(&effective); err != nil {
+		t.Fatalf("decode effective live-change payload: %v", err)
+	}
+	if effective.EffectiveSequence == nil || *effective.EffectiveSequence != successEvent.Context.Sequence || effective.Factory == nil {
+		t.Fatalf("effective payload = %#v, want assigned sequence and complete snapshot", effective)
+	}
+}
+
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
 		Workers: map[string]*interfaces.FactoryWorkerConfig{

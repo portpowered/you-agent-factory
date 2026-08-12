@@ -222,6 +222,8 @@ type (
 	DispatchReconciledEventPayload             = interfaces.DispatchReconciledEventPayload
 	DispatchRequestEventPayload                = interfaces.DispatchRequestEventPayload
 	FactoryChangeEventPayload                  = interfaces.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload           = interfaces.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload            = interfaces.FactoryChangeFailedEventPayload
 	FactoryEvent                               = interfaces.FactoryEvent
 	FactoryEventContext                        = interfaces.FactoryEventContext
 	FactoryEventReconnectCursor                = interfaces.FactoryEventReconnectCursor
@@ -260,6 +262,8 @@ const (
 	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
 	FactoryEventTypeDispatchWorkerSessionAssoc    = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
 	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = interfaces.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = interfaces.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = interfaces.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = interfaces.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = interfaces.FactoryEventTypeInferenceResponse

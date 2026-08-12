@@ -28,6 +28,34 @@ func WorkerSessionsCollectionPath(sessionID string) string {
 	return fmt.Sprintf("/factory-sessions/%s/worker-sessions", escapedSessionID(sessionID))
 }
 
+// TopLevelWorkerSessionsCollectionPath returns the process-scoped Worker
+// Session observation collection addressed by stable Worker Session identity.
+func TopLevelWorkerSessionsCollectionPath() string {
+	return "/worker-sessions"
+}
+
+// TopLevelWorkerSessionDetailPath returns the identity detail route without a
+// Factory Session or Provider Session tuple.
+func TopLevelWorkerSessionDetailPath(workerSessionID string) string {
+	return fmt.Sprintf("%s/%s", TopLevelWorkerSessionsCollectionPath(), url.PathEscape(workerSessionID))
+}
+
+// TopLevelWorkerSessionEventsPath returns the identity event stream route.
+func TopLevelWorkerSessionEventsPath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/events"
+}
+
+// TopLevelWorkerSessionContinuePath returns the source-addressed continuation
+// route. The source ID is the only identity supplied to the server.
+func TopLevelWorkerSessionContinuePath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/continue"
+}
+
+// TopLevelWorkerSessionTranscriptPath returns the identity transcript route.
+func TopLevelWorkerSessionTranscriptPath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/transcript"
+}
+
 // WorkerSessionsDetailPath returns the exact Worker Session observation route
 // for one factory session.
 func WorkerSessionsDetailPath(sessionID string) string {

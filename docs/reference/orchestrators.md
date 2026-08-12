@@ -110,6 +110,7 @@ argument contract is intentionally small:
 | `modelProvider` | Optional string |
 | `model` | Optional string |
 | `reasoningEffort` | Optional string |
+| `resourceId` | Optional stable Factory Runtime resource ID whose capacity admission governs the child |
 | `skipPermissions` | Optional boolean; set `true` only when the child is intentionally autonomous |
 
 This complete example uses every supported field:
@@ -123,6 +124,7 @@ const child = await agent.run({
   modelProvider: "cursor-acp",
   model: "gpt-example",
   reasoningEffort: "high",
+  resourceId: "reviewers",
   skipPermissions: true,
 });
 ```

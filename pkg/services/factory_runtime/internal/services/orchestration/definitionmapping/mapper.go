@@ -98,7 +98,7 @@ func (cm *Mapper) convertToTransitions(cfg *interfaces.FactoryConfig, places map
 
 		cm.addCronTimeInputArc(ws, t)
 
-		cm.appendResourceArcs(t, combinedTransitionResourceUsage(cfg, ws))
+		cm.appendResourceArcs(t, cfg, combinedTransitionResourceUsage(cfg, ws))
 	}
 	return transitions
 }
@@ -109,7 +109,8 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 
 	appendResources := func(resources []interfaces.ResourceConfig) {
 		for _, resource := range resources {
-			if existing, ok := combined[resource.Name]; ok {
+			key := resourceReferenceID(cfg, resource)
+			if existing, ok := combined[key]; ok {
 				// Worker and workstation declarations describe the same
 				// transition requirement at two authoring scopes. Repeating a
 				// resource aligns the declarations; it does not consume the
@@ -117,11 +118,11 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 				if resource.Capacity > existing.Capacity {
 					existing.Capacity = resource.Capacity
 				}
-				combined[resource.Name] = existing
+				combined[key] = existing
 				continue
 			}
-			combined[resource.Name] = resource
-			order = append(order, resource.Name)
+			combined[key] = resource
+			order = append(order, key)
 		}
 	}
 
@@ -206,12 +207,13 @@ func (cm *Mapper) appendOutcomeArcs(target *[]petri.Arc, routes []interfaces.IOC
 	}
 }
 
-func (cm *Mapper) appendResourceArcs(t *petri.Transition, resources []interfaces.ResourceConfig) {
+func (cm *Mapper) appendResourceArcs(t *petri.Transition, cfg *interfaces.FactoryConfig, resources []interfaces.ResourceConfig) {
 	for _, ru := range resources {
-		resourcePlaceID := fmt.Sprintf("%s:%s", ru.Name, interfaces.ResourceStateAvailable)
+		resourceID := resourceReferenceID(cfg, ru)
+		resourcePlaceID := fmt.Sprintf("%s:%s", resourceID, interfaces.ResourceStateAvailable)
 		t.InputArcs = append(t.InputArcs, petri.Arc{
 			ID:           cm.newID(),
-			Name:         fmt.Sprintf("%s:consume:%s", ru.Name, t.Name),
+			Name:         fmt.Sprintf("%s:consume:%s", resourceID, t.Name),
 			PlaceID:      resourcePlaceID,
 			TransitionID: t.ID,
 			Direction:    petri.ArcInput,
@@ -220,7 +222,7 @@ func (cm *Mapper) appendResourceArcs(t *petri.Transition, resources []interfaces
 		})
 		t.OutputArcs = append(t.OutputArcs, petri.Arc{
 			ID:           cm.newID(),
-			Name:         fmt.Sprintf("%s:release:%s", ru.Name, t.Name),
+			Name:         fmt.Sprintf("%s:release:%s", resourceID, t.Name),
 			PlaceID:      resourcePlaceID,
 			TransitionID: t.ID,
 			Direction:    petri.ArcOutput,
@@ -585,9 +587,10 @@ func mapToID(io interfaces.IOConfig) string {
 }
 
 func mapToPlace(resource interfaces.ResourceConfig) *petri.Place {
+	resourceID := interfaces.CanonicalFactoryGraphResourceID(resource)
 	return &petri.Place{
-		ID:     fmt.Sprintf("%s:%s", resource.Name, interfaces.ResourceStateAvailable),
-		TypeID: resource.Name,
+		ID:     fmt.Sprintf("%s:%s", resourceID, interfaces.ResourceStateAvailable),
+		TypeID: resourceID,
 		State:  interfaces.ResourceStateAvailable,
 	}
 }
@@ -644,13 +647,31 @@ func (cm *Mapper) convertToResources(cfg *interfaces.FactoryConfig) map[string]*
 	}
 	resources := make(map[string]*state.ResourceDef, len(cfg.Resources))
 	for _, r := range cfg.Resources {
-		resources[r.Name] = &state.ResourceDef{
-			ID:       r.Name,
+		resourceID := interfaces.CanonicalFactoryGraphResourceID(r)
+		resources[resourceID] = &state.ResourceDef{
+			ID:       resourceID,
 			Name:     r.Name,
 			Capacity: r.Capacity,
 		}
 	}
 	return resources
+}
+
+// resourceReferenceID resolves a workstation or worker requirement to the
+// stable top-level Resource.id. Legacy name-keyed factories retain their name
+// as the canonical id, while a display-name change does not change the pool.
+func resourceReferenceID(cfg *interfaces.FactoryConfig, resource interfaces.ResourceConfig) string {
+	if cfg != nil {
+		for _, declared := range cfg.Resources {
+			if resource.ID != "" && declared.ID == resource.ID {
+				return interfaces.CanonicalFactoryGraphResourceID(declared)
+			}
+			if resource.Name != "" && (declared.Name == resource.Name || declared.ID == resource.Name) {
+				return interfaces.CanonicalFactoryGraphResourceID(declared)
+			}
+		}
+	}
+	return interfaces.CanonicalFactoryGraphResourceID(resource)
 }
 
 // addDependencyGuards adds a DependencyGuard to input arcs consuming from INITIAL places

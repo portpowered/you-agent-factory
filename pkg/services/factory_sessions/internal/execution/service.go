@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,9 +13,68 @@ import (
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func reconcileAppendOnlyCanonicalEvents(previous, projected []json.RawMessage) []json.RawMessage {
+	if len(previous) == 0 {
+		return resequenceCanonicalEvents(cloneRawMessages(projected))
+	}
+	result := cloneRawMessages(previous)
+	seen := make(map[string]struct{}, len(result))
+	for _, raw := range result {
+		if id := canonicalEventID(raw); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	for _, raw := range projected {
+		id := canonicalEventID(raw)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, resequenceCanonicalEvent(raw, len(result)))
+	}
+	return result
+}
+
+func canonicalEventID(raw json.RawMessage) string {
+	var event struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(raw, &event) != nil {
+		return ""
+	}
+	return strings.TrimSpace(event.ID)
+}
+
+func resequenceCanonicalEvent(raw json.RawMessage, index int) json.RawMessage {
+	var event canonicalFactoryEvent
+	if json.Unmarshal(raw, &event) != nil {
+		return append(json.RawMessage(nil), raw...)
+	}
+	event.Context.Sequence = index + 1
+	event.Context.Tick = index + 1
+	event.Context.SessionSequence = intPtr(index)
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return append(json.RawMessage(nil), raw...)
+	}
+	return encoded
+}
+
+func cloneRawMessages(events []json.RawMessage) []json.RawMessage {
+	cloned := make([]json.RawMessage, len(events))
+	for index, event := range events {
+		cloned[index] = append(json.RawMessage(nil), event...)
+	}
+	return cloned
+}
 
 // SyncWaitScheduler owns the blocking primitive used while a synchronous
 // durable start waits for terminal session state. Wire supplies the production
@@ -41,7 +101,11 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 		events,
 		extractDispatchInterruptedEvents(candidate.events),
 	)
+	preserveAppendOnly := target.eventConsumer != nil || hasDurableLiveChangeEvents(target.events)
 	candidate.events = projected
+	if preserveAppendOnly {
+		candidate.events = reconcileAppendOnlyCanonicalEvents(target.events, projected)
+	}
 	if err := s.persistTerminalSessionState(candidate); err != nil {
 		return err
 	}
@@ -84,6 +148,7 @@ func (s *JavaScriptRuntimeService) publishAsyncTerminalCandidate(
 	policyResolution factory.JavaScriptPolicyResolution,
 	startedAt time.Time,
 ) {
+	sessionID := state.session.SessionID
 	if err := s.recordCanonicalTerminalState(state, candidate); err != nil {
 		failureOutcome := factory.JavaScriptRuntimeOutcome{Failure: factory.JavaScriptRuntimeFailure{
 			Code:    factory.JavaScriptRuntimeCodeScriptError,
@@ -104,6 +169,7 @@ func (s *JavaScriptRuntimeService) publishAsyncTerminalCandidate(
 		*state = failed
 	}
 	s.mu.Unlock()
+	s.presentCurrentFactoryEvents(sessionID)
 }
 
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
@@ -284,6 +350,7 @@ func NewJavaScriptExecutionService(
 	generateSessionID internalcontracts.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {
@@ -329,6 +396,7 @@ func NewJavaScriptExecutionService(
 		generateSessionID,
 		generateResponseEventID,
 		responseStreams,
+		liveChangeCoordinator,
 	), nil
 }
 

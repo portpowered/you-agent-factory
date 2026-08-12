@@ -29,6 +29,62 @@ tags:
     description: Stored workflow inspection.
 paths:
   /worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessions
+      summary: List top-level Worker Session observations
+      description: >-
+        Lists Worker Session observations through their stable top-level
+        identity. The default scope is direct Worker Sessions admitted through
+        this API; Factory-originated observations require an explicit scope.
+        Results are deterministically ordered by Worker Session identity and
+        use an opaque cursor for bounded pagination. State filters compose with
+        the selected origin scope.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          description: Origin scope to inspect. Direct is the safe default.
+          schema:
+            type: string
+            enum:
+              - direct
+              - factory
+              - all
+            default: direct
+        - name: state
+          in: query
+          required: false
+          description: Optional repeated Worker Session lifecycle state filters.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - RESERVED
+                - STARTING
+                - RUNNING
+                - PAUSED
+                - COMPLETED
+                - FAILED
+                - CANCELED
+                - TERMINATED
+        - $ref: '#/components/parameters/MaxResults'
+        - $ref: '#/components/parameters/NextToken'
+      responses:
+        '200':
+          description: Deterministically ordered top-level Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags:
         - Worker Sessions
@@ -61,6 +117,136 @@ paths:
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
           $ref: '#/components/responses/WorkerSessionStartUnavailable'
+  /worker-sessions/{worker_session_id}:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationByWorkerSessionId
+      summary: Show one top-level Worker Session observation
+      description: >-
+        Returns one authoritative Worker Session observation by its stable
+        Worker Session identity. Direct observations expose their origin and
+        any recorded Provider Session association without requiring callers to
+        reconstruct a provider tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: One top-level Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/continue:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: continueWorkerSession
+      summary: Continue one terminal Worker Session
+      description: >-
+        Reserves one distinct successor Worker Session for a terminal source
+        Worker Session and resumes the exact Provider Session association
+        recorded by the server. The requestId and successor identity are
+        idempotent inputs. A 202 response is returned only after the successor
+        opening event is readable/subscribable and Workers has admitted the
+        continuation; terminal output remains asynchronous.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionContinueRequest'
+      responses:
+        '202':
+          description: The successor Worker Session was admitted and is observable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionContinueResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionContinuationConflict'
+        '503':
+          $ref: '#/components/responses/WorkerSessionContinuationUnavailable'
+  /worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByTopLevelWorkerSessionId
+      summary: Stream top-level Worker Session events
+      description: >-
+        Streams the retained and live Worker Session Events topic by stable
+        Worker Session identity. The server resolves the exact topic from its
+        own observation registry; callers do not supply Provider Session
+        identity fields. Retained records are emitted first, followed by live
+        records unless replayOnly is true.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain retained history without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      summary: Read one top-level Worker Session transcript
+      description: >-
+        Returns the normalized transcript for a terminal Worker Session by its
+        stable identity. Provider Session association and projection are
+        resolved by the Worker Sessions service; callers cannot substitute a
+        provider, kind, or provider-issued id tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -1153,6 +1339,41 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/resources/{resource_id}/capacity:
+    post:
+      tags:
+        - Factory
+      operationId: setFactorySessionResourceCapacity
+      summary: Set one Factory Session resource capacity
+      description: >-
+        Changes the effective capacity of one live Factory Session resource by
+        stable Resource.id. The operation is revisioned and idempotent. It does
+        not cancel, interrupt, terminate, restart, or admit work directly; a
+        capacity increase wakes waiting runtime dispatches.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionResourceCapacityRequest'
+      responses:
+        '200':
+          description: Capacity was applied, was an exact no-op, or replayed an identical request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResourceCapacityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionResourceCapacityConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/artifacts:
     get:
       tags:
@@ -1758,6 +1979,8 @@ components:
       $ref: './components/parameters/SessionID.yaml'
     WorkerSessionID:
       $ref: './components/parameters/WorkerSessionID.yaml'
+    ResourceID:
+      $ref: './components/parameters/ResourceID.yaml'
     MaxResults:
       $ref: './components/parameters/MaxResults.yaml'
     NextToken:
@@ -1833,8 +2056,14 @@ components:
       $ref: './components/responses/WorkerSessionStartConflict.yaml'
     WorkerSessionStartUnavailable:
       $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
+    WorkerSessionContinuationConflict:
+      $ref: './components/responses/WorkerSessionContinuationConflict.yaml'
+    WorkerSessionContinuationUnavailable:
+      $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
+    FactorySessionResourceCapacityConflict:
+      $ref: './components/responses/FactorySessionResourceCapacityConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
     ResponseEventBadRequest:
@@ -1896,6 +2125,10 @@ components:
       $ref: './components/schemas/api/WorkerSessionStartRequest.yaml'
     WorkerSessionStartResponse:
       $ref: './components/schemas/api/WorkerSessionStartResponse.yaml'
+    WorkerSessionContinueRequest:
+      $ref: './components/schemas/api/WorkerSessionContinueRequest.yaml'
+    WorkerSessionContinueResponse:
+      $ref: './components/schemas/api/WorkerSessionContinueResponse.yaml'
     WorkerSessionStartRetryPolicy:
       $ref: './components/schemas/api/WorkerSessionStartRetryPolicy.yaml'
     WorkerSessionResolvedExecution:
@@ -2228,6 +2461,16 @@ components:
       $ref: './components/schemas/api/FactorySessionInterruptDispatchRequest.yaml'
     FactorySessionLifecycleControlResponse:
       $ref: './components/schemas/api/FactorySessionLifecycleControlResponse.yaml'
+    FactorySessionResourceCapacityRequest:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityRequest.yaml'
+    FactorySessionResourceCapacityErrorDetails:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityErrorDetails.yaml'
+    FactorySessionResourceCapacityOutcome:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityOutcome.yaml'
+    FactorySessionResourceCapacityLinks:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityLinks.yaml'
+    FactorySessionResourceCapacityResponse:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityResponse.yaml'
     LoadableProviderSessionRef:
       $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
     LoadableProviderSessionProvider:
@@ -2326,12 +2569,18 @@ components:
       $ref: './components/schemas/events/DispatchConsumedWorkRef.yaml'
     DispatchRequestEventMetadata:
       $ref: './components/schemas/events/DispatchRequestEventMetadata.yaml'
+    FactoryResourceCapacityChange:
+      $ref: './components/schemas/events/FactoryResourceCapacityChange.yaml'
     RunRequestEventPayload:
       $ref: './components/schemas/events/payloads/RunRequestEventPayload.yaml'
     InitialStructureRequestEventPayload:
       $ref: './components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml'
     FactoryChangeEventPayload:
       $ref: './components/schemas/events/payloads/FactoryChangeEventPayload.yaml'
+    FactoryChangeRequestEventPayload:
+      $ref: './components/schemas/events/payloads/FactoryChangeRequestEventPayload.yaml'
+    FactoryChangeFailedEventPayload:
+      $ref: './components/schemas/events/payloads/FactoryChangeFailedEventPayload.yaml'
     WorkRequestEventPayload:
       $ref: './components/schemas/events/payloads/WorkRequestEventPayload.yaml'
     RelationshipChangeRequestEventPayload:

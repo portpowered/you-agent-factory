@@ -15,6 +15,8 @@ var knownRuntimeEmissionAnchors = map[recordings.FactoryEventType]string{
 	recordings.FactoryEventTypeRunRequest:                    "pkg/services/recordings/internal/events/event_history.go RecordRunRequest",
 	recordings.FactoryEventTypeInitialStructureRequest:       "pkg/services/recordings/internal/events/event_history.go RecordInitialStructure",
 	recordings.FactoryEventTypeFactoryChange:                 "pkg/services/recordings/internal/events/event_history.go RecordFactoryChange",
+	recordings.FactoryEventTypeFactoryChangeRequest:          "pkg/services/factory_sessions/internal/livechange/service.go appendRequest",
+	recordings.FactoryEventTypeFactoryChangeFailed:           "pkg/services/factory_sessions/internal/livechange/service.go closeFailure",
 	recordings.FactoryEventTypeWorkRequest:                   "pkg/services/recordings/internal/events/event_history.go RecordWorkRequest",
 	recordings.FactoryEventTypeRelationshipChangeRequest:     "pkg/services/recordings/internal/events/event_history.go RecordRelationshipChange",
 	recordings.FactoryEventTypeDispatchRequest:               "pkg/services/recordings/internal/events/event_history.go RecordWorkstationRequest",

@@ -62,6 +62,7 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
+	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                   ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
 	ErrorResponseCodeBADREQUEST                                   ErrorResponseCode = "BAD_REQUEST"
 	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                   ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeFACTORYALREADYEXISTS                         ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
@@ -73,18 +74,26 @@ const (
 	ErrorResponseCodeINVALIDFACTORYNAME                           ErrorResponseCode = "INVALID_FACTORY_NAME"
 	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
 	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	ErrorResponseCodeLIFECYCLECONFLICT                            ErrorResponseCode = "LIFECYCLE_CONFLICT"
 	ErrorResponseCodeMETHODNOTALLOWED                             ErrorResponseCode = "METHOD_NOT_ALLOWED"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                     ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                        ErrorResponseCode = "PROJECTION_UNAVAILABLE"
 	ErrorResponseCodePROVIDERUNSUPPORTED                          ErrorResponseCode = "PROVIDER_UNSUPPORTED"
+	ErrorResponseCodeREQUESTCONFLICT                              ErrorResponseCode = "REQUEST_CONFLICT"
+	ErrorResponseCodeRESOURCECAPACITYINUSE                        ErrorResponseCode = "RESOURCE_CAPACITY_IN_USE"
 	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND                 ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeREVISIONCONFLICT                             ErrorResponseCode = "REVISION_CONFLICT"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT            ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT   ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                    ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
+	ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID     ErrorResponseCode = "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
 	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED              ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
 	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT          ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
@@ -179,6 +188,8 @@ const (
 	FactoryEventTypeDispatchResponse                 FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeDispatchWorkerSessionAssociation FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeFactoryChange                    FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryChangeFailed              FactoryEventType = "FACTORY_CHANGE_FAILED"
+	FactoryEventTypeFactoryChangeRequest             FactoryEventType = "FACTORY_CHANGE_REQUEST"
 	FactoryEventTypeFactoryStateResponse             FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest                 FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse                FactoryEventType = "INFERENCE_RESPONSE"
@@ -318,6 +329,12 @@ const (
 // Defines values for FactoryRecordingSchemaVersion.
 const (
 	AgentFactoryRecordingV1 FactoryRecordingSchemaVersion = "agent-factory.recording.v1"
+)
+
+// Defines values for FactoryResourceCapacityChangeOutcome.
+const (
+	FactoryResourceCapacityChangeOutcomeAPPLIED FactoryResourceCapacityChangeOutcome = "APPLIED"
+	FactoryResourceCapacityChangeOutcomeNOOP    FactoryResourceCapacityChangeOutcome = "NO_OP"
 )
 
 // Defines values for FactoryResponseEventSchemaVersion.
@@ -479,6 +496,13 @@ const (
 	FactorySessionLogicalTargetKindProvider FactorySessionLogicalTargetKind = "provider"
 )
 
+// Defines values for FactorySessionResourceCapacityOutcome.
+const (
+	FactorySessionResourceCapacityOutcomeAPPLIED  FactorySessionResourceCapacityOutcome = "APPLIED"
+	FactorySessionResourceCapacityOutcomeNOOP     FactorySessionResourceCapacityOutcome = "NO_OP"
+	FactorySessionResourceCapacityOutcomeREPLAYED FactorySessionResourceCapacityOutcome = "REPLAYED"
+)
+
 // Defines values for FactorySessionResultMode.
 const (
 	FactorySessionResultModeFinal   FactorySessionResultMode = "final"
@@ -544,10 +568,10 @@ const (
 
 // Defines values for FactoryStopKind.
 const (
-	BLOCKED     FactoryStopKind = "BLOCKED"
-	INTERRUPTED FactoryStopKind = "INTERRUPTED"
-	NEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
-	PAUSED      FactoryStopKind = "PAUSED"
+	FactoryStopKindBLOCKED     FactoryStopKind = "BLOCKED"
+	FactoryStopKindINTERRUPTED FactoryStopKind = "INTERRUPTED"
+	FactoryStopKindNEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
+	FactoryStopKindPAUSED      FactoryStopKind = "PAUSED"
 )
 
 // Defines values for FactoryValidationSeverity.
@@ -1180,6 +1204,18 @@ const (
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
 )
 
+// Defines values for WorkerSessionContinueResponseState.
+const (
+	WorkerSessionContinueResponseStateCanceled   WorkerSessionContinueResponseState = "CANCELED"
+	WorkerSessionContinueResponseStateCompleted  WorkerSessionContinueResponseState = "COMPLETED"
+	WorkerSessionContinueResponseStateFailed     WorkerSessionContinueResponseState = "FAILED"
+	WorkerSessionContinueResponseStatePaused     WorkerSessionContinueResponseState = "PAUSED"
+	WorkerSessionContinueResponseStateReserved   WorkerSessionContinueResponseState = "RESERVED"
+	WorkerSessionContinueResponseStateRunning    WorkerSessionContinueResponseState = "RUNNING"
+	WorkerSessionContinueResponseStateStarting   WorkerSessionContinueResponseState = "STARTING"
+	WorkerSessionContinueResponseStateTerminated WorkerSessionContinueResponseState = "TERMINATED"
+)
+
 // Defines values for WorkerSessionEventDelivery.
 const (
 	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
@@ -1280,6 +1316,25 @@ const (
 // Defines values for ListWorkBySessionIdParamsSortBy.
 const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
+)
+
+// Defines values for ListWorkerSessionsParamsScope.
+const (
+	ListWorkerSessionsParamsScopeAll     ListWorkerSessionsParamsScope = "all"
+	ListWorkerSessionsParamsScopeDirect  ListWorkerSessionsParamsScope = "direct"
+	ListWorkerSessionsParamsScopeFactory ListWorkerSessionsParamsScope = "factory"
+)
+
+// Defines values for ListWorkerSessionsParamsState.
+const (
+	ListWorkerSessionsParamsStateCANCELED   ListWorkerSessionsParamsState = "CANCELED"
+	ListWorkerSessionsParamsStateCOMPLETED  ListWorkerSessionsParamsState = "COMPLETED"
+	ListWorkerSessionsParamsStateFAILED     ListWorkerSessionsParamsState = "FAILED"
+	ListWorkerSessionsParamsStatePAUSED     ListWorkerSessionsParamsState = "PAUSED"
+	ListWorkerSessionsParamsStateRESERVED   ListWorkerSessionsParamsState = "RESERVED"
+	ListWorkerSessionsParamsStateRUNNING    ListWorkerSessionsParamsState = "RUNNING"
+	ListWorkerSessionsParamsStateSTARTING   ListWorkerSessionsParamsState = "STARTING"
+	ListWorkerSessionsParamsStateTERMINATED ListWorkerSessionsParamsState = "TERMINATED"
 )
 
 // AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
@@ -1579,6 +1634,9 @@ type ErrorResponse struct {
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
 
+	// ResourceCapacity Accounting details explaining why a resource-capacity reduction was rejected.
+	ResourceCapacity *FactorySessionResourceCapacityErrorDetails `json:"resourceCapacity,omitempty"`
+
 	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
 	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
 }
@@ -1805,10 +1863,73 @@ type FactoryArtifactVisibility string
 
 // FactoryChangeEventPayload Runtime topology snapshot after a live factory definition change replaces the running factory.
 type FactoryChangeEventPayload struct {
+	// ChangeId Stable live-change identity when this is a revisioned change boundary.
+	ChangeId *string `json:"changeId,omitempty"`
+
+	// EffectiveSequence Canonical Factory Event sequence at which this change became effective.
+	EffectiveSequence *int `json:"effectiveSequence,omitempty"`
+
 	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	Factory         Factory    `json:"factory"`
-	Metadata        *StringMap `json:"metadata,omitempty"`
-	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
+	Factory  Factory    `json:"factory"`
+	Metadata *StringMap `json:"metadata,omitempty"`
+
+	// NewRevision Effective Factory revision created by this change.
+	NewRevision *int `json:"newRevision,omitempty"`
+
+	// Operation Normalized live-change operation name.
+	Operation *string `json:"operation,omitempty"`
+
+	// PreviousRevision Effective Factory revision immediately before this change.
+	PreviousRevision *int `json:"previousRevision,omitempty"`
+
+	// ResourceCapacity Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.
+	ResourceCapacity *FactoryResourceCapacityChange `json:"resourceCapacity,omitempty"`
+	SourceDirectory  *string                        `json:"sourceDirectory,omitempty"`
+
+	// TargetId Stable target identity changed by the operation.
+	TargetId *string `json:"targetId,omitempty"`
+}
+
+// FactoryChangeFailedEventPayload Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded.
+type FactoryChangeFailedEventPayload struct {
+	ChangeId         string `json:"changeId"`
+	ExpectedRevision int    `json:"expectedRevision"`
+
+	// FailureCode Stable safe failure category.
+	FailureCode string `json:"failureCode"`
+
+	// FailureMessage Bounded safe failure explanation.
+	FailureMessage   string `json:"failureMessage"`
+	Operation        string `json:"operation"`
+	PreviousRevision int    `json:"previousRevision"`
+	TargetId         string `json:"targetId"`
+}
+
+// FactoryChangeRequestEventPayload Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context.
+type FactoryChangeRequestEventPayload struct {
+	// Actor Safe actor identity supplied by the caller.
+	Actor *string `json:"actor,omitempty"`
+
+	// ChangeId Stable identity of the requested live change.
+	ChangeId string `json:"changeId"`
+
+	// ExpectedRevision Effective Factory revision the operator observed before admission.
+	ExpectedRevision int `json:"expectedRevision"`
+
+	// Operation Normalized live-change operation name.
+	Operation string `json:"operation"`
+
+	// Reason Optional normalized safe operator reason.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestedValue Canonical JSON value requested by the operation.
+	RequestedValue interface{} `json:"requestedValue"`
+
+	// Source Safe source label such as cli or api.
+	Source *string `json:"source,omitempty"`
+
+	// TargetId Stable target identity changed by the operation.
+	TargetId string `json:"targetId"`
 }
 
 // FactoryDispatch defines model for FactoryDispatch.
@@ -2579,6 +2700,39 @@ type FactoryRecording struct {
 
 // FactoryRecordingSchemaVersion Version of the Factory Recording envelope schema.
 type FactoryRecordingSchemaVersion string
+
+// FactoryResourceCapacityChange Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.
+type FactoryResourceCapacityChange struct {
+	// AvailableCount Number of currently available capacity units.
+	AvailableCount int `json:"availableCount"`
+
+	// EffectiveCapacity Capacity effective after the change.
+	EffectiveCapacity int `json:"effectiveCapacity"`
+
+	// InUseCount Number of leases in use at the decision boundary.
+	InUseCount int `json:"inUseCount"`
+
+	// MinimumCapacity Lowest capacity permitted by the current in-use count.
+	MinimumCapacity int `json:"minimumCapacity"`
+
+	// Outcome Terminal capacity decision recorded by the runtime.
+	Outcome FactoryResourceCapacityChangeOutcome `json:"outcome"`
+
+	// PreviousCapacity Capacity immediately before the change.
+	PreviousCapacity int `json:"previousCapacity"`
+
+	// RequestedCapacity Capacity requested by the operator.
+	RequestedCapacity int `json:"requestedCapacity"`
+
+	// ResourceId Stable authored Resource.id whose capacity changed.
+	ResourceId string `json:"resourceId"`
+
+	// ResourceName Optional display name retained for inspection only.
+	ResourceName *string `json:"resourceName,omitempty"`
+}
+
+// FactoryResourceCapacityChangeOutcome Terminal capacity decision recorded by the runtime.
+type FactoryResourceCapacityChangeOutcome string
 
 // FactoryResponseEvent Provider-neutral envelope for transient agent activity observed during one Factory Session run. Unlike canonical factory events, these records are ephemeral observation records and must not derive canonical work state after replay.
 type FactoryResponseEvent struct {
@@ -3874,6 +4028,76 @@ type FactorySessionResolvedSourceIdentity struct {
 	SourceRef *string `json:"sourceRef,omitempty"`
 }
 
+// FactorySessionResourceCapacityErrorDetails Accounting details explaining why a resource-capacity reduction was rejected.
+type FactorySessionResourceCapacityErrorDetails struct {
+	AvailableCount    int `json:"availableCount"`
+	CurrentCapacity   int `json:"currentCapacity"`
+	InUseCount        int `json:"inUseCount"`
+	MinimumCapacity   int `json:"minimumCapacity"`
+	RequestedCapacity int `json:"requestedCapacity"`
+
+	// ResourceId Stable authored Resource.id.
+	ResourceId string `json:"resourceId"`
+}
+
+// FactorySessionResourceCapacityLinks Canonical relative links for inspecting the affected Factory Session and its events.
+type FactorySessionResourceCapacityLinks struct {
+	// Events Relative URL for the session's canonical Factory Events.
+	Events *string `json:"events,omitempty"`
+
+	// Session Relative URL for the affected Factory Session.
+	Session *string `json:"session,omitempty"`
+
+	// Status Relative URL for the session status projection.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactorySessionResourceCapacityOutcome Terminal capacity decision outcome.
+type FactorySessionResourceCapacityOutcome string
+
+// FactorySessionResourceCapacityRequest defines model for FactorySessionResourceCapacityRequest.
+type FactorySessionResourceCapacityRequest struct {
+	// Capacity Requested total resource capacity. Zero is valid only when no units are in use.
+	Capacity int `json:"capacity"`
+
+	// ExpectedRevision Effective Factory revision observed before admission.
+	ExpectedRevision int `json:"expectedRevision"`
+
+	// Reason Optional safe operator reason retained with the canonical change request.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestId Caller-owned idempotency identity for this capacity request.
+	RequestId string `json:"requestId"`
+}
+
+// FactorySessionResourceCapacityResponse defines model for FactorySessionResourceCapacityResponse.
+type FactorySessionResourceCapacityResponse struct {
+	AvailableCount    int    `json:"availableCount"`
+	ChangeId          string `json:"changeId"`
+	EffectiveCapacity int    `json:"effectiveCapacity"`
+	InUseCount        int    `json:"inUseCount"`
+
+	// Links Canonical relative links for inspecting the affected Factory Session and its events.
+	Links *FactorySessionResourceCapacityLinks `json:"links,omitempty"`
+
+	// MinimumCapacity Lowest capacity currently safe to admit without interrupting in-use work.
+	MinimumCapacity int `json:"minimumCapacity"`
+
+	// Outcome Terminal capacity decision outcome.
+	Outcome           FactorySessionResourceCapacityOutcome `json:"outcome"`
+	PreviousCapacity  int                                   `json:"previousCapacity"`
+	RequestId         string                                `json:"requestId"`
+	RequestedCapacity int                                   `json:"requestedCapacity"`
+
+	// ResourceId Stable authored Resource.id. This is the only resource identity used by the operation.
+	ResourceId string `json:"resourceId"`
+
+	// ResourceName Current display label, provided for presentation only.
+	ResourceName *string `json:"resourceName,omitempty"`
+	Revision     int     `json:"revision"`
+	SessionId    string  `json:"sessionId"`
+}
+
 // FactorySessionResult Durable factory-session result retrieval response for final or partial workflow outputs. Non-ready, unavailable, and failed-with-partial states return typed bodies with session identity, current session status, and actionable failure or availability details when known.
 type FactorySessionResult struct {
 	// ArtifactIds Artifact identifiers for materialized outputs when bodies are omitted or includeArtifacts is false.
@@ -5026,6 +5250,8 @@ type ListWorkResponse struct {
 
 // ListWorkerSessionsResponse defines model for ListWorkerSessionsResponse.
 type ListWorkerSessionsResponse struct {
+	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
+
 	// Sessions Deterministically ordered Worker Session observations correlated with the requested Work.
 	Sessions []WorkerSessionObservation `json:"sessions"`
 }
@@ -7421,6 +7647,43 @@ type WorkerModelProvider string
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
+// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+type WorkerSessionContinueRequest struct {
+	// FollowUpInput Non-empty follow-up input delivered to the resumed Provider Session.
+	FollowUpInput string `json:"followUpInput"`
+
+	// RequestId Required caller idempotency key for this continuation.
+	RequestId string `json:"requestId"`
+
+	// SuccessorWorkerSessionId Distinct Worker Session identity to reserve for the successor.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionContinueResponse Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs.
+type WorkerSessionContinueResponse struct {
+	// Accepted Always true for a 202 response.
+	Accepted bool `json:"accepted"`
+
+	// EventTopic Deterministic Events topic whose retained opening record is ready to read and subscribe.
+	EventTopic string `json:"eventTopic"`
+
+	// PredecessorWorkerSessionId Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId.
+	PredecessorWorkerSessionId string `json:"predecessorWorkerSessionId"`
+
+	// RequestId Caller idempotency key echoed for correlation.
+	RequestId string `json:"requestId"`
+
+	// SourceWorkerSessionId Stable terminal Worker Session identity used as the source.
+	SourceWorkerSessionId string                             `json:"sourceWorkerSessionId"`
+	State                 WorkerSessionContinueResponseState `json:"state"`
+
+	// SuccessorWorkerSessionId Stable Worker Session identity reserved for the successor.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionContinueResponseState defines model for WorkerSessionContinueResponse.State.
+type WorkerSessionContinueResponseState string
+
 // WorkerSessionEvent defines model for WorkerSessionEvent.
 type WorkerSessionEvent struct {
 	// Delivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -7503,7 +7766,10 @@ type WorkerSessionFailure struct {
 // WorkerSessionObservation defines model for WorkerSessionObservation.
 type WorkerSessionObservation struct {
 	// AttemptId Stable attempt or dispatch identity.
-	AttemptId     string                                `json:"attemptId"`
+	AttemptId string `json:"attemptId"`
+
+	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
+	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
 
 	// DurationMillis Projected duration in milliseconds when authoritative timing exists.
@@ -8058,6 +8324,9 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// ResourceID defines model for ResourceID.
+type ResourceID = string
+
 // ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
 type ResponseEventAfterSequence = int64
 
@@ -8123,6 +8392,11 @@ type FactorySessionLifecycleControlConflict struct {
 	union json.RawMessage
 }
 
+// FactorySessionResourceCapacityConflict defines model for FactorySessionResourceCapacityConflict.
+type FactorySessionResourceCapacityConflict struct {
+	union json.RawMessage
+}
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
@@ -8146,6 +8420,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
+
+// WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
+type WorkerSessionContinuationConflict = ErrorResponse
+
+// WorkerSessionContinuationUnavailable defines model for WorkerSessionContinuationUnavailable.
+type WorkerSessionContinuationUnavailable = ErrorResponse
 
 // WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
 type WorkerSessionStartConflict = ErrorResponse
@@ -8315,6 +8595,33 @@ type GetProviderSessionDetailsParams struct {
 	Id string `form:"id" json:"id"`
 }
 
+// ListWorkerSessionsParams defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParams struct {
+	// Scope Origin scope to inspect. Direct is the safe default.
+	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+
+	// State Optional repeated Worker Session lifecycle state filters.
+	State *[]ListWorkerSessionsParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
+	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+
+	// NextToken Optional base64-encoded token ID cursor.
+	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+}
+
+// ListWorkerSessionsParamsScope defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsScope string
+
+// ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsState string
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByTopLevelWorkerSessionId.
+type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
+	// ReplayOnly Drain retained history without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
 // PreviewFactoryJSONRequestBody defines body for PreviewFactory for application/json ContentType.
 type PreviewFactoryJSONRequestBody = FactoryPreviewRequest
 
@@ -8348,6 +8655,9 @@ type InvokeFactorySessionBySessionIdJSONRequestBody = InvocationRequest
 // PauseFactorySessionJSONRequestBody defines body for PauseFactorySession for application/json ContentType.
 type PauseFactorySessionJSONRequestBody = FactorySessionLifecycleControlRequest
 
+// SetFactorySessionResourceCapacityJSONRequestBody defines body for SetFactorySessionResourceCapacity for application/json ContentType.
+type SetFactorySessionResourceCapacityJSONRequestBody = FactorySessionResourceCapacityRequest
+
 // ResumeFactorySessionJSONRequestBody defines body for ResumeFactorySession for application/json ContentType.
 type ResumeFactorySessionJSONRequestBody = FactorySessionLifecycleControlRequest
 
@@ -8377,6 +8687,9 @@ type InvokeModelJSONRequestBody = ModelInvocationRequest
 
 // StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
 type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
+
+// ContinueWorkerSessionJSONRequestBody defines body for ContinueWorkerSession for application/json ContentType.
+type ContinueWorkerSessionJSONRequestBody = WorkerSessionContinueRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -8582,6 +8895,58 @@ func (t *FactoryEvent_Payload) FromFactoryChangeEventPayload(v FactoryChangeEven
 
 // MergeFactoryChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeEventPayload
 func (t *FactoryEvent_Payload) MergeFactoryChangeEventPayload(v FactoryChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeRequestEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeRequestEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeRequestEventPayload() (FactoryChangeRequestEventPayload, error) {
+	var body FactoryChangeRequestEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeRequestEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeRequestEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeRequestEventPayload(v FactoryChangeRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeRequestEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeRequestEventPayload(v FactoryChangeRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeFailedEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeFailedEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeFailedEventPayload() (FactoryChangeFailedEventPayload, error) {
+	var body FactoryChangeFailedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeFailedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeFailedEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeFailedEventPayload(v FactoryChangeFailedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeFailedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeFailedEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeFailedEventPayload(v FactoryChangeFailedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -11411,6 +11776,68 @@ func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsFactorySessionResourceCapacityResponse returns the union data inside the FactorySessionResourceCapacityConflict as a FactorySessionResourceCapacityResponse
+func (t FactorySessionResourceCapacityConflict) AsFactorySessionResourceCapacityResponse() (FactorySessionResourceCapacityResponse, error) {
+	var body FactorySessionResourceCapacityResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactorySessionResourceCapacityResponse overwrites any union data inside the FactorySessionResourceCapacityConflict as the provided FactorySessionResourceCapacityResponse
+func (t *FactorySessionResourceCapacityConflict) FromFactorySessionResourceCapacityResponse(v FactorySessionResourceCapacityResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactorySessionResourceCapacityResponse performs a merge with any union data inside the FactorySessionResourceCapacityConflict, using the provided FactorySessionResourceCapacityResponse
+func (t *FactorySessionResourceCapacityConflict) MergeFactorySessionResourceCapacityResponse(v FactorySessionResourceCapacityResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the FactorySessionResourceCapacityConflict as a ErrorResponse
+func (t FactorySessionResourceCapacityConflict) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the FactorySessionResourceCapacityConflict as the provided ErrorResponse
+func (t *FactorySessionResourceCapacityConflict) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the FactorySessionResourceCapacityConflict, using the provided ErrorResponse
+func (t *FactorySessionResourceCapacityConflict) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactorySessionResourceCapacityConflict) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactorySessionResourceCapacityConflict) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Preview JavaScript orchestrator factory source
@@ -11479,6 +11906,9 @@ type ServerInterface interface {
 	// Pause one Factory Session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Set one Factory Session resource capacity
+	// (POST /factory-sessions/{session_id}/resources/{resource_id}/capacity)
+	SetFactorySessionResourceCapacity(w http.ResponseWriter, r *http.Request, sessionId SessionID, resourceId ResourceID)
 	// Stream ephemeral response events for one Factory Session
 	// (GET /factory-sessions/{session_id}/response-events)
 	GetFactoryResponseEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactoryResponseEventsBySessionIdParams)
@@ -11560,9 +11990,24 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
+	// List top-level Worker Session observations
+	// (GET /worker-sessions)
+	ListWorkerSessions(w http.ResponseWriter, r *http.Request, params ListWorkerSessionsParams)
 	// Start one directly resolved Worker Session
 	// (POST /worker-sessions)
 	StartWorkerSession(w http.ResponseWriter, r *http.Request)
+	// Show one top-level Worker Session observation
+	// (GET /worker-sessions/{worker_session_id})
+	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Continue one terminal Worker Session
+	// (POST /worker-sessions/{worker_session_id}/continue)
+	ContinueWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Stream top-level Worker Session events
+	// (GET /worker-sessions/{worker_session_id}/events)
+	StreamWorkerSessionEventsByTopLevelWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams)
+	// Read one top-level Worker Session transcript
+	// (GET /worker-sessions/{worker_session_id}/transcript)
+	ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -12147,6 +12592,40 @@ func (siw *ServerInterfaceWrapper) PauseFactorySession(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PauseFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetFactorySessionResourceCapacity operation middleware
+func (siw *ServerInterfaceWrapper) SetFactorySessionResourceCapacity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resource_id" -------------
+	var resourceId ResourceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resource_id", mux.Vars(r)["resource_id"], &resourceId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resource_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetFactorySessionResourceCapacity(w, r, sessionId, resourceId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13215,11 +13694,173 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkerSessions operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkerSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkerSessionsParams
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "scope", r.URL.Query(), &params.Scope)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state", r.URL.Query(), &params.State)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "maxResults" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nextToken" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkerSessions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StartWorkerSession operation middleware
 func (siw *ServerInterfaceWrapper) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartWorkerSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkerSessionObservationByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ContinueWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) ContinueWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ContinueWorkerSession(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByTopLevelWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams
+
+	// ------------- Optional query parameter "replayOnly" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(w, r, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, workerSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13386,6 +14027,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/pause", wrapper.PauseFactorySession).Methods("POST")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/resources/{resource_id}/capacity", wrapper.SetFactorySessionResourceCapacity).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/response-events", wrapper.GetFactoryResponseEventsBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
@@ -13440,7 +14083,17 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/worker-sessions", wrapper.ListWorkerSessions).Methods("GET")
+
 	r.HandleFunc(options.BaseURL+"/worker-sessions", wrapper.StartWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}", wrapper.GetWorkerSessionObservationByWorkerSessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/continue", wrapper.ContinueWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByTopLevelWorkerSessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByWorkerSessionId).Methods("GET")
 
 	return r
 }

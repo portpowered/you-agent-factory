@@ -11,6 +11,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
 
 // Root is the one process-scoped Factory Sessions root. Its live-session
@@ -19,6 +20,7 @@ import (
 type Root struct {
 	factorysessions.Service
 	*legacyservice.Assembly
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
 
 var _ factorysessions.Service = (*Root)(nil)
@@ -42,6 +44,7 @@ func NewRoot(
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
 	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -76,6 +79,9 @@ func NewRoot(
 	if clock == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
 	}
+	if liveChangeCoordinator == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
 	assemblyRole := legacyservice.NewAssembly(
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
@@ -92,12 +98,17 @@ func NewRoot(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
+		liveChangeCoordinator,
 	)
 	assembly, ok := assemblyRole.(*legacyservice.Assembly)
 	if !ok || assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
 	}
-	root := &Root{Service: &legacyservice.Service{}, Assembly: assembly}
+	root := &Root{
+		Service:               &legacyservice.Service{},
+		Assembly:              assembly,
+		liveChangeCoordinator: liveChangeCoordinator,
+	}
 	if err := validateCompatibilityBinding(root, clock); err != nil {
 		return nil, fmt.Errorf("construct Factory Sessions: compatibility binding rejected root: %w", err)
 	}

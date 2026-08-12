@@ -2,7 +2,12 @@
 // roles to canonical Wire without widening the product-facing root Service.
 package contracts
 
-import "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+import (
+	"context"
+
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+)
 
 type (
 	DirectoryInspection                  = roles.DirectoryInspection
@@ -18,3 +23,11 @@ type (
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
 )
+
+// LiveChangeCoordinator is the explicit Factory Sessions construction role
+// shared by live and durable execution. It remains outside the product-facing
+// service root because it is a composition dependency, not a customer API.
+type LiveChangeCoordinator interface {
+	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest, factorysessions.LiveChangeOperation) (factorysessions.LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string, factorysessions.LiveChangeOperation) (factorysessions.LiveChangeResult, error)
+}

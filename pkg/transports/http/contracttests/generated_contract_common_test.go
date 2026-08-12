@@ -200,6 +200,8 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeRunRequest,
 	factoryapi.FactoryEventTypeInitialStructureRequest,
 	factoryapi.FactoryEventTypeFactoryChange,
+	factoryapi.FactoryEventTypeFactoryChangeRequest,
+	factoryapi.FactoryEventTypeFactoryChangeFailed,
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
@@ -252,6 +254,14 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeFactoryChange: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsFactoryChangeEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeFactoryChangeRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsFactoryChangeRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeFactoryChangeFailed: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsFactoryChangeFailedEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeWorkRequest: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -381,6 +391,12 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.FactoryChangeEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromFactoryChangeEventPayload(value.(factoryapi.FactoryChangeEventPayload))
+	},
+	reflect.TypeOf(factoryapi.FactoryChangeRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromFactoryChangeRequestEventPayload(value.(factoryapi.FactoryChangeRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.FactoryChangeFailedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromFactoryChangeFailedEventPayload(value.(factoryapi.FactoryChangeFailedEventPayload))
 	},
 	reflect.TypeOf(factoryapi.WorkRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromWorkRequestEventPayload(value.(factoryapi.WorkRequestEventPayload))

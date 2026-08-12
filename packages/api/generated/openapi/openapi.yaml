@@ -29,6 +29,56 @@ tags:
     description: Stored workflow inspection.
 paths:
   /worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessions
+      summary: List top-level Worker Session observations
+      description: Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          description: Origin scope to inspect. Direct is the safe default.
+          schema:
+            type: string
+            enum:
+              - direct
+              - factory
+              - all
+            default: direct
+        - name: state
+          in: query
+          required: false
+          description: Optional repeated Worker Session lifecycle state filters.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - RESERVED
+                - STARTING
+                - RUNNING
+                - PAUSED
+                - COMPLETED
+                - FAILED
+                - CANCELED
+                - TERMINATED
+        - $ref: '#/components/parameters/MaxResults'
+        - $ref: '#/components/parameters/NextToken'
+      responses:
+        '200':
+          description: Deterministically ordered top-level Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags:
         - Worker Sessions
@@ -54,6 +104,117 @@ paths:
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
           $ref: '#/components/responses/WorkerSessionStartUnavailable'
+  /worker-sessions/{worker_session_id}:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationByWorkerSessionId
+      summary: Show one top-level Worker Session observation
+      description: Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: One top-level Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/continue:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: continueWorkerSession
+      summary: Continue one terminal Worker Session
+      description: Reserves one distinct successor Worker Session for a terminal source Worker Session and resumes the exact Provider Session association recorded by the server. The requestId and successor identity are idempotent inputs. A 202 response is returned only after the successor opening event is readable/subscribable and Workers has admitted the continuation; terminal output remains asynchronous.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionContinueRequest'
+      responses:
+        '202':
+          description: The successor Worker Session was admitted and is observable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionContinueResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionContinuationConflict'
+        '503':
+          $ref: '#/components/responses/WorkerSessionContinuationUnavailable'
+  /worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByTopLevelWorkerSessionId
+      summary: Stream top-level Worker Session events
+      description: Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain retained history without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      summary: Read one top-level Worker Session transcript
+      description: Returns the normalized transcript for a terminal Worker Session by its stable identity. Provider Session association and projection are resolved by the Worker Sessions service; callers cannot substitute a provider, kind, or provider-issued id tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -977,6 +1138,37 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/resources/{resource_id}/capacity:
+    post:
+      tags:
+        - Factory
+      operationId: setFactorySessionResourceCapacity
+      summary: Set one Factory Session resource capacity
+      description: Changes the effective capacity of one live Factory Session resource by stable Resource.id. The operation is revisioned and idempotent. It does not cancel, interrupt, terminate, restart, or admit work directly; a capacity increase wakes waiting runtime dispatches.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionResourceCapacityRequest'
+      responses:
+        '200':
+          description: Capacity was applied, was an exact no-op, or replayed an identical request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResourceCapacityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionResourceCapacityConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/artifacts:
     get:
       tags:
@@ -1533,6 +1725,14 @@ components:
       schema:
         type: string
         minLength: 1
+    ResourceID:
+      name: resource_id
+      in: path
+      required: true
+      description: Stable authored Resource.id. Mutable display names are not accepted as identifiers.
+      schema:
+        type: string
+        minLength: 1
     MaxResults:
       name: maxResults
       in: query
@@ -1932,6 +2132,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionContinuationConflict:
+      description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionContinuationUnavailable:
+      description: The Worker Session continuation could not cross its event-readiness or Workers-admission barrier.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     FactorySessionLifecycleControlConflict:
       description: Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId.
       content:
@@ -1939,6 +2151,14 @@ components:
           schema:
             oneOf:
               - $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+              - $ref: '#/components/schemas/ErrorResponse'
+    FactorySessionResourceCapacityConflict:
+      description: Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/FactorySessionResourceCapacityResponse'
               - $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: Server failed while reading or building runtime state.
@@ -2430,6 +2650,9 @@ components:
           description: Deterministically ordered Worker Session observations correlated with the requested Work.
           items:
             $ref: '#/components/schemas/WorkerSessionObservation'
+        paginationContext:
+          $ref: '#/components/schemas/PaginationContext'
+          description: Bounded pagination context for top-level Worker Session observation queries.
     WorkerSessionStartRequest:
       type: object
       additionalProperties: false
@@ -2493,6 +2716,78 @@ components:
             - WorkerSessionStartResponseStateFailed
             - WorkerSessionStartResponseStateCanceled
             - WorkerSessionStartResponseStateTerminated
+        eventTopic:
+          type: string
+          description: Deterministic Events topic whose retained opening record is ready to read and subscribe.
+    WorkerSessionContinueRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - successorWorkerSessionId
+        - followUpInput
+      description: Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          description: Required caller idempotency key for this continuation.
+        successorWorkerSessionId:
+          type: string
+          minLength: 1
+          description: Distinct Worker Session identity to reserve for the successor.
+        followUpInput:
+          type: string
+          minLength: 1
+          description: Non-empty follow-up input delivered to the resumed Provider Session.
+    WorkerSessionContinueResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - sourceWorkerSessionId
+        - successorWorkerSessionId
+        - predecessorWorkerSessionId
+        - accepted
+        - state
+        - eventTopic
+      description: Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs.
+      properties:
+        requestId:
+          type: string
+          description: Caller idempotency key echoed for correlation.
+        sourceWorkerSessionId:
+          type: string
+          description: Stable terminal Worker Session identity used as the source.
+        successorWorkerSessionId:
+          type: string
+          description: Stable Worker Session identity reserved for the successor.
+        predecessorWorkerSessionId:
+          type: string
+          description: Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId.
+        accepted:
+          type: boolean
+          description: Always true for a 202 response.
+        state:
+          type: string
+          enum:
+            - RESERVED
+            - STARTING
+            - RUNNING
+            - PAUSED
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+          x-enum-varnames:
+            - WorkerSessionContinueResponseStateReserved
+            - WorkerSessionContinueResponseStateStarting
+            - WorkerSessionContinueResponseStateRunning
+            - WorkerSessionContinueResponseStatePaused
+            - WorkerSessionContinueResponseStateCompleted
+            - WorkerSessionContinueResponseStateFailed
+            - WorkerSessionContinueResponseStateCanceled
+            - WorkerSessionContinueResponseStateTerminated
         eventTopic:
           type: string
           description: Deterministic Events topic whose retained opening record is ready to read and subscribe.
@@ -2671,6 +2966,7 @@ components:
       additionalProperties: false
       required:
         - workerSessionId
+        - direct
         - providerSessionAvailable
         - workIds
         - turnId
@@ -2686,6 +2982,9 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity.
+        direct:
+          type: boolean
+          description: Whether this observation was admitted through the direct top-level Worker Session surface.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
           nullable: true
@@ -3584,12 +3883,21 @@ components:
             - MOVE_WORK_REQUEST_ALREADY_APPLIED
             - METHOD_NOT_ALLOWED
             - EXECUTION_REQUEST_ID_CONFLICT
+            - REQUEST_CONFLICT
             - WORKER_SESSION_START_REQUEST_ID_CONFLICT
             - WORKER_SESSION_NOT_STARTABLE
             - WORKER_SESSION_START_OPENING_FAILED
             - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
             - WORKER_SESSION_ADMISSION_FAILED
+            - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
+            - WORKER_SESSION_CONTINUATION_CONFLICT
+            - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
+            - WORKER_SESSION_CONTINUATION_ADMISSION_FAILED
             - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
+            - RESOURCE_CAPACITY_IN_USE
+            - REVISION_CONFLICT
+            - LIFECYCLE_CONFLICT
+            - ADMITTED_APPLICATION_FAILURE
             - INVALID_RESPONSE_EVENT_CURSOR
             - INVALID_RESPONSE_EVENT_FILTER
             - RESPONSE_EVENT_SESSION_NOT_FOUND
@@ -3614,12 +3922,21 @@ components:
             - Operator move requestId was already applied for this session.
             - The HTTP method is not allowed for the requested route.
             - Durable execution requestId was reused with materially different inputs.
+            - A live-change requestId was reused with a different normalized request body.
             - Worker Session start requestId was reused with different normalized inputs.
             - The requested Worker Session identity is already reserved or terminal.
             - The Worker Session opening record could not be published.
             - The Worker Session event topic did not reach the required readiness barrier.
             - Workers could not admit the Worker Session execution.
+            - Worker Session continuation requestId was reused with different inputs.
+            - The Worker Session continuation conflicts with source lifecycle or successor lineage.
+            - The recorded Provider Session cannot be resumed for this Worker Session continuation.
+            - Workers could not admit the Worker Session continuation.
             - Lifecycle control requestId was already applied with different control inputs.
+            - Requested resource capacity is below the number of units currently in use.
+            - The caller's expected Factory revision is no longer current.
+            - The Factory Session lifecycle does not admit the requested change.
+            - A live change was admitted but its runtime application failed.
             - The Factory Response Event reconnect cursor is invalid.
             - A Factory Response Event filter is invalid.
             - The explicitly selected Factory Session for response events does not exist.
@@ -3638,6 +3955,9 @@ components:
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
           items:
             $ref: '#/components/schemas/FactoryValidationTarget'
+        resourceCapacity:
+          $ref: '#/components/schemas/FactorySessionResourceCapacityErrorDetails'
+          description: Resource accounting for a rejected capacity reduction.
     ErrorTarget:
       type: object
       additionalProperties: false
@@ -6435,6 +6755,135 @@ components:
         links:
           $ref: '#/components/schemas/FactorySessionLifecycleControlLinks'
           description: Inspection links for session, results, dispatches, and artifacts.
+    FactorySessionResourceCapacityRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - expectedRevision
+        - capacity
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          description: Caller-owned idempotency identity for this capacity request.
+        expectedRevision:
+          type: integer
+          minimum: 0
+          description: Effective Factory revision observed before admission.
+        capacity:
+          type: integer
+          minimum: 0
+          description: Requested total resource capacity. Zero is valid only when no units are in use.
+        reason:
+          type: string
+          description: Optional safe operator reason retained with the canonical change request.
+    FactorySessionResourceCapacityErrorDetails:
+      type: object
+      additionalProperties: false
+      description: Accounting details explaining why a resource-capacity reduction was rejected.
+      required:
+        - resourceId
+        - currentCapacity
+        - requestedCapacity
+        - inUseCount
+        - availableCount
+        - minimumCapacity
+      properties:
+        resourceId:
+          type: string
+          minLength: 1
+          description: Stable authored Resource.id.
+        currentCapacity:
+          type: integer
+          minimum: 0
+        requestedCapacity:
+          type: integer
+        inUseCount:
+          type: integer
+          minimum: 0
+        availableCount:
+          type: integer
+          minimum: 0
+        minimumCapacity:
+          type: integer
+          minimum: 0
+    FactorySessionResourceCapacityOutcome:
+      type: string
+      enum:
+        - APPLIED
+        - NO_OP
+        - REPLAYED
+      description: Terminal capacity decision outcome.
+    FactorySessionResourceCapacityLinks:
+      type: object
+      additionalProperties: false
+      description: Canonical relative links for inspecting the affected Factory Session and its events.
+      properties:
+        session:
+          type: string
+          description: Relative URL for the affected Factory Session.
+        events:
+          type: string
+          description: Relative URL for the session's canonical Factory Events.
+        status:
+          type: string
+          description: Relative URL for the session status projection.
+    FactorySessionResourceCapacityResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - resourceId
+        - previousCapacity
+        - requestedCapacity
+        - effectiveCapacity
+        - inUseCount
+        - availableCount
+        - minimumCapacity
+        - outcome
+        - revision
+        - requestId
+        - changeId
+      properties:
+        sessionId:
+          type: string
+        resourceId:
+          type: string
+          description: Stable authored Resource.id. This is the only resource identity used by the operation.
+        resourceName:
+          type: string
+          description: Current display label, provided for presentation only.
+        previousCapacity:
+          type: integer
+          minimum: 0
+        requestedCapacity:
+          type: integer
+          minimum: 0
+        effectiveCapacity:
+          type: integer
+          minimum: 0
+        inUseCount:
+          type: integer
+          minimum: 0
+        availableCount:
+          type: integer
+          minimum: 0
+        minimumCapacity:
+          type: integer
+          minimum: 0
+          description: Lowest capacity currently safe to admit without interrupting in-use work.
+        outcome:
+          $ref: '#/components/schemas/FactorySessionResourceCapacityOutcome'
+        revision:
+          type: integer
+          minimum: 0
+        requestId:
+          type: string
+        changeId:
+          type: string
+        links:
+          $ref: '#/components/schemas/FactorySessionResourceCapacityLinks'
     LoadableProviderSessionRef:
       type: object
       additionalProperties: false
@@ -7281,6 +7730,8 @@ components:
             - $ref: '#/components/schemas/RunRequestEventPayload'
             - $ref: '#/components/schemas/InitialStructureRequestEventPayload'
             - $ref: '#/components/schemas/FactoryChangeEventPayload'
+            - $ref: '#/components/schemas/FactoryChangeRequestEventPayload'
+            - $ref: '#/components/schemas/FactoryChangeFailedEventPayload'
             - $ref: '#/components/schemas/WorkRequestEventPayload'
             - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
             - $ref: '#/components/schemas/DispatchRequestEventPayload'
@@ -7335,6 +7786,8 @@ components:
           RUN_REQUEST: '#/components/schemas/RunRequestEventPayload'
           INITIAL_STRUCTURE_REQUEST: '#/components/schemas/InitialStructureRequestEventPayload'
           FACTORY_CHANGE: '#/components/schemas/FactoryChangeEventPayload'
+          FACTORY_CHANGE_REQUEST: '#/components/schemas/FactoryChangeRequestEventPayload'
+          FACTORY_CHANGE_FAILED: '#/components/schemas/FactoryChangeFailedEventPayload'
           WORK_REQUEST: '#/components/schemas/WorkRequestEventPayload'
           RELATIONSHIP_CHANGE_REQUEST: '#/components/schemas/RelationshipChangeRequestEventPayload'
           DISPATCH_REQUEST: '#/components/schemas/DispatchRequestEventPayload'
@@ -7394,6 +7847,8 @@ components:
         - FactoryEventTypeRunRequest
         - FactoryEventTypeInitialStructureRequest
         - FactoryEventTypeFactoryChange
+        - FactoryEventTypeFactoryChangeRequest
+        - FactoryEventTypeFactoryChangeFailed
         - FactoryEventTypeWorkRequest
         - FactoryEventTypeRelationshipChangeRequest
         - FactoryEventTypeDispatchRequest
@@ -7427,6 +7882,8 @@ components:
         - RUN_REQUEST
         - INITIAL_STRUCTURE_REQUEST
         - FACTORY_CHANGE
+        - FACTORY_CHANGE_REQUEST
+        - FACTORY_CHANGE_FAILED
         - WORK_REQUEST
         - RELATIONSHIP_CHANGE_REQUEST
         - DISPATCH_REQUEST
@@ -7460,6 +7917,8 @@ components:
         - A factory run request was recorded and its effective runtime configuration is known.
         - The static factory topology and configured resources are available before work moves.
         - The running factory definition changed and a canonical replacement topology is now active.
+        - A normalized live Factory Session change request was admitted before application.
+        - An admitted live Factory Session change could not become effective and was closed with a safe failure.
         - Work entered the factory as a normalized request.
         - A relationship-change request between work items was recorded.
         - A workstation request began processing a set of input work.
@@ -7595,6 +8054,57 @@ components:
           $ref: '#/components/schemas/RunnerID'
         runnerSelectionSource:
           $ref: '#/components/schemas/RunnerSelectionSource'
+    FactoryResourceCapacityChange:
+      type: object
+      additionalProperties: false
+      description: Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.
+      required:
+        - resourceId
+        - previousCapacity
+        - requestedCapacity
+        - effectiveCapacity
+        - inUseCount
+        - availableCount
+        - minimumCapacity
+        - outcome
+      properties:
+        resourceId:
+          type: string
+          minLength: 1
+          description: Stable authored Resource.id whose capacity changed.
+        resourceName:
+          type: string
+          description: Optional display name retained for inspection only.
+        previousCapacity:
+          type: integer
+          minimum: 0
+          description: Capacity immediately before the change.
+        requestedCapacity:
+          type: integer
+          minimum: 0
+          description: Capacity requested by the operator.
+        effectiveCapacity:
+          type: integer
+          minimum: 0
+          description: Capacity effective after the change.
+        inUseCount:
+          type: integer
+          minimum: 0
+          description: Number of leases in use at the decision boundary.
+        availableCount:
+          type: integer
+          minimum: 0
+          description: Number of currently available capacity units.
+        minimumCapacity:
+          type: integer
+          minimum: 0
+          description: Lowest capacity permitted by the current in-use count.
+        outcome:
+          type: string
+          enum:
+            - APPLIED
+            - NO_OP
+          description: Terminal capacity decision recorded by the runtime.
     RunRequestEventPayload:
       type: object
       additionalProperties: false
@@ -7633,10 +8143,108 @@ components:
       properties:
         factory:
           $ref: '#/components/schemas/Factory'
+        changeId:
+          type: string
+          description: Stable live-change identity when this is a revisioned change boundary.
+        operation:
+          type: string
+          description: Normalized live-change operation name.
+        targetId:
+          type: string
+          description: Stable target identity changed by the operation.
+        previousRevision:
+          type: integer
+          minimum: 0
+          description: Effective Factory revision immediately before this change.
+        newRevision:
+          type: integer
+          minimum: 0
+          description: Effective Factory revision created by this change.
+        effectiveSequence:
+          type: integer
+          minimum: 0
+          description: Canonical Factory Event sequence at which this change became effective.
+        resourceCapacity:
+          $ref: '#/components/schemas/FactoryResourceCapacityChange'
+          description: Detached resource-capacity accounting for a capacity change.
         sourceDirectory:
           type: string
         metadata:
           $ref: '#/components/schemas/StringMap'
+    FactoryChangeRequestEventPayload:
+      type: object
+      additionalProperties: false
+      description: Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context.
+      required:
+        - changeId
+        - expectedRevision
+        - operation
+        - targetId
+        - requestedValue
+      properties:
+        changeId:
+          type: string
+          minLength: 1
+          description: Stable identity of the requested live change.
+        expectedRevision:
+          type: integer
+          minimum: 0
+          description: Effective Factory revision the operator observed before admission.
+        operation:
+          type: string
+          minLength: 1
+          description: Normalized live-change operation name.
+        targetId:
+          type: string
+          minLength: 1
+          description: Stable target identity changed by the operation.
+        requestedValue:
+          description: Canonical JSON value requested by the operation.
+        actor:
+          type: string
+          description: Safe actor identity supplied by the caller.
+        source:
+          type: string
+          description: Safe source label such as cli or api.
+        reason:
+          type: string
+          description: Optional normalized safe operator reason.
+    FactoryChangeFailedEventPayload:
+      type: object
+      additionalProperties: false
+      description: Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded.
+      required:
+        - changeId
+        - operation
+        - targetId
+        - expectedRevision
+        - previousRevision
+        - failureCode
+        - failureMessage
+      properties:
+        changeId:
+          type: string
+          minLength: 1
+        operation:
+          type: string
+          minLength: 1
+        targetId:
+          type: string
+          minLength: 1
+        expectedRevision:
+          type: integer
+          minimum: 0
+        previousRevision:
+          type: integer
+          minimum: 0
+        failureCode:
+          type: string
+          minLength: 1
+          description: Stable safe failure category.
+        failureMessage:
+          type: string
+          minLength: 1
+          description: Bounded safe failure explanation.
     WorkRequestEventPayload:
       type: object
       additionalProperties: false

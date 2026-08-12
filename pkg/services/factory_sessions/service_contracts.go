@@ -2,9 +2,14 @@ package factorysessions
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
+	"strings"
 	"time"
 )
 
@@ -139,6 +144,8 @@ type Service interface {
 	ApproveDurableFactorySession(context.Context, string, ApproveRequest) (LifecycleControlResult, error)
 	RetryDurableFactorySessionDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error)
 	InterruptDurableFactorySessionDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
+	ApplyLiveChange(context.Context, string, LiveChangeRequest) (LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error)
 }
 
 // --- merged from live_control_contract.go ---
@@ -185,6 +192,14 @@ type LiveControlService interface {
 // narrow public capability synchronized with its authoritative implementation.
 var _ LiveControlService = (Service)(nil)
 
+// LiveChangeService is the owner-published Factory Sessions capability for
+// normalized, revisioned live changes and idempotent recovery.
+//
+// The aggregate Service is asserted below so callers that need the complete
+// Factory Sessions surface and callers that only need live changes share one
+// implementation and one admission path.
+var _ LiveChangeService = (Service)(nil)
+
 // LiveControlOpenRequest is the plain root open request for live session control.
 // It is the published name for OpenRequest on the live-control slice.
 type LiveControlOpenRequest = OpenRequest
@@ -213,3 +228,284 @@ type LiveControlResult = LifecycleControlResult
 // on the live-control root slice. Peers match it with errors.As and inspect
 // Outcome without importing nested live-runtime packages.
 type LiveControlError = ControlError
+
+// LiveChangeOutcome identifies the terminal result returned by the
+// session-scoped live-change operation.
+type LiveChangeOutcome string
+
+const (
+	LiveChangeOutcomeApplied  LiveChangeOutcome = "APPLIED"
+	LiveChangeOutcomeNoOp     LiveChangeOutcome = "NO_OP"
+	LiveChangeOutcomeReplayed LiveChangeOutcome = "REPLAYED"
+	LiveChangeOutcomeFailed   LiveChangeOutcome = "FAILED"
+)
+
+// LiveChangeLifecycle is the small lifecycle vocabulary needed for admission.
+// A Factory Session may remain IDLE after its current Work finishes, so IDLE
+// is intentionally represented as eligible rather than terminal.
+type LiveChangeLifecycle string
+
+const (
+	LiveChangeLifecycleRunning   LiveChangeLifecycle = "RUNNING"
+	LiveChangeLifecycleIdle      LiveChangeLifecycle = "IDLE"
+	LiveChangeLifecyclePaused    LiveChangeLifecycle = "PAUSED"
+	LiveChangeLifecycleCompleted LiveChangeLifecycle = "COMPLETED"
+	LiveChangeLifecycleFailed    LiveChangeLifecycle = "FAILED"
+)
+
+// LiveChangeRequest is the transport-neutral operator intent. RequestedValue
+// is canonical JSON so transports do not need to agree on a Go value shape.
+type LiveChangeRequest struct {
+	RequestID        string          `json:"requestId"`
+	ChangeID         string          `json:"changeId,omitempty"`
+	ExpectedRevision int             `json:"expectedRevision"`
+	Operation        string          `json:"operation"`
+	TargetID         string          `json:"targetId"`
+	RequestedValue   json.RawMessage `json:"requestedValue"`
+	Actor            string          `json:"actor,omitempty"`
+	Source           string          `json:"source,omitempty"`
+	Reason           string          `json:"reason,omitempty"`
+}
+
+// LiveChangeResult is the detached terminal outcome. Factory is present only
+// for an applied or replayed success and is always cloned at the boundary.
+type LiveChangeResult struct {
+	SessionID         string
+	RequestID         string
+	ChangeID          string
+	Outcome           LiveChangeOutcome
+	PreviousRevision  int
+	NewRevision       int
+	EffectiveSequence int
+	Factory           *factorydefinitions.FactorySnapshot
+	ResourceCapacity  *factoryruntime.ResourceCapacityResult
+	FailureCode       string
+	FailureMessage    string
+}
+
+// LiveChangeSessionState is the admission read model supplied by the owning
+// Factory Session. The application does not infer revision from mutable
+// runtime implementation state.
+type LiveChangeSessionState struct {
+	SessionID         string
+	Lifecycle         LiveChangeLifecycle
+	EffectiveRevision int
+	EffectiveSequence int
+	Factory           *factorydefinitions.FactorySnapshot
+}
+
+// LiveChangeStateProvider supplies the current lifecycle and revision
+// projection for one Factory Session. It is evaluated only after request
+// identity and replay checks permit a new admission attempt.
+type LiveChangeStateProvider func(context.Context, string) (LiveChangeSessionState, error)
+
+// LiveChangeApplicationRequest is the explicit application port input. The
+// application must mutate the running runtime atomically with its own resource
+// or orchestration policy and return the complete effective Factory snapshot.
+type LiveChangeApplicationRequest struct {
+	SessionID        string
+	Request          LiveChangeRequest
+	PreviousRevision int
+	CurrentFactory   *factorydefinitions.FactorySnapshot
+}
+
+// LiveChangeApplicationResult is the successful application result.
+type LiveChangeApplicationResult struct {
+	Factory          *factorydefinitions.FactorySnapshot
+	ResourceCapacity *factoryruntime.ResourceCapacityResult
+}
+
+// LiveChangePreflightResult lets an application reject a no-op or other
+// target-specific condition before the request enters canonical history.
+type LiveChangePreflightResult struct {
+	Admissible       bool
+	NoOp             bool
+	Factory          *factorydefinitions.FactorySnapshot
+	ResourceCapacity *factoryruntime.ResourceCapacityResult
+}
+
+// LiveChangeEventLog is the explicit canonical event boundary used by
+// Factory Sessions. Implementations assign sequence and preserve stream
+// behavior; the admission owner never reaches into a concrete ledger.
+type LiveChangeEventLog interface {
+	AppendLiveChangeEvent(factorydefinitions.FactoryEvent) (factorydefinitions.FactoryEvent, error)
+	LiveChangeEvents() []factorydefinitions.FactoryEvent
+}
+
+// LiveChangeApplication applies an already-admitted live change to a running
+// Factory Session. Resource-specific policy belongs behind this port.
+type LiveChangeApplication interface {
+	ApplyLiveChange(context.Context, LiveChangeApplicationRequest) (LiveChangeApplicationResult, error)
+}
+
+// LiveChangePreflight is an optional application capability for target lookup,
+// exact no-op detection, and application-specific validation before admission.
+type LiveChangePreflight interface {
+	PreflightLiveChange(context.Context, LiveChangeApplicationRequest) (LiveChangePreflightResult, error)
+}
+
+// LiveChangeAdmission serializes change application with dispatch admission.
+// The release function is always owned by the caller after a successful
+// acquisition; a nil implementation falls back to the session-local guard.
+type LiveChangeAdmission interface {
+	AcquireLiveChange(context.Context, string) (release func(), err error)
+}
+
+// LiveChangeOperation contains the runtime-scoped capabilities used by the
+// process-scoped live-change coordinator. The coordinator is constructed once
+// by Factory Sessions wire; state, event history, application behavior, clock,
+// and logging remain explicit for each live or durable session operation.
+type LiveChangeOperation struct {
+	StateProvider LiveChangeStateProvider
+	Events        LiveChangeEventLog
+	Application   LiveChangeApplication
+	Now           func() time.Time
+	Logger        *zap.Logger
+}
+
+// LiveChangeErrorCode identifies a safe, stable failure category.
+type LiveChangeErrorCode string
+
+const (
+	LiveChangeErrorInvalidRequest         LiveChangeErrorCode = "INVALID_REQUEST"
+	LiveChangeErrorSessionNotFound        LiveChangeErrorCode = "SESSION_NOT_FOUND"
+	LiveChangeErrorLifecycleConflict      LiveChangeErrorCode = "LIFECYCLE_CONFLICT"
+	LiveChangeErrorRevisionConflict       LiveChangeErrorCode = "REVISION_CONFLICT"
+	LiveChangeErrorRequestConflict        LiveChangeErrorCode = "REQUEST_CONFLICT"
+	LiveChangeErrorTargetNotFound         LiveChangeErrorCode = "TARGET_NOT_FOUND"
+	LiveChangeErrorNoOp                   LiveChangeErrorCode = "NO_OP"
+	LiveChangeErrorCapacityInUse          LiveChangeErrorCode = "RESOURCE_CAPACITY_IN_USE"
+	LiveChangeErrorApplicationFailed      LiveChangeErrorCode = "APPLICATION_FAILED"
+	LiveChangeErrorApplicationUnavailable LiveChangeErrorCode = "APPLICATION_UNAVAILABLE"
+	LiveChangeErrorRecoveryUnavailable    LiveChangeErrorCode = "RECOVERY_UNAVAILABLE"
+	LiveChangeErrorEventAppendFailed      LiveChangeErrorCode = "EVENT_APPEND_FAILED"
+)
+
+var (
+	ErrLiveChangeInvalidRequest         = errors.New("live change request is invalid")
+	ErrLiveChangeSessionNotFound        = errors.New("live change session not found")
+	ErrLiveChangeLifecycleConflict      = errors.New("live change session lifecycle is not eligible")
+	ErrLiveChangeRevisionConflict       = errors.New("live change expected revision is stale")
+	ErrLiveChangeRequestConflict        = errors.New("live change request identity conflicts with a prior request")
+	ErrLiveChangeTargetNotFound         = errors.New("live change target was not found")
+	ErrLiveChangeNoOp                   = errors.New("live change is an exact no-op")
+	ErrLiveChangeCapacityInUse          = errors.New("live change resource capacity is in use")
+	ErrLiveChangeApplicationFailed      = errors.New("live change application failed")
+	ErrLiveChangeApplicationUnavailable = errors.New("live change application is unavailable")
+	ErrLiveChangeRecoveryUnavailable    = errors.New("live change recovery is unavailable")
+	ErrLiveChangeEventAppendFailed      = errors.New("live change event append failed")
+)
+
+var liveChangeErrorSentinels = map[LiveChangeErrorCode]error{
+	LiveChangeErrorInvalidRequest:         ErrLiveChangeInvalidRequest,
+	LiveChangeErrorLifecycleConflict:      ErrLiveChangeLifecycleConflict,
+	LiveChangeErrorRevisionConflict:       ErrLiveChangeRevisionConflict,
+	LiveChangeErrorRequestConflict:        ErrLiveChangeRequestConflict,
+	LiveChangeErrorTargetNotFound:         ErrLiveChangeTargetNotFound,
+	LiveChangeErrorNoOp:                   ErrLiveChangeNoOp,
+	LiveChangeErrorCapacityInUse:          ErrLiveChangeCapacityInUse,
+	LiveChangeErrorApplicationFailed:      ErrLiveChangeApplicationFailed,
+	LiveChangeErrorApplicationUnavailable: ErrLiveChangeApplicationUnavailable,
+	LiveChangeErrorRecoveryUnavailable:    ErrLiveChangeRecoveryUnavailable,
+	LiveChangeErrorEventAppendFailed:      ErrLiveChangeEventAppendFailed,
+}
+
+// LiveChangeError is the typed, safe error returned by admission. Cause is
+// retained only for local errors.Is matching and is never serialized.
+type LiveChangeError struct {
+	Code             LiveChangeErrorCode
+	Field            string
+	Message          string
+	RequestID        string
+	ChangeID         string
+	ResourceCapacity *factoryruntime.ResourceCapacityResult
+	Cause            error
+}
+
+func (e *LiveChangeError) Error() string {
+	if e == nil {
+		return "live change error"
+	}
+	if e.Message == "" {
+		return string(e.Code)
+	}
+	return e.Message
+}
+
+func (e *LiveChangeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+func (e *LiveChangeError) Is(target error) bool {
+	if e == nil || target == nil {
+		return false
+	}
+	if e.Code == LiveChangeErrorSessionNotFound {
+		return target == ErrLiveChangeSessionNotFound || target == ErrSessionNotFound
+	}
+	return liveChangeErrorSentinels[e.Code] == target
+}
+
+// NewLiveChangeError constructs a stable typed error without exposing an
+// implementation error's unsafe message at the public boundary.
+func NewLiveChangeError(code LiveChangeErrorCode, message string) *LiveChangeError {
+	return &LiveChangeError{Code: code, Message: strings.TrimSpace(message)}
+}
+
+// NormalizeLiveChangeRequest validates and canonicalizes request identity and
+// JSON value bytes before any session state or event-log mutation occurs.
+func NormalizeLiveChangeRequest(request LiveChangeRequest) (LiveChangeRequest, error) {
+	request.RequestID = strings.TrimSpace(request.RequestID)
+	request.ChangeID = strings.TrimSpace(request.ChangeID)
+	request.Operation = strings.ToLower(strings.TrimSpace(request.Operation))
+	request.TargetID = strings.TrimSpace(request.TargetID)
+	request.Actor = strings.TrimSpace(request.Actor)
+	request.Source = strings.TrimSpace(request.Source)
+	request.Reason = strings.Join(strings.Fields(request.Reason), " ")
+	if request.RequestID == "" {
+		return LiveChangeRequest{}, &LiveChangeError{Code: LiveChangeErrorInvalidRequest, Field: "requestId", Message: "request id is required"}
+	}
+	if request.ChangeID == "" {
+		request.ChangeID = "live-change/" + request.RequestID
+	}
+	if request.ExpectedRevision < 0 {
+		return LiveChangeRequest{}, &LiveChangeError{Code: LiveChangeErrorInvalidRequest, Field: "expectedRevision", Message: "expected revision must not be negative"}
+	}
+	if request.Operation == "" {
+		return LiveChangeRequest{}, &LiveChangeError{Code: LiveChangeErrorInvalidRequest, Field: "operation", Message: "operation is required"}
+	}
+	if request.TargetID == "" {
+		return LiveChangeRequest{}, &LiveChangeError{Code: LiveChangeErrorInvalidRequest, Field: "targetId", Message: "target id is required"}
+	}
+	canonical, err := canonicalJSON(request.RequestedValue)
+	if err != nil {
+		return LiveChangeRequest{}, &LiveChangeError{Code: LiveChangeErrorInvalidRequest, Field: "requestedValue", Message: "requested value must be valid JSON", Cause: err}
+	}
+	request.RequestedValue = canonical
+	return request, nil
+}
+
+func canonicalJSON(value json.RawMessage) (json.RawMessage, error) {
+	if len(value) == 0 {
+		return nil, fmt.Errorf("requested value is empty")
+	}
+	var decoded any
+	if err := json.Unmarshal(value, &decoded); err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(decoded)
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
+}
+
+// LiveChangeService is the narrow Factory Sessions capability for admitted
+// live changes and crash recovery.
+type LiveChangeService interface {
+	ApplyLiveChange(context.Context, string, LiveChangeRequest) (LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error)
+}

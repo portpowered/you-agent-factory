@@ -937,6 +937,9 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 }
 
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
+	if hasDurableLiveChangeEvents(state.events) {
+		return true
+	}
 	if len(state.petriMutations) > 0 {
 		return true
 	}

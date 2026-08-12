@@ -102,6 +102,14 @@ var publicFactoryEventPayloadDecoders = map[recordings.FactoryEventType]func(fac
 		_, err := payload.AsFactoryChangeEventPayload()
 		return err
 	},
+	recordings.FactoryEventTypeFactoryChangeRequest: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsFactoryChangeRequestEventPayload()
+		return err
+	},
+	recordings.FactoryEventTypeFactoryChangeFailed: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsFactoryChangeFailedEventPayload()
+		return err
+	},
 	recordings.FactoryEventTypeWorkRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsWorkRequestEventPayload()
 		return err

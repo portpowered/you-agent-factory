@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
@@ -69,6 +70,7 @@ type (
 	InvocationOperation                  = roles.InvocationOperation
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
+	LiveChangeCoordinator                = factorysessionwirecontracts.LiveChangeCoordinator
 	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
 	OpeningPresentationOwner             = factorysessions.OpeningPresentationOwner
 	RuntimeResources                     = roles.RuntimeResources

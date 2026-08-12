@@ -70,14 +70,32 @@ func (s *JavaScriptRuntimeService) workerInvoker(sessionID string) factory.Servi
 // operation. What remains here is translation: a child spec in, a child result
 // out.
 type childWorkerExecutor struct {
-	sessionID   string
-	invoke      factory.Service
-	records     factory.JavaScriptChildRecordSink
-	childValues factory.JavaScriptChildValues
-	observe     workerDispatchObserver
-	workingDir  string
-	maxAttempts int
+	sessionID             string
+	invoke                factory.Service
+	records               factory.JavaScriptChildRecordSink
+	childValues           factory.JavaScriptChildValues
+	observe               workerDispatchObserver
+	workingDir            string
+	maxAttempts           int
+	resourceLeaseAcquirer childResourceLeaseAcquirer
 }
+
+// childResourceLease is the execution-owned view of a resource lease. The
+// runtime contract still owns the concrete lease; this narrow seam keeps the
+// child executor's release behavior directly testable without constructing a
+// Factory Runtime value from a Factory Sessions test.
+type childResourceLease struct {
+	factoryRevision int
+	release         func()
+}
+
+func (lease *childResourceLease) Release() {
+	if lease != nil && lease.release != nil {
+		lease.release()
+	}
+}
+
+type childResourceLeaseAcquirer func(context.Context, factory.ResourceCapacityLeaseRequest) (*childResourceLease, error)
 
 // workerDispatchObserver claims one Workers dispatch identity for the session
 // that started it, so the Worker's progress can be routed back to that
@@ -101,13 +119,14 @@ func newChildWorkerExecutor(
 		attempts = 1
 	}
 	return &childWorkerExecutor{
-		sessionID:   sessionID,
-		invoke:      invoke,
-		records:     records,
-		childValues: childValues,
-		observe:     observe,
-		workingDir:  strings.TrimSpace(workingDir),
-		maxAttempts: attempts,
+		sessionID:             sessionID,
+		invoke:                invoke,
+		records:               records,
+		childValues:           childValues,
+		observe:               observe,
+		workingDir:            strings.TrimSpace(workingDir),
+		maxAttempts:           attempts,
+		resourceLeaseAcquirer: nil,
 	}
 }
 
@@ -129,6 +148,14 @@ func (e *childWorkerExecutor) Execute(
 		return factory.JavaScriptChildExecutionResult{}, fmt.Errorf(
 			"javascript child execution requires a Factory Runtime worker invoker",
 		)
+	}
+	lease, err := e.acquireResourceLease(ctx, req)
+	if err != nil {
+		return factory.JavaScriptChildExecutionResult{}, err
+	}
+	if lease != nil {
+		req.FactoryRevision = lease.factoryRevision
+		defer lease.Release()
 	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
@@ -193,6 +220,38 @@ func (e *childWorkerExecutor) Execute(
 	}, nil
 }
 
+func (e *childWorkerExecutor) acquireResourceLease(
+	ctx context.Context,
+	req factory.JavaScriptChildExecutionRequest,
+) (*childResourceLease, error) {
+	resourceID := strings.TrimSpace(req.ResourceID)
+	if resourceID == "" {
+		return nil, nil
+	}
+	request := factory.ResourceCapacityLeaseRequest{ResourceID: resourceID}
+	if e.resourceLeaseAcquirer != nil {
+		return e.resourceLeaseAcquirer(ctx, request)
+	}
+	admission, ok := e.invoke.(factory.ResourceCapacityLeaseAdmission)
+	if !ok {
+		return nil, fmt.Errorf(
+			"javascript child resource %q requires Factory Runtime resource lease admission",
+			resourceID,
+		)
+	}
+	lease, err := admission.AcquireResourceCapacityLease(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	if lease == nil {
+		return nil, nil
+	}
+	return &childResourceLease{
+		factoryRevision: lease.FactoryRevision,
+		release:         lease.Release,
+	}, nil
+}
+
 // openChild resolves everything the session records about one child before its
 // Worker runs, and commits the queued and running dispatch facts.
 //
@@ -226,6 +285,8 @@ func (e *childWorkerExecutor) openChild(
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		ResourceID:      req.ResourceID,
+		FactoryRevision: req.FactoryRevision,
 		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,

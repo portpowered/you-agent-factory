@@ -695,6 +695,14 @@ func (fake *peerRootServiceFake) GetFactorySession(_ context.Context, sessionID 
 	return SessionProjection{}, ErrSessionNotFound
 }
 
+func (fake *peerRootServiceFake) ApplyLiveChange(context.Context, string, LiveChangeRequest) (LiveChangeResult, error) {
+	return LiveChangeResult{}, ErrLiveChangeApplicationUnavailable
+}
+
+func (fake *peerRootServiceFake) RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error) {
+	return LiveChangeResult{}, ErrLiveChangeApplicationUnavailable
+}
+
 func (fake *peerRootServiceFake) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error) {
 	return SyncPreflightResult{}, ErrSessionNotFound
 }

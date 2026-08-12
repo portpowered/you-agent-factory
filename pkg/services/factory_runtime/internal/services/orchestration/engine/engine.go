@@ -55,6 +55,14 @@ type FactoryEngine struct {
 	transformer           *token_transformer.Transformer
 	acceptingSubmits      bool
 	terminationResult     *interfaces.TerminationResult
+	// admissionGate serializes a complete live-change admission transaction
+	// with ticks that may acquire or release resource tokens.
+	admissionGate       chan struct{}
+	capacityWakePending bool
+	capacityChanged     chan struct{}
+	resourceLeases      map[string]resourceCapacityLease
+	nextResourceLeaseID uint64
+	factoryRevision     int
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -131,7 +139,11 @@ func NewFactoryEngine(
 		onResultBufferDrained: onResultBufferDrained,
 		transformer:           transformer,
 		acceptingSubmits:      true,
+		admissionGate:         make(chan struct{}, 1),
+		capacityChanged:       make(chan struct{}),
+		resourceLeases:        make(map[string]resourceCapacityLease),
 	}
+	e.admissionGate <- struct{}{}
 	e.submissionHooks = append([]factory.SubmissionHook{e.submissionHook}, e.submissionHooks...)
 	e.submissionHooks = sortedSubmissionHooks(e.submissionHooks)
 	return e, nil
@@ -263,33 +275,6 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.wakeForPendingProcessing()
-}
-
-func (e *FactoryEngine) wakeForPendingProcessing() {
-	if !e.hasBufferedInputs() {
-		return
-	}
-	select {
-	case e.submitSignal <- struct{}{}:
-	default:
-	}
-	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
-		hook.SignalBufferedResults()
-	}
-}
-
-func (e *FactoryEngine) hasBufferedInputs() bool {
-	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
-		return true
-	}
-	buffer := e.runtimeState.ResultBuffer
-	if buffer != nil && buffer.HasData() {
-		return true
-	}
-	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
-		return true
-	}
-	return false
 }
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
@@ -570,6 +555,7 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 		e.logger.Debug("engine: skipping automatic tick while factory is paused")
 		return false, false, nil
 	}
+	e.capacityWakePending = false
 	e.terminationResult = nil
 
 	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)

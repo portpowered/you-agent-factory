@@ -23,6 +23,8 @@ type ChildExecutionRequest struct {
 	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
+	ResourceID       string
+	FactoryRevision  int
 	SkipPermissions  bool
 	Command          string
 	Sandbox          string
@@ -157,6 +159,8 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 		ModelProvider:      req.ModelProvider,
 		Model:              req.Model,
 		ReasoningEffort:    req.ReasoningEffort,
+		ResourceID:         req.ResourceID,
+		FactoryRevision:    req.FactoryRevision,
 		SkipPermissions:    req.SkipPermissions,
 		Command:            req.Command,
 		Sandbox:            req.Sandbox,
@@ -202,6 +206,8 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		ResourceID:      req.ResourceID,
+		FactoryRevision: req.FactoryRevision,
 		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
@@ -269,6 +275,7 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		ModelProvider:    normalized.ModelProvider,
 		Model:            normalized.Model,
 		ReasoningEffort:  normalized.ReasoningEffort,
+		ResourceID:       normalized.ResourceID,
 		SkipPermissions:  normalized.SkipPermissions,
 		WorkflowName:     workflowName,
 		ArgsSubject:      argsSubject,
@@ -338,6 +345,12 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 	}
 	if req.Model != "" {
 		value["model"] = req.Model
+	}
+	if req.ResourceID != "" {
+		value["resourceId"] = req.ResourceID
+	}
+	if req.FactoryRevision > 0 {
+		value["factoryRevision"] = req.FactoryRevision
 	}
 	if req.ReasoningEffort != "" {
 		value["reasoningEffort"] = req.ReasoningEffort
@@ -489,6 +502,8 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 			ModelProvider:   child.ModelProvider,
 			Model:           child.Model,
 			ReasoningEffort: child.ReasoningEffort,
+			ResourceID:      child.ResourceID,
+			FactoryRevision: child.FactoryRevision,
 			SkipPermissions: child.SkipPermissions,
 			Command:         child.Command,
 			Sandbox:         child.Sandbox,

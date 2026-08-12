@@ -15,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -22,6 +23,7 @@ import (
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -43,6 +45,12 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 			request.SessionStopSummary,
 		)
 	}
+}
+
+// NewLiveChangeCoordinator constructs the one process-scoped admission
+// coordinator shared by live and durable Factory Session execution.
+func NewLiveChangeCoordinator() factorysessioncontracts.LiveChangeCoordinator {
+	return livechange.NewCoordinator()
 }
 
 // NewService constructs an inert Factory Sessions root from construction and
@@ -67,6 +75,7 @@ func NewService(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
 	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -91,6 +100,12 @@ func NewService(
 	}
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
+	}
+	if clock == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	if liveChangeCoordinator == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
 	}
 	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
 	if err != nil {
@@ -117,6 +132,7 @@ func NewService(
 		identityService,
 		responseStreams,
 		clock,
+		liveChangeCoordinator,
 	)
 	if err != nil {
 		return nil, err
@@ -146,6 +162,7 @@ func NewDurableExecution(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	eventsService events.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
 	if err != nil {
@@ -156,6 +173,7 @@ func NewDurableExecution(
 		checkpointSummaries, workflows, orchestration, workflows,
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
+		liveChangeCoordinator,
 	)
 }
 
@@ -176,11 +194,12 @@ func NewStandaloneExecution(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
 		executor,
 		clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
-		recordingWriter, generateSessionID, fixtureFiles,
+		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)
 }

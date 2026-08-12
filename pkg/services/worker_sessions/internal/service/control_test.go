@@ -26,6 +26,7 @@ type controlledBoundary struct {
 	admittedOnce sync.Once
 	accept       workers.WorkstationDispatchAcceptFunc
 	request      workers.WorkstationDispatchRequest
+	publishCalls int
 	cancelCalls  []workers.WorkstationDispatchCancelRequest
 	cancelCalled chan struct{}
 	cancel       func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
@@ -51,6 +52,7 @@ func (b *controlledBoundary) PublishWithAdmission(_ context.Context, request wor
 	b.mu.Lock()
 	b.request = request
 	b.accept = accept
+	b.publishCalls++
 	b.mu.Unlock()
 	b.startedOnce.Do(func() { close(b.started) })
 	if admitted != nil {
@@ -88,6 +90,12 @@ func (b *controlledBoundary) cancellations() []workers.WorkstationDispatchCancel
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]workers.WorkstationDispatchCancelRequest(nil), b.cancelCalls...)
+}
+
+func (b *controlledBoundary) publishCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.publishCalls
 }
 
 func (b *controlledBoundary) currentRequest() workers.WorkstationDispatchRequest {

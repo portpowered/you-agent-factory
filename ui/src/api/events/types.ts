@@ -4,6 +4,8 @@ export const FACTORY_EVENTS_ENDPOINT = "/events";
 
 export const FACTORY_EVENT_TYPES = {
   factoryChange: "FACTORY_CHANGE",
+  factoryChangeRequest: "FACTORY_CHANGE_REQUEST",
+  factoryChangeFailed: "FACTORY_CHANGE_FAILED",
   dispatchResponse: "DISPATCH_RESPONSE",
   dispatchRequest: "DISPATCH_REQUEST",
   factoryStateResponse: "FACTORY_STATE_RESPONSE",
@@ -51,6 +53,8 @@ export type FactoryEventPayload =
   | RunResponsePayload
   | InitialStructureRequestPayload
   | FactoryChangePayload
+  | FactoryChangeRequestPayload
+  | FactoryChangeFailedPayload
   | WorkRequestPayload
   | RelationshipChangeRequestPayload
   | DispatchRequestPayload
@@ -76,6 +80,12 @@ export type InitialStructureRequestPayload =
   FactorySchemas["InitialStructureRequestEventPayload"];
 
 export type FactoryChangePayload = FactorySchemas["FactoryChangeEventPayload"];
+
+export type FactoryChangeRequestPayload =
+  FactorySchemas["FactoryChangeRequestEventPayload"];
+
+export type FactoryChangeFailedPayload =
+  FactorySchemas["FactoryChangeFailedEventPayload"];
 
 export type FactoryDefinition = FactorySchemas["Factory"];
 

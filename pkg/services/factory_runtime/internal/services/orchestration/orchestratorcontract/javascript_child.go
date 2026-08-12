@@ -15,6 +15,7 @@ const (
 	FieldModelProvider    = "modelProvider"
 	FieldModel            = "model"
 	FieldReasoningEffort  = "reasoningEffort"
+	FieldResourceID       = "resourceId"
 	FieldSkipPermissions  = "skipPermissions"
 )
 
@@ -26,6 +27,7 @@ var supportedFields = []string{
 	FieldModelProvider,
 	FieldModel,
 	FieldReasoningEffort,
+	FieldResourceID,
 	FieldSkipPermissions,
 }
 
@@ -46,6 +48,7 @@ type JavaScriptChildSpec struct {
 	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
+	ResourceID       string
 	SkipPermissions  bool
 }
 
@@ -96,6 +99,7 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 		ModelProvider:    optional[FieldModelProvider],
 		Model:            optional[FieldModel],
 		ReasoningEffort:  optional[FieldReasoningEffort],
+		ResourceID:       optional[FieldResourceID],
 		SkipPermissions:  skipPermissions,
 	}, nil
 }

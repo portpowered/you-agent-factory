@@ -75,11 +75,14 @@ func (c compositeProcessLifecycle) Close(ctx context.Context) error {
 // -- so every runtime that activation ever opens is guaranteed a reachable,
 // deterministic close on process shutdown, not left open for the life of the
 // process regardless of whether a production ACP stdio entrypoint has been
-// built yet.
+// built yet. The process-scoped direct Worker Sessions pool closes first so an
+// admitted local invocation can publish its terminal observation before the
+// shared Events root is closed.
 func provideApplicationProcessLifecycle(
 	service providers.Service,
 	eventsService events.Service,
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
+	localWorkerSessions *localWorkerSessionsBoundary,
 ) (initializerapplication.ProcessLifecycle, error) {
 	lifecycle, ok := service.(providers.Lifecycle)
 	if !ok {
@@ -90,6 +93,12 @@ func provideApplicationProcessLifecycle(
 		return nil, fmt.Errorf("construct application process: Events lifecycle is required")
 	}
 	return compositeProcessLifecycle{closers: []func(context.Context) error{
+		func(ctx context.Context) error {
+			// Wire treats the process-scoped direct Worker Sessions boundary as
+			// required: construction returns an error before this lifecycle is
+			// assembled when that boundary cannot be built.
+			return localWorkerSessions.Close(ctx)
+		},
 		lifecycle.Close,
 		eventsLifecycleValue.Close,
 		func(context.Context) error {
@@ -546,10 +555,11 @@ func provideFactorySessionsService(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
 	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator)
 }
 
 func provideFactorySessionsRuntimeAssembly(
@@ -585,6 +595,7 @@ func provideFactorySessionExecutionFactory(
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	providerOverride workers.Provider,
 	eventsService events.Service,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	// The allocator, runner adapter, and fixed provider override are read only
 	// to decide whether this process can reach a provider at all. No invocation executor is built
@@ -630,6 +641,7 @@ func provideFactorySessionExecutionFactory(
 			responseEventIDs,
 			responseEventRetentionLimits,
 			eventsService,
+			liveChangeCoordinator,
 		)
 	}
 }
@@ -642,6 +654,7 @@ func provideStandaloneSessionExecutionFactory(
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	fixtureFiles factorysessionwire.ContractFixtureReader,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.StandaloneSessionExecutionFactory {
 	return func(
 		provider factorysessions.ExecutionProvider,
@@ -666,6 +679,7 @@ func provideStandaloneSessionExecutionFactory(
 			recordingWriter,
 			sessionIDs,
 			fixtureFiles,
+			liveChangeCoordinator,
 		)
 	}
 }

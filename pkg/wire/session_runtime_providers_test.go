@@ -179,6 +179,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		adaptRunner,
 		provideFactoryRuntimeProviderOverride(edges),
 		eventsService,
+		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 
 	provider := wireTestProvider{}
@@ -260,7 +261,7 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		t.Fatalf("construct events service: %v", err)
 	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, factoryTarget)
+	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, factoryTarget, &localWorkerSessionsBoundary{})
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -282,7 +283,7 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		t.Fatalf("construct second events service: %v", err)
 	}
 
-	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, secondEventsService, nil)
+	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, secondEventsService, nil, &localWorkerSessionsBoundary{})
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle(nil factoryTarget) error = %v", err)
 	}
@@ -340,7 +341,7 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 func TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle(t *testing.T) {
 	t.Parallel()
 
-	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, nil, nil)
+	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, nil, nil, &localWorkerSessionsBoundary{})
 	if err == nil {
 		t.Fatal("provideApplicationProcessLifecycle() error = nil, want a construction error for a non-Lifecycle providers.Service")
 	}

@@ -1,0 +1,10 @@
+description: >-
+  Resource capacity admission was rejected because the request revision or
+  Factory Session lifecycle is stale, the requested capacity is below units in
+  use.
+content:
+  application/json:
+    schema:
+      oneOf:
+        - $ref: '../schemas/api/FactorySessionResourceCapacityResponse.yaml'
+        - $ref: '../schemas/api/ErrorResponse.yaml'

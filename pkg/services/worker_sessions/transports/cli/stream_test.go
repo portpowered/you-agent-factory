@@ -62,6 +62,33 @@ func TestStreamJSONUsesSessionScopedSSEAndStopsAtTerminal(t *testing.T) {
 	}
 }
 
+func TestStreamByWorkerSessionIDUsesTopLevelIdentityRoute(t *testing.T) {
+	var gotPath string
+	var gotQuery map[string][]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"delivery\":\"REPLAY_SUMMARY\",\"workerSessionId\":\"direct-1\",\"providerSession\":null,\"workIds\":[],\"event\":null,\"errorCode\":null,\"errorMessage\":null,\"replaySummary\":{\"kind\":\"replay-summary\",\"complete\":true,\"reason\":\"terminal\",\"eventsEmitted\":0}}\n\n")
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, WorkerSessionID: "direct-1", ReplayOnly: true,
+		OutputFormat: "json", Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	if gotPath != "/worker-sessions/direct-1/events" || len(gotQuery) != 1 || len(gotQuery["replayOnly"]) != 1 || gotQuery["replayOnly"][0] != "true" {
+		t.Fatalf("request = path=%q query=%#v, want identity-only SSE route", gotPath, gotQuery)
+	}
+	if !strings.Contains(output.String(), `"kind":"replay-summary"`) {
+		t.Fatalf("output = %q, want replay summary", output.String())
+	}
+}
+
 func TestStreamReplayOnlyWritesEventFramesAndFinalSummary(t *testing.T) {
 	var gotReplayOnly string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
