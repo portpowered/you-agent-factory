@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/terminalportlock"
 )
 
 // TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL proves the shipped socket fallback contract.
@@ -177,9 +178,22 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *testing.T) {
 	binaryPath := buildServerBindingBinary(t, t.Context(), testutil.MustRepoRoot(t))
 
+	// The run_scoped_server package asserts the same terminal-port exhaustion
+	// contract in a separate test process; this OS lock makes endpoint ownership
+	// explicit across both package processes before either listener is opened.
+	releasePortLock, err := terminalportlock.Acquire()
+	if err != nil {
+		t.Fatalf("acquire terminal loopback test lock: %v", err)
+	}
+	defer func() {
+		if err := releasePortLock(); err != nil {
+			t.Errorf("release terminal loopback test lock: %v", err)
+		}
+	}()
+
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
 	if err != nil {
-		t.Skipf("reserve terminal loopback port for deterministic bind failure: %v", err)
+		t.Fatalf("reserve terminal loopback port while owning test lock: %v", err)
 	}
 	defer func() {
 		if err := busyListener.Close(); err != nil {

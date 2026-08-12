@@ -25,6 +25,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/terminalportlock"
 )
 
 const (
@@ -617,12 +618,6 @@ func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
 // TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary proves port
 // exhaustion is reported through the customer CLI contract.
 func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) {
-	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
-	if err != nil {
-		t.Skipf("terminal loopback port unavailable for exhaustion contract: %v", err)
-	}
-	defer busyListener.Close()
-
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
@@ -632,6 +627,30 @@ func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) 
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+
+	// Coordinate with the built-executable server_binding package before
+	// opening the shared terminal endpoint. The lock is cross-process because
+	// go test runs each package in its own process.
+	releasePortLock, err := terminalportlock.Acquire()
+	if err != nil {
+		t.Fatalf("acquire terminal loopback test lock: %v", err)
+	}
+	defer func() {
+		if err := releasePortLock(); err != nil {
+			t.Errorf("release terminal loopback test lock: %v", err)
+		}
+	}()
+
+	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
+	if err != nil {
+		t.Fatalf("reserve terminal loopback port while owning test lock: %v", err)
+	}
+	defer func() {
+		if err := busyListener.Close(); err != nil {
+			t.Errorf("close terminal loopback listener: %v", err)
+		}
+	}()
+
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	var stdout, stderr bytes.Buffer
