@@ -49,6 +49,11 @@ on:
         required: false
         default: ''
         type: string
+      behavior_test_key:
+        description: Unique concurrency key for one controlled behavior scenario.
+        required: false
+        default: ''
+        type: string
     outputs:
       api_package_result:
         description: Terminal result of API package verification.
@@ -84,6 +89,7 @@ permissions:
 concurrency:
   group: >-
     development-package-${{
+      inputs.is_ci_call == true && inputs.behavior_test && inputs.behavior_test_key != '' && format('behavior-{0}-{1}', github.run_id, inputs.behavior_test_key) ||
       inputs.is_ci_call == true && format('ci-{0}', github.run_id) ||
       github.event_name == 'workflow_run' && github.event.workflow_run.id ||
       github.ref

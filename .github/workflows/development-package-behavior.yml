@@ -38,6 +38,7 @@ jobs:
       is_ci_call: true
       behavior_test: true
       behavior_test_failure_lane: ''
+      behavior_test_key: api-only
       run_candidates: true
       run_api_package: true
       run_packaged_factories_package: false
@@ -57,6 +58,7 @@ jobs:
       is_ci_call: true
       behavior_test: true
       behavior_test_failure_lane: ''
+      behavior_test_key: mixed
       run_candidates: true
       run_api_package: true
       run_packaged_factories_package: true
@@ -76,6 +78,7 @@ jobs:
       is_ci_call: true
       behavior_test: true
       behavior_test_failure_lane: ''
+      behavior_test_key: no-package
       run_candidates: true
       run_api_package: false
       run_packaged_factories_package: false
@@ -95,6 +98,7 @@ jobs:
       is_ci_call: true
       behavior_test: true
       behavior_test_failure_lane: ''
+      behavior_test_key: protected-main
       run_candidates: false
       run_api_package: true
       run_packaged_factories_package: true
@@ -115,6 +119,7 @@ jobs:
       is_ci_call: true
       behavior_test: true
       behavior_test_failure_lane: api
+      behavior_test_key: selected-failure
       run_candidates: true
       run_api_package: true
       run_packaged_factories_package: false
