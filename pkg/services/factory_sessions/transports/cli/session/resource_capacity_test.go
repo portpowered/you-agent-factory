@@ -103,4 +103,36 @@ func TestSetResourceCapacityReturnsTypedAPIError(t *testing.T) {
 	}
 }
 
+func TestResourceCapacityRejectedErrorPreservesCLIContract(t *testing.T) {
+	t.Parallel()
+
+	rejected := &ResourceCapacityRejectedError{
+		StatusCode: http.StatusConflict,
+		Response: factoryapi.ErrorResponse{
+			Code:    factoryapi.ErrorResponseCodeRESOURCECAPACITYINUSE,
+			Message: "reviewers has units in use",
+		},
+	}
+	if got, want := rejected.CLIErrorCode(), string(factoryapi.ErrorResponseCodeRESOURCECAPACITYINUSE); got != want {
+		t.Fatalf("CLIErrorCode() = %q, want %q", got, want)
+	}
+	if got, want := rejected.CLIErrorMessage(), rejected.Error(); got != want {
+		t.Fatalf("CLIErrorMessage() = %q, want %q", got, want)
+	}
+	if !strings.Contains(rejected.Error(), "reviewers has units in use") {
+		t.Fatalf("Error() = %q, want API message", rejected.Error())
+	}
+
+	var nilRejected *ResourceCapacityRejectedError
+	if got, want := nilRejected.CLIErrorCode(), "RESOURCE_CAPACITY_REQUEST_FAILED"; got != want {
+		t.Fatalf("nil CLIErrorCode() = %q, want %q", got, want)
+	}
+	if got, want := nilRejected.CLIErrorMessage(), "resource capacity request rejected"; got != want {
+		t.Fatalf("nil CLIErrorMessage() = %q, want %q", got, want)
+	}
+	if got := nilRejected.Error(); got != "" {
+		t.Fatalf("nil Error() = %q, want empty", got)
+	}
+}
+
 func stringPointer(value string) *string { return &value }

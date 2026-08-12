@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +24,34 @@ func TestNewRequiresHTTPAndPreparationDependencies(t *testing.T) {
 	}
 	if service := New(testHTTPProtocol(t), canonicalListRequestPreparation); service == nil {
 		t.Fatal("New(protocol, preparation) = nil, want Sessions CLI service")
+	}
+}
+
+func TestBoundService_SetResourceCapacityDelegatesAndRequiresOperation(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("capacity operation failed")
+	called := false
+	service := Bind(Operations{
+		SetResourceCapacity: func(cfg ResourceCapacityConfig) error {
+			called = true
+			if cfg.ResourceID != "reviewers" || cfg.Capacity != 8 {
+				t.Fatalf("config = %#v, want reviewers capacity 8", cfg)
+			}
+			return wantErr
+		},
+	})
+
+	err := service.SetResourceCapacity(ResourceCapacityConfig{ResourceID: "reviewers", Capacity: 8})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("SetResourceCapacity() error = %v, want %v", err, wantErr)
+	}
+	if !called {
+		t.Fatal("SetResourceCapacity() did not invoke the bound operation")
+	}
+
+	if err := Bind(Operations{}).SetResourceCapacity(ResourceCapacityConfig{}); err == nil || err.Error() != "session resource capacity service is required" {
+		t.Fatalf("missing SetResourceCapacity operation error = %v, want stable dependency error", err)
 	}
 }
 

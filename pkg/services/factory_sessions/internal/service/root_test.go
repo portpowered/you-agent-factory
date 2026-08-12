@@ -1,0 +1,273 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+)
+
+func TestNewRootRejectsMissingLiveChangeCoordinator(t *testing.T) {
+	t.Parallel()
+
+	root, err := newRootForTest(nil)
+	if root != nil {
+		t.Fatalf("NewRoot() = %#v, want nil root", root)
+	}
+	if err == nil || !strings.Contains(err.Error(), "live-change coordinator is required") {
+		t.Fatalf("NewRoot() error = %v, want missing live-change coordinator diagnostic", err)
+	}
+}
+
+func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
+	t.Parallel()
+
+	coordinator := livechange.NewCoordinator()
+	root, err := newRootForTest(coordinator)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	if root == nil {
+		t.Fatal("NewRoot() returned nil root")
+	}
+	if root.liveChangeCoordinator != coordinator {
+		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
+	}
+}
+
+func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*rootTestInputs)
+	}{
+		{name: "session result projection", mutate: func(in *rootTestInputs) { in.sessionResultProjection = nil }},
+		{name: "response event ID generator", mutate: func(in *rootTestInputs) { in.eventIDs = nil }},
+		{name: "session ID generator", mutate: func(in *rootTestInputs) { in.sessionIDs = nil }},
+		{name: "home directory resolver", mutate: func(in *rootTestInputs) { in.resolveHome = nil }},
+		{name: "directory inspection", mutate: func(in *rootTestInputs) { in.directoryInspection = nil }},
+		{name: "named path resolver", mutate: func(in *rootTestInputs) { in.namedPaths = nil }},
+		{name: "invocation input reader", mutate: func(in *rootTestInputs) { in.invocationInputFiles = nil }},
+		{name: "initial Work reader", mutate: func(in *rootTestInputs) { in.initialWorkFiles = nil }},
+		{name: "identity service", mutate: func(in *rootTestInputs) { in.identity = nil }},
+		{name: "response-stream service", mutate: func(in *rootTestInputs) { in.responseStreams = nil }},
+		{name: "live-change coordinator", mutate: func(in *rootTestInputs) { in.liveChangeCoordinator = nil }},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			inputs := validRootInputs(livechange.NewCoordinator())
+			test.mutate(&inputs)
+			root, err := inputs.call()
+			if root != nil || err == nil {
+				t.Fatalf("NewRoot() = (%#v, %v), want nil root and dependency error", root, err)
+			}
+		})
+	}
+}
+
+func TestRootForRuntimeRequiresClockAndBindsRuntime(t *testing.T) {
+	t.Parallel()
+
+	var nilRoot *Root
+	if bound, err := nilRoot.ForRuntime(factorysessions.RuntimeBinding{}); bound != nil || err == nil {
+		t.Fatalf("nil Root.ForRuntime() = (%#v, %v), want nil result and error", bound, err)
+	}
+
+	root, err := newRootForTest(livechange.NewCoordinator())
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	bound, err := root.ForRuntime(factorysessions.RuntimeBinding{})
+	if bound != nil || err == nil {
+		t.Fatalf("ForRuntime() without clock = (%#v, %v), want nil result and error", bound, err)
+	}
+
+	var openingErr *factorysessions.OpeningBindingError
+	if !errors.As(err, &openingErr) {
+		t.Fatalf("ForRuntime() error = %v, want OpeningBindingError", err)
+	}
+	bound, err = root.ForRuntime(factorysessions.RuntimeBinding{Clock: rootTestClock{}})
+	if err != nil {
+		t.Fatalf("ForRuntime() error = %v", err)
+	}
+	if bound == nil {
+		t.Fatal("ForRuntime() returned nil bound service")
+	}
+}
+
+func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (*Root, error) {
+	return validRootInputs(coordinator).call()
+}
+
+type rootTestInputs struct {
+	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
+	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
+	interpolation                factorydefinitions.InvocationInterpolationService
+	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
+	ttsObservability             factorydefinitions.TTSObservabilityService
+	eventIDs                     factorysessions.ResponseEventIDGenerator
+	sessionIDs                   factorysessions.SessionIDGenerator
+	resolveHome                  factorysessions.HomeDirectoryResolver
+	directoryInspection          roles.DirectoryInspection
+	namedPaths                   factorydefinitions.NamedPathResolver
+	invocationInputFiles         fileeffects.InvocationInputReader
+	initialWorkFiles             fileeffects.InitialWorkReader
+	identity                     identity.Service
+	responseStreams              responsestreamservice.Service
+	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
+}
+
+func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) rootTestInputs {
+	var namedPaths factorydefinitions.NamedPathResolver = rootTestNamedPathResolver{}
+	var identityService identity.Service = rootTestIdentityService{}
+	var responseStreams responsestreamservice.Service = rootTestResponseStreams{}
+
+	return rootTestInputs{
+		sessionResultProjection: factoryruntime.NewSessionResultProjectionOperation(),
+		eventIDs:                factorysessions.ResponseEventIDGenerator(func() string { return "response-event" }),
+		sessionIDs:              factorysessions.SessionIDGenerator(func() string { return "session" }),
+		resolveHome:             factorysessions.HomeDirectoryResolver(func() (string, error) { return "", nil }),
+		directoryInspection:     filesystem.Local{},
+		namedPaths:              namedPaths,
+		invocationInputFiles:    fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
+		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		identity:                identityService,
+		responseStreams:         responseStreams,
+		liveChangeCoordinator:   coordinator,
+	}
+}
+
+func (in rootTestInputs) call() (*Root, error) {
+	return NewRoot(
+		in.newJavaScriptCheckpointStore,
+		in.sessionResultProjection,
+		in.interpolation,
+		in.invocationWorkTypes,
+		in.ttsObservability,
+		in.eventIDs,
+		in.sessionIDs,
+		in.resolveHome,
+		in.directoryInspection,
+		in.namedPaths,
+		in.invocationInputFiles,
+		in.initialWorkFiles,
+		in.identity,
+		in.responseStreams,
+		in.liveChangeCoordinator,
+	)
+}
+
+var _ factorysessioncontracts.LiveChangeCoordinator = (*livechange.Service)(nil)
+
+type rootTestNamedPathResolver struct{}
+
+func (rootTestNamedPathResolver) ResolveCandidatePaths(string, string, string) (factorydefinitions.NamedFactoryCandidatePaths, error) {
+	return factorydefinitions.NamedFactoryCandidatePaths{}, nil
+}
+
+func (rootTestNamedPathResolver) ResolveExistingDir(string, string) (string, error) {
+	return "", nil
+}
+
+func (rootTestNamedPathResolver) RequireDefinitionDir(string) error { return nil }
+
+func (rootTestNamedPathResolver) ResolveCurrentDir(string) (string, error) {
+	return "", nil
+}
+
+func (rootTestNamedPathResolver) ReadCurrentPointer(string) (string, error) {
+	return "", nil
+}
+
+func (rootTestNamedPathResolver) WriteCurrentPointer(string, string) error { return nil }
+
+type rootTestIdentityService struct{}
+
+func (rootTestIdentityService) Normalize(context.Context, identity.NormalizeRequest) (identity.ResolvedIdentity, error) {
+	return identity.ResolvedIdentity{}, nil
+}
+
+func (rootTestIdentityService) NormalizeProvider(context.Context, identity.NormalizeProviderRequest) (identity.ResolvedIdentity, error) {
+	return identity.ResolvedIdentity{}, nil
+}
+
+func (rootTestIdentityService) Discover(context.Context, identity.DiscoverRequest) ([]factorysessions.Target, error) {
+	return nil, nil
+}
+
+func (rootTestIdentityService) ResolveFolder(string) (string, error) { return "", nil }
+
+func (rootTestIdentityService) Select([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error) {
+	return nil, nil
+}
+
+func (rootTestIdentityService) Resolve(sessionregistry.Service, string) *livesession.LiveSession {
+	return nil
+}
+
+func (rootTestIdentityService) ResolveLogical(sessionregistry.Service, string, string) *livesession.LiveSession {
+	return nil
+}
+
+type rootTestResponseStreams struct{}
+
+func (rootTestResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
+	return nil, nil
+}
+
+func (rootTestResponseStreams) NewStreamRegistry(clock factoryruntime.Clock) (*responsestream.Registry, error) {
+	if clock == nil {
+		return nil, errors.New("clock is required")
+	}
+	return responsestream.NewRegistry(
+		func() *responsestream.SessionResponseStream { return responsestream.NewSessionResponseStream(clock) },
+		clock,
+	), nil
+}
+
+func (rootTestResponseStreams) Subscribe(context.Context, *responseeventstore.SessionResponseEventStore, responsestreamservice.SubscriptionRequest) (*responsestreamservice.Cursor, error) {
+	return nil, nil
+}
+
+func (rootTestResponseStreams) NewCursorTracker(cursors.Store, cursors.StorageIdentity) (*responsestreamservice.Tracker, error) {
+	return nil, nil
+}
+
+func (rootTestResponseStreams) NewPublisher(*responsestream.SessionResponseStream, responsestream.DiagnosticsObserver) *responsestreamservice.Publisher {
+	return nil
+}
+
+func (rootTestResponseStreams) Publish(*responseeventstore.SessionResponseEventStore, responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
+	return responseevents.FactoryResponseEvent{}, nil
+}
+
+func (rootTestResponseStreams) Complete(*responseeventstore.SessionResponseEventStore) {}
+
+func (rootTestResponseStreams) Close(*responseeventstore.SessionResponseEventStore) {}
+
+var _ identity.Service = rootTestIdentityService{}
+var _ responsestreamservice.Service = rootTestResponseStreams{}
+
+type rootTestClock struct{}
+
+func (rootTestClock) Now() time.Time { return time.Unix(0, 0) }
