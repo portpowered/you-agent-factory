@@ -188,6 +188,7 @@ func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) erro
 type invocationPreparationOptions struct {
 	serverOwned      bool
 	direct           bool
+	continuation     bool
 	requestID        string
 	verifyTopicReady bool
 }
@@ -346,6 +347,7 @@ func (r *registry) registerInvocationSupervision(
 	}
 	supervision.mu.Lock()
 	supervision.retryBudget = req.Retry.Attempts()
+	supervision.continuing = options.continuation
 	supervision.mu.Unlock()
 	return invocationPreparation{supervision: supervision}, nil
 }

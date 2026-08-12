@@ -193,22 +193,24 @@ func (r StreamObservationsByWorkerSessionIDRequest) Validate() error {
 // show. Optional values stay nil when the owning source cannot provide them;
 // callers must not infer zero usage or zero duration from absence.
 type Observation struct {
-	WorkerSessionID          string
-	Direct                   bool
-	ProviderSession          providers.SessionRef
-	ProviderSessionAvailable bool
-	WorkIDs                  []string
-	TurnID                   string
-	AttemptID                string
-	State                    State
-	StartedAt                *time.Time
-	EndedAt                  *time.Time
-	Duration                 *time.Duration
-	DurationBasis            DurationBasis
-	TokenUsage               *TokenUsage
-	Transcript               TranscriptAvailability
-	Failure                  *FailureCause
-	Parse                    ParseDiagnostics
+	WorkerSessionID            string
+	PredecessorWorkerSessionID string
+	SuccessorWorkerSessionID   string
+	Direct                     bool
+	ProviderSession            providers.SessionRef
+	ProviderSessionAvailable   bool
+	WorkIDs                    []string
+	TurnID                     string
+	AttemptID                  string
+	State                      State
+	StartedAt                  *time.Time
+	EndedAt                    *time.Time
+	Duration                   *time.Duration
+	DurationBasis              DurationBasis
+	TokenUsage                 *TokenUsage
+	Transcript                 TranscriptAvailability
+	Failure                    *FailureCause
+	Parse                      ParseDiagnostics
 }
 
 // Validate reports whether an observation has a coherent detached identity,
@@ -231,6 +233,9 @@ func (o Observation) Validate() error {
 func (o Observation) validateIdentity() error {
 	if strings.TrimSpace(o.WorkerSessionID) == "" {
 		return ErrInvalidObservationIdentity
+	}
+	if err := validateLineage(o.WorkerSessionID, o.PredecessorWorkerSessionID, o.SuccessorWorkerSessionID); err != nil {
+		return err
 	}
 	if o.ProviderSessionAvailable {
 		if err := o.ProviderSession.Validate(); err != nil {

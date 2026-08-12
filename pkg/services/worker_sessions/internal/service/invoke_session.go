@@ -624,14 +624,16 @@ func (r *registry) loadObservationState(id string) (workersessions.Session, *obs
 // lifecycle facts that never require the Provider Sessions root.
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
-		WorkerSessionID: id,
-		Direct:          metadata.direct,
-		WorkIDs:         append([]string(nil), metadata.workIDs...),
-		TurnID:          metadata.turnID,
-		AttemptID:       metadata.attemptID,
-		State:           session.State,
-		DurationBasis:   workersessions.DurationBasisUnavailable,
-		Transcript:      workersessions.TranscriptAvailabilityUnavailable,
+		WorkerSessionID:            id,
+		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
+		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
+		Direct:                     metadata.direct,
+		WorkIDs:                    append([]string(nil), metadata.workIDs...),
+		TurnID:                     metadata.turnID,
+		AttemptID:                  metadata.attemptID,
+		State:                      session.State,
+		DurationBasis:              workersessions.DurationBasisUnavailable,
+		Transcript:                 workersessions.TranscriptAvailabilityUnavailable,
 	}
 	if session.ProviderSessionAssociation != nil {
 		projected.ProviderSession = session.ProviderSessionAssociation.Reference.Clone()

@@ -250,6 +250,41 @@ func TestControlRequest_Validate(t *testing.T) {
 	}
 }
 
+func TestContinueRequest_ValidateAndNormalize(t *testing.T) {
+	valid := workersessions.ContinueRequest{
+		RequestID:                " request-1 ",
+		SourceWorkerSessionID:    " source-1 ",
+		SuccessorWorkerSessionID: " successor-1 ",
+		FollowUpInput:            "  follow-up  ",
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid ContinueRequest.Validate() = %v, want nil", err)
+	}
+	normalized := valid.Normalize()
+	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+		t.Fatalf("Normalize() identities = %#v, want trimmed identities", normalized)
+	}
+	if normalized.FollowUpInput != valid.FollowUpInput {
+		t.Fatalf("Normalize() changed follow-up input from %q to %q", valid.FollowUpInput, normalized.FollowUpInput)
+	}
+
+	for _, test := range []struct {
+		name string
+		req  workersessions.ContinueRequest
+		want error
+	}{
+		{name: "missing request ID", req: workersessions.ContinueRequest{SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", FollowUpInput: "input"}, want: workersessions.ErrInvalidContinuationRequestID},
+		{name: "same lineage identity", req: workersessions.ContinueRequest{RequestID: "request", SourceWorkerSessionID: "same", SuccessorWorkerSessionID: "same", FollowUpInput: "input"}, want: workersessions.ErrInvalidContinuationLineage},
+		{name: "missing input", req: workersessions.ContinueRequest{RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"}, want: workersessions.ErrInvalidContinuationInput},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.req.Validate(); !errors.Is(err, test.want) {
+				t.Fatalf("Validate() = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
 func TestSession_Validate_RequiresAssociationToBelongToSession(t *testing.T) {
 	association := &workersessions.ProviderSessionAssociation{
 		WorkerSessionID: "worker-1",
