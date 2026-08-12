@@ -13,6 +13,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -95,6 +96,79 @@ func TestStartFactoryEventBridgeRequiresPresentationForScopedEvents(t *testing.T
 	}
 	if bridge, err := op.startFactoryEventBridge(context.Background(), nil, roles.InvocationTarget{EventScopeID: "scope-1"}); err != nil || bridge != nil {
 		t.Fatalf("scoped bridge = %v, error = %v, want presentation-owned nil bridge", bridge, err)
+	}
+}
+
+func TestOpenModelsCatalogScopeReusesAndClosesInjectedScope(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("catalog:1")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	root := &catalogScopeModelsStub{scope: scope}
+	op := &operation{openRuntime: &runtimeopening.Factory{}, modelsRoot: root}
+	first, err := op.OpenModelsCatalogScope(context.Background())
+	if err != nil {
+		t.Fatalf("first OpenModelsCatalogScope: %v", err)
+	}
+	second, err := op.OpenModelsCatalogScope(context.Background())
+	if err != nil {
+		t.Fatalf("second OpenModelsCatalogScope: %v", err)
+	}
+	if first.Scope != second.Scope || root.opens != 1 {
+		t.Fatalf("catalog scope reuse = (%v, %d), want same scope and one open", first.Scope, root.opens)
+	}
+	if err := first.Close(context.Background()); err != nil {
+		t.Fatalf("close first catalog scope: %v", err)
+	}
+	if root.closes != 1 {
+		t.Fatalf("catalog scope closes = %d, want one", root.closes)
+	}
+	third, err := op.OpenModelsCatalogScope(context.Background())
+	if err != nil {
+		t.Fatalf("third OpenModelsCatalogScope: %v", err)
+	}
+	if third.Scope != scope || root.opens != 2 {
+		t.Fatalf("catalog scope reopen = (%v, %d), want injected scope and second open", third.Scope, root.opens)
+	}
+	if err := third.Close(context.Background()); err != nil {
+		t.Fatalf("close reopened catalog scope: %v", err)
+	}
+}
+
+func TestHostedInvocationFinishesThroughPresentationOwnedEventBridge(t *testing.T) {
+	t.Parallel()
+
+	projection := factorysessions.SessionProjection{
+		Context: factorysessions.ProjectionContext{FactoryCfg: &factorydefinitions.FactoryConfig{
+			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+				Kind: factorydefinitions.OrchestratorKindPetri,
+			},
+		}},
+	}
+	sessions := newHostedLiveSessionsFake(projection)
+	sessions.invokeResult = factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusCompleted,
+	}
+	bridge := &recordingInvocationEventBridge{err: errors.New("post-result bridge failure")}
+	op := &operation{
+		logger:        zap.NewNop(),
+		presentations: invocationPresentationOwnerWithBridge{bridge: bridge},
+	}
+	outcome, err := op.invokeFactoryOnHostedLiveRuntime(
+		context.Background(), sessions,
+		roles.InvocationTarget{EventScopeID: "scope-1"},
+		factorysessions.InvocationRequest{},
+	)
+	if err != nil {
+		t.Fatalf("invokeFactoryOnHostedLiveRuntime: %v", err)
+	}
+	if outcome.Result.Status != factorydefinitions.InvocationTerminalStatusCompleted {
+		t.Fatalf("outcome status = %q, want completed", outcome.Result.Status)
+	}
+	if bridge.finishCalls != 1 {
+		t.Fatalf("event bridge finish calls = %d, want one", bridge.finishCalls)
 	}
 }
 
@@ -336,6 +410,44 @@ type coverageLifecycleStub struct {
 	startErr error
 	stopErr  error
 	waitErr  error
+}
+
+type catalogScopeModelsStub struct {
+	models.Service
+	scope  models.RuntimeScopeRef
+	opens  int
+	closes int
+}
+
+func (stub *catalogScopeModelsStub) OpenRuntimeScope(context.Context, models.OpenRuntimeScopeRequest) (models.OpenRuntimeScopeResult, error) {
+	stub.opens++
+	return models.OpenRuntimeScopeResult{Scope: stub.scope}, nil
+}
+
+func (stub *catalogScopeModelsStub) CloseRuntimeScope(_ context.Context, request models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error) {
+	stub.closes++
+	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+}
+
+type recordingInvocationEventBridge struct {
+	finishCalls int
+	err         error
+}
+
+func (bridge *recordingInvocationEventBridge) Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error {
+	bridge.finishCalls++
+	return bridge.err
+}
+
+type invocationPresentationOwnerWithBridge struct {
+	invocationPresentationOwnerStub
+	bridge *recordingInvocationEventBridge
+}
+
+func (owner invocationPresentationOwnerWithBridge) StartFactoryEventBridge(context.Context, roles.FactoryEventReader, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return owner.bridge, nil
 }
 
 func (stub coverageLifecycleStub) StartLifecycle(context.Context, context.Context) error {
