@@ -25,7 +25,7 @@ func TestGetWorkerSessionObservationByWorkerSessionIDProjectsProviderNeutralHist
 	}}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
-	handler.GetWorkerSessionObservationByWorkerSessionId(
+	handler.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions/worker-no-provider", nil),
 		factoryapi.SessionID("session-1"),
@@ -62,7 +62,7 @@ func TestReadWorkerSessionTranscriptByWorkerSessionIDUsesCanonicalIdentity(t *te
 	}}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
-	handler.ReadWorkerSessionTranscriptByWorkerSessionId(
+	handler.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions/worker-1/transcript", nil),
 		factoryapi.SessionID("session-1"),
@@ -101,7 +101,7 @@ func TestGetWorkerSessionObservationByWorkerSessionIDProjectsRecordingHealthAndS
 	}}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
-	handler.GetWorkerSessionObservationByWorkerSessionId(
+	handler.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-scope/worker-sessions/worker-incomplete", nil),
 		factoryapi.SessionID("session-scope"),
@@ -135,7 +135,7 @@ func TestWorkerSessionIDHistoryMapsRecordingHealthReadFailures(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			handler := NewHandler(NewAdapter(&fakeObservationService{getByWorkerErr: testCase.err}, workServiceStub{}), zap.NewNop())
 			recorder := httptest.NewRecorder()
-			handler.GetWorkerSessionObservationByWorkerSessionId(
+	handler.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 				recorder,
 				httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions/worker-1", nil),
 				factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("worker-1"),
@@ -158,7 +158,7 @@ func TestReadWorkerSessionTranscriptByWorkerSessionIDMapsUnavailableProviderDeta
 	service := &fakeObservationService{readErr: workersessions.ErrObservationTranscriptUnavailable}
 	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
 	recorder := httptest.NewRecorder()
-	handler.ReadWorkerSessionTranscriptByWorkerSessionId(
+	handler.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions/worker-1/transcript", nil),
 		factoryapi.SessionID("session-1"),
@@ -181,7 +181,7 @@ func TestWorkerSessionIDHistoryHandlersRejectMissingIdentity(t *testing.T) {
 	handler := NewHandler(NewAdapter(&fakeObservationService{}, workServiceStub{}), zap.NewNop())
 
 	observationRecorder := httptest.NewRecorder()
-	handler.GetWorkerSessionObservationByWorkerSessionId(
+	handler.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 		observationRecorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions/", nil),
 		factoryapi.SessionID("session-1"),
@@ -192,7 +192,7 @@ func TestWorkerSessionIDHistoryHandlersRejectMissingIdentity(t *testing.T) {
 	}
 
 	transcriptRecorder := httptest.NewRecorder()
-	handler.ReadWorkerSessionTranscriptByWorkerSessionId(
+	handler.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
 		transcriptRecorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions/", nil),
 		factoryapi.SessionID(" "),
@@ -214,7 +214,7 @@ func TestWorkerSessionIDHistoryHandlersRejectMalformedIdentity(t *testing.T) {
 				handler := NewHandler(NewAdapter(&fakeObservationService{
 					getByWorkerErr: workersessions.ErrInvalidSessionID,
 				}, workServiceStub{}), zap.NewNop())
-				handler.GetWorkerSessionObservationByWorkerSessionId(
+	handler.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 					recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions/bad%20id", nil),
 					factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("bad id"),
 				)
@@ -226,7 +226,7 @@ func TestWorkerSessionIDHistoryHandlersRejectMalformedIdentity(t *testing.T) {
 				handler := NewHandler(NewAdapter(&fakeObservationService{
 					readErr: workersessions.ErrInvalidSessionID,
 				}, workServiceStub{}), zap.NewNop())
-				handler.ReadWorkerSessionTranscriptByWorkerSessionId(
+	handler.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
 					recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions/bad%20id/transcript", nil),
 					factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("bad id"),
 				)

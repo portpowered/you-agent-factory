@@ -262,10 +262,10 @@ func (h *Handler) GetWorkerSessionObservationBySessionId(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
-// GetWorkerSessionObservationByWorkerSessionId handles the canonical
+// GetWorkerSessionObservationByFactorySessionAndWorkerSessionId handles the canonical
 // session-scoped Worker Session identity lookup. It intentionally has no
 // provider query parameters: provider association is optional enrichment.
-func (h *Handler) GetWorkerSessionObservationByWorkerSessionId(
+func (h *Handler) GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -346,10 +346,10 @@ func (h *Handler) ReadWorkerSessionTranscriptBySessionId(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
-// ReadWorkerSessionTranscriptByWorkerSessionId handles the canonical
+// ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId handles the canonical
 // Worker-ID transcript/history read. Provider-native identity is resolved by
 // Worker Sessions when available and is never accepted from the caller here.
-func (h *Handler) ReadWorkerSessionTranscriptByWorkerSessionId(
+func (h *Handler) ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,

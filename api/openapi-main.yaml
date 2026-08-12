@@ -625,7 +625,7 @@ paths:
     get:
       tags:
         - Worker Sessions
-      operationId: getWorkerSessionObservationByWorkerSessionId
+      operationId: getWorkerSessionObservationByFactorySessionAndWorkerSessionId
       summary: Show one Worker Session observation by Worker Session ID
       description: >-
         Returns the authoritative observation for the exact Worker Session
@@ -655,7 +655,7 @@ paths:
     get:
       tags:
         - Worker Sessions
-      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      operationId: readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId
       summary: Read one Worker Session transcript by Worker Session ID
       description: >-
         Returns normalized transcript entries for the exact Worker Session

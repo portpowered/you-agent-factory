@@ -250,9 +250,9 @@ func (s *Server) GetWorkerSessionObservationBySessionId(
 	s.workerSessionsHTTP.GetWorkerSessionObservationBySessionId(w, r, sessionID, params)
 }
 
-// GetWorkerSessionObservationByWorkerSessionId forwards the canonical
+// GetWorkerSessionObservationByFactorySessionAndWorkerSessionId forwards the canonical
 // Worker-ID observation operation to the Worker Sessions owner handler.
-func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
+func (s *Server) GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -262,7 +262,7 @@ func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, sessionID, workerSessionID)
+	s.workerSessionsHTTP.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w, r, sessionID, workerSessionID)
 }
 
 // ReadWorkerSessionTranscriptBySessionId forwards the generated operation to
@@ -280,9 +280,9 @@ func (s *Server) ReadWorkerSessionTranscriptBySessionId(
 	s.workerSessionsHTTP.ReadWorkerSessionTranscriptBySessionId(w, r, sessionID, params)
 }
 
-// ReadWorkerSessionTranscriptByWorkerSessionId forwards the canonical
+// ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId forwards the canonical
 // Worker-ID transcript operation to the Worker Sessions owner handler.
-func (s *Server) ReadWorkerSessionTranscriptByWorkerSessionId(
+func (s *Server) ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -292,7 +292,7 @@ func (s *Server) ReadWorkerSessionTranscriptByWorkerSessionId(
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, sessionID, workerSessionID)
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(w, r, sessionID, workerSessionID)
 }
 
 // StreamWorkerSessionEventsBySessionId forwards the generated operation to

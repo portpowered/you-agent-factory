@@ -303,7 +303,7 @@ export interface paths {
      * Show one Worker Session observation by Worker Session ID
      * @description Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
      */
-    get: operations["getWorkerSessionObservationByWorkerSessionId"];
+    get: operations["getWorkerSessionObservationByFactorySessionAndWorkerSessionId"];
     put?: never;
     post?: never;
     delete?: never;
@@ -323,7 +323,7 @@ export interface paths {
      * Read one Worker Session transcript by Worker Session ID
      * @description Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
      */
-    get: operations["readWorkerSessionTranscriptByWorkerSessionId"];
+    get: operations["readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId"];
     put?: never;
     post?: never;
     delete?: never;
@@ -7686,7 +7686,7 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
-  getWorkerSessionObservationByWorkerSessionId: {
+  getWorkerSessionObservationByFactorySessionAndWorkerSessionId: {
     parameters: {
       query?: never;
       header?: never;
@@ -7714,7 +7714,7 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
-  readWorkerSessionTranscriptByWorkerSessionId: {
+  readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId: {
     parameters: {
       query?: never;
       header?: never;

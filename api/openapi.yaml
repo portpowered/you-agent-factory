@@ -532,7 +532,7 @@ paths:
     get:
       tags:
         - Worker Sessions
-      operationId: getWorkerSessionObservationByWorkerSessionId
+      operationId: getWorkerSessionObservationByFactorySessionAndWorkerSessionId
       summary: Show one Worker Session observation by Worker Session ID
       description: Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
       parameters:
@@ -555,7 +555,7 @@ paths:
     get:
       tags:
         - Worker Sessions
-      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      operationId: readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId
       summary: Read one Worker Session transcript by Worker Session ID
       description: Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
       parameters:

@@ -12154,13 +12154,13 @@ type ServerInterface interface {
 	ReadWorkerSessionTranscriptBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ReadWorkerSessionTranscriptBySessionIdParams)
 	// Show one Worker Session observation by Worker Session ID
 	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id})
-	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID)
+	GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID)
 	// Stream retained and live Worker Session events by Worker Session identity
 	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events)
 	StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByWorkerSessionIdParams)
 	// Read one Worker Session transcript by Worker Session ID
 	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript)
-	ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID)
+	ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -13664,8 +13664,8 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptBySessionId(w http
 	handler.ServeHTTP(w, r)
 }
 
-// GetWorkerSessionObservationByWorkerSessionId operation middleware
-func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+// GetWorkerSessionObservationByFactorySessionAndWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -13688,7 +13688,7 @@ func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetWorkerSessionObservationByWorkerSessionId(w, r, sessionId, workerSessionId)
+		siw.Handler.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w, r, sessionId, workerSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13743,8 +13743,8 @@ func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w 
 	handler.ServeHTTP(w, r)
 }
 
-// ReadWorkerSessionTranscriptByWorkerSessionId operation middleware
-func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+// ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -13767,7 +13767,7 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptByWorkerSessionId(
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, sessionId, workerSessionId)
+		siw.Handler.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(w, r, sessionId, workerSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14468,11 +14468,11 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/transcript", wrapper.ReadWorkerSessionTranscriptBySessionId).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}", wrapper.GetWorkerSessionObservationByWorkerSessionId).Methods("GET")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}", wrapper.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByWorkerSessionId).Methods("GET")
 
-	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByWorkerSessionId).Methods("GET")
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 
