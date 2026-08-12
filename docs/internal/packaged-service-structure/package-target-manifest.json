@@ -292,6 +292,7 @@
     "pkg/services/factory_sessions/internal/sessionvalidation",
     "pkg/services/factory_sessions/internal/stream",
     "pkg/services/factory_sessions/internal/testing/eventsstub",
+    "pkg/services/factory_sessions/transports/cli",
     "pkg/services/factory_sessions/transports/cli/session",
     "pkg/services/factory_sessions/transports/cli/sessionexecution",
     "pkg/services/factory_sessions/transports/http",
@@ -1840,6 +1841,11 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/testing/eventsstub",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/transports/cli",
       "disposition": "retain",
       "destination": "factory_sessions"
     },

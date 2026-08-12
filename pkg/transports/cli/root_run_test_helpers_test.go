@@ -355,6 +355,7 @@ func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
 		namedFactoryCatalog: catalog,
 		SubmitWork:          submitWork, SubmitBatch: submitBatch,
 		SessionsCLI:          rootTestSessionsCLI(),
+		LocalSessionsCLI:     rootTestSessionsCLI(),
 		ModelsCLI:            rootModelsCLI,
 		FlattenFactoryConfig: flattenFactoryConfig,
 		ExpandFactoryConfig:  expandFactoryConfig, InitFactory: initFactory,

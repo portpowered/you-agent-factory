@@ -28,9 +28,11 @@ import (
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -42,6 +44,193 @@ const ModelCacheDirEnvironment = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
 
 type factoryServiceRunner interface {
 	Run(ctx context.Context) error
+}
+
+func runRemoteResponseStream(
+	ctx context.Context,
+	cfg RunConfig,
+	server string,
+	start factoryapi.FactorySessionExecutionResponse,
+	requestID string,
+	events RemoteInvocationEventOperation,
+	results RemoteInvocationResultOperation,
+	presentation factoryvisualization.ResponsePresentation,
+) (apisurface.FactoryInvocationResult, visualizationcliFactoryEventRenderer, error) {
+	renderer, err := invocationFactoryEventRenderer(cfg, presentation)
+	if err != nil {
+		return apisurface.FactoryInvocationResult{}, nil, err
+	}
+	if renderer == nil {
+		return apisurface.FactoryInvocationResult{}, nil, fmt.Errorf("remote response stream renderer is required")
+	}
+	if results == nil {
+		return apisurface.FactoryInvocationResult{}, renderer, fmt.Errorf("remote response stream result operation is required")
+	}
+	return followRemoteResponseStream(ctx, cfg, server, start, requestID, events, results, renderer)
+}
+
+func followRemoteResponseStream(
+	ctx context.Context,
+	cfg RunConfig,
+	server string,
+	start factoryapi.FactorySessionExecutionResponse,
+	requestID string,
+	events RemoteInvocationEventOperation,
+	results RemoteInvocationResultOperation,
+	renderer visualizationcliFactoryEventRenderer,
+) (apisurface.FactoryInvocationResult, visualizationcliFactoryEventRenderer, error) {
+	if events == nil {
+		return apisurface.FactoryInvocationResult{}, renderer, errors.New("remote response stream event operation is required")
+	}
+
+	cursor := RemoteInvocationEventCursor{}
+	reconnectAttempts := 0
+	for {
+		if err := readRemoteFactoryEvents(ctx, cfg, server, start.SessionId, events, renderer, &cursor, &reconnectAttempts); err != nil {
+			return apisurface.FactoryInvocationResult{}, renderer, err
+		}
+
+		result, err := results.GetFactorySessionResult(ctx, RemoteInvocationResultRequest{
+			Server:      server,
+			SessionID:   start.SessionId,
+			Diagnostics: cfg.Diagnostics,
+			Verbose:     cfg.Verbose,
+		})
+		if err != nil {
+			return apisurface.FactoryInvocationResult{}, renderer, err
+		}
+		invocationResult, ready, poll, err := remoteInvocationResultFromDurable(result, start.SessionId, requestID)
+		if err != nil {
+			return apisurface.FactoryInvocationResult{}, renderer, err
+		}
+		if ready {
+			return invocationResult, renderer, nil
+		}
+		if !poll {
+			return apisurface.FactoryInvocationResult{}, renderer, &InvocationError{
+				Code:    RemoteDurableResponseInvalidCode,
+				Message: "remote durable result ended without a terminal classification",
+			}
+		}
+		reconnectAttempts = 0
+		if err := factorysessionscli.Wait(ctx, remoteDurableResultPollInterval); err != nil {
+			return apisurface.FactoryInvocationResult{}, renderer, err
+		}
+	}
+}
+
+func readRemoteFactoryEvents(
+	ctx context.Context,
+	cfg RunConfig,
+	server string,
+	sessionID string,
+	events RemoteInvocationEventOperation,
+	renderer visualizationcliFactoryEventRenderer,
+	cursor *RemoteInvocationEventCursor,
+	reconnectAttempts *int,
+) error {
+	for {
+		stream, err := events.OpenFactorySessionEvents(ctx, RemoteInvocationEventRequest{
+			Server:        server,
+			SessionID:     sessionID,
+			AfterEventID:  cursor.EventID,
+			AfterSequence: cursor.Sequence,
+			Diagnostics:   cfg.Diagnostics,
+			Verbose:       cfg.Verbose,
+		})
+		if err == nil {
+			if stream == nil {
+				err = errors.New("remote Factory Event stream is unavailable")
+			} else {
+				err = consumeRemoteFactoryEventStream(ctx, stream, renderer, cursor)
+				_ = stream.Close()
+			}
+		}
+		if err == nil || errors.Is(err, io.EOF) {
+			return nil
+		}
+		if retryErr := retryRemoteFactoryEventStream(ctx, server, sessionID, reconnectAttempts, err); retryErr != nil {
+			return retryErr
+		}
+	}
+}
+
+// visualizationcliFactoryEventRenderer is kept as a narrow local alias so
+// remote response-stream orchestration depends only on the renderer contract.
+type visualizationcliFactoryEventRenderer interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	StopProgressRendering()
+	WriteFinalInvocationResult(apisurface.FactoryInvocationResult) error
+}
+
+func consumeRemoteFactoryEventStream(
+	ctx context.Context,
+	stream RemoteInvocationEventStream,
+	renderer visualizationcliFactoryEventRenderer,
+	cursor *RemoteInvocationEventCursor,
+) error {
+	if stream == nil {
+		return errors.New("remote Factory Event stream is unavailable")
+	}
+	if renderer == nil {
+		return errors.New("remote response stream renderer is unavailable")
+	}
+	for {
+		event, err := stream.Next(ctx)
+		if err != nil {
+			return err
+		}
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return fmt.Errorf("decode remote canonical Factory Event %q: %w", event.Id, err)
+		}
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{domainEvent})
+		if cursor != nil {
+			*cursor = remoteFactoryEventCursor(event)
+		}
+	}
+}
+
+func retryRemoteFactoryEventStream(
+	ctx context.Context,
+	server string,
+	sessionID string,
+	attempts *int,
+	cause error,
+) error {
+	if !remoteFactoryEventRetryable(cause) {
+		return cause
+	}
+	if attempts == nil {
+		return cause
+	}
+	if *attempts >= remoteFactoryEventMaxReconnectAttempts {
+		return fmt.Errorf(
+			"remote Factory Event stream for session %q reconnect attempts exhausted after %d attempt(s): %w",
+			sessionID,
+			*attempts,
+			cause,
+		)
+	}
+	(*attempts)++
+	if err := waitForRemoteEventReconnect(ctx); err != nil {
+		return &InvocationError{
+			Code:    RemoteDurableResultCode,
+			Message: fmt.Sprintf("remote Factory Event stream reconnect canceled at %s: %v", safeRemoteEndpoint(server), err),
+			Cause:   err,
+		}
+	}
+	return nil
+}
+
+func remoteResponseStreamFailureResult(requestID, sessionID string, err error) apisurface.FactoryInvocationResult {
+	status := interfaces.InvocationTerminalStatusFailed
+	code := RemoteDurableResultCode
+	message := "remote Factory Event stream failed before the invocation result was available"
+	if err != nil {
+		message = strings.TrimSpace(err.Error())
+	}
+	return remoteDurableInvocationFailure(requestID, sessionID, status, code, message, nil)
 }
 
 // RuntimeRunner is the local in-process runtime seam used by CLI startup.

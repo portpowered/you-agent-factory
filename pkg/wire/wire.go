@@ -18,6 +18,7 @@ import (
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -309,6 +310,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
 	provideSessionsCLIService,
+	provideLocalSessionsCLIService,
 	provideModelsCLIService,
 	provideProvidersCLIService,
 	provideFlattenFactoryConfigOperation,
@@ -353,6 +355,7 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
 	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
+	wire.Bind(new(processcontract.ACPServer), new(acp.Server)),
 	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),

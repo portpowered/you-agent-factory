@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	application2 "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -447,6 +448,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	service2 := provideProvidersCLIService(service)
 	v68 := wire.NewRequestPreparation()
 	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v68)
+	localSessionsCLIService := provideLocalSessionsCLIService(factorysessionsService)
 	payloadFileReader := provideSubmitPayloadReader()
 	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol()
 	if err != nil {
@@ -604,6 +606,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ModelsCLI:                         cliService,
 		ProvidersCLI:                      service2,
 		SessionsCLI:                       sessionService,
+		LocalSessionsCLI:                  localSessionsCLIService,
 		SubmitWork:                        submitWorkOperation,
 		SubmitBatch:                       submitBatchOperation,
 		FlattenFactoryConfig:              flattenFactoryConfigOperation,
@@ -629,6 +632,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		StreamWorkerSession:               v76,
 		OpenRunSelection:                  selectionFactory,
 		RemoteInvocation:                  remoteInvocationOperation,
+		ResponsePresentation:              v81,
 		ACP:                               acpService,
 		ACPServer:                         server,
 	}
@@ -911,6 +915,7 @@ var cliCommandOperationsSet = wire4.NewSet(
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
 	provideSessionsCLIService,
+	provideLocalSessionsCLIService,
 	provideModelsCLIService,
 	provideProvidersCLIService,
 	provideFlattenFactoryConfigOperation,
@@ -952,7 +957,7 @@ var BundleSet = wire4.NewSet(
 	providePackagedFactoryDefinitions,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
-	provideSystemInitializationOperation, wire4.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire4.Bind(new(wire.ApplicationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.InvocationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.RuntimeOpening)), provideApplicationRuntimeAdapter,
+	provideSystemInitializationOperation, wire4.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire4.Bind(new(process.ACPServer), new(acp.Server)), wire4.Bind(new(wire.ApplicationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.InvocationRuntimeOpening), new(*wire.RuntimeOpening)), wire4.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.RuntimeOpening)), provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,

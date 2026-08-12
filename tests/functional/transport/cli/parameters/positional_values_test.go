@@ -129,7 +129,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 
 		process := support.BuildProcess(t, serviceedges.Edges{})
 		inputs := support.FakeInputs(t.Context(), []string{
-			"you", "--server", server.URL,
+			"you", "--remote", "--server", server.URL,
 			"session", "pause",
 		})
 		inputs.WorkingDirectory = t.TempDir()
@@ -160,7 +160,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 
 		process := support.BuildProcess(t, serviceedges.Edges{})
 		inputs := support.FakeInputs(t.Context(), []string{
-			"you", "--server", server.URL,
+			"you", "--remote", "--server", server.URL,
 			"session", "pause", overrideSessionID,
 		})
 		inputs.WorkingDirectory = t.TempDir()

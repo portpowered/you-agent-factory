@@ -75,7 +75,6 @@ type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
 }
-
 type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
@@ -92,8 +91,7 @@ type runtimeConfig struct {
 	clock                     factory.Clock
 	workRequestIDs            work.RequestIDGenerator
 	eventHistory              recordings.RuntimeLedger
-	// recordingID is the runtime recording target propagated to Worker Sessions.
-	recordingID               string
+	recordingID               string // runtime recording target propagated to Worker Sessions
 	worldStateProjector       factory.WorldStateProjector
 	providerSessions          providersessions.Service
 	submissionRecorder        recordings.SubmissionRecorder

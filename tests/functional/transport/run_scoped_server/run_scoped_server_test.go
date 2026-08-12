@@ -20,10 +20,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock"
 )
@@ -339,26 +337,43 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 // run sends its normalized prompt to the selected server without starting a
 // local listener or invoking the local runtime.
 func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
-	var gotRequest factoryapi.InvocationRequest
-	var requests atomic.Int32
+	var gotRequest factoryapi.FactorySessionExecutionRequest
+	var startRequests atomic.Int32
+	var resultRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/~default/invocations" {
-			t.Fatalf("remote request = %s %s, want POST /factory-sessions/~default/invocations", r.Method, r.URL.Path)
-		}
-		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
-			t.Fatalf("decode remote invocation request: %v", err)
-		}
-		requests.Add(1)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(factoryapi.InvocationResponse{
-			RequestId: "remote-request",
-			TraceId:   "remote-trace",
-			Status:    factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText,
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/factory-sessions/async":
+			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				t.Fatalf("decode remote durable execution request: %v", err)
+			}
+			startRequests.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionExecutionResponse{
+				SessionId:        "dur-sess-remote",
+				Status:           factoryapi.FactorySessionDurableLifecycleStatusQueued,
+				OrchestratorKind: factoryapi.PETRI,
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/factory-sessions/dur-sess-remote/results":
+			resultRequests.Add(1)
+			var part factoryapi.WorkContentPart
+			if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+				Type: factoryapi.WorkContentPartTypeText,
 				Text: "remote result",
-			}}),
-		})
+			}); err != nil {
+				t.Fatalf("build remote result content: %v", err)
+			}
+			primaryResult := factoryapi.WorkContent{part}
+			sessionStatus := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
+				SessionId:     "dur-sess-remote",
+				ResultStatus:  factoryapi.FactorySessionResultStatusFinal,
+				SessionStatus: &sessionStatus,
+				PrimaryResult: &primaryResult,
+			})
+		default:
+			t.Fatalf("remote request = %s %s, want durable start or result endpoint", r.Method, r.URL.Path)
+		}
 	}))
 	defer server.Close()
 
@@ -386,12 +401,14 @@ func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
 	if stderr != "" || stdout != "remote result" {
 		t.Fatalf("remote stdout=%q stderr=%q, want remote result and no diagnostics", stdout, stderr)
 	}
-	if requests.Load() != 1 || localStarts.Load() != 0 {
-		t.Fatalf("dispatch effects = remote requests:%d local listeners:%d, want 1/0", requests.Load(), localStarts.Load())
+	if startRequests.Load() != 1 || resultRequests.Load() != 1 || localStarts.Load() != 0 {
+		t.Fatalf("dispatch effects = durable starts:%d results:%d local listeners:%d, want 1/1/0", startRequests.Load(), resultRequests.Load(), localStarts.Load())
 	}
-	parts := contentcontract.PartsFromGenerated(gotRequest.Content)
-	if len(parts) != 1 || parts[0].Text != "same normalized request" {
-		t.Fatalf("remote normalized content = %#v, want one prompt part", gotRequest.Content)
+	if gotRequest.Source.Kind != factoryapi.FactorySessionExecutionSourceKindFactoryInline || gotRequest.Source.FactoryInline == nil {
+		t.Fatalf("remote source = %#v, want normalized inline Factory source", gotRequest.Source)
+	}
+	if gotRequest.Args == nil || (*gotRequest.Args)["prompt"] != "same normalized request" {
+		t.Fatalf("remote normalized args = %#v, want prompt argument", gotRequest.Args)
 	}
 }
 
@@ -840,6 +857,13 @@ func reserveExactPort(t *testing.T) int {
 
 const remotePlacementFactoryJSON = `{
   "name": "remote-placement",
+  "invocationSignature": {
+    "parameters": [{
+      "name": "prompt",
+      "required": true,
+      "bindings": [{"kind": "POSITIONAL", "position": 1}]
+    }]
+  },
   "workTypes": [
     {
       "name": "task",

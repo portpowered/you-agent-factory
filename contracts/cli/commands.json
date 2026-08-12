@@ -4126,7 +4126,7 @@
       "path": "you session",
       "runnable": false,
       "usage": {
-        "example": "  # List live sessions on the default local port.\n  you session list\n\n  # Show orchestrator-aware runtime for one live session.\n  you session show session-beta\n\n  # Pause and resume the default compatibility session.\n  you session pause\n  you session resume\n\n  # Pause and resume one named or durable Factory Session.\n  you session pause session-beta\n  you session resume dur-sess-js-run-n-001\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Pause and resume the default compatibility session.\n  you session pause\n  you session resume\n\n  # Target a different service port for list output.\n  you session list --port 9090",
+        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
         "line": "session"
       },
       "visibility": "visible"
@@ -5519,7 +5519,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause.\n\nHuman output reports paused, already-paused, invalid-state, not-found, or unreachable-host outcomes using Factory Session terminology. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Use global --json for the API-shaped FactorySessionLifecycleControlResponse and global --server to target the same factory API base URI as workflow status and session show.",
+            "canonicalEnglish": "Pause one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports paused, already-paused, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
             "id": "you.session.pause.description"
           },
           "title": {
@@ -5531,6 +5531,8 @@
           "you session pause",
           "you session pause session-beta",
           "you session pause dur-sess-js-run-n-001",
+          "you --remote --server http://factory.example:7437 session pause session-beta",
+          "you session pause session-beta --remote --server http://factory.example:7437",
           "you --json session pause session-beta"
         ],
         "formatVersion": "1.0.0",
@@ -5743,7 +5745,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
-      "placement": "remote-only",
+      "placement": "dual",
       "sideEffects": {
         "you.session.pause.side-effect.network": {
           "id": "you.session.pause.side-effect.network",
@@ -5751,7 +5753,7 @@
         }
       },
       "usage": {
-        "example": "  # Pause the default compatibility Factory Session.\n  you session pause\n\n  # Pause one named live Factory Session.\n  you session pause session-beta\n\n  # Pause one running durable Factory Session.\n  you session pause dur-sess-js-run-n-001\n\n  # Emit API-shaped JSON for automation.\n  you --json session pause session-beta",
+        "example": "  # Pause the default compatibility Factory Session locally.\n  you session pause\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session pause session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"",
         "line": "pause [session-id]"
       },
       "visibility": "visible"
@@ -5803,7 +5805,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume.\n\nHuman output reports resumed, already-running, invalid-state, not-found, or unreachable-host outcomes using Factory Session terminology. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Use global --json for the API-shaped FactorySessionLifecycleControlResponse and global --server to target the same factory API base URI as workflow status and session show.",
+            "canonicalEnglish": "Resume one paused live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports resumed, already-running, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
             "id": "you.session.resume.description"
           },
           "title": {
@@ -5815,6 +5817,8 @@
           "you session resume",
           "you session resume session-beta",
           "you session resume dur-sess-js-run-n-001",
+          "you --remote --server http://factory.example:7437 session resume session-beta",
+          "you session resume session-beta --remote --server http://factory.example:7437",
           "you --json session resume session-beta"
         ],
         "formatVersion": "1.0.0",
@@ -6027,7 +6031,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
-      "placement": "remote-only",
+      "placement": "dual",
       "sideEffects": {
         "you.session.resume.side-effect.network": {
           "id": "you.session.resume.side-effect.network",
@@ -6035,9 +6039,145 @@
         }
       },
       "usage": {
-        "example": "  # Resume the default compatibility Factory Session.\n  you session resume\n\n  # Resume one named live Factory Session.\n  you session resume session-beta\n\n  # Resume one paused durable Factory Session.\n  you session resume dur-sess-js-run-n-001\n\n  # Emit API-shaped JSON for automation.\n  you --json session resume session-beta",
+        "example": "  # Resume the default compatibility Factory Session locally.\n  you session resume\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session resume session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"",
         "line": "resume [session-id]"
       },
+      "visibility": "visible"
+    },
+    "you.session.cancel": {
+      "aliases": [],
+      "arguments": {
+        "you.session.cancel.arg.0": {
+          "channels": ["cli"],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.session.cancel.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "name": "session-id",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {"input": ["cli", "env", "config", "stdin"], "output": ["stdout", "stderr"]},
+      "completeness": "authoritative",
+      "constraints": {"platforms": ["linux", "darwin", "windows"], "runtime": ["local"]},
+      "documentation": {
+        "documentation": {
+          "description": {"canonicalEnglish": "Cancel one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.cancel.description"},
+          "title": {"canonicalEnglish": "Cancel one live or durable Factory Session", "id": "you.session.cancel.title"}
+        },
+        "examples": [
+          "you session cancel session-beta",
+          "you --remote --server http://factory.example:7437 session cancel session-beta",
+          "you session cancel session-beta --remote --server http://factory.example:7437",
+          "you --json session cancel session-beta"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.cancel",
+        "sourceHash": "e5f83667ae14844ae67db7652cfd1d9ef42fc87a5f09ae14dd665c69df72dc84",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.session.cancel.exit.failure": {"code": 1, "id": "you.session.cancel.exit.failure", "kind": "failure"},
+        "you.session.cancel.exit.success": {"code": 0, "id": "you.session.cancel.exit.success", "kind": "success"},
+        "you.session.cancel.exit.usage": {"code": 1, "id": "you.session.cancel.exit.usage", "kind": "usage"}
+      },
+      "flags": {
+        "you.session.cancel.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.cancel.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
+        "you.session.cancel.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.cancel.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.json", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.session.cancel.flag.port": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "0", "id": "you.session.cancel.flag.port", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel.flag.port", "since": "1.0.0", "state": "active"}, "long": "port", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "usage": "deprecated; use --server", "valueType": "int", "visibility": "hidden"},
+        "you.session.cancel.flag.remote": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.cancel.flag.remote", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel.flag.remote", "since": "1.0.0", "state": "active"}, "long": "remote", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.remote", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.session.cancel.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.session.cancel.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.server", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.session.cancel.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.cancel.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
+      },
+      "handler": {"id": "you.session.cancel.handler", "operationId": "cancelFactorySession"},
+      "id": "you.session.cancel",
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.cancel", "since": "1.0.0", "state": "active"},
+      "name": "cancel",
+      "outputs": {
+        "you.session.cancel.output.human": {"channel": "stdout", "format": "text", "id": "you.session.cancel.output.human"},
+        "you.session.cancel.output.json": {"channel": "stdout", "format": "json", "id": "you.session.cancel.output.json"}
+      },
+      "path": "you session cancel",
+      "precedence": {"order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"], "withinTier": {"scalar": "last", "repeated": "append"}, "acrossTiers": "replace", "multipleBindings": "reject"},
+      "runnable": true,
+      "placement": "dual",
+      "sideEffects": {"you.session.cancel.side-effect.network": {"id": "you.session.cancel.side-effect.network", "kind": "network"}},
+      "usage": {"example": "  # Cancel one Factory Session locally by default.\n  you session cancel session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session cancel session-beta\n  you session cancel session-beta --remote --server http://factory.example:7437", "line": "cancel [session-id]"},
+      "visibility": "visible"
+    },
+    "you.session.terminate": {
+      "aliases": [],
+      "arguments": {
+        "you.session.terminate.arg.0": {
+          "channels": ["cli"],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.session.terminate.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "name": "session-id",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {"input": ["cli", "env", "config", "stdin"], "output": ["stdout", "stderr"]},
+      "completeness": "authoritative",
+      "constraints": {"platforms": ["linux", "darwin", "windows"], "runtime": ["local"]},
+      "documentation": {
+        "documentation": {
+          "description": {"canonicalEnglish": "Terminate one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.terminate.description"},
+          "title": {"canonicalEnglish": "Terminate one live or durable Factory Session", "id": "you.session.terminate.title"}
+        },
+        "examples": [
+          "you session terminate session-beta",
+          "you --remote --server http://factory.example:7437 session terminate session-beta",
+          "you session terminate session-beta --remote --server http://factory.example:7437",
+          "you --json session terminate session-beta"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.terminate",
+        "sourceHash": "e5f83667ae14844ae67db7652cfd1d9ef42fc87a5f09ae14dd665c69df72dc84",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.session.terminate.exit.failure": {"code": 1, "id": "you.session.terminate.exit.failure", "kind": "failure"},
+        "you.session.terminate.exit.success": {"code": 0, "id": "you.session.terminate.exit.success", "kind": "success"},
+        "you.session.terminate.exit.usage": {"code": 1, "id": "you.session.terminate.exit.usage", "kind": "usage"}
+      },
+      "flags": {
+        "you.session.terminate.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.terminate.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
+        "you.session.terminate.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.terminate.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.json", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.session.terminate.flag.port": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "0", "id": "you.session.terminate.flag.port", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate.flag.port", "since": "1.0.0", "state": "active"}, "long": "port", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "usage": "deprecated; use --server", "valueType": "int", "visibility": "hidden"},
+        "you.session.terminate.flag.remote": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.terminate.flag.remote", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate.flag.remote", "since": "1.0.0", "state": "active"}, "long": "remote", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.remote", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.session.terminate.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.session.terminate.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.server", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.session.terminate.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.session.terminate.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
+      },
+      "handler": {"id": "you.session.terminate.handler", "operationId": "terminateFactorySession"},
+      "id": "you.session.terminate",
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.terminate", "since": "1.0.0", "state": "active"},
+      "name": "terminate",
+      "outputs": {
+        "you.session.terminate.output.human": {"channel": "stdout", "format": "text", "id": "you.session.terminate.output.human"},
+        "you.session.terminate.output.json": {"channel": "stdout", "format": "json", "id": "you.session.terminate.output.json"}
+      },
+      "path": "you session terminate",
+      "precedence": {"order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"], "withinTier": {"scalar": "last", "repeated": "append"}, "acrossTiers": "replace", "multipleBindings": "reject"},
+      "runnable": true,
+      "placement": "dual",
+      "sideEffects": {"you.session.terminate.side-effect.network": {"id": "you.session.terminate.side-effect.network", "kind": "network"}},
+      "usage": {"example": "  # Terminate one Factory Session locally by default.\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session terminate session-beta\n  you session terminate session-beta --remote --server http://factory.example:7437", "line": "terminate [session-id]"},
       "visibility": "visible"
     },
     "you.session.show": {

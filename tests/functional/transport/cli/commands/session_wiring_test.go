@@ -256,6 +256,13 @@ func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
 		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionWiringMissingSessionID, true)
+
+	for _, operation := range []string{"cancel", "terminate"} {
+		controlOut, controlErr := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+			"--remote", "--json", "session", operation, sessionWiringMissingSessionID,
+		)
+		assertCLISessionNotFoundFailure(t, operation, controlOut, controlErr, sessionWiringMissingSessionID, false)
+	}
 }
 
 func sessionWiringFactoryConfig() map[string]any {
@@ -397,6 +404,7 @@ func runSessionLifecycleCLIJSON(
 	t.Helper()
 
 	out, err := runYouCLI(ctx, processHarness, workingDir, serverURL,
+		"--remote",
 		"--json",
 		"session", operation, sessionID,
 	)
