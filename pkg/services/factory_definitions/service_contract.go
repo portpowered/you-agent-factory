@@ -39,6 +39,10 @@ type Service interface {
 	// Compile slice: authored/canonical source into one normalized effective source.
 	CompileEffectiveFactorySource(context.Context, CompileEffectiveFactorySourceRequest) (CompileEffectiveFactorySourceResult, error)
 
+	// Execution-policy slice: resolve one invocation-effective, detached catalog
+	// before any execution machinery is selected or invoked.
+	ResolveExecutionCatalog(context.Context, ResolveExecutionCatalogRequest) (ResolveExecutionCatalogResult, error)
+
 	// Validate slice: structural/pre-persist and effective-definition validation.
 	ValidateStructuralFactoryDefinition(context.Context, ValidateStructuralFactoryDefinitionRequest) (ValidateStructuralFactoryDefinitionResult, error)
 	ValidateEffectiveFactoryDefinition(context.Context, ValidateEffectiveFactoryDefinitionRequest) (ValidateEffectiveFactoryDefinitionResult, error)

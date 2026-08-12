@@ -139,6 +139,13 @@ func (fake *mcpDefinitionsRootFake) ValidateStructuralFactoryDefinition(
 
 func (fake *mcpDefinitionsRootFake) ActivateNamedFactory(context.Context, string) error { return nil }
 
+func (fake *mcpDefinitionsRootFake) ResolveExecutionCatalog(
+	context.Context,
+	factorydefinitions.ResolveExecutionCatalogRequest,
+) (factorydefinitions.ResolveExecutionCatalogResult, error) {
+	return factorydefinitions.ResolveExecutionCatalogResult{}, nil
+}
+
 func (fake *mcpDefinitionsRootFake) Save(
 	context.Context,
 	string,

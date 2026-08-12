@@ -80,6 +80,66 @@ type ResolvedRunnerSelection struct {
 	Source   RunnerSelectionSource `json:"source,omitempty"`
 }
 
+// ResolvedExecutionPolicy is the Workers-owned value boundary for one
+// invocation-effective worker/workstation pair. It contains no executor,
+// provider, model, process, pool, or session object; those are selected by a
+// later attempt operation.
+type ResolvedExecutionPolicy struct {
+	WorkerName                  string                           `json:"worker_name"`
+	WorkerType                  string                           `json:"worker_type,omitempty"`
+	WorkstationName             string                           `json:"workstation_name"`
+	WorkstationType             string                           `json:"workstation_type,omitempty"`
+	RunnerID                    string                           `json:"runner_id"`
+	RunnerSelectionSource       RunnerSelectionSource            `json:"runner_selection_source,omitempty"`
+	Provider                    string                           `json:"provider,omitempty"`
+	Model                       string                           `json:"model,omitempty"`
+	ModelProvider               string                           `json:"model_provider,omitempty"`
+	ModelLocality               string                           `json:"model_locality,omitempty"`
+	ReasoningEffort             string                           `json:"reasoning_effort,omitempty"`
+	ExecutorProvider            string                           `json:"executor_provider,omitempty"`
+	Command                     string                           `json:"command,omitempty"`
+	Args                        []string                         `json:"args,omitempty"`
+	StopToken                   string                           `json:"stop_token,omitempty"`
+	AgentToolPolicy             string                           `json:"agent_tool_policy,omitempty"`
+	SkipPermissions             bool                             `json:"skip_permissions,omitempty"`
+	PromptFile                  string                           `json:"prompt_file,omitempty"`
+	Prompt                      string                           `json:"prompt,omitempty"`
+	PromptTemplate              string                           `json:"prompt_template,omitempty"`
+	OutputSchema                string                           `json:"output_schema,omitempty"`
+	OutputContract              string                           `json:"output_contract,omitempty"`
+	OutputFormat                string                           `json:"output_format,omitempty"`
+	DecisionEnvelope            bool                             `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope bool                             `json:"goal_routing_decision_envelope,omitempty"`
+	FormatInvocationSummary     bool                             `json:"format_invocation_summary,omitempty"`
+	FormatInvocationResponse    bool                             `json:"format_invocation_response,omitempty"`
+	FormatTTSMetadata           bool                             `json:"format_tts_metadata,omitempty"`
+	Environment                 map[string]string                `json:"environment,omitempty"`
+	WorkingDirectory            string                           `json:"working_directory,omitempty"`
+	Worktree                    string                           `json:"worktree,omitempty"`
+	Timeout                     time.Duration                    `json:"timeout,omitempty"`
+	WorkPropagation             string                           `json:"work_propagation,omitempty"`
+	Operation                   string                           `json:"operation,omitempty"`
+	OperationBindings           []ResolvedExecutionPolicyBinding `json:"operation_bindings,omitempty"`
+	StopWords                   []string                         `json:"stop_words,omitempty"`
+	RuntimeStopWords            []string                         `json:"runtime_stop_words,omitempty"`
+}
+
+// ExecutionPolicy is retained as the concise Workers vocabulary for callers
+// that do not need the longer resolved-value name.
+type ExecutionPolicy = ResolvedExecutionPolicy
+
+// ResolvedExecutionPolicyBinding preserves authored operation-input policy
+// without exposing Factory Definitions types to Workers.
+type ResolvedExecutionPolicyBinding struct {
+	Slot           string                 `json:"slot"`
+	SelectorSlot   string                 `json:"selector_slot,omitempty"`
+	SelectorLabel  string                 `json:"selector_label,omitempty"`
+	SelectorType   string                 `json:"selector_type,omitempty"`
+	SelectorRole   string                 `json:"selector_role,omitempty"`
+	Config         []work.WorkContentPart `json:"config,omitempty"`
+	DefaultContent []work.WorkContentPart `json:"default_content,omitempty"`
+}
+
 // RunnerSelectionResolver resolves configured provider precedence into the
 // stable native runner contract.
 type RunnerSelectionResolver func(

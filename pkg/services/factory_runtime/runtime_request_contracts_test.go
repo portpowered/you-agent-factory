@@ -3,6 +3,9 @@ package factory
 import (
 	"strings"
 	"testing"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestObservationScopeRequestPublishesRuntimeRootVocabulary(t *testing.T) {
@@ -134,4 +137,74 @@ func withPlanDispatchIntent(
 	clone.WorkIDs = append([]string(nil), intent.WorkIDs...)
 	mutate(&clone)
 	return clone
+}
+
+func TestMapExecutionCatalogEntry_ReturnsDetachedWorkersPolicy(t *testing.T) {
+	t.Parallel()
+
+	worker := factorydefinitions.ResolvedWorkerDefinition{
+		Name:            "worker",
+		Type:            factorydefinitions.WorkerTypeModel,
+		Provider:        "provider-a",
+		Model:           "model-a",
+		ModelProvider:   "provider-a",
+		Args:            []string{"--mode=fast"},
+		Body:            "worker prompt",
+		SkipPermissions: true,
+		AgentToolPolicy: "READ_ONLY",
+	}
+	workstation := factorydefinitions.ResolvedWorkstationDefinition{
+		Name:                  "run",
+		Type:                  factorydefinitions.WorkstationTypeModel,
+		WorkerName:            "worker",
+		Runner:                "codex",
+		RunnerSelectionSource: "factory",
+		Body:                  "workstation prompt",
+		PromptTemplate:        "template",
+		Environment:           map[string]string{"MODE": "fast"},
+		OperationBindings: []factorydefinitions.ResolvedModelOperationBinding{{
+			Slot: "prompt",
+			Config: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText, Text: "config",
+			}},
+		}},
+	}
+
+	mapper := ExecutionCatalogMapper{}
+	first, err := mapper.MapExecutionCatalogEntry(worker, workstation)
+	if err != nil {
+		t.Fatalf("MapExecutionCatalogEntry: %v", err)
+	}
+	if first.RunnerID != "codex" || first.Model != "model-a" || first.Prompt != "workstation prompt" ||
+		first.AgentToolPolicy != "READ_ONLY" || !first.SkipPermissions {
+		t.Fatalf("mapped policy = %#v", first)
+	}
+	first.Args[0] = "mutated"
+	first.Environment["MODE"] = "mutated"
+	first.OperationBindings[0].Config[0].Text = "mutated"
+
+	second, err := mapper.MapExecutionCatalogEntry(worker, workstation)
+	if err != nil {
+		t.Fatalf("MapExecutionCatalogEntry after mutation: %v", err)
+	}
+	if second.Args[0] != "--mode=fast" || second.Environment["MODE"] != "fast" ||
+		second.OperationBindings[0].Config[0].Text != "config" {
+		t.Fatalf("second mapping was affected by first-result mutation: %#v", second)
+	}
+}
+
+func TestMapExecutionCatalogEntry_RejectsMismatchedDetachedPair(t *testing.T) {
+	t.Parallel()
+
+	_, err := (ExecutionCatalogMapper{}).MapExecutionCatalogEntry(
+		factorydefinitions.ResolvedWorkerDefinition{Name: "worker-a"},
+		factorydefinitions.ResolvedWorkstationDefinition{
+			Name:       "run",
+			Runner:     "codex",
+			WorkerName: "worker-b",
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "does not match selected worker") {
+		t.Fatalf("error = %v, want detached pair mismatch", err)
+	}
 }
