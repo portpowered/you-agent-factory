@@ -1,11 +1,14 @@
 package wire
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	runtime "runtime"
 
+	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -22,12 +25,31 @@ import (
 
 func provideWorkerRecordingReader(
 	writer recordings.WorkerRecordingWriter,
-) (recordings.WorkerRecordingReader, error) {
+) (processcontract.WorkerRecordingReader, error) {
 	reader, ok := writer.(recordings.WorkerRecordingReader)
 	if !ok || reader == nil {
 		return nil, fmt.Errorf("compose Worker recording reader: %w", recordings.ErrMissingWorkerRecordingReader)
 	}
-	return reader, nil
+	return workerRecordingReaderCapability{reader: reader}, nil
+}
+
+type workerRecordingReaderCapability struct {
+	reader recordings.WorkerRecordingReader
+}
+
+func (capability workerRecordingReaderCapability) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (json.RawMessage, error) {
+	snapshot, err := capability.reader.LoadWorkerRecording(ctx, recordingID)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, fmt.Errorf("encode Worker recording snapshot: %w", err)
+	}
+	return append(json.RawMessage(nil), payload...), nil
 }
 
 // provideWorkerSessionsFactory constructs the one canonical per-session

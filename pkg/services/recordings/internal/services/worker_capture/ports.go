@@ -7,6 +7,23 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
+// Service is the pure Worker recording capability. It keeps reduction,
+// portable validation, and portable replay behind one focused subservice
+// contract while the enclosing Recordings service owns lifecycle and storage
+// effects.
+type Service interface {
+	ReduceWorkerRecording(WorkerRecordingHistory) (WorkerRecordingProjection, error)
+	ReplayWorkerRecording(WorkerRecordingReplayRequest) (WorkerRecordingReplayResult, error)
+	BuildWorkerPortableRecording(WorkerRecordingSnapshot, ...string) (WorkerPortableRecording, error)
+	ExportWorkerPortableRecording(WorkerRecordingSnapshot, ...string) (WorkerPortableRecording, error)
+	ValidateWorkerPortableRecording(WorkerPortableRecording) error
+	EncodeWorkerPortableRecording(WorkerPortableRecording) ([]byte, error)
+	DecodeWorkerPortableRecording([]byte) (WorkerPortableRecording, error)
+	ReplayWorkerPortableRecording(WorkerPortableRecording) (WorkerRecordingReplayResult, error)
+}
+
+var _ Service = WorkerRecordingCodec{}
+
 // WorkerSessionRecordingRequest identifies the exact source stream Recordings
 // must capture. Topic is explicit so a caller cannot accidentally subscribe to
 // a sibling or provider-owned stream.

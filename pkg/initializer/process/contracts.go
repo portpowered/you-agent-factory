@@ -4,6 +4,7 @@ package process
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -104,6 +105,15 @@ type CommandInvocation struct {
 
 type CommandFactory interface {
 	ExecuteCommand(CommandInvocation) error
+}
+
+// WorkerRecordingReader is the neutral process capability for loading one
+// detached Worker recording snapshot. The application process carries the
+// JSON value across the initializer boundary; the Recordings-owned root
+// adapter decodes it back into the domain snapshot without exposing a product
+// service dependency to pkg/initializer/application.
+type WorkerRecordingReader interface {
+	LoadWorkerRecording(context.Context, string) (json.RawMessage, error)
 }
 
 type Functions struct {

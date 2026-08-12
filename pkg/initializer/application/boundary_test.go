@@ -22,12 +22,8 @@ func TestInitializerApplicationDoesNotConstructConcreteTransportsOrMappingAdapte
 		if err != nil {
 			t.Fatalf("read %s: %v", entry.Name(), err)
 		}
-		sourceText := string(source)
-		if strings.Contains(sourceText, "github.com/portpowered/infinite-you/pkg/services/") &&
-			!strings.Contains(sourceText, "github.com/portpowered/infinite-you/pkg/services/recordings") {
-			t.Errorf("%s imports a concrete product service instead of a narrow public capability", entry.Name())
-		}
 		for _, forbidden := range []string{
+			"github.com/portpowered/infinite-you/pkg/services/",
 			"transporthttp.NewServer",
 			"mcpserver.New",
 			"factorydefinitionmapping.New",
@@ -44,7 +40,7 @@ func TestInitializerApplicationDoesNotConstructConcreteTransportsOrMappingAdapte
 			"ApplyRuntimeOverrides",
 			"serviceedges.Merge(",
 		} {
-			if strings.Contains(sourceText, forbidden) {
+			if strings.Contains(string(source), forbidden) {
 				t.Errorf("%s contains initializer-owned construction %q", entry.Name(), forbidden)
 			}
 		}

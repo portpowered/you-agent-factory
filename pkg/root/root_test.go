@@ -97,8 +97,14 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildProcess(reader writer) error = %v", err)
 	}
-	if got := WorkerRecordingReaderFromProcess(process); got != readerWriter {
-		t.Fatalf("WorkerRecordingReaderFromProcess() = %T/%#v, want %T/%#v", got, got, readerWriter, readerWriter)
+	got := WorkerRecordingReaderFromProcess(process)
+	if got == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if snapshot, err := got.LoadWorkerRecording(t.Context(), "root-recording"); err != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess.LoadWorkerRecording() error = %v", err)
+	} else if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
+		t.Fatalf("WorkerRecordingReaderFromProcess snapshot = %#v, want empty snapshot", snapshot)
 	}
 
 	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{

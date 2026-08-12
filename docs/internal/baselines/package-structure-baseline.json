@@ -2861,11 +2861,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/worktree",
       "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture",
-      "target": "\u003cnone\u003e"
     }
   ]
 }

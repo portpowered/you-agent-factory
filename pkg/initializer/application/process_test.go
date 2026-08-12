@@ -3,6 +3,7 @@ package application
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/spf13/cobra"
 )
 
@@ -311,8 +311,8 @@ type processTestACPServer struct{}
 
 type processTestWorkerRecordingReader struct{}
 
-func (processTestWorkerRecordingReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
-	return recordings.WorkerRecordingSnapshot{}, nil
+func (processTestWorkerRecordingReader) LoadWorkerRecording(context.Context, string) (json.RawMessage, error) {
+	return json.RawMessage(`{"sessions":[]}`), nil
 }
 
 func (processTestACPServer) Serve(context.Context, io.Reader, io.Writer) error { return nil }

@@ -665,11 +665,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v92, err := provideWorkerRecordingReader(v10)
+	workerRecordingReader, err := provideWorkerRecordingReader(v10)
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, v92)
+	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader)
 	if err != nil {
 		return nil, err
 	}

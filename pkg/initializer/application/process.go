@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
@@ -33,7 +32,7 @@ type Process struct {
 	providers      ProviderRegistry
 	lifecycle      ProcessLifecycle
 	acpServer      acp.Server
-	workerReader   recordings.WorkerRecordingReader
+	workerReader   processcontract.WorkerRecordingReader
 }
 
 func NewProcess(
@@ -42,7 +41,7 @@ func NewProcess(
 	providers ProviderRegistry,
 	lifecycle ProcessLifecycle,
 	acpServer acp.Server,
-	workerReader recordings.WorkerRecordingReader,
+	workerReader processcontract.WorkerRecordingReader,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -89,11 +88,10 @@ func (p *Process) ACPServer() acp.Server {
 	return p.acpServer
 }
 
-// WorkerRecordingReader returns the Recordings-owned durable read capability
-// composed for this process. Callers can pass its detached snapshot to the
-// pure Recordings replay or portable-export functions; this does not expose
-// the Worker Sessions capture writer or any runtime service graph.
-func (p *Process) WorkerRecordingReader() recordings.WorkerRecordingReader {
+// WorkerRecordingReader returns the neutral detached Worker snapshot reader
+// composed for this process. The application process does not depend on the
+// Recordings service; the root boundary owns decoding into its public value.
+func (p *Process) WorkerRecordingReader() processcontract.WorkerRecordingReader {
 	if p == nil {
 		return nil
 	}

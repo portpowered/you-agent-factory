@@ -40,6 +40,7 @@ type (
 	WorkerPortableRecordingDiagnostic     = workerrecording.WorkerPortableRecordingDiagnostic
 	WorkerPortableRecordingDiagnosticCode = workerrecording.WorkerPortableRecordingDiagnosticCode
 	WorkerRecordingCodec                  = workerrecording.WorkerRecordingCodec
+	WorkerRecordingService                = workerrecording.Service
 )
 
 const (

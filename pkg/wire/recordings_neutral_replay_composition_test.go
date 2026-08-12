@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -26,8 +27,16 @@ func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideWorkerRecordingReader() error = %v", err)
 	}
-	if got != reader {
-		t.Fatalf("reader = %T/%#v, want %T/%#v", got, got, reader, reader)
+	payload, err := got.LoadWorkerRecording(t.Context(), "wire-reader")
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording() error = %v", err)
+	}
+	var snapshot recordings.WorkerRecordingSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		t.Fatalf("decode Worker recording snapshot: %v", err)
+	}
+	if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
+		t.Fatalf("snapshot = %#v, want empty snapshot", snapshot)
 	}
 }
 

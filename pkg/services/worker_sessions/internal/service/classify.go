@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -443,4 +444,120 @@ func orUnknown(value string) string {
 		return "unknown"
 	}
 	return value
+}
+
+// normalizeCommittedTerminal is the last in-process guard before a terminal
+// snapshot becomes durable. Normal classification already supplies a valid
+// result, but this boundary also protects against an adapter or future caller
+// constructing an empty/overlong cause: a FAILED session and its event must
+// never be committed with a blank diagnostic.
+func normalizeCommittedTerminal(state workersessions.State, result workersessions.TerminalResult) workersessions.TerminalResult {
+	switch state {
+	case workersessions.StateCompleted:
+		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+	case workersessions.StateFailed:
+		if result.Outcome != workersessions.TerminalOutcomeFailed || result.Cause == nil || !result.Cause.Kind.Valid() {
+			return failedTerminal(
+				workersessions.FailureCauseWorkersExecutionFailure,
+				"the Worker Session failed without a reported cause",
+			)
+		}
+		cause := *result.Cause
+		cause.Detail = boundedFailureDetail(cause.Kind, cause.Detail)
+		cause.ProviderFailureKind,
+			cause.ProviderContinuationFailureKind,
+			cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
+			cause.ProviderFailureKind,
+			cause.ProviderContinuationFailureKind,
+			cause.ProviderContinuationOutcome,
+		)
+		return workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &cause,
+		}
+	default:
+		return result
+	}
+}
+
+// cloneSession returns a detached copy of session: mutating the returned
+// value, or its Result, never affects registry-owned state.
+func cloneSession(session workersessions.Session) workersessions.Session {
+	session.Result = cloneTerminalResult(session.Result)
+	if session.ProviderSessionAssociation != nil {
+		association := session.ProviderSessionAssociation.Clone()
+		session.ProviderSessionAssociation = &association
+	}
+	return session
+}
+
+func cloneTerminalResult(result *workersessions.TerminalResult) *workersessions.TerminalResult {
+	if result == nil {
+		return nil
+	}
+	clone := *result
+	if result.Cause != nil {
+		cause := *result.Cause
+		clone.Cause = &cause
+	}
+	return &clone
+}
+
+func causeKindString(cause *workersessions.FailureCause) string {
+	if cause == nil {
+		return ""
+	}
+	return string(cause.Kind)
+}
+
+// terminalSessionPayload is the SESSION KindSession payload committed for the
+// W3 terminal record. Failure fields are additive and carry only the already
+// normalized Worker Sessions classification.
+type terminalSessionPayload struct {
+	Status        string `json:"status,omitempty"`
+	FailureCause  string `json:"failureCause,omitempty"`
+	FailureDetail string `json:"failureDetail,omitempty"`
+}
+
+// terminalPhase is the pure mapping from a committed Worker Session State to
+// its terminal projection Phase. CANCELED and TERMINATED share the existing
+// canceled phase because Worker Sessions has no separate terminal phase.
+func terminalPhase(state workersessions.State) (workers.Phase, error) {
+	switch state {
+	case workersessions.StateCompleted:
+		return workers.PhaseCompleted, nil
+	case workersessions.StateFailed:
+		return workers.PhaseFailed, nil
+	case workersessions.StateCanceled, workersessions.StateTerminated:
+		return workers.PhaseCanceled, nil
+	default:
+		return "", fmt.Errorf("worker sessions: state %q has no terminal projection phase", state)
+	}
+}
+
+// terminalDraft maps a committed Worker Session State and TerminalResult to
+// the one KindSession terminal draft emitted after prior Worker output.
+func terminalDraft(state workersessions.State, result workersessions.TerminalResult, attemptID string) (workers.Draft, error) {
+	phase, err := terminalPhase(state)
+	if err != nil {
+		return workers.Draft{}, err
+	}
+	if state == workersessions.StateCompleted || state == workersessions.StateFailed {
+		if err := result.Validate(); err != nil {
+			return workers.Draft{}, err
+		}
+	}
+	payload := terminalSessionPayload{Status: string(state)}
+	if result.Cause != nil {
+		payload.FailureCause = string(result.Cause.Kind)
+		payload.FailureDetail = result.Cause.Detail
+	}
+	payloadJSON, _ := json.Marshal(payload)
+	return workers.Draft{
+		Kind:       workers.KindSession,
+		Phase:      phase,
+		Provenance: lifecycleProvenance(""),
+		Payload:    payloadJSON,
+		DispatchID: attemptID,
+	}, nil
 }
