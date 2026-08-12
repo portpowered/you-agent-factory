@@ -1009,6 +1009,165 @@ type QueryRecordingScopeResult struct {
 	Status RecordingScopeStatus
 }
 
+// OpenRecordingScopeRequest opens an already-finalized recording for
+// historical inspection. Live scopes are acquired with
+// BeginRecordingScope; opening an existing active recording would create two
+// mutable owners for the same history and is therefore rejected.
+type OpenRecordingScopeRequest struct {
+	RecordingID RecordingID
+	Scope       CanonicalEventScope
+}
+
+// OpenRecordingScopeResult returns the opaque historical scope and its
+// detached terminal status.
+type OpenRecordingScopeResult = BeginRecordingScopeResult
+
+// SubscribeRecordingScopeRequest selects the canonical event stream owned by
+// one recording scope. Cursor validation is performed against that scope's
+// retained event prefix rather than a caller-provided session or ledger.
+type SubscribeRecordingScopeRequest struct {
+	Scope  RecordingScopeRef
+	Cursor *CanonicalEventCursor
+}
+
+// SubscribeRecordingScopeResult contains a scope-filtered event subscription.
+type SubscribeRecordingScopeResult struct {
+	Subscription EventSubscription
+}
+
+// LoadReplayRecordingScopeRequest selects finalized replay facts by opaque
+// recording scope reference.
+type LoadReplayRecordingScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// LoadReplayRecordingScopeResult returns detached replay facts and lifecycle
+// status for the selected scope.
+type LoadReplayRecordingScopeResult struct {
+	Recording ReplayRecordingFacts
+	Status    RecordingScopeStatus
+}
+
+// CreateReplayPlanScopeRequest asks Recordings to build a neutral replay plan
+// from the finalized prefix owned by Scope.
+type CreateReplayPlanScopeRequest struct {
+	Scope           RecordingScopeRef
+	SchemaVersion   ReplayPlanSchemaVersion
+	Timing          ReplayTimingMode
+	ExpectedThrough *CanonicalEventCursor
+	SelectedTick    int
+}
+
+// CreateReplayPlanScopeResult returns the detached opaque replay-plan facts.
+type CreateReplayPlanScopeResult struct {
+	Plan   ReplayPlanFacts
+	Status RecordingScopeStatus
+}
+
+// ObserveReplayScopeRequest advances a replay plan that was created through
+// the selected scope. Plan ownership is checked before the neutral replay
+// service is called.
+type ObserveReplayScopeRequest struct {
+	Scope RecordingScopeRef
+	Plan  ReplayPlanHandle
+}
+
+// ObserveReplayScopeResult returns detached replay progress and current scope
+// status.
+type ObserveReplayScopeResult struct {
+	Observation ReplayObservation
+	Status      RecordingScopeStatus
+}
+
+// ReconstructRecordingScopeRequest asks Recordings to project a coherent
+// prefix of one scope's retained canonical facts. Through, when present,
+// selects the last cursor included in that prefix.
+type ReconstructRecordingScopeRequest struct {
+	Scope        RecordingScopeRef
+	Through      *CanonicalEventCursor
+	SelectedTick int
+}
+
+// ReconstructRecordingScopeResult returns detached world-state and lifecycle
+// facts from one coherent scope prefix.
+type ReconstructRecordingScopeResult struct {
+	WorldState WorldStateView
+	Status     RecordingScopeStatus
+}
+
+// QuerySimpleDashboardScopeRequest asks Recordings to derive dashboard data
+// from a coherent scope projection prefix.
+type QuerySimpleDashboardScopeRequest struct {
+	Scope        RecordingScopeRef
+	Through      *CanonicalEventCursor
+	SelectedTick int
+}
+
+// QuerySimpleDashboardScopeResult returns the world-state and detached
+// dashboard projection used to derive it.
+type QuerySimpleDashboardScopeResult struct {
+	Data       SimpleDashboardRenderData
+	WorldState WorldStateView
+	Status     RecordingScopeStatus
+}
+
+// QueryWorkstationRequestsScopeRequest asks Recordings to derive workstation
+// requests from a coherent scope projection prefix.
+type QueryWorkstationRequestsScopeRequest struct {
+	Scope        RecordingScopeRef
+	Through      *CanonicalEventCursor
+	SelectedTick int
+}
+
+// QueryWorkstationRequestsScopeResult returns the world-state and detached
+// workstation-request projection used to derive it.
+type QueryWorkstationRequestsScopeResult struct {
+	Projection WorkstationFactoryWorldWorkstationRequestProjectionSlice
+	WorldState WorldStateView
+	Status     RecordingScopeStatus
+}
+
+// BuildPortableArtifactScopeRequest selects one finalized scope for artifact
+// construction without exposing its private RecordingID.
+type BuildPortableArtifactScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// BuildPortableArtifactScopeResult returns the detached artifact and scope
+// status.
+type BuildPortableArtifactScopeResult struct {
+	Artifact PortableArtifact
+	Status   RecordingScopeStatus
+}
+
+// ExportPortableArtifactScopeRequest selects one finalized scope for atomic
+// artifact publication.
+type ExportPortableArtifactScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// ExportPortableArtifactScopeResult returns the public reference, artifact,
+// and detached scope status.
+type ExportPortableArtifactScopeResult struct {
+	Reference RecordingArtifactReference
+	Artifact  PortableArtifact
+	Status    RecordingScopeStatus
+}
+
+// ReadPortableArtifactScopeRequest selects one published artifact through its
+// owning scope. Reference remains an opaque public artifact handle.
+type ReadPortableArtifactScopeRequest struct {
+	Scope     RecordingScopeRef
+	Reference RecordingArtifactReference
+}
+
+// ReadPortableArtifactScopeResult returns a validated detached artifact and
+// scope status.
+type ReadPortableArtifactScopeResult struct {
+	Artifact PortableArtifact
+	Status   RecordingScopeStatus
+}
+
 // RecordingSnapshot is the detached value passed to the exact persistence
 // effect selected by Wire. Target selection remains private to Recordings.
 type RecordingSnapshot struct {
@@ -1322,11 +1481,22 @@ type Service interface {
 // references; owner collaborators remain private to Recordings.
 type RecordingScopeService interface {
 	BeginRecordingScope(context.Context, BeginRecordingScopeRequest) (BeginRecordingScopeResult, error)
+	OpenRecordingScope(context.Context, OpenRecordingScopeRequest) (OpenRecordingScopeResult, error)
 	AppendRecordingScopeEvent(context.Context, AppendRecordingScopeEventRequest) (AppendRecordingScopeEventResult, error)
+	SubscribeRecordingScope(context.Context, SubscribeRecordingScopeRequest) (SubscribeRecordingScopeResult, error)
 	FlushRecordingScope(context.Context, FlushRecordingScopeRequest) (FlushRecordingScopeResult, error)
 	FinalizeRecordingScope(context.Context, FinalizeRecordingScopeRequest) (FinalizeRecordingScopeResult, error)
 	CloseRecordingScope(context.Context, CloseRecordingScopeRequest) (CloseRecordingScopeResult, error)
 	QueryRecordingScope(context.Context, QueryRecordingScopeRequest) (QueryRecordingScopeResult, error)
+	LoadReplayRecordingScope(context.Context, LoadReplayRecordingScopeRequest) (LoadReplayRecordingScopeResult, error)
+	CreateReplayPlanScope(context.Context, CreateReplayPlanScopeRequest) (CreateReplayPlanScopeResult, error)
+	ObserveReplayScope(context.Context, ObserveReplayScopeRequest) (ObserveReplayScopeResult, error)
+	ReconstructRecordingScope(context.Context, ReconstructRecordingScopeRequest) (ReconstructRecordingScopeResult, error)
+	QuerySimpleDashboardScope(context.Context, QuerySimpleDashboardScopeRequest) (QuerySimpleDashboardScopeResult, error)
+	QueryWorkstationRequestsScope(context.Context, QueryWorkstationRequestsScopeRequest) (QueryWorkstationRequestsScopeResult, error)
+	BuildPortableArtifactScope(context.Context, BuildPortableArtifactScopeRequest) (BuildPortableArtifactScopeResult, error)
+	ExportPortableArtifactScope(context.Context, ExportPortableArtifactScopeRequest) (ExportPortableArtifactScopeResult, error)
+	ReadPortableArtifactScope(context.Context, ReadPortableArtifactScopeRequest) (ReadPortableArtifactScopeResult, error)
 }
 
 // ProjectionService is the legacy runtime projection composition capability.

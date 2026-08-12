@@ -146,6 +146,83 @@ func (adapter *projectionServiceRoot) QueryRecordingScope(
 	return recordings.QueryRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
 }
 
+func (adapter *projectionServiceRoot) OpenRecordingScope(
+	context.Context,
+	recordings.OpenRecordingScopeRequest,
+) (recordings.OpenRecordingScopeResult, error) {
+	return recordings.OpenRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) SubscribeRecordingScope(
+	context.Context,
+	recordings.SubscribeRecordingScopeRequest,
+) (recordings.SubscribeRecordingScopeResult, error) {
+	return recordings.SubscribeRecordingScopeResult{}, recordings.ErrReconnectCursorNotFound
+}
+
+func (adapter *projectionServiceRoot) LoadReplayRecordingScope(
+	context.Context,
+	recordings.LoadReplayRecordingScopeRequest,
+) (recordings.LoadReplayRecordingScopeResult, error) {
+	return recordings.LoadReplayRecordingScopeResult{}, recordings.ErrMissingReplayArtifact
+}
+
+func (adapter *projectionServiceRoot) CreateReplayPlanScope(
+	context.Context,
+	recordings.CreateReplayPlanScopeRequest,
+) (recordings.CreateReplayPlanScopeResult, error) {
+	return recordings.CreateReplayPlanScopeResult{}, recordings.ErrInvalidReplayArtifact
+}
+
+func (adapter *projectionServiceRoot) ObserveReplayScope(
+	context.Context,
+	recordings.ObserveReplayScopeRequest,
+) (recordings.ObserveReplayScopeResult, error) {
+	return recordings.ObserveReplayScopeResult{}, recordings.ErrInvalidReplayArtifact
+}
+
+func (adapter *projectionServiceRoot) ReconstructRecordingScope(
+	context.Context,
+	recordings.ReconstructRecordingScopeRequest,
+) (recordings.ReconstructRecordingScopeResult, error) {
+	return recordings.ReconstructRecordingScopeResult{}, recordings.ErrInvalidProjectionInput
+}
+
+func (adapter *projectionServiceRoot) QuerySimpleDashboardScope(
+	context.Context,
+	recordings.QuerySimpleDashboardScopeRequest,
+) (recordings.QuerySimpleDashboardScopeResult, error) {
+	return recordings.QuerySimpleDashboardScopeResult{}, recordings.ErrInvalidProjectionInput
+}
+
+func (adapter *projectionServiceRoot) QueryWorkstationRequestsScope(
+	context.Context,
+	recordings.QueryWorkstationRequestsScopeRequest,
+) (recordings.QueryWorkstationRequestsScopeResult, error) {
+	return recordings.QueryWorkstationRequestsScopeResult{}, recordings.ErrInvalidProjectionInput
+}
+
+func (adapter *projectionServiceRoot) BuildPortableArtifactScope(
+	context.Context,
+	recordings.BuildPortableArtifactScopeRequest,
+) (recordings.BuildPortableArtifactScopeResult, error) {
+	return recordings.BuildPortableArtifactScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) ExportPortableArtifactScope(
+	context.Context,
+	recordings.ExportPortableArtifactScopeRequest,
+) (recordings.ExportPortableArtifactScopeResult, error) {
+	return recordings.ExportPortableArtifactScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) ReadPortableArtifactScope(
+	context.Context,
+	recordings.ReadPortableArtifactScopeRequest,
+) (recordings.ReadPortableArtifactScopeResult, error) {
+	return recordings.ReadPortableArtifactScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
 func (adapter *projectionServiceRoot) LoadReplayRecording(
 	recordings.LoadReplayRecordingRequest,
 ) (recordings.LoadReplayRecordingResult, error) {

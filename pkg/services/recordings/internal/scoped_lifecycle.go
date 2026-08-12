@@ -17,6 +17,8 @@ import (
 type recordingScopeBinding struct {
 	recordingID recordings.RecordingID
 	eventScope  recordings.CanonicalEventScope
+	historical  bool
+	replayPlans map[recordings.ReplayPlanHandle]struct{}
 
 	mu          sync.Mutex
 	finalized   bool
@@ -98,6 +100,7 @@ func (service *combinedService) BeginRecordingScope(
 	binding := &recordingScopeBinding{
 		recordingID: started.Status.RecordingID,
 		eventScope:  started.Status.Scope,
+		replayPlans: make(map[recordings.ReplayPlanHandle]struct{}),
 	}
 	service.scopeMu.Lock()
 	service.scopeByRef[ref] = binding
