@@ -2,6 +2,7 @@ package acp_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -65,12 +66,12 @@ func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 			t.Setenv(acpHelperEnvironment, "package-conformance")
 
 			var starts atomic.Int32
-			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStable(t, dir, serviceedges.Edges{
 				PlatformProcessCommandFactory: packagedACPCommandFactory(catalog.ACP, &starts),
 				ProvidersExecutableLocator:    availableExecutableLocator{},
 			}, 20*time.Second)
 			if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-				t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
+				t.Fatalf("completed work = %d, want 1; %s", got, packagedACPConformanceDiagnostics(t, events, entry.Name))
 			}
 			if got := starts.Load(); got != 1 {
 				t.Fatalf("%s ACP process starts = %d, want 1", entry.Name, got)
@@ -138,6 +139,73 @@ func assertPackagedACPResponse(t *testing.T, events []factoryapi.FactoryEvent, p
 		return
 	}
 	t.Fatalf("%s omitted a terminal model response", providerID)
+}
+
+func packagedACPConformanceDiagnostics(t *testing.T, events []factoryapi.FactoryEvent, providerID string) string {
+	t.Helper()
+	var modelResponses []string
+	var dispatchResponses []string
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeModelResponse:
+			payload, err := event.Payload.AsModelResponseEventPayload()
+			if err != nil {
+				modelResponses = append(modelResponses, fmt.Sprintf("model-response[%s] decode=%v", event.Id, err))
+				continue
+			}
+			if payload.ProviderSession != nil && payload.ProviderSession.Provider != nil && *payload.ProviderSession.Provider != providerID {
+				continue
+			}
+			detail := fmt.Sprintf(
+				"model-response[%s] outcome=%q attempt=%d session=%s",
+				event.Id,
+				payload.Outcome,
+				payload.Attempt,
+				packagedACPProviderSession(payload.ProviderSession),
+			)
+			if payload.FailureDetail != nil {
+				detail += fmt.Sprintf(" failure=%s:%q", payload.FailureDetail.Reason, payload.FailureDetail.Message)
+			}
+			modelResponses = append(modelResponses, detail)
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				dispatchResponses = append(dispatchResponses, fmt.Sprintf("dispatch-response[%s] decode=%v", event.Id, err))
+				continue
+			}
+			detail := fmt.Sprintf("dispatch-response[%s] outcome=%q transition=%q", event.Id, payload.Outcome, payload.TransitionId)
+			if payload.FailureDetail != nil {
+				detail += fmt.Sprintf(" failure=%s:%q", payload.FailureDetail.Reason, payload.FailureDetail.Message)
+			}
+			dispatchResponses = append(dispatchResponses, detail)
+		}
+	}
+	if len(modelResponses) == 0 && len(dispatchResponses) == 0 {
+		return fmt.Sprintf("ACP model-response/session diagnostics unavailable for %q (factory events=%d)", providerID, len(events))
+	}
+	parts := []string{}
+	if len(modelResponses) > 0 {
+		parts = append(parts, "ACP model-response/session diagnostics: "+strings.Join(modelResponses, "; "))
+	}
+	if len(dispatchResponses) > 0 {
+		parts = append(parts, "dispatch diagnostics: "+strings.Join(dispatchResponses, "; "))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func packagedACPProviderSession(session *factoryapi.ProviderSessionMetadata) string {
+	if session == nil {
+		return "<none>"
+	}
+	provider := "<unknown>"
+	if session.Provider != nil {
+		provider = *session.Provider
+	}
+	identifier := "<unknown>"
+	if session.Id != nil {
+		identifier = *session.Id
+	}
+	return provider + "/" + identifier
 }
 
 func sameStringSlice(left, right []string) bool {
