@@ -287,6 +287,23 @@ jobs:
       source_ref: ${{ github.ref }}
       repository: ${{ github.repository }}
 
+  # Maintainers can add the ci-workflow-behavior label to request one
+  # controlled hosted evaluation of the reusable workflow contract. The job is
+  # skipped before any runner is allocated for ordinary pull requests.
+  development-package-behavior:
+    name: Development Package Workflow Behavior
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'ci-workflow-behavior')
+      }}
+    uses: ./.github/workflows/development-package-behavior.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      include_failure: true
+
   local-inference:
     name: Local Inference
     needs: classify
