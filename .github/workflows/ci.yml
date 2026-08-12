@@ -302,7 +302,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Run CI workflow policy tests
+        if: always()
+        run: make test-ci-workflows
       - name: Verify selected lanes
+        if: always()
         env:
           CLASSIFICATION_RESULT: ${{ needs.classify.result }}
           CLASSIFICATION: ${{ needs.classify.outputs.classification }}

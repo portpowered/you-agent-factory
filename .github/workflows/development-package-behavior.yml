@@ -1,0 +1,180 @@
+name: Development Package Workflow Behavior
+
+# Controlled hosted evidence for the reusable workflow contract. This is
+# intentionally dispatch-only on normal repository activity so it does not add
+# package runners to every pull request; the deterministic contract tests run
+# in the normal CI policy job.
+on:
+  workflow_call:
+    inputs:
+      include_failure:
+        description: Include the intentionally failing caller-propagation scenario.
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      behavior_result:
+        description: Result of the behavior assertions; selected-failure is expected inside the harness.
+        value: ${{ jobs.assert.outputs.result }}
+  workflow_dispatch:
+    inputs:
+      include_failure:
+        description: Include the intentionally failing caller-propagation scenario.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  api-only:
+    name: API package only
+    uses: ./.github/workflows/development-package.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      is_ci_call: true
+      behavior_test: true
+      behavior_test_failure_lane: ''
+      run_candidates: true
+      run_api_package: true
+      run_packaged_factories_package: false
+      run_model_providers_package: false
+      source_commit: ${{ github.sha }}
+      pull_request_head_sha: ${{ github.sha }}
+      source_ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+
+  mixed:
+    name: Mixed package families
+    uses: ./.github/workflows/development-package.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      is_ci_call: true
+      behavior_test: true
+      behavior_test_failure_lane: ''
+      run_candidates: true
+      run_api_package: true
+      run_packaged_factories_package: true
+      run_model_providers_package: true
+      source_commit: ${{ github.sha }}
+      pull_request_head_sha: ${{ github.sha }}
+      source_ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+
+  no-package:
+    name: No package impact
+    uses: ./.github/workflows/development-package.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      is_ci_call: true
+      behavior_test: true
+      behavior_test_failure_lane: ''
+      run_candidates: true
+      run_api_package: false
+      run_packaged_factories_package: false
+      run_model_providers_package: false
+      source_commit: ${{ github.sha }}
+      pull_request_head_sha: ${{ github.sha }}
+      source_ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+
+  protected-main:
+    name: Protected-main verification
+    uses: ./.github/workflows/development-package.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      is_ci_call: true
+      behavior_test: true
+      behavior_test_failure_lane: ''
+      run_candidates: false
+      run_api_package: true
+      run_packaged_factories_package: true
+      run_model_providers_package: true
+      source_commit: ${{ github.sha }}
+      pull_request_head_sha: ${{ github.sha }}
+      source_ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+
+  selected-failure:
+    name: Selected package failure
+    if: inputs.include_failure == true
+    uses: ./.github/workflows/development-package.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      is_ci_call: true
+      behavior_test: true
+      behavior_test_failure_lane: api
+      run_candidates: true
+      run_api_package: true
+      run_packaged_factories_package: false
+      run_model_providers_package: false
+      source_commit: ${{ github.sha }}
+      pull_request_head_sha: ${{ github.sha }}
+      source_ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+
+  assert:
+    name: Assert observed workflow behavior
+    needs:
+      - api-only
+      - mixed
+      - no-package
+      - protected-main
+      - selected-failure
+    if: always()
+    outputs:
+      result: ${{ steps.record-result.outputs.result }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Assert reusable workflow observations
+        env:
+          INCLUDE_FAILURE: ${{ inputs.include_failure }}
+          API_ONLY_WORKFLOW_RESULT: ${{ needs.api-only.result }}
+          API_ONLY_API_PACKAGE_RESULT: ${{ needs.api-only.outputs.api_package_result }}
+          API_ONLY_API_CANDIDATE_RESULT: ${{ needs.api-only.outputs.api_candidate_result }}
+          API_ONLY_PACKAGED_FACTORIES_PACKAGE_RESULT: ${{ needs.api-only.outputs.packaged_factories_package_result }}
+          API_ONLY_PACKAGED_FACTORIES_CANDIDATE_RESULT: ${{ needs.api-only.outputs.packaged_factories_candidate_result }}
+          API_ONLY_MODEL_PROVIDERS_PACKAGE_RESULT: ${{ needs.api-only.outputs.model_providers_package_result }}
+          MIXED_WORKFLOW_RESULT: ${{ needs.mixed.result }}
+          MIXED_API_PACKAGE_RESULT: ${{ needs.mixed.outputs.api_package_result }}
+          MIXED_API_CANDIDATE_RESULT: ${{ needs.mixed.outputs.api_candidate_result }}
+          MIXED_PACKAGED_FACTORIES_PACKAGE_RESULT: ${{ needs.mixed.outputs.packaged_factories_package_result }}
+          MIXED_PACKAGED_FACTORIES_CANDIDATE_RESULT: ${{ needs.mixed.outputs.packaged_factories_candidate_result }}
+          MIXED_MODEL_PROVIDERS_PACKAGE_RESULT: ${{ needs.mixed.outputs.model_providers_package_result }}
+          NO_PACKAGE_WORKFLOW_RESULT: ${{ needs.no-package.result }}
+          NO_PACKAGE_API_PACKAGE_RESULT: ${{ needs.no-package.outputs.api_package_result }}
+          NO_PACKAGE_API_CANDIDATE_RESULT: ${{ needs.no-package.outputs.api_candidate_result }}
+          NO_PACKAGE_PACKAGED_FACTORIES_PACKAGE_RESULT: ${{ needs.no-package.outputs.packaged_factories_package_result }}
+          NO_PACKAGE_PACKAGED_FACTORIES_CANDIDATE_RESULT: ${{ needs.no-package.outputs.packaged_factories_candidate_result }}
+          NO_PACKAGE_MODEL_PROVIDERS_PACKAGE_RESULT: ${{ needs.no-package.outputs.model_providers_package_result }}
+          PROTECTED_MAIN_WORKFLOW_RESULT: ${{ needs.protected-main.result }}
+          PROTECTED_MAIN_API_PACKAGE_RESULT: ${{ needs.protected-main.outputs.api_package_result }}
+          PROTECTED_MAIN_API_CANDIDATE_RESULT: ${{ needs.protected-main.outputs.api_candidate_result }}
+          PROTECTED_MAIN_PACKAGED_FACTORIES_PACKAGE_RESULT: ${{ needs.protected-main.outputs.packaged_factories_package_result }}
+          PROTECTED_MAIN_PACKAGED_FACTORIES_CANDIDATE_RESULT: ${{ needs.protected-main.outputs.packaged_factories_candidate_result }}
+          PROTECTED_MAIN_MODEL_PROVIDERS_PACKAGE_RESULT: ${{ needs.protected-main.outputs.model_providers_package_result }}
+          SELECTED_FAILURE_WORKFLOW_RESULT: ${{ needs.selected-failure.result }}
+          SELECTED_FAILURE_API_PACKAGE_RESULT: ${{ needs.selected-failure.outputs.api_package_result }}
+          SELECTED_FAILURE_API_CANDIDATE_RESULT: ${{ needs.selected-failure.outputs.api_candidate_result }}
+          SELECTED_FAILURE_PACKAGED_FACTORIES_PACKAGE_RESULT: ${{ needs.selected-failure.outputs.packaged_factories_package_result }}
+          SELECTED_FAILURE_PACKAGED_FACTORIES_CANDIDATE_RESULT: ${{ needs.selected-failure.outputs.packaged_factories_candidate_result }}
+          SELECTED_FAILURE_MODEL_PROVIDERS_PACKAGE_RESULT: ${{ needs.selected-failure.outputs.model_providers_package_result }}
+        run: node scripts/development-package-workflow-behavior.mjs
+      - name: Record behavior assertion result
+        if: always()
+        id: record-result
+        run: echo "result=${{ job.status }}" >> "$GITHUB_OUTPUT"

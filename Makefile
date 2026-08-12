@@ -129,7 +129,7 @@ endef
 .PHONY: default build install bundle-api
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
-.PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
+.PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
@@ -372,6 +372,10 @@ readme-check:
 
 test:
 	$(MAKE) test-unit
+	$(MAKE) test-ci-workflows
+
+test-ci-workflows:
+	node --test scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)

@@ -39,6 +39,16 @@ on:
         description: Repository passed to candidate validation policy.
         required: true
         type: string
+      behavior_test:
+        description: Run the lightweight hosted workflow behavior probe instead of package commands.
+        required: false
+        default: false
+        type: boolean
+      behavior_test_failure_lane:
+        description: Deliberately fail the named package behavior probe for propagation coverage.
+        required: false
+        default: ''
+        type: string
     outputs:
       api_package_result:
         description: Terminal result of API package verification.
@@ -313,20 +323,36 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        if: inputs.behavior_test != true
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        if: inputs.behavior_test != true
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - uses: oven-sh/setup-bun@v2
+        if: inputs.behavior_test != true
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - uses: actions/setup-node@v4
+        if: inputs.behavior_test != true
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: make ui-deps contracts-smoke api-smoke api-package-verify
+      - name: Verify API package
+        if: inputs.behavior_test != true
+        run: make ui-deps contracts-smoke api-smoke api-package-verify
+      - name: Exercise API package workflow behavior
+        if: inputs.behavior_test == true
+        env:
+          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
+        run: |
+          if [[ "$TEST_FAILURE_LANE" == "api" ]]; then
+            echo "intentional API package behavior failure"
+            exit 1
+          fi
+          echo "API package workflow behavior selected"
       - name: Record package result
         if: always()
         id: record_result
@@ -341,13 +367,27 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        if: inputs.behavior_test != true
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
+        if: inputs.behavior_test != true
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: make packaged-factory-package-verify
+      - name: Verify Packaged Factories package
+        if: inputs.behavior_test != true
+        run: make packaged-factory-package-verify
+      - name: Exercise Packaged Factories workflow behavior
+        if: inputs.behavior_test == true
+        env:
+          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
+        run: |
+          if [[ "$TEST_FAILURE_LANE" == "packaged" ]]; then
+            echo "intentional Packaged Factories package behavior failure"
+            exit 1
+          fi
+          echo "Packaged Factories package workflow behavior selected"
       - name: Record package result
         if: always()
         id: record_result
@@ -362,17 +402,34 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        if: inputs.behavior_test != true
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
+        if: inputs.behavior_test != true
         with:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
+        if: inputs.behavior_test != true
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - run: make model-provider-package-verify
+      - name: Install model provider package dependencies
+        if: inputs.behavior_test != true
+        run: make ui-deps
+      - name: Verify Model Providers package
+        if: inputs.behavior_test != true
+        run: make model-provider-package-verify
+      - name: Exercise Model Providers workflow behavior
+        if: inputs.behavior_test == true
+        env:
+          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
+        run: |
+          if [[ "$TEST_FAILURE_LANE" == "providers" ]]; then
+            echo "intentional Model Providers package behavior failure"
+            exit 1
+          fi
+          echo "Model Providers package workflow behavior selected"
       - name: Record package result
         if: always()
         id: record_result
@@ -387,13 +444,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        if: inputs.behavior_test != true
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
+        if: inputs.behavior_test != true
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: >-
+      - name: Build API candidate
+        if: inputs.behavior_test != true
+        run: >-
           node scripts/api-package-development-command.mjs --action dry-run
           --event-name pull_request
           --output-directory .artifacts/api-development-candidate/package
@@ -403,6 +464,16 @@ jobs:
           --run-id "${{ github.run_id }}"
           --source-commit "${{ inputs.source_commit }}"
           --workspace-directory "${{ github.workspace }}"
+      - name: Exercise API candidate workflow behavior
+        if: inputs.behavior_test == true
+        env:
+          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
+        run: |
+          if [[ "$TEST_FAILURE_LANE" == "api_candidate" ]]; then
+            echo "intentional API candidate behavior failure"
+            exit 1
+          fi
+          echo "API candidate workflow behavior selected"
       - name: Record candidate result
         if: always()
         id: record_result
@@ -417,13 +488,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        if: inputs.behavior_test != true
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
+        if: inputs.behavior_test != true
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: >-
+      - name: Build Packaged Factories candidate
+        if: inputs.behavior_test != true
+        run: >-
           node scripts/packaged-factories-package-pr-dry-run.mjs
           --event-name pull_request
           --output-directory .artifacts/packaged-factories-development-candidate/package
@@ -433,6 +508,16 @@ jobs:
           --run-id "${{ github.run_id }}"
           --source-commit "${{ inputs.source_commit }}"
           --workspace-directory "${{ github.workspace }}"
+      - name: Exercise Packaged Factories candidate workflow behavior
+        if: inputs.behavior_test == true
+        env:
+          TEST_FAILURE_LANE: ${{ inputs.behavior_test_failure_lane }}
+        run: |
+          if [[ "$TEST_FAILURE_LANE" == "packaged_candidate" ]]; then
+            echo "intentional Packaged Factories candidate behavior failure"
+            exit 1
+          fi
+          echo "Packaged Factories candidate workflow behavior selected"
       - name: Record candidate result
         if: always()
         id: record_result
