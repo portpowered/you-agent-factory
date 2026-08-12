@@ -196,6 +196,24 @@ func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 	t.Run("async promise resolves child-result shape and emits child_dispatch", func(t *testing.T) {
 		assertAgentRunAsyncPromiseResolvesChildResult(t)
 	})
+	t.Run("records the child-scoped permission bypass request", func(t *testing.T) {
+		outcome := runInlineWorkflow(t, "agent-run-skip-permissions", `
+return (async function () {
+  const child = await agent.run({ prompt: "review", skipPermissions: true });
+  return { child };
+})();
+`)
+		for _, record := range outcome.Records {
+			if record.Kind != factory.JavaScriptRecordKindChildDispatch || record.ChildDispatch == nil {
+				continue
+			}
+			if !record.ChildDispatch.SkipPermissions {
+				t.Fatalf("child dispatch record = %#v, want skipPermissions=true", record.ChildDispatch)
+			}
+			return
+		}
+		t.Fatalf("records = %#v, want child_dispatch record", outcome.Records)
+	})
 	testAgentRunInventoryErrors(t, record)
 	testAgentRunPolicyDenials(t, record)
 }
@@ -589,6 +607,8 @@ func agentRunErrorSource(condition string) string {
 		return `return agent.run({ prompt: "review", modelProvider: "Not_A_Provider" });`
 	case "unsupported-reasoning-effort":
 		return `return agent.run({ prompt: "review", reasoningEffort: "not-an-effort" });`
+	case "non-boolean-skip-permissions":
+		return `return agent.run({ prompt: "review", skipPermissions: "true" });`
 	default:
 		return ""
 	}

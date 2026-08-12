@@ -106,6 +106,9 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 				if request.ReasoningEffort != "xhigh" {
 					t.Fatalf("adapter reasoning effort = %q, want canonical xhigh", request.ReasoningEffort)
 				}
+				if !request.SkipPermissions {
+					t.Fatal("adapter skip permissions = false, want true")
+				}
 				return providers.ExecuteResult{Content: "root result"}, nil
 			},
 		},
@@ -122,12 +125,78 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 		Provider:        providers.IDCodex,
 		AttemptID:       "attempt-1",
 		ReasoningEffort: " XHIGH ",
+		SkipPermissions: true,
 	})
 	if err != nil {
 		t.Fatalf("Execute() = %v", err)
 	}
 	if result.Content != "root result" || calls != 1 {
 		t.Fatalf("Execute() = (%#v, %d calls), want root result and 1 call", result, calls)
+	}
+}
+
+func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+		ID:           providers.IDCodex,
+		DisplayName:  "Codex",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+	}))
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	adapterCalls := 0
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{Content: "unexpected"}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.IDCodex,
+		AttemptID:       "unsupported-bypass",
+		SkipPermissions: true,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.Is(executeErr, providers.ErrCapabilityMismatch) ||
+		!errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindCapabilityMismatch ||
+		!strings.Contains(failure.Message, "codex") ||
+		!strings.Contains(failure.Message, "permission_bypass") ||
+		strings.Contains(failure.Message, "command") ||
+		adapterCalls != 0 {
+		t.Fatalf(
+			"Execute(unsupported bypass) = (%#v, %d calls), want bounded capability failure before attempt",
+			executeErr,
+			adapterCalls,
+		)
+	}
+
+	for _, request := range []providers.ExecuteRequest{
+		{Provider: providers.IDCodex, AttemptID: "omitted-bypass"},
+		{Provider: providers.IDCodex, AttemptID: "false-bypass", SkipPermissions: false},
+	} {
+		result, executeErr := root.Execute(context.Background(), request)
+		if executeErr != nil || result.Content != "unexpected" {
+			t.Fatalf("Execute(%q) = (%#v, %v), want default route execution", request.AttemptID, result, executeErr)
+		}
+	}
+	if adapterCalls != 2 {
+		t.Fatalf("adapter calls after default bypass requests = %d, want 2", adapterCalls)
 	}
 }
 
@@ -263,8 +332,9 @@ func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
 var _ acp.Service = (*stubACPService)(nil)
 
 type stubACPService struct {
-	provider     providers.ID
-	executeCalls int
+	provider        providers.ID
+	executeCalls    int
+	skipPermissions bool
 }
 
 func (service *stubACPService) Close(context.Context) error { return nil }
@@ -273,7 +343,9 @@ func (service *stubACPService) Configure(context.Context, []providers.ACPIntegra
 	return nil
 }
 
-func (service *stubACPService) Integrations() []providers.ACPIntegration { return nil }
+func (service *stubACPService) Integrations() []providers.ACPIntegration {
+	return []providers.ACPIntegration{{Name: service.provider}}
+}
 
 func (service *stubACPService) Resolve(id providers.ID) (providers.ID, bool) {
 	return service.provider, id == service.provider
@@ -286,9 +358,10 @@ func (service *stubACPService) NegotiatedCapabilities(providers.ID) (acpsdk.Agen
 func (service *stubACPService) Execute(
 	_ context.Context,
 	_ providers.ID,
-	_ providers.ExecuteRequest,
+	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	service.executeCalls++
+	service.skipPermissions = request.SkipPermissions
 	return providers.ExecuteResult{Content: "acp result"}, nil
 }
 
@@ -296,6 +369,40 @@ func (service *stubACPService) Claim(providers.ID, string) (acp.Generation, bool
 
 func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool, error) {
 	return false, nil
+}
+
+func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	acpService := &stubACPService{provider: "cursor-acp"}
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        acpService.provider,
+		AttemptID:       "acp-bypass",
+		Model:           "cursor-grok-4.5-medium-fast",
+		SkipPermissions: true,
+	})
+	if executeErr != nil || result.Content != "acp result" || !acpService.skipPermissions || acpService.executeCalls != 1 {
+		t.Fatalf(
+			"Execute(ACP bypass) = (%#v, %v, skip=%v, calls=%d), want delegated bypass request",
+			result,
+			executeErr,
+			acpService.skipPermissions,
+			acpService.executeCalls,
+		)
+	}
 }
 
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {

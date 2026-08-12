@@ -296,6 +296,9 @@ func assertJavaScriptDispatchLifecycleReplay(t *testing.T, worldState interfaces
 	if dispatch.JavaScript == nil || dispatch.JavaScript.TaskKind != "AGENT" {
 		t.Fatalf("javascript dispatch = %#v, want AGENT task kind", dispatch.JavaScript)
 	}
+	if !dispatch.JavaScript.SkipPermissions {
+		t.Fatalf("javascript dispatch = %#v, want skipPermissions=true", dispatch.JavaScript)
+	}
 	if len(dispatch.ArtifactIDs) != 1 || dispatch.ArtifactIDs[0] != "artifact-result-1" {
 		t.Fatalf("dispatch artifact ids = %#v, want artifact-result-1", dispatch.ArtifactIDs)
 	}
@@ -337,6 +340,8 @@ func dispatchQueuedEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent 
 		SchemaDigest:  stringPointer("sha256:schema"),
 		InputWorkIds:  &[]string{"work-1"},
 	}
+	skipPermissions := true
+	payload.SkipPermissions = &skipPermissions
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchQueued, "dispatch-queued/"+dispatchID, tick, eventTime, context, payload)
 }
 

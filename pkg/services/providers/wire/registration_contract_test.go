@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -90,25 +91,31 @@ func TestExternalRegistrationAttemptMapsSuccessAndRejectsInvalidRegistration(t *
 		DisplayName: LocalizedValue{Value: "Sealed"},
 		Aliases:     []string{"sealed-alias"},
 		MaximumExecutionCapabilities: ExecutionCapabilities{
-			PromptSubmission: true, ImageInput: true, SessionResume: true, StructuredOutput: true,
+			PromptSubmission: true, ImageInput: true, SessionResume: true, StructuredOutput: true, PermissionBypass: true,
 		},
 	})
-	if descriptor.ID != "sealed" || len(descriptor.Aliases) != 1 || len(descriptor.Capabilities) != 4 {
-		t.Fatalf("registrationDescriptor() = %#v, want identity, alias, and four capabilities", descriptor)
+	if descriptor.ID != "sealed" || len(descriptor.Aliases) != 1 || len(descriptor.Capabilities) != 5 || !slices.Contains(descriptor.Capabilities, providers.CapabilityPermissionBypass) {
+		t.Fatalf("registrationDescriptor() = %#v, want identity, alias, and five capabilities including permission bypass", descriptor)
 	}
 
+	integration := &permissionBypassIntegration{
+		ProgressingIntegration: ProgressingExternalIntegration("sealed", "attempt result"),
+	}
 	attempt, err := externalRegistrationAttempt(Registration{
 		Manifest:    Manifest{ID: "sealed"},
-		Integration: ProgressingExternalIntegration("sealed", "attempt result"),
+		Integration: integration,
 	})
 	if err != nil {
 		t.Fatalf("externalRegistrationAttempt() error = %v", err)
 	}
 	result, err := attempt.Attempt(context.Background(), providers.ExecuteRequest{
-		Provider: providers.ID("sealed"), AttemptID: "attempt-1", Model: "model-1", UserMessage: "hello",
+		Provider: providers.ID("sealed"), AttemptID: "attempt-1", Model: "model-1", UserMessage: "hello", SkipPermissions: true,
 	})
 	if err != nil || result.Content != "attempt result" || result.Diagnostics == nil {
 		t.Fatalf("external attempt = (%#v, %v), want result with diagnostics", result, err)
+	}
+	if !integration.Stats().LastSkipPermissions {
+		t.Fatal("external invocation lost skip permissions")
 	}
 
 	if _, err := externalRegistrationAttempt(Registration{Manifest: Manifest{ID: "missing"}}); err == nil || !strings.Contains(err.Error(), "integration is required") {
@@ -119,6 +126,31 @@ func TestExternalRegistrationAttemptMapsSuccessAndRejectsInvalidRegistration(t *
 		Integration: ProgressingExternalIntegration("different", "ignored"),
 	}); err == nil || !strings.Contains(err.Error(), "does not match manifest") {
 		t.Fatalf("identity mismatch error = %v, want validation error", err)
+	}
+}
+
+func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing.T) {
+	t.Parallel()
+
+	manifest := Manifest{
+		ID:                         "mismatch-provider",
+		ImplementationAvailability: ImplementationExternallySupplied,
+		TechnicalSupportLevel:      SupportProduction,
+		MaximumExecutionCapabilities: ExecutionCapabilities{
+			PromptSubmission: true,
+			PermissionBypass: true,
+		},
+	}
+	integration := ProgressingExternalIntegration("mismatch-provider", "must not execute")
+	_, err := NewService(WithRegistrations(Registration{
+		Manifest:    manifest,
+		Integration: integration,
+	}))
+	if err == nil || !strings.Contains(err.Error(), `integration maximum capability "permission_bypass" contradicts`) {
+		t.Fatalf("NewService() error = %v, want manifest/integration permission-bypass mismatch", err)
+	}
+	if stats := integration.Stats(); stats.DiscoverCalls != 0 || stats.CapabilityCalls != 0 || stats.InvokeCalls != 0 {
+		t.Fatalf("mismatched integration stats = %#v, want no provider calls during rejected construction", stats)
 	}
 }
 
@@ -138,3 +170,15 @@ func (writer *recordingResponseWriter) Close(_ context.Context, completion Compl
 }
 
 var _ ResponseWriter = (*recordingResponseWriter)(nil)
+
+type permissionBypassIntegration struct {
+	*ProgressingIntegration
+}
+
+func (*permissionBypassIntegration) MaximumCapabilities() CapabilitySet {
+	return NewCapabilitySet(CapabilityPromptSubmission, CapabilityPermissionBypass)
+}
+
+func (integration *permissionBypassIntegration) Capabilities(context.Context, InvocationRequest) (CapabilitySet, error) {
+	return integration.MaximumCapabilities(), nil
+}

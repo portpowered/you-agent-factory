@@ -1018,3 +1018,53 @@ func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *te
 		t.Fatalf("restored child request = %#v, want retained execution selection", result.Request)
 	}
 }
+
+func TestResumingChildExecutor_RestoresSkipPermissionsPerDispatch(t *testing.T) {
+	records := []factory.JavaScriptRuntimeRecord{
+		{
+			Kind: factory.JavaScriptRecordKindChildDispatch,
+			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
+				DispatchID:      "dispatch-1",
+				ChildIndex:      1,
+				Status:          factory.JavaScriptChildDispatchStatusCompleted,
+				Label:           "autonomous-child",
+				SkipPermissions: true,
+				ExecutionMode:   factory.JavaScriptChildExecutionModeLive,
+				Output:          map[string]any{"text": "cached autonomous"},
+			},
+		},
+		{
+			Kind: factory.JavaScriptRecordKindChildDispatch,
+			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
+				DispatchID:      "dispatch-2",
+				ChildIndex:      2,
+				Status:          factory.JavaScriptChildDispatchStatusCompleted,
+				Label:           "ordinary-child",
+				SkipPermissions: false,
+				ExecutionMode:   factory.JavaScriptChildExecutionModeLive,
+				Output:          map[string]any{"text": "cached ordinary"},
+			},
+		},
+	}
+	resume := factory.JavaScriptResumeContext{
+		CompletedDispatchIDs:  []string{"dispatch-1", "dispatch-2"},
+		CompletedChildResults: workflowruntime.CompletedChildResultsFromRecords(records),
+	}
+	base := &countingChildExecutor{}
+	executor := workflowruntime.NewResumingChildExecutor(base, resume)
+
+	first, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Label: "autonomous-child"})
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	second, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Label: "ordinary-child"})
+	if err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+	if !first.Request.SkipPermissions || second.Request.SkipPermissions {
+		t.Fatalf("replayed child policies = first %v, second %v; want true, false", first.Request.SkipPermissions, second.Request.SkipPermissions)
+	}
+	if base.calls != 0 {
+		t.Fatalf("base calls = %d, want 0 for both replayed children", base.calls)
+	}
+}

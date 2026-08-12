@@ -20,7 +20,8 @@
       "system_initialization",
       "chat_sessions",
       "events",
-      "worker_sessions"
+      "worker_sessions",
+      "webhooks"
     ],
     "families": [
       "initializer",
@@ -97,6 +98,7 @@
     "pkg/services/operator_settings",
     "pkg/services/system_initialization",
     "pkg/services/factory_visualization",
+    "pkg/services/webhooks",
     "pkg/services/edges"
   ],
   "ownerRationales": [
@@ -803,6 +805,18 @@
       "failureRecovery": "Partial failure/rollback reporting is Bootstrap-owned without absorbing peer stores."
     },
     {
+      "serviceId": "webhooks",
+      "owner": "webhooks",
+      "kind": "top_level",
+      "targetPath": "pkg/services/webhooks",
+      "authority": "Factory-configured outbound webhook subscriptions, canonical event filtering, signed delivery attempts, bounded retry/backoff, and session-owned dead-letter diagnostics; Recordings remains the event authority.",
+      "stateStore": "Process-local endpoint delivery state and session-owned dead-letter JSONL; no canonical Factory state.",
+      "lifecycle": "Wire constructs the service once; Factory Sessions start and stop session-scoped endpoint subscribers and delivery workers.",
+      "consumers": "Factory Definitions configuration, Recordings canonical events, platform HTTP/clock/logging effects, and external webhook receivers.",
+      "transactionBoundary": "Webhook delivery, retry, and dead-letter state remain Webhooks-local; canonical events are read-only input and terminal records use an injected runtime-storage effect.",
+      "failureRecovery": "Secret, receiver, retry, cancellation, and dead-letter failures are structured Webhooks diagnostics and never mutate or block Factory Session or Work state."
+    },
+    {
       "serviceId": "work",
       "owner": "work",
       "kind": "top_level",
@@ -1227,6 +1241,13 @@
     },
     {
       "fromOwner": "edges",
+      "toOwner": "webhooks",
+      "class": "external_effect",
+      "architectureException": true,
+      "evidence": "pkg/services/edges -> pkg/services/webhooks"
+    },
+    {
+      "fromOwner": "edges",
       "toOwner": "work",
       "class": "external_effect",
       "architectureException": true,
@@ -1440,6 +1461,12 @@
       "bidirectional": true,
       "unresolved": true,
       "evidence": "pkg/services/factory_sessions/transports/cli/session -> pkg/transports/cli/clidiag"
+    },
+    {
+      "fromOwner": "factory_sessions",
+      "toOwner": "webhooks",
+      "class": "command",
+      "evidence": "pkg/services/factory_sessions/internal/runtimeopening -> pkg/services/webhooks"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1873,6 +1900,24 @@
       "evidence": "pkg/transports/acp/internal/mapping -> pkg/services/workers"
     },
     {
+      "fromOwner": "webhooks",
+      "toOwner": "factory_definitions",
+      "class": "query",
+      "evidence": "pkg/services/webhooks -> pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "webhooks",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/webhooks/internal/service -> pkg/platform/logging"
+    },
+    {
+      "fromOwner": "webhooks",
+      "toOwner": "recordings",
+      "class": "event",
+      "evidence": "pkg/services/webhooks -> pkg/services/recordings"
+    },
+    {
       "fromOwner": "wire",
       "toOwner": "automations",
       "class": "construction",
@@ -1974,6 +2019,12 @@
       "toOwner": "transports",
       "class": "construction",
       "evidence": "pkg/wire -> pkg/transports/acp"
+    },
+    {
+      "fromOwner": "wire",
+      "toOwner": "webhooks",
+      "class": "construction",
+      "evidence": "pkg/wire -> pkg/services/webhooks"
     },
     {
       "fromOwner": "wire",
@@ -5200,6 +5251,24 @@
       "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/webhooks",
+      "disposition": "retain",
+      "destination": "webhooks",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/webhooks/internal/service",
+      "disposition": "retain",
+      "destination": "webhooks",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/webhooks/wire",
+      "disposition": "retain",
+      "destination": "webhooks",
       "destinationKind": "owner"
     },
     {

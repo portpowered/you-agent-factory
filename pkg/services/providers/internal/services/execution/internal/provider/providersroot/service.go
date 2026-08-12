@@ -131,6 +131,7 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		Worktree:           request.Worktree,
 		EnvVars:            cloneMetadata(request.EnvVars),
 		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
+		SkipPermissions:    request.SkipPermissions,
 	}
 	return infer
 }

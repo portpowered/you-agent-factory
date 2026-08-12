@@ -69,6 +69,7 @@ func closedDestinationVocabulary() DestinationVocabulary {
 			"chat_sessions",
 			"events",
 			"worker_sessions",
+			"webhooks",
 		},
 		NonServiceFamilies: []string{
 			"initializer",

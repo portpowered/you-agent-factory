@@ -54,8 +54,9 @@ func conductorIdentity(providerID string) string {
 
 func invocationRequestFromExecute(
 	request providers.ExecuteRequest,
-	skipPermissions bool,
+	configuredSkipPermissions bool,
 ) inference.InvocationRequest {
+	skipPermissions := request.SkipPermissions || configuredSkipPermissions
 	invocationID := strings.TrimSpace(request.AttemptID)
 	if invocationID == "" {
 		invocationID = "providers-root-invocation"
@@ -81,13 +82,20 @@ func invocationRequestFromExecute(
 		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
 		SkipPermissions:    skipPermissions,
 	}
+	required := inference.NewCapabilitySet(inference.CapabilityPromptSubmission)
+	if skipPermissions {
+		required = inference.NewCapabilitySet(
+			inference.CapabilityPromptSubmission,
+			inference.CapabilityPermissionBypass,
+		)
+	}
 	return inference.NewInvocationRequest(inference.InvocationInput{
 		InvocationID: invocationID,
 		Model:        execution.Model,
 		SystemPrompt: execution.SystemPrompt,
 		UserMessage:  execution.UserMessage,
 		OutputSchema: execution.OutputSchema,
-		Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+		Required:     required,
 		Execution:    execution,
 	})
 }
@@ -98,8 +106,12 @@ func mapConductorInvokeError(err error) error {
 	}
 	var rejection *conductor.Rejection
 	if errors.As(err, &rejection) {
+		kind := providers.ExecuteFailureKindInvalidRequest
+		if rejection.Invariant() == conductor.InvariantCapabilityEscalation {
+			kind = providers.ExecuteFailureKindCapabilityMismatch
+		}
 		return providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Kind:    kind,
 			Message: rejection.Error(),
 		}
 	}

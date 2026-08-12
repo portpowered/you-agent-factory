@@ -112,6 +112,21 @@ type DispatchQueuedInput struct {
 	SchemaDigest        string
 	InputArtifactIDs    []string
 	InputWorkIDs        []string
+	SkipPermissions     bool
+}
+
+func isJavaScriptDispatch(kind interfaces.FactoryDispatchKind) bool {
+	switch kind {
+	case interfaces.FactoryDispatchKindJavaScriptAgent,
+		interfaces.FactoryDispatchKindJavaScriptScript,
+		interfaces.FactoryDispatchKindJavaScriptSynthesize,
+		interfaces.FactoryDispatchKindJavaScriptSystem,
+		interfaces.FactoryDispatchKindJavaScriptTool,
+		interfaces.FactoryDispatchKindJavaScriptVerify:
+		return true
+	default:
+		return false
+	}
 }
 
 // DispatchInterruptedInput carries replay-safe facts for DISPATCH_INTERRUPTED.
@@ -216,6 +231,10 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 	}
 	if schemaDigest := strings.TrimSpace(input.SchemaDigest); schemaDigest != "" {
 		payload.SchemaDigest = &schemaDigest
+	}
+	if isJavaScriptDispatch(input.DispatchKind) {
+		skipPermissions := input.SkipPermissions
+		payload.SkipPermissions = &skipPermissions
 	}
 	if len(input.InputArtifactIDs) > 0 {
 		artifactIDs := append([]string(nil), input.InputArtifactIDs...)
@@ -702,4 +721,99 @@ func maxEventTick(events []interfaces.FactoryEvent) int {
 		}
 	}
 	return tick
+}
+
+// RecordModelEvent appends worker-owned model execution facts to canonical
+// history while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordModelEvent(event workerexecution.ModelEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	eventType, payload := modelFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		}),
+		payload,
+	))
+}
+
+func modelFactoryEventPayload(event workerexecution.ModelEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ModelEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeModelRequest, *event.Request
+		}
+	case workerexecution.ModelEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeModelResponse, *event.Response
+		}
+	}
+	return "", nil
+}
+
+// RecordScriptEvent appends worker-owned script facts to the canonical history
+// while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordScriptEvent(event workerexecution.ScriptEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	eventType, payload := scriptFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		}),
+		payload,
+	))
+}
+
+func scriptFactoryEventPayload(event workerexecution.ScriptEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ScriptEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeScriptRequest, *event.Request
+		}
+	case workerexecution.ScriptEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeScriptResponse, *event.Response
+		}
+	}
+	return "", nil
+}
+
+// RecordAgentRunEvent appends an agent-run boundary event to the same
+// canonical history used for dispatch and replay events.
+func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRunResponseEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeAgentRunResponse,
+		event.ID,
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtr(event.DispatchID),
+		}),
+		event.Payload,
+	))
 }

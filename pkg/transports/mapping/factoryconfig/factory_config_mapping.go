@@ -177,6 +177,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Fac
 		InvocationReturn:    invocationReturnAPIFromInternal(cfg.InvocationReturn),
 		InvocationSignature: invocationSignatureAPIFromInternal(cfg.InvocationSignature),
 		Examples:            examples,
+		Webhooks:            factoryWebhooksAPIFromInternal(cfg.Webhooks),
 		Orchestrator:        orchestratorAPIFromInternal(cfg),
 		WorkTypes:           workTypesAPIFromInternal(cfg.WorkTypes),
 		Resources:           resourcesAPIFromInternal(cfg.Resources),
@@ -185,6 +186,56 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Fac
 		Workers:             workersAPIFromInternal(cfg.Workers, cfg.Workstations),
 		Workstations:        workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
 	}, nil
+}
+
+func factoryWebhooksAPIFromInternal(values []interfaces.FactoryWebhookConfig) *[]factoryapi.FactoryWebhook {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]factoryapi.FactoryWebhook, len(values))
+	for index, value := range values {
+		filter := factoryapi.FactoryWebhookFilter{
+			EventTypes: make([]factoryapi.FactoryWebhookEventType, len(value.Filter.EventTypes)),
+		}
+		for eventIndex, eventType := range value.Filter.EventTypes {
+			filter.EventTypes[eventIndex] = factoryapi.FactoryWebhookEventType(eventType)
+		}
+		if len(value.Filter.DispatchStatuses) > 0 {
+			statuses := make([]factoryapi.FactoryWebhookDispatchStatus, len(value.Filter.DispatchStatuses))
+			for statusIndex, status := range value.Filter.DispatchStatuses {
+				statuses[statusIndex] = factoryapi.FactoryWebhookDispatchStatus(status)
+			}
+			filter.DispatchStatuses = &statuses
+		}
+		result[index] = factoryapi.FactoryWebhook{
+			Name:             value.Name,
+			Enabled:          value.Enabled,
+			Url:              value.URL,
+			SigningSecretRef: value.SigningSecretRef,
+			Filter:           filter,
+			DeliveryPolicy:   factoryWebhookDeliveryPolicyAPIFromInternal(value.DeliveryPolicy),
+		}
+	}
+	return &result
+}
+
+func factoryWebhookDeliveryPolicyAPIFromInternal(value *interfaces.FactoryWebhookDeliveryPolicyConfig) *factoryapi.FactoryWebhookDeliveryPolicy {
+	if value == nil {
+		return nil
+	}
+	result := &factoryapi.FactoryWebhookDeliveryPolicy{
+		RequestTimeout: value.RequestTimeout,
+		InitialBackoff: value.InitialBackoff,
+		MaxBackoff:     value.MaxBackoff,
+	}
+	if value.MaxAttempts != nil {
+		result.MaxAttempts = value.MaxAttempts
+	}
+	if value.BackoffMultiplier != nil {
+		multiplier := float32(*value.BackoffMultiplier)
+		result.BackoffMultiplier = &multiplier
+	}
+	return result
 }
 
 func validateInternalFactoryMetadata(cfg *interfaces.FactoryConfig) error {
