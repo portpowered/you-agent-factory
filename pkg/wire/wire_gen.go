@@ -520,6 +520,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v93 := provideInvokeWorkerSessionOperation(wireStreamingCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator, executionFileReader)
 	v94 := provideContinueWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator)
 	v95 := provideInterruptWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator)
+	pauseWorkerSessionOperation := providePauseWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
+	resumeWorkerSessionOperation := provideResumeWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
+	cancelWorkerSessionOperation := provideCancelWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
+	terminateWorkerSessionOperation := provideTerminateWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	singleWorkTargetPreparation := work.NewSingleWorkTargetPreparation()
 	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
 	mockWorkersConfigLoader, err := workers.NewMockWorkersConfigLoader(mockWorkersConfigFileSystem)
@@ -660,7 +664,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		InvokeWorkerSession:               v93,
 		ContinueWorkerSession:             v94,
 		InterruptWorkerSession:            v95,
+		PauseWorkerSession:                pauseWorkerSessionOperation,
+		ResumeWorkerSession:               resumeWorkerSessionOperation,
+		CancelWorkerSession:               cancelWorkerSessionOperation,
+		TerminateWorkerSession:            terminateWorkerSessionOperation,
 		LocalWorkerSessions:               wireLocalWorkerSessionsBoundary,
+		LocalWorkerSessionControls:        wireLocalWorkerSessionsBoundary,
 		OpenRunSelection:                  selectionFactory,
 		RemoteInvocation:                  remoteInvocationOperation,
 		ResponsePresentation:              v101,
@@ -956,7 +965,11 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideWorkerSessionsCLIExecutionFileReader,
 	provideContinueWorkerSessionOperation,
 	provideInterruptWorkerSessionOperation,
-	provideLocalWorkerSessionsBoundary, wire5.Bind(new(workersessions.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)), provideInvokeWorkerSessionOperation,
+	providePauseWorkerSessionOperation,
+	provideResumeWorkerSessionOperation,
+	provideCancelWorkerSessionOperation,
+	provideTerminateWorkerSessionOperation,
+	provideLocalWorkerSessionsBoundary, wire5.Bind(new(workersessions.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)), wire5.Bind(new(workersessions.LocalControlBoundary), new(*localWorkerSessionsBoundary)), provideInvokeWorkerSessionOperation,
 	provideSessionsCLIService,
 	provideLocalSessionsCLIService,
 	provideModelsCLIService,

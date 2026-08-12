@@ -57,6 +57,30 @@ func TopLevelWorkerSessionInterruptPath(workerSessionID string) string {
 	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/interrupt"
 }
 
+// TopLevelWorkerSessionPausePath returns the exact source-addressed pause
+// control route.
+func TopLevelWorkerSessionPausePath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/pause"
+}
+
+// TopLevelWorkerSessionResumePath returns the exact source-addressed resume
+// control route.
+func TopLevelWorkerSessionResumePath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/resume"
+}
+
+// TopLevelWorkerSessionCancelPath returns the exact source-addressed cancel
+// control route.
+func TopLevelWorkerSessionCancelPath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/cancel"
+}
+
+// TopLevelWorkerSessionTerminatePath returns the exact source-addressed
+// terminate control route.
+func TopLevelWorkerSessionTerminatePath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/terminate"
+}
+
 // TopLevelWorkerSessionTranscriptPath returns the identity transcript route.
 func TopLevelWorkerSessionTranscriptPath(workerSessionID string) string {
 	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/transcript"

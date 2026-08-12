@@ -88,6 +88,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/worker-sessions/{worker_session_id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause one active Worker Session
+     * @description Cancels the exact admitted Worker Session dispatch through the Workers boundary and returns only after the authoritative PAUSED snapshot is available. Repeated requests are idempotent.
+     */
+    post: operations["pauseWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume one paused Worker Session
+     * @description Admits exactly one continuation of a paused Worker Session using the exact Provider Session association recorded on that session. Repeated requests are idempotent and never select a fallback Provider Session.
+     */
+    post: operations["resumeWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel one Worker Session
+     * @description Requests cancellation of the exact admitted Worker Session dispatch. Cancellation is terminal and repeated requests are idempotent.
+     */
+    post: operations["cancelWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/terminate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Terminate one Worker Session
+     * @description Requests termination of the exact admitted Worker Session dispatch and joins its completion before returning. Repeated and concurrent calls are idempotent and return the canonical terminal snapshot.
+     */
+    post: operations["terminateWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions/{worker_session_id}/events": {
     parameters: {
       query?: never;
@@ -1374,6 +1454,19 @@ export interface components {
       successorWorkerSessionId?: string;
       source?: components["schemas"]["WorkerSessionInterruptSnapshot"];
       successor?: components["schemas"]["WorkerSessionInterruptSnapshot"];
+    };
+    /** @description Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action. */
+    WorkerSessionControlResponse: {
+      /** @description Stable Worker Session identity targeted by the control. */
+      workerSessionId: string;
+      /** @enum {string} */
+      action: WorkerSessionControlResponseAction;
+      /** @enum {string} */
+      outcome: WorkerSessionControlResponseOutcome;
+      /** @enum {string} */
+      state: WorkerSessionControlResponseState;
+      /** @description Exact admitted dispatch identity, or empty before admission. */
+      dispatchId: string;
     };
     WorkerSessionStartRetryPolicy: {
       /**
@@ -6875,6 +6968,33 @@ export interface components {
         "application/json": components["schemas"]["WorkerSessionInterruptError"];
       };
     };
+    /** @description The Worker Session lifecycle control conflicts with its current state. */
+    WorkerSessionControlConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session lifecycle control could not reach its authoritative boundary. */
+    WorkerSessionControlUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The server failed while applying the Worker Session lifecycle control. */
+    WorkerSessionControlInternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -7145,6 +7265,118 @@ export interface operations {
       409: components["responses"]["WorkerSessionInterruptConflict"];
       500: components["responses"]["WorkerSessionInterruptInternalError"];
       503: components["responses"]["WorkerSessionInterruptUnavailable"];
+    };
+  };
+  pauseWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  resumeWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  cancelWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  terminateWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
     };
   };
   streamWorkerSessionEventsByTopLevelWorkerSessionId: {
@@ -8884,6 +9116,34 @@ export const WorkerSessionInterruptErrorPhase = {
 } as const;
 export type WorkerSessionInterruptErrorPhase =
   (typeof WorkerSessionInterruptErrorPhase)[keyof typeof WorkerSessionInterruptErrorPhase];
+export const WorkerSessionControlResponseAction = {
+  WorkerSessionControlResponseActionPause: "PAUSE",
+  WorkerSessionControlResponseActionResume: "RESUME",
+  WorkerSessionControlResponseActionCancel: "CANCEL",
+  WorkerSessionControlResponseActionTerminate: "TERMINATE",
+} as const;
+export type WorkerSessionControlResponseAction =
+  (typeof WorkerSessionControlResponseAction)[keyof typeof WorkerSessionControlResponseAction];
+export const WorkerSessionControlResponseOutcome = {
+  WorkerSessionControlResponseOutcomeApplied: "APPLIED",
+  WorkerSessionControlResponseOutcomeNoop: "NOOP",
+  WorkerSessionControlResponseOutcomeUnsupported: "UNSUPPORTED",
+  WorkerSessionControlResponseOutcomeFailed: "FAILED",
+} as const;
+export type WorkerSessionControlResponseOutcome =
+  (typeof WorkerSessionControlResponseOutcome)[keyof typeof WorkerSessionControlResponseOutcome];
+export const WorkerSessionControlResponseState = {
+  WorkerSessionControlResponseStateReserved: "RESERVED",
+  WorkerSessionControlResponseStateStarting: "STARTING",
+  WorkerSessionControlResponseStateRunning: "RUNNING",
+  WorkerSessionControlResponseStatePaused: "PAUSED",
+  WorkerSessionControlResponseStateCompleted: "COMPLETED",
+  WorkerSessionControlResponseStateFailed: "FAILED",
+  WorkerSessionControlResponseStateCanceled: "CANCELED",
+  WorkerSessionControlResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionControlResponseState =
+  (typeof WorkerSessionControlResponseState)[keyof typeof WorkerSessionControlResponseState];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -9076,43 +9336,46 @@ export const ErrorResponseCode = {
   WORKER_SESSION_INTERRUPT_ADMISSION_FAILED:
     "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
+  WORKER_SESSION_CONTROL_INVALID: "WORKER_SESSION_CONTROL_INVALID",
+  // Requested resource capacity is below the number of units currently in use.
+  WORKER_SESSION_CONTROL_CONFLICT: "WORKER_SESSION_CONTROL_CONFLICT",
+  // The caller's expected Factory revision is no longer current.
+  WORKER_SESSION_CONTROL_FAILED: "WORKER_SESSION_CONTROL_FAILED",
+  // The Factory Session lifecycle does not admit the requested change.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
-  // Requested resource capacity is below the number of units currently in use.
-  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
-  // The caller's expected Factory revision is no longer current.
-  REVISION_CONFLICT: "REVISION_CONFLICT",
-  // The Factory Session lifecycle does not admit the requested change.
-  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
   // A live change was admitted but its runtime application failed.
-  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
+  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
   // The Factory Response Event reconnect cursor is invalid.
-  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
+  REVISION_CONFLICT: "REVISION_CONFLICT",
   // A Factory Response Event filter is invalid.
-  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
+  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
   // The explicitly selected Factory Session for response events does not exist.
-  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
+  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
   // The retained Factory Response Event stream is no longer available.
-  RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
+  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
   // The requested Provider Session provider is not loadable by this API.
-  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
+  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
   // The requested Provider Session identifier kind is not loadable by this API.
-  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
+  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
   // The correlated Worker Session projection is temporarily unavailable.
-  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
   // The canonical Worker Session event stream is temporarily unavailable.
-  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
   // The requested Worker Session has not reached a terminal state.
-  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
   // The finished Worker Session has no normalized transcript available.
+  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  // Provider Sessions could not project the normalized Worker Session transcript.
+  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  // The requested resource does not exist.
+  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  // The server failed while handling an otherwise valid request.
   WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
-  // Provider Sessions could not project the normalized Worker Session transcript.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
-  // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
-  // The server failed while handling an otherwise valid request.
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 export type ErrorResponseCode =

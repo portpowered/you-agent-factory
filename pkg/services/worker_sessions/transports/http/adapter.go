@@ -40,11 +40,19 @@ type interruptService interface {
 	Interrupt(context.Context, workersessions.InterruptRequest) (workersessions.InterruptResult, error)
 }
 
+type controlService interface {
+	Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
+	Resume(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
+	Cancel(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
+	Terminate(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
+}
+
 type Adapter struct {
 	observations observationService
 	starter      startService
 	continuer    continuationService
 	interrupter  interruptService
+	controller   controlService
 	work         work.Service
 }
 
@@ -266,6 +274,26 @@ func NewAdapterWithStartAndContinueAndInterrupt(
 	}
 }
 
+// NewAdapterWithStartAndContinueAndInterruptAndControl binds the complete
+// direct Worker Session lifecycle surface while retaining the observation and
+// Work read capabilities of the base adapter.
+func NewAdapterWithStartAndContinueAndInterruptAndControl(
+	starter startService,
+	continuer continuationService,
+	interrupter interruptService,
+	controller controlService,
+	observations observationService,
+	workRoot work.Service,
+) *Adapter {
+	if starter == nil || continuer == nil || interrupter == nil || controller == nil || observations == nil || workRoot == nil {
+		return nil
+	}
+	return &Adapter{
+		starter: starter, continuer: continuer, interrupter: interrupter,
+		controller: controller, observations: observations, work: workRoot,
+	}
+}
+
 // StartWorkerSession maps one typed HTTP request to the Worker Sessions-owned
 // asynchronous start operation. The service returns only at its admission
 // barrier; terminal execution is deliberately not awaited here.
@@ -338,6 +366,46 @@ func (a *Adapter) InterruptWorkerSession(
 		return factoryapi.WorkerSessionInterruptResponse{}, err
 	}
 	return WorkerSessionInterruptResponseToAPI(result), nil
+}
+
+// ControlWorkerSession maps one exact top-level Worker Session control to the
+// corresponding Worker Sessions root operation. The action is selected by
+// the route, so callers cannot submit an arbitrary action payload or identity.
+func (a *Adapter) ControlWorkerSession(
+	ctx context.Context,
+	workerSessionID string,
+	action workersessions.ControlAction,
+) (factoryapi.WorkerSessionControlResponse, error) {
+	if a == nil || a.controller == nil {
+		return factoryapi.WorkerSessionControlResponse{}, errors.New("Worker Sessions control service is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request := workersessions.ControlRequest{ID: strings.TrimSpace(workerSessionID)}
+	if err := request.Validate(); err != nil {
+		return factoryapi.WorkerSessionControlResponse{}, err
+	}
+	var (
+		result workersessions.ControlResult
+		err    error
+	)
+	switch action {
+	case workersessions.ControlActionPause:
+		result, err = a.controller.Pause(ctx, request)
+	case workersessions.ControlActionResume:
+		result, err = a.controller.Resume(ctx, request)
+	case workersessions.ControlActionCancel:
+		result, err = a.controller.Cancel(ctx, request)
+	case workersessions.ControlActionTerminate:
+		result, err = a.controller.Terminate(ctx, request)
+	default:
+		return factoryapi.WorkerSessionControlResponse{}, fmt.Errorf("unsupported Worker Session control action %q", action)
+	}
+	if err != nil {
+		return factoryapi.WorkerSessionControlResponse{}, err
+	}
+	return WorkerSessionControlResponseToAPI(result), nil
 }
 
 // ListWorkerSessions verifies Work existence and returns every authoritative

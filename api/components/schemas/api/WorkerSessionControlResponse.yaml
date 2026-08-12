@@ -1,0 +1,64 @@
+type: object
+additionalProperties: false
+required:
+  - workerSessionId
+  - action
+  - outcome
+  - state
+  - dispatchId
+description: >-
+  Detached result for one Worker Session lifecycle control. NOOP is used for
+  idempotent requests, including a request against an already-terminal
+  session; UNSUPPORTED identifies a valid lifecycle state that does not admit
+  the requested action.
+properties:
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity targeted by the control.
+  action:
+    type: string
+    enum:
+      - PAUSE
+      - RESUME
+      - CANCEL
+      - TERMINATE
+    x-enum-varnames:
+      - WorkerSessionControlResponseActionPause
+      - WorkerSessionControlResponseActionResume
+      - WorkerSessionControlResponseActionCancel
+      - WorkerSessionControlResponseActionTerminate
+  outcome:
+    type: string
+    enum:
+      - APPLIED
+      - NOOP
+      - UNSUPPORTED
+      - FAILED
+    x-enum-varnames:
+      - WorkerSessionControlResponseOutcomeApplied
+      - WorkerSessionControlResponseOutcomeNoop
+      - WorkerSessionControlResponseOutcomeUnsupported
+      - WorkerSessionControlResponseOutcomeFailed
+  state:
+    type: string
+    enum:
+      - RESERVED
+      - STARTING
+      - RUNNING
+      - PAUSED
+      - COMPLETED
+      - FAILED
+      - CANCELED
+      - TERMINATED
+    x-enum-varnames:
+      - WorkerSessionControlResponseStateReserved
+      - WorkerSessionControlResponseStateStarting
+      - WorkerSessionControlResponseStateRunning
+      - WorkerSessionControlResponseStatePaused
+      - WorkerSessionControlResponseStateCompleted
+      - WorkerSessionControlResponseStateFailed
+      - WorkerSessionControlResponseStateCanceled
+      - WorkerSessionControlResponseStateTerminated
+  dispatchId:
+    type: string
+    description: Exact admitted dispatch identity, or empty before admission.

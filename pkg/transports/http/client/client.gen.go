@@ -94,6 +94,9 @@ const (
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT              ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTROLCONFLICT                   ErrorResponseCode = "WORKER_SESSION_CONTROL_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTROLFAILED                     ErrorResponseCode = "WORKER_SESSION_CONTROL_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTROLINVALID                    ErrorResponseCode = "WORKER_SESSION_CONTROL_INVALID"
 	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE             ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED          ErrorResponseCode = "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT                 ErrorResponseCode = "WORKER_SESSION_INTERRUPT_CONFLICT"
@@ -1222,6 +1225,34 @@ const (
 	WorkerSessionContinueResponseStateRunning    WorkerSessionContinueResponseState = "RUNNING"
 	WorkerSessionContinueResponseStateStarting   WorkerSessionContinueResponseState = "STARTING"
 	WorkerSessionContinueResponseStateTerminated WorkerSessionContinueResponseState = "TERMINATED"
+)
+
+// Defines values for WorkerSessionControlResponseAction.
+const (
+	WorkerSessionControlResponseActionCancel    WorkerSessionControlResponseAction = "CANCEL"
+	WorkerSessionControlResponseActionPause     WorkerSessionControlResponseAction = "PAUSE"
+	WorkerSessionControlResponseActionResume    WorkerSessionControlResponseAction = "RESUME"
+	WorkerSessionControlResponseActionTerminate WorkerSessionControlResponseAction = "TERMINATE"
+)
+
+// Defines values for WorkerSessionControlResponseOutcome.
+const (
+	WorkerSessionControlResponseOutcomeApplied     WorkerSessionControlResponseOutcome = "APPLIED"
+	WorkerSessionControlResponseOutcomeFailed      WorkerSessionControlResponseOutcome = "FAILED"
+	WorkerSessionControlResponseOutcomeNoop        WorkerSessionControlResponseOutcome = "NOOP"
+	WorkerSessionControlResponseOutcomeUnsupported WorkerSessionControlResponseOutcome = "UNSUPPORTED"
+)
+
+// Defines values for WorkerSessionControlResponseState.
+const (
+	WorkerSessionControlResponseStateCanceled   WorkerSessionControlResponseState = "CANCELED"
+	WorkerSessionControlResponseStateCompleted  WorkerSessionControlResponseState = "COMPLETED"
+	WorkerSessionControlResponseStateFailed     WorkerSessionControlResponseState = "FAILED"
+	WorkerSessionControlResponseStatePaused     WorkerSessionControlResponseState = "PAUSED"
+	WorkerSessionControlResponseStateReserved   WorkerSessionControlResponseState = "RESERVED"
+	WorkerSessionControlResponseStateRunning    WorkerSessionControlResponseState = "RUNNING"
+	WorkerSessionControlResponseStateStarting   WorkerSessionControlResponseState = "STARTING"
+	WorkerSessionControlResponseStateTerminated WorkerSessionControlResponseState = "TERMINATED"
 )
 
 // Defines values for WorkerSessionEventDelivery.
@@ -7695,6 +7726,28 @@ type WorkerSessionContinueResponse struct {
 // WorkerSessionContinueResponseState defines model for WorkerSessionContinueResponse.State.
 type WorkerSessionContinueResponseState string
 
+// WorkerSessionControlResponse Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action.
+type WorkerSessionControlResponse struct {
+	Action WorkerSessionControlResponseAction `json:"action"`
+
+	// DispatchId Exact admitted dispatch identity, or empty before admission.
+	DispatchId string                              `json:"dispatchId"`
+	Outcome    WorkerSessionControlResponseOutcome `json:"outcome"`
+	State      WorkerSessionControlResponseState   `json:"state"`
+
+	// WorkerSessionId Stable Worker Session identity targeted by the control.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionControlResponseAction defines model for WorkerSessionControlResponse.Action.
+type WorkerSessionControlResponseAction string
+
+// WorkerSessionControlResponseOutcome defines model for WorkerSessionControlResponse.Outcome.
+type WorkerSessionControlResponseOutcome string
+
+// WorkerSessionControlResponseState defines model for WorkerSessionControlResponse.State.
+type WorkerSessionControlResponseState string
+
 // WorkerSessionEvent defines model for WorkerSessionEvent.
 type WorkerSessionEvent struct {
 	// Delivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -8514,6 +8567,15 @@ type WorkerSessionContinuationConflict = ErrorResponse
 
 // WorkerSessionContinuationUnavailable defines model for WorkerSessionContinuationUnavailable.
 type WorkerSessionContinuationUnavailable = ErrorResponse
+
+// WorkerSessionControlConflict defines model for WorkerSessionControlConflict.
+type WorkerSessionControlConflict = ErrorResponse
+
+// WorkerSessionControlInternalError defines model for WorkerSessionControlInternalError.
+type WorkerSessionControlInternalError = ErrorResponse
+
+// WorkerSessionControlUnavailable defines model for WorkerSessionControlUnavailable.
+type WorkerSessionControlUnavailable = ErrorResponse
 
 // WorkerSessionInterruptBadRequest Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
 type WorkerSessionInterruptBadRequest = WorkerSessionInterruptError

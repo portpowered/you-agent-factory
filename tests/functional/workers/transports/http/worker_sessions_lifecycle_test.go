@@ -99,6 +99,86 @@ func TestWorkerSessionHTTPShutdownJoinsAdmittedWorker(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
+	runner := newFunctionalWorkerGate(make(chan struct{}))
+	server := startDirectWorkerSessionServer(t, runner)
+
+	start := postDirectWorkerSession(t, context.Background(), server.URL(), "control-request", "control-session", "control-dispatch")
+	start.Body.Close()
+	if start.StatusCode != http.StatusAccepted {
+		t.Fatalf("POST /worker-sessions status = %d, want 202", start.StatusCode)
+	}
+	runner.waitStarted(t)
+
+	eventResponse, eventCancel := openWorkerSessionEventStream(t, server.URL(), "control-session")
+	defer eventCancel()
+	defer eventResponse.Body.Close()
+	eventsResult := make(chan workerSessionTerminalEventsResult, 1)
+	go func() {
+		frames, phase, err := readWorkerSessionEventStreamUntilTerminal(eventResponse)
+		eventsResult <- workerSessionTerminalEventsResult{frames: frames, phase: phase, err: err}
+	}()
+
+	cancel := postWorkerSessionControl(t, server.URL(), "control-session", "cancel")
+	defer cancel.Body.Close()
+	if cancel.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(cancel.Body)
+		t.Fatalf("POST /worker-sessions/control-session/cancel status = %d, body = %s", cancel.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var cancelResult factoryapi.WorkerSessionControlResponse
+	if err := json.NewDecoder(cancel.Body).Decode(&cancelResult); err != nil {
+		t.Fatalf("decode cancel result: %v", err)
+	}
+	if cancelResult.WorkerSessionId != "control-session" || cancelResult.Action != factoryapi.WorkerSessionControlResponseActionCancel ||
+		cancelResult.Outcome != factoryapi.WorkerSessionControlResponseOutcomeApplied || cancelResult.DispatchId != "control-dispatch" {
+		t.Fatalf("cancel result = %#v, want applied exact dispatch control", cancelResult)
+	}
+	runner.waitCanceled(t)
+
+	events := <-eventsResult
+	if events.err != nil {
+		t.Fatalf("read canceled Worker Session event stream: %v", events.err)
+	}
+	if events.phase != "CANCELED" {
+		t.Fatalf("Worker Session terminal phase = %q, want CANCELED; frames=%#v", events.phase, events.frames)
+	}
+	assertSingleTerminalWorkerSessionEvent(t, events.frames, "control-session", "CANCELED")
+
+	repeated := postWorkerSessionControl(t, server.URL(), "control-session", "cancel")
+	defer repeated.Body.Close()
+	if repeated.StatusCode != http.StatusOK {
+		t.Fatalf("repeated cancel status = %d, want 200", repeated.StatusCode)
+	}
+	var repeatedResult factoryapi.WorkerSessionControlResponse
+	if err := json.NewDecoder(repeated.Body).Decode(&repeatedResult); err != nil {
+		t.Fatalf("decode repeated cancel result: %v", err)
+	}
+	if repeatedResult.Outcome != factoryapi.WorkerSessionControlResponseOutcomeNoop ||
+		repeatedResult.State != factoryapi.WorkerSessionControlResponseStateCanceled ||
+		repeatedResult.DispatchId != "control-dispatch" {
+		t.Fatalf("repeated cancel result = %#v, want canonical canceled no-op", repeatedResult)
+	}
+
+	terminated := postWorkerSessionControl(t, server.URL(), "control-session", "terminate")
+	defer terminated.Body.Close()
+	if terminated.StatusCode != http.StatusOK {
+		t.Fatalf("mixed terminate status = %d, want 200", terminated.StatusCode)
+	}
+	var terminateResult factoryapi.WorkerSessionControlResponse
+	if err := json.NewDecoder(terminated.Body).Decode(&terminateResult); err != nil {
+		t.Fatalf("decode mixed terminate result: %v", err)
+	}
+	if terminateResult.Outcome != factoryapi.WorkerSessionControlResponseOutcomeNoop ||
+		terminateResult.State != factoryapi.WorkerSessionControlResponseStateCanceled ||
+		terminateResult.DispatchId != "control-dispatch" {
+		t.Fatalf("mixed terminate result = %#v, want canonical canceled no-op", terminateResult)
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("worker command calls after repeated/mixed controls = %d, want one", runner.callCount())
+	}
+	functionalevidence.Covers(t, "rest/cancelWorkerSession")
+}
+
 func startDirectWorkerSessionServer(t *testing.T, runner platformprocess.CommandRunner) *support.FunctionalAPIServer {
 	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "direct-worker-lifecycle")
@@ -129,6 +209,21 @@ func postDirectWorkerSession(
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("POST /worker-sessions: %v", err)
+	}
+	return response
+}
+
+func postWorkerSessionControl(t *testing.T, baseURL, workerSessionID, action string) *http.Response {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/worker-sessions/" + url.PathEscape(workerSessionID) + "/" + action
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, nil)
+	if err != nil {
+		t.Fatalf("construct Worker Session %s request: %v", action, err)
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST Worker Session %s: %v", action, err)
 	}
 	return response
 }
@@ -232,21 +327,57 @@ func readWorkerSessionEventStream(response *http.Response) ([]factoryapi.WorkerS
 	return frames, fmt.Errorf("Worker Session event stream ended before lifecycle terminal event")
 }
 
+type workerSessionTerminalEventsResult struct {
+	frames []factoryapi.WorkerSessionEvent
+	phase  string
+	err    error
+}
+
+func readWorkerSessionEventStreamUntilTerminal(response *http.Response) ([]factoryapi.WorkerSessionEvent, string, error) {
+	var frames []factoryapi.WorkerSessionEvent
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &frame); err != nil {
+			return frames, "", fmt.Errorf("decode Worker Session terminal event: %w", err)
+		}
+		frames = append(frames, frame)
+		if frame.Event.SourceType != "worker_session_lifecycle" {
+			continue
+		}
+		phase := workerSessionEventPhase(frame)
+		switch phase {
+		case "COMPLETED", "FAILED", "CANCELED", "TERMINATED":
+			return frames, phase, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return frames, "", err
+	}
+	return frames, "", fmt.Errorf("Worker Session event stream ended before lifecycle terminal event")
+}
+
 func functionalStringPtr(value string) *string { return &value }
 
 type functionalWorkerGate struct {
 	gate         <-chan struct{}
 	started      chan struct{}
+	canceled     chan struct{}
 	completed    chan struct{}
 	mu           sync.Mutex
 	calls        int
-	canceled     bool
+	canceledFlag bool
 	startOnce    sync.Once
+	canceledOnce sync.Once
 	completeOnce sync.Once
 }
 
 func newFunctionalWorkerGate(gate <-chan struct{}) *functionalWorkerGate {
-	return &functionalWorkerGate{gate: gate, started: make(chan struct{}), completed: make(chan struct{})}
+	return &functionalWorkerGate{gate: gate, started: make(chan struct{}), canceled: make(chan struct{}), completed: make(chan struct{})}
 }
 
 func (r *functionalWorkerGate) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -260,8 +391,9 @@ func (r *functionalWorkerGate) Run(ctx context.Context, _ platformprocess.Comman
 		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("functional worker completed. COMPLETE")}, nil
 	case <-ctx.Done():
 		r.mu.Lock()
-		r.canceled = true
+		r.canceledFlag = true
 		r.mu.Unlock()
+		r.canceledOnce.Do(func() { close(r.canceled) })
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
 }
@@ -290,10 +422,19 @@ func (r *functionalWorkerGate) waitStarted(t testing.TB) {
 	}
 }
 
+func (r *functionalWorkerGate) waitCanceled(t testing.TB) {
+	t.Helper()
+	select {
+	case <-r.canceled:
+	case <-time.After(functionalWorkerSignalTimeout):
+		t.Fatalf("functional worker did not observe deterministic cancellation")
+	}
+}
+
 func (r *functionalWorkerGate) wasCanceled() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.canceled
+	return r.canceledFlag
 }
 
 func (r *functionalWorkerGate) callCount() int {
@@ -336,6 +477,33 @@ func assertCompletedWorkerSessionEvents(
 	}
 	if !started {
 		t.Fatalf("Worker Session replay has no STARTED lifecycle event: %#v", frames)
+	}
+	if terminalCount != 1 {
+		t.Fatalf("Worker Session terminal lifecycle event count = %d, want one; frames=%#v", terminalCount, frames)
+	}
+}
+
+func assertSingleTerminalWorkerSessionEvent(
+	t *testing.T,
+	frames []factoryapi.WorkerSessionEvent,
+	wantWorkerSessionID, wantPhase string,
+) {
+	t.Helper()
+	terminalCount := 0
+	for index, frame := range frames {
+		if frame.WorkerSessionId != wantWorkerSessionID {
+			t.Fatalf("Worker Session frame[%d] identity = %q, want %q", index, frame.WorkerSessionId, wantWorkerSessionID)
+		}
+		if frame.Event.SourceType != "worker_session_lifecycle" {
+			continue
+		}
+		phase := workerSessionEventPhase(frame)
+		if phase == "COMPLETED" || phase == "FAILED" || phase == "CANCELED" || phase == "TERMINATED" {
+			terminalCount++
+			if phase != wantPhase {
+				t.Fatalf("Worker Session terminal phase = %q, want %q; frames=%#v", phase, wantPhase, frames)
+			}
+		}
 	}
 	if terminalCount != 1 {
 		t.Fatalf("Worker Session terminal lifecycle event count = %d, want one; frames=%#v", terminalCount, frames)

@@ -391,6 +391,21 @@ func WorkerSessionInterruptResponseToAPI(
 	}
 }
 
+// WorkerSessionControlResponseToAPI maps the detached lifecycle result while
+// preserving the exact action, outcome, state, and admitted dispatch identity
+// selected by the Worker Sessions root.
+func WorkerSessionControlResponseToAPI(
+	result workersessions.ControlResult,
+) factoryapi.WorkerSessionControlResponse {
+	return factoryapi.WorkerSessionControlResponse{
+		WorkerSessionId: result.Session.ID,
+		Action:          factoryapi.WorkerSessionControlResponseAction(result.Action),
+		Outcome:         factoryapi.WorkerSessionControlResponseOutcome(result.Outcome),
+		State:           factoryapi.WorkerSessionControlResponseState(result.Session.State),
+		DispatchId:      result.DispatchID,
+	}
+}
+
 func workerSessionInterruptSnapshotToAPI(
 	session workersessions.Session,
 ) factoryapi.WorkerSessionInterruptSnapshot {

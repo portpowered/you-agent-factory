@@ -1,0 +1,5 @@
+description: The Worker Session lifecycle control could not reach its authoritative boundary.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

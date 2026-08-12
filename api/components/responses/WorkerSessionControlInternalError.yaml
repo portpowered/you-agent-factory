@@ -1,0 +1,5 @@
+description: The server failed while applying the Worker Session lifecycle control.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

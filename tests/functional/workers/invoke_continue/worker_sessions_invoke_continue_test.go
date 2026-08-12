@@ -194,6 +194,81 @@ func TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots(t
 	functionalevidence.Covers(t, "cli/you.worker-sessions.interrupt")
 }
 
+func TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback(t *testing.T) {
+	expectedActions := map[string]factoryapi.WorkerSessionControlResponseAction{
+		"pause":     factoryapi.WorkerSessionControlResponseActionPause,
+		"resume":    factoryapi.WorkerSessionControlResponseActionResume,
+		"cancel":    factoryapi.WorkerSessionControlResponseActionCancel,
+		"terminate": factoryapi.WorkerSessionControlResponseActionTerminate,
+	}
+	expectedStates := map[string]factoryapi.WorkerSessionControlResponseState{
+		"pause":     factoryapi.WorkerSessionControlResponseStatePaused,
+		"resume":    factoryapi.WorkerSessionControlResponseStateRunning,
+		"cancel":    factoryapi.WorkerSessionControlResponseStateCanceled,
+		"terminate": factoryapi.WorkerSessionControlResponseStateTerminated,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("remote Worker Session control method = %q, want POST", r.Method)
+			http.NotFound(w, r)
+			return
+		}
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) != 3 || parts[0] != "worker-sessions" || parts[1] == "" || expectedActions[parts[2]] == "" {
+			t.Errorf("remote Worker Session control path = %q, want /worker-sessions/<id>/<action>", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read remote Worker Session control body: %v", err)
+		}
+		if len(body) != 0 {
+			t.Errorf("remote Worker Session control body = %q, want empty POST body", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionControlResponse{
+			WorkerSessionId: "remote-control-" + parts[2],
+			Action:          expectedActions[parts[2]],
+			Outcome:         factoryapi.WorkerSessionControlResponseOutcomeApplied,
+			State:           expectedStates[parts[2]],
+			DispatchId:      "remote-dispatch-" + parts[2],
+		})
+	}))
+	defer server.Close()
+
+	runner := testutil.NewProviderCommandRunner()
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+	for action := range expectedActions {
+		action := action
+		t.Run(action, func(t *testing.T) {
+			workerSessionID := "remote-control-" + action
+			inputs := support.FakeInputs(context.Background(), []string{
+				"you", "--remote", "--server", server.URL, "--json", "worker-sessions", action, workerSessionID,
+			})
+			if err := process.Execute(inputs.Input); err != nil {
+				t.Fatalf("remote Worker Session %s: %v\nstdout:%s\nstderr:%s", action, err, inputs.Stdout(), inputs.Stderr())
+			}
+			var result factoryapi.WorkerSessionControlResponse
+			decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
+			if result.WorkerSessionId != workerSessionID || result.Action != expectedActions[action] ||
+				result.Outcome != factoryapi.WorkerSessionControlResponseOutcomeApplied || result.State != expectedStates[action] {
+				t.Fatalf("remote Worker Session %s result = %#v, want exact typed response", action, result)
+			}
+		})
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("remote Worker Session controls caused local provider fallback: %d calls", runner.CallCount())
+	}
+	functionalevidence.Covers(t,
+		"cli/you.worker-sessions.cancel",
+		"cli/you.worker-sessions.pause",
+		"cli/you.worker-sessions.resume",
+		"cli/you.worker-sessions.terminate",
+	)
+}
+
 func TestDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

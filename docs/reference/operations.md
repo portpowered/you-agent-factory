@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-12
 doc-id: agent-factory/guides/operations
 ---
 
@@ -274,6 +274,28 @@ Interrupt failures include a stable phase: `VALIDATION`,
 `SOURCE_CANCELLATION`, or `SUCCESSOR_ADMISSION`. Local placement is the
 default. `--remote` sends the complete request only to the configured
 `--server`; it never falls back to local state.
+
+Use the direct Worker Session controls when the same admitted session should
+be paused, resumed, canceled, or terminated. Each command accepts one stable
+Worker Session identity and returns a JSON or human-readable control result;
+repeated terminal controls are safe no-ops. Pause returns only after the
+authoritative `PAUSED` snapshot, resume uses the exact recorded Provider
+Session, and terminate joins the in-flight dispatch before returning:
+
+```bash
+you worker-sessions pause <worker-session-id>
+you worker-sessions resume <worker-session-id>
+you worker-sessions cancel <worker-session-id> --output json
+you worker-sessions terminate <worker-session-id>
+you --server http://localhost:7437 worker-sessions terminate <worker-session-id> --remote
+```
+
+Local placement is the default for all four controls. `--remote` sends the
+selected action only to the configured `--server`; a transport or control
+failure never falls back to local state. Outcomes are `APPLIED`, `NOOP`,
+`UNSUPPORTED`, or `FAILED`, with stable error classifications for invalid
+identity, unknown session, invalid state, transport failure, and an already
+terminal session.
 
 Local placement is the default. `--remote` selects exactly the configured
 `--server`; a failed remote continuation never falls back to a new local

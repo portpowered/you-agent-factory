@@ -108,6 +108,62 @@ func (s *Server) InterruptWorkerSession(
 	s.workerSessionsHTTP.InterruptWorkerSession(w, r, workerSessionID)
 }
 
+// PauseWorkerSession forwards the source-addressed pause control to the
+// Worker Sessions owner handler.
+func (s *Server) PauseWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.PauseWorkerSession(w, r, workerSessionID)
+}
+
+// ResumeWorkerSession forwards the source-addressed resume control to the
+// Worker Sessions owner handler.
+func (s *Server) ResumeWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ResumeWorkerSession(w, r, workerSessionID)
+}
+
+// CancelWorkerSession forwards the source-addressed cancel control to the
+// Worker Sessions owner handler.
+func (s *Server) CancelWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.CancelWorkerSession(w, r, workerSessionID)
+}
+
+// TerminateWorkerSession forwards the source-addressed terminate control to
+// the Worker Sessions owner handler.
+func (s *Server) TerminateWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.TerminateWorkerSession(w, r, workerSessionID)
+}
+
 // ListWorkerSessions forwards the top-level Worker Session observation list.
 func (s *Server) ListWorkerSessions(
 	w http.ResponseWriter,

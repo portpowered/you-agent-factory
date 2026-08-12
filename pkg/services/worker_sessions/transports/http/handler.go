@@ -129,6 +129,68 @@ func (h *Handler) InterruptWorkerSession(
 	h.writeJSON(w, http.StatusAccepted, response)
 }
 
+// PauseWorkerSession applies the exact source-addressed pause control.
+func (h *Handler) PauseWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	h.controlWorkerSession(w, r, workerSessionID, workersessions.ControlActionPause)
+}
+
+// ResumeWorkerSession applies the exact source-addressed resume control.
+func (h *Handler) ResumeWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	h.controlWorkerSession(w, r, workerSessionID, workersessions.ControlActionResume)
+}
+
+// CancelWorkerSession applies the exact source-addressed cancel control.
+func (h *Handler) CancelWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	h.controlWorkerSession(w, r, workerSessionID, workersessions.ControlActionCancel)
+}
+
+// TerminateWorkerSession applies the exact source-addressed terminate control.
+func (h *Handler) TerminateWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	h.controlWorkerSession(w, r, workerSessionID, workersessions.ControlActionTerminate)
+}
+
+func (h *Handler) controlWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+	action workersessions.ControlAction,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	if strings.TrimSpace(string(workerSessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "worker session id is required", "WORKER_SESSION_CONTROL_INVALID")
+		return
+	}
+	response, err := h.adapter.ControlWorkerSession(r.Context(), string(workerSessionID), action)
+	if err != nil {
+		h.writeMappedControlError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
 func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionStartRequest, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -893,6 +955,26 @@ func (h *Handler) writeMappedInterruptError(
 		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED), "Workers could not admit the Worker Session interrupt", result.Phase, result)
 	default:
 		writeInterruptError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to interrupt Worker Session", result.Phase, result)
+	}
+}
+
+func (h *Handler) writeMappedControlError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return
+	case errors.Is(err, workersessions.ErrInvalidSessionID):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session control request", "WORKER_SESSION_CONTROL_INVALID")
+	case errors.Is(err, workersessions.ErrSessionNotFound):
+		writeError(w, http.StatusNotFound, "Worker Session not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrInvalidState),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationNotAvailable),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationMissing),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationConflict),
+		errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation):
+		writeError(w, http.StatusConflict, "Worker Session control conflicts with current state", "WORKER_SESSION_CONTROL_CONFLICT")
+	default:
+		writeError(w, http.StatusServiceUnavailable, "Workers could not apply the Worker Session control", "WORKER_SESSION_CONTROL_FAILED")
 	}
 }
 

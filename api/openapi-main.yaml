@@ -218,6 +218,121 @@ paths:
           $ref: '#/components/responses/WorkerSessionInterruptInternalError'
         '503':
           $ref: '#/components/responses/WorkerSessionInterruptUnavailable'
+  /worker-sessions/{worker_session_id}/pause:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: pauseWorkerSession
+      summary: Pause one active Worker Session
+      description: >-
+        Cancels the exact admitted Worker Session dispatch through the
+        Workers boundary and returns only after the authoritative PAUSED
+        snapshot is available. Repeated requests are idempotent.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: The Worker Session control result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionControlConflict'
+        '500':
+          $ref: '#/components/responses/WorkerSessionControlInternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionControlUnavailable'
+  /worker-sessions/{worker_session_id}/resume:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: resumeWorkerSession
+      summary: Resume one paused Worker Session
+      description: >-
+        Admits exactly one continuation of a paused Worker Session using the
+        exact Provider Session association recorded on that session. Repeated
+        requests are idempotent and never select a fallback Provider Session.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: The Worker Session control result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionControlConflict'
+        '500':
+          $ref: '#/components/responses/WorkerSessionControlInternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionControlUnavailable'
+  /worker-sessions/{worker_session_id}/cancel:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: cancelWorkerSession
+      summary: Cancel one Worker Session
+      description: >-
+        Requests cancellation of the exact admitted Worker Session dispatch.
+        Cancellation is terminal and repeated requests are idempotent.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: The Worker Session control result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionControlConflict'
+        '500':
+          $ref: '#/components/responses/WorkerSessionControlInternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionControlUnavailable'
+  /worker-sessions/{worker_session_id}/terminate:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: terminateWorkerSession
+      summary: Terminate one Worker Session
+      description: >-
+        Requests termination of the exact admitted Worker Session dispatch and
+        joins its completion before returning. Repeated and concurrent calls
+        are idempotent and return the canonical terminal snapshot.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: The Worker Session control result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionControlConflict'
+        '500':
+          $ref: '#/components/responses/WorkerSessionControlInternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionControlUnavailable'
   /worker-sessions/{worker_session_id}/events:
     get:
       tags:
@@ -2109,6 +2224,12 @@ components:
       $ref: './components/responses/WorkerSessionInterruptUnavailable.yaml'
     WorkerSessionInterruptInternalError:
       $ref: './components/responses/WorkerSessionInterruptInternalError.yaml'
+    WorkerSessionControlConflict:
+      $ref: './components/responses/WorkerSessionControlConflict.yaml'
+    WorkerSessionControlUnavailable:
+      $ref: './components/responses/WorkerSessionControlUnavailable.yaml'
+    WorkerSessionControlInternalError:
+      $ref: './components/responses/WorkerSessionControlInternalError.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     FactorySessionResourceCapacityConflict:
@@ -2186,6 +2307,8 @@ components:
       $ref: './components/schemas/api/WorkerSessionInterruptResponse.yaml'
     WorkerSessionInterruptError:
       $ref: './components/schemas/api/WorkerSessionInterruptError.yaml'
+    WorkerSessionControlResponse:
+      $ref: './components/schemas/api/WorkerSessionControlResponse.yaml'
     WorkerSessionStartRetryPolicy:
       $ref: './components/schemas/api/WorkerSessionStartRetryPolicy.yaml'
     WorkerSessionResolvedExecution:

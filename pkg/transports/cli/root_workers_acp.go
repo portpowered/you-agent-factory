@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -168,6 +169,26 @@ func productionWorkerSessionsCommand(
 	}
 	if err := registry.Register("you.worker-sessions.interrupt.handler", func(cmd *cobra.Command, args []string) error {
 		return executeGeneratedWorkerSessionsInterrupt(cmd, args, globals, diagnostics, options.InterruptWorkerSession)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
+	if err := registry.Register("you.worker-sessions.pause.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.PauseWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionPause)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
+	if err := registry.Register("you.worker-sessions.resume.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.ResumeWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionResume)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
+	if err := registry.Register("you.worker-sessions.cancel.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.CancelWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionCancel)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
+	if err := registry.Register("you.worker-sessions.terminate.handler", func(cmd *cobra.Command, _ []string) error {
+		return executeGeneratedWorkerSessionsControl(cmd, globals, diagnostics, options.TerminateWorkerSession, options.LocalWorkerSessionControls, workersessions.ControlActionTerminate)
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
@@ -413,6 +434,39 @@ func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generate
 		return generatedWorkerSessionsInterruptInputs{}, err
 	}
 	return inputs, nil
+}
+
+func executeGeneratedWorkerSessionsControl(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operation func(workersessionscli.ControlConfig) error,
+	local workersessionscli.LocalControlBoundary,
+	action workersessions.ControlAction,
+) error {
+	if operation == nil {
+		return fmt.Errorf("worker sessions %s service is required", strings.ToLower(string(action)))
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	commandName := strings.ToLower(string(action))
+	workerSessionID, err := commandInputValue[string](values, "you.worker-sessions."+commandName+".arg.0")
+	if err != nil {
+		return err
+	}
+	outputFormat, err := commandInputValue[string](values, "you.worker-sessions."+commandName+".flag.output")
+	if err != nil {
+		return err
+	}
+	return operation(workersessionscli.ControlConfig{
+		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		WorkerSessionID: workerSessionID, Action: action, OutputFormat: outputFormat,
+		JSON:   globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json"),
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug, Local: local,
+	})
 }
 
 func installWorkerSessionsStreamModeConflictGuard(command *cobra.Command) error {
