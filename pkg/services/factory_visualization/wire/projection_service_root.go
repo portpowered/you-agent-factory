@@ -104,6 +104,48 @@ func (adapter *projectionServiceRoot) QueryRecordingStatus(
 	return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
 }
 
+func (adapter *projectionServiceRoot) BeginRecordingScope(
+	context.Context,
+	recordings.BeginRecordingScopeRequest,
+) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) AppendRecordingScopeEvent(
+	context.Context,
+	recordings.AppendRecordingScopeEventRequest,
+) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrInvalidRecordingEvent
+}
+
+func (adapter *projectionServiceRoot) FlushRecordingScope(
+	context.Context,
+	recordings.FlushRecordingScopeRequest,
+) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) FinalizeRecordingScope(
+	context.Context,
+	recordings.FinalizeRecordingScopeRequest,
+) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) CloseRecordingScope(
+	context.Context,
+	recordings.CloseRecordingScopeRequest,
+) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (adapter *projectionServiceRoot) QueryRecordingScope(
+	context.Context,
+	recordings.QueryRecordingScopeRequest,
+) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
 func (adapter *projectionServiceRoot) LoadReplayRecording(
 	recordings.LoadReplayRecordingRequest,
 ) (recordings.LoadReplayRecordingResult, error) {

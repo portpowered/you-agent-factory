@@ -114,6 +114,48 @@ func invalidSubscribeScope(scope recordings.CanonicalEventScope) error {
 	return nil
 }
 
+func (fake *peerRootServiceFake) BeginRecordingScope(
+	context.Context,
+	recordings.BeginRecordingScopeRequest,
+) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) AppendRecordingScopeEvent(
+	context.Context,
+	recordings.AppendRecordingScopeEventRequest,
+) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) FlushRecordingScope(
+	context.Context,
+	recordings.FlushRecordingScopeRequest,
+) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) FinalizeRecordingScope(
+	context.Context,
+	recordings.FinalizeRecordingScopeRequest,
+) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) CloseRecordingScope(
+	context.Context,
+	recordings.CloseRecordingScopeRequest,
+) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) QueryRecordingScope(
+	context.Context,
+	recordings.QueryRecordingScopeRequest,
+) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
 type peerEventSubscription struct {
 	outcomes []recordings.SubscriptionOutcome
 }
