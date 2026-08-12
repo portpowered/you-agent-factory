@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -31,6 +32,62 @@ func TestPortableReplayInspectionExecutesThroughRootProcess(t *testing.T) {
 
 	output := functionalExecutePortableReplay(t, process)
 	functionalAssertPortableReplayInspection(t, output, calls)
+}
+
+// TestWSRFT016RecordingCompatibilityThroughCustomerFacingReplayPath proves
+// that the root-composed replay command keeps legacy recordings readable and
+// carries the current Worker-history outcome through historical inspection.
+//
+// WSR-FT-016: legacy/current fixture load, honest legacy Worker-history
+// unavailability, current Worker-history preservation, and no live execution.
+func TestWSRFT016RecordingCompatibilityThroughCustomerFacingReplayPath(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name          string
+		fixture       string
+		wantSession   string
+		wantStatus    string
+		wantWorker    string
+		wantEventLine string
+	}{
+		{
+			name: "legacy-schema-v2", fixture: "valid-v2.json", wantSession: "session-js-001",
+			wantStatus: "SUCCEEDED", wantWorker: "Worker history: UNAVAILABLE (reason=SCHEMA_DID_NOT_RECORD_CANONICAL_WORKER_HISTORY)",
+			wantEventLine: "Events: 2",
+		},
+		{
+			name: "current-schema-v3-worker-history", fixture: "valid-v3-worker-history.json", wantSession: "session-current-worker-001",
+			wantStatus: "SUCCEEDED", wantWorker: "Worker history: AVAILABLE (reason=)", wantEventLine: "Events: 2",
+		},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			payloadPath := testpath.MustRepoPathFromCaller(
+				t, 0, "pkg", "services", "recordings", "internal", "artifacts", "testdata", testCase.fixture,
+			)
+			payload, err := os.ReadFile(payloadPath)
+			if err != nil {
+				t.Fatalf("read fixture %q: %v", testCase.fixture, err)
+			}
+			calls := &functionalReplayLiveConstructionCalls{}
+			process := support.BuildProcess(t, functionalPortableReplayEdges(t, payload, calls))
+			output := functionalExecutePortableReplay(t, process)
+			if calls.replayReads.Load() != 1 || calls.providerRuns.Load() != 0 || calls.scriptRuns.Load() != 0 ||
+				calls.sessionIDRequests.Load() != 0 || calls.hostBindings.Load() != 0 {
+				t.Fatalf("replay/live calls = reads:%d provider:%d script:%d sessionID:%d host:%d", calls.replayReads.Load(), calls.providerRuns.Load(), calls.scriptRuns.Load(), calls.sessionIDRequests.Load(), calls.hostBindings.Load())
+			}
+			for _, want := range []string{
+				"Replayed Factory Session: " + testCase.wantSession,
+				"Status: " + testCase.wantStatus,
+				testCase.wantWorker,
+				testCase.wantEventLine,
+			} {
+				if !bytes.Contains([]byte(output), []byte(want)) {
+					t.Fatalf("WSR-FT-016 replay output = %q, want %q", output, want)
+				}
+			}
+		})
+	}
 }
 
 type functionalReplayLiveConstructionCalls struct {
@@ -116,6 +173,7 @@ func functionalAssertPortableReplayInspection(
 		"Source: workflow/example.js",
 		"Status: SUCCEEDED",
 		"Result: FINAL",
+		"Worker history: UNAVAILABLE (reason=CANONICAL_WORKER_HISTORY_NOT_CAPTURED)",
 		"Artifacts: 1",
 		"Artifact: artifact-1 (CHECKPOINT)",
 		"Checkpoint: checkpoint-1 (Waiting for operator input)",

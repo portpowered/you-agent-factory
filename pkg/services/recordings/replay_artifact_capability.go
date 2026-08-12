@@ -323,6 +323,7 @@ type ReplayArtifactDiagnosticCode string
 const (
 	ReplayArtifactDiagnosticMalformed             ReplayArtifactDiagnosticCode = "MALFORMED_REPLAY_ARTIFACT"
 	ReplayArtifactDiagnosticUnsupportedVersion    ReplayArtifactDiagnosticCode = "UNSUPPORTED_REPLAY_COMPATIBILITY_VERSION"
+	ReplayArtifactDiagnosticUnsupportedSchema     ReplayArtifactDiagnosticCode = "UNSUPPORTED_RECORDING_SCHEMA_VERSION"
 	ReplayArtifactDiagnosticInvalidIdentity       ReplayArtifactDiagnosticCode = "INVALID_RECORDING_IDENTITY"
 	ReplayArtifactDiagnosticInvalidSummary        ReplayArtifactDiagnosticCode = "INVALID_RECORDING_SUMMARY"
 	ReplayArtifactDiagnosticInvalidIntegrity      ReplayArtifactDiagnosticCode = "INVALID_REPLAY_ARTIFACT_INTEGRITY"
@@ -340,11 +341,13 @@ const (
 // never a customer filesystem path. SupportedVersions is present only when a
 // compatibility failure can name supported values.
 type ReplayArtifactDiagnostic struct {
-	Code              ReplayArtifactDiagnosticCode
-	Area              string
-	Path              string
-	Message           string
-	SupportedVersions []string
+	Code               ReplayArtifactDiagnosticCode
+	Area               string
+	Path               string
+	Message            string
+	EncounteredVersion string
+	SupportedVersions  []string
+	Action             string
 }
 
 // Error renders only the stable, safe diagnostic facts.

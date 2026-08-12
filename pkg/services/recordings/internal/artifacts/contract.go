@@ -21,6 +21,7 @@ type (
 	ResultProjection   = recordings.PortableRecordingResult
 	FailureSummary     = recordings.PortableRecordingFailureSummary
 	AvailabilityDetail = recordings.PortableRecordingAvailability
+	WorkerHistory      = recordings.PortableRecordingWorkerHistory
 	RedactionMetadata  = recordings.PortableRecordingRedactionMetadata
 
 	DiagnosticCode = recordings.PortableRecordingDiagnosticCode
@@ -42,6 +43,7 @@ type (
 const (
 	CodeMalformedContract  = recordings.PortableRecordingCodeMalformedContract
 	CodeUnsupportedVersion = recordings.PortableRecordingCodeUnsupportedVersion
+	CodeUnsupportedSchema  = recordings.PortableRecordingCodeUnsupportedSchema
 	CodeInvalidIdentity    = recordings.PortableRecordingCodeInvalidIdentity
 	CodeInvalidDigest      = recordings.PortableRecordingCodeInvalidDigest
 	CodeInvalidSummary     = recordings.PortableRecordingCodeInvalidSummary

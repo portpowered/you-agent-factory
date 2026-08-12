@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestReplayRecordingRestoresCompletedPublicReadModelsWithoutLiveExecution(t *testing.T) {
@@ -130,6 +131,32 @@ func TestReplayRecordingPreservesLegacyFactsAndReportsWorkerHistoryUnavailable(t
 			assertLegacyReplayFixture(t, name)
 		})
 	}
+}
+
+func TestReplayRecordingPreservesCurrentWorkerHistoryFacts(t *testing.T) {
+	t.Parallel()
+	value := loadVersionPinnedRecordingFixture(t, "valid-v3-worker-history.json")
+	first := replayVersionPinnedFixture(t, value)
+	second := replayVersionPinnedFixture(t, value)
+	assertStableWorkerHistory(t, first, second)
+	history := first.WorkerHistory
+	if history.Availability != recording.PortableRecordingWorkerHistoryAvailable ||
+		history.WorkerPortableRecording == nil || len(history.Records) != 3 {
+		t.Fatalf("Worker history = %#v, want available ordered history", history)
+	}
+	if history.Lifecycle.Terminal == nil || history.Lifecycle.Terminal.Status != "COMPLETED" ||
+		history.Correlation.FactorySessionID != value.Session.ID || history.Correlation.DispatchID != "dispatch-current-001" {
+		t.Fatalf("Worker lifecycle/correlation = %#v", history)
+	}
+	if history.Records[1].Provenance.Fidelity != workers.FidelityNormalized ||
+		history.Records[1].Provenance.Delivery != workers.DeliveryNativeStream {
+		t.Fatalf("Worker fidelity facts = %#v", history.Records[1])
+	}
+	if first.Session.SessionID != value.Session.ID || len(first.Events.Events) != len(value.Events) ||
+		first.Result.ResultStatus != fse.ResultStatusFinal {
+		t.Fatalf("Factory Session projection = %#v", first)
+	}
+	assertInspectionWorkerHistory(t, first)
 }
 
 func assertLegacyReplayFixture(t *testing.T, name string) {

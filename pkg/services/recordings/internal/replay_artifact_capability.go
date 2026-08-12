@@ -354,8 +354,10 @@ func replayArtifactDiagnosticFromPortable(
 		return replayInputDependencyDiagnostic()
 	}
 	result := recordings.ReplayArtifactDiagnostic{
-		Area: diagnostic.Area,
-		Path: safeReplayArtifactDiagnosticPath(diagnostic.Path),
+		Area:               diagnostic.Area,
+		Path:               safeReplayArtifactDiagnosticPath(diagnostic.Path),
+		EncounteredVersion: diagnostic.EncounteredVersion,
+		Action:             diagnostic.Action,
 	}
 	switch diagnostic.Code {
 	case recordings.PortableRecordingCodeMalformedContract:
@@ -364,6 +366,10 @@ func replayArtifactDiagnosticFromPortable(
 	case recordings.PortableRecordingCodeUnsupportedVersion:
 		result.Code = recordings.ReplayArtifactDiagnosticUnsupportedVersion
 		result.Message = "recording uses an unsupported replay compatibility version"
+		result.SupportedVersions = slices.Clone(diagnostic.SupportedVersions)
+	case recordings.PortableRecordingCodeUnsupportedSchema:
+		result.Code = recordings.ReplayArtifactDiagnosticUnsupportedSchema
+		result.Message = "recording uses an unsupported schema version"
 		result.SupportedVersions = slices.Clone(diagnostic.SupportedVersions)
 	case recordings.PortableRecordingCodeInvalidIdentity:
 		result.Code = recordings.ReplayArtifactDiagnosticInvalidIdentity

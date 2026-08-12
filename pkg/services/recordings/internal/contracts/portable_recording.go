@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io/fs"
 	"time"
+
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
 )
 
 const (
@@ -17,13 +19,26 @@ const (
 	// PortableRecordingSchemaV2 adds the required public result projection while
 	// preserving the established Factory Session and event summaries.
 	PortableRecordingSchemaV2 = "2"
+	// PortableRecordingSchemaV3 adds the explicit Worker-history outcome and,
+	// when available, the detached canonical Worker recording. Earlier schema
+	// versions retain their original meaning and cannot carry this field.
+	PortableRecordingSchemaV3 = "3"
 	// PortableRecordingCurrentSchemaVersion is the version emitted by the
-	// pre-Worker-history Factory Session exporter.
-	PortableRecordingCurrentSchemaVersion = PortableRecordingSchemaV2
+	// Worker-history-capable Factory Session exporter.
+	PortableRecordingCurrentSchemaVersion = PortableRecordingSchemaV3
 
 	// PortableRecordingReplayCompatibilityV1 identifies the replay vocabulary
-	// supported by both shipped Factory Session recording schemas.
+	// shared by every shipped Factory Session recording schema.
 	PortableRecordingReplayCompatibilityV1 = "1"
+
+	// PortableRecordingWorkerHistoryReasonNotCaptured is the explicit outcome
+	// used by a new export that has the Worker-history-capable schema but no
+	// canonical Worker capture to attach.
+	PortableRecordingWorkerHistoryReasonNotCaptured = "CANONICAL_WORKER_HISTORY_NOT_CAPTURED"
+
+	// PortableRecordingCompatibilityAction is safe, stable guidance for a
+	// reader that cannot consume a recording's declared version.
+	PortableRecordingCompatibilityAction = "UPGRADE_READER_OR_MIGRATE_RECORDING_TO_A_SUPPORTED_VERSION"
 
 	// portableRecordingMaxSecretsRedacted bounds the aggregate count exposed by
 	// a recording. Counts at or above this limit are reported as the limit.
@@ -31,7 +46,9 @@ const (
 )
 
 var (
-	portableRecordingSupportedSchemaVersions = []string{PortableRecordingSchemaV1, PortableRecordingSchemaV2}
+	portableRecordingSupportedSchemaVersions = []string{
+		PortableRecordingSchemaV1, PortableRecordingSchemaV2, PortableRecordingSchemaV3,
+	}
 	portableRecordingSupportedReplayVersions = []string{PortableRecordingReplayCompatibilityV1}
 )
 
@@ -49,6 +66,7 @@ type PortableRecording struct {
 	Events                     []PortableRecordingEventSummary     `json:"events"`
 	Checkpoint                 *PortableRecordingCheckpointSummary `json:"checkpoint,omitempty"`
 	Result                     *PortableRecordingResult            `json:"result,omitempty"`
+	WorkerHistory              *PortableRecordingWorkerHistory     `json:"workerHistory,omitempty"`
 	Redaction                  PortableRecordingRedactionMetadata  `json:"redaction"`
 }
 
@@ -123,13 +141,17 @@ const (
 )
 
 // PortableRecordingWorkerHistory is the detached Worker-history availability
-// projection for a Factory Session recording. Legacy schemas intentionally
+// projection for a Factory Session recording. The embedded Worker recording
+// is flattened into this object so callers can inspect ordered records and
+// their lifecycle, correlation, provenance, and fidelity facts without a
+// second envelope or a live service dependency. Legacy schemas intentionally
 // contain only the unavailable outcome and its compatibility reason; they do
 // not acquire fabricated records, terminal, fidelity, provider, or complete
 // facts while being read.
 type PortableRecordingWorkerHistory struct {
 	Availability PortableRecordingWorkerHistoryAvailability `json:"availability"`
 	Reason       string                                     `json:"reason"`
+	*workerrecording.WorkerPortableRecording
 }
 
 // NormalizePortableRecordingWorkerHistory maps the shipped pre-Worker-history
@@ -142,9 +164,54 @@ func NormalizePortableRecordingWorkerHistory(recording PortableRecording) Portab
 			Availability: PortableRecordingWorkerHistoryUnavailable,
 			Reason:       PortableRecordingWorkerHistoryReasonLegacySchema,
 		}
+	case PortableRecordingSchemaV3:
+		if recording.WorkerHistory == nil {
+			return PortableRecordingWorkerHistory{}
+		}
+		return clonePortableRecordingWorkerHistory(*recording.WorkerHistory)
 	default:
 		return PortableRecordingWorkerHistory{}
 	}
+}
+
+func clonePortableRecordingWorkerHistory(
+	history PortableRecordingWorkerHistory,
+) PortableRecordingWorkerHistory {
+	clone := history
+	if history.WorkerPortableRecording != nil {
+		recording := cloneWorkerPortableRecording(*history.WorkerPortableRecording)
+		clone.WorkerPortableRecording = &recording
+	}
+	return clone
+}
+
+func cloneWorkerPortableRecording(
+	recording workerrecording.WorkerPortableRecording,
+) workerrecording.WorkerPortableRecording {
+	clone := recording
+	clone.Records = append([]workerrecording.WorkerPortableRecord(nil), recording.Records...)
+	for index := range clone.Records {
+		clone.Records[index].Payload = append(json.RawMessage(nil), recording.Records[index].Payload...)
+		clone.Records[index].Provenance = recording.Records[index].Provenance
+	}
+	clone.Correlation.WorkIDs = append([]string(nil), recording.Correlation.WorkIDs...)
+	if recording.Correlation.Continuation != nil {
+		continuation := *recording.Correlation.Continuation
+		clone.Correlation.Continuation = &continuation
+	}
+	if recording.Correlation.ProviderSelection != nil {
+		selection := *recording.Correlation.ProviderSelection
+		clone.Correlation.ProviderSelection = &selection
+	}
+	if recording.Lifecycle.OpeningTimestamp != nil {
+		timestamp := *recording.Lifecycle.OpeningTimestamp
+		clone.Lifecycle.OpeningTimestamp = &timestamp
+	}
+	if recording.Lifecycle.Terminal != nil {
+		terminal := *recording.Lifecycle.Terminal
+		clone.Lifecycle.Terminal = &terminal
+	}
+	return clone
 }
 
 // PortableRecordingFailureSummary exposes a safe failure summary.
@@ -178,6 +245,7 @@ type PortableRecordingDiagnosticCode string
 const (
 	PortableRecordingCodeMalformedContract  PortableRecordingDiagnosticCode = "MALFORMED_RECORDING_CONTRACT"
 	PortableRecordingCodeUnsupportedVersion PortableRecordingDiagnosticCode = "UNSUPPORTED_REPLAY_COMPATIBILITY_VERSION"
+	PortableRecordingCodeUnsupportedSchema  PortableRecordingDiagnosticCode = "UNSUPPORTED_RECORDING_SCHEMA_VERSION"
 	PortableRecordingCodeInvalidIdentity    PortableRecordingDiagnosticCode = "INVALID_RECORDING_IDENTITY"
 	PortableRecordingCodeInvalidDigest      PortableRecordingDiagnosticCode = "INVALID_RECORDING_DIGEST"
 	PortableRecordingCodeInvalidSummary     PortableRecordingDiagnosticCode = "INVALID_RECORDING_SUMMARY"
@@ -186,11 +254,13 @@ const (
 
 // PortableRecordingDiagnostic reports one validation failure area.
 type PortableRecordingDiagnostic struct {
-	Code              PortableRecordingDiagnosticCode `json:"code"`
-	Area              string                          `json:"area"`
-	Path              string                          `json:"path,omitempty"`
-	Message           string                          `json:"message"`
-	SupportedVersions []string                        `json:"supportedVersions,omitempty"`
+	Code               PortableRecordingDiagnosticCode `json:"code"`
+	Area               string                          `json:"area"`
+	Path               string                          `json:"path,omitempty"`
+	Message            string                          `json:"message"`
+	EncounteredVersion string                          `json:"encounteredVersion,omitempty"`
+	SupportedVersions  []string                        `json:"supportedVersions,omitempty"`
+	Action             string                          `json:"action,omitempty"`
 }
 
 func (diagnostic *PortableRecordingDiagnostic) Error() string {
@@ -214,6 +284,7 @@ type PortableRecordingCanonicalFacts struct {
 	Events                              []json.RawMessage
 	Checkpoint                          *PortableRecordingCanonicalCheckpoint
 	Result                              *PortableRecordingCanonicalResult
+	WorkerHistory                       *PortableRecordingWorkerHistory
 }
 
 // PortableRecordingCanonicalCheckpoint carries canonical checkpoint facts.

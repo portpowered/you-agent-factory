@@ -146,6 +146,8 @@ type (
 	PortableRecordingCanonicalFacts                            = recordingcontracts.PortableRecordingCanonicalFacts
 	PortableRecordingCanonicalResult                           = recordingcontracts.PortableRecordingCanonicalResult
 	PortableRecordingCheckpointSummary                         = recordingcontracts.PortableRecordingCheckpointSummary
+	PortableRecordingCodec                                     = recordingcontracts.PortableRecordingCodec
+	PortableRecordingCompatibilityPolicy                       = recordingcontracts.PortableRecordingCompatibilityPolicy
 	PortableRecordingDiagnostic                                = recordingcontracts.PortableRecordingDiagnostic
 	PortableRecordingDiagnosticCode                            = recordingcontracts.PortableRecordingDiagnosticCode
 	PortableRecordingEventSummary                              = recordingcontracts.PortableRecordingEventSummary
@@ -357,6 +359,13 @@ const (
 )
 
 const (
+	PortableRecordingCodeUnsupportedSchema          = recordingcontracts.PortableRecordingCodeUnsupportedSchema
+	PortableRecordingCompatibilityAction            = recordingcontracts.PortableRecordingCompatibilityAction
+	PortableRecordingSchemaV3                       = recordingcontracts.PortableRecordingSchemaV3
+	PortableRecordingWorkerHistoryReasonNotCaptured = recordingcontracts.PortableRecordingWorkerHistoryReasonNotCaptured
+)
+
+const (
 	PortableRecordingWorkerHistoryAvailable          = recordingcontracts.PortableRecordingWorkerHistoryAvailable
 	PortableRecordingWorkerHistoryUnavailable        = recordingcontracts.PortableRecordingWorkerHistoryUnavailable
 	PortableRecordingWorkerHistoryReasonLegacySchema = recordingcontracts.PortableRecordingWorkerHistoryReasonLegacySchema
@@ -407,10 +416,14 @@ var (
 	NewFactoryEvent                                    = recordingcontracts.NewFactoryEvent
 	BuildFactoryWorldWorkstationRequestProjectionSlice = recordingcontracts.BuildFactoryWorldWorkstationRequestProjectionSlice
 	BuildPortableRecording                             = recordingcontracts.BuildPortableRecording
+	CurrentPortableRecordingCodec                      = recordingcontracts.CurrentPortableRecordingCodec
 	DecodePortableRecording                            = recordingcontracts.DecodePortableRecording
+	DecodePortableRecordingWithVersions                = recordingcontracts.DecodePortableRecordingWithVersions
 	FactoryMetadataWarnings                            = recordingcontracts.FactoryMetadataWarnings
 	NormalizePortableRecordingWorkerHistory            = recordingcontracts.NormalizePortableRecordingWorkerHistory
+	NewPortableRecordingCodec                          = recordingcontracts.NewPortableRecordingCodec
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
+	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
 )
 
 // Service is the singular cross-service Recordings authority.
