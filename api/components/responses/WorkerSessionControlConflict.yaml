@@ -1,0 +1,5 @@
+description: The Worker Session lifecycle control conflicts with its current state.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

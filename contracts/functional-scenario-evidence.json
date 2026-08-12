@@ -110,6 +110,21 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+      "stableIds": [
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.pause",
+        "cli/you.worker-sessions.resume",
+        "cli/you.worker-sessions.terminate"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots",
+      "stableIds": [
+        "cli/you.worker-sessions.interrupt"
+      ]
+    },
+    {
       "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
       "stableIds": [
         "cli/you.session.resource.set"
@@ -122,9 +137,21 @@
       ]
     },
     {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
+      "stableIds": [
+        "rest/cancelWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
       "stableIds": [
         "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+      "stableIds": [
+        "rest/interruptWorkerSession"
       ]
     },
     {

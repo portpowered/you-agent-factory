@@ -204,6 +204,54 @@ func provideContinueWorkerSessionOperation(
 	return workersessionscli.BindContinue(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
 }
 
+func provideInterruptWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+	generateID workersessionscli.IDGenerator,
+) cli.InterruptWorkerSessionOperation {
+	return workersessionscli.BindInterrupt(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
+}
+
+func providePauseWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+) cli.PauseWorkerSessionOperation {
+	return cli.PauseWorkerSessionOperation(bindWorkerSessionControlOperation(transport.Protocol, local, workersessions.ControlActionPause))
+}
+
+func provideResumeWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+) cli.ResumeWorkerSessionOperation {
+	return cli.ResumeWorkerSessionOperation(bindWorkerSessionControlOperation(transport.Protocol, local, workersessions.ControlActionResume))
+}
+
+func provideCancelWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+) cli.CancelWorkerSessionOperation {
+	return cli.CancelWorkerSessionOperation(bindWorkerSessionControlOperation(transport.Protocol, local, workersessions.ControlActionCancel))
+}
+
+func provideTerminateWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+) cli.TerminateWorkerSessionOperation {
+	return cli.TerminateWorkerSessionOperation(bindWorkerSessionControlOperation(transport.Protocol, local, workersessions.ControlActionTerminate))
+}
+
+func bindWorkerSessionControlOperation(
+	transport clihttp.Protocol,
+	local *localWorkerSessionsBoundary,
+	action workersessions.ControlAction,
+) workersessionscli.ControlOperation {
+	operation := workersessionscli.BindControl(transport, local)
+	return func(config workersessionscli.ControlConfig) error {
+		config.Action = action
+		return operation(config)
+	}
+}
+
 // localWorkerSessionsBoundary owns the process-scoped direct Worker route used
 // by the CLI. Direct invoke has already resolved the provider-facing execution
 // fields, so its user-facing workstation name is not an authored route. The
@@ -215,6 +263,7 @@ type localWorkerSessionsBoundary struct {
 }
 
 var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
+var _ workersessionscli.LocalControlBoundary = (*localWorkerSessionsBoundary)(nil)
 
 func (b *localWorkerSessionsBoundary) Start(
 	ctx context.Context,
@@ -236,6 +285,56 @@ func (b *localWorkerSessionsBoundary) Continue(
 		return workersessions.ContinueResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
 	}
 	return b.service.Continue(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Interrupt(
+	ctx context.Context,
+	req workersessions.InterruptRequest,
+) (workersessions.InterruptResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.InterruptResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Interrupt(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Pause(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.ControlResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Pause(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Resume(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.ControlResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Resume(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Cancel(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.ControlResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Cancel(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Terminate(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.ControlResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Terminate(ctx, req)
 }
 
 func (b *localWorkerSessionsBoundary) StreamObservationsByWorkerSessionID(

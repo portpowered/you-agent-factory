@@ -101,3 +101,100 @@ func TestContinueWorkerSessionMapsStableFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestInterruptWorkerSessionReturnsPhaseAwareSnapshotsAfterAdmission(t *testing.T) {
+	service := &fakeObservationService{interruptResult: workersessions.InterruptResult{
+		RequestID: "request-1", SourceWorkerSessionID: "source-1", SuccessorWorkerSessionID: "successor-1",
+		Phase: workersessions.InterruptPhaseSuccessorAdmission, Accepted: true,
+		Source:    workersessions.Session{ID: "source-1", State: workersessions.StateCanceled},
+		Successor: workersessions.Session{ID: "successor-1", State: workersessions.StateRunning},
+	}}
+	handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/interrupt", strings.NewReader(`{
+		"requestId": " request-1 ",
+		"successorWorkerSessionId": " successor-1 ",
+		"replacementMessage": "  replace the work  "
+	}`))
+
+	handler.InterruptWorkerSession(recorder, request, factoryapi.WorkerSessionID(" source-1 "))
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.WorkerSessionInterruptResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Accepted || response.Phase != factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission ||
+		response.Source.WorkerSessionId != "source-1" || response.Source.State != factoryapi.WorkerSessionInterruptSnapshotStateCanceled ||
+		response.Successor.WorkerSessionId != "successor-1" || response.Successor.State != factoryapi.WorkerSessionInterruptSnapshotStateRunning {
+		t.Fatalf("response = %#v, want phase-aware source/successor snapshots", response)
+	}
+	if !service.interruptCalled || service.interruptRequest.RequestID != "request-1" ||
+		service.interruptRequest.SourceWorkerSessionID != "source-1" ||
+		service.interruptRequest.SuccessorWorkerSessionID != "successor-1" ||
+		service.interruptRequest.ReplacementMessage != "  replace the work  " {
+		t.Fatalf("interrupt request = %#v, want normalized identities and preserved input", service.interruptRequest)
+	}
+}
+
+func TestInterruptWorkerSessionRejectsMalformedPayloadBeforeService(t *testing.T) {
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/interrupt", strings.NewReader(`{
+		"requestId":"request-1",
+		"successorWorkerSessionId":"successor-1",
+		"replacementMessage":"replace",
+		"unexpected":true
+	}`)), factoryapi.WorkerSessionID("source-1"))
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.WorkerSessionInterruptError
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != "BAD_REQUEST" || response.Phase != factoryapi.WorkerSessionInterruptErrorPhaseValidation {
+		t.Fatalf("error response = %#v, want validation phase", response)
+	}
+	if service.interruptCalled {
+		t.Fatal("Worker Sessions Interrupt was called for malformed input")
+	}
+}
+
+func TestInterruptWorkerSessionMapsStablePhaseAwareFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name  string
+		err   error
+		code  string
+		phase factoryapi.WorkerSessionInterruptErrorPhase
+		want  int
+	}{
+		{name: "source not found", err: workersessions.ErrInterruptSourceNotFound, code: "NOT_FOUND", phase: factoryapi.WorkerSessionInterruptErrorPhaseValidation, want: http.StatusNotFound},
+		{name: "request id conflict", err: workersessions.ErrInterruptRequestIDConflict, code: "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT", phase: factoryapi.WorkerSessionInterruptErrorPhaseValidation, want: http.StatusConflict},
+		{name: "source cancellation", err: workersessions.ErrInterruptSourceCancellationFailed, code: "WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED", phase: factoryapi.WorkerSessionInterruptErrorPhaseSourceCancellation, want: http.StatusServiceUnavailable},
+		{name: "successor admission", err: workersessions.ErrInterruptSuccessorAdmissionFailed, code: "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED", phase: factoryapi.WorkerSessionInterruptErrorPhaseSuccessorAdmission, want: http.StatusServiceUnavailable},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := &fakeObservationService{interruptErr: testCase.err}
+			handler := NewHandler(NewAdapterWithStartAndContinueAndInterrupt(service, service, service, service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/source-1/interrupt", strings.NewReader(`{
+				"requestId":"request-1","successorWorkerSessionId":"successor-1","replacementMessage":"replace"
+			}`)), factoryapi.WorkerSessionID("source-1"))
+			if recorder.Code != testCase.want {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, testCase.want, recorder.Body.String())
+			}
+			var response factoryapi.WorkerSessionInterruptError
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if response.Code != testCase.code || response.Phase != testCase.phase {
+				t.Fatalf("error response = %#v, want code=%q phase=%q", response, testCase.code, testCase.phase)
+			}
+		})
+	}
+}

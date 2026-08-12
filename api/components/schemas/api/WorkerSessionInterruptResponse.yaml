@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - sourceWorkerSessionId
+  - successorWorkerSessionId
+  - phase
+  - accepted
+  - source
+  - successor
+description: >-
+  Admission acknowledgment for an interrupt-and-replace operation. A 202
+  response is returned only after source cancellation has reached the
+  authoritative CANCELED state and the successor has crossed its admission
+  barrier. Successor terminal output remains asynchronous.
+properties:
+  requestId:
+    type: string
+    description: Caller idempotency key echoed for correlation.
+  sourceWorkerSessionId:
+    type: string
+    description: Active source Worker Session that was interrupted.
+  successorWorkerSessionId:
+    type: string
+    description: Replacement Worker Session admitted after source cancellation.
+  phase:
+    type: string
+    enum:
+      - SUCCESSOR_ADMISSION
+    x-enum-varnames:
+      - WorkerSessionInterruptResponsePhaseSuccessorAdmission
+    description: Authoritative phase reached by a successful interrupt.
+  accepted:
+    type: boolean
+    description: Always true for a 202 response.
+  source:
+    $ref: './WorkerSessionInterruptSnapshot.yaml'
+  successor:
+    $ref: './WorkerSessionInterruptSnapshot.yaml'

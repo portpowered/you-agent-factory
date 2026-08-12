@@ -517,14 +517,17 @@ func TestInvokeOutputAndRemoteErrorHelpersCoverStableMappings(t *testing.T) {
 }
 
 type invokeLocalFake struct {
-	startResult      workersessions.StartResult
-	startRequests    []workersessions.StartRequest
-	continueResult   workersessions.ContinueResult
-	continueErr      error
-	continueRequests []workersessions.ContinueRequest
-	deliveries       []workersessions.ObservationDelivery
-	streamCalls      int
-	closed           bool
+	startResult       workersessions.StartResult
+	startRequests     []workersessions.StartRequest
+	continueResult    workersessions.ContinueResult
+	continueErr       error
+	continueRequests  []workersessions.ContinueRequest
+	interruptResult   workersessions.InterruptResult
+	interruptErr      error
+	interruptRequests []workersessions.InterruptRequest
+	deliveries        []workersessions.ObservationDelivery
+	streamCalls       int
+	closed            bool
 }
 
 func (fake *invokeLocalFake) Start(_ context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
@@ -535,6 +538,11 @@ func (fake *invokeLocalFake) Start(_ context.Context, request workersessions.Sta
 func (fake *invokeLocalFake) Continue(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
 	fake.continueRequests = append(fake.continueRequests, request)
 	return fake.continueResult, fake.continueErr
+}
+
+func (fake *invokeLocalFake) Interrupt(_ context.Context, request workersessions.InterruptRequest) (workersessions.InterruptResult, error) {
+	fake.interruptRequests = append(fake.interruptRequests, request)
+	return fake.interruptResult, fake.interruptErr
 }
 
 func (fake *invokeLocalFake) StreamObservationsByWorkerSessionID(_ context.Context, _ workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {

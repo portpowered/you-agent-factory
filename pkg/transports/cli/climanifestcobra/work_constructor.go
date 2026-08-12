@@ -548,6 +548,11 @@ const workerSessionsReadHandlerID = "you.worker-sessions.read.handler"
 const workerSessionsStreamHandlerID = "you.worker-sessions.stream.handler"
 const workerSessionsInvokeHandlerID = "you.worker-sessions.invoke.handler"
 const workerSessionsContinueHandlerID = "you.worker-sessions.continue.handler"
+const workerSessionsInterruptHandlerID = "you.worker-sessions.interrupt.handler"
+const workerSessionsPauseHandlerID = "you.worker-sessions.pause.handler"
+const workerSessionsResumeHandlerID = "you.worker-sessions.resume.handler"
+const workerSessionsCancelHandlerID = "you.worker-sessions.cancel.handler"
+const workerSessionsTerminateHandlerID = "you.worker-sessions.terminate.handler"
 
 var workerSessionsRunnableCommands = []struct {
 	id        string
@@ -555,6 +560,11 @@ var workerSessionsRunnableCommands = []struct {
 }{
 	{id: "you.worker-sessions.invoke", handlerID: workerSessionsInvokeHandlerID},
 	{id: "you.worker-sessions.continue", handlerID: workerSessionsContinueHandlerID},
+	{id: "you.worker-sessions.interrupt", handlerID: workerSessionsInterruptHandlerID},
+	{id: "you.worker-sessions.pause", handlerID: workerSessionsPauseHandlerID},
+	{id: "you.worker-sessions.resume", handlerID: workerSessionsResumeHandlerID},
+	{id: "you.worker-sessions.cancel", handlerID: workerSessionsCancelHandlerID},
+	{id: "you.worker-sessions.terminate", handlerID: workerSessionsTerminateHandlerID},
 	{id: "you.worker-sessions.list", handlerID: workerSessionsListHandlerID},
 	{id: "you.worker-sessions.show", handlerID: workerSessionsShowHandlerID},
 	{id: "you.worker-sessions.read", handlerID: workerSessionsReadHandlerID},
@@ -606,20 +616,30 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
 		},
 		CobraHandlers: CobraHandlerRegistry{
-			workerSessionsInvokeHandlerID:   resolvedWorkerSessionsHandler(registered.invoke),
-			workerSessionsContinueHandlerID: resolvedWorkerSessionsHandler(registered.continueOperation),
-			workerSessionsListHandlerID:     resolvedWorkerSessionsHandler(registered.list),
-			workerSessionsShowHandlerID:     resolvedWorkerSessionsHandler(registered.show),
-			workerSessionsReadHandlerID:     resolvedWorkerSessionsHandler(registered.read),
-			workerSessionsStreamHandlerID:   resolvedWorkerSessionsHandler(registered.stream),
+			workerSessionsInvokeHandlerID:    resolvedWorkerSessionsHandler(registered.invoke),
+			workerSessionsContinueHandlerID:  resolvedWorkerSessionsHandler(registered.continueOperation),
+			workerSessionsInterruptHandlerID: resolvedWorkerSessionsHandler(registered.interrupt),
+			workerSessionsPauseHandlerID:     resolvedWorkerSessionsHandler(registered.pause),
+			workerSessionsResumeHandlerID:    resolvedWorkerSessionsHandler(registered.resume),
+			workerSessionsCancelHandlerID:    resolvedWorkerSessionsHandler(registered.cancel),
+			workerSessionsTerminateHandlerID: resolvedWorkerSessionsHandler(registered.terminate),
+			workerSessionsListHandlerID:      resolvedWorkerSessionsHandler(registered.list),
+			workerSessionsShowHandlerID:      resolvedWorkerSessionsHandler(registered.show),
+			workerSessionsReadHandlerID:      resolvedWorkerSessionsHandler(registered.read),
+			workerSessionsStreamHandlerID:    resolvedWorkerSessionsHandler(registered.stream),
 		},
 		DeferRequiredValidation: map[string]bool{
-			workerSessionsInvokeHandlerID:   true,
-			workerSessionsContinueHandlerID: true,
-			workerSessionsListHandlerID:     true,
-			workerSessionsShowHandlerID:     true,
-			workerSessionsReadHandlerID:     true,
-			workerSessionsStreamHandlerID:   true,
+			workerSessionsInvokeHandlerID:    true,
+			workerSessionsContinueHandlerID:  true,
+			workerSessionsInterruptHandlerID: true,
+			workerSessionsPauseHandlerID:     true,
+			workerSessionsResumeHandlerID:    true,
+			workerSessionsCancelHandlerID:    true,
+			workerSessionsTerminateHandlerID: true,
+			workerSessionsListHandlerID:      true,
+			workerSessionsShowHandlerID:      true,
+			workerSessionsReadHandlerID:      true,
+			workerSessionsStreamHandlerID:    true,
 		},
 		GuardUnknownSubcommands: true,
 	})
@@ -639,7 +659,7 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 }
 
 type workerSessionsHandlers struct {
-	invoke, continueOperation, list, show, read, stream commandregistry.CommandHandlers
+	invoke, continueOperation, interrupt, pause, resume, cancel, terminate, list, show, read, stream commandregistry.CommandHandlers
 }
 
 func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSessionsHandlers, error) {
@@ -654,7 +674,11 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 		}
 		found[index] = handlers
 	}
-	return workerSessionsHandlers{invoke: found[0], continueOperation: found[1], list: found[2], show: found[3], read: found[4], stream: found[5]}, nil
+	return workerSessionsHandlers{
+		invoke: found[0], continueOperation: found[1], interrupt: found[2],
+		pause: found[3], resume: found[4], cancel: found[5], terminate: found[6],
+		list: found[7], show: found[8], read: found[9], stream: found[10],
+	}, nil
 }
 
 func resolvedWorkerSessionsHandler(handlers commandregistry.CommandHandlers) func(*cobra.Command, []string, map[string]any, resolvedinput.Inputs) error {

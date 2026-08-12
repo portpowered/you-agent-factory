@@ -72,6 +72,11 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 		{id: "you.worker-sessions.stream", handlerID: "you.worker-sessions.stream.handler"},
 		{id: "you.worker-sessions.invoke", handlerID: "you.worker-sessions.invoke.handler"},
 		{id: "you.worker-sessions.continue", handlerID: "you.worker-sessions.continue.handler"},
+		{id: "you.worker-sessions.interrupt", handlerID: "you.worker-sessions.interrupt.handler"},
+		{id: "you.worker-sessions.pause", handlerID: "you.worker-sessions.pause.handler"},
+		{id: "you.worker-sessions.resume", handlerID: "you.worker-sessions.resume.handler"},
+		{id: "you.worker-sessions.cancel", handlerID: "you.worker-sessions.cancel.handler"},
+		{id: "you.worker-sessions.terminate", handlerID: "you.worker-sessions.terminate.handler"},
 	} {
 		command := command
 		if err := registry.RegisterHandlers(command.handlerID, commandregistry.CommandHandlers{
@@ -95,11 +100,11 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 	if workerSessions.Name() != "worker-sessions" || workerSessions.Parent() != nil {
 		t.Fatalf("worker-sessions command = name %q parent %v, want detached root", workerSessions.Name(), workerSessions.Parent())
 	}
-	if len(workerSessions.Commands()) != 6 {
-		t.Fatalf("worker-sessions child count = %d, want 6", len(workerSessions.Commands()))
+	if len(workerSessions.Commands()) != 11 {
+		t.Fatalf("worker-sessions child count = %d, want 11", len(workerSessions.Commands()))
 	}
 
-	for _, command := range []string{"invoke", "continue", "list", "show", "read", "stream"} {
+	for _, command := range []string{"invoke", "continue", "interrupt", "pause", "resume", "cancel", "terminate", "list", "show", "read", "stream"} {
 		leaf, err := findCommandByPath(workerSessions, "worker-sessions "+command)
 		if err != nil {
 			t.Fatalf("FindCommandByPath(%s) error = %v", command, err)
@@ -211,6 +216,11 @@ func workerSessionsRegistry(t *testing.T) *commandregistry.Registry {
 		"you.worker-sessions.show.handler",
 		"you.worker-sessions.read.handler",
 		"you.worker-sessions.stream.handler",
+		"you.worker-sessions.interrupt.handler",
+		"you.worker-sessions.pause.handler",
+		"you.worker-sessions.resume.handler",
+		"you.worker-sessions.cancel.handler",
+		"you.worker-sessions.terminate.handler",
 	} {
 		if err := registry.RegisterHandlers(handlerID, commandregistry.CommandHandlers{RunE: noopRunE}); err != nil {
 			t.Fatalf("RegisterHandlers(%q) error = %v", handlerID, err)
@@ -228,6 +238,11 @@ func workerSessionsResolvedOnlyRegistry(t *testing.T) *commandregistry.Registry 
 	for _, handlerID := range []string{
 		"you.worker-sessions.invoke.handler",
 		"you.worker-sessions.continue.handler",
+		"you.worker-sessions.interrupt.handler",
+		"you.worker-sessions.pause.handler",
+		"you.worker-sessions.resume.handler",
+		"you.worker-sessions.cancel.handler",
+		"you.worker-sessions.terminate.handler",
 		"you.worker-sessions.show.handler",
 		"you.worker-sessions.read.handler",
 		"you.worker-sessions.stream.handler",

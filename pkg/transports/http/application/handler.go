@@ -100,7 +100,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	var workerSessionsHandler *workersessionshttp.Handler
 	if opened.WorkerSessions != nil {
 		workerSessionsHandler = workersessionshttp.NewHandler(
-			workersessionshttp.NewAdapterWithStartAndContinue(opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.Work),
+			workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.Work),
 			opened.Logger,
 		)
 	}

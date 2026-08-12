@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-12
 doc-id: agent-factory/guides/operations
 ---
 
@@ -252,6 +252,50 @@ you --server http://localhost:7437 worker-sessions continue <source-worker-sessi
   --successor-worker-session-id <successor-worker-session-id> \
   --async --output json "Review the result"
 ```
+
+To replace an active direct Worker Session, interrupt its admitted dispatch and
+provide a distinct successor identity and replacement input. The server first
+records the source as canceled, then admits the successor against the same
+Provider Session association. Use `--async` to return after those admission
+barriers, or omit it to wait for the successor terminal output:
+
+```bash
+you worker-sessions interrupt <source-worker-session-id> \
+  --request-id <interrupt-request-id> \
+  --successor-worker-session-id <successor-worker-session-id> \
+  --replacement-message "Take a different approach"
+you --server http://localhost:7437 worker-sessions interrupt <source-worker-session-id> \
+  --remote --request-id <interrupt-request-id> \
+  --successor-worker-session-id <successor-worker-session-id> \
+  --async --output json "Stop and revise the plan"
+```
+
+Interrupt failures include a stable phase: `VALIDATION`,
+`SOURCE_CANCELLATION`, or `SUCCESSOR_ADMISSION`. Local placement is the
+default. `--remote` sends the complete request only to the configured
+`--server`; it never falls back to local state.
+
+Use the direct Worker Session controls when the same admitted session should
+be paused, resumed, canceled, or terminated. Each command accepts one stable
+Worker Session identity and returns a JSON or human-readable control result;
+repeated terminal controls are safe no-ops. Pause returns only after the
+authoritative `PAUSED` snapshot, resume uses the exact recorded Provider
+Session, and terminate joins the in-flight dispatch before returning:
+
+```bash
+you worker-sessions pause <worker-session-id>
+you worker-sessions resume <worker-session-id>
+you worker-sessions cancel <worker-session-id> --output json
+you worker-sessions terminate <worker-session-id>
+you --server http://localhost:7437 worker-sessions terminate <worker-session-id> --remote
+```
+
+Local placement is the default for all four controls. `--remote` sends the
+selected action only to the configured `--server`; a transport or control
+failure never falls back to local state. Outcomes are `APPLIED`, `NOOP`,
+`UNSUPPORTED`, or `FAILED`, with stable error classifications for invalid
+identity, unknown session, invalid state, transport failure, and an already
+terminal session.
 
 Local placement is the default. `--remote` selects exactly the configured
 `--server`; a failed remote continuation never falls back to a new local

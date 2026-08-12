@@ -19,7 +19,13 @@ type InvokeConfig = workersessionscli.InvokeConfig
 type InvokeOperation = workersessionscli.InvokeOperation
 type ContinueConfig = workersessionscli.ContinueConfig
 type ContinueOperation = workersessionscli.ContinueOperation
+type InterruptConfig = workersessionscli.InterruptConfig
+type InterruptOperation = workersessionscli.InterruptOperation
 type LocalInvokeBoundary = workersessionscli.LocalInvokeBoundary
+type LocalInterruptBoundary = workersessionscli.LocalInterruptBoundary
+type LocalControlBoundary = workersessionscli.LocalControlBoundary
+type ControlConfig = workersessionscli.ControlConfig
+type ControlOperation = workersessionscli.ControlOperation
 type CLIError = workersessionscli.CLIError
 
 const StreamModeConflictCode = workersessionscli.StreamModeConflictCode
@@ -74,4 +80,20 @@ func NewContinue(transport clihttp.Protocol, local LocalInvokeBoundary) Continue
 
 func BindContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
 	return workersessionscli.BindContinue(transport, local)
+}
+
+func NewInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary) InterruptOperation {
+	return workersessionscli.NewInterrupt(transport, local)
+}
+
+func BindInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary) InterruptOperation {
+	return workersessionscli.BindInterrupt(transport, local)
+}
+
+func NewControl(transport clihttp.Protocol, local LocalControlBoundary) ControlOperation {
+	return workersessionscli.NewControl(transport, local)
+}
+
+func BindControl(transport clihttp.Protocol, local LocalControlBoundary) ControlOperation {
+	return workersessionscli.BindControl(transport, local)
 }

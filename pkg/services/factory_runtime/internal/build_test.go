@@ -395,6 +395,10 @@ func (s *stubWorkerSessionsService) Continue(context.Context, workersessions.Con
 	return workersessions.ContinueResult{}, nil
 }
 
+func (s *stubWorkerSessionsService) Interrupt(context.Context, workersessions.InterruptRequest) (workersessions.InterruptResult, error) {
+	return workersessions.InterruptResult{}, nil
+}
+
 func (s *stubWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	return workersessions.PublishRecordResult{}, nil
 }

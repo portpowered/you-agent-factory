@@ -47,12 +47,17 @@ you work show	show <work-id>	you work
 you work visualize	visualize <batch-file.json>	you work
 you work watch	watch [--session <session>] [--follow]	you work
 you worker-sessions	worker-sessions	you
+you worker-sessions cancel	cancel <worker-session-id>	you worker-sessions
 you worker-sessions continue	continue <source-worker-session-id> [follow-up-input...]	you worker-sessions
+you worker-sessions interrupt	interrupt <source-worker-session-id> [replacement-input...]	you worker-sessions
 you worker-sessions invoke	invoke [prompt...]	you worker-sessions
 you worker-sessions list	list	you worker-sessions
+you worker-sessions pause	pause <worker-session-id>	you worker-sessions
 you worker-sessions read	read	you worker-sessions
+you worker-sessions resume	resume <worker-session-id>	you worker-sessions
 you worker-sessions show	show	you worker-sessions
 you worker-sessions stream	stream	you worker-sessions
+you worker-sessions terminate	terminate <worker-session-id>	you worker-sessions
 you workers	workers	you
 you workers acp	acp	you workers
 you workers acp add	add	you workers acp

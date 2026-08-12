@@ -1,0 +1,5 @@
+description: The Worker Session interrupt conflicts with source, lineage, or idempotency state.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/WorkerSessionInterruptError.yaml'

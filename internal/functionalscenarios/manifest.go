@@ -137,7 +137,13 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal", InterfaceCLI)
 	case "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream":
 		markCovered(scenario, LaneLong, "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI", InterfaceCLI)
-	case "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.continue":
+	case "cli/you.worker-sessions.pause", "cli/you.worker-sessions.resume", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.terminate":
+		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback", InterfaceCLI)
+	case "cli/you.worker-sessions.continue", "cli/you.worker-sessions.interrupt", "cli/you.worker-sessions.invoke":
+		if scenario.StableID == "cli/you.worker-sessions.interrupt" {
+			markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots", InterfaceCLI)
+			break
+		}
 		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage", InterfaceCLI)
 	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
 		markCovered(scenario, LaneShort, "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry", InterfaceCLI)
@@ -155,6 +161,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/startWorkerSession":
 		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive", InterfaceREST)
+	case "rest/cancelWorkerSession":
+		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot", InterfaceREST)
 	case "rest/streamWorkerSessionEventsByWorkerSessionId":
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceREST)
 	case "rest/getEventsBySessionId":

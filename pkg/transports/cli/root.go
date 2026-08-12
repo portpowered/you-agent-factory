@@ -113,6 +113,11 @@ type ReadWorkerSessionOperation = workersessionscli.ReadOperation
 type StreamWorkerSessionOperation = workersessionscli.StreamOperation
 type InvokeWorkerSessionOperation = workersessionscli.InvokeOperation
 type ContinueWorkerSessionOperation = workersessionscli.ContinueOperation
+type InterruptWorkerSessionOperation = workersessionscli.InterruptOperation
+type PauseWorkerSessionOperation func(workersessionscli.ControlConfig) error
+type ResumeWorkerSessionOperation func(workersessionscli.ControlConfig) error
+type CancelWorkerSessionOperation func(workersessionscli.ControlConfig) error
+type TerminateWorkerSessionOperation func(workersessionscli.ControlConfig) error
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
 // CommandOperations is the complete inert CLI operation graph assembled by Wire.
@@ -166,7 +171,13 @@ type CommandOperations struct {
 	StreamWorkerSession               StreamWorkerSessionOperation
 	InvokeWorkerSession               InvokeWorkerSessionOperation
 	ContinueWorkerSession             ContinueWorkerSessionOperation
+	InterruptWorkerSession            InterruptWorkerSessionOperation
+	PauseWorkerSession                PauseWorkerSessionOperation
+	ResumeWorkerSession               ResumeWorkerSessionOperation
+	CancelWorkerSession               CancelWorkerSessionOperation
+	TerminateWorkerSession            TerminateWorkerSessionOperation
 	LocalWorkerSessions               workersessionscli.LocalInvokeBoundary
+	LocalWorkerSessionControls        workersessionscli.LocalControlBoundary
 	OpenRunSelection                  runcli.SelectionFactory
 	RemoteInvocation                  runcli.RemoteInvocationOperation
 	ResponsePresentation              factoryvisualization.ResponsePresentation
@@ -200,42 +211,48 @@ type CommandFactory struct {
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
 	loadOperatorConfig                operatorconfig.ConfigLoader
 
-	SubmitWork             func(submitcli.SubmitConfig) error
-	SubmitBatch            func(submitcli.BatchConfig) error
-	SessionsCLI            sessioncli.Service
-	LocalSessionsCLI       sessioncli.Service
-	BuildExecution         ExecutionServiceBuilder
-	ModelsCLI              modelscli.Service
-	ProvidersCLI           providerscli.Service
-	FlattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
-	ExpandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
-	InitFactory            interfaces.ScaffoldInitializer
-	ConfigureInit          func(initsetup.Config) error
-	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
-	QueryFactory           func(factorycli.QueryConfig) error
-	ListFactories          func(factorycli.ListConfig) error
-	ValidateFactory        func(factorycli.ValidateConfig) error
-	CreateFactoryFromFile  func(factorycli.CreateFromFileConfig) error
-	ReplaceFactoryCurrent  func(factorycli.ReplaceCurrentConfig) error
-	UpdateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
-	DeleteFactory          func(factorycli.DeleteConfig) error
-	ListWork               func(workcli.ListConfig) error
-	WatchWork              func(workcli.WatchConfig) error
-	ShowWork               func(workcli.ShowConfig) error
-	MoveWork               func(workcli.MoveConfig) error
-	VisualizeWork          func(workcli.VisualizeConfig) error
-	ListWorkerSessions     workersessionscli.ListOperation
-	ShowWorkerSession      workersessionscli.ShowOperation
-	ReadWorkerSession      workersessionscli.ReadOperation
-	StreamWorkerSession    workersessionscli.StreamOperation
-	InvokeWorkerSession    workersessionscli.InvokeOperation
-	ContinueWorkerSession  workersessionscli.ContinueOperation
-	LocalWorkerSessions    workersessionscli.LocalInvokeBoundary
-	openRunSelection       runcli.SelectionFactory
-	remoteInvocation       runcli.RemoteInvocationOperation
-	responsePresentation   factoryvisualization.ResponsePresentation
-	acp                    acpcli.Service
-	acpServer              acp.Server
+	SubmitWork                 func(submitcli.SubmitConfig) error
+	SubmitBatch                func(submitcli.BatchConfig) error
+	SessionsCLI                sessioncli.Service
+	LocalSessionsCLI           sessioncli.Service
+	BuildExecution             ExecutionServiceBuilder
+	ModelsCLI                  modelscli.Service
+	ProvidersCLI               providerscli.Service
+	FlattenFactoryConfig       func(configcli.FactoryConfigFlattenConfig) error
+	ExpandFactoryConfig        func(configcli.FactoryConfigExpandConfig) error
+	InitFactory                interfaces.ScaffoldInitializer
+	ConfigureInit              func(initsetup.Config) error
+	InstallPackagedFactory     func(factorydefinitionscli.InstallPackagedFactoryConfig) error
+	QueryFactory               func(factorycli.QueryConfig) error
+	ListFactories              func(factorycli.ListConfig) error
+	ValidateFactory            func(factorycli.ValidateConfig) error
+	CreateFactoryFromFile      func(factorycli.CreateFromFileConfig) error
+	ReplaceFactoryCurrent      func(factorycli.ReplaceCurrentConfig) error
+	UpdateFactoryFromFile      func(factorycli.UpdateFromFileConfig) error
+	DeleteFactory              func(factorycli.DeleteConfig) error
+	ListWork                   func(workcli.ListConfig) error
+	WatchWork                  func(workcli.WatchConfig) error
+	ShowWork                   func(workcli.ShowConfig) error
+	MoveWork                   func(workcli.MoveConfig) error
+	VisualizeWork              func(workcli.VisualizeConfig) error
+	ListWorkerSessions         workersessionscli.ListOperation
+	ShowWorkerSession          workersessionscli.ShowOperation
+	ReadWorkerSession          workersessionscli.ReadOperation
+	StreamWorkerSession        workersessionscli.StreamOperation
+	InvokeWorkerSession        workersessionscli.InvokeOperation
+	ContinueWorkerSession      workersessionscli.ContinueOperation
+	InterruptWorkerSession     workersessionscli.InterruptOperation
+	PauseWorkerSession         PauseWorkerSessionOperation
+	ResumeWorkerSession        ResumeWorkerSessionOperation
+	CancelWorkerSession        CancelWorkerSessionOperation
+	TerminateWorkerSession     TerminateWorkerSessionOperation
+	LocalWorkerSessions        workersessionscli.LocalInvokeBoundary
+	LocalWorkerSessionControls workersessionscli.LocalControlBoundary
+	openRunSelection           runcli.SelectionFactory
+	remoteInvocation           runcli.RemoteInvocationOperation
+	responsePresentation       factoryvisualization.ResponsePresentation
+	acp                        acpcli.Service
+	acpServer                  acp.Server
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -290,7 +307,13 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		InvokeWorkerSession:               operations.InvokeWorkerSession,
 		ContinueWorkerSession:             operations.ContinueWorkerSession,
+		InterruptWorkerSession:            operations.InterruptWorkerSession,
+		PauseWorkerSession:                operations.PauseWorkerSession,
+		ResumeWorkerSession:               operations.ResumeWorkerSession,
+		CancelWorkerSession:               operations.CancelWorkerSession,
+		TerminateWorkerSession:            operations.TerminateWorkerSession,
 		LocalWorkerSessions:               operations.LocalWorkerSessions,
+		LocalWorkerSessionControls:        operations.LocalWorkerSessionControls,
 		openRunSelection:                  operations.OpenRunSelection,
 		remoteInvocation:                  operations.RemoteInvocation,
 		responsePresentation:              operations.ResponsePresentation,

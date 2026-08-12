@@ -1,0 +1,5 @@
+description: The Worker Session interrupt source was not found.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/WorkerSessionInterruptError.yaml'

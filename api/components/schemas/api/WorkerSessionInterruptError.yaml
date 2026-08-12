@@ -1,0 +1,45 @@
+type: object
+additionalProperties: false
+required:
+  - message
+  - family
+  - code
+  - phase
+description: >-
+  Stable, phase-aware interrupt failure. Source and successor snapshots are
+  included when the server reached the corresponding operation boundary.
+properties:
+  message:
+    type: string
+  family:
+    $ref: './ErrorFamily.yaml'
+  code:
+    type: string
+    description: Stable machine-readable interrupt error code.
+  phase:
+    type: string
+    enum:
+      - VALIDATION
+      - SOURCE_CANCELLATION
+      - SUCCESSOR_ADMISSION
+      - TRANSPORT
+      - RESPONSE
+      - WAIT
+    x-enum-varnames:
+      - WorkerSessionInterruptErrorPhaseValidation
+      - WorkerSessionInterruptErrorPhaseSourceCancellation
+      - WorkerSessionInterruptErrorPhaseSuccessorAdmission
+      - WorkerSessionInterruptErrorPhaseTransport
+      - WorkerSessionInterruptErrorPhaseResponse
+      - WorkerSessionInterruptErrorPhaseWait
+    description: Stable operation boundary or caller/transport phase.
+  requestId:
+    type: string
+  sourceWorkerSessionId:
+    type: string
+  successorWorkerSessionId:
+    type: string
+  source:
+    $ref: './WorkerSessionInterruptSnapshot.yaml'
+  successor:
+    $ref: './WorkerSessionInterruptSnapshot.yaml'

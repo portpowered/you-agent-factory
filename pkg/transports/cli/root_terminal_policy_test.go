@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
@@ -605,6 +606,151 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 	}
 	if len(got.Prompt) != 2 || got.Prompt[0] != "follow" || got.Prompt[1] != "up" {
 		t.Fatalf("continue prompt = %#v, want positional follow-up input", got.Prompt)
+	}
+}
+
+func TestWorkerSessionsInterruptCommandMapsManifestInputs(t *testing.T) {
+	var interrupt workersessionscli.InterruptConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		InterruptWorkerSession: func(config workersessionscli.InterruptConfig) error {
+			interrupt = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "interrupt", "source-1", "--request-id", "request-1",
+		"--successor-worker-session-id", "successor-1", "--replacement-message", "hello",
+		"--async", "--output", "json", "replace", "input",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions interrupt: %v", err)
+	}
+	if interrupt.SourceWorkerSessionID != "source-1" || interrupt.RequestID != "request-1" ||
+		interrupt.SuccessorWorkerSessionID != "successor-1" || interrupt.ReplacementMessage != "hello" ||
+		interrupt.Server != "http://factory.test:7437" || interrupt.Remote || !interrupt.Async ||
+		interrupt.OutputFormat != "json" || !interrupt.JSON || len(interrupt.Prompt) != 2 {
+		t.Fatalf("interrupt config = %#v, want manifest values", interrupt)
+	}
+}
+
+func TestWorkerSessionsControlCommandsMapManifestInputs(t *testing.T) {
+	for _, action := range []workersessions.ControlAction{
+		workersessions.ControlActionPause, workersessions.ControlActionResume,
+		workersessions.ControlActionCancel, workersessions.ControlActionTerminate,
+	} {
+		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
+			var control workersessionscli.ControlConfig
+			operations := CommandFactory{}
+			operation := func(config workersessionscli.ControlConfig) error {
+				control = config
+				return nil
+			}
+			switch action {
+			case workersessions.ControlActionPause:
+				operations.PauseWorkerSession = operation
+			case workersessions.ControlActionResume:
+				operations.ResumeWorkerSession = operation
+			case workersessions.ControlActionCancel:
+				operations.CancelWorkerSession = operation
+			case workersessions.ControlActionTerminate:
+				operations.TerminateWorkerSession = operation
+			}
+			root := withTestInjectedPlatformRoles(operations).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs([]string{
+				"--json", "--server", "http://factory.test:7437", "worker-sessions",
+				strings.ToLower(string(action)), "session-1", "--output", "json",
+			})
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute worker-sessions %s: %v", action, err)
+			}
+			if control.WorkerSessionID != "session-1" || control.Action != action ||
+				control.Server != "http://factory.test:7437" || control.Remote ||
+				control.OutputFormat != "json" || !control.JSON {
+				t.Fatalf("%s config = %#v, want manifest values", action, control)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionsInterruptAndControlCommandsRequireOperations(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "interrupt",
+			args: []string{"worker-sessions", "interrupt", "source-1", "--request-id", "request-1", "--successor-worker-session-id", "successor-1", "--replacement-message", "replacement"},
+			want: "worker sessions interrupt service is required",
+		},
+		{
+			name: "pause",
+			args: []string{"worker-sessions", "pause", "session-1"},
+			want: "worker sessions pause service is required",
+		},
+		{
+			name: "resume",
+			args: []string{"worker-sessions", "resume", "session-1"},
+			want: "worker sessions resume service is required",
+		},
+		{
+			name: "cancel",
+			args: []string{"worker-sessions", "cancel", "session-1"},
+			want: "worker sessions cancel service is required",
+		},
+		{
+			name: "terminate",
+			args: []string{"worker-sessions", "terminate", "session-1"},
+			want: "worker sessions terminate service is required",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			root := withTestInjectedPlatformRoles(CommandFactory{}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(test.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("execute %s error = %v, want %q", test.name, err, test.want)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T) {
+	values := map[string]any{
+		"you.worker-sessions.interrupt.arg.0":                            "source-1",
+		"you.worker-sessions.interrupt.flag.request-id":                  "request-1",
+		"you.worker-sessions.interrupt.flag.successor-worker-session-id": "successor-1",
+		"you.worker-sessions.interrupt.flag.replacement-message":         "replacement",
+		"you.worker-sessions.interrupt.flag.output":                      "json",
+		"you.worker-sessions.interrupt.arg.1":                            []string{"follow-up"},
+		"you.worker-sessions.interrupt.flag.async":                       true,
+	}
+	for _, key := range []string{
+		"you.worker-sessions.interrupt.arg.0",
+		"you.worker-sessions.interrupt.flag.request-id",
+		"you.worker-sessions.interrupt.flag.successor-worker-session-id",
+		"you.worker-sessions.interrupt.flag.replacement-message",
+		"you.worker-sessions.interrupt.flag.output",
+		"you.worker-sessions.interrupt.arg.1",
+		"you.worker-sessions.interrupt.flag.async",
+	} {
+		candidate := make(map[string]any, len(values))
+		for id, value := range values {
+			candidate[id] = value
+		}
+		delete(candidate, key)
+		if _, err := readGeneratedWorkerSessionsInterruptInputs(candidate); err == nil {
+			t.Errorf("readGeneratedWorkerSessionsInterruptInputs(missing %s) = nil error, want typed input error", key)
+		}
 	}
 }
 

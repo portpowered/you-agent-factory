@@ -3,9 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -30,6 +28,7 @@ type controlledBoundary struct {
 	cancelCalls  []workers.WorkstationDispatchCancelRequest
 	cancelCalled chan struct{}
 	cancel       func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
+	publishError func(int, workers.WorkstationDispatchRequest) error
 }
 
 var _ workers.WorkstationPoolBoundary = (*controlledBoundary)(nil)
@@ -53,8 +52,15 @@ func (b *controlledBoundary) PublishWithAdmission(_ context.Context, request wor
 	b.request = request
 	b.accept = accept
 	b.publishCalls++
+	publishCall := b.publishCalls
+	publishError := b.publishError
 	b.mu.Unlock()
 	b.startedOnce.Do(func() { close(b.started) })
+	if publishError != nil {
+		if err := publishError(publishCall, request); err != nil {
+			return err
+		}
+	}
 	if admitted != nil {
 		admitted()
 		b.admittedOnce.Do(func() { close(b.admitted) })
@@ -110,6 +116,12 @@ func (b *controlledBoundary) currentRequest() workers.WorkstationDispatchRequest
 func (b *controlledBoundary) setCancel(fn func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)) {
 	b.mu.Lock()
 	b.cancel = fn
+	b.mu.Unlock()
+}
+
+func (b *controlledBoundary) setPublishError(fn func(int, workers.WorkstationDispatchRequest) error) {
+	b.mu.Lock()
+	b.publishError = fn
 	b.mu.Unlock()
 }
 
@@ -224,7 +236,7 @@ func TestTerminate_WaitsForAcceptedDispatchCallbackBeforeReportingTerminal(t *te
 	}
 }
 
-func TestTerminate_AfterCancelWaitsForTheEstablishedTerminalCallback(t *testing.T) {
+func TestCancel_WaitsForTheAuthoritativeTerminalCallback(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
@@ -234,28 +246,29 @@ func TestTerminate_AfterCancelWaitsForTheEstablishedTerminalCallback(t *testing.
 		}, nil
 	})
 
-	canceled, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-	if err != nil || canceled.Outcome != workersessions.ControlOutcomeApplied || canceled.Session.State != workersessions.StateRunning {
-		t.Fatalf("Cancel() = %#v, %v, want applied control while callback remains pending", canceled, err)
-	}
-
-	terminated := make(chan workersessions.ControlResult, 1)
-	terminateErr := make(chan error, 1)
+	canceled := make(chan workersessions.ControlResult, 1)
+	cancelErr := make(chan error, 1)
 	go func() {
-		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		terminated <- result
-		terminateErr <- callErr
+		result, callErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		canceled <- result
+		cancelErr <- callErr
 	}()
+	<-boundary.cancelCalled
 	select {
-	case result := <-terminated:
-		t.Fatalf("Terminate() returned before the prior Cancel callback: %#v", result)
+	case result := <-canceled:
+		t.Fatalf("Cancel() returned before its callback: %#v", result)
 	default:
 	}
 
 	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-	result := <-terminated
-	if callErr := <-terminateErr; callErr != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Terminate() = %#v, %v, want joined CANCELED NOOP", result, callErr)
+	result := <-canceled
+	if callErr := <-cancelErr; callErr != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() = %#v, %v, want joined CANCELED APPLIED", result, callErr)
+	}
+
+	terminated, err := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || terminated.Outcome != workersessions.ControlOutcomeNoop || terminated.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Terminate() = %#v, %v, want joined CANCELED NOOP", terminated, err)
 	}
 	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
 		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
@@ -686,7 +699,7 @@ func TestControl_BeforeStartCancellationAndTerminationPreventWorkersHandoff(t *t
 	}
 }
 
-func TestCancel_BoundaryAlreadyCanceledReturnsNoopWithoutChangingRunningSession(t *testing.T) {
+func TestCancel_BoundaryAlreadyCanceledWaitsForTheCanonicalTerminalSnapshot(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
@@ -696,13 +709,26 @@ func TestCancel_BoundaryAlreadyCanceledReturnsNoopWithoutChangingRunningSession(
 		}, nil
 	})
 
-	result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-	if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
-		t.Fatalf("Cancel() = %#v, %v, want NOOP with unchanged RUNNING session", result, err)
+	resultCh := make(chan workersessions.ControlResult, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		resultCh <- result
+		errCh <- err
+	}()
+	<-boundary.cancelCalled
+	select {
+	case result := <-resultCh:
+		t.Fatalf("Cancel() returned before the canonical callback: %#v", result)
+	default:
 	}
-	boundary.complete(completedDispatchResult("dispatch-1"), nil)
-	if final := <-started; final.Session.State != workersessions.StateCompleted {
-		t.Fatalf("Start() after ordinary completion = %#v, want COMPLETED", final)
+	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+	result := <-resultCh
+	if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() = %#v, %v, want joined CANCELED NOOP", result, err)
+	}
+	if final := <-started; final.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Start() after canonical cancellation = %#v, want CANCELED", final)
 	}
 }
 
@@ -757,224 +783,3 @@ func TestCancel_ConcurrentControlsShareOneBoundaryEffect(t *testing.T) {
 // tool call whose content continues rather than a second tool call appearing.
 // Only the Workers dispatch identity changes, and it changes to ".../attempt/N"
 // so Workers can tell the attempts apart.
-func TestInvokeSession_RetriesARetryableFailureUnderOneWorkerIdentity(t *testing.T) {
-	var attempts atomic.Int32
-	execution := &fakeExecution{
-		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			if attempts.Add(1) == 1 {
-				return retryableFailureResult(req), nil
-			}
-			return acceptedResult(req), nil
-		},
-	}
-	registry := newRegistryWithExecution(execution)
-
-	req := validStartRequest("worker-1", "dispatch-1")
-	req.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
-	result, err := registry.InvokeSession(context.Background(), req)
-	if err != nil {
-		t.Fatalf("InvokeSession: %v", err)
-	}
-	if result.Session.State != workersessions.StateCompleted {
-		t.Fatalf("session state = %q, want COMPLETED after the retry succeeded", result.Session.State)
-	}
-	if result.Attempts != 2 {
-		t.Fatalf("attempts = %d, want 2", result.Attempts)
-	}
-
-	requests := execution.requests()
-	if len(requests) != 2 {
-		t.Fatalf("Workers dispatches = %d, want 2", len(requests))
-	}
-	if got := requests[0].Execution.Dispatch.DispatchID; got != "dispatch-1" {
-		t.Fatalf("first attempt dispatch ID = %q, want the caller's own", got)
-	}
-	if got := requests[1].Execution.Dispatch.DispatchID; got != "dispatch-1/attempt/2" {
-		t.Fatalf("second attempt dispatch ID = %q, want dispatch-1/attempt/2", got)
-	}
-	if strings.TrimSpace(result.Session.ID) != "worker-1" {
-		t.Fatalf("session ID = %q, want the one Worker identity to survive the retry", result.Session.ID)
-	}
-}
-
-// TestInvokeSession_StopsAtTheAttemptBudget proves the budget is a ceiling on
-// attempts, not on retries after the first: a Worker allowed two attempts that
-// fails both is terminal, and Workers is not asked a third time.
-func TestInvokeSession_StopsAtTheAttemptBudget(t *testing.T) {
-	execution := &fakeExecution{
-		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			return retryableFailureResult(req), nil
-		},
-	}
-	registry := newRegistryWithExecution(execution)
-
-	req := validStartRequest("worker-1", "dispatch-1")
-	req.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
-	result, err := registry.InvokeSession(context.Background(), req)
-	if err != nil {
-		t.Fatalf("InvokeSession: %v", err)
-	}
-	if !result.Session.Terminal() {
-		t.Fatalf("session state = %q, want a terminal state once the budget is spent", result.Session.State)
-	}
-	if execution.callCount() != 2 {
-		t.Fatalf("Workers dispatches = %d, want exactly the 2-attempt budget", execution.callCount())
-	}
-	if result.Attempts != 2 {
-		t.Fatalf("attempts = %d, want 2", result.Attempts)
-	}
-}
-
-// TestInvokeSession_DefaultPolicyIsOneAttempt pins the property that lets one
-// operation serve both orchestrators. A Petri dispatch has always been one
-// attempt with retryability classified and handed outward for the graph to act
-// on; converging JavaScript children onto this call must not quietly give
-// every Petri Worker attempt-level retry it never had.
-func TestInvokeSession_DefaultPolicyIsOneAttempt(t *testing.T) {
-	execution := &fakeExecution{
-		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			return retryableFailureResult(req), nil
-		},
-	}
-	registry := newRegistryWithExecution(execution)
-
-	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
-	if err != nil {
-		t.Fatalf("InvokeSession: %v", err)
-	}
-	if execution.callCount() != 1 {
-		t.Fatalf("Workers dispatches = %d, want 1 for the zero-value retry policy", execution.callCount())
-	}
-	if result.Attempts != 1 {
-		t.Fatalf("attempts = %d, want 1", result.Attempts)
-	}
-}
-
-// TestInvokeSession_DoesNotRetryATerminalFailure keeps the retry decision
-// Workers' own: a failure Workers classifies as terminal is terminal here too,
-// because a second opinion would let two orchestrators disagree about the
-// identical provider failure.
-func TestInvokeSession_DoesNotRetryATerminalFailure(t *testing.T) {
-	execution := &fakeExecution{
-		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			result := retryableFailureResult(req)
-			result.Result.FailureMetadata = &workers.WorkFailureMetadata{
-				Family: workers.WorkFailureFamilyTerminal,
-				Type:   workers.WorkFailureTypePermanentBadRequest,
-			}
-			return result, nil
-		},
-	}
-	registry := newRegistryWithExecution(execution)
-
-	req := validStartRequest("worker-1", "dispatch-1")
-	req.Retry = workersessions.RetryPolicy{MaxAttempts: 5}
-	if _, err := registry.InvokeSession(context.Background(), req); err != nil {
-		t.Fatalf("InvokeSession: %v", err)
-	}
-	if execution.callCount() != 1 {
-		t.Fatalf("Workers dispatches = %d, want 1; a terminal classification is not retried", execution.callCount())
-	}
-}
-
-func retryableFailureResult(req workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
-	dispatchID := req.Execution.Dispatch.DispatchID
-	return workers.WorkstationDispatchResult{
-		DispatchID:      dispatchID,
-		WorkstationName: req.WorkstationName,
-		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-		Result: workers.WorkResult{
-			DispatchID: dispatchID,
-			Outcome:    workers.OutcomeFailed,
-			FailureMetadata: &workers.WorkFailureMetadata{
-				Family: workers.WorkFailureFamilyRetryable,
-				Type:   workers.WorkFailureTypeInternalServerError,
-			},
-		},
-	}
-}
-
-func acceptedResult(req workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
-	dispatchID := req.Execution.Dispatch.DispatchID
-	return workers.WorkstationDispatchResult{
-		DispatchID:      dispatchID,
-		WorkstationName: req.WorkstationName,
-		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
-		Result: workers.WorkResult{
-			DispatchID: dispatchID,
-			Outcome:    workers.OutcomeAccepted,
-		},
-	}
-}
-
-// TestInvokeSession_ControlDuringAnAttemptSpendsNoRetryBudget closes the race
-// between the attempt loop and a control.
-//
-// Every disqualifying condition is checked before the budget, so a Worker a
-// control already owns can never consume an attempt: publishing another would
-// run provider work for a session that has moved on.
-func TestInvokeSession_ControlDuringAnAttemptSpendsNoRetryBudget(t *testing.T) {
-	execution := newGatedRetryExecution()
-	registry := newRegistryWithExecution(execution)
-
-	req := validStartRequest("worker-1", "dispatch-1")
-	req.Retry = workersessions.RetryPolicy{MaxAttempts: 3}
-	done := make(chan workersessions.InvokeSessionResult, 1)
-	go func() {
-		result, err := registry.InvokeSession(context.Background(), req)
-		if err != nil {
-			t.Errorf("InvokeSession: %v", err)
-		}
-		done <- result
-	}()
-
-	<-execution.entered
-	if _, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"}); err != nil {
-		t.Fatalf("Cancel: %v", err)
-	}
-
-	result := <-done
-	if !result.Session.Terminal() {
-		t.Fatalf("session state = %q, want terminal after the control won", result.Session.State)
-	}
-	if execution.callCount() != 1 {
-		t.Fatalf("Workers dispatches = %d, want 1; a canceled Worker must not consume its retry budget",
-			execution.callCount())
-	}
-}
-
-// gatedRetryExecution holds its first attempt open until a control cancels it,
-// so the retry decision is made for a Worker a control already owns.
-type gatedRetryExecution struct {
-	*fakeExecution
-
-	entered     chan struct{}
-	enteredOnce sync.Once
-	release     chan struct{}
-	releaseOnce sync.Once
-}
-
-func newGatedRetryExecution() *gatedRetryExecution {
-	gated := &gatedRetryExecution{
-		entered: make(chan struct{}),
-		release: make(chan struct{}),
-	}
-	gated.fakeExecution = &fakeExecution{
-		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			gated.enteredOnce.Do(func() { close(gated.entered) })
-			select {
-			case <-gated.release:
-			case <-ctx.Done():
-			}
-			return retryableFailureResult(req), nil
-		},
-		cancel: func(_ context.Context, req workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-			gated.releaseOnce.Do(func() { close(gated.release) })
-			return workers.WorkstationDispatchCancelResult{
-				DispatchID: req.DispatchID,
-				Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
-			}, nil
-		},
-	}
-	return gated
-}

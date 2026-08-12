@@ -119,6 +119,10 @@ func (s *countingWorkerSessionsService) Continue(ctx context.Context, req worker
 	return s.inner.Continue(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) Interrupt(ctx context.Context, req workersessions.InterruptRequest) (workersessions.InterruptResult, error) {
+	return s.inner.Interrupt(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) PublishRecord(
 	ctx context.Context, req workersessions.PublishRecordRequest,
 ) (workersessions.PublishRecordResult, error) {

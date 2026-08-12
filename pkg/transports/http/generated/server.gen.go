@@ -62,44 +62,52 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                   ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
-	ErrorResponseCodeBADREQUEST                                   ErrorResponseCode = "BAD_REQUEST"
-	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                   ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	ErrorResponseCodeFACTORYALREADYEXISTS                         ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	ErrorResponseCodeFACTORYNOTIDLE                               ErrorResponseCode = "FACTORY_NOT_IDLE"
-	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED               ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
-	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED   ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
-	ErrorResponseCodeINTERNALERROR                                ErrorResponseCode = "INTERNAL_ERROR"
-	ErrorResponseCodeINVALIDFACTORY                               ErrorResponseCode = "INVALID_FACTORY"
-	ErrorResponseCodeINVALIDFACTORYNAME                           ErrorResponseCode = "INVALID_FACTORY_NAME"
-	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
-	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
-	ErrorResponseCodeLIFECYCLECONFLICT                            ErrorResponseCode = "LIFECYCLE_CONFLICT"
-	ErrorResponseCodeMETHODNOTALLOWED                             ErrorResponseCode = "METHOD_NOT_ALLOWED"
-	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	ErrorResponseCodeNOTFOUND                                     ErrorResponseCode = "NOT_FOUND"
-	ErrorResponseCodePROJECTIONUNAVAILABLE                        ErrorResponseCode = "PROJECTION_UNAVAILABLE"
-	ErrorResponseCodePROVIDERUNSUPPORTED                          ErrorResponseCode = "PROVIDER_UNSUPPORTED"
-	ErrorResponseCodeREQUESTCONFLICT                              ErrorResponseCode = "REQUEST_CONFLICT"
-	ErrorResponseCodeRESOURCECAPACITYINUSE                        ErrorResponseCode = "RESOURCE_CAPACITY_IN_USE"
-	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND                 ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
-	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
-	ErrorResponseCodeREVISIONCONFLICT                             ErrorResponseCode = "REVISION_CONFLICT"
-	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
-	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
-	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
-	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
-	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT            ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
-	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT   ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
-	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
-	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                    ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
-	ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID     ErrorResponseCode = "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
-	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED              ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
-	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT          ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
-	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
-	ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE                ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_ACTIVE"
-	ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE"
-	ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"
+	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                     ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
+	ErrorResponseCodeBADREQUEST                                     ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                     ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeFACTORYALREADYEXISTS                           ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	ErrorResponseCodeFACTORYNOTIDLE                                 ErrorResponseCode = "FACTORY_NOT_IDLE"
+	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED                 ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED     ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeINTERNALERROR                                  ErrorResponseCode = "INTERNAL_ERROR"
+	ErrorResponseCodeINVALIDFACTORY                                 ErrorResponseCode = "INVALID_FACTORY"
+	ErrorResponseCodeINVALIDFACTORYNAME                             ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                     ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
+	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                     ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	ErrorResponseCodeLIFECYCLECONFLICT                              ErrorResponseCode = "LIFECYCLE_CONFLICT"
+	ErrorResponseCodeMETHODNOTALLOWED                               ErrorResponseCode = "METHOD_NOT_ALLOWED"
+	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
+	ErrorResponseCodePROVIDERUNSUPPORTED                            ErrorResponseCode = "PROVIDER_UNSUPPORTED"
+	ErrorResponseCodeREQUESTCONFLICT                                ErrorResponseCode = "REQUEST_CONFLICT"
+	ErrorResponseCodeRESOURCECAPACITYINUSE                          ErrorResponseCode = "RESOURCE_CAPACITY_IN_USE"
+	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND                   ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                     ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeREVISIONCONFLICT                               ErrorResponseCode = "REVISION_CONFLICT"
+	ErrorResponseCodeSESSIONKINDUNSUPPORTED                         ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
+	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT              ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTROLCONFLICT                   ErrorResponseCode = "WORKER_SESSION_CONTROL_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTROLFAILED                     ErrorResponseCode = "WORKER_SESSION_CONTROL_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTROLINVALID                    ErrorResponseCode = "WORKER_SESSION_CONTROL_INVALID"
+	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE             ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED          ErrorResponseCode = "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT                 ErrorResponseCode = "WORKER_SESSION_INTERRUPT_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONINTERRUPTREQUESTIDCONFLICT        ErrorResponseCode = "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONINTERRUPTSOURCECANCELLATIONFAILED ErrorResponseCode = "WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED"
+	ErrorResponseCodeWORKERSESSIONINTERRUPTSUCCESSORADMISSIONFAILED ErrorResponseCode = "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                      ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
+	ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID       ErrorResponseCode = "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
+	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED                ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
+	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT            ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE                 ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE                  ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_ACTIVE"
+	ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE   ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE             ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"
 )
 
 // Defines values for ExpectedArtifactVerificationReason.
@@ -1216,6 +1224,34 @@ const (
 	WorkerSessionContinueResponseStateTerminated WorkerSessionContinueResponseState = "TERMINATED"
 )
 
+// Defines values for WorkerSessionControlResponseAction.
+const (
+	WorkerSessionControlResponseActionCancel    WorkerSessionControlResponseAction = "CANCEL"
+	WorkerSessionControlResponseActionPause     WorkerSessionControlResponseAction = "PAUSE"
+	WorkerSessionControlResponseActionResume    WorkerSessionControlResponseAction = "RESUME"
+	WorkerSessionControlResponseActionTerminate WorkerSessionControlResponseAction = "TERMINATE"
+)
+
+// Defines values for WorkerSessionControlResponseOutcome.
+const (
+	WorkerSessionControlResponseOutcomeApplied     WorkerSessionControlResponseOutcome = "APPLIED"
+	WorkerSessionControlResponseOutcomeFailed      WorkerSessionControlResponseOutcome = "FAILED"
+	WorkerSessionControlResponseOutcomeNoop        WorkerSessionControlResponseOutcome = "NOOP"
+	WorkerSessionControlResponseOutcomeUnsupported WorkerSessionControlResponseOutcome = "UNSUPPORTED"
+)
+
+// Defines values for WorkerSessionControlResponseState.
+const (
+	WorkerSessionControlResponseStateCanceled   WorkerSessionControlResponseState = "CANCELED"
+	WorkerSessionControlResponseStateCompleted  WorkerSessionControlResponseState = "COMPLETED"
+	WorkerSessionControlResponseStateFailed     WorkerSessionControlResponseState = "FAILED"
+	WorkerSessionControlResponseStatePaused     WorkerSessionControlResponseState = "PAUSED"
+	WorkerSessionControlResponseStateReserved   WorkerSessionControlResponseState = "RESERVED"
+	WorkerSessionControlResponseStateRunning    WorkerSessionControlResponseState = "RUNNING"
+	WorkerSessionControlResponseStateStarting   WorkerSessionControlResponseState = "STARTING"
+	WorkerSessionControlResponseStateTerminated WorkerSessionControlResponseState = "TERMINATED"
+)
+
 // Defines values for WorkerSessionEventDelivery.
 const (
 	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
@@ -1223,6 +1259,33 @@ const (
 	WorkerSessionEventDeliverySourceFailure  WorkerSessionEventDelivery = "SOURCE_FAILURE"
 	WorkerSessionEventDeliveryTerminal       WorkerSessionEventDelivery = "TERMINAL"
 	WorkerSessionEventDeliveryTerminalReplay WorkerSessionEventDelivery = "TERMINAL_REPLAY"
+)
+
+// Defines values for WorkerSessionInterruptErrorPhase.
+const (
+	WorkerSessionInterruptErrorPhaseResponse           WorkerSessionInterruptErrorPhase = "RESPONSE"
+	WorkerSessionInterruptErrorPhaseSourceCancellation WorkerSessionInterruptErrorPhase = "SOURCE_CANCELLATION"
+	WorkerSessionInterruptErrorPhaseSuccessorAdmission WorkerSessionInterruptErrorPhase = "SUCCESSOR_ADMISSION"
+	WorkerSessionInterruptErrorPhaseTransport          WorkerSessionInterruptErrorPhase = "TRANSPORT"
+	WorkerSessionInterruptErrorPhaseValidation         WorkerSessionInterruptErrorPhase = "VALIDATION"
+	WorkerSessionInterruptErrorPhaseWait               WorkerSessionInterruptErrorPhase = "WAIT"
+)
+
+// Defines values for WorkerSessionInterruptResponsePhase.
+const (
+	WorkerSessionInterruptResponsePhaseSuccessorAdmission WorkerSessionInterruptResponsePhase = "SUCCESSOR_ADMISSION"
+)
+
+// Defines values for WorkerSessionInterruptSnapshotState.
+const (
+	WorkerSessionInterruptSnapshotStateCanceled   WorkerSessionInterruptSnapshotState = "CANCELED"
+	WorkerSessionInterruptSnapshotStateCompleted  WorkerSessionInterruptSnapshotState = "COMPLETED"
+	WorkerSessionInterruptSnapshotStateFailed     WorkerSessionInterruptSnapshotState = "FAILED"
+	WorkerSessionInterruptSnapshotStatePaused     WorkerSessionInterruptSnapshotState = "PAUSED"
+	WorkerSessionInterruptSnapshotStateReserved   WorkerSessionInterruptSnapshotState = "RESERVED"
+	WorkerSessionInterruptSnapshotStateRunning    WorkerSessionInterruptSnapshotState = "RUNNING"
+	WorkerSessionInterruptSnapshotStateStarting   WorkerSessionInterruptSnapshotState = "STARTING"
+	WorkerSessionInterruptSnapshotStateTerminated WorkerSessionInterruptSnapshotState = "TERMINATED"
 )
 
 // Defines values for WorkerSessionObservationDurationBasis.
@@ -7684,6 +7747,28 @@ type WorkerSessionContinueResponse struct {
 // WorkerSessionContinueResponseState defines model for WorkerSessionContinueResponse.State.
 type WorkerSessionContinueResponseState string
 
+// WorkerSessionControlResponse Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action.
+type WorkerSessionControlResponse struct {
+	Action WorkerSessionControlResponseAction `json:"action"`
+
+	// DispatchId Exact admitted dispatch identity, or empty before admission.
+	DispatchId string                              `json:"dispatchId"`
+	Outcome    WorkerSessionControlResponseOutcome `json:"outcome"`
+	State      WorkerSessionControlResponseState   `json:"state"`
+
+	// WorkerSessionId Stable Worker Session identity targeted by the control.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionControlResponseAction defines model for WorkerSessionControlResponse.Action.
+type WorkerSessionControlResponseAction string
+
+// WorkerSessionControlResponseOutcome defines model for WorkerSessionControlResponse.Outcome.
+type WorkerSessionControlResponseOutcome string
+
+// WorkerSessionControlResponseState defines model for WorkerSessionControlResponse.State.
+type WorkerSessionControlResponseState string
+
 // WorkerSessionEvent defines model for WorkerSessionEvent.
 type WorkerSessionEvent struct {
 	// Delivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -7762,6 +7847,83 @@ type WorkerSessionFailure struct {
 	// ProviderFailureKind Optional bounded Providers failure classification.
 	ProviderFailureKind *string `json:"providerFailureKind"`
 }
+
+// WorkerSessionInterruptError Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
+type WorkerSessionInterruptError struct {
+	// Code Stable machine-readable interrupt error code.
+	Code string `json:"code"`
+
+	// Family Stable machine-readable error family for broader client grouping.
+	Family  ErrorFamily `json:"family"`
+	Message string      `json:"message"`
+
+	// Phase Stable operation boundary or caller/transport phase.
+	Phase     WorkerSessionInterruptErrorPhase `json:"phase"`
+	RequestId *string                          `json:"requestId,omitempty"`
+
+	// Source Detached lifecycle snapshot captured at an interrupt operation boundary.
+	Source                *WorkerSessionInterruptSnapshot `json:"source,omitempty"`
+	SourceWorkerSessionId *string                         `json:"sourceWorkerSessionId,omitempty"`
+
+	// Successor Detached lifecycle snapshot captured at an interrupt operation boundary.
+	Successor                *WorkerSessionInterruptSnapshot `json:"successor,omitempty"`
+	SuccessorWorkerSessionId *string                         `json:"successorWorkerSessionId,omitempty"`
+}
+
+// WorkerSessionInterruptErrorPhase Stable operation boundary or caller/transport phase.
+type WorkerSessionInterruptErrorPhase string
+
+// WorkerSessionInterruptRequest Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route.
+type WorkerSessionInterruptRequest struct {
+	// ReplacementMessage Non-empty replacement input delivered to the admitted successor.
+	ReplacementMessage string `json:"replacementMessage"`
+
+	// RequestId Required caller idempotency key for this interrupt.
+	RequestId string `json:"requestId"`
+
+	// SuccessorWorkerSessionId Distinct Worker Session identity to reserve for the replacement.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionInterruptResponse Admission acknowledgment for an interrupt-and-replace operation. A 202 response is returned only after source cancellation has reached the authoritative CANCELED state and the successor has crossed its admission barrier. Successor terminal output remains asynchronous.
+type WorkerSessionInterruptResponse struct {
+	// Accepted Always true for a 202 response.
+	Accepted bool `json:"accepted"`
+
+	// Phase Authoritative phase reached by a successful interrupt.
+	Phase WorkerSessionInterruptResponsePhase `json:"phase"`
+
+	// RequestId Caller idempotency key echoed for correlation.
+	RequestId string `json:"requestId"`
+
+	// Source Detached lifecycle snapshot captured at an interrupt operation boundary.
+	Source WorkerSessionInterruptSnapshot `json:"source"`
+
+	// SourceWorkerSessionId Active source Worker Session that was interrupted.
+	SourceWorkerSessionId string `json:"sourceWorkerSessionId"`
+
+	// Successor Detached lifecycle snapshot captured at an interrupt operation boundary.
+	Successor WorkerSessionInterruptSnapshot `json:"successor"`
+
+	// SuccessorWorkerSessionId Replacement Worker Session admitted after source cancellation.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionInterruptResponsePhase Authoritative phase reached by a successful interrupt.
+type WorkerSessionInterruptResponsePhase string
+
+// WorkerSessionInterruptSnapshot Detached lifecycle snapshot captured at an interrupt operation boundary.
+type WorkerSessionInterruptSnapshot struct {
+	// EventTopic Deterministic Events topic for this Worker Session.
+	EventTopic string                              `json:"eventTopic"`
+	State      WorkerSessionInterruptSnapshotState `json:"state"`
+
+	// WorkerSessionId Stable Worker Session identity.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionInterruptSnapshotState defines model for WorkerSessionInterruptSnapshot.State.
+type WorkerSessionInterruptSnapshotState string
 
 // WorkerSessionObservation defines model for WorkerSessionObservation.
 type WorkerSessionObservation struct {
@@ -8427,6 +8589,30 @@ type WorkerSessionContinuationConflict = ErrorResponse
 // WorkerSessionContinuationUnavailable defines model for WorkerSessionContinuationUnavailable.
 type WorkerSessionContinuationUnavailable = ErrorResponse
 
+// WorkerSessionControlConflict defines model for WorkerSessionControlConflict.
+type WorkerSessionControlConflict = ErrorResponse
+
+// WorkerSessionControlInternalError defines model for WorkerSessionControlInternalError.
+type WorkerSessionControlInternalError = ErrorResponse
+
+// WorkerSessionControlUnavailable defines model for WorkerSessionControlUnavailable.
+type WorkerSessionControlUnavailable = ErrorResponse
+
+// WorkerSessionInterruptBadRequest Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
+type WorkerSessionInterruptBadRequest = WorkerSessionInterruptError
+
+// WorkerSessionInterruptConflict Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
+type WorkerSessionInterruptConflict = WorkerSessionInterruptError
+
+// WorkerSessionInterruptInternalError Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
+type WorkerSessionInterruptInternalError = WorkerSessionInterruptError
+
+// WorkerSessionInterruptNotFound Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
+type WorkerSessionInterruptNotFound = WorkerSessionInterruptError
+
+// WorkerSessionInterruptUnavailable Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
+type WorkerSessionInterruptUnavailable = WorkerSessionInterruptError
+
 // WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
 type WorkerSessionStartConflict = ErrorResponse
 
@@ -8690,6 +8876,9 @@ type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
 
 // ContinueWorkerSessionJSONRequestBody defines body for ContinueWorkerSession for application/json ContentType.
 type ContinueWorkerSessionJSONRequestBody = WorkerSessionContinueRequest
+
+// InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
+type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -11999,12 +12188,27 @@ type ServerInterface interface {
 	// Show one top-level Worker Session observation
 	// (GET /worker-sessions/{worker_session_id})
 	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Cancel one Worker Session
+	// (POST /worker-sessions/{worker_session_id}/cancel)
+	CancelWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
 	// Continue one terminal Worker Session
 	// (POST /worker-sessions/{worker_session_id}/continue)
 	ContinueWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
 	// Stream top-level Worker Session events
 	// (GET /worker-sessions/{worker_session_id}/events)
 	StreamWorkerSessionEventsByTopLevelWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams)
+	// Interrupt one active Worker Session into a replacement
+	// (POST /worker-sessions/{worker_session_id}/interrupt)
+	InterruptWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Pause one active Worker Session
+	// (POST /worker-sessions/{worker_session_id}/pause)
+	PauseWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Resume one paused Worker Session
+	// (POST /worker-sessions/{worker_session_id}/resume)
+	ResumeWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Terminate one Worker Session
+	// (POST /worker-sessions/{worker_session_id}/terminate)
+	TerminateWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
 	// Read one top-level Worker Session transcript
 	// (GET /worker-sessions/{worker_session_id}/transcript)
 	ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
@@ -13784,6 +13988,31 @@ func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(
 	handler.ServeHTTP(w, r)
 }
 
+// CancelWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) CancelWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelWorkerSession(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ContinueWorkerSession operation middleware
 func (siw *ServerInterfaceWrapper) ContinueWorkerSession(w http.ResponseWriter, r *http.Request) {
 
@@ -13836,6 +14065,106 @@ func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByTopLevelWorkerSess
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(w, r, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InterruptWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) InterruptWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InterruptWorkerSession(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PauseWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) PauseWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PauseWorkerSession(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumeWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) ResumeWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeWorkerSession(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TerminateWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) TerminateWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TerminateWorkerSession(w, r, workerSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14089,9 +14418,19 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}", wrapper.GetWorkerSessionObservationByWorkerSessionId).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/cancel", wrapper.CancelWorkerSession).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/continue", wrapper.ContinueWorkerSession).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByTopLevelWorkerSessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/interrupt", wrapper.InterruptWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/pause", wrapper.PauseWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/resume", wrapper.ResumeWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/terminate", wrapper.TerminateWorkerSession).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByWorkerSessionId).Methods("GET")
 

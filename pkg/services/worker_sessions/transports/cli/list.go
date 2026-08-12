@@ -258,7 +258,10 @@ func normalizeOutputFormat(value string) (string, error) {
 type CLIError struct {
 	Code    string
 	Message string
-	Cause   error
+	// Phase carries the typed interrupt boundary for interrupt-specific JSON
+	// diagnostics. Other Worker Sessions operations leave it empty.
+	Phase string
+	Cause error
 }
 
 func (err *CLIError) Error() string {

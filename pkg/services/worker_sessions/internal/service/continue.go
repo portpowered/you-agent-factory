@@ -172,6 +172,11 @@ func (r *registry) snapshotContinuationSourceLocked(
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationExecutionUnavailable
 	}
 	supervision.mu.Lock()
+	interruptContinuation := interruptContinuationRequestID(supervision.interruptRequestID)
+	if supervision.interrupting && (supervision.interruptRequestID == "" || req.RequestID != interruptContinuation) {
+		supervision.mu.Unlock()
+		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
+	}
 	execution := cloneWorkstationDispatchRequest(supervision.execution)
 	dispatchID := strings.TrimSpace(supervision.dispatchID)
 	turnID := supervision.turnID

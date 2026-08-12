@@ -106,6 +106,42 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 	}
 }
 
+func TestLocalWorkerSessionsBoundaryRejectsControlsWhenServiceUnavailable(t *testing.T) {
+	t.Parallel()
+
+	boundary := &localWorkerSessionsBoundary{}
+	if _, err := boundary.Continue(context.Background(), workersessions.ContinueRequest{}); err == nil {
+		t.Fatal("Continue() error = nil, want unavailable local Worker Sessions service")
+	}
+	if _, err := boundary.Interrupt(context.Background(), workersessions.InterruptRequest{}); err == nil {
+		t.Fatal("Interrupt() error = nil, want unavailable local Worker Sessions service")
+	}
+	for _, control := range []struct {
+		name string
+		call func() (workersessions.ControlResult, error)
+	}{
+		{name: "pause", call: func() (workersessions.ControlResult, error) {
+			return boundary.Pause(context.Background(), workersessions.ControlRequest{})
+		}},
+		{name: "resume", call: func() (workersessions.ControlResult, error) {
+			return boundary.Resume(context.Background(), workersessions.ControlRequest{})
+		}},
+		{name: "cancel", call: func() (workersessions.ControlResult, error) {
+			return boundary.Cancel(context.Background(), workersessions.ControlRequest{})
+		}},
+		{name: "terminate", call: func() (workersessions.ControlResult, error) {
+			return boundary.Terminate(context.Background(), workersessions.ControlRequest{})
+		}},
+	} {
+		t.Run(control.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := control.call(); err == nil {
+				t.Fatalf("%s() error = nil, want unavailable local Worker Sessions service", control.name)
+			}
+		})
+	}
+}
+
 type localBoundaryRequestExecutor struct {
 	routes chan<- string
 }
