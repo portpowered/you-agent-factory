@@ -10,10 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
-	"github.com/google/uuid"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -67,6 +65,8 @@ type InvokeConfig struct {
 	Diagnostics  io.Writer
 	HTTP         clihttp.Protocol
 	Local        LocalInvokeBoundary
+	GenerateID   IDGenerator
+	ReadFile     ExecutionFileReader
 }
 
 // InvokeOperation is the composition-facing direct Worker operation.
@@ -75,11 +75,18 @@ type InvokeOperation func(InvokeConfig) error
 // BindInvoke binds remote HTTP and an explicit local Worker Sessions boundary.
 // A nil local boundary remains a hard failure for local placement; it is never
 // replaced with a request to the configured server.
-func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
+func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary, effects ...Effects) InvokeOperation {
+	selected := selectEffects(effects)
 	return func(config InvokeConfig) error {
 		config.HTTP = transport
 		if local != nil {
 			config.Local = local
+		}
+		if config.GenerateID == nil {
+			config.GenerateID = selected.GenerateID
+		}
+		if config.ReadFile == nil {
+			config.ReadFile = selected.ReadFile
 		}
 		return invoke(config)
 	}
@@ -88,8 +95,8 @@ func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOpe
 // NewInvoke returns an invoke operation with its effects supplied by the
 // caller. It is useful to focused CLI and functional tests that need to prove
 // local and remote placement separately.
-func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
-	return BindInvoke(transport, local)
+func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary, effects ...Effects) InvokeOperation {
+	return BindInvoke(transport, local, effects...)
 }
 
 type normalizedInvokeRequest struct {
@@ -165,7 +172,9 @@ func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error
 	if err := applyInvokeOverrides(&request, config); err != nil {
 		return normalizedInvokeRequest{}, err
 	}
-	ensureInvokeIdentities(&request)
+	if err := ensureInvokeIdentities(&request, config.GenerateID); err != nil {
+		return normalizedInvokeRequest{}, err
+	}
 
 	serviceRequest, err := workersessionshttp.WorkerSessionStartRequestFromAPI(request)
 	if err != nil {
@@ -265,12 +274,17 @@ func applyInvokeRetryOverride(request *factoryapi.WorkerSessionStartRequest, con
 	}
 }
 
-func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest) {
+func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest, generateID IDGenerator) error {
+	if (strings.TrimSpace(request.RequestId) == "" ||
+		strings.TrimSpace(request.WorkerSessionId) == "" ||
+		strings.TrimSpace(request.Execution.Dispatch.DispatchId) == "") && generateID == nil {
+		return newCLIError("WORKER_SESSION_IDENTITY_UNAVAILABLE", "direct Worker execution identity generator is unavailable", nil)
+	}
 	if strings.TrimSpace(request.RequestId) == "" {
-		request.RequestId = uuid.NewString()
+		request.RequestId = generateID()
 	}
 	if strings.TrimSpace(request.WorkerSessionId) == "" {
-		request.WorkerSessionId = uuid.NewString()
+		request.WorkerSessionId = generateID()
 	}
 	if strings.TrimSpace(request.Execution.WorkstationName) == "" {
 		request.Execution.WorkstationName = strings.TrimSpace(request.Execution.Dispatch.WorkstationName)
@@ -279,7 +293,7 @@ func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest) {
 		request.Execution.Dispatch.WorkstationName = strings.TrimSpace(request.Execution.WorkstationName)
 	}
 	if strings.TrimSpace(request.Execution.Dispatch.DispatchId) == "" {
-		request.Execution.Dispatch.DispatchId = uuid.NewString()
+		request.Execution.Dispatch.DispatchId = generateID()
 	}
 	if request.Execution.Dispatch.Execution == nil {
 		request.Execution.Dispatch.Execution = &factoryapi.WorkerSessionExecutionMetadata{}
@@ -287,6 +301,7 @@ func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest) {
 	if request.Execution.Dispatch.Execution.RequestId == nil {
 		request.Execution.Dispatch.Execution.RequestId = invokeStringPointer(request.RequestId)
 	}
+	return nil
 }
 
 func readInvokeRequest(config InvokeConfig) (factoryapi.WorkerSessionStartRequest, error) {
@@ -308,7 +323,10 @@ func readInvokeRequest(config InvokeConfig) (factoryapi.WorkerSessionStartReques
 		data = []byte(input)
 	} else {
 		var err error
-		data, err = os.ReadFile(input)
+		if config.ReadFile == nil {
+			return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "direct Worker execution file reader is unavailable", nil)
+		}
+		data, err = config.ReadFile(input)
 		if err != nil {
 			return factoryapi.WorkerSessionStartRequest{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read direct Worker execution file", err)
 		}
@@ -862,14 +880,31 @@ func remoteInvokeStreamHTTPError(response *http.Response, status int) error {
 	return newCLIError("WORKER_SESSION_STREAM_FAILED", fmt.Sprintf("remote Worker Session stream failed (%d)", status), nil)
 }
 
-func mapInvokeServiceError(err error, async bool) error {
+func mapInvokeServiceError(err error, _ bool) error {
 	if errors.Is(err, context.Canceled) {
 		return newCLIError("WORKER_SESSION_INVOKE_INTERRUPTED", "Worker Session invocation was interrupted", context.Canceled)
 	}
-	if async {
+	switch {
+	case errors.Is(err, workersessions.ErrInvalidStartRequestID),
+		errors.Is(err, workersessions.ErrInvalidSessionID),
+		errors.Is(err, workersessions.ErrInvalidExecutionRequest):
+		return newCLIError("WORKER_SESSION_INVOKE_INVALID", "invalid Worker Session start request", err)
+	case errors.Is(err, workersessions.ErrStartRequestIDConflict):
+		return newCLIError("WORKER_SESSION_START_REQUEST_ID_CONFLICT", "Worker Session start requestId was reused with different inputs", err)
+	case errors.Is(err, workersessions.ErrSessionNotStartable),
+		errors.Is(err, workersessions.ErrSessionAlreadyExists):
+		return newCLIError("WORKER_SESSION_NOT_STARTABLE", "Worker Session identity is already in use", err)
+	case errors.Is(err, workersessions.ErrEventTopicUnavailable):
+		return newCLIError("WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE", "Worker Session event topic is unavailable", err)
+	case errors.Is(err, workersessions.ErrStartOpeningPublication):
+		return newCLIError("WORKER_SESSION_START_OPENING_FAILED", "Worker Session opening event is unavailable", err)
+	case errors.Is(err, workersessions.ErrStartAdmissionFailed),
+		errors.Is(err, workersessions.ErrStartNotAccepted),
+		errors.Is(err, workersessions.ErrStartServerStopping):
+		return newCLIError("WORKER_SESSION_ADMISSION_FAILED", "Workers could not admit the Worker Session", err)
+	default:
 		return newCLIError("WORKER_SESSION_ADMISSION_FAILED", "Worker Session admission failed", err)
 	}
-	return newCLIError("WORKER_SESSION_INVOKE_FAILED", "Worker Session invocation failed", err)
 }
 
 func emitInvokeCLIError(config InvokeConfig, jsonOutput bool, err error) error {

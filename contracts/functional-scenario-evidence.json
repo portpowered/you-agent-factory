@@ -109,6 +109,19 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
+      "stableIds": [
+        "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
+      ]
+    },
+    {
       "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
       "stableIds": [
         "rest/startWorkerSession"

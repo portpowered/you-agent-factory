@@ -489,8 +489,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v75 := provideInvokeWorkerSessionOperation(wireStreamingCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
-	v76 := provideContinueWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
+	cliIDGenerator := provideWorkerSessionsCLIIdentityGenerator()
+	executionFileReader := provideWorkerSessionsCLIExecutionFileReader()
+	v75 := provideInvokeWorkerSessionOperation(wireStreamingCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator, executionFileReader)
+	v76 := provideContinueWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator)
 	singleWorkTargetPreparation := work.NewSingleWorkTargetPreparation()
 	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
 	mockWorkersConfigLoader, err := workers.NewMockWorkersConfigLoader(mockWorkersConfigFileSystem)
@@ -906,6 +908,8 @@ var cliCommandOperationsSet = wire4.NewSet(
 	provideShowWorkerSessionOperation,
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
+	provideWorkerSessionsCLIIdentityGenerator,
+	provideWorkerSessionsCLIExecutionFileReader,
 	provideContinueWorkerSessionOperation,
 	provideLocalWorkerSessionsBoundary, wire4.Bind(new(workersessions.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)), provideInvokeWorkerSessionOperation,
 	provideSessionsCLIService,

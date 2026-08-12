@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
-
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -16,8 +16,8 @@ import (
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
@@ -150,8 +150,20 @@ func provideStreamWorkerSessionOperation(transport streamingCLIHTTPProtocol) cli
 	return workersessionscli.BindStream(transport.Protocol)
 }
 
-func provideContinueWorkerSessionOperation(transport standardCLIHTTPProtocol, local *localWorkerSessionsBoundary) cli.ContinueWorkerSessionOperation {
-	return workersessionscli.BindContinue(transport.Protocol, local)
+func provideWorkerSessionsCLIIdentityGenerator() workersessionscli.IDGenerator {
+	return uuid.NewString
+}
+
+func provideWorkerSessionsCLIExecutionFileReader() workersessionscli.ExecutionFileReader {
+	return os.ReadFile
+}
+
+func provideContinueWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+	generateID workersessionscli.IDGenerator,
+) cli.ContinueWorkerSessionOperation {
+	return workersessionscli.BindContinue(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
 }
 
 // localWorkerSessionsBoundary owns the process-scoped direct Worker route used
@@ -249,8 +261,13 @@ func provideLocalWorkerSessionsBoundary(
 func provideInvokeWorkerSessionOperation(
 	transport streamingCLIHTTPProtocol,
 	local *localWorkerSessionsBoundary,
+	generateID workersessionscli.IDGenerator,
+	readFile workersessionscli.ExecutionFileReader,
 ) cli.InvokeWorkerSessionOperation {
-	return workersessionscli.BindInvoke(transport.Protocol, local)
+	return workersessionscli.BindInvoke(transport.Protocol, local, workersessionscli.Effects{
+		GenerateID: generateID,
+		ReadFile:   readFile,
+	})
 }
 func provideSubmitBatchOperation(
 	transport extendedCLIHTTPProtocol,

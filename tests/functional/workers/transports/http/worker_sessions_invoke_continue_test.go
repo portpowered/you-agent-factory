@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const remoteWorkerSessionProviderID = "session_fixture_codex_success"
@@ -71,6 +72,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	if len(all) != 2 {
 		t.Fatalf("top-level direct Worker Session count = %d, want source and distinct successor", len(all))
 	}
+	functionalevidence.Covers(t, "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId")
 }
 
 func assertRemoteSourceObservation(t *testing.T, ctx context.Context, client support.Process, env []string, factoryDir, serverURL string) {

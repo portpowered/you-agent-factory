@@ -12,6 +12,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 type directWorkerSessionCLIResult struct {
@@ -102,6 +103,7 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 	if !strings.Contains(continuationArgs, "resume") || !strings.Contains(continuationArgs, "local-source-thread") {
 		t.Fatalf("continuation provider command = %#v, want resume local-source-thread", requests[1].Args)
 	}
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
 }
 
 func decodeDirectWorkerSessionResult(t *testing.T, stdout string, result any) {

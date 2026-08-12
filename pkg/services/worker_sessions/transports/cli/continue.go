@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/google/uuid"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -46,6 +45,7 @@ type ContinueConfig struct {
 	Diagnostics  io.Writer
 	HTTP         clihttp.Protocol
 	Local        LocalInvokeBoundary
+	GenerateID   IDGenerator
 }
 
 // ContinueOperation is the composition-facing Worker Session continuation
@@ -55,11 +55,15 @@ type ContinueOperation func(ContinueConfig) error
 // BindContinue binds the exact remote protocol and local Worker Sessions
 // boundary. A remote failure is returned to the caller and never falls back
 // to the local boundary.
-func BindContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
+func BindContinue(transport clihttp.Protocol, local LocalInvokeBoundary, effects ...Effects) ContinueOperation {
+	selected := selectEffects(effects)
 	return func(config ContinueConfig) error {
 		config.HTTP = transport
 		if local != nil {
 			config.Local = local
+		}
+		if config.GenerateID == nil {
+			config.GenerateID = selected.GenerateID
 		}
 		return continueWorkerSession(config)
 	}
@@ -67,8 +71,8 @@ func BindContinue(transport clihttp.Protocol, local LocalInvokeBoundary) Continu
 
 // NewContinue returns a continuation operation with injected effects for
 // focused CLI and functional tests.
-func NewContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
-	return BindContinue(transport, local)
+func NewContinue(transport clihttp.Protocol, local LocalInvokeBoundary, effects ...Effects) ContinueOperation {
+	return BindContinue(transport, local, effects...)
 }
 
 type normalizedContinueRequest struct {
@@ -138,11 +142,17 @@ func normalizeContinueRequest(config ContinueConfig) (normalizedContinueRequest,
 	}
 	requestID := strings.TrimSpace(config.RequestID)
 	if requestID == "" {
-		requestID = uuid.NewString()
+		if config.GenerateID == nil {
+			return normalizedContinueRequest{}, newCLIError("WORKER_SESSION_IDENTITY_UNAVAILABLE", "Worker Session continuation identity generator is unavailable", nil)
+		}
+		requestID = config.GenerateID()
 	}
 	successorID := strings.TrimSpace(config.SuccessorWorkerSessionID)
 	if successorID == "" {
-		successorID = uuid.NewString()
+		if config.GenerateID == nil {
+			return normalizedContinueRequest{}, newCLIError("WORKER_SESSION_IDENTITY_UNAVAILABLE", "Worker Session continuation identity generator is unavailable", nil)
+		}
+		successorID = config.GenerateID()
 	}
 	apiRequest := factoryapi.WorkerSessionContinueRequest{
 		RequestId: requestID, SuccessorWorkerSessionId: successorID, FollowUpInput: followUp,
@@ -325,14 +335,35 @@ func remoteContinueHTTPError(response *http.Response, status int) error {
 	return newCLIError("WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", fmt.Sprintf("remote Worker Session continuation failed (%d)", status), nil)
 }
 
-func mapContinueServiceError(err error, async bool) error {
+func mapContinueServiceError(err error, _ bool) error {
 	if errors.Is(err, context.Canceled) {
 		return newCLIError("WORKER_SESSION_CONTINUATION_INTERRUPTED", "Worker Session continuation was interrupted", context.Canceled)
 	}
-	if async {
-		return newCLIError("WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", "Worker Session continuation admission failed", err)
+	switch {
+	case errors.Is(err, workersessions.ErrInvalidContinuationRequestID),
+		errors.Is(err, workersessions.ErrInvalidContinuationLineage),
+		errors.Is(err, workersessions.ErrInvalidContinuationInput):
+		return newCLIError("BAD_REQUEST", "invalid Worker Session continuation request", err)
+	case errors.Is(err, workersessions.ErrContinuationSourceNotFound):
+		return newCLIError("NOT_FOUND", "Worker Session continuation source not found", err)
+	case errors.Is(err, workersessions.ErrContinuationRequestIDConflict):
+		return newCLIError("WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT", "Worker Session continuation requestId was reused with different inputs", err)
+	case errors.Is(err, workersessions.ErrContinuationSourceActive),
+		errors.Is(err, workersessions.ErrContinuationSourceConflict),
+		errors.Is(err, workersessions.ErrContinuationSuccessorConflict):
+		return newCLIError("WORKER_SESSION_CONTINUATION_CONFLICT", "Worker Session continuation conflicts with existing state", err)
+	case errors.Is(err, workersessions.ErrContinuationProviderSessionMissing),
+		errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid):
+		return newCLIError("WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", "recorded Provider Session cannot be continued", err)
+	case errors.Is(err, workersessions.ErrContinuationExecutionUnavailable),
+		errors.Is(err, workersessions.ErrContinuationNotAccepted),
+		errors.Is(err, workersessions.ErrContinuationServerStopping),
+		errors.Is(err, workersessions.ErrEventTopicUnavailable),
+		errors.Is(err, workersessions.ErrStartOpeningPublication):
+		return newCLIError("WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", "Workers could not admit the Worker Session continuation", err)
+	default:
+		return newCLIError("INTERNAL_ERROR", "failed to continue Worker Session", err)
 	}
-	return newCLIError("WORKER_SESSION_CONTINUATION_FAILED", "Worker Session continuation failed", err)
 }
 
 func writeContinueResult(config ContinueConfig, jsonOutput bool, result continueResult, synchronous bool) error {

@@ -59,7 +59,7 @@ func TestContinueLocalWaitsForSuccessorTerminalOutput(t *testing.T) {
 	var output bytes.Buffer
 	err := NewContinue(nil, boundary)(ContinueConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json",
-		SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "finish the continuation",
+		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "finish the continuation",
 	})
 	if err != nil {
 		t.Fatalf("local synchronous continue error = %v", err)
@@ -179,7 +179,7 @@ func TestContinueRemoteFailureDoesNotFallbackToLocal(t *testing.T) {
 	var output bytes.Buffer
 	err := NewContinue(testHTTPProtocol(t), boundary)(ContinueConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
-		SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "remote failure",
+		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "remote failure",
 	})
 	if err == nil {
 		t.Fatal("remote continuation failure = nil, want admission error")
