@@ -45,9 +45,10 @@ type (
 )
 
 const (
-	WorkerRecordingStatusComplete   = workerrecording.WorkerRecordingStatusComplete
-	WorkerRecordingStatusDegraded   = workerrecording.WorkerRecordingStatusDegraded
-	WorkerRecordingStatusIncomplete = workerrecording.WorkerRecordingStatusIncomplete
+	WorkerRecordingStatusComplete             = workerrecording.WorkerRecordingStatusComplete
+	WorkerRecordingStatusDegraded             = workerrecording.WorkerRecordingStatusDegraded
+	WorkerRecordingStatusIncomplete           = workerrecording.WorkerRecordingStatusIncomplete
+	WorkerRecordingInterruptionProcessStopped = workerrecording.WorkerRecordingInterruptionProcessStopped
 	// Legacy capture-state values are retained for explicit sidecar
 	// compatibility. New recordings expose only the three health statuses
 	// above.

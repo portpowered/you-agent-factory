@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -50,13 +53,22 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if strings.TrimSpace(record.RecordingID) == "" || strings.TrimSpace(record.WorkerSessionID) == "" {
+		return recordings.ErrInvalidWorkerRecordingRequest
+	}
 	if err := record.Record.Validate(); err != nil {
 		return fmt.Errorf("validate Worker record: %w", err)
 	}
 
+	snapshot, err := writer.snapshotForWrite(ctx, record.RecordingID)
+	if err != nil {
+		return err
+	}
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
-	snapshot := cloneSnapshot(writer.snapshots[record.RecordingID])
+	if cached, ok := writer.snapshots[record.RecordingID]; ok {
+		snapshot = cloneSnapshot(cached)
+	}
 	snapshot.RecordingID = record.RecordingID
 	var session *recordings.WorkerSessionRecordingSnapshot
 	for i := range snapshot.Sessions {
@@ -97,6 +109,7 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	session.Topic = projection.Topic
 	session.Status = projection.Status
 	session.LastPosition = projection.LastPosition
+	session.InterruptionReason = projection.InterruptionReason
 	session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
 	session.Records = projection.Records
 	data, err := json.Marshal(snapshot)
@@ -105,6 +118,9 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	}
 	if err := writer.storage.WriteFile(writer.path(record.RecordingID), data); err != nil {
 		return fmt.Errorf("persist Worker recording snapshot: %w", err)
+	}
+	if writer.snapshots == nil {
+		writer.snapshots = make(map[string]recordings.WorkerRecordingSnapshot)
 	}
 	writer.snapshots[record.RecordingID] = snapshot
 	return nil
@@ -121,9 +137,19 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if strings.TrimSpace(failure.RecordingID) == "" || strings.TrimSpace(failure.WorkerSessionID) == "" {
+		return recordings.ErrInvalidWorkerRecordingRequest
+	}
+
+	snapshot, err := writer.snapshotForWrite(ctx, failure.RecordingID)
+	if err != nil {
+		return err
+	}
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
-	snapshot := cloneSnapshot(writer.snapshots[failure.RecordingID])
+	if cached, ok := writer.snapshots[failure.RecordingID]; ok {
+		snapshot = cloneSnapshot(cached)
+	}
 	snapshot.RecordingID = failure.RecordingID
 	session := findOrCreateSession(&snapshot, failure.WorkerSessionID)
 	if failure.Topic != "" {
@@ -145,6 +171,7 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	session.Topic = projection.Topic
 	session.Status = projection.Status
 	session.LastPosition = projection.LastPosition
+	session.InterruptionReason = projection.InterruptionReason
 	session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
 	session.Records = projection.Records
 	data, err := json.Marshal(snapshot)
@@ -153,6 +180,9 @@ func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, fai
 	}
 	if err := writer.storage.WriteFile(writer.path(failure.RecordingID), data); err != nil {
 		return fmt.Errorf("persist failed Worker recording snapshot: %w", err)
+	}
+	if writer.snapshots == nil {
+		writer.snapshots = make(map[string]recordings.WorkerRecordingSnapshot)
 	}
 	writer.snapshots[failure.RecordingID] = snapshot
 	return nil
@@ -169,6 +199,9 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, recordingID s
 	if err := ctx.Err(); err != nil {
 		return recordings.WorkerRecordingSnapshot{}, err
 	}
+	if strings.TrimSpace(recordingID) == "" {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
 
 	writer.mu.Lock()
 	if snapshot, ok := writer.snapshots[recordingID]; ok {
@@ -178,26 +211,53 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, recordingID s
 	}
 	writer.mu.Unlock()
 
+	snapshot, err := writer.readDurableSnapshot(ctx, recordingID)
+	if err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	clone := cloneSnapshot(snapshot)
+	writer.mu.Lock()
+	if writer.snapshots == nil {
+		writer.snapshots = make(map[string]recordings.WorkerRecordingSnapshot)
+	}
+	writer.snapshots[recordingID] = cloneSnapshot(snapshot)
+	writer.mu.Unlock()
+	return clone, nil
+}
+
+func (writer *FileWriter) snapshotForWrite(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
+	writer.mu.Lock()
+	if snapshot, ok := writer.snapshots[recordingID]; ok {
+		clone := cloneSnapshot(snapshot)
+		writer.mu.Unlock()
+		return clone, nil
+	}
+	writer.mu.Unlock()
+
+	snapshot, err := writer.readDurableSnapshot(ctx, recordingID)
+	if errors.Is(err, os.ErrNotExist) {
+		return recordings.WorkerRecordingSnapshot{RecordingID: recordingID}, nil
+	}
+	return snapshot, err
+}
+
+func (writer *FileWriter) readDurableSnapshot(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
 	data, err := writer.storage.ReadFile(writer.path(recordingID))
 	if err != nil {
 		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("load Worker recording snapshot: %w", err)
 	}
 	var snapshot recordings.WorkerRecordingSnapshot
 	if err := json.Unmarshal(data, &snapshot); err != nil {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("decode Worker recording snapshot: %w", err)
+		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: decode Worker recording snapshot: %v", recordings.ErrWorkerRecordingReplay, err)
 	}
 	if snapshot.RecordingID != recordingID {
 		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: snapshot identity %q does not match %q", recordings.ErrWorkerRecordingReplay, snapshot.RecordingID, recordingID)
 	}
-	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID == "" {
-			return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: snapshot contains an unnamed Worker Session", recordings.ErrWorkerRecordingReplay)
-		}
-		for _, record := range session.Records {
-			if err := record.Validate(); err != nil {
-				return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: snapshot record: %w", recordings.ErrWorkerRecordingReplay, err)
-			}
-		}
+	if len(snapshot.Sessions) == 0 {
+		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: Worker Session history is missing", recordings.ErrWorkerRecordingReplay)
 	}
 	for index := range snapshot.Sessions {
 		session := &snapshot.Sessions[index]
@@ -212,14 +272,11 @@ func (writer *FileWriter) LoadWorkerRecording(ctx context.Context, recordingID s
 		session.Topic = projection.Topic
 		session.Status = projection.Status
 		session.LastPosition = projection.LastPosition
+		session.InterruptionReason = projection.InterruptionReason
 		session.ExecutionTerminal = cloneWorkerRecordingTerminal(projection.ExecutionTerminal)
 		session.Records = projection.Records
 	}
-	clone := cloneSnapshot(snapshot)
-	writer.mu.Lock()
-	writer.snapshots[recordingID] = cloneSnapshot(snapshot)
-	writer.mu.Unlock()
-	return clone, nil
+	return snapshot, nil
 }
 
 func (writer *FileWriter) path(recordingID string) string {
@@ -232,13 +289,14 @@ func cloneSnapshot(snapshot recordings.WorkerRecordingSnapshot) recordings.Worke
 	clone.Sessions = make([]recordings.WorkerSessionRecordingSnapshot, len(snapshot.Sessions))
 	for i, session := range snapshot.Sessions {
 		clone.Sessions[i] = recordings.WorkerSessionRecordingSnapshot{
-			WorkerSessionID:   session.WorkerSessionID,
-			Topic:             session.Topic,
-			Status:            session.Status,
-			LastPosition:      session.LastPosition,
-			Failure:           session.Failure,
-			ExecutionTerminal: cloneWorkerRecordingTerminal(session.ExecutionTerminal),
-			Records:           make([]events.Record, len(session.Records)),
+			WorkerSessionID:    session.WorkerSessionID,
+			Topic:              session.Topic,
+			Status:             session.Status,
+			LastPosition:       session.LastPosition,
+			Failure:            session.Failure,
+			InterruptionReason: session.InterruptionReason,
+			ExecutionTerminal:  cloneWorkerRecordingTerminal(session.ExecutionTerminal),
+			Records:            make([]events.Record, len(session.Records)),
 		}
 		for j, record := range session.Records {
 			clone.Sessions[i].Records[j] = record.Detached()

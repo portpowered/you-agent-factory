@@ -24,13 +24,14 @@ type WorkerRecordingSnapshot struct {
 // WorkerSessionRecordingSnapshot contains one detached Worker topic history
 // in aggregate order.
 type WorkerSessionRecordingSnapshot struct {
-	WorkerSessionID   string                   `json:"workerSessionId"`
-	Topic             events.Topic             `json:"topic,omitempty"`
-	Status            WorkerRecordingStatus    `json:"status,omitempty"`
-	LastPosition      events.AggregateSequence `json:"lastPosition,omitempty"`
-	Failure           string                   `json:"failure,omitempty"`
-	ExecutionTerminal *WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
-	Records           []events.Record          `json:"records"`
+	WorkerSessionID    string                   `json:"workerSessionId"`
+	Topic              events.Topic             `json:"topic,omitempty"`
+	Status             WorkerRecordingStatus    `json:"status,omitempty"`
+	LastPosition       events.AggregateSequence `json:"lastPosition,omitempty"`
+	Failure            string                   `json:"failure,omitempty"`
+	InterruptionReason string                   `json:"interruptionReason,omitempty"`
+	ExecutionTerminal  *WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
+	Records            []events.Record          `json:"records"`
 }
 
 // WorkerRecordingStatus is the durable recording-health state derived from
@@ -44,6 +45,11 @@ const (
 	WorkerRecordingStatusDegraded   WorkerRecordingStatus = "DEGRADED"
 	WorkerRecordingStatusIncomplete WorkerRecordingStatus = "INCOMPLETE"
 
+	// WorkerRecordingInterruptionProcessStopped is the stable reason assigned
+	// during recovery when a durable prefix has no persisted capture failure or
+	// terminal fact. It describes the recording evidence, not Worker execution.
+	WorkerRecordingInterruptionProcessStopped = "PROCESS_INTERRUPTED"
+
 	// The following values are retained solely so older durable sidecars and
 	// callers can be recognized and mapped explicitly. New snapshots never
 	// write them.
@@ -55,12 +61,13 @@ const (
 // WorkerRecordingHistory is the canonical, source-native input to the pure
 // Worker recording reducer.
 type WorkerRecordingHistory struct {
-	RecordingID       string
-	WorkerSessionID   string
-	Topic             events.Topic
-	Failure           string
-	ExecutionTerminal *WorkerRecordingTerminal
-	Records           []events.Record
+	RecordingID        string
+	WorkerSessionID    string
+	Topic              events.Topic
+	Failure            string
+	InterruptionReason string
+	ExecutionTerminal  *WorkerRecordingTerminal
+	Records            []events.Record
 }
 
 // WorkerRecordingTerminal is the detached terminal lifecycle fact derived by
@@ -76,17 +83,18 @@ type WorkerRecordingTerminal struct {
 // durable prefixes; ReplayWorkerRecording returns them instead of hiding the
 // readable history behind a generic replay error.
 type WorkerRecordingProjection struct {
-	RecordingID       string
-	WorkerSessionID   string
-	Topic             events.Topic
-	Status            WorkerRecordingStatus
-	Complete          bool
-	LastPosition      events.AggregateSequence
-	Opening           events.Record
-	Terminal          *WorkerRecordingTerminal
-	ExecutionTerminal *WorkerRecordingTerminal
-	Degradation       string
-	Records           []events.Record
+	RecordingID        string
+	WorkerSessionID    string
+	Topic              events.Topic
+	Status             WorkerRecordingStatus
+	Complete           bool
+	LastPosition       events.AggregateSequence
+	Opening            events.Record
+	Terminal           *WorkerRecordingTerminal
+	ExecutionTerminal  *WorkerRecordingTerminal
+	Degradation        string
+	InterruptionReason string
+	Records            []events.Record
 }
 
 // WorkerRecordingReplayRequest selects one Worker Session history from a
@@ -142,12 +150,13 @@ func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory
 		return WorkerRecordingProjection{}, err
 	}
 	projection := WorkerRecordingProjection{
-		RecordingID:     history.RecordingID,
-		WorkerSessionID: history.WorkerSessionID,
-		Topic:           topic,
-		Status:          WorkerRecordingStatusIncomplete,
-		Degradation:     strings.TrimSpace(history.Failure),
-		Records:         make([]events.Record, 0, len(history.Records)),
+		RecordingID:        history.RecordingID,
+		WorkerSessionID:    history.WorkerSessionID,
+		Topic:              topic,
+		Status:             WorkerRecordingStatusIncomplete,
+		Degradation:        strings.TrimSpace(history.Failure),
+		InterruptionReason: strings.TrimSpace(history.InterruptionReason),
+		Records:            make([]events.Record, 0, len(history.Records)),
 	}
 	identities := make(map[events.AppendIdentity]struct{}, len(history.Records))
 	for index, record := range history.Records {
@@ -251,6 +260,9 @@ func (codec WorkerRecordingCodec) ReplayWorkerRecording(request WorkerRecordingR
 	if len(request.Snapshot.Sessions) == 0 {
 		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: Worker Session history is missing", ErrWorkerRecordingReplay)
 	}
+	if err := validateWorkerRecordingSnapshot(request.Snapshot); err != nil {
+		return WorkerRecordingReplayResult{}, err
+	}
 	sessionID := strings.TrimSpace(request.WorkerSessionID)
 	if sessionID == "" {
 		if len(request.Snapshot.Sessions) != 1 {
@@ -271,22 +283,63 @@ func (codec WorkerRecordingCodec) ReplayWorkerRecording(request WorkerRecordingR
 			failure = "LEGACY_CAPTURE_FAILED"
 		}
 		projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
-			RecordingID:       request.Snapshot.RecordingID,
-			WorkerSessionID:   session.WorkerSessionID,
-			Topic:             session.Topic,
-			Failure:           failure,
-			ExecutionTerminal: session.ExecutionTerminal,
-			Records:           session.Records,
+			RecordingID:        request.Snapshot.RecordingID,
+			WorkerSessionID:    session.WorkerSessionID,
+			Topic:              session.Topic,
+			Failure:            failure,
+			InterruptionReason: session.InterruptionReason,
+			ExecutionTerminal:  session.ExecutionTerminal,
+			Records:            session.Records,
 		})
 		if err != nil {
 			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: %w", ErrWorkerRecordingReplay, err)
 		}
+		if projection.Status != WorkerRecordingStatusIncomplete && strings.TrimSpace(session.InterruptionReason) != "" {
+			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: interruption reason is only valid for INCOMPLETE recordings", ErrWorkerRecordingCompatibility)
+		}
+		projection.InterruptionReason = recoveredInterruptionReason(projection, failure)
 		if legacyStatus != "" && !isLegacyWorkerRecordingStatus(session.Status) && legacyStatus != projection.Status {
 			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: declared status %q disagrees with durable evidence %q", ErrWorkerRecordingCompatibility, session.Status, projection.Status)
 		}
 		return WorkerRecordingReplayResult{Projection: projection}, nil
 	}
 	return WorkerRecordingReplayResult{}, fmt.Errorf("%w: Worker Session %q was not found", ErrWorkerRecordingReplay, sessionID)
+}
+
+func validateWorkerRecordingSnapshot(snapshot WorkerRecordingSnapshot) error {
+	seen := make(map[string]struct{}, len(snapshot.Sessions))
+	for _, session := range snapshot.Sessions {
+		workerSessionID := strings.TrimSpace(session.WorkerSessionID)
+		if workerSessionID == "" {
+			return fmt.Errorf("%w: snapshot contains an unnamed Worker Session", ErrWorkerRecordingReplay)
+		}
+		if workerSessionID != session.WorkerSessionID {
+			return fmt.Errorf("%w: Worker Session identity %q contains surrounding whitespace", ErrWorkerRecordingReplay, session.WorkerSessionID)
+		}
+		if _, exists := seen[workerSessionID]; exists {
+			return fmt.Errorf("%w: Worker Session %q appears more than once", ErrWorkerRecordingDuplicate, workerSessionID)
+		}
+		seen[workerSessionID] = struct{}{}
+		if session.LastPosition != 0 {
+			if len(session.Records) == 0 || session.LastPosition != session.Records[len(session.Records)-1].ID.Position {
+				return fmt.Errorf("%w: declared last position %d does not match the durable prefix", ErrWorkerRecordingOrder, session.LastPosition)
+			}
+		}
+	}
+	return nil
+}
+
+func recoveredInterruptionReason(projection WorkerRecordingProjection, failure string) string {
+	if projection.Status != WorkerRecordingStatusIncomplete {
+		return ""
+	}
+	if reason := strings.TrimSpace(projection.InterruptionReason); reason != "" {
+		return reason
+	}
+	if reason := strings.TrimSpace(failure); reason != "" {
+		return reason
+	}
+	return WorkerRecordingInterruptionProcessStopped
 }
 
 func normalizeWorkerRecordingStatus(status WorkerRecordingStatus) (WorkerRecordingStatus, bool, error) {
