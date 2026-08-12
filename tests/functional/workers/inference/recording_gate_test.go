@@ -6,27 +6,24 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestWSRFT004DurableOpeningGatesProviderHandoff proves the opening barrier
-// through the canonical root-built process. The durable writer is a real
-// sidecar writer wrapped only to observe the accepted order and inject one
-// opening persistence failure; the ProviderCommandRunner remains the only
-// provider effect at this boundary.
+// through the canonical root-built process. The recording writer is an
+// injected deterministic persistence edge wrapped only to observe accepted
+// order and inject one opening persistence failure; the ProviderCommandRunner
+// remains the only provider effect at this boundary.
 //
 // WSR-FT-004: durable opening before the first provider call and zero provider
 // calls when opening durability fails.
@@ -196,18 +193,121 @@ type wsrFT004RecordingProbe struct {
 
 func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004RecordingProbe {
 	t.Helper()
-	writer, err := recordingswire.NewWorkerRecordingFileWriter(
-		platformreplay.NewLocal(runtime.GOOS),
-		t.TempDir(),
-	)
-	if err != nil {
-		t.Fatalf("construct Worker recording writer: %v", err)
-	}
 	return &wsrFT004RecordingProbe{
-		delegate:     writer,
+		delegate:     newWSRFT004RecordingStore(),
 		failOpening:  failOpening,
 		liveByWorker: make(map[string]recordings.WorkerRecordingProjection),
 	}
+}
+
+type wsrFT004RecordingStore struct {
+	mu        sync.Mutex
+	snapshots map[string]recordings.WorkerRecordingSnapshot
+}
+
+func newWSRFT004RecordingStore() *wsrFT004RecordingStore {
+	return &wsrFT004RecordingStore{snapshots: make(map[string]recordings.WorkerRecordingSnapshot)}
+}
+
+func (store *wsrFT004RecordingStore) PersistWorkerRecord(
+	ctx context.Context,
+	record recordings.WorkerRecordingRecord,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	snapshot := cloneWSRFT004Snapshot(store.snapshots[record.RecordingID])
+	snapshot.RecordingID = record.RecordingID
+	session := findWSRFT004Session(&snapshot, record.WorkerSessionID)
+	history := append([]events.Record(nil), session.Records...)
+	history = append(history, record.Record.Detached())
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:     record.RecordingID,
+		WorkerSessionID: record.WorkerSessionID,
+		Topic:           record.Record.ID.Topic,
+		Records:         history,
+	})
+	if err != nil {
+		return err
+	}
+	session.Topic = projection.Topic
+	session.Status = projection.Status
+	session.LastPosition = projection.LastPosition
+	session.Records = cloneWSRFT004Records(projection.Records)
+	store.snapshots[record.RecordingID] = snapshot
+	return nil
+}
+
+func (store *wsrFT004RecordingStore) PersistWorkerRecordingFailure(
+	ctx context.Context,
+	failure recordings.WorkerRecordingFailure,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	snapshot := cloneWSRFT004Snapshot(store.snapshots[failure.RecordingID])
+	snapshot.RecordingID = failure.RecordingID
+	session := findWSRFT004Session(&snapshot, failure.WorkerSessionID)
+	session.Topic = failure.Topic
+	session.Status = recordings.WorkerRecordingStatusFailed
+	session.Failure = failure.Code
+	store.snapshots[failure.RecordingID] = snapshot
+	return nil
+}
+
+func (store *wsrFT004RecordingStore) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	snapshot, ok := store.snapshots[recordingID]
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("recording %q not found", recordingID)
+	}
+	return cloneWSRFT004Snapshot(snapshot), nil
+}
+
+func findWSRFT004Session(
+	snapshot *recordings.WorkerRecordingSnapshot,
+	workerSessionID string,
+) *recordings.WorkerSessionRecordingSnapshot {
+	for index := range snapshot.Sessions {
+		if snapshot.Sessions[index].WorkerSessionID == workerSessionID {
+			return &snapshot.Sessions[index]
+		}
+	}
+	snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
+		WorkerSessionID: workerSessionID,
+	})
+	return &snapshot.Sessions[len(snapshot.Sessions)-1]
+}
+
+func cloneWSRFT004Snapshot(
+	snapshot recordings.WorkerRecordingSnapshot,
+) recordings.WorkerRecordingSnapshot {
+	clone := snapshot
+	clone.Sessions = make([]recordings.WorkerSessionRecordingSnapshot, len(snapshot.Sessions))
+	for index, session := range snapshot.Sessions {
+		clone.Sessions[index] = session
+		clone.Sessions[index].Records = cloneWSRFT004Records(session.Records)
+	}
+	return clone
+}
+
+func cloneWSRFT004Records(records []events.Record) []events.Record {
+	clone := make([]events.Record, len(records))
+	for index, record := range records {
+		clone[index] = record.Detached()
+	}
+	return clone
 }
 
 func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(

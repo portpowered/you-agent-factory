@@ -205,6 +205,67 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 
 type testRuntimeWorkers struct{}
 
+func testRuntimePoolBoundaryFactory(cfg workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary {
+	return &testRuntimePoolBoundary{service: cfg.Service}
+}
+
+type testRuntimePoolBoundary struct {
+	service workers.WorkstationExecutionService
+}
+
+func (boundary *testRuntimePoolBoundary) Start(ctx context.Context) error {
+	if boundary.service == nil {
+		return nil
+	}
+	_, err := boundary.service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{})
+	return err
+}
+
+func (boundary *testRuntimePoolBoundary) Publish(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	return boundary.PublishWithAdmission(ctx, request, nil, accept)
+}
+
+func (boundary *testRuntimePoolBoundary) PublishWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	_ workers.WorkstationDispatchAdmissionFunc,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	if err := boundary.Start(ctx); err != nil {
+		return err
+	}
+	if boundary.service == nil {
+		return nil
+	}
+	result, err := boundary.service.DispatchWorkstationWithAdmission(ctx, request, nil)
+	if accept != nil {
+		accept(context.Background(), request, result, err)
+	}
+	return nil
+}
+
+func (boundary *testRuntimePoolBoundary) Cancel(
+	ctx context.Context,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if boundary.service == nil {
+		return workers.WorkstationDispatchCancelResult{}, nil
+	}
+	return boundary.service.CancelWorkstationDispatch(ctx, request)
+}
+
+func (boundary *testRuntimePoolBoundary) Stop(ctx context.Context) error {
+	if boundary.service == nil {
+		return nil
+	}
+	_, err := boundary.service.StopWorkstationPool(ctx)
+	return err
+}
+
 func (testRuntimeWorkers) StartWorkstationPool(
 	context.Context,
 	workers.WorkstationPoolStartRequest,
@@ -379,7 +440,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
-		nil,
+		nil, testRuntimePoolBoundaryFactory,
 	)
 }
 
@@ -389,7 +450,7 @@ func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.Run
 		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
-		nil,
+		nil, testRuntimePoolBoundaryFactory,
 	)
 }
 

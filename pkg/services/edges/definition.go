@@ -27,7 +27,6 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -109,40 +108,45 @@ type Edges struct {
 		Open(string) (io.ReadCloser, error)
 		Create(string) (io.WriteCloser, error)
 	}
-	FactorySessionsWorkingDirectory                       platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem              factorysessions.ExecutionOpeningFileSystem
-	FactorySessionDirectoryInspection                     factorysessions.DirectoryInspection
-	FactorySessionResolveHomeDirectory                    factorysessions.HomeDirectoryResolver
-	FactorySessionResolveLogicalTargetSymlinks            factorysessions.LogicalTargetResolveSymlinks
-	FactorySessionIDGenerator                             factorysessions.SessionIDGenerator
-	FactorySessionRuntimeInstanceIDGenerator              factorysessions.RuntimeInstanceIDGenerator
-	FactorySessionResponseEventIDGenerator                factorysessions.ResponseEventIDGenerator
-	FactorySessionResponseEventRetentionLimits            *factorysessions.ResponseEventRetentionLimits
-	FactorySessionCursorPersistenceFileSystem             factorysessions.CursorPersistenceFileSystem
-	FactorySessionCursorCreateTemporaryFile               factorysessions.CursorPersistenceCreateTemporaryFile
-	FactorySessionRuntimePersistenceFileSystem            factorysessions.RuntimePersistenceFileSystem
-	FactorySessionContractFixtureReader                   factorysessions.ContractFixtureReader
-	FactorySessionInvocationInputReader                   factorysessions.InvocationInputReader
-	FactorySessionReplayRecordingReader                   factorysessions.ReplayRecordingReader
-	FactorySessionInitialWorkReader                       factorysessions.InitialWorkReader
-	FactoryRuntimeIDGenerator                             factoryruntime.IDGenerator
-	FactoryRuntimeDirectories                             factoryruntime.RuntimeDirectoryFileSystem
-	FactoryRuntimeInputs                                  factoryruntime.InputFileSystem
-	FactoryRuntimeInputDirectoryWalker                    factoryruntime.InputDirectoryWalker
-	FactoryRuntimeWorkflowSources                         factoryruntime.WorkflowSourceFileSystem
-	FactoryRuntimeWorkflowSourceResolveSymlinks           factoryruntime.WorkflowSourceResolveSymlinks
-	FactoryRuntimeWorkflowHome                            factoryruntime.WorkflowHomeResolver
-	FactoryDefinitionPortableFileSystem                   portablefiles.FileSystem
-	FactoryDefinitionLoadingFileSystem                    factorydefinitions.LoadingFileSystem
-	FactoryDefinitionClock                                factorydefinitions.Clock
-	FactoryDefinitionVersionFileSystem                    factorydefinitions.VersionFileSystem
-	FactoryDefinitionPackagedGoalPromptFileSystem         factorydefinitions.PackagedGoalPromptFileSystem
-	FactoryDefinitionPortableBundledFileInspection        factorydefinitions.PortableBundledFileInspection
-	FactoryDefinitionRequiredToolPathLookup               factorydefinitions.RequiredToolPathLookup
-	FactoryDefinitionRequiredToolVersionProbe             factorydefinitions.RequiredToolVersionProbe
-	FactoryDefinitionPersistenceFileSystem                factorydefinitions.PersistenceFileSystem
-	FactoryDefinitionDirectoryReplacementStore            factorydefinitions.DirectoryReplacementStore
-	FactoryDefinitionNamedPathFileSystem                  factorydefinitionswire.NamedPathFileSystem
+	FactorySessionsWorkingDirectory                platformfilesystem.WorkingDirectory
+	FactorySessionExecutionOpeningFileSystem       factorysessions.ExecutionOpeningFileSystem
+	FactorySessionDirectoryInspection              factorysessions.DirectoryInspection
+	FactorySessionResolveHomeDirectory             factorysessions.HomeDirectoryResolver
+	FactorySessionResolveLogicalTargetSymlinks     factorysessions.LogicalTargetResolveSymlinks
+	FactorySessionIDGenerator                      factorysessions.SessionIDGenerator
+	FactorySessionRuntimeInstanceIDGenerator       factorysessions.RuntimeInstanceIDGenerator
+	FactorySessionResponseEventIDGenerator         factorysessions.ResponseEventIDGenerator
+	FactorySessionResponseEventRetentionLimits     *factorysessions.ResponseEventRetentionLimits
+	FactorySessionCursorPersistenceFileSystem      factorysessions.CursorPersistenceFileSystem
+	FactorySessionCursorCreateTemporaryFile        factorysessions.CursorPersistenceCreateTemporaryFile
+	FactorySessionRuntimePersistenceFileSystem     factorysessions.RuntimePersistenceFileSystem
+	FactorySessionContractFixtureReader            factorysessions.ContractFixtureReader
+	FactorySessionInvocationInputReader            factorysessions.InvocationInputReader
+	FactorySessionReplayRecordingReader            factorysessions.ReplayRecordingReader
+	FactorySessionInitialWorkReader                factorysessions.InitialWorkReader
+	FactoryRuntimeIDGenerator                      factoryruntime.IDGenerator
+	FactoryRuntimeDirectories                      factoryruntime.RuntimeDirectoryFileSystem
+	FactoryRuntimeInputs                           factoryruntime.InputFileSystem
+	FactoryRuntimeInputDirectoryWalker             factoryruntime.InputDirectoryWalker
+	FactoryRuntimeWorkflowSources                  factoryruntime.WorkflowSourceFileSystem
+	FactoryRuntimeWorkflowSourceResolveSymlinks    factoryruntime.WorkflowSourceResolveSymlinks
+	FactoryRuntimeWorkflowHome                     factoryruntime.WorkflowHomeResolver
+	FactoryDefinitionPortableFileSystem            portablefiles.FileSystem
+	FactoryDefinitionLoadingFileSystem             factorydefinitions.LoadingFileSystem
+	FactoryDefinitionClock                         factorydefinitions.Clock
+	FactoryDefinitionVersionFileSystem             factorydefinitions.VersionFileSystem
+	FactoryDefinitionPackagedGoalPromptFileSystem  factorydefinitions.PackagedGoalPromptFileSystem
+	FactoryDefinitionPortableBundledFileInspection factorydefinitions.PortableBundledFileInspection
+	FactoryDefinitionRequiredToolPathLookup        factorydefinitions.RequiredToolPathLookup
+	FactoryDefinitionRequiredToolVersionProbe      factorydefinitions.RequiredToolVersionProbe
+	FactoryDefinitionPersistenceFileSystem         factorydefinitions.PersistenceFileSystem
+	FactoryDefinitionDirectoryReplacementStore     factorydefinitions.DirectoryReplacementStore
+	FactoryDefinitionNamedPathFileSystem           interface {
+		ReadFile(string) ([]byte, error)
+		Stat(string) (fs.FileInfo, error)
+		MkdirAll(string, fs.FileMode) error
+		WriteFile(string, []byte, fs.FileMode) error
+	}
 	FactoryDefinitionNamedFactoryCatalogFileSystem        factorydefinitions.NamedFactoryCatalogFileSystem
 	FactoryDefinitionPackagedInstallationFileSystem       factorydefinitions.PackagedInstallationFileSystem
 	FactoryDefinitionPackagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator

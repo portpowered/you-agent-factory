@@ -103,6 +103,12 @@ type WorkersMockCommandRunnerFactory func(
 // Runtime never imports a peer service's wire or internal packages directly.
 type WorkerSessionsFactory func(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error)
 
+// WorkstationPoolBoundaryFactory constructs the Workers-owned workstation
+// pool boundary for one Factory Runtime session. Wire owns the concrete
+// Workers constructor; Factory Runtime receives only this composition
+// contract so its orchestration code does not construct a peer service.
+type WorkstationPoolBoundaryFactory func(workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary
+
 // ProviderInvocationExecutorFactory constructs the executor serving
 // workers.ProviderInvocationRoute for one session, from that session's own
 // provider command runner and reference-bearing progress publisher.

@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -40,10 +39,7 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 }
 
 func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	recordingRoot := t.TempDir()
 	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
 	if err != nil {
@@ -80,10 +76,7 @@ func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
 
 func startCompletedWorkerCapture(t *testing.T) (recordings.WorkerSessionRecordingRequest, recordings.WorkerSessionRecording, string) {
 	t.Helper()
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	recordingRoot := t.TempDir()
 	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
 	if err != nil {
@@ -138,10 +131,7 @@ func loadWorkerRecording(t *testing.T, recordingRoot, recordingID string) record
 }
 
 func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -185,10 +175,7 @@ func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T
 }
 
 func TestWorkerCaptureCloseCancellationIsNotCompletion(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -225,10 +212,7 @@ func TestWorkerCaptureCloseCancellationIsNotCompletion(t *testing.T) {
 }
 
 func TestWorkerCaptureRejectsRecordAfterTerminal(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	service, err := New(eventService, recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
 		return nil
 	}), logging.NoopLogger{})

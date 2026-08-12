@@ -77,20 +77,21 @@ type appliedOperatorMove struct {
 }
 
 type runtimeConfig struct {
-	net                   *state.Net
-	scheduler             scheduler.Scheduler
-	workerExecutors       map[string]workers.WorkerExecutor
-	workerService         workers.WorkstationExecutionService
-	providerInvocation    workers.WorkstationRequestExecutor
-	workerSessionsFactory factory.WorkerSessionsFactory
-	workerSessions        workersessions.Service
-	runtimeConfig         interfaces.RuntimeDefinitionLookup
-	workflowContext       *factory_context.FactoryContext
-	runtimeMode           interfaces.RuntimeMode
-	logger                logging.Logger
-	clock                 factory.Clock
-	workRequestIDs        work.RequestIDGenerator
-	eventHistory          recordings.RuntimeLedger
+	net                       *state.Net
+	scheduler                 scheduler.Scheduler
+	workerExecutors           map[string]workers.WorkerExecutor
+	workerService             workers.WorkstationExecutionService
+	providerInvocation        workers.WorkstationRequestExecutor
+	workerSessionsFactory     factory.WorkerSessionsFactory
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
+	workerSessions            workersessions.Service
+	runtimeConfig             interfaces.RuntimeDefinitionLookup
+	workflowContext           *factory_context.FactoryContext
+	runtimeMode               interfaces.RuntimeMode
+	logger                    logging.Logger
+	clock                     factory.Clock
+	workRequestIDs            work.RequestIDGenerator
+	eventHistory              recordings.RuntimeLedger
 	// recordingID is the runtime recording target propagated to Worker Sessions.
 	recordingID               string
 	worldStateProjector       factory.WorldStateProjector
@@ -125,6 +126,7 @@ func New(
 	workerService workers.WorkstationExecutionService,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -171,6 +173,9 @@ func New(
 	if workerSessionsFactory == nil {
 		return nil, fmt.Errorf("a canonical Worker Sessions factory is required")
 	}
+	if workerPoolBoundaryFactory == nil {
+		return nil, fmt.Errorf("a canonical Workers pool-boundary factory is required")
+	}
 	if runtimeMode == "" {
 		runtimeMode = interfaces.RuntimeModeBatch
 	}
@@ -181,6 +186,7 @@ func New(
 		workerService:             workerService,
 		providerInvocation:        providerInvocation,
 		workerSessionsFactory:     workerSessionsFactory,
+		workerPoolBoundaryFactory: workerPoolBoundaryFactory,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -441,7 +447,7 @@ func configureRuntimeDispatch(
 	workers.WorkstationPoolBoundary,
 	error,
 ) {
-	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+	workersBoundary := cfg.workerPoolBoundaryFactory(workers.WorkstationPoolBoundaryConfig{
 		Service:            cfg.workerService,
 		Executors:          cfg.workerExecutors,
 		RouteNames:         runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),

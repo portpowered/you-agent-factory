@@ -9,16 +9,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 
 	writeEntered := make(chan struct{})
 	releaseWrite := make(chan struct{})
@@ -79,10 +75,7 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 }
 
 func TestWorkerCaptureRejectsNonOpeningPositionBeforeBarrier(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	var writes int
 	service, err := New(eventService, recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
 		writes++
@@ -116,10 +109,7 @@ func TestWorkerCaptureRejectsNonOpeningPositionBeforeBarrier(t *testing.T) {
 }
 
 func TestWorkerCapturePersistenceFailureBlocksOpening(t *testing.T) {
-	eventService, err := eventswire.NewService()
-	if err != nil {
-		t.Fatal(err)
-	}
+	eventService := newRecordingEventsService()
 	writeErr := errors.New("disk full")
 	service, err := New(eventService, recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
 		return writeErr

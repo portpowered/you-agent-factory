@@ -30,21 +30,22 @@ type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
-	quorumPolicy             interfaces.QuorumPolicyService
-	outputShaping            interfaces.InvocationOutputShapingService
-	workPropagation          interfaces.WorkPropagationPolicyService
-	workService              work.Service
-	decisionEnvelopes        interfaces.DecisionEnvelopeService
-	loggerFactory            factory.RuntimeLoggerFactory
-	runtimeLogs              factory.RuntimeLogSinkFactory
-	runtimeMetrics           factory.RuntimeMetricsSinkFactory
-	newID                    factory.IDGenerator
-	workRequestIDs           work.RequestIDGenerator
-	runtimeDirs              factory.RuntimeDirectoryFileSystem
-	inputFiles               factory.InputFileSystem
-	inputDirectoryWalker     factory.InputDirectoryWalker
-	orchestrationCompilation factory.OrchestrationCompilation
-	providerSessions         providersessions.Service
+	quorumPolicy              interfaces.QuorumPolicyService
+	outputShaping             interfaces.InvocationOutputShapingService
+	workPropagation           interfaces.WorkPropagationPolicyService
+	workService               work.Service
+	decisionEnvelopes         interfaces.DecisionEnvelopeService
+	loggerFactory             factory.RuntimeLoggerFactory
+	runtimeLogs               factory.RuntimeLogSinkFactory
+	runtimeMetrics            factory.RuntimeMetricsSinkFactory
+	newID                     factory.IDGenerator
+	workRequestIDs            work.RequestIDGenerator
+	runtimeDirs               factory.RuntimeDirectoryFileSystem
+	inputFiles                factory.InputFileSystem
+	inputDirectoryWalker      factory.InputDirectoryWalker
+	orchestrationCompilation  factory.OrchestrationCompilation
+	providerSessions          providersessions.Service
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
 }
 
 func NewRuntimeFactory(
@@ -63,23 +64,25 @@ func NewRuntimeFactory(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
-		quorumPolicy:             quorumPolicy,
-		outputShaping:            outputShaping,
-		workPropagation:          workPropagation,
-		workService:              workService,
-		decisionEnvelopes:        decisionEnvelopes,
-		loggerFactory:            loggerFactory,
-		runtimeLogs:              runtimeLogs,
-		runtimeMetrics:           runtimeMetrics,
-		newID:                    newID,
-		workRequestIDs:           workRequestIDs,
-		runtimeDirs:              runtimeDirs,
-		inputFiles:               inputFiles,
-		inputDirectoryWalker:     inputDirectoryWalker,
-		orchestrationCompilation: orchestrationCompilation,
-		providerSessions:         providerSessions,
+		quorumPolicy:              quorumPolicy,
+		outputShaping:             outputShaping,
+		workPropagation:           workPropagation,
+		workService:               workService,
+		decisionEnvelopes:         decisionEnvelopes,
+		loggerFactory:             loggerFactory,
+		runtimeLogs:               runtimeLogs,
+		runtimeMetrics:            runtimeMetrics,
+		newID:                     newID,
+		workRequestIDs:            workRequestIDs,
+		runtimeDirs:               runtimeDirs,
+		inputFiles:                inputFiles,
+		inputDirectoryWalker:      inputDirectoryWalker,
+		orchestrationCompilation:  orchestrationCompilation,
+		providerSessions:          providerSessions,
+		workerPoolBoundaryFactory: workerPoolBoundaryFactory,
 	}
 }
 
@@ -176,6 +179,10 @@ func (f *RuntimeFactory) Build(
 		_ = logSink.Close()
 		return nil, fmt.Errorf("Worker Sessions factory is required")
 	}
+	if f.workerPoolBoundaryFactory == nil {
+		_ = logSink.Close()
+		return nil, fmt.Errorf("Workstation pool boundary factory is required")
+	}
 	metricsSink, err := buildRuntimeMetricsSink(
 		f.runtimeMetrics,
 		runtimeMetricsPolicy,
@@ -232,6 +239,7 @@ func (f *RuntimeFactory) Build(
 		workerService,
 		providerInvocation,
 		workerSessionsFactory,
+		f.workerPoolBoundaryFactory,
 		f.providerSessions,
 		f.workService,
 		f.quorumPolicy,
@@ -286,6 +294,7 @@ func assembleRuntimeBundle(
 	workerService runtimeWorkstationService,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
+	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
 	providerSessions providersessions.Service,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
@@ -331,6 +340,7 @@ func assembleRuntimeBundle(
 		workerService,
 		providerInvocation,
 		workerSessionsFactory,
+		workerPoolBoundaryFactory,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 // ProviderRegistry is the narrow immutable provider identity projection
@@ -31,7 +30,7 @@ type Process struct {
 	initializer    processcontract.Initializer
 	providers      ProviderRegistry
 	lifecycle      ProcessLifecycle
-	acpServer      acp.Server
+	acpServer      processcontract.ACPServer
 	workerReader   processcontract.WorkerRecordingReader
 }
 
@@ -40,7 +39,7 @@ func NewProcess(
 	initializer processcontract.Initializer,
 	providers ProviderRegistry,
 	lifecycle ProcessLifecycle,
-	acpServer acp.Server,
+	acpServer processcontract.ACPServer,
 	workerReader processcontract.WorkerRecordingReader,
 ) (*Process, error) {
 	if providers == nil {
@@ -81,7 +80,7 @@ func (p *Process) ProviderRegistry() ProviderRegistry {
 // same process's canonical Chat Sessions authority. It is exposed for
 // embedding and customer-scale verification; construction alone performs no
 // I/O, so returning it starts no connection.
-func (p *Process) ACPServer() acp.Server {
+func (p *Process) ACPServer() processcontract.ACPServer {
 	if p == nil {
 		return nil
 	}

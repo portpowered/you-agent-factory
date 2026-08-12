@@ -102,3 +102,10 @@ func provideWorkerSessionsFactoryWithRecorder(
 		return workersessionswire.NewService(boundary, eventsService, logger, clock, providerSessions, recorder)
 	}
 }
+
+// provideWorkstationPoolBoundaryFactory keeps the Workers-owned constructor
+// in the canonical composition root. Factory Runtime consumes only the
+// factoryruntime composition contract.
+func provideWorkstationPoolBoundaryFactory() factoryruntime.WorkstationPoolBoundaryFactory {
+	return workers.NewWorkstationPoolBoundary
+}

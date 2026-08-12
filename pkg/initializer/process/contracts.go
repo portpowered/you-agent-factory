@@ -116,6 +116,13 @@ type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (json.RawMessage, error)
 }
 
+// ACPServer is the neutral application-process capability for serving the ACP
+// protocol. The transport package supplies the concrete implementation at the
+// composition root; the initializer only retains the protocol operation.
+type ACPServer interface {
+	Serve(context.Context, io.Reader, io.Writer) error
+}
+
 type Functions struct {
 	ProcessContextFunc   func(context.Context) (context.Context, func())
 	InitializeSystemFunc func(context.Context, string) error

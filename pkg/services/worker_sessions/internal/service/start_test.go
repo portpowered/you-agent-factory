@@ -19,7 +19,6 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -2754,10 +2753,7 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 	eventService := newEventsAppender()
 	appender := &failOnNthAppendEventsAppender{Service: eventService, n: 1}
 	writer := &recordingFailureWriter{}
-	workerRecorder, err := recordingswire.NewWorkerSessionRecorder(eventService, writer, logging.NoopLogger{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	workerRecorder := &recordingFailureService{writer: writer}
 	observedRecorder := &observedRecordingService{delegate: workerRecorder}
 	registry, err := service.New(
 		executionBoundary{execution: execution},
@@ -2831,6 +2827,53 @@ type observedRecordingService struct {
 	delegate recordings.WorkerSessionRecordingService
 	mu       sync.Mutex
 	handle   recordings.WorkerSessionRecording
+}
+
+// recordingFailureService is a Worker Sessions test double for the
+// Recordings-owned capture contract. The capture package owns the real
+// subscription and durable-classification behavior; this test only verifies
+// that an opening append failure reaches the injected Abort lifecycle.
+type recordingFailureService struct {
+	writer *recordingFailureWriter
+	mu     sync.Mutex
+	handle *recordingFailure
+}
+
+func (service *recordingFailureService) StartWorkerSessionRecording(
+	_ context.Context,
+	request recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	handle := &recordingFailure{writer: service.writer, request: request}
+	service.mu.Lock()
+	service.handle = handle
+	service.mu.Unlock()
+	return handle, nil
+}
+
+type recordingFailure struct {
+	writer    *recordingFailureWriter
+	request   recordings.WorkerSessionRecordingRequest
+	closeOnce sync.Once
+}
+
+func (*recordingFailure) AwaitOpening(context.Context) error {
+	return recordings.ErrWorkerRecordingOpening
+}
+
+func (recording *recordingFailure) Close(context.Context) error {
+	return recordings.ErrWorkerRecordingOpening
+}
+
+func (recording *recordingFailure) Abort(ctx context.Context, _ error) error {
+	recording.closeOnce.Do(func() {
+		_ = recording.writer.PersistWorkerRecordingFailure(ctx, recordings.WorkerRecordingFailure{
+			RecordingID:     recording.request.RecordingID,
+			WorkerSessionID: recording.request.WorkerSessionID,
+			Topic:           recording.request.Topic,
+			Code:            "OPENING_INVALID",
+		})
+	})
+	return recordings.ErrWorkerRecordingOpening
 }
 
 func (service *observedRecordingService) StartWorkerSessionRecording(
