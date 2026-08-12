@@ -160,3 +160,5 @@ Use these canonical concept owners when you need the current contract.
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
 - [Templates](templates.md)
+
+<!-- Isolated CI routing evidence fixture. -->
