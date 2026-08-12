@@ -137,6 +137,47 @@ func TestRuntimeRootActivationUnwindsFailedStartAndCanRetry(t *testing.T) {
 	}
 }
 
+func TestRuntimeRootFailedCleanupRemainsExplicitlyRetryable(t *testing.T) {
+	t.Parallel()
+
+	cleanupCalls := 0
+	cleanupFailure := true
+	root := newRuntimeRoot(t, func(_ context.Context, _ factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		return &factoryruntime.RuntimeActivation{
+			Close: func(context.Context) error {
+				cleanupCalls++
+				if cleanupFailure {
+					return errors.New("runtime artifact is still open")
+				}
+				return nil
+			},
+		}, errors.New("runtime worker initialization failed")
+	})
+	request := foldRuntimeActivationRequest()
+
+	if _, err := root.Activate(context.Background(), request); !errors.Is(err, factoryruntime.ErrRuntimeActivationFailed) {
+		t.Fatalf("Activate(failed cleanup) error = %v, want activation failure", err)
+	}
+	if _, err := root.Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus}); !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("Observe(failed cleanup) error = %v, want ErrNotRunning", err)
+	}
+	if _, err := root.Activate(context.Background(), request); !errors.Is(err, factoryruntime.ErrRuntimeActivationConflict) {
+		t.Fatalf("Activate(with pending cleanup) error = %v, want conflict", err)
+	}
+
+	if _, err := root.Deactivate(context.Background(), factoryruntime.RuntimeDeactivationRequest{RuntimeID: request.RuntimeID}); !errors.Is(err, factoryruntime.ErrRuntimeDeactivationFailed) {
+		t.Fatalf("Deactivate(first cleanup retry) error = %v, want deactivation failure", err)
+	}
+	cleanupFailure = false
+	result, err := root.Deactivate(context.Background(), factoryruntime.RuntimeDeactivationRequest{RuntimeID: request.RuntimeID})
+	if err != nil {
+		t.Fatalf("Deactivate(second cleanup retry) error = %v", err)
+	}
+	if result.State != factoryruntime.RuntimeLifecycleStateStopped || cleanupCalls != 3 {
+		t.Fatalf("Deactivate(second cleanup retry) = %#v, cleanup calls %d; want STOPPED and 3", result, cleanupCalls)
+	}
+}
+
 func TestRuntimeRootDeactivationRetainsStateUntilCleanupSucceeds(t *testing.T) {
 	t.Parallel()
 

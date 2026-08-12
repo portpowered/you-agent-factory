@@ -27,6 +27,7 @@ type Root struct {
 
 	mu           sync.RWMutex
 	active       *runtimeActivationState
+	failed       *runtimeActivationCleanupState
 	activating   bool
 	deactivating bool
 }
@@ -37,6 +38,11 @@ type runtimeActivationState struct {
 	request factoryruntime.RuntimeActivationRequest
 	service factoryruntime.Service
 	close   func(context.Context) error
+}
+
+type runtimeActivationCleanupState struct {
+	runtimeID string
+	close     func(context.Context) error
 }
 
 // NewRoot constructs the inert Factory Runtime root from construction ports. It
@@ -81,7 +87,9 @@ func NewRoot(
 
 // Activate validates and atomically publishes one initialized Runtime. The
 // activation operation is the only construction-time route to a live
-// delegate; failed operations never become observable through this root.
+// delegate; failed operations never become observable through this root. If
+// failed-start cleanup also fails, the cleanup remains explicitly retryable
+// through Deactivate for the same Runtime ID.
 func (r *Root) Activate(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
@@ -138,6 +146,13 @@ func (r *Root) beginActivation(
 			Message:   message,
 		}
 	}
+	if r.failed != nil {
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorConflict,
+			RuntimeID: request.RuntimeID,
+			Message:   "activate Factory Runtime: failed activation cleanup is pending",
+		}
+	}
 	if r.activating || r.deactivating {
 		return nil, &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorConflict,
@@ -165,6 +180,7 @@ func (r *Root) finishActivation(
 	if operationErr != nil {
 		cleanupErr := closeActivation(activation, ctx)
 		if cleanupErr != nil {
+			r.retainFailedCleanup(request.RuntimeID, activation)
 			operationErr = fmt.Errorf("%w; unwind activation: %v", operationErr, cleanupErr)
 		}
 		r.clearActivating()
@@ -178,6 +194,7 @@ func (r *Root) finishActivation(
 	if activation == nil || activation.Service == nil {
 		cleanupErr := closeActivation(activation, ctx)
 		if cleanupErr != nil {
+			r.retainFailedCleanup(request.RuntimeID, activation)
 			operationErr = fmt.Errorf("activation returned no Runtime service; unwind activation: %w", cleanupErr)
 		} else {
 			operationErr = fmt.Errorf("activation returned no Runtime service")
@@ -201,6 +218,21 @@ func (r *Root) finishActivation(
 	return nil
 }
 
+func (r *Root) retainFailedCleanup(
+	runtimeID string,
+	activation *factoryruntime.RuntimeActivation,
+) {
+	if r == nil || activation == nil || activation.Close == nil {
+		return
+	}
+	r.mu.Lock()
+	r.failed = &runtimeActivationCleanupState{
+		runtimeID: runtimeID,
+		close:     activation.Close,
+	}
+	r.mu.Unlock()
+}
+
 func (r *Root) clearActivating() {
 	r.mu.Lock()
 	r.activating = false
@@ -209,7 +241,8 @@ func (r *Root) clearActivating() {
 
 // Deactivate closes the active Runtime's owned resources before removing its
 // delegate. A failed cleanup leaves the Runtime published so callers can retry
-// cleanup without losing the only reference to the active state.
+// cleanup without losing the only reference to the active state. It also
+// retries cleanup retained from a failed activation that never became active.
 func (r *Root) Deactivate(
 	ctx context.Context,
 	request factoryruntime.RuntimeDeactivationRequest,
@@ -265,6 +298,24 @@ func (r *Root) beginDeactivation(runtimeID string) (func(context.Context) error,
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.active == nil {
+		if r.failed != nil {
+			if r.failed.runtimeID != runtimeID {
+				return nil, &factoryruntime.RuntimeActivationError{
+					Kind:      factoryruntime.RuntimeActivationErrorConflict,
+					RuntimeID: runtimeID,
+					Message:   "deactivate Factory Runtime: Runtime ID does not match pending activation cleanup",
+				}
+			}
+			if r.activating || r.deactivating {
+				return nil, &factoryruntime.RuntimeActivationError{
+					Kind:      factoryruntime.RuntimeActivationErrorConflict,
+					RuntimeID: runtimeID,
+					Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
+				}
+			}
+			r.deactivating = true
+			return r.failed.close, nil
+		}
 		return nil, &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorNotActive,
 			RuntimeID: runtimeID,
@@ -298,7 +349,11 @@ func (r *Root) abortDeactivation() {
 func (r *Root) completeDeactivation() {
 	r.mu.Lock()
 	r.deactivating = false
-	r.active = nil
+	if r.active != nil {
+		r.active = nil
+	} else {
+		r.failed = nil
+	}
 	r.mu.Unlock()
 }
 
