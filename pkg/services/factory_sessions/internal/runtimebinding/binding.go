@@ -194,6 +194,7 @@ func Replace(
 		},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
+			Clock:                 state.Clock(),
 			RuntimeConfig:         loadedFactorySnapshotSource(replacement.LoadedRuntimeConfig()),
 			LiveChangeEvents:      NewLiveChangeEventLog(replacement.RecordingLedger()),
 			LiveChangeApplication: NewLiveChangeApplication(replacement.RuntimeService()),
@@ -300,6 +301,7 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: bundle.RuntimeService(), BackendScopeID: bundle.BackendScope(),
+			Clock:                 state.Clock(),
 			RuntimeConfig:         loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig()),
 			LiveChangeEvents:      NewLiveChangeEventLog(bundle.RecordingLedger()),
 			LiveChangeApplication: NewLiveChangeApplication(bundle.RuntimeService()),

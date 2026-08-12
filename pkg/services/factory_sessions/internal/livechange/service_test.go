@@ -77,6 +77,10 @@ func testRequest(value string) factorysessions.LiveChangeRequest {
 	}
 }
 
+func liveChangeTestNow() time.Time {
+	return time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+}
+
 func testState(t *testing.T, lifecycle factorysessions.LiveChangeLifecycle) factorysessions.LiveChangeSessionState {
 	t.Helper()
 	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{"name": "factory", "resources": []any{}})
@@ -253,7 +257,7 @@ func TestApplyLiveChange_PreAdmissionRejectionsDoNotAppend(t *testing.T) {
 				state.EffectiveRevision = 3
 			}
 			app := &application{preflight: test.preflight, applyResult: factorysessions.LiveChangeApplicationResult{Factory: state.Factory}}
-			_, err := New(nil, nil).Apply(context.Background(), "session-1", test.request, func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
+			_, err := New(liveChangeTestNow, nil).Apply(context.Background(), "session-1", test.request, func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
 				return state, nil
 			}, log, app)
 			if !errors.Is(err, test.want) {
@@ -279,7 +283,7 @@ func TestApplyLiveChange_ExactNoOpReturnsTypedSuccessWithoutHistory(t *testing.T
 		},
 	}
 	log := &eventLog{}
-	result, err := New(nil, nil).Apply(context.Background(), "session-1", testRequest("1"), func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
+	result, err := New(liveChangeTestNow, nil).Apply(context.Background(), "session-1", testRequest("1"), func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
 		return state, nil
 	}, log, app)
 	if err != nil || result.Outcome != factorysessions.LiveChangeOutcomeNoOp || result.PreviousRevision != 2 || result.NewRevision != 2 || len(log.events) != 0 || app.applyCalls != 0 {
@@ -295,7 +299,7 @@ func TestApplyLiveChange_SequentialSnapshotsRemainCompleteOnReplay(t *testing.T)
 		applyResult: factorysessions.LiveChangeApplicationResult{Factory: firstSnapshot},
 	}
 	log := &eventLog{}
-	service := New(nil, nil)
+	service := New(liveChangeTestNow, nil)
 	first := testRequest("4")
 	first.RequestID = "request-reviewers"
 	result, err := service.Apply(context.Background(), "session-1", first, func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
@@ -401,7 +405,7 @@ func TestApplyLiveChange_RequestIDConflictAndChangeIDCollisionDoNotMutate(t *tes
 		applyResult: factorysessions.LiveChangeApplicationResult{Factory: updated},
 	}
 	log := &eventLog{}
-	service := New(nil, nil)
+	service := New(liveChangeTestNow, nil)
 	if _, err := service.Apply(context.Background(), "session-1", testRequest("1"), func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
 		return state, nil
 	}, log, app); err != nil {
@@ -429,7 +433,7 @@ func TestApplyLiveChange_RequestIDConflictAndChangeIDCollisionDoNotMutate(t *tes
 
 func TestApplyLiveChange_MissingSessionIsRejectedBeforeDependenciesOrEvents(t *testing.T) {
 	log := &eventLog{}
-	_, err := New(nil, nil).Apply(context.Background(), " ", testRequest("1"), nil, log, nil)
+	_, err := New(liveChangeTestNow, nil).Apply(context.Background(), " ", testRequest("1"), nil, log, nil)
 	if !errors.Is(err, factorysessions.ErrLiveChangeSessionNotFound) || len(log.events) != 0 {
 		t.Fatalf("missing session error = %v events=%d, want typed rejection without append", err, len(log.events))
 	}
@@ -442,7 +446,7 @@ func TestApplyLiveChange_AdmittedApplicationFailureClosesAndReplays(t *testing.T
 		preflight: factorysessions.LiveChangePreflightResult{Admissible: true},
 		applyErr:  errors.New("provider secret and stack should not escape"),
 	}
-	service := New(nil, nil)
+	service := New(liveChangeTestNow, nil)
 	result, err := service.Apply(context.Background(), "session-1", testRequest("1"), func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
 		return state, nil
 	}, log, app)
@@ -479,7 +483,7 @@ func TestRecoverLiveChange_ClosesPendingRequestAfterAppendFailure(t *testing.T) 
 		preflight:   factorysessions.LiveChangePreflightResult{Admissible: true},
 		applyResult: factorysessions.LiveChangeApplicationResult{Factory: updated},
 	}
-	service := New(nil, nil)
+	service := New(liveChangeTestNow, nil)
 	_, firstErr := service.Apply(context.Background(), "session-1", testRequest("1"), func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
 		return state, nil
 	}, log, app)

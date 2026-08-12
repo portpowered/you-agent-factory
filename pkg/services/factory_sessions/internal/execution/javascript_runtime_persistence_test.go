@@ -78,11 +78,10 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 		Source:           "test",
 	}
 
-	childLease, err := runtime.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "reviewers"})
-	if err != nil {
+	if err := runtime.holdChildResourceLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "reviewers"}); err != nil {
 		t.Fatalf("acquire child resource lease: %v", err)
 	}
-	defer childLease.Release()
+	defer runtime.releaseHeldChildResourceLease()
 
 	firstDone := startDurableLiveChange(service, sessionID, request)
 	<-runtime.changeAdmissionAttempt
@@ -91,7 +90,7 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 	secondDone := startDurableLiveChange(service, sessionID, request)
 	assertDurableLiveChangePending(t, secondDone, "duplicate durable live change completed before the first admitted request")
 
-	childLease.Release()
+	runtime.releaseHeldChildResourceLease()
 	assertDurableLiveChangeOutcome(t, <-firstDone, factorysessions.LiveChangeOutcomeApplied, "first durable live change")
 	assertDurableLiveChangeOutcome(t, <-secondDone, factorysessions.LiveChangeOutcomeReplayed, "duplicate durable live change")
 	assertDurableLiveChangeApplicationCounts(t, runtime)
@@ -162,6 +161,7 @@ type durableLiveChangeAdmissionTestRuntime struct {
 	mu                      sync.Mutex
 	snapshot                *interfaces.FactorySnapshot
 	changeAdmissionHeld     bool
+	childResourceLeaseHeld  bool
 }
 
 func newDurableLiveChangeAdmissionTestRuntime(t *testing.T) *durableLiveChangeAdmissionTestRuntime {
@@ -204,19 +204,30 @@ func (r *durableLiveChangeAdmissionTestRuntime) AcquireResourceCapacityAdmission
 	}, nil
 }
 
-func (r *durableLiveChangeAdmissionTestRuntime) AcquireResourceCapacityLease(ctx context.Context, request factory.ResourceCapacityLeaseRequest) (*factory.ResourceCapacityLease, error) {
+func (r *durableLiveChangeAdmissionTestRuntime) holdChildResourceLease(ctx context.Context, request factory.ResourceCapacityLeaseRequest) error {
 	if request.ResourceID == "" {
-		return nil, errors.New("resource id is required")
+		return errors.New("resource id is required")
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ctx.Err()
 	case <-r.gate:
 	}
-	var once sync.Once
-	return factory.NewResourceCapacityLease(request.ResourceID, 0, func() {
-		once.Do(func() { r.gate <- struct{}{} })
-	}), nil
+	r.mu.Lock()
+	r.childResourceLeaseHeld = true
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) releaseHeldChildResourceLease() {
+	r.mu.Lock()
+	if !r.childResourceLeaseHeld {
+		r.mu.Unlock()
+		return
+	}
+	r.childResourceLeaseHeld = false
+	r.mu.Unlock()
+	r.gate <- struct{}{}
 }
 
 func (r *durableLiveChangeAdmissionTestRuntime) PreviewResourceCapacity(context.Context, factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {

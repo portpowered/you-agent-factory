@@ -468,6 +468,7 @@ func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.
 
 func TestChildWorkerExecutor_ResourceLeaseSurroundsTerminalChild(t *testing.T) {
 	released := 0
+	var leaseRequests []factory.ResourceCapacityLeaseRequest
 	invoker := &recordingWorkerInvoker{
 		result: factory.InvokeWorkerResult{
 			Outcome:            factory.InvokeWorkerOutcomeCompleted,
@@ -475,10 +476,13 @@ func TestChildWorkerExecutor_ResourceLeaseSurroundsTerminalChild(t *testing.T) {
 			Provider:           "codex",
 			ProviderSessionRef: "codex-session-resource",
 		},
-		lease: factory.NewResourceCapacityLease("reviewers", 7, func() { released++ }),
 	}
 	sink := newChildRecordSink()
 	executor := newTestChildWorkerExecutor(invoker, sink, nil)
+	executor.resourceLeaseAcquirer = func(_ context.Context, request factory.ResourceCapacityLeaseRequest) (*childResourceLease, error) {
+		leaseRequests = append(leaseRequests, request)
+		return &childResourceLease{factoryRevision: 7, release: func() { released++ }}, nil
+	}
 
 	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
 		Prompt:     "review",
@@ -495,8 +499,8 @@ func TestChildWorkerExecutor_ResourceLeaseSurroundsTerminalChild(t *testing.T) {
 	if terminal.Status != factory.JavaScriptChildDispatchStatusCompleted || terminal.ResourceID != "reviewers" || terminal.FactoryRevision != 7 {
 		t.Fatalf("terminal resource child = %#v, want completed reviewers at revision 7", terminal)
 	}
-	if len(invoker.leaseRequests) != 1 || invoker.leaseRequests[0].ResourceID != "reviewers" {
-		t.Fatalf("resource lease requests = %#v, want one reviewers request", invoker.leaseRequests)
+	if len(leaseRequests) != 1 || leaseRequests[0].ResourceID != "reviewers" {
+		t.Fatalf("resource lease requests = %#v, want one reviewers request", leaseRequests)
 	}
 	if released != 1 {
 		t.Fatalf("resource lease releases = %d, want exactly one after terminal child", released)
@@ -697,12 +701,10 @@ func newTestChildWorkerExecutor(
 type recordingWorkerInvoker struct {
 	factory.Service
 
-	request       factory.InvokeWorkerRequest
-	result        factory.InvokeWorkerResult
-	err           error
-	onInvoke      func()
-	lease         *factory.ResourceCapacityLease
-	leaseRequests []factory.ResourceCapacityLeaseRequest
+	request  factory.InvokeWorkerRequest
+	result   factory.InvokeWorkerResult
+	err      error
+	onInvoke func()
 }
 
 func (i *recordingWorkerInvoker) InvokeWorker(
@@ -714,21 +716,6 @@ func (i *recordingWorkerInvoker) InvokeWorker(
 		i.onInvoke()
 	}
 	return i.result, i.err
-}
-
-func (i *recordingWorkerInvoker) AcquireResourceCapacityAdmission(context.Context) (func(), error) {
-	return func() {}, nil
-}
-
-func (i *recordingWorkerInvoker) AcquireResourceCapacityLease(
-	_ context.Context,
-	request factory.ResourceCapacityLeaseRequest,
-) (*factory.ResourceCapacityLease, error) {
-	i.leaseRequests = append(i.leaseRequests, request)
-	if i.lease == nil {
-		return nil, errors.New("resource lease not configured")
-	}
-	return i.lease, nil
 }
 
 type childRecordSink struct {

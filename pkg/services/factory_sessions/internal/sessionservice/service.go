@@ -233,8 +233,20 @@ func (s *Service) runLiveChange(
 	}
 
 	runtime := session.Runtime
+	if runtime.Clock == nil {
+		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change clock is unavailable",
+		}
+	}
 	stateProvider := liveChangeStateProvider(runtime)
-	coordinator := livechange.New(nil, runtime.LiveChangeLogger)
+	coordinator := livechange.New(runtime.Clock.Now, runtime.LiveChangeLogger)
+	if coordinator == nil {
+		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordinator is unavailable",
+		}
+	}
 	canonicalID := livesession.CanonicalID(session)
 	var result factorysessions.LiveChangeResult
 	var applyErr error

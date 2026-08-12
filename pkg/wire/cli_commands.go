@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
@@ -149,7 +151,7 @@ func provideSessionsCLIService(
 	transport standardCLIHTTPProtocol,
 	prepare factorysessionwire.RequestPreparation,
 ) sessioncli.Service {
-	return sessioncli.New(transport.Protocol, prepare)
+	return sessioncli.NewWithRequestIDGenerator(transport.Protocol, prepare, uuid.NewString)
 }
 
 func provideLocalSessionsCLIService(

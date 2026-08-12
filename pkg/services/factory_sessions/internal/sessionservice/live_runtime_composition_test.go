@@ -289,6 +289,7 @@ func TestService_LiveChangeUsesRootCapabilityAndSessionScopedCanonicalEvents(t *
 		ID: sessionID,
 		Runtime: &factorysessions.LiveRuntime{
 			Factory:               factory,
+			Clock:                 serviceTestClock,
 			LiveChangeEvents:      log,
 			LiveChangeApplication: application,
 		},

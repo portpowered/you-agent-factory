@@ -50,6 +50,11 @@ type Service interface {
 	Delete(DeleteConfig) error
 }
 
+// RequestIDGenerator supplies an idempotency key when the CLI caller omits
+// one. Wire selects the process implementation; tests provide a deterministic
+// generator.
+type RequestIDGenerator func() string
+
 // Operations carries the accepted per-command operations used to build Service.
 type Operations struct {
 	List                func(ListConfig) error
@@ -65,8 +70,9 @@ type Operations struct {
 }
 
 type service struct {
-	http    clihttp.Protocol
-	prepare RequestPreparation
+	http              clihttp.Protocol
+	prepare           RequestPreparation
+	generateRequestID RequestIDGenerator
 }
 
 type boundService struct {
@@ -84,10 +90,29 @@ type boundService struct {
 
 // New constructs the Sessions CLI service injected into Cobra composition.
 func New(httpProtocol clihttp.Protocol, prepare RequestPreparation) Service {
+	return newService(httpProtocol, prepare, nil)
+}
+
+// NewWithRequestIDGenerator constructs the Sessions CLI service with the
+// caller-owned request identity effect used by commands that need an
+// idempotency key.
+func NewWithRequestIDGenerator(
+	httpProtocol clihttp.Protocol,
+	prepare RequestPreparation,
+	generateRequestID RequestIDGenerator,
+) Service {
+	return newService(httpProtocol, prepare, generateRequestID)
+}
+
+func newService(
+	httpProtocol clihttp.Protocol,
+	prepare RequestPreparation,
+	generateRequestID RequestIDGenerator,
+) Service {
 	if httpProtocol == nil || prepare == nil {
 		return nil
 	}
-	return &service{http: httpProtocol, prepare: prepare}
+	return &service{http: httpProtocol, prepare: prepare, generateRequestID: generateRequestID}
 }
 
 // Bind constructs a Sessions CLI service from injected per-command operations.
@@ -140,6 +165,7 @@ func (service *service) Terminate(cfg LifecycleControlConfig) error {
 
 func (service *service) SetResourceCapacity(cfg ResourceCapacityConfig) error {
 	cfg.HTTP = service.http
+	cfg.GenerateRequestID = service.generateRequestID
 	return SetResourceCapacity(cfg)
 }
 

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -20,20 +19,21 @@ import (
 
 // ResourceCapacityConfig holds parameters for the session resource set command.
 type ResourceCapacityConfig struct {
-	Context          context.Context
-	Server           string
-	SessionID        string
-	ResourceID       string
-	Capacity         int
-	ExpectedRevision int
-	RequestID        string
-	Reason           string
-	JSON             bool
-	Verbose          bool
-	Debug            bool
-	Output           io.Writer
-	Diagnostics      io.Writer
-	HTTP             clihttp.Protocol
+	Context           context.Context
+	Server            string
+	SessionID         string
+	ResourceID        string
+	Capacity          int
+	ExpectedRevision  int
+	RequestID         string
+	GenerateRequestID RequestIDGenerator
+	Reason            string
+	JSON              bool
+	Verbose           bool
+	Debug             bool
+	Output            io.Writer
+	Diagnostics       io.Writer
+	HTTP              clihttp.Protocol
 }
 
 // ResourceCapacityRejectedError reports a typed API rejection from resource
@@ -158,7 +158,13 @@ func normalizeResourceCapacityConfig(cfg ResourceCapacityConfig) (ResourceCapaci
 	}
 	cfg.RequestID = strings.TrimSpace(cfg.RequestID)
 	if cfg.RequestID == "" {
-		cfg.RequestID = fmt.Sprintf("cli-resource-capacity-%d", time.Now().UTC().UnixNano())
+		if cfg.GenerateRequestID == nil {
+			return ResourceCapacityConfig{}, fmt.Errorf("request id is required")
+		}
+		cfg.RequestID = strings.TrimSpace(cfg.GenerateRequestID())
+		if cfg.RequestID == "" {
+			return ResourceCapacityConfig{}, fmt.Errorf("request id generator returned an empty id")
+		}
 	}
 	cfg.Reason = strings.TrimSpace(cfg.Reason)
 	return cfg, nil

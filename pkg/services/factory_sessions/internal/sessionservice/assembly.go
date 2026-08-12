@@ -218,6 +218,7 @@ func (a *Assembly) Complete(
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
 		Factory:               startupRuntime.RuntimeService(),
+		Clock:                 clock,
 		BackendScopeID:        startupRuntime.BackendScope(),
 		RuntimeConfig:         runtimeConfig,
 		LiveChangeEvents:      runtimebinding.NewLiveChangeEventLog(startupRuntime.RecordingLedger()),

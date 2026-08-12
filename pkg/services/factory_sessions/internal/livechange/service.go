@@ -33,7 +33,7 @@ type Service struct {
 // New constructs an admission coordinator with explicit process effects.
 func New(now func() time.Time, logger *zap.Logger) *Service {
 	if now == nil {
-		now = time.Now
+		return nil
 	}
 	if logger == nil {
 		logger = zap.NewNop()
