@@ -11,7 +11,7 @@ import (
 // lives in the Distribution private tree; Bootstrap and other peers consume
 // only the returned PackagedFactoryInstaller root contract.
 func NewPackagedFactoryInstaller(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,
@@ -22,7 +22,7 @@ func NewPackagedFactoryInstaller(
 // NewPackagedFactoryInstallationService constructs the private packaged
 // installation service for composition paths that need the concrete type.
 func NewPackagedFactoryInstallationService(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,

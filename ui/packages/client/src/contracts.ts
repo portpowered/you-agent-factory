@@ -7,6 +7,13 @@ import {
 } from "./generated/openapi.js";
 
 export type { components, operations, paths };
+// Re-export the generated workstation taxonomy so presentation packages can
+// consume the same runtime values as the public Factory contract.
+export {
+  WorkstationGuardType,
+  WorkstationKind,
+  WorkstationType,
+} from "./generated/openapi.js";
 
 type FactorySchemas = components["schemas"];
 

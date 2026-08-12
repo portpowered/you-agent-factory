@@ -575,7 +575,7 @@ command.
 ### Built-in `@you/goal` repeater
 
 The shipped goal factory is deliberately minimal. It defines `goal:init`,
-`goal:execute`, `goal:complete`, `goal:blocked`, and `goal:failed`, with one
+`goal:complete`, `goal:blocked`, and `goal:failed`, with one
 `goal-executor` worker and one `execute-goal` `AGENT_RUN` workstation using
 `REPEATER` behavior. The executor maintains an atomic JSON progress file under
 `.you-goals/<session-id>/<work-id>.json` in the working directory and returns a

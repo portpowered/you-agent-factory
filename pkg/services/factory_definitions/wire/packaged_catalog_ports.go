@@ -18,7 +18,7 @@ func NewPackagedFactoryCatalog(
 // NewPackagedFactoryInstaller constructs packaged Factory ensure/install
 // operations from exact persistence and filesystem ports.
 func NewPackagedFactoryInstaller(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,
@@ -29,7 +29,7 @@ func NewPackagedFactoryInstaller(
 // NewPackagedFactoryInstallationService constructs the private packaged
 // installation service for composition paths that need the concrete type.
 func NewPackagedFactoryInstallationService(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,

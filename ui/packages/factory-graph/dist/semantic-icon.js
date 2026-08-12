@@ -17,7 +17,6 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
     "repeater",
     "cron",
     "poller",
-    "exhaustion",
     "active-work",
 ];
 const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-on-surface-variant";
@@ -36,9 +35,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
     },
     poller: {
         paths: (_jsxs(_Fragment, { children: [_jsx("path", { d: "M6 6.5h8a4 4 0 1 1 0 8H9.5" }), _jsx("path", { d: "m7.5 4-3 2.5 3 2.5" }), _jsx("path", { d: "M18 17.5H10a4 4 0 1 1 0-8h4.5" }), _jsx("path", { d: "m16.5 20 3-2.5-3-2.5" })] })),
-    },
-    exhaustion: {
-        paths: (_jsxs(_Fragment, { children: [_jsx("path", { d: "M12 4 21 19H3L12 4Z" }), _jsx("path", { d: "M12 9v4" }), _jsx("path", { d: "M12 16.5h.01" })] })),
     },
     failed: {
         paths: (_jsxs(_Fragment, { children: [_jsx("path", { d: "M8.5 3.5h7L20.5 8.5v7l-5 5h-7l-5-5v-7l5-5Z" }), _jsx("path", { d: "m9 9 6 6" }), _jsx("path", { d: "m15 9-6 6" })] })),

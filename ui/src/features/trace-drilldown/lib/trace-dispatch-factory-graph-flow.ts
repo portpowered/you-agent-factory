@@ -8,7 +8,6 @@ import {
   type FactoryGraphReactFlowEdge,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
-import { STANDARD_WORKSTATION_KIND } from "../../flowchart/lib/workstation-icon-metadata";
 import type { WorkstationNodeData } from "../../graphs/components/workstation-node-view";
 import {
   projectTraceDispatchesToFactoryGraph,
@@ -75,6 +74,7 @@ export function buildTraceDispatchFactoryGraphFlow(
         selectedWorkstation: false,
         summaryOnly: true,
         workstation: traceDispatchWorkstationNode(overlay),
+        workstationSemantics: node.data.workstationSemantics,
       },
       id: dispatchId,
       sourcePosition: Position.Right,
@@ -110,7 +110,6 @@ function traceDispatchWorkstationNode(
   return {
     node_id: overlay.dispatchId,
     transition_id: overlay.displayLabel,
-    workstation_kind: STANDARD_WORKSTATION_KIND,
     workstation_name: overlay.displayLabel,
   };
 }

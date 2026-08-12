@@ -5,10 +5,6 @@ import {
 } from "../../../api/generated/openapi";
 import type { GraphSemanticIconKind } from "../components/graph-semantic-icon";
 import { getActivityGraphMessages } from "../messages/activity-graph";
-import {
-  EXHAUSTION_WORKSTATION_KIND,
-  isExhaustionWorkstation,
-} from "./workstation-semantics";
 
 export type ApiWorkstationKind = components["schemas"]["WorkstationKind"];
 
@@ -20,6 +16,7 @@ export const CRON_WORKSTATION_KIND =
   WorkstationKind.CRON satisfies ApiWorkstationKind;
 export const POLLER_WORKSTATION_KIND =
   WorkstationKind.POLLER satisfies ApiWorkstationKind;
+export const UNKNOWN_WORKSTATION_KIND = "UNKNOWN" as const;
 
 export const SUPPORTED_WORKSTATION_ICON_KINDS = [
   STANDARD_WORKSTATION_KIND,
@@ -32,7 +29,7 @@ export type SupportedWorkstationIconKind =
   (typeof SUPPORTED_WORKSTATION_ICON_KINDS)[number];
 export type WorkstationSemanticKind =
   | SupportedWorkstationIconKind
-  | typeof EXHAUSTION_WORKSTATION_KIND;
+  | typeof UNKNOWN_WORKSTATION_KIND;
 
 export interface WorkstationIconMetadata {
   className: string;
@@ -58,14 +55,6 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     ),
     semanticKind: POLLER_WORKSTATION_KIND,
   },
-  [EXHAUSTION_WORKSTATION_KIND]: {
-    className: "text-error",
-    iconKind: "exhaustion",
-    label: getActivityGraphMessages().workstationIconLabel(
-      EXHAUSTION_WORKSTATION_KIND,
-    ),
-    semanticKind: EXHAUSTION_WORKSTATION_KIND,
-  },
   [REPEATER_WORKSTATION_KIND]: {
     className: "text-info",
     iconKind: "repeater",
@@ -82,14 +71,20 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     ),
     semanticKind: STANDARD_WORKSTATION_KIND,
   },
+  [UNKNOWN_WORKSTATION_KIND]: {
+    className: "text-on-surface-subtle",
+    iconKind: "workstation",
+    label: getActivityGraphMessages().workstationIconLabel(
+      UNKNOWN_WORKSTATION_KIND,
+    ),
+    semanticKind: UNKNOWN_WORKSTATION_KIND,
+  },
 } satisfies Record<WorkstationSemanticKind, WorkstationIconMetadata>;
 
 export const SUPPORTED_WORKSTATION_ICON_METADATA =
   SUPPORTED_WORKSTATION_ICON_KINDS.map(
     (kind) => WORKSTATION_ICON_METADATA_BY_KIND[kind],
   );
-export const EXHAUSTION_WORKSTATION_ICON_METADATA =
-  WORKSTATION_ICON_METADATA_BY_KIND[EXHAUSTION_WORKSTATION_KIND];
 
 function normalizeApiWorkstationKind(
   workstationKind: string | undefined,
@@ -106,15 +101,13 @@ function normalizeApiWorkstationKind(
   }
 }
 
+/** Legacy dashboard adapter: absent or future topology metadata stays neutral. */
 export function workstationSemanticKind(
   workstation: DashboardWorkstationNode,
 ): WorkstationSemanticKind {
-  if (isExhaustionWorkstation(workstation)) {
-    return EXHAUSTION_WORKSTATION_KIND;
-  }
   return (
     normalizeApiWorkstationKind(workstation.workstation_kind) ??
-    STANDARD_WORKSTATION_KIND
+    UNKNOWN_WORKSTATION_KIND
   );
 }
 

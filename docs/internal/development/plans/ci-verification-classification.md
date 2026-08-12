@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed.
+Implemented and active. The contributor-facing routing contract and local
+rerun guide live in the [Agent Factory Development Guide](../development.md);
+this plan records the ownership model and implementation rationale.
 
 ## Problem
 

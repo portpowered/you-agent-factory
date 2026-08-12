@@ -68,7 +68,6 @@ describe("DashboardFlowAxisLegend", () => {
       [messages.iconLabels.cron, "cron"],
       [messages.iconLabels.poller, "poller"],
       [messages.iconLabels["active-work"], "active-work"],
-      [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
       const iconEntry = legend.querySelector(`[data-legend-icon='${kind}']`);
       const icon = legendScope.getByRole("img", {

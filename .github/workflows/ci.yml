@@ -28,24 +28,25 @@ jobs:
     outputs:
       classification: ${{ steps.classify.outputs.classification || 'full' }}
       areas: ${{ steps.classify.outputs.areas || 'ci-tooling' }}
-      run_docs_reference: ${{ steps.classify.outputs.run_docs_reference || 'true' }}
-      run_readme: ${{ steps.classify.outputs.run_readme || 'true' }}
-      run_frontend: ${{ steps.classify.outputs.run_frontend || 'true' }}
-      run_backend: ${{ steps.classify.outputs.run_backend || 'true' }}
-      run_ui_backend_integration: ${{ steps.classify.outputs.run_ui_backend_integration || 'true' }}
-      run_api_package: ${{ steps.classify.outputs.run_api_package || 'true' }}
-      run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package || 'true' }}
-      run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package || 'true' }}
-      run_local_inference: ${{ steps.classify.outputs.run_local_inference || 'true' }}
-      docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || 'Conservative full verification.' }}
-      readme_reason: ${{ steps.classify.outputs.readme_reason || 'Conservative full verification.' }}
-      frontend_reason: ${{ steps.classify.outputs.frontend_reason || 'Conservative full verification.' }}
-      backend_reason: ${{ steps.classify.outputs.backend_reason || 'Conservative full verification.' }}
-      ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || 'Conservative full verification.' }}
-      api_package_reason: ${{ steps.classify.outputs.api_package_reason || 'Conservative full verification.' }}
-      packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || 'Conservative full verification.' }}
-      model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || 'Conservative full verification.' }}
-      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || 'Conservative full verification.' }}
+      reason: ${{ steps.classify.outputs.reason || 'Conservative full verification.' }}
+      run_docs_reference: ${{ steps.classify.outputs.run_docs_reference != 'false' }}
+      run_readme: ${{ steps.classify.outputs.run_readme != 'false' }}
+      run_frontend: ${{ steps.classify.outputs.run_frontend != 'false' }}
+      run_backend: ${{ steps.classify.outputs.run_backend != 'false' }}
+      run_ui_backend_integration: ${{ steps.classify.outputs.run_ui_backend_integration != 'false' }}
+      run_api_package: ${{ steps.classify.outputs.run_api_package != 'false' }}
+      run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package != 'false' }}
+      run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package != 'false' }}
+      run_local_inference: ${{ steps.classify.outputs.run_local_inference != 'false' }}
+      docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      readme_reason: ${{ steps.classify.outputs.readme_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      frontend_reason: ${{ steps.classify.outputs.frontend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      backend_reason: ${{ steps.classify.outputs.backend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      api_package_reason: ${{ steps.classify.outputs.api_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -69,7 +70,7 @@ jobs:
   docs-reference:
     name: Docs Reference
     needs: classify
-    if: always() && needs.classify.outputs.run_docs_reference == 'true'
+    if: always() && needs.classify.outputs.run_docs_reference != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +82,7 @@ jobs:
   readme:
     name: README
     needs: classify
-    if: always() && needs.classify.outputs.run_readme == 'true'
+    if: always() && needs.classify.outputs.run_readme != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +94,7 @@ jobs:
   frontend:
     name: Frontend
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend == 'true'
+    if: always() && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -111,7 +112,7 @@ jobs:
   frontend-component:
     name: Frontend Component
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend == 'true'
+    if: always() && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -128,7 +129,7 @@ jobs:
   ui-coverage:
     name: Frontend Coverage
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend == 'true'
+    if: always() && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -145,7 +146,7 @@ jobs:
   frontend-browser:
     name: Frontend Browser
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend == 'true'
+    if: always() && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -158,7 +159,7 @@ jobs:
   frontend-storybook:
     name: Frontend Storybook
     needs: classify
-    if: always() && needs.classify.outputs.run_frontend == 'true'
+    if: always() && needs.classify.outputs.run_frontend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -171,7 +172,7 @@ jobs:
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage
     needs: classify
-    if: always()
+    if: always() && needs.classify.outputs.run_backend != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -185,48 +186,43 @@ jobs:
           - suite: functional
             label: Functional
     steps:
-      - name: Skip unselected backend coverage lane
-        if: needs.classify.outputs.run_backend != 'true'
-        run: echo "Backend coverage was not selected by CI classification."
       - uses: actions/checkout@v4
-        if: needs.classify.outputs.run_backend == 'true'
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
-        if: needs.classify.outputs.run_backend == 'true'
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - uses: actions/setup-node@v4
-        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        if: matrix.suite == 'functional'
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Build backend
-        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'unit'
+        if: matrix.suite == 'unit'
         run: make build
       - name: Run backend coverage
-        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'unit'
+        if: matrix.suite == 'unit'
         run: make test-unit-coverage
       - name: Run backend functional coverage and visualization
-        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        if: matrix.suite == 'functional'
         run: bash scripts/ci/run-functional-test-viz.sh
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
       - name: Run pinned real ACP client evidence
-        if: needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        if: matrix.suite == 'functional'
         run: go test -v ./tests/functional/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout 4m
         env:
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
       - name: Publish functional test job summary
-        if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        if: always() && matrix.suite == 'functional'
         run: bash scripts/ci/publish-functional-test-summary.sh
         env:
           FUNCTIONAL_TEST_VIZ_MARKDOWN: .artifacts/functional-test-viz/functional-tests.md
       - name: Upload functional test diagnostics
-        if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
         with:
           name: functional-test-diagnostics
@@ -240,7 +236,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Require pinned real ACP evidence artifact
-        if: always() && needs.classify.outputs.run_backend == 'true' && matrix.suite == 'functional'
+        if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
         with:
           name: pinned-real-acp-evidence
@@ -251,7 +247,7 @@ jobs:
   ui-backend-integration:
     name: UI Backend Integration
     needs: classify
-    if: always() && needs.classify.outputs.run_ui_backend_integration == 'true'
+    if: always() && needs.classify.outputs.run_ui_backend_integration != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -265,132 +261,77 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: make ui-durable-session-real-backend-integration-test
 
-  api-package:
-    name: API Contract And Package
+  development-package:
+    name: Development Package
     needs: classify
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - name: Skip unselected API contract and package lane
-        if: needs.classify.outputs.run_api_package != 'true'
-        run: echo "API contract and package verification was not selected by CI classification."
-      - uses: actions/checkout@v4
-        if: needs.classify.outputs.run_api_package == 'true'
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        if: needs.classify.outputs.run_api_package == 'true'
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - uses: oven-sh/setup-bun@v2
-        if: needs.classify.outputs.run_api_package == 'true'
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/setup-node@v4
-        if: needs.classify.outputs.run_api_package == 'true'
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - if: needs.classify.outputs.run_api_package == 'true'
-        run: make ui-deps contracts-smoke api-smoke api-package-verify
+    if: >-
+      ${{
+        always() &&
+        (github.event_name == 'pull_request' || github.event_name == 'push')
+      }}
+    uses: ./.github/workflows/development-package.yml
+    permissions:
+      # The called workflow contains explicitly gated publication jobs whose
+      # permission ceiling must be allowed at the call boundary. Its package
+      # verification jobs retain the called workflow's read-only default.
+      contents: write
+      id-token: write
+    with:
+      is_ci_call: true
+      run_candidates: ${{ github.event_name == 'pull_request' }}
+      run_api_package: ${{ needs.classify.outputs.run_api_package != 'false' }}
+      run_packaged_factories_package: ${{ needs.classify.outputs.run_packaged_factories_package != 'false' }}
+      run_model_providers_package: ${{ needs.classify.outputs.run_model_providers_package != 'false' }}
+      source_commit: ${{ github.event.pull_request.head.sha || github.sha }}
+      pull_request_head_sha: ${{ github.event.pull_request.head.sha || '' }}
+      source_ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
 
-  packaged-factories-package:
-    name: Packaged Factories Package
-    needs: classify
-    if: always() && needs.classify.outputs.run_packaged_factories_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: make packaged-factory-package-verify
-
-  model-providers-package:
-    name: Model Providers Package
-    needs: classify
-    if: always() && needs.classify.outputs.run_model_providers_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-deps
-      - run: make model-provider-package-verify
-
-  api-candidate:
-    name: Build API Candidate (No Publish)
-    needs: classify
-    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_api_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: >-
-          node scripts/api-package-development-command.mjs --action dry-run
-          --event-name "${{ github.event_name }}"
-          --output-directory .artifacts/api-development-candidate/package
-          --package-directory packages/api
-          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
-          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.event.pull_request.head.sha }}"
-          --workspace-directory "${{ github.workspace }}"
-
-  packaged-factories-candidate:
-    name: Build Packaged Factories Candidate (No Publish)
-    needs: classify
-    if: always() && github.event_name == 'pull_request' && needs.classify.outputs.run_packaged_factories_package == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: >-
-          node scripts/packaged-factories-package-pr-dry-run.mjs
-          --event-name "${{ github.event_name }}"
-          --output-directory .artifacts/packaged-factories-development-candidate/package
-          --package-directory packages/packaged-factories
-          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
-          --ref "${{ github.ref }}" --repository "${{ github.repository }}"
-          --run-id "${{ github.run_id }}"
-          --source-commit "${{ github.event.pull_request.head.sha }}"
-          --workspace-directory "${{ github.workspace }}"
+  # Maintainers can add the ci-workflow-behavior label to request one
+  # controlled hosted evaluation of the reusable workflow contract. The job is
+  # skipped before any runner is allocated for ordinary pull requests.
+  development-package-behavior:
+    name: Development Package Workflow Behavior
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        contains(github.event.pull_request.labels.*.name, 'ci-workflow-behavior')
+      }}
+    uses: ./.github/workflows/development-package-behavior.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      # Keep the PR evidence check green. The expected-failure propagation
+      # case remains available through the dispatch input and deterministic
+      # gate; hosted run 31558145400 records its child failure and assertion.
+      include_failure: false
 
   local-inference:
     name: Local Inference
     needs: classify
-    if: always() && needs.classify.outputs.run_local_inference == 'true'
+    if: always() && needs.classify.outputs.run_local_inference != 'false'
     uses: ./.github/workflows/long-local-inference.yml
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, api-package, packaged-factories-package, model-providers-package, api-candidate, packaged-factories-candidate, local-inference]
+    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, development-package, local-inference]
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Run CI workflow policy tests
+        if: always()
+        run: make test-ci-workflows
       - name: Verify selected lanes
+        if: always()
         env:
+          CLASSIFICATION_RESULT: ${{ needs.classify.result }}
           CLASSIFICATION: ${{ needs.classify.outputs.classification }}
           AREAS: ${{ needs.classify.outputs.areas }}
+          CLASSIFICATION_REASON: ${{ needs.classify.outputs.reason }}
           RUN_DOCS: ${{ needs.classify.outputs.run_docs_reference }}
           RUN_README: ${{ needs.classify.outputs.run_readme }}
           RUN_FRONTEND: ${{ needs.classify.outputs.run_frontend }}
@@ -409,36 +350,22 @@ jobs:
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
-          RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_component=${{ needs.frontend-component.result }} frontend_coverage=${{ needs.ui-coverage.result }} frontend_browser=${{ needs.frontend-browser.result }} frontend_storybook=${{ needs.frontend-storybook.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} api=${{ needs.api-package.result }} packaged=${{ needs.packaged-factories-package.result }} providers=${{ needs.model-providers-package.result }} api_candidate=${{ needs.api-candidate.result }} packaged_candidate=${{ needs.packaged-factories-candidate.result }} inference=${{ needs.local-inference.result }}
+          RUN_CANDIDATES: ${{ github.event_name == 'pull_request' }}
+          DOCS_RESULT: ${{ needs.docs-reference.result }}
+          README_RESULT: ${{ needs.readme.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}
+          FRONTEND_COVERAGE_RESULT: ${{ needs.ui-coverage.result }}
+          FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
+          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
+          BACKEND_RESULT: ${{ needs.backend-coverage.result }}
+          UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
+          PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
+          API_RESULT: ${{ needs.development-package.outputs.api_package_result }}
+          API_CANDIDATE_RESULT: ${{ needs.development-package.outputs.api_candidate_result }}
+          PACKAGED_RESULT: ${{ needs.development-package.outputs.packaged_factories_package_result }}
+          PACKAGED_CANDIDATE_RESULT: ${{ needs.development-package.outputs.packaged_factories_candidate_result }}
+          PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}
+          INFERENCE_RESULT: ${{ needs.local-inference.result }}
         shell: bash
-        run: |
-          set -euo pipefail
-          echo "## Verification policy" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Classification: \`$CLASSIFICATION\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Areas: \`$AREAS\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Results: \`$RESULTS\`" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo "### Lane decisions" >> "$GITHUB_STEP_SUMMARY"
-          for lane in \
-            "Docs Reference|$RUN_DOCS|${{ needs.docs-reference.result }}|$DOCS_REASON" \
-            "README|$RUN_README|${{ needs.readme.result }}|$README_REASON" \
-            "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
-            "Frontend Component|$RUN_FRONTEND|${{ needs.frontend-component.result }}|$FRONTEND_REASON" \
-            "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage.result }}|$FRONTEND_REASON" \
-            "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
-            "Frontend Storybook|$RUN_FRONTEND|${{ needs.frontend-storybook.result }}|$FRONTEND_REASON" \
-            "Backend Coverage|$RUN_BACKEND|${{ needs.backend-coverage.result }}|$BACKEND_REASON" \
-            "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \
-            "API Contract And Package|$RUN_API|${{ needs.api-package.result }}|$API_REASON" \
-            "Packaged Factories Package|$RUN_PACKAGED|${{ needs.packaged-factories-package.result }}|$PACKAGED_REASON" \
-            "Model Providers Package|$RUN_PROVIDERS|${{ needs.model-providers-package.result }}|$PROVIDERS_REASON" \
-            "Local Inference|$RUN_INFERENCE|${{ needs.local-inference.result }}|$INFERENCE_REASON"; do
-            IFS='|' read -r name selected result reason <<< "$lane"
-            decision=skip
-            [[ "$selected" == "true" ]] && decision=run
-            echo "- \`$name\`: \`$decision\` (result: \`$result\`) - $reason" >> "$GITHUB_STEP_SUMMARY"
-          done
-          if [[ "$RESULTS" == *"failure"* || "$RESULTS" == *"cancelled"* ]]; then
-            exit 1
-          fi
+        run: node scripts/verification-policy.mjs

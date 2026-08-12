@@ -93,6 +93,9 @@ func buildCatalogOnce(
 	if err != nil {
 		return nil, err
 	}
+	if err := validateFirstPartyArtifactRoles(artifacts); err != nil {
+		return nil, err
+	}
 	schemaIdentity, err := readSchemaIdentity(source, schemaPath)
 	if err != nil {
 		return nil, err
@@ -116,6 +119,23 @@ func buildCatalogOnce(
 		return nil, err
 	}
 	return files, nil
+}
+
+func validateFirstPartyArtifactRoles(artifacts []ArtifactPair) error {
+	var diagnostics []string
+	for _, artifact := range artifacts {
+		if err := ValidateFirstPartyWorkStateRoles(artifact.Slug, artifact.Factory); err != nil {
+			diagnostics = append(diagnostics, fmt.Sprintf("%s: %v", artifact.SourcePath, err))
+		}
+	}
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	sort.Strings(diagnostics)
+	return fmt.Errorf(
+		"first-party Work state role validation failed:\n- %s",
+		strings.Join(diagnostics, "\n- "),
+	)
 }
 
 func validateManifestHashes(manifest Manifest, files map[string][]byte) error {

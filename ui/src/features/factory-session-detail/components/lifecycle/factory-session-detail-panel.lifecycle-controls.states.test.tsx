@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
+import { buildPausedDurableSession } from "../../../../testing/factory-session-lifecycle-fixtures";
 import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   createDeferred,
@@ -94,6 +95,7 @@ describe("factory session detail lifecycle control states", () => {
           operation: "PAUSE",
           outcome: "ACCEPTED",
           sessionId: "dur-sess-js-running-001",
+          session: buildPausedDurableSession("dur-sess-js-running-001"),
           status: "PAUSED",
         },
         202,
@@ -106,24 +108,29 @@ describe("factory session detail lifecycle control states", () => {
   });
 
   it("submits lifecycle controls from keyboard activation", async () => {
+    let sessionRequestCount = 0;
     const fetchMock = vi
       .mocked(globalThis.fetch)
       .mockImplementation(async (input, init) => {
         const url = String(input);
 
         if (url.endsWith("/factory-sessions/dur-sess-js-running-001")) {
+          sessionRequestCount += 1;
           return jsonResponse({
             dialect: "you-workflow-v1",
             lifecycle: {
               startedAt: "2026-06-08T14:00:00Z",
-              updatedAt: "2026-06-08T14:05:00Z",
+              updatedAt:
+                sessionRequestCount > 1
+                  ? "2026-06-08T14:06:00Z"
+                  : "2026-06-08T14:05:00Z",
             },
             orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
             phase: "review",
             progress: {
               completedDispatches: 1,
               failedDispatches: 0,
-              inFlightDispatches: 1,
+              inFlightDispatches: sessionRequestCount > 1 ? 0 : 1,
               totalDispatches: 2,
             },
             resolvedSource: {
@@ -132,7 +139,7 @@ describe("factory session detail lifecycle control states", () => {
               sourceRef: "workflow/review",
             },
             sessionId: "dur-sess-js-running-001",
-            status: "RUNNING",
+            status: sessionRequestCount > 1 ? "PAUSED" : "RUNNING",
             usage: { resources: [] },
           });
         }
@@ -175,6 +182,8 @@ describe("factory session detail lifecycle control states", () => {
         expect.objectContaining({ method: "POST" }),
       );
       expect(screen.getByText("Pause accepted")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
     });
   });
 

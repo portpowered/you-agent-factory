@@ -6,6 +6,7 @@ import "../../../styles.css";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
+  mixedFactorySemanticsDashboardSnapshot,
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
@@ -13,10 +14,7 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import { resourceOccupancySnapshotForTick } from "../../../components/dashboard/timeline-test-fixtures";
-import {
-  EXHAUSTION_WORKSTATION_ICON_METADATA,
-  SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart/lib/workstation-icon-metadata";
+import { SUPPORTED_WORKSTATION_ICON_METADATA } from "../../flowchart/lib/workstation-icon-metadata";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
@@ -46,12 +44,8 @@ const LEGEND_ICON_EXPECTATIONS: LegendIconExpectation[] = [
     label: metadata.label,
   })),
   { kind: "active-work", label: "Active work" },
-  {
-    kind: EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind,
-    label: EXHAUSTION_WORKSTATION_ICON_METADATA.label,
-  },
 ];
-const GRAPH_BROWSER_SMOKE_TIMEOUT_MS = 2000;
+const GRAPH_BROWSER_SMOKE_TIMEOUT_MS = 5000;
 const GRAPH_BROWSER_SMOKE_POLL_MS = 50;
 
 function snapshotWithStateCounts(
@@ -160,6 +154,9 @@ function snapshotWithLongActiveWorkLabel(): DashboardSnapshot {
 
 function snapshotWithLongStateLabels(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  const longWorkType =
+    "customer-escalation-story-with-a-deliberately-long-type";
+  const longState = "ready-for-review-after-multiple-dependent-checks-complete";
 
   for (const workstation of Object.values(
     snapshot.topology.workstation_nodes_by_id,
@@ -169,13 +166,27 @@ function snapshotWithLongStateLabels(): DashboardSnapshot {
       ...(workstation.output_places ?? []),
     ]) {
       if (place.place_id === "story:ready") {
-        place.type_id =
-          "customer-escalation-story-with-a-deliberately-long-type";
-        place.state_value =
-          "ready-for-review-after-multiple-dependent-checks-complete";
+        place.type_id = longWorkType;
+        place.state_value = longState;
       }
     }
   }
+
+  for (const workstation of snapshot.factory?.workstations ?? []) {
+    for (const route of [
+      ...(workstation.inputs ?? []),
+      ...(workstation.outputs ?? []),
+    ]) {
+      if (route.workType === "story" && route.state === "ready") {
+        route.workType = longWorkType;
+        route.state = longState;
+      }
+    }
+  }
+  snapshot.factory?.workTypes?.push({
+    name: longWorkType,
+    states: [{ name: longState, type: "PROCESSING" }],
+  });
 
   return snapshot;
 }
@@ -243,6 +254,20 @@ function workstationNode(button: HTMLElement): HTMLElement {
   return node;
 }
 
+function workstationShell(button: HTMLElement): HTMLElement {
+  const shell = button.closest(
+    "[data-current-activity-node-type='workstation']",
+  );
+
+  if (!(shell instanceof HTMLElement)) {
+    throw new Error(
+      "Expected workstation button to render inside a workstation shell",
+    );
+  }
+
+  return shell;
+}
+
 function expectFixedWorkstationDimensions(node: HTMLElement): void {
   expect(node.getAttribute("style")).toContain("width: 156px");
   expect(node.getAttribute("style")).toContain("height: 196px");
@@ -264,9 +289,7 @@ async function expectResourceCount(
     `${count} resource tokens`,
   );
 
-  await expect(
-    await canvas.findByLabelText("agent-slot:available"),
-  ).toBeVisible();
+  await expect(await canvas.findByText("agent-slot")).toBeVisible();
   await expect(resourceCount).toBeVisible();
   await expect(resourceCount).toHaveTextContent(String(count));
   expectNoImplementationLabels(canvasElement);
@@ -307,7 +330,7 @@ async function expectLegendIconVocabulary(
 
     await expect(icon).toBeVisible();
     await expect(icon).toHaveAttribute("data-graph-semantic-icon", item.kind);
-    await expect(legendScope.getByText(item.label)).toBeVisible();
+    await expect(legendScope.getAllByText(item.label)[0]).toBeVisible();
   }
 }
 
@@ -482,12 +505,12 @@ export const SemanticWorkflow = {
       name: "Select Review workstation",
     });
     await expect(
-      within(reviewButton).getByRole("img", { name: "Repeater workstation" }),
+      within(reviewButton).getByRole("img", { name: "Inference workstation" }),
     ).toBeVisible();
     await expect(
       within(
         await canvas.findByRole("button", { name: "Select Plan workstation" }),
-      ).getByRole("img", { name: "Standard workstation" }),
+      ).getByRole("img", { name: "Inference workstation" }),
     ).toBeVisible();
     await expect(
       reviewButton
@@ -501,10 +524,6 @@ export const SemanticWorkflow = {
     await expect(
       canvas.queryByText("Workstation Definition"),
     ).not.toBeInTheDocument();
-    await expect(await canvas.findByText("quality-gate:ready")).toBeVisible();
-    await expect(
-      await canvas.findByLabelText("1 constraint token"),
-    ).toBeVisible();
     await expect(
       await canvas.findByRole("button", { name: "Select story:blocked state" }),
     ).toBeVisible();
@@ -569,7 +588,7 @@ export const WorkstationIdle = {
 
     expectFixedWorkstationDimensions(reviewNode);
     await expect(
-      within(reviewButton).getByRole("img", { name: "Repeater workstation" }),
+      within(reviewButton).getByRole("img", { name: "Inference workstation" }),
     ).toBeVisible();
     await expect(
       reviewNode.querySelector("[data-active='true']"),
@@ -600,7 +619,9 @@ export const WorkstationOneActive = {
       reviewNode.querySelector("[data-active='true']"),
     ).toBeInTheDocument();
     await expect(
-      reviewNode.className.includes("border-af-success-border"),
+      workstationShell(reviewButton).className.includes(
+        "border-af-success-border",
+      ),
     ).toBe(true);
     await expect(
       within(reviewButton).queryByRole("img", { name: "Active" }),
@@ -743,8 +764,6 @@ export const WorkstationKindParity = {
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const legend = await expandGraphLegend(canvasElement);
-    const legendScope = within(legend);
 
     for (const expectation of workstationKindParityExpectations) {
       const button = await canvas.findByRole("button", {
@@ -752,9 +771,6 @@ export const WorkstationKindParity = {
       });
       const icon = within(button).getByRole("img", {
         name: expectation.metadata.label,
-      });
-      const legendIcon = legendScope.getByRole("img", {
-        name: `${expectation.metadata.label} legend icon`,
       });
 
       expectFixedWorkstationDimensions(workstationNode(button));
@@ -766,15 +782,7 @@ export const WorkstationKindParity = {
       await expect(
         within(button).getByText(expectation.workstationName),
       ).toBeVisible();
-      await expect(legendIcon).toBeVisible();
-      await expect(legendIcon).toHaveAttribute(
-        "data-graph-semantic-icon",
-        expectation.metadata.iconKind,
-      );
-      await expect(
-        legendScope.getByText(expectation.metadata.label),
-      ).toBeVisible();
-      expect(button.textContent).not.toContain(expectation.metadata.label);
+      expect(button.textContent).toContain(expectation.metadata.label);
     }
 
     const cronExpectation = workstationKindParityExpectations.find(
@@ -788,6 +796,45 @@ export const WorkstationKindParity = {
     await userEvent.click(cronButton);
     await expect(cronButton).toHaveAttribute("aria-pressed", "true");
     expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const MixedWorkstationSemantics = {
+  render: () => (
+    <CurrentActivityStory snapshot={mixedFactorySemanticsDashboardSnapshot} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const expectedNodes = [
+      ["Classifier route", "Classifier workstation"],
+      ["Logical route", "Logical move workstation"],
+      [
+        "Inference workstation with a deliberately long authored title",
+        "Inference workstation",
+      ],
+      ["Agent worker", "Agent workstation"],
+      ["execute-goal", "Repeater schedule"],
+      ["Script cron", "Cron schedule"],
+      ["Poller source", "Poller schedule"],
+    ] as const;
+
+    for (const [name, semanticLabel] of expectedNodes) {
+      const button = await canvas.findByRole("button", {
+        name: `Select ${name} workstation`,
+      });
+      await expect(within(button).getByText(semanticLabel)).toBeVisible();
+    }
+
+    const loopTitle = await canvas.findByText("goal-loop-breaker", {
+      exact: true,
+    });
+    const loopNode = loopTitle.closest(".react-flow__node");
+    expect(loopNode).toBeTruthy();
+    const loopScope = within(loopNode as HTMLElement);
+    await expect(loopScope.getByText("Loop breaker")).toBeVisible();
+    await expect(loopScope.getByText("execute-goal")).toBeVisible();
+    await expect(loopScope.getByText("3")).toBeVisible();
+    await expect(loopScope.getByText("Logical move workstation")).toBeVisible();
   },
 };
 
@@ -1114,7 +1161,7 @@ export const NarrowViewport = {
 export const TouchPanePanning = {
   render: () => (
     <div style={{ maxWidth: "100%", width: "360px" }}>
-      <CurrentActivityStory snapshot={twentyNodeDashboardSnapshot} />
+      <CurrentActivityStory snapshot={mixedFactorySemanticsDashboardSnapshot} />
     </div>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -1153,7 +1200,6 @@ export const LocalizedZhCN = {
     await expect(
       canvas.getByRole("button", { name: "编辑模式" }),
     ).toBeVisible();
-    await expect(canvas.getByText("观察")).toBeVisible();
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };

@@ -11,6 +11,13 @@ type NamedFactoryResolutionSource = contracts.NamedFactoryResolutionSource
 type NamedFactoryPrecedenceDecision = contracts.NamedFactoryPrecedenceDecision
 type Persistence = contracts.Persistence
 
+// PackagedFactoryPersistence is the explicit persistence capability required
+// by first-party packaged Factory installation. The packaged preparation path
+// is intentionally separate from ordinary named-Factory persistence so its
+// catalog-only lifecycle allowances cannot be discovered through a runtime
+// type assertion or applied to customer-authored persistence.
+type PackagedFactoryPersistence = contracts.PackagedFactoryPersistence
+
 const (
 	NamedFactoryResolutionSourceProjectLocal = contracts.NamedFactoryResolutionSourceProjectLocal
 	NamedFactoryResolutionSourceGlobal       = contracts.NamedFactoryResolutionSourceGlobal

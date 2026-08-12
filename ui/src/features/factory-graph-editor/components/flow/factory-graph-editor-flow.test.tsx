@@ -10,6 +10,10 @@ import {
 } from "@testing-library/react";
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 
+import {
+  WorkstationKind,
+  WorkstationType,
+} from "../../../../api/generated/openapi";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import "../../../../styles.css";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
@@ -288,7 +292,7 @@ describe("factory graph editor edge labels", () => {
     expect(
       reviewNode.querySelector("[data-factory-entity-title]")?.textContent,
     ).toContain("review");
-    expect(reviewNode.textContent).toContain("Workstation");
+    expect(reviewNode.textContent).toContain("Unknown workstation semantics");
     expect(reviewNode.textContent).toContain("Pending");
 
     expect(
@@ -298,6 +302,43 @@ describe("factory graph editor edge labels", () => {
     ).not.toBeNull();
     expect(writerNode.textContent).toContain("Worker");
     expect(writerNode.textContent).toContain("Active");
+  });
+
+  it("joins authored semantics for a legacy workstation with a blank topology id", async () => {
+    const legacyFactory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: WorkstationKind.REPEATER,
+          id: undefined,
+          type: WorkstationType.AGENT_RUN,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const legacyTopology: FactoryGraphTopology = {
+      edges: [],
+      nodes: [
+        {
+          id: "workstation:draft",
+          key: { id: "", kind: "workstation", name: "draft" },
+          kind: "workstation",
+          label: "draft",
+        },
+      ],
+    };
+
+    renderEditorFlow(false, legacyTopology, {
+      factoryDefinition: legacyFactory,
+    });
+
+    const workstationNode = (await screen.findByTitle("draft")).closest(
+      "article",
+    );
+
+    expect(workstationNode).not.toBeNull();
+    expect(workstationNode?.textContent).toContain("Agent workstation");
+    expect(workstationNode?.textContent).toContain("Repeater schedule");
   });
 
   it("keeps inline labels hidden by default while preserving accessible edge names", async () => {

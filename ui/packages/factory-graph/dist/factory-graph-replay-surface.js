@@ -1,7 +1,8 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { Background, Controls, ReactFlow, } from "@xyflow/react";
+import { Background, Controls, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
+import { projectFactoryGraphWorkstationSemantics, } from "./workstation-semantics.js";
 /**
  * Read-only canonical Factory graph for replay and emulator hosts.
  * It consumes the complete Factory and its selected-tick runtime projection,
@@ -9,7 +10,7 @@ import { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
  */
 export function FactoryGraphReplaySurface({ className, onSelectNode, selectedNodeId, source, }) {
     const flow = projectFactoryGraphReplayFlow(source, selectedNodeId);
-    return (_jsx(GraphViewportSurface, { className: className, "data-factory-graph-replay": true, children: _jsxs(ReactFlow, { defaultViewport: source.factory.layout?.viewport, edges: flow.edges, edgesFocusable: false, fitView: true, fitViewOptions: { padding: 0.12 }, nodes: flow.nodes, nodesConnectable: false, nodesDraggable: false, nodeTypes: FACTORY_GRAPH_NODE_TYPES, onNodeClick: (_event, node) => onSelectNode?.(node.id), proOptions: { hideAttribution: true }, children: [_jsx(Background, {}), _jsx(Controls, { showInteractive: false })] }) }));
+    return (_jsx(GraphViewportSurface, { className: className, "data-factory-graph-replay": true, children: _jsxs(ReactFlow, { defaultViewport: source.factory.layout?.viewport, edges: flow.edges, edgesFocusable: false, fitView: true, fitViewOptions: { padding: 0.12 }, minZoom: 0.25, nodes: flow.nodes, nodesConnectable: false, nodesDraggable: false, nodeTypes: FACTORY_GRAPH_NODE_TYPES, onNodeClick: (_event, node) => onSelectNode?.(node.id), proOptions: { hideAttribution: true }, children: [_jsx(Background, {}), _jsx(Controls, { showInteractive: false })] }) }));
 }
 /** Project replay data into the original Factory semantic node family. */
 export function projectFactoryGraphReplayFlow(source, selectedNodeId) {
@@ -18,11 +19,16 @@ export function projectFactoryGraphReplayFlow(source, selectedNodeId) {
         node.position,
     ]));
     const activeIds = replayActiveNodeIds(source);
+    const workstationSemanticsByNodeId = new Map(projectFactoryGraphWorkstationSemantics(source).map((projection) => [
+        projection.nodeId,
+        projection,
+    ]));
     const topologyNodes = source.runtime.topology.nodes.map((topologyNode, index) => semanticNode(topologyNode, {
         active: activeIds.has(topologyNode.id),
         position: positions.get(topologyNode.id) ?? fallbackPosition(index),
         selected: topologyNode.id === selectedNodeId,
         source,
+        workstationProjection: workstationSemanticsByNodeId.get(topologyNode.id),
     }));
     const docs = (source.factory.supportingFiles?.bundledFiles ?? []).flatMap((file, index) => {
         const id = `doc:${file.id?.trim() || file.targetPath}`;
@@ -128,12 +134,13 @@ function semanticNode(node, input) {
                 id: node.id,
                 type: "statePosition",
             };
-        case "workstation":
+        case "workstation": {
+            const active = input.active || Boolean(input.workstationProjection?.activity.active);
             return {
                 ...base,
                 data: {
-                    active: input.active,
-                    activeFlow: input.active,
+                    active,
+                    activeFlow: active,
                     executions: [],
                     factoryGraphNodeId: node.id,
                     handles,
@@ -142,6 +149,7 @@ function semanticNode(node, input) {
                     selectedWorkID: null,
                     selectedWorkstation: input.selected,
                     summaryOnly: true,
+                    workstationSemantics: input.workstationProjection,
                     workstation: {
                         node_id: node.id,
                         transition_id: node.label,
@@ -151,6 +159,7 @@ function semanticNode(node, input) {
                 id: node.id,
                 type: "workstation",
             };
+        }
     }
 }
 function toSemanticHandle(handle) {

@@ -138,51 +138,16 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
+} as const;
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: viewport coverage keeps related mocked React Flow click paths together.
 describe("CurrentActivityGraphViewport", () => {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
-
   beforeEach(() => {
     setViewport.mockClear();
-    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-    globalThis.ResizeObserver = class {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              contentRect: DEFAULT_GRAPH_RECT,
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this as unknown as ResizeObserver,
-        );
-      }
-
-      public unobserve(): void {}
-    } as unknown as typeof ResizeObserver;
-  });
-
-  afterEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   it("renders hide/show controls in observer mode without editor tools", () => {
@@ -568,6 +533,7 @@ function renderViewport({
       }}
       edges={edges}
       flowContainerRef={flowContainerRef}
+      viewportMeasurement={DEFAULT_VIEWPORT_MEASUREMENT}
       handleGraphSelectionChange={handleGraphSelectionChange}
       handleNodesChange={vi.fn()}
       hasPendingChanges={false}

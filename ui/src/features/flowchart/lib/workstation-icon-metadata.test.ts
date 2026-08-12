@@ -6,10 +6,10 @@ import {
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
   SUPPORTED_WORKSTATION_ICON_METADATA,
+  UNKNOWN_WORKSTATION_KIND,
   workstationIconMetadata,
   workstationSemanticKind,
 } from "./workstation-icon-metadata";
-import { EXHAUSTION_WORKSTATION_KIND } from "./workstation-semantics";
 
 function dashboardWorkstationNode(
   overrides: Partial<DashboardWorkstationNode> = {},
@@ -114,31 +114,21 @@ describe("workstationIconMetadata", () => {
     });
   });
 
-  it("preserves the exhaustion-rule special case ahead of workstation-kind fallback", () => {
-    const explicitExhaustion = dashboardWorkstationNode({
-      workstation_kind: EXHAUSTION_WORKSTATION_KIND,
-      worker_type: "processor",
-    });
-    const emptyFallbackExhaustion = dashboardWorkstationNode({
+  it("keeps missing and future workstation metadata neutral", () => {
+    const missingMetadata = dashboardWorkstationNode({
       workstation_kind: "",
       worker_type: "",
     });
 
-    expect(workstationSemanticKind(explicitExhaustion)).toBe(
-      EXHAUSTION_WORKSTATION_KIND,
+    expect(workstationSemanticKind(missingMetadata)).toBe(
+      UNKNOWN_WORKSTATION_KIND,
     );
-    expect(workstationSemanticKind(emptyFallbackExhaustion)).toBe(
-      EXHAUSTION_WORKSTATION_KIND,
-    );
-    expect(workstationIconMetadata(explicitExhaustion)).toEqual({
-      className: "text-error",
-      iconKind: "exhaustion",
-      label: "Exhaustion rule",
-      semanticKind: EXHAUSTION_WORKSTATION_KIND,
+    expect(workstationIconMetadata(missingMetadata)).toEqual({
+      className: "text-on-surface-subtle",
+      iconKind: "workstation",
+      label: "Unknown workstation semantics",
+      semanticKind: UNKNOWN_WORKSTATION_KIND,
     });
-  });
-
-  it("treats unknown workstation kinds as the standard workstation icon", () => {
     expect(
       workstationIconMetadata(
         dashboardWorkstationNode({ workstation_kind: "future-kind" }),
@@ -146,8 +136,8 @@ describe("workstationIconMetadata", () => {
     ).toEqual({
       className: "text-on-surface-subtle",
       iconKind: "workstation",
-      label: "Standard workstation",
-      semanticKind: STANDARD_WORKSTATION_KIND,
+      label: "Unknown workstation semantics",
+      semanticKind: UNKNOWN_WORKSTATION_KIND,
     });
   });
 

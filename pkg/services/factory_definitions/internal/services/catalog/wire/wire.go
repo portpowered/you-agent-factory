@@ -78,7 +78,7 @@ func NewPersistence(
 	fileSystem factorydefinitions.PersistenceFileSystem,
 	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
 	directories factorydefinitions.DirectoryReplacementStore,
-) (factorydefinitions.Persistence, error) {
+) (factorydefinitions.PackagedFactoryPersistence, error) {
 	return catalogpersistence.New(
 		validator,
 		mapInput,
