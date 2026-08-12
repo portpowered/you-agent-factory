@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -19,6 +20,7 @@ func TestStreamWorkerSessionEventsByWorkerSessionIDWritesProviderNeutralReplay(t
 	service := &fakeObservationService{
 		getByWorkerResult: workersessions.Observation{
 			WorkerSessionID: "worker-no-reference", WorkIDs: []string{"work-1"}, State: workersessions.StateCompleted,
+			RecordingHealth: recordings.WorkerRecordingStatusDegraded, RecordingHealthReason: "PERSISTENCE_FAILED",
 		},
 		streamByWorkerSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
 			{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{
@@ -65,6 +67,12 @@ func assertProviderNeutralReplayFrames(t *testing.T, frames []sseTestFrame) {
 	}
 	if frames[0].WorkerSessionID != "worker-no-reference" {
 		t.Fatalf("provider-neutral frame identity = %#v, want Worker Session identity", frames[0])
+	}
+	if frames[0].FactorySessionID == nil || *frames[0].FactorySessionID != "session-1" {
+		t.Fatalf("provider-neutral frame Factory Session scope = %#v, want session-1", frames[0].FactorySessionID)
+	}
+	if frames[0].RecordingHealth == nil || *frames[0].RecordingHealth != string(recordings.WorkerRecordingStatusDegraded) || frames[0].RecordingHealthReason == nil || *frames[0].RecordingHealthReason != "PERSISTENCE_FAILED" {
+		t.Fatalf("provider-neutral frame recording health = %#v/%#v, want DEGRADED/PERSISTENCE_FAILED", frames[0].RecordingHealth, frames[0].RecordingHealthReason)
 	}
 	if frames[0].ProviderSession == nil {
 		t.Fatalf("provider-neutral frame = %#v, want empty provider envelope", frames[0])

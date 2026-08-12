@@ -86,6 +86,7 @@ func (a *Adapter) GetWorkerSessionObservation(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
+	observation.FactorySessionID = strings.TrimSpace(sessionID)
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
@@ -119,6 +120,7 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
+	observation.FactorySessionID = strings.TrimSpace(sessionID)
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
@@ -152,7 +154,9 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
 	}
-	return WorkerSessionTranscriptToAPI(result), nil
+	response := WorkerSessionTranscriptToAPI(result)
+	response.FactorySessionId = stringPtr(strings.TrimSpace(sessionID))
+	return response, nil
 }
 
 // ReadWorkerSessionTranscriptByWorkerSessionID reads the normalized history
@@ -185,7 +189,9 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
 	}
-	return WorkerSessionTranscriptToAPI(result), nil
+	response := WorkerSessionTranscriptToAPI(result)
+	response.FactorySessionId = stringPtr(strings.TrimSpace(sessionID))
+	return response, nil
 }
 
 // StreamWorkerSessionEvents returns the detached identity envelope together
@@ -235,6 +241,7 @@ func (a *Adapter) StreamWorkerSessionEvents(
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
+	observation.FactorySessionID = strings.TrimSpace(sessionID)
 	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
@@ -279,6 +286,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionID(
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
+	observation.FactorySessionID = strings.TrimSpace(sessionID)
 	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
@@ -510,6 +518,9 @@ func (a *Adapter) ListWorkerSessions(
 		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("list Worker Session observations: %w", err)
 	}
 	sortObservations(result.Observations)
+	for index := range result.Observations {
+		result.Observations[index].FactorySessionID = strings.TrimSpace(sessionID)
+	}
 	return ListWorkerSessionsResponseToAPI(result), nil
 }
 

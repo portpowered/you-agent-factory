@@ -625,14 +625,17 @@ func (h *Handler) writeWorkerSessionFrame(
 }
 
 type workerSessionEventFramePayload struct {
-	Delivery        workersessions.ObservationDeliveryKind     `json:"delivery"`
-	WorkerSessionID string                                     `json:"workerSessionId"`
-	ProviderSession factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
-	WorkIDs         []string                                   `json:"workIds"`
-	Event           *workerSessionEventRecordPayload           `json:"event"`
-	ErrorCode       *string                                    `json:"errorCode"`
-	ErrorMessage    *string                                    `json:"errorMessage"`
-	ReplaySummary   *factoryapi.WorkerSessionReplaySummary     `json:"replaySummary,omitempty"`
+	Delivery              workersessions.ObservationDeliveryKind        `json:"delivery"`
+	WorkerSessionID       string                                        `json:"workerSessionId"`
+	FactorySessionID      *string                                       `json:"factorySessionId,omitempty"`
+	ProviderSession       factoryapi.WorkerSessionProviderSessionRef    `json:"providerSession"`
+	WorkIDs               []string                                      `json:"workIds"`
+	Event                 *workerSessionEventRecordPayload              `json:"event"`
+	ErrorCode             *string                                       `json:"errorCode"`
+	ErrorMessage          *string                                       `json:"errorMessage"`
+	ReplaySummary         *factoryapi.WorkerSessionReplaySummary        `json:"replaySummary,omitempty"`
+	RecordingHealth       *factoryapi.WorkerSessionEventRecordingHealth `json:"recordingHealth,omitempty"`
+	RecordingHealthReason *string                                       `json:"recordingHealthReason,omitempty"`
 }
 
 type workerSessionEventRecordPayload struct {
@@ -662,10 +665,13 @@ func workerSessionReplaySummaryFrame(observation factoryapi.WorkerSessionObserva
 		return workerSessionFailureFrame(observation, "WORKER_SESSION_STREAM_FAILED", "Worker Session replay summary is unavailable")
 	}
 	return workerSessionEventFramePayload{
-		Delivery:        workersessions.ObservationDeliveryReplaySummary,
-		WorkerSessionID: observation.WorkerSessionId,
-		ProviderSession: workerSessionProviderSessionRef(observation),
-		WorkIDs:         append([]string(nil), observation.WorkIds...),
+		Delivery:              workersessions.ObservationDeliveryReplaySummary,
+		WorkerSessionID:       observation.WorkerSessionId,
+		FactorySessionID:      observation.FactorySessionId,
+		ProviderSession:       workerSessionProviderSessionRef(observation),
+		WorkIDs:               append([]string(nil), observation.WorkIds...),
+		RecordingHealth:       eventRecordingHealth(observation.RecordingHealth),
+		RecordingHealthReason: observation.RecordingHealthReason,
 		ReplaySummary: &factoryapi.WorkerSessionReplaySummary{
 			Kind:          "replay-summary",
 			Complete:      summary.Complete,
@@ -693,9 +699,12 @@ func workerSessionEventFrameWithIdentity(
 		providerSession = *observation.ProviderSession
 	}
 	return workerSessionEventFramePayload{
-		Delivery: delivery, WorkerSessionID: observation.WorkerSessionId, ProviderSession: providerSession,
+		Delivery: delivery, WorkerSessionID: observation.WorkerSessionId,
+		FactorySessionID: observation.FactorySessionId, ProviderSession: providerSession,
 		WorkIDs: append([]string(nil), observation.WorkIds...), Event: event,
 		ErrorCode: errorCode, ErrorMessage: errorMessage,
+		RecordingHealth:       eventRecordingHealth(observation.RecordingHealth),
+		RecordingHealthReason: observation.RecordingHealthReason,
 	}
 }
 
@@ -704,6 +713,14 @@ func workerSessionProviderSessionRef(observation factoryapi.WorkerSessionObserva
 		return factoryapi.WorkerSessionProviderSessionRef{}
 	}
 	return *observation.ProviderSession
+}
+
+func eventRecordingHealth(value *factoryapi.WorkerSessionObservationRecordingHealth) *factoryapi.WorkerSessionEventRecordingHealth {
+	if value == nil {
+		return nil
+	}
+	health := factoryapi.WorkerSessionEventRecordingHealth(*value)
+	return &health
 }
 
 func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, frame workerSessionEventFramePayload) error {
@@ -740,6 +757,10 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 		errors.Is(err, workersessions.ErrInvalidState),
 		strings.Contains(err.Error(), "worker session id is required"):
 		writeError(w, http.StatusBadRequest, "invalid Worker Session observation query", "BAD_REQUEST")
+	case errors.Is(err, workersessions.ErrObservationRecordingCorrupt):
+		writeError(w, http.StatusInternalServerError, "Worker Session recording history is corrupt", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGCORRUPT))
+	case errors.Is(err, workersessions.ErrObservationRecordingUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "Worker Session recording history is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE))
 	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
 		return
 	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "work id is required"):
@@ -894,6 +915,10 @@ func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) 
 		writeError(w, http.StatusNotFound, "worker session observation is not direct", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
 		writeError(w, http.StatusInternalServerError, "worker session observation is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
+	case errors.Is(err, workersessions.ErrObservationRecordingCorrupt):
+		writeError(w, http.StatusInternalServerError, "Worker Session recording history is corrupt", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGCORRUPT))
+	case errors.Is(err, workersessions.ErrObservationRecordingUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "Worker Session recording history is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE))
 	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
 		return
 	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "provider, kind, and id are required"):
@@ -918,6 +943,10 @@ func (h *Handler) writeMappedTranscriptError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInternalServerError, "worker session transcript is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE))
 	case errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable):
 		writeError(w, http.StatusInternalServerError, "worker session transcript projection is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE))
+	case errors.Is(err, workersessions.ErrObservationRecordingCorrupt):
+		writeError(w, http.StatusInternalServerError, "Worker Session recording history is corrupt", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGCORRUPT))
+	case errors.Is(err, workersessions.ErrObservationRecordingUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "Worker Session recording history is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE))
 	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
 		return
 	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "provider, kind, and id are required"):
@@ -938,6 +967,10 @@ func (h *Handler) writeMappedStreamError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "worker session observation is not direct", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
 		writeError(w, http.StatusInternalServerError, "worker session observation is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
+	case errors.Is(err, workersessions.ErrObservationRecordingCorrupt):
+		writeError(w, http.StatusInternalServerError, "Worker Session recording history is corrupt", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGCORRUPT))
+	case errors.Is(err, workersessions.ErrObservationRecordingUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "Worker Session recording history is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE))
 	case errors.Is(err, workersessions.ErrObservationSourceUnavailable), errors.Is(err, workersessions.ErrObservationSourceGap), errors.Is(err, workersessions.ErrObservationSourceClosed):
 		writeError(w, http.StatusInternalServerError, "Worker Session event stream is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
 	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):

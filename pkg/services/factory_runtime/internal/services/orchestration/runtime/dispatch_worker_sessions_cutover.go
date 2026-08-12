@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -153,12 +154,18 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 	if f == nil || f.cfg == nil {
 		return nil
 	}
-	return newRecordedWorkerSessionObservation(
+	var workerRecordingReader recordings.WorkerRecordingReader
+	if reader, ok := f.cfg.workerSessions.(recordings.WorkerRecordingReader); ok {
+		workerRecordingReader = reader
+	}
+	return newRecordedWorkerSessionObservationWithRecording(
 		f.cfg.workerSessions,
 		f.eventHistory,
 		f.cfg.worldStateProjector,
 		f.clock,
 		f.cfg.providerSessions,
+		f.cfg.recordingID,
+		workerRecordingReader,
 	)
 }
 
@@ -172,6 +179,8 @@ type recordedWorkerSessionObservation struct {
 	projector        factory.WorldStateProjector
 	clock            factory.Clock
 	providerSessions providersessions.Service
+	recordingID      string
+	recordingReader  recordings.WorkerRecordingReader
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
@@ -183,9 +192,22 @@ func newRecordedWorkerSessionObservation(
 	clock factory.Clock,
 	providerSessions providersessions.Service,
 ) workersessions.Service {
+	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, "", nil)
+}
+
+func newRecordedWorkerSessionObservationWithRecording(
+	live workersessions.Service,
+	ledger recordings.RuntimeLedger,
+	projector factory.WorldStateProjector,
+	clock factory.Clock,
+	providerSessions providersessions.Service,
+	recordingID string,
+	recordingReader recordings.WorkerRecordingReader,
+) workersessions.Service {
 	return &recordedWorkerSessionObservation{
 		Service: live, ledger: ledger, projector: projector, clock: clock,
-		providerSessions: providerSessions,
+		providerSessions: providerSessions, recordingID: strings.TrimSpace(recordingID),
+		recordingReader: recordingReader,
 	}
 }
 
@@ -215,6 +237,9 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	}
 	if !acceptableLiveObservationError(liveErr) {
 		return workersessions.ListObservationsResult{}, liveErr
+	}
+	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
+		return workersessions.ListObservationsResult{}, err
 	}
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
 }
@@ -252,6 +277,129 @@ func (s *recordedWorkerSessionObservation) listLive(
 	return s.Service.ListObservations(ctx, req)
 }
 
+type workerRecordingHealth struct {
+	status recordings.WorkerRecordingStatus
+	reason string
+}
+
+func (s *recordedWorkerSessionObservation) recordingHealth(
+	ctx context.Context,
+) (map[string]workerRecordingHealth, error) {
+	if s == nil || s.recordingReader == nil || s.recordingID == "" {
+		return nil, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := observationContextError(ctx); err != nil {
+		return nil, err
+	}
+	snapshot, err := s.recordingReader.LoadWorkerRecording(ctx, s.recordingID)
+	if err != nil {
+		switch {
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			return nil, workersessions.ErrObservationCanceled
+		case errors.Is(err, os.ErrNotExist):
+			return nil, nil
+		case isCorruptWorkerRecordingError(err):
+			return nil, fmt.Errorf("%w: %v", workersessions.ErrObservationRecordingCorrupt, err)
+		default:
+			return nil, fmt.Errorf("%w: %v", workersessions.ErrObservationRecordingUnavailable, err)
+		}
+	}
+	if snapshot.RecordingID != s.recordingID {
+		return nil, fmt.Errorf("%w: recording identity %q does not match %q", workersessions.ErrObservationRecordingCorrupt, snapshot.RecordingID, s.recordingID)
+	}
+	if len(snapshot.Sessions) == 0 {
+		return nil, fmt.Errorf("%w: recording contains no Worker Session history", workersessions.ErrObservationRecordingCorrupt)
+	}
+	health := make(map[string]workerRecordingHealth, len(snapshot.Sessions))
+	for _, session := range snapshot.Sessions {
+		workerSessionID := strings.TrimSpace(session.WorkerSessionID)
+		if workerSessionID == "" {
+			return nil, fmt.Errorf("%w: recording contains an empty Worker Session identity", workersessions.ErrObservationRecordingCorrupt)
+		}
+		if _, exists := health[workerSessionID]; exists {
+			return nil, fmt.Errorf("%w: recording contains duplicate Worker Session %q", workersessions.ErrObservationRecordingCorrupt, workerSessionID)
+		}
+		if !validWorkerRecordingHealth(session.Status) {
+			return nil, fmt.Errorf("%w: Worker Session %q has invalid health %q", workersessions.ErrObservationRecordingCorrupt, workerSessionID, session.Status)
+		}
+		health[workerSessionID] = workerRecordingHealth{
+			status: session.Status,
+			reason: recordingHealthReason(session.Status, session.Failure, session.InterruptionReason),
+		}
+	}
+	return health, nil
+}
+
+func validWorkerRecordingHealth(status recordings.WorkerRecordingStatus) bool {
+	switch status {
+	case recordings.WorkerRecordingStatusComplete,
+		recordings.WorkerRecordingStatusDegraded,
+		recordings.WorkerRecordingStatusIncomplete:
+		return true
+	}
+	return false
+}
+
+func recordingHealthReason(status recordings.WorkerRecordingStatus, failure, interruption string) string {
+	if status == recordings.WorkerRecordingStatusDegraded {
+		return strings.TrimSpace(failure)
+	}
+	if status == recordings.WorkerRecordingStatusIncomplete {
+		return strings.TrimSpace(interruption)
+	}
+	return ""
+}
+
+func isCorruptWorkerRecordingError(err error) bool {
+	return errors.Is(err, recordings.ErrWorkerRecordingReplay) ||
+		errors.Is(err, recordings.ErrWorkerRecordingCompatibility) ||
+		errors.Is(err, recordings.ErrWorkerRecordingOrder) ||
+		errors.Is(err, recordings.ErrWorkerRecordingDuplicate) ||
+		errors.Is(err, recordings.ErrWorkerRecordingTerminal) ||
+		errors.Is(err, recordings.ErrWorkerRecordingOpening) ||
+		errors.Is(err, recordings.ErrWorkerRecordingDelivery)
+}
+
+func (s *recordedWorkerSessionObservation) withRecordingHealth(
+	ctx context.Context,
+	observation workersessions.Observation,
+) (workersessions.Observation, error) {
+	health, err := s.recordingHealth(ctx)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	if current, ok := health[observation.WorkerSessionID]; ok {
+		observation.RecordingHealth = current.status
+		observation.RecordingHealthReason = current.reason
+	}
+	return observation, nil
+}
+
+func (s *recordedWorkerSessionObservation) applyRecordingHealth(
+	ctx context.Context,
+	observations []workersessions.Observation,
+) error {
+	health, err := s.recordingHealth(ctx)
+	if err != nil {
+		return err
+	}
+	for index := range observations {
+		if current, ok := health[observations[index].WorkerSessionID]; ok {
+			observations[index].RecordingHealth = current.status
+			observations[index].RecordingHealthReason = current.reason
+		}
+	}
+	return nil
+}
+
+func (s *recordedWorkerSessionObservation) validateRecordingHealth(ctx context.Context) error {
+	_, err := s.recordingHealth(ctx)
+	return err
+}
+
 func (s *recordedWorkerSessionObservation) GetObservation(
 	ctx context.Context,
 	req workersessions.GetObservationRequest,
@@ -268,7 +416,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 			return workersessions.Observation{}, err
 		}
 		if found {
-			return s.enrichRecordedObservation(ctx, recordedObservationFromFact(fact, s.clock), req.ProviderSession)
+			observation, enrichErr := s.enrichRecordedObservation(ctx, recordedObservationFromFact(fact, s.clock), req.ProviderSession)
+			if enrichErr != nil {
+				return workersessions.Observation{}, enrichErr
+			}
+			return s.withRecordingHealth(ctx, observation)
 		}
 		if s.Service == nil {
 			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
@@ -277,7 +429,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.Service.GetObservation(ctx, req)
+	observation, err := s.Service.GetObservation(ctx, req)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return s.withRecordingHealth(ctx, observation)
 }
 
 // GetObservationByWorkerSessionID resolves the canonical Worker Session
@@ -304,9 +460,13 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 		if found {
 			observation := recordedObservationFromFact(fact, s.clock)
 			if fact.provider == nil {
-				return observation, nil
+				return s.withRecordingHealth(ctx, observation)
 			}
-			return s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+			observation, enrichErr := s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+			if enrichErr != nil {
+				return workersessions.Observation{}, enrichErr
+			}
+			return s.withRecordingHealth(ctx, observation)
 		}
 		if s.Service == nil {
 			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
@@ -315,7 +475,11 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.Service.GetObservationByWorkerSessionID(ctx, req)
+	observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return s.withRecordingHealth(ctx, observation)
 }
 
 func (s *recordedWorkerSessionObservation) ReadTranscript(
@@ -342,6 +506,9 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 			return workersessions.ReadTranscriptResult{}, err
 		}
 		if found {
+			if err := s.validateRecordingHealth(ctx); err != nil {
+				return workersessions.ReadTranscriptResult{}, err
+			}
 			if !fact.state.Terminal() {
 				return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
 			}
@@ -361,7 +528,14 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if s == nil || s.Service == nil {
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.Service.ReadTranscript(ctx, req)
+	result, err := s.Service.ReadTranscript(ctx, req)
+	if err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if err := s.validateRecordingHealth(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	return result, nil
 }
 
 func (s *recordedWorkerSessionObservation) enrichRecordedObservation(
@@ -520,6 +694,9 @@ func (s *recordedWorkerSessionObservation) streamRecorded(
 		}
 		return workersessions.ObservationSubscription{}, false, nil
 	}
+	if err := s.validateRecordingHealth(ctx); err != nil {
+		return workersessions.ObservationSubscription{}, true, err
+	}
 	return s.streamRecordedFact(ctx, fact, req.Limit)
 }
 
@@ -539,6 +716,9 @@ func (s *recordedWorkerSessionObservation) streamRecordedByWorkerSessionID(
 			return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSessionNotFound
 		}
 		return workersessions.ObservationSubscription{}, false, nil
+	}
+	if err := s.validateRecordingHealth(ctx); err != nil {
+		return workersessions.ObservationSubscription{}, true, err
 	}
 	return s.streamRecordedFact(ctx, fact, req.Limit)
 }

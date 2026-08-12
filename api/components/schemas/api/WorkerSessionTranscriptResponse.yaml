@@ -11,6 +11,9 @@ properties:
   workerSessionId:
     type: string
     description: Stable Worker Session identity.
+  factorySessionId:
+    type: string
+    description: Explicit Factory Session scope used for this transcript read.
   providerSession:
     $ref: './WorkerSessionProviderSessionRef.yaml'
   workIds:

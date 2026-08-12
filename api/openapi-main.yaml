@@ -495,6 +495,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/events:
     get:
       tags:
@@ -557,6 +559,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
     get:
       tags:
@@ -597,6 +601,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}:
     get:
       tags:
@@ -625,6 +631,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript:
     get:
       tags:
@@ -659,6 +667,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -700,6 +710,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/transcript:
     get:
       tags:
@@ -747,6 +759,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/invocations:
     post:
       tags:
@@ -2274,8 +2288,8 @@ components:
       $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
     WorkerSessionContinuationConflict:
       $ref: './components/responses/WorkerSessionContinuationConflict.yaml'
-    WorkerSessionContinuationUnavailable:
-      $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
+      WorkerSessionContinuationUnavailable:
+        $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
     WorkerSessionInterruptBadRequest:
       $ref: './components/responses/WorkerSessionInterruptBadRequest.yaml'
     WorkerSessionInterruptNotFound:
@@ -2292,7 +2306,9 @@ components:
       $ref: './components/responses/WorkerSessionControlUnavailable.yaml'
     WorkerSessionControlInternalError:
       $ref: './components/responses/WorkerSessionControlInternalError.yaml'
-    FactorySessionLifecycleControlConflict:
+    WorkerSessionRecordingUnavailable:
+      $ref: './components/responses/WorkerSessionRecordingUnavailable.yaml'
+      FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     FactorySessionResourceCapacityConflict:
       $ref: './components/responses/FactorySessionResourceCapacityConflict.yaml'

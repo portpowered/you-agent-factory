@@ -1,0 +1,5 @@
+description: The durable Worker Session recording could not be read.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

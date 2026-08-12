@@ -21,6 +21,9 @@ properties:
   direct:
     type: boolean
     description: Whether this observation was admitted through the direct top-level Worker Session surface.
+  factorySessionId:
+    type: string
+    description: Explicit Factory Session scope used for this observation.
   providerSession:
     $ref: './WorkerSessionProviderSessionRef.yaml'
     nullable: true
@@ -90,5 +93,19 @@ properties:
   failure:
     $ref: './WorkerSessionFailure.yaml'
     nullable: true
+  recordingHealth:
+    type: string
+    enum:
+      - COMPLETE
+      - DEGRADED
+      - INCOMPLETE
+    x-enum-varnames:
+      - WorkerSessionObservationRecordingHealthComplete
+      - WorkerSessionObservationRecordingHealthDegraded
+      - WorkerSessionObservationRecordingHealthIncomplete
+    description: Recordings-owned capture health, independent of Worker execution outcome.
+  recordingHealthReason:
+    type: string
+    description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
   parse:
     $ref: './WorkerSessionParseDiagnostics.yaml'

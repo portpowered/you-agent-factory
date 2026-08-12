@@ -470,6 +470,66 @@ func TestRecordedWorkerSessionObservation_UsesCanonicalFactsForExactQueries(t *t
 	requireRecordedExactObservationWorkerID(t, fixture, show)
 }
 
+type scriptedWorkerRecordingReader struct {
+	snapshot recordings.WorkerRecordingSnapshot
+	err      error
+}
+
+func (reader *scriptedWorkerRecordingReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	if reader.err != nil {
+		return recordings.WorkerRecordingSnapshot{}, reader.err
+	}
+	return reader.snapshot, nil
+}
+
+func TestRecordedWorkerSessionObservationProjectsDurableRecordingHealth(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	service := fixture.service.(*recordedWorkerSessionObservation)
+	service.recordingID = "recording-health"
+	reader := &scriptedWorkerRecordingReader{}
+	service.recordingReader = reader
+
+	for _, testCase := range []struct {
+		name        string
+		status      recordings.WorkerRecordingStatus
+		failure     string
+		interrupted string
+		wantReason  string
+	}{
+		{name: "complete", status: recordings.WorkerRecordingStatusComplete},
+		{name: "degraded", status: recordings.WorkerRecordingStatusDegraded, failure: "PERSISTENCE_FAILED", wantReason: "PERSISTENCE_FAILED"},
+		{name: "incomplete", status: recordings.WorkerRecordingStatusIncomplete, interrupted: recordings.WorkerRecordingInterruptionProcessStopped, wantReason: recordings.WorkerRecordingInterruptionProcessStopped},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			reader.snapshot = recordings.WorkerRecordingSnapshot{
+				RecordingID: "recording-health",
+				Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+					WorkerSessionID:    fixture.workerSessionID,
+					Status:             testCase.status,
+					Failure:            testCase.failure,
+					InterruptionReason: testCase.interrupted,
+				}},
+			}
+			observation, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID})
+			if err != nil {
+				t.Fatalf("GetObservationByWorkerSessionID() error = %v", err)
+			}
+			if observation.RecordingHealth != testCase.status || observation.RecordingHealthReason != testCase.wantReason {
+				t.Fatalf("recording health = %q/%q, want %q/%q", observation.RecordingHealth, observation.RecordingHealthReason, testCase.status, testCase.wantReason)
+			}
+		})
+	}
+
+	reader.err = recordings.ErrWorkerRecordingReplay
+	if _, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID}); !errors.Is(err, workersessions.ErrObservationRecordingCorrupt) {
+		t.Fatalf("corrupt recording error = %v, want ErrObservationRecordingCorrupt", err)
+	}
+	reader.err = errors.New("recording storage is offline")
+	if _, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID}); !errors.Is(err, workersessions.ErrObservationRecordingUnavailable) {
+		t.Fatalf("unavailable recording error = %v, want ErrObservationRecordingUnavailable", err)
+	}
+}
+
 type recordedExactObservationFixture struct {
 	service         workersessions.Service
 	ref             providers.SessionRef

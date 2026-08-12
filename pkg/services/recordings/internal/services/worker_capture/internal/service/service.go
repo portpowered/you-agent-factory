@@ -25,6 +25,7 @@ type Service struct {
 }
 
 var _ recordings.WorkerSessionRecordingService = (*Service)(nil)
+var _ recordings.WorkerRecordingReader = (*Service)(nil)
 var _ recordings.WorkerSessionRecordingFinalizer = (*capture)(nil)
 
 // New constructs the Worker capture capability. Construction is inert; the
@@ -51,6 +52,27 @@ func New(
 		logger: logging.EnsureLogger(logger),
 		limit:  limit,
 	}, nil
+}
+
+// LoadWorkerRecording exposes the durable reader already owned by the
+// composed Worker capture service. The capture service remains the lifecycle
+// owner; this optional capability lets a Factory Session observation project
+// Recordings health without constructing a second storage path.
+func (service *Service) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if service == nil || service.writer == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reader, ok := service.writer.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
 // StartWorkerSessionRecording subscribes from aggregate position zero before

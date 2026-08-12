@@ -53,6 +53,8 @@ properties:
       - PROVIDER_UNSUPPORTED
       - SESSION_KIND_UNSUPPORTED
       - PROJECTION_UNAVAILABLE
+      - WORKER_SESSION_RECORDING_CORRUPT
+      - WORKER_SESSION_RECORDING_UNAVAILABLE
       - WORKER_SESSION_STREAM_UNAVAILABLE
       - WORKER_SESSION_TRANSCRIPT_ACTIVE
       - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
@@ -97,6 +99,8 @@ properties:
       - The requested Provider Session provider is not loadable by this API.
       - The requested Provider Session identifier kind is not loadable by this API.
       - The correlated Worker Session projection is temporarily unavailable.
+      - The durable Worker Session recording contains corrupt history.
+      - The durable Worker Session recording could not be read.
       - The canonical Worker Session event stream is temporarily unavailable.
       - The requested Worker Session has not reached a terminal state.
       - The finished Worker Session has no normalized transcript available.

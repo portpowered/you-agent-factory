@@ -931,13 +931,16 @@ func (s *fakeObservationSubscription) Close() {
 }
 
 type sseTestFrame struct {
-	Delivery        string                                      `json:"delivery"`
-	WorkerSessionID string                                      `json:"workerSessionId"`
-	ProviderSession *factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
-	Event           *sseTestEvent                               `json:"event"`
-	ErrorCode       *string                                     `json:"errorCode"`
-	ErrorMessage    *string                                     `json:"errorMessage"`
-	ReplaySummary   *sseTestReplaySummary                       `json:"replaySummary"`
+	Delivery              string                                      `json:"delivery"`
+	WorkerSessionID       string                                      `json:"workerSessionId"`
+	FactorySessionID      *string                                     `json:"factorySessionId"`
+	ProviderSession       *factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
+	Event                 *sseTestEvent                               `json:"event"`
+	ErrorCode             *string                                     `json:"errorCode"`
+	ErrorMessage          *string                                     `json:"errorMessage"`
+	ReplaySummary         *sseTestReplaySummary                       `json:"replaySummary"`
+	RecordingHealth       *string                                     `json:"recordingHealth"`
+	RecordingHealthReason *string                                     `json:"recordingHealthReason"`
 }
 
 type sseTestReplaySummary struct {

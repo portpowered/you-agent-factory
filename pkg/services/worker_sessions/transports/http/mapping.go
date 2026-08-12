@@ -569,6 +569,16 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		Transcript:               factoryapi.WorkerSessionObservationTranscript(observation.Transcript),
 		Parse:                    workerSessionParseDiagnosticsToAPI(observation.Parse),
 	}
+	if observation.FactorySessionID != "" {
+		result.FactorySessionId = stringPtr(observation.FactorySessionID)
+	}
+	if observation.RecordingHealth != "" {
+		health := factoryapi.WorkerSessionObservationRecordingHealth(observation.RecordingHealth)
+		result.RecordingHealth = &health
+	}
+	if observation.RecordingHealthReason != "" {
+		result.RecordingHealthReason = stringPtr(observation.RecordingHealthReason)
+	}
 	if observation.TurnID != "" {
 		result.TurnId = stringPtr(observation.TurnID)
 	}

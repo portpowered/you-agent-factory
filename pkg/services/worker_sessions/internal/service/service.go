@@ -163,6 +163,28 @@ func New(
 	return registry, nil
 }
 
+// LoadWorkerRecording forwards the optional Recordings-owned durable reader
+// through the same per-Factory-Session Worker Sessions instance used for
+// observation. It is intentionally not part of the broad Worker Sessions
+// service contract; runtime projections discover this read capability only
+// when the composed capture service provides it.
+func (r *registry) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reader, ok := r.recording.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
+}
+
 func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.InvokeSessionRequest) (recordings.WorkerSessionRecording, error) {
 	recordingID := strings.TrimSpace(req.Execution.Execution.RecordingID)
 	if r.recording == nil || recordingID == "" {
