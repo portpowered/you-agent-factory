@@ -1362,6 +1362,8 @@ export interface components {
       kind: string;
       /** @description Customer-safe failure detail derived by Worker Sessions. */
       detail: string;
+      /** @description Optional bounded Workers-owned agent-run class distinguishing provider and harness failures. */
+      agentRunFailureClass: string | null;
       /** @description Optional bounded Providers failure classification. */
       providerFailureKind: string | null;
       /** @description Optional bounded continuation rejection classification. */

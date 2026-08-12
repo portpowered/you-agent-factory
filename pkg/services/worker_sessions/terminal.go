@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TerminalOutcome is the exact two-value W2 vocabulary for a committed
@@ -93,6 +94,10 @@ func (k FailureCauseKind) Valid() bool {
 type FailureCause struct {
 	Kind   FailureCauseKind
 	Detail string
+	// AgentRunFailureClass preserves the bounded Workers-owned distinction
+	// between provider and harness failures when the failed attempt used an
+	// agent-run workstation. It is empty for other Worker Session failures.
+	AgentRunFailureClass string
 	// ProviderFailureKind carries the Providers-owned operational failure
 	// classification for a continuation attempt when one exists. It is empty
 	// for failures that did not reach a provider continuation.
@@ -124,6 +129,9 @@ func (c FailureCause) Validate() error {
 	if utf8.RuneCountInString(trimmed) > MaxFailureCauseDetailRunes {
 		return fmt.Errorf("%w: failure detail exceeds %d runes", ErrInvalidFailureCause, MaxFailureCauseDetailRunes)
 	}
+	if !validAgentRunFailureClass(c.AgentRunFailureClass) {
+		return fmt.Errorf("%w: invalid agent-run failure class", ErrInvalidFailureCause)
+	}
 	providerFailureKind, continuationFailureKind, continuationOutcome := SanitizeProviderFailureClassification(
 		c.ProviderFailureKind,
 		c.ProviderContinuationFailureKind,
@@ -135,6 +143,15 @@ func (c FailureCause) Validate() error {
 		return fmt.Errorf("%w: invalid provider continuation classification", ErrInvalidFailureCause)
 	}
 	return nil
+}
+
+func validAgentRunFailureClass(class string) bool {
+	switch class {
+	case "", workers.AgentRunFailureClassProvider, workers.AgentRunFailureClassHarness:
+		return true
+	default:
+		return false
+	}
 }
 
 // SanitizeProviderFailureClassification keeps only the closed

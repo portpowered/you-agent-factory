@@ -90,7 +90,15 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
 				DurationMillis: int64Ptr(2500), TokenUsage: &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
-				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail"},
+				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail", AgentRunFailureClass: stringPtrForTest("agent_run_provider_failure")},
+			},
+			{
+				WorkerSessionId: "worker-session-2", AttemptId: "attempt-2",
+				ProviderSessionAvailable: true,
+				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-2"},
+				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
+				DurationMillis: int64Ptr(2500), TokenUsage: &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
+				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail", AgentRunFailureClass: stringPtrForTest("agent_run_harness_failure")},
 			},
 		}})
 	}))
@@ -105,7 +113,8 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 	}
 	for _, want := range []string{
 		"PROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE",
-		"codex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tWORKERS_EXECUTION_FAILURE",
+		"codex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tagent_run_provider_failure",
+		"codex\tsession_id\tprovider-session-2\twork-1\tattempt-2\tFAILED\t17\t2.5s\tagent_run_harness_failure",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output %q missing %q", output.String(), want)

@@ -253,9 +253,9 @@ func writeFailure(output io.Writer, failure *factoryapi.WorkerSessionFailure) er
 		_, err := fmt.Fprintln(output, "Failure:\tunavailable")
 		return err
 	}
-	if _, err := fmt.Fprintf(output, "Failure:\tkind=%s detail=%s provider-kind=%s continuation-kind=%s continuation-outcome=%s\n",
+	if _, err := fmt.Fprintf(output, "Failure:\tkind=%s detail=%s provider-kind=%s continuation-kind=%s continuation-outcome=%s agent-run-class=%s\n",
 		stringOrDashPtr(failure.Kind), stringOrDashPtr(failure.Detail), stringOrDash(failure.ProviderFailureKind),
-		stringOrDash(failure.ProviderContinuationFailureKind), stringOrDash(failure.ProviderContinuationOutcome)); err != nil {
+		stringOrDash(failure.ProviderContinuationFailureKind), stringOrDash(failure.ProviderContinuationOutcome), stringOrDash(safeAgentRunFailureClass(failure.AgentRunFailureClass))); err != nil {
 		return err
 	}
 	return nil

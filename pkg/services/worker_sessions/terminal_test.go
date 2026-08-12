@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestTerminalOutcome_Valid(t *testing.T) {
@@ -48,6 +49,38 @@ func TestFailureCause_Validate_RejectsUnknownKind(t *testing.T) {
 	}
 	if err := (workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "executor failed"}).Validate(); err != nil {
 		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestFailureCause_Validate_AcceptsKnownAgentRunFailureClasses(t *testing.T) {
+	tests := []struct {
+		name  string
+		class string
+		want  error
+	}{
+		{name: "not an agent run", class: "", want: nil},
+		{name: "provider", class: workers.AgentRunFailureClassProvider, want: nil},
+		{name: "harness", class: workers.AgentRunFailureClassHarness, want: nil},
+		{name: "unknown", class: "agent_run_unknown_failure", want: workersessions.ErrInvalidFailureCause},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := (workersessions.FailureCause{
+				Kind:                 workersessions.FailureCauseWorkersExecutionFailure,
+				Detail:               "agent run failed",
+				AgentRunFailureClass: tt.class,
+			}).Validate()
+			if tt.want == nil {
+				if err != nil {
+					t.Fatalf("Validate() = %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Validate() = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }
 

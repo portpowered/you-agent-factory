@@ -3,6 +3,7 @@ additionalProperties: false
 required:
   - kind
   - detail
+  - agentRunFailureClass
   - providerFailureKind
   - providerContinuationFailureKind
   - providerContinuationOutcome
@@ -13,6 +14,10 @@ properties:
   detail:
     type: string
     description: Customer-safe failure detail derived by Worker Sessions.
+  agentRunFailureClass:
+    type: string
+    nullable: true
+    description: Optional bounded Workers-owned agent-run class distinguishing provider and harness failures.
   providerFailureKind:
     type: string
     nullable: true

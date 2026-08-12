@@ -335,12 +335,22 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		result.Failure = &factoryapi.WorkerSessionFailure{
 			Kind:                            string(observation.Failure.Kind),
 			Detail:                          observation.Failure.Detail,
+			AgentRunFailureClass:            stringPtrIfNonEmpty(safeAgentRunFailureClass(observation.Failure.AgentRunFailureClass)),
 			ProviderFailureKind:             stringPtrIfNonEmpty(string(observation.Failure.ProviderFailureKind)),
 			ProviderContinuationFailureKind: stringPtrIfNonEmpty(string(observation.Failure.ProviderContinuationFailureKind)),
 			ProviderContinuationOutcome:     stringPtrIfNonEmpty(string(observation.Failure.ProviderContinuationOutcome)),
 		}
 	}
 	return result
+}
+
+func safeAgentRunFailureClass(class string) string {
+	switch class {
+	case workers.AgentRunFailureClassProvider, workers.AgentRunFailureClassHarness:
+		return class
+	default:
+		return ""
+	}
 }
 
 func workerSessionParseDiagnosticsToAPI(value workersessions.ParseDiagnostics) factoryapi.WorkerSessionParseDiagnostics {

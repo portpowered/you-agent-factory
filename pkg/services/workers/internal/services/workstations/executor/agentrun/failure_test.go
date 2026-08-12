@@ -1,6 +1,7 @@
 package agentrun
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -128,6 +129,114 @@ func TestFailureMetadataForError_PreservesRetryableProviderFailure(t *testing.T)
 	if metadata == nil || metadata.Family != workerexecution.WorkFailureFamilyRetryable ||
 		metadata.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("metadata = %#v, want retryable internal server error", metadata)
+	}
+}
+
+func TestAgentRunProviderFailureRecoveryUsesCanonicalFamily(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		failureType   workerexecution.WorkFailureType
+		wantFamily    workerexecution.WorkFailureFamily
+		wantRetryable bool
+		wantRecovery  string
+	}{
+		{
+			name:          "dependency or overload normalized as internal server error",
+			failureType:   workerexecution.WorkFailureTypeInternalServerError,
+			wantFamily:    workerexecution.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+			wantRecovery:  "retry the agent run after the provider recovers",
+		},
+		{
+			name:          "provider timeout",
+			failureType:   workerexecution.WorkFailureTypeTimeout,
+			wantFamily:    workerexecution.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+			wantRecovery:  "retry the agent run after the provider recovers",
+		},
+		{
+			name:          "rate limited provider",
+			failureType:   workerexecution.WorkFailureTypeThrottled,
+			wantFamily:    workerexecution.WorkFailureFamilyThrottle,
+			wantRetryable: true,
+			wantRecovery:  "retry after provider capacity or rate limiting recovers",
+		},
+		{
+			name:        "authentication failure",
+			failureType: workerexecution.WorkFailureTypeAuthFailure,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+		},
+		{
+			name:        "permanent invalid request",
+			failureType: workerexecution.WorkFailureTypePermanentBadRequest,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := workerexecution.NewProviderError(
+				test.failureType,
+				"normalized provider failure",
+				errors.New("provider payload must not become recovery guidance"),
+			)
+			metadata := failureMetadataForError(err)
+			if metadata == nil || metadata.Family != test.wantFamily || metadata.Type != test.failureType {
+				t.Fatalf("failure metadata = %#v, want family %q and type %q", metadata, test.wantFamily, test.failureType)
+			}
+			decision := workerexecution.FailureDecisionFromMetadata(metadata)
+			if decision.Retryable != test.wantRetryable || decision.Terminal != !test.wantRetryable {
+				t.Fatalf("failure decision = %#v, want retryable=%t and terminal=%t", decision, test.wantRetryable, !test.wantRetryable)
+			}
+
+			diagnostics := agentRunFailureDiagnostics(err)
+			if got := diagnostics[DiagnosticRecoveryAction]; got != test.wantRecovery {
+				t.Fatalf("recovery action = %q, want %q", got, test.wantRecovery)
+			}
+			if test.wantRecovery == "" && strings.Contains(diagnostics[DiagnosticRecoveryAction], "retry") {
+				t.Fatalf("terminal provider failure received retry guidance: %q", diagnostics[DiagnosticRecoveryAction])
+			}
+		})
+	}
+}
+
+func TestAgentRunFailureDiagnostics_ProviderFailurePreservesSafeType(t *testing.T) {
+	t.Parallel()
+
+	rawProviderPayload := "provider response contained a secret payload"
+	err := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypeInternalServerError,
+		"temporary provider failure",
+		errors.New(rawProviderPayload),
+	)
+	diagnostics := agentRunFailureDiagnostics(err)
+	if diagnostics[DiagnosticFailureClass] != FailureClassProvider {
+		t.Fatalf("failure class = %q, want %q", diagnostics[DiagnosticFailureClass], FailureClassProvider)
+	}
+	if diagnostics[DiagnosticProviderFailureType] != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("provider failure type = %q, want %q", diagnostics[DiagnosticProviderFailureType], workerexecution.WorkFailureTypeInternalServerError)
+	}
+	formatted := formatAgentRunError(err)
+	if !strings.HasPrefix(formatted, "agent run provider failure:") {
+		t.Fatalf("formatAgentRunError() = %q, want provider prefix", formatted)
+	}
+	if !strings.Contains(formatted, string(workerexecution.WorkFailureTypeInternalServerError)) {
+		t.Fatalf("formatAgentRunError() = %q, want normalized provider type", formatted)
+	}
+	if strings.Contains(formatted, rawProviderPayload) {
+		t.Fatalf("formatAgentRunError() leaked raw provider payload: %q", formatted)
+	}
+}
+
+func TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout(t *testing.T) {
+	t.Parallel()
+
+	if got := failureClassForError(context.DeadlineExceeded); got != FailureClassTimeout {
+		t.Fatalf("failureClassForError() = %q, want %q", got, FailureClassTimeout)
 	}
 }
 
