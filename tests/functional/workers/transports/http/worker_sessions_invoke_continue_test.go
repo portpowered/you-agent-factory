@@ -150,6 +150,7 @@ func continueRemoteWorkerSession(t *testing.T, ctx context.Context, client suppo
 		continuation.SuccessorWorkerSessionID != "remote-successor-session" {
 		t.Fatalf("remote continuation admission = %#v, want accepted source/successor", continuation)
 	}
+	waitForRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, "remote-successor-session")
 
 	successorStream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-successor-session", "--replay-only")

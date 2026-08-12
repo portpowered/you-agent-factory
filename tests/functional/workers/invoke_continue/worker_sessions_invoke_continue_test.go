@@ -30,10 +30,6 @@ type directWorkerSessionCLIResult struct {
 }
 
 func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built direct Worker Session invoke/continue functional flow")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	runner := testutil.NewProviderCommandRunner(
@@ -126,10 +122,6 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 }
 
 func TestDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built direct Worker Session continuation failure")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	runner := testutil.NewProviderCommandRunner()
@@ -151,10 +143,6 @@ func TestDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderC
 }
 
 func TestDirectWorkerSessionContinueUnassociatedSourceRejectsWithoutProviderContinuation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built unassociated Worker Session continuation failure")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
@@ -193,10 +181,6 @@ func TestDirectWorkerSessionContinueUnassociatedSourceRejectsWithoutProviderCont
 }
 
 func TestDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built stale Provider Session continuation failure")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	runner := testutil.NewProviderCommandRunner(
@@ -238,10 +222,6 @@ func TestDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart(t *tes
 }
 
 func TestDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built remote Provider Session continuation failure classifications")
-	}
-
 	tests := []struct {
 		name    string
 		status  int
@@ -286,10 +266,6 @@ func TestDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback(t *testi
 }
 
 func TestDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built remote Worker Session stream-source failure")
-	}
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost && r.URL.Path == "/worker-sessions" {
@@ -327,10 +303,6 @@ func TestDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess(t 
 }
 
 func TestDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess(t *testing.T) {
-	if testing.Short() {
-		t.Skip("root-built remote Worker Session caller cancellation")
-	}
-
 	requestStarted := make(chan struct{})
 	releaseHandler := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
