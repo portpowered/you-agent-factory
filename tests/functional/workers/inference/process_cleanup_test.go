@@ -50,13 +50,13 @@ type: SCRIPT_WORKER
 command: %s
 args:
   - '-test.run=TestProcessTreeHelper'
-%s  - '--'
+  - '--'
   - 'spawn-child'
   - %s
 timeout: 1500ms
 ---
 Spawn a descendant and wait for the factory timeout to cancel it.
-`, yamlSingleQuoted(os.Args[0]), processCleanupCoverageTestArg(), yamlSingleQuoted(childPIDFile))
+`, yamlSingleQuoted(os.Args[0]), yamlSingleQuoted(childPIDFile))
 	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
@@ -119,15 +119,21 @@ func TestProcessTreeHelper(t *testing.T) {
 	case "spawn-child":
 		spawnProcessCleanupChild(pidFile)
 		time.Sleep(30 * time.Second)
-		os.Exit(0)
+		finishProcessCleanupHelper()
+		return
 	case "pid-sleep":
 		writeProcessCleanupPID(pidFile)
 		time.Sleep(30 * time.Second)
-		os.Exit(0)
+		finishProcessCleanupHelper()
+		return
 	case "companion-timeout-once":
 		runCompanionTimeoutOnceHelper(pidFile)
+		finishProcessCleanupHelper()
+		return
 	case "timeout-once":
 		runTimeoutOnceHelper(pidFile)
+		finishProcessCleanupHelper()
+		return
 	default:
 		return
 	}
@@ -152,13 +158,13 @@ type: SCRIPT_WORKER
 command: %s
 args:
   - '-test.run=TestProcessTreeHelper'
-%s  - '--'
+  - '--'
   - 'timeout-once'
   - %s
 timeout: 1500ms
 ---
 Timeout once, then succeed after the Agent Factory requeues the work.
-`, yamlSingleQuoted(os.Args[0]), processCleanupCoverageTestArg(), yamlSingleQuoted(attemptFile))
+`, yamlSingleQuoted(os.Args[0]), yamlSingleQuoted(attemptFile))
 	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
@@ -220,11 +226,10 @@ func runTimeoutOnceHelper(attemptFile string) {
 	}
 	if attempt == 1 {
 		time.Sleep(30 * time.Second)
-		os.Exit(0)
+		return
 	}
 	writeProcessCleanupPID(attemptFile + ".provider.pid")
 	fmt.Println("recovered after timeout")
-	os.Exit(0)
 }
 
 func runCompanionTimeoutOnceHelper(attemptFile string) {
@@ -236,10 +241,25 @@ func runCompanionTimeoutOnceHelper(attemptFile string) {
 	if attempt == 1 {
 		spawnProcessCleanupChild(attemptFile + ".companion.pid")
 		time.Sleep(30 * time.Second)
-		os.Exit(0)
+		return
 	}
 	fmt.Println("recovered after companion timeout")
-	os.Exit(0)
+}
+
+func finishProcessCleanupHelper() {
+	if os.Getenv("GOCOVERDIR") == "" {
+		os.Exit(0)
+	}
+	// The coverage-instrumented test binary is reused as a child command, but
+	// its external test package has no coverable statements. Returning normally
+	// avoids the coverage exit-hook diagnostic; redirecting the harness tail
+	// keeps the child protocol's intended stdout unchanged.
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "open helper output sink: %v\n", err)
+		os.Exit(2)
+	}
+	os.Stdout = null
 }
 
 func readProcessCleanupAttempt(attemptFile string) int {
@@ -260,12 +280,12 @@ func readProcessCleanupAttempt(attemptFile string) int {
 }
 
 func spawnProcessCleanupChild(pidFile string) {
-	args := []string{"-test.run=TestProcessTreeHelper"}
-	if coverageArg := processCleanupCoverageTestArgValue(); coverageArg != "" {
-		args = append(args, coverageArg)
-	}
-	args = append(args, "--", "pid-sleep", pidFile)
-	child := exec.Command(os.Args[0], args...)
+	child := exec.Command(os.Args[0],
+		"-test.run=TestProcessTreeHelper",
+		"--",
+		"pid-sleep",
+		pidFile,
+	)
 	child.Env = os.Environ()
 	if err := child.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
@@ -491,20 +511,4 @@ func processCleanupScriptEdges(t *testing.T) serviceedges.Edges {
 
 func yamlSingleQuoted(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
-}
-
-func processCleanupCoverageTestArg() string {
-	coverageArg := processCleanupCoverageTestArgValue()
-	if coverageArg == "" {
-		return ""
-	}
-	return fmt.Sprintf("  - %s\n", yamlSingleQuoted(coverageArg))
-}
-
-func processCleanupCoverageTestArgValue() string {
-	coverageDir := os.Getenv("GOCOVERDIR")
-	if coverageDir == "" {
-		return ""
-	}
-	return "-test.gocoverdir=" + coverageDir
 }
