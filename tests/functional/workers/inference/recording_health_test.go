@@ -111,6 +111,11 @@ func TestWSRFT007WorkerRecordingHealthMatrix(t *testing.T) {
 		})
 	}
 
+	assertWSRFT007TerminalOutcomes(t)
+}
+
+func assertWSRFT007TerminalOutcomes(t *testing.T) {
+	t.Helper()
 	for _, test := range []struct {
 		name   string
 		status string

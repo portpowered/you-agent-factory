@@ -1755,7 +1755,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/internal/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionPayload",
+      "target": "pkg/services/recordings/internal/projections/projectiontests/world_state_payload_support_test.go#assignGeneratedProjectionPayload",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
