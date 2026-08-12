@@ -197,6 +197,8 @@ func executeFailurePresentation(failure providers.ExecuteFailure) (code string, 
 		return errorCodeExecutionAuthentication, errorMessageExecutionAuthentication, false
 	case providers.ExecuteFailureKindInvalidRequest:
 		return errorCodeExecutionInvalidRequest, errorMessageExecutionInvalidRequest, false
+	case providers.ExecuteFailureKindCapabilityMismatch:
+		return errorCodeExecutionInvalidRequest, errorMessageExecutionInvalidRequest, false
 	case providers.ExecuteFailureKindThrottled:
 		return errorCodeExecutionThrottled, errorMessageExecutionThrottled, true
 	case providers.ExecuteFailureKindDependency:

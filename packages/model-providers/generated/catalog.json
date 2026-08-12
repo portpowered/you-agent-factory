@@ -182,6 +182,7 @@
       ],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": true,
         "promptSubmission": true,
         "sessionResume": true,
         "structuredOutput": false,
@@ -1282,6 +1283,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": true,
         "promptSubmission": true,
         "sessionResume": true,
         "structuredOutput": false,
@@ -1787,6 +1789,7 @@
       ],
       "maximumExecutionCapabilities": {
         "imageInput": true,
+        "permissionBypass": true,
         "promptSubmission": true,
         "sessionResume": true,
         "structuredOutput": true,

@@ -292,7 +292,7 @@ func applyDispatchQueuedProjection(dispatches map[string]DispatchSummary, envelo
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 		return fmt.Errorf("unmarshal DISPATCH_QUEUED payload: %w", err)
 	}
-	dispatches[dispatchID] = DispatchSummary{
+	dispatch := DispatchSummary{
 		ID:           dispatchID,
 		Status:       DispatchStatusQueued,
 		DispatchKind: strings.TrimSpace(payload.DispatchKind),
@@ -302,6 +302,13 @@ func applyDispatchQueuedProjection(dispatches map[string]DispatchSummary, envelo
 		Model:        strings.TrimSpace(payload.Model),
 		Provider:     strings.TrimSpace(payload.Provider),
 	}
+	if payload.SkipPermissions != nil {
+		dispatch.JavaScript = &DispatchJavaScriptProjection{
+			TaskKind:        "AGENT",
+			SkipPermissions: *payload.SkipPermissions,
+		}
+	}
+	dispatches[dispatchID] = dispatch
 	return nil
 }
 
@@ -342,15 +349,15 @@ func applyDispatchInterruptedProjection(dispatches map[string]DispatchSummary, e
 	if reason == "" {
 		reason = defaultDispatchInterruptionReason
 	}
-	dispatches[dispatchID] = DispatchSummary{
-		ID:     dispatchID,
-		Status: DispatchStatusInterrupted,
-		Phase:  stringValuePtr(envelope.Context.PhaseID),
-		FailureDetail: &DispatchFailureDetail{
-			Reason:  dispatchInterruptionFailureReasonCode,
-			Message: reason,
-		},
+	dispatch := dispatches[dispatchID]
+	dispatch.ID = dispatchID
+	dispatch.Status = DispatchStatusInterrupted
+	dispatch.Phase = stringValuePtr(envelope.Context.PhaseID)
+	dispatch.FailureDetail = &DispatchFailureDetail{
+		Reason:  dispatchInterruptionFailureReasonCode,
+		Message: reason,
 	}
+	dispatches[dispatchID] = dispatch
 	return nil
 }
 

@@ -169,11 +169,10 @@ func (r *Registry) Capabilities(
 	}
 	for _, required := range request.RequiredCapabilities().Values() {
 		if !negotiated.Has(required) {
-			return inference.CapabilitySet{}, fmt.Errorf(
-				"provider %q capabilities omit required capability %q",
-				canonical,
-				required,
-			)
+			return inference.CapabilitySet{}, &RequiredCapabilityError{
+				provider:   canonical,
+				capability: required,
+			}
 		}
 	}
 	return canonicalCapabilities(negotiated), nil
@@ -254,6 +253,24 @@ type operationError struct {
 	message string
 	cause   error
 }
+
+// RequiredCapabilityError reports that a selectable integration negotiated a
+// valid capability set that cannot satisfy the current request.
+type RequiredCapabilityError struct {
+	provider   string
+	capability inference.Capability
+}
+
+func (e *RequiredCapabilityError) Error() string {
+	return fmt.Sprintf(
+		"provider %q capabilities omit required capability %q",
+		e.provider,
+		e.capability,
+	)
+}
+
+func (e *RequiredCapabilityError) Provider() string                 { return e.provider }
+func (e *RequiredCapabilityError) Capability() inference.Capability { return e.capability }
 
 func (e *operationError) Error() string { return e.message }
 func (e *operationError) Unwrap() error { return e.cause }

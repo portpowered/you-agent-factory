@@ -181,6 +181,7 @@ type Edges struct {
 	ModelPullMetricsRecorder         interface{ RecordModelPullMetric(PullMetric) }
 	ProviderOverride                 providercontract.Provider
 	providercontract.ProviderRegistrations
+	ProviderCatalogCapabilityOverrides []providercontract.CatalogCapabilityOverride
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
@@ -220,6 +221,10 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	defaults.ProviderRegistrations = append(
 		append(providercontract.ProviderRegistrations(nil), defaults.ProviderRegistrations...),
 		replacements.ProviderRegistrations...,
+	)
+	defaults.ProviderCatalogCapabilityOverrides = append(
+		cloneCatalogCapabilityOverrides(defaults.ProviderCatalogCapabilityOverrides),
+		cloneCatalogCapabilityOverrides(replacements.ProviderCatalogCapabilityOverrides)...,
 	)
 	if replacements.CLIObserver != nil {
 		defaults.CLIObserver = replacements.CLIObserver
@@ -624,4 +629,14 @@ func Merge(defaults Edges, replacements Edges) Edges {
 		defaults.WorkSubmittedFilePathInspector = replacements.WorkSubmittedFilePathInspector
 	}
 	return defaults
+}
+
+func cloneCatalogCapabilityOverrides(
+	overrides []providercontract.CatalogCapabilityOverride,
+) []providercontract.CatalogCapabilityOverride {
+	cloned := make([]providercontract.CatalogCapabilityOverride, len(overrides))
+	for index, override := range overrides {
+		cloned[index] = override.Clone()
+	}
+	return cloned
 }

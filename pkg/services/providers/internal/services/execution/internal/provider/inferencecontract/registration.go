@@ -49,6 +49,7 @@ type ExecutionCapabilities struct {
 	PromptSubmission bool `json:"promptSubmission"`
 	SessionResume    bool `json:"sessionResume"`
 	StructuredOutput bool `json:"structuredOutput"`
+	PermissionBypass bool `json:"permissionBypass"`
 	ToolExecution    bool `json:"toolExecution"`
 	WorkingDirectory bool `json:"workingDirectory"`
 	Worktree         bool `json:"worktree"`
