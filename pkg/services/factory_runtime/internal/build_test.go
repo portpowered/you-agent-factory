@@ -343,6 +343,10 @@ func (s *stubWorkerSessionsService) GetObservationByWorkerSessionID(context.Cont
 	return workersessions.Observation{}, nil
 }
 
+func (s *stubWorkerSessionsService) ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+	return workersessions.ListWorkerSessionObservationsResult{}, nil
+}
+
 func (s *stubWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
 	return workersessions.ObservationSubscription{}, nil
 }
@@ -352,6 +356,10 @@ func (s *stubWorkerSessionsService) StreamObservationsByWorkerSessionID(context.
 }
 
 func (s *stubWorkerSessionsService) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) ReadTranscriptByWorkerSessionID(context.Context, workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error) {
 	return workersessions.ReadTranscriptResult{}, nil
 }
 
@@ -381,6 +389,10 @@ func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersession
 		Retry:     req.Retry,
 	})
 	return workersessions.StartResult{Session: result.Session}, err
+}
+
+func (s *stubWorkerSessionsService) Continue(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+	return workersessions.ContinueResult{}, nil
 }
 
 func (s *stubWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
