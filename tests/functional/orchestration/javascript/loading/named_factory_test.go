@@ -531,7 +531,7 @@ func runNamedJavaScriptSessionLifecycleCLIJSON(
 	t.Helper()
 
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "--server", serverURL,
+		"you", "--remote", "--json", "--server", serverURL,
 		"session", operation, sessionID,
 	})
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)

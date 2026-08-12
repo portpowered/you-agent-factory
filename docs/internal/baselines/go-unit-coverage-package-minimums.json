@@ -1163,6 +1163,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
       "minimum": 74.40
     },

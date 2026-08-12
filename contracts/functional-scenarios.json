@@ -312,6 +312,16 @@
       "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
     },
     {
+      "stableId": "cli/you.session.cancel",
+      "name": "you session cancel",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "cli/you.session.create",
       "name": "you session create",
       "interface": "cli",
@@ -374,6 +384,16 @@
     {
       "stableId": "cli/you.session.show",
       "name": "you session show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.terminate",
+      "name": "you session terminate",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",

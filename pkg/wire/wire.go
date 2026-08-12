@@ -305,6 +305,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
 	provideSessionsCLIService,
+	provideLocalSessionsCLIService,
 	provideModelsCLIService,
 	provideProvidersCLIService,
 	provideFlattenFactoryConfigOperation,

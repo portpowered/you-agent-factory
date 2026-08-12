@@ -189,6 +189,38 @@ func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 	}
 }
 
+// TestCLISessionHelpPublishesRunnablePlacementExamples proves the packaged
+// session guidance is executable CLI behavior: placement examples use the
+// accepted run grammar and do not advertise flags that belong to another
+// command family.
+func TestCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
+	t.Parallel()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	for _, command := range [][]string{
+		{"you", "session", "--help"},
+		{"you", "session", "pause", "--help"},
+		{"you", "session", "resume", "--help"},
+	} {
+		inputs := support.FakeInputs(t.Context(), command)
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf("Process.Execute(%q) error = %v\nstdout:\n%s\nstderr:\n%s", command, err, inputs.Stdout(), inputs.Stderr())
+		}
+		got := inputs.Stdout()
+		if !strings.Contains(got, "--remote --server http://factory.example:7437") {
+			t.Fatalf("help %q missing explicit remote placement example:\n%s", command, got)
+		}
+		if !strings.Contains(got, "run --named @you/research --output primary") {
+			t.Fatalf("help %q missing runnable run example:\n%s", command, got)
+		}
+		for _, invalid := range []string{"you run --wait", "run --follow"} {
+			if strings.Contains(got, invalid) {
+				t.Fatalf("help %q advertises invalid example %q:\n%s", command, invalid, got)
+			}
+		}
+	}
+}
+
 func invocationHelpUsageLine(t *testing.T, help string) string {
 	t.Helper()
 

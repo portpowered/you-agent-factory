@@ -12,6 +12,7 @@ import (
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
@@ -149,6 +150,12 @@ func provideSessionsCLIService(
 	prepare factorysessionwire.RequestPreparation,
 ) sessioncli.Service {
 	return sessioncli.New(transport.Protocol, prepare)
+}
+
+func provideLocalSessionsCLIService(
+	service factorysessions.Service,
+) cli.LocalSessionsCLIService {
+	return sessioncli.NewLocalLifecycleControls(service)
 }
 func provideModelsCLIService(
 	transport standardCLIHTTPProtocol,
