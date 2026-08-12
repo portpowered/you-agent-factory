@@ -14,6 +14,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -44,6 +45,9 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 			},
 		},
 	})
+	clientRunner := testutil.NewProviderCommandRunner()
+	client := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: clientRunner})
+	support.CleanupProcess(t, client)
 
 	// Use the public HTTP admission boundary and close the actual submitting
 	// connection after Workers admission. The server-owned execution must keep
@@ -56,16 +60,40 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	if runner.wasCanceled() {
 		t.Fatal("server-owned remote Worker Session was canceled by submitting disconnect")
 	}
+	activeFailure, activeErr := executeRemoteWorkerCLIExpectError(t, ctx, client, env, factoryDir, server.URL(),
+		"--json", "worker-sessions", "continue", "remote-source-session",
+		"--request-id", "remote-active-continue-request", "--successor-worker-session-id", "remote-active-successor",
+		"--user-message", "active source must be rejected", "--async")
+	if activeErr == nil {
+		t.Fatal("continuation of active source succeeded, want conflict")
+	}
+	assertRemoteWorkerCLIError(t, activeFailure, string(factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT))
+
+	unknownFailure, unknownErr := executeRemoteWorkerCLIExpectError(t, ctx, client, env, factoryDir, server.URL(),
+		"--json", "worker-sessions", "continue", "remote-unknown-source",
+		"--request-id", "remote-unknown-continue-request", "--successor-worker-session-id", "remote-unknown-successor",
+		"--user-message", "unknown source must be rejected", "--async")
+	if unknownErr == nil {
+		t.Fatal("continuation of unknown source succeeded, want not found")
+	}
+	assertRemoteWorkerCLIError(t, unknownFailure, string(factoryapi.ErrorResponseCodeNOTFOUND))
+	if runnerCallCount := len(runner.requestsSnapshot()); runnerCallCount != 1 {
+		t.Fatalf("provider calls after active/unknown continuation failures = %d, want one initial call", runnerCallCount)
+	}
 	close(gate)
 	runner.waitFirstCompleted(t)
-
-	clientRunner := testutil.NewProviderCommandRunner()
-	client := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: clientRunner})
-	support.CleanupProcess(t, client)
 
 	serverURL := server.URL()
 	assertRemoteSourceObservation(t, ctx, client, env, factoryDir, serverURL)
 	continueRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL)
+	idempotencyFailure, idempotencyErr := executeRemoteWorkerCLIExpectError(t, ctx, client, env, factoryDir, serverURL,
+		"--json", "worker-sessions", "continue", "remote-source-session",
+		"--request-id", "remote-continue-request", "--successor-worker-session-id", "remote-other-successor",
+		"--user-message", "different immutable input", "--async")
+	if idempotencyErr == nil {
+		t.Fatal("continuation request-id reuse succeeded, want conflict")
+	}
+	assertRemoteWorkerCLIError(t, idempotencyFailure, string(factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT))
 	assertRemoteContinuationUsesServer(t, clientRunner, runner)
 
 	all := waitForRemoteWorkerSessionList(t, ctx, client, env, factoryDir, serverURL)
@@ -257,6 +285,36 @@ func executeRemoteWorkerCLI(
 		t.Fatalf("remote CLI %s: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(command, " "), err, inputs.Stdout(), inputs.Stderr())
 	}
 	return inputs
+}
+
+func executeRemoteWorkerCLIExpectError(
+	t *testing.T,
+	ctx context.Context,
+	process support.Process,
+	env []string,
+	factoryDir, serverURL string,
+	args ...string,
+) (*support.CapturedInputs, error) {
+	t.Helper()
+	command := append([]string{"you", "--remote", "--server", serverURL}, args...)
+	inputs := support.FakeInputs(ctx, command)
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = factoryDir
+	return inputs, process.Execute(inputs.Input)
+}
+
+func assertRemoteWorkerCLIError(t *testing.T, inputs *support.CapturedInputs, wantCode string) {
+	t.Helper()
+	for _, output := range []string{inputs.Stderr(), inputs.Stdout()} {
+		var response factoryapi.ErrorResponse
+		if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &response); err == nil && response.Code != "" {
+			if string(response.Code) != wantCode {
+				t.Fatalf("remote CLI error code = %q, want %q; stderr=%s stdout=%s", response.Code, wantCode, inputs.Stderr(), inputs.Stdout())
+			}
+			return
+		}
+	}
+	t.Fatalf("remote CLI emitted no typed error response; stderr=%s stdout=%s", inputs.Stderr(), inputs.Stdout())
 }
 
 func decodeRemoteWorkerJSON(t *testing.T, stdout string, target any) {
