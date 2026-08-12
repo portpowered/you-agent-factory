@@ -422,6 +422,34 @@ def copy_prd_files(prd_json_path, prd_md_path, worktree_path):
     return dest_json, dest_md
 
 
+# Operator-authored standing rules that lane payloads reference by this exact
+# repo-relative path. The file lives under the gitignored docs/temp tree, so a
+# fresh worktree never contains it and the payload pointer would dangle. Copy it
+# in alongside the PRD so every lane can actually read its own rules.
+STANDING_RULES_RELPATH = Path("docs") / "temp" / "scale-program-rules.md"
+
+
+def copy_standing_rules(repo_root, worktree_path):
+    """Copy the operator standing-rules doc into the worktree, if it exists.
+
+    Returns the destination path, or None when the source is absent. Never
+    fatal: a missing or unreadable rules doc must not block workspace setup.
+    """
+    source = repo_root / STANDING_RULES_RELPATH
+    if not source.is_file():
+        return None
+
+    dest = worktree_path / STANDING_RULES_RELPATH
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(source), str(dest))
+    except OSError as e:
+        print(f"Standing-rules copy skipped: {e}", file=sys.stderr)
+        return None
+
+    return dest
+
+
 def main():
     if len(sys.argv) != 2:
         print(f"Usage: {sys.argv[0]} <prd-name>", file=sys.stderr)
@@ -481,6 +509,9 @@ def main():
         print(f"PRD copy failed: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Copy the operator standing-rules doc referenced by lane payloads.
+    dest_rules = copy_standing_rules(repo_root, worktree_dir)
+
     # Output result.
     result = {
         "status": "ready",
@@ -488,6 +519,7 @@ def main():
         "branch": branch,
         "prd_path": str(dest_json),
         "prd_md_path": str(dest_md) if dest_md else None,
+        "standing_rules_path": str(dest_rules) if dest_rules else None,
         "reused": reused,
     }
     print(json.dumps(result, indent=2))
