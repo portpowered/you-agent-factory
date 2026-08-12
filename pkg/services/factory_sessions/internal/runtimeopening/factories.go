@@ -18,13 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// The factory roles below are consumed only while opening a Factory Session
-// runtime. Keeping them here makes the dependency direction explicit: Wire
-// supplies implementations, while this package owns the operation signature it
-// needs. They are aliases to function signatures so the remaining legacy Wire
-// providers can be cut over without an intermediate adapter graph.
-type WorkFactory = func(work.RuntimeResolver) work.Service
-
 type AutomationFactory = func(
 	*zap.Logger,
 	factoryruntime.Clock,

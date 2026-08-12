@@ -110,7 +110,6 @@ type (
 	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
 	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
 	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
-	WorkFactory                            = runtimeopening.WorkFactory
 	AutomationFactory                      = runtimeopening.AutomationFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
