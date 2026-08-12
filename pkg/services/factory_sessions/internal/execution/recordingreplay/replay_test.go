@@ -1,13 +1,16 @@
 package recordingreplay
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -116,6 +119,100 @@ func TestReplayRecordingRestoresResumedHistoryAndFinalAvailability(t *testing.T)
 		t.Fatalf("resumed lifecycle/result = %#v %#v", got.Session.Lifecycle, got.Result)
 	}
 	assertRecordedInspectionParity(t, value, got)
+}
+
+func TestReplayRecordingPreservesLegacyFactsAndReportsWorkerHistoryUnavailable(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"valid-v1.json", "valid-v2.json", "valid-v2-checkpoint.json"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assertLegacyReplayFixture(t, name)
+		})
+	}
+}
+
+func assertLegacyReplayFixture(t *testing.T, name string) {
+	t.Helper()
+	value := loadVersionPinnedRecordingFixture(t, name)
+	first := replayVersionPinnedFixture(t, value)
+	second := replayVersionPinnedFixture(t, value)
+	assertStableWorkerHistory(t, first, second)
+	assertLegacyWorkerHistory(t, first)
+	assertLegacyFactorySessionFacts(t, value, first)
+	assertLegacyResultAbsence(t, value, first)
+	assertInspectionWorkerHistory(t, first)
+}
+
+func replayVersionPinnedFixture(t *testing.T, value recording.PortableRecording) RecordingReplayProjection {
+	t.Helper()
+	projection, err := ReplayRecording(value)
+	if err != nil {
+		t.Fatalf("ReplayRecording() error = %v", err)
+	}
+	return projection
+}
+
+func assertStableWorkerHistory(t *testing.T, first, second RecordingReplayProjection) {
+	t.Helper()
+	if !reflect.DeepEqual(first.WorkerHistory, second.WorkerHistory) {
+		t.Fatalf("Worker history changed across replay: first=%#v second=%#v", first.WorkerHistory, second.WorkerHistory)
+	}
+}
+
+func assertLegacyWorkerHistory(t *testing.T, projection RecordingReplayProjection) {
+	t.Helper()
+	if projection.WorkerHistory.Availability != recording.PortableRecordingWorkerHistoryUnavailable ||
+		projection.WorkerHistory.Reason != recording.PortableRecordingWorkerHistoryReasonLegacySchema {
+		t.Fatalf("Worker history = %#v, want unavailable legacy outcome", projection.WorkerHistory)
+	}
+}
+
+func assertLegacyFactorySessionFacts(t *testing.T, value recording.PortableRecording, projection RecordingReplayProjection) {
+	t.Helper()
+	if projection.Session.SessionID != value.Session.ID ||
+		projection.Session.ResolvedSource.SourceRef != value.Source.Ref ||
+		len(projection.Events.Events) != len(value.Events) ||
+		len(projection.Artifacts.Artifacts) != len(value.Artifacts) {
+		t.Fatalf("legacy Factory Session facts were not preserved: %#v", projection)
+	}
+}
+
+func assertLegacyResultAbsence(t *testing.T, value recording.PortableRecording, projection RecordingReplayProjection) {
+	t.Helper()
+	if value.Result != nil {
+		return
+	}
+	if projection.Session.ResultSummary != nil || projection.Result.ResultStatus != "" ||
+		projection.Result.Availability != nil || projection.Result.Failure != nil {
+		t.Fatalf("schema-1 fabricated result facts: session=%#v result=%#v", projection.Session, projection.Result)
+	}
+}
+
+func assertInspectionWorkerHistory(t *testing.T, projection RecordingReplayProjection) {
+	t.Helper()
+	inspection := NewService(projection).Inspection()
+	if !reflect.DeepEqual(inspection.WorkerHistory, projection.WorkerHistory) {
+		t.Fatalf("inspection Worker history = %#v, want %#v", inspection.WorkerHistory, projection.WorkerHistory)
+	}
+}
+
+func loadVersionPinnedRecordingFixture(t *testing.T, name string) recording.PortableRecording {
+	t.Helper()
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", name,
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %q: %v", name, err)
+	}
+	value, err := recording.DecodePortableRecording(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("decode fixture %q: %v", name, err)
+	}
+	return value
 }
 
 func buildLifecycleRecording(t *testing.T, status string, resumed bool) recording.PortableRecording {

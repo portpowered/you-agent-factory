@@ -13,12 +13,13 @@ import (
 // RecordingReplayProjection is the complete public inspection surface restored
 // from a portable recording. It intentionally has no live execution controls.
 type RecordingReplayProjection struct {
-	Session    fse.SessionReadResult
-	Events     fse.EventReadResult
-	Artifacts  fse.ListArtifactsResult
-	Result     fse.ResultReadResult
-	Checkpoint *CheckpointReadModel
-	Redaction  recording.PortableRecordingRedactionMetadata
+	Session       fse.SessionReadResult
+	Events        fse.EventReadResult
+	Artifacts     fse.ListArtifactsResult
+	Result        fse.ResultReadResult
+	WorkerHistory recording.PortableRecordingWorkerHistory
+	Checkpoint    *CheckpointReadModel
+	Redaction     recording.PortableRecordingRedactionMetadata
 }
 
 type CheckpointReadModel struct {
@@ -42,12 +43,6 @@ func ReplayRecording(value recording.PortableRecording) (RecordingReplayProjecti
 	if err := recording.ValidatePortableRecording(value); err != nil {
 		return RecordingReplayProjection{}, err
 	}
-	if value.Result == nil {
-		return RecordingReplayProjection{}, &recording.PortableRecordingDiagnostic{
-			Code: recording.PortableRecordingCodeInvalidSummary, Area: "result", Path: "result",
-			Message: "recording has no referenced public result data; migrate or re-record the session",
-		}
-	}
 
 	artifacts := replayArtifactSummaries(value.Artifacts)
 	result := replayResultProjection(value, artifacts)
@@ -57,12 +52,13 @@ func ReplayRecording(value recording.PortableRecording) (RecordingReplayProjecti
 		return RecordingReplayProjection{}, err
 	}
 	return RecordingReplayProjection{
-		Session:    session,
-		Events:     fse.EventReadResult{SessionID: value.Session.ID, Events: events},
-		Artifacts:  fse.ListArtifactsResult{SessionID: value.Session.ID, Artifacts: artifacts},
-		Result:     result,
-		Checkpoint: replayCheckpoint(value.Checkpoint),
-		Redaction:  value.Redaction,
+		Session:       session,
+		Events:        fse.EventReadResult{SessionID: value.Session.ID, Events: events},
+		Artifacts:     fse.ListArtifactsResult{SessionID: value.Session.ID, Artifacts: artifacts},
+		Result:        result,
+		WorkerHistory: recording.NormalizePortableRecordingWorkerHistory(value),
+		Checkpoint:    replayCheckpoint(value.Checkpoint),
+		Redaction:     value.Redaction,
 	}, nil
 }
 
@@ -79,8 +75,11 @@ func replaySessionRead(value recording.PortableRecording, result fse.ResultReadR
 		SessionID: value.Session.ID, Status: status, OrchestratorKind: value.Session.OrchestratorKind,
 		ResolvedSource: fse.ResolvedSource{SourceRef: value.Source.Ref, SourceHash: value.Source.Hash},
 		SourceHash:     value.Source.Hash, Policy: fse.PolicyProjection{EffectiveHash: value.PolicyHash},
-		Usage: fse.EmptySessionUsage(), ResultSummary: &fse.ResultSummary{ResultStatus: string(result.ResultStatus)},
+		Usage:        fse.EmptySessionUsage(),
 		ArtifactRefs: refs, ArtifactCount: len(refs), Links: fse.InspectionLinksForSession(value.Session.ID, true),
+	}
+	if value.Result != nil {
+		session.ResultSummary = &fse.ResultSummary{ResultStatus: string(result.ResultStatus)}
 	}
 	session.Lifecycle = replayLifecycle(value.Events)
 	if result.Failure != nil {
@@ -119,13 +118,17 @@ func replayResultProjection(value recording.PortableRecording, artifacts []fse.A
 	result := value.Result
 	projected := fse.ResultReadResult{
 		SessionID: value.Session.ID, SessionStatus: fse.LifecycleStatus(value.Session.Status),
-		ResultStatus: fse.ResultStatus(result.Status), Mode: fse.ResultMode(result.Mode),
-		PrimaryResult: append(json.RawMessage(nil), result.PrimaryResult...),
-		ArtifactIDs:   append([]string(nil), result.ArtifactIDs...),
 	}
 	if projected.SessionStatus == "COMPLETED" {
 		projected.SessionStatus = fse.LifecycleStatusSucceeded
 	}
+	if result == nil {
+		return projected
+	}
+	projected.ResultStatus = fse.ResultStatus(result.Status)
+	projected.Mode = fse.ResultMode(result.Mode)
+	projected.PrimaryResult = append(json.RawMessage(nil), result.PrimaryResult...)
+	projected.ArtifactIDs = append([]string(nil), result.ArtifactIDs...)
 	artifactByID := make(map[string]fse.ArtifactSummary, len(artifacts))
 	for _, artifact := range artifacts {
 		artifactByID[artifact.ID] = artifact

@@ -154,6 +154,8 @@ type (
 	PortableRecordingResult                                    = recordingcontracts.PortableRecordingResult
 	PortableRecordingSessionSummary                            = recordingcontracts.PortableRecordingSessionSummary
 	PortableRecordingSourceSummary                             = recordingcontracts.PortableRecordingSourceSummary
+	PortableRecordingWorkerHistory                             = recordingcontracts.PortableRecordingWorkerHistory
+	PortableRecordingWorkerHistoryAvailability                 = recordingcontracts.PortableRecordingWorkerHistoryAvailability
 	PortableRecordingWriter                                    = recordingcontracts.PortableRecordingWriter
 	ProjectionService                                          = recordingcontracts.ProjectionService
 	ReadPortableArtifactRequest                                = recordingcontracts.ReadPortableArtifactRequest
@@ -354,6 +356,13 @@ const (
 	WorldStateViewSchemaV1                        = recordingcontracts.WorldStateViewSchemaV1
 )
 
+const (
+	PortableRecordingWorkerHistoryAvailable          = recordingcontracts.PortableRecordingWorkerHistoryAvailable
+	PortableRecordingWorkerHistoryUnavailable        = recordingcontracts.PortableRecordingWorkerHistoryUnavailable
+	PortableRecordingWorkerHistoryReasonLegacySchema = recordingcontracts.PortableRecordingWorkerHistoryReasonLegacySchema
+	PortableRecordingWorkerHistoryUnavailableReason  = recordingcontracts.PortableRecordingWorkerHistoryUnavailableReason
+)
+
 var (
 	CloneFactoryWorldDispatchCompletion                = recordingcontracts.CloneFactoryWorldDispatchCompletion
 	CloneFactoryWorldInferenceAttemptsByDispatchID     = recordingcontracts.CloneFactoryWorldInferenceAttemptsByDispatchID
@@ -400,6 +409,7 @@ var (
 	BuildPortableRecording                             = recordingcontracts.BuildPortableRecording
 	DecodePortableRecording                            = recordingcontracts.DecodePortableRecording
 	FactoryMetadataWarnings                            = recordingcontracts.FactoryMetadataWarnings
+	NormalizePortableRecordingWorkerHistory            = recordingcontracts.NormalizePortableRecordingWorkerHistory
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
 )
 

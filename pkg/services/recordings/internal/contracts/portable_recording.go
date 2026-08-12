@@ -108,6 +108,45 @@ type PortableRecordingResult struct {
 	Availability  *PortableRecordingAvailability   `json:"availability,omitempty"`
 }
 
+// PortableRecordingWorkerHistoryAvailability identifies whether a portable
+// recording can make a canonical Worker-history claim.
+type PortableRecordingWorkerHistoryAvailability string
+
+const (
+	PortableRecordingWorkerHistoryAvailable   PortableRecordingWorkerHistoryAvailability = "AVAILABLE"
+	PortableRecordingWorkerHistoryUnavailable PortableRecordingWorkerHistoryAvailability = "UNAVAILABLE"
+
+	// PortableRecordingWorkerHistoryReasonLegacySchema is stable compatibility
+	// metadata for recordings that predate canonical Worker-history capture.
+	PortableRecordingWorkerHistoryReasonLegacySchema = "SCHEMA_DID_NOT_RECORD_CANONICAL_WORKER_HISTORY"
+	PortableRecordingWorkerHistoryUnavailableReason  = PortableRecordingWorkerHistoryReasonLegacySchema
+)
+
+// PortableRecordingWorkerHistory is the detached Worker-history availability
+// projection for a Factory Session recording. Legacy schemas intentionally
+// contain only the unavailable outcome and its compatibility reason; they do
+// not acquire fabricated records, terminal, fidelity, provider, or complete
+// facts while being read.
+type PortableRecordingWorkerHistory struct {
+	Availability PortableRecordingWorkerHistoryAvailability `json:"availability"`
+	Reason       string                                     `json:"reason"`
+}
+
+// NormalizePortableRecordingWorkerHistory maps the shipped pre-Worker-history
+// schemas to their honest read-time outcome. It is pure and does not consult
+// Workers, Providers, Events, or provider transcripts.
+func NormalizePortableRecordingWorkerHistory(recording PortableRecording) PortableRecordingWorkerHistory {
+	switch recording.SchemaVersion {
+	case PortableRecordingSchemaV1, PortableRecordingSchemaV2:
+		return PortableRecordingWorkerHistory{
+			Availability: PortableRecordingWorkerHistoryUnavailable,
+			Reason:       PortableRecordingWorkerHistoryReasonLegacySchema,
+		}
+	default:
+		return PortableRecordingWorkerHistory{}
+	}
+}
+
 // PortableRecordingFailureSummary exposes a safe failure summary.
 type PortableRecordingFailureSummary struct {
 	Reason                 string `json:"reason"`

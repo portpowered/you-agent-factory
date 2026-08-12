@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
 )
 
@@ -51,6 +52,36 @@ func TestVersionPinnedSchemaV2CheckpointFixturePreservesFactorySessionFacts(t *t
 		schemaVersion: "2", sessionID: "session-js-checkpoint-001", sourceRef: "workflow/checkpoint.js",
 		eventIDs: []string{"event-started", "event-checkpoint", "event-completed"}, artifactCount: 1, result: true, checkpoint: true,
 	})
+}
+
+func TestLegacyFixturesNormalizeWorkerHistoryAsUnavailable(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"valid-v1.json", "valid-v2.json", "valid-v2-checkpoint.json"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			value, err := loadFixture(name)
+			if err != nil {
+				t.Fatalf("DecodeAndValidate() error = %v", err)
+			}
+			got := recordings.NormalizePortableRecordingWorkerHistory(value)
+			if got.Availability != recordings.PortableRecordingWorkerHistoryUnavailable ||
+				got.Reason != recordings.PortableRecordingWorkerHistoryReasonLegacySchema {
+				t.Fatalf("Worker history = %#v, want unavailable legacy outcome", got)
+			}
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatalf("Marshal Worker history: %v", err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(encoded, &fields); err != nil {
+				t.Fatalf("decode Worker history projection: %v", err)
+			}
+			if len(fields) != 2 {
+				t.Fatalf("legacy Worker history fields = %#v, want availability and reason only", fields)
+			}
+		})
+	}
 }
 
 type versionPinnedFixtureExpectation struct {
