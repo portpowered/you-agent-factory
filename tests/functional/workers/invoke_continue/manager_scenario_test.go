@@ -33,13 +33,14 @@ const (
 )
 
 type s8Correlation struct {
-	repository        string
-	marker            string
-	dispatchID        string
-	workerSessionID   string
-	providerSessionID string
-	message           string
-	output            string
+	repository               string
+	marker                   string
+	dispatchID               string
+	workerSessionID          string
+	providerSessionID        string
+	message                  string
+	output                   string
+	successorWorkerSessionID string
 }
 
 func (correlation s8Correlation) tokens() []string {
@@ -175,8 +176,8 @@ func startS8ManagerWorkers(t *testing.T, scenario s8ManagerScenario) s8ManagerOv
 
 func assertS8ManagerOverlap(t *testing.T, scenario s8ManagerScenario, overlap s8ManagerOverlap) {
 	t.Helper()
-	overlap.streamA.writer.waitFirstWrite(t, s8WorkerAID)
-	overlap.streamB.writer.waitFirstWrite(t, s8WorkerBID)
+	overlap.streamA.writer.waitWorkerSessionFrame(t, s8WorkerAID)
+	overlap.streamB.writer.waitWorkerSessionFrame(t, s8WorkerBID)
 
 	active := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.server.URL())
 	if len(active) != 2 {
@@ -585,7 +586,7 @@ func inspectS8Frame(
 	if err != nil {
 		t.Fatalf("encode stream frame %d for %q: %v", index, own.workerSessionID, err)
 	}
-	assertS8ForeignFrame(t, index, encoded, own, foreign)
+	assertS8ForeignFrame(t, index, encoded, frame, own, foreign)
 	if frame.WorkerSessionID != "" && frame.WorkerSessionID != own.workerSessionID {
 		t.Fatalf("stream frame %d Worker Session = %q, want %q", index, frame.WorkerSessionID, own.workerSessionID)
 	}
@@ -601,11 +602,13 @@ func inspectS8Frame(
 	return inspectS8StreamEvent(t, index, frame.Event, own, previousPosition, evidence)
 }
 
-func assertS8ForeignFrame(t *testing.T, index int, encoded []byte, own s8Correlation, foreign []s8Correlation) {
+func assertS8ForeignFrame(t *testing.T, index int, encoded []byte, frame s8StreamFrame, own s8Correlation, foreign []s8Correlation) {
 	t.Helper()
+	expectedSuccessorLineage := s8HasExpectedSuccessorLineage(frame, own)
 	for _, correlation := range foreign {
 		for _, token := range correlation.tokens() {
 			if token == "" || own.owns(token) ||
+				(expectedSuccessorLineage && token == own.successorWorkerSessionID && token == correlation.workerSessionID) ||
 				(token == correlation.dispatchID && strings.HasPrefix(own.dispatchID, token+"/continue/")) {
 				continue
 			}
@@ -614,6 +617,26 @@ func assertS8ForeignFrame(t *testing.T, index int, encoded []byte, own s8Correla
 			}
 		}
 	}
+}
+
+func s8HasExpectedSuccessorLineage(frame s8StreamFrame, own s8Correlation) bool {
+	if own.successorWorkerSessionID == "" || frame.Event == nil {
+		return false
+	}
+	successorWorkerSessionID, ok := s8SuccessorLineage(frame.Event.Payload)
+	return ok && successorWorkerSessionID == own.successorWorkerSessionID
+}
+
+func s8SuccessorLineage(payload json.RawMessage) (string, bool) {
+	var decoded struct {
+		Lineage *struct {
+			SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
+		} `json:"lineage"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil || decoded.Lineage == nil || decoded.Lineage.SuccessorWorkerSessionID == "" {
+		return "", false
+	}
+	return decoded.Lineage.SuccessorWorkerSessionID, true
 }
 
 func inspectS8StreamEvent(
@@ -634,6 +657,9 @@ func inspectS8StreamEvent(
 	}
 	if event.Position <= previousPosition {
 		t.Fatalf("stream frame positions for %q are not increasing: previous=%d current=%d", own.workerSessionID, previousPosition, event.Position)
+	}
+	if successorWorkerSessionID, ok := s8SuccessorLineage(event.Payload); ok && own.successorWorkerSessionID != "" && successorWorkerSessionID != own.successorWorkerSessionID {
+		t.Fatalf("stream frame %d for %q successor lineage = %q, want %q", index, own.workerSessionID, successorWorkerSessionID, own.successorWorkerSessionID)
 	}
 	eventEncoded, err := json.Marshal(event)
 	if err != nil {
@@ -702,7 +728,7 @@ func startS8LiveStream(
 	})
 	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = workingDirectory
-	writer := newS8SignalWriter()
+	writer := newS8SignalWriter(workerSessionID)
 	inputs.Input.Stdout = writer
 	return s8StreamCapture{inputs: inputs, writer: writer, command: support.StartProcessCommand(t, process, inputs.Input)}
 }
@@ -722,33 +748,53 @@ func waitS8Stream(t *testing.T, stream s8StreamCapture, workerSessionID string) 
 }
 
 type s8SignalWriter struct {
-	mu    sync.Mutex
-	data  bytes.Buffer
-	first chan struct{}
-	once  sync.Once
+	mu              sync.Mutex
+	data            bytes.Buffer
+	workerSessionID string
+	ready           chan struct{}
+	readyOnce       sync.Once
 }
 
-func newS8SignalWriter() *s8SignalWriter {
-	return &s8SignalWriter{first: make(chan struct{})}
+func newS8SignalWriter(workerSessionID string) *s8SignalWriter {
+	return &s8SignalWriter{workerSessionID: workerSessionID, ready: make(chan struct{})}
 }
 
 func (writer *s8SignalWriter) Write(data []byte) (int, error) {
 	writer.mu.Lock()
 	_, _ = writer.data.Write(data)
+	ready := writer.hasWorkerSessionFrameLocked()
 	writer.mu.Unlock()
-	writer.once.Do(func() { close(writer.first) })
+	if ready {
+		writer.readyOnce.Do(func() { close(writer.ready) })
+	}
 	return len(data), nil
 }
 
-func (writer *s8SignalWriter) waitFirstWrite(t *testing.T, workerSessionID string) {
+func (writer *s8SignalWriter) waitWorkerSessionFrame(t *testing.T, workerSessionID string) {
 	t.Helper()
 	watchdog := time.NewTimer(20 * time.Second)
 	defer watchdog.Stop()
 	select {
-	case <-writer.first:
+	case <-writer.ready:
 	case <-watchdog.C:
-		t.Fatalf("deadlock watchdog expired waiting for public live stream %q", workerSessionID)
+		t.Fatalf("deadlock watchdog expired waiting for complete public live stream frame %q", workerSessionID)
 	}
+}
+
+func (writer *s8SignalWriter) hasWorkerSessionFrameLocked() bool {
+	for _, line := range strings.Split(writer.data.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var frame struct {
+			WorkerSessionID string `json:"workerSessionId"`
+		}
+		if err := json.Unmarshal([]byte(line), &frame); err == nil && frame.WorkerSessionID == writer.workerSessionID {
+			return true
+		}
+	}
+	return false
 }
 
 func (writer *s8SignalWriter) bytes() []byte {
