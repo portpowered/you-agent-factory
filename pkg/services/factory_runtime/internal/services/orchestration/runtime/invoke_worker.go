@@ -33,11 +33,20 @@ func startThroughStatelessWorkers(
 	if err != nil {
 		return err
 	}
-	// Worker Session association is an optional historical observation edge.
-	// It does not own admission, cancellation, execution, or terminal
-	// authority; the attempt lifecycle below remains the only execution owner.
+	// Worker Session association does not own admission, cancellation,
+	// execution, or terminal authority -- the attempt lifecycle below remains
+	// the only execution owner -- but the association Factory Event is part of
+	// the canonical dispatch event order and must be recorded on every
+	// dispatch, not only when a Worker Sessions dependency happens to be wired.
+	sessionID := executeRequest.Correlation.DispatchID
+	// Replay must reuse the originally recorded Worker Session ID so live and
+	// replay correlation stay stable across resume.
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
+		if recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch); found {
+			sessionID = recordedSessionID
+		}
+	}
 	if cfg.workerSessions != nil {
-		sessionID := executeRequest.Correlation.DispatchID
 		if _, reserveErr := cfg.workerSessions.Reserve(
 			context.WithoutCancel(ctx),
 			workersessions.ReserveRequest{ID: sessionID},
