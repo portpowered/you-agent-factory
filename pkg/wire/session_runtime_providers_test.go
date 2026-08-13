@@ -383,6 +383,7 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 		worktreePreparer,
 		worktreeRelease,
 		platformfilesystem.Local{},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideStatelessWorkersService() error = %v", err)
@@ -451,7 +452,7 @@ func TestProvideWorkersWorktreeReleaseReturnsNilForPreparerWithoutRelease(t *tes
 }
 
 func TestProvideStatelessWorkersServiceRejectsMissingClock(t *testing.T) {
-	_, err := provideStatelessWorkersService(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := provideStatelessWorkersService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("provideStatelessWorkersService() error = nil, want missing clock error")
 	}
@@ -546,6 +547,7 @@ func newProductionCleanupStatelessService(
 		worktreePreparer,
 		worktreeRelease,
 		platformfilesystem.Local{},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideStatelessWorkersService() error = %v", err)

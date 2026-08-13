@@ -176,10 +176,14 @@ func (s *Service) runRunner(
 	if request.Input.ProgressPublisher != nil {
 		ctx = workers.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
 	}
+	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
+	if s.providerOverride != nil && identity == runners.AgentIdentity {
+		return s.providerOverride.Infer(ctx, runnerRequest)
+	}
 	return s.runners.Execute(ctx, runners.ExecuteRequest{
 		Identity:             identity,
 		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
-		Attempt:              adaptRunnerRequest(request, identity, temporaryFiles),
+		Attempt:              runnerRequest,
 	})
 }
 

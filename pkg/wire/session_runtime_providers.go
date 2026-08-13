@@ -764,6 +764,7 @@ func provideStatelessWorkersService(
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	providerOverride workers.Provider,
 ) (workers.Service, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("construct stateless Workers: clock is required")
@@ -804,6 +805,7 @@ func provideStatelessWorkersService(
 		worktreePreparer,
 		worktreeRelease,
 		temporaryFiles,
+		providerOverride,
 	)
 }
 

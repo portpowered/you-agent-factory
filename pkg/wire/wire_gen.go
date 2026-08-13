@@ -242,7 +242,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v21 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -751,7 +751,8 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	}
 	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem)
+	provider := provideFactoryRuntimeProviderOverride(edges2)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -973,6 +974,7 @@ var statelessWorkersSet = wire5.NewSet(
 	provideWorkersProviderTemporaryFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
 	provideStatelessWorkersService,
 )
 
