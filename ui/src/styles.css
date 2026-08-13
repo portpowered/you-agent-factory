@@ -174,6 +174,52 @@
   code {
     @apply font-mono;
   }
+
+  /*
+   * Keep native dashboard scrollports visually aligned with the shared Radix
+   * ScrollArea. This is intentionally behavior-based rather than class-based:
+   * overflow ownership stays with the document or the existing component.
+   */
+  :where(*) {
+    scrollbar-color: var(--color-outline-variant) transparent;
+    scrollbar-width: thin;
+  }
+
+  :where(*)::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+
+  :where(*)::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  :where(*)::-webkit-scrollbar-thumb {
+    background-clip: padding-box;
+    background-color: var(--color-outline-variant);
+    border: 1px solid transparent;
+    border-radius: 999px;
+  }
+
+  :where(*)::-webkit-scrollbar-thumb:hover,
+  :where(*)::-webkit-scrollbar-thumb:active {
+    background-color: var(--color-on-surface-variant);
+  }
+
+  /* Let high-contrast users and the operating system own scrollbar colors. */
+  @media (forced-colors: active) {
+    :where(*) {
+      forced-color-adjust: auto;
+      scrollbar-color: auto;
+      scrollbar-width: auto;
+    }
+
+    :where(*)::-webkit-scrollbar,
+    :where(*)::-webkit-scrollbar-thumb,
+    :where(*)::-webkit-scrollbar-track {
+      all: revert;
+    }
+  }
 }
 
 @layer components {
