@@ -113,11 +113,6 @@ type (
 	AutomationFactory                      = runtimeopening.AutomationFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
-	RecordingsServiceFactory               = runtimeopening.RecordingsServiceFactory
-	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
-	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
 	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
 	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
