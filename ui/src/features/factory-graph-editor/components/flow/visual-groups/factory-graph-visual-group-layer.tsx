@@ -1,13 +1,10 @@
 import { useReactFlow, useStore } from "@xyflow/react";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
+import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph";
 import { useCallback, useRef, useState } from "react";
 import { cn } from "../../../../../lib/cn";
-import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
-import {
-  type FactoryLayoutGroup,
-  factoryLayoutGroupColorCssVariable,
-  factoryLayoutGroupColorSurfaceCssVariable,
-} from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
+import type { FactoryLayoutGroup } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   isDragBeyondClickThreshold,
   RESIZE_CORNERS,
@@ -362,26 +359,23 @@ export function FactoryGraphVisualGroupLayer({
       className="pointer-events-none absolute inset-0 z-[1]"
       data-factory-visual-group-layer=""
     >
+      <FactoryGraphGroupRegionLayer groups={groups} />
       {groups.map((group) => {
         const bounds = resolveBounds(group);
         const projected = projectGroupBounds(bounds);
         const selected = selectedGroupId === group.id;
-        const accent = factoryLayoutGroupColorCssVariable(group.color);
-        const fill = factoryLayoutGroupColorSurfaceCssVariable(group.color);
 
         return (
           <div
             className={cn(
-              "pointer-events-auto absolute overflow-visible rounded-xl border-2 text-left shadow-none",
+              "pointer-events-none absolute overflow-visible rounded-2xl text-left",
               selected
-                ? "border-primary ring-2 ring-af-overlay-focus"
-                : "border-outline",
+                ? "border-2 border-primary ring-2 ring-af-overlay-focus"
+                : undefined,
             )}
             data-factory-visual-group={group.id}
             key={group.id}
             style={{
-              backgroundColor: fill,
-              borderColor: selected ? undefined : accent,
               height: projected.height,
               left: projected.x,
               top: projected.y,
@@ -403,14 +397,7 @@ export function FactoryGraphVisualGroupLayer({
               onPointerUp={handlePointerUp}
               role="button"
               tabIndex={canEdit ? 0 : -1}
-            >
-              <span
-                className="block truncate px-3 py-2 text-sm font-medium text-on-surface"
-                data-factory-visual-group-label=""
-              >
-                {group.label?.trim() || group.id}
-              </span>
-            </div>
+            ></div>
             {selected && canEdit && onResizeGroup
               ? RESIZE_CORNERS.map((corner) => (
                   <GraphNodeButton

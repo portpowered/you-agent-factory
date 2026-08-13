@@ -1,7 +1,7 @@
 import { Background, Controls, type Edge, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
-
+import { FactoryGraphGroupRegionLayer } from "./group-region-presentation.js";
 import type { FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 import {
   FACTORY_GRAPH_NODE_TYPES,
@@ -48,6 +48,7 @@ export function FactoryGraphReplaySurface({
         onNodeClick={(_event, node) => onSelectNode?.(node.id)}
         proOptions={{ hideAttribution: true }}
       >
+        <FactoryGraphGroupRegionLayer groups={source.factory.layout?.groups} />
         <Background />
         <Controls showInteractive={false} />
       </ReactFlow>
