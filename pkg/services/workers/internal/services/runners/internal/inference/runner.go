@@ -107,10 +107,11 @@ func (r *runner) Execute(
 func (r *runner) localInvocationRequest(
 	request workers.RunnerExecutionRequest,
 ) models.LocalInvocationRequest {
+	worker := r.workerForRequest(request)
 	return models.LocalInvocationRequest{
 		Scope:            r.scope,
 		Holder:           invocationHolder(request),
-		Worker:           r.worker,
+		Worker:           worker,
 		Resources:        r.resources,
 		Dispatch:         request.Dispatch,
 		ModelOperation:   request.ModelOperation,
@@ -175,14 +176,28 @@ func (r *runner) normalizeInvocationError(
 		return err
 	}
 	failure, ok := workers.ClassifyInferenceFailure(err, workers.InferenceFailureContext{
-		ModelName:  r.worker.Model,
-		WorkerName: r.worker.Name,
+		ModelName:  firstNonEmpty(request.Model, r.worker.Model),
+		WorkerName: firstNonEmpty(request.WorkerName, request.WorkerType, r.worker.Name),
 		Operation:  request.ModelOperation,
 	})
 	if ok {
 		return failure
 	}
 	return err
+}
+
+func (r *runner) workerForRequest(request workers.RunnerExecutionRequest) models.LocalWorker {
+	worker := snapshotWorker(r.worker)
+	if name := strings.TrimSpace(request.WorkerName); name != "" {
+		worker.Name = name
+	}
+	if model := strings.TrimSpace(request.Model); model != "" {
+		worker.Model = model
+	}
+	if locality := strings.TrimSpace(request.ModelLocality); locality != "" {
+		worker.ModelLocality = locality
+	}
+	return worker
 }
 
 func validateWorker(worker models.LocalWorker) error {
@@ -236,6 +251,15 @@ func snapshotWorker(worker models.LocalWorker) models.LocalWorker {
 		ModelLocality: worker.ModelLocality,
 		Resources:     snapshotResources(worker.Resources),
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func snapshotResources(resources []models.LocalResource) []models.LocalResource {

@@ -131,6 +131,15 @@ func (UnimplementedService) CompileEffectiveFactorySource(
 	return CompileEffectiveFactorySourceResult{}, ErrInvalidAuthoredFactorySource
 }
 
+// ResolveExecutionCatalog returns a collaborator-required failure until a
+// concrete Definitions owner is connected to the pure resolver.
+func (UnimplementedService) ResolveExecutionCatalog(
+	context.Context,
+	ResolveExecutionCatalogRequest,
+) (ResolveExecutionCatalogResult, error) {
+	return ResolveExecutionCatalogResult{}, fmt.Errorf("execution catalog resolver is required")
+}
+
 // ValidateStructuralFactoryDefinition returns ErrInvalidFactoryDefinitionPayload
 // until nested validator wiring lands.
 func (UnimplementedService) ValidateStructuralFactoryDefinition(

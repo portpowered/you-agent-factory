@@ -69,6 +69,44 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	}
 }
 
+func TestBuildStatelessWorkersValidatesContextBeforeComposition(t *testing.T) {
+	t.Parallel()
+
+	if service, err := BuildStatelessWorkers(nil, serviceedges.Edges{}); service != nil ||
+		err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("BuildStatelessWorkers(nil) = (%#v, %v), want required-context failure", service, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if service, err := BuildStatelessWorkers(ctx, serviceedges.Edges{}); service != nil ||
+		!errors.Is(err, context.Canceled) {
+		t.Fatalf("BuildStatelessWorkers(canceled) = (%#v, %v), want context.Canceled", service, err)
+	}
+}
+
+func TestBuildStatelessWorkersComposesAndPropagatesProviderValidation(t *testing.T) {
+	t.Parallel()
+
+	service, err := BuildStatelessWorkers(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildStatelessWorkers() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("BuildStatelessWorkers() returned nil service")
+	}
+
+	_, err = BuildStatelessWorkers(context.Background(), serviceedges.Edges{
+		ProviderRegistrations: []inference.Registration{{
+			Manifest:    rootExternalManifest(t, "claude", "collision"),
+			Integration: &rootRecordingIntegration{identity: "claude"},
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider registry validation failed") {
+		t.Fatalf("BuildStatelessWorkers(invalid provider) error = %v, want provider validation failure", err)
+	}
+}
+
 func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	t.Parallel()
 

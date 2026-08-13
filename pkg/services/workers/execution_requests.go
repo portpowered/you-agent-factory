@@ -1,6 +1,9 @@
 package workers
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -80,6 +83,66 @@ type ResolvedRunnerSelection struct {
 	Source   RunnerSelectionSource `json:"source,omitempty"`
 }
 
+// ResolvedExecutionPolicy is the Workers-owned value boundary for one
+// invocation-effective worker/workstation pair. It contains no executor,
+// provider, model, process, pool, or session object; those are selected by a
+// later attempt operation.
+type ResolvedExecutionPolicy struct {
+	WorkerName                  string                           `json:"worker_name"`
+	WorkerType                  string                           `json:"worker_type,omitempty"`
+	WorkstationName             string                           `json:"workstation_name"`
+	WorkstationType             string                           `json:"workstation_type,omitempty"`
+	RunnerID                    string                           `json:"runner_id"`
+	RunnerSelectionSource       RunnerSelectionSource            `json:"runner_selection_source,omitempty"`
+	Provider                    string                           `json:"provider,omitempty"`
+	Model                       string                           `json:"model,omitempty"`
+	ModelProvider               string                           `json:"model_provider,omitempty"`
+	ModelLocality               string                           `json:"model_locality,omitempty"`
+	ReasoningEffort             string                           `json:"reasoning_effort,omitempty"`
+	ExecutorProvider            string                           `json:"executor_provider,omitempty"`
+	Command                     string                           `json:"command,omitempty"`
+	Args                        []string                         `json:"args,omitempty"`
+	StopToken                   string                           `json:"stop_token,omitempty"`
+	AgentToolPolicy             string                           `json:"agent_tool_policy,omitempty"`
+	SkipPermissions             bool                             `json:"skip_permissions,omitempty"`
+	PromptFile                  string                           `json:"prompt_file,omitempty"`
+	Prompt                      string                           `json:"prompt,omitempty"`
+	PromptTemplate              string                           `json:"prompt_template,omitempty"`
+	OutputSchema                string                           `json:"output_schema,omitempty"`
+	OutputContract              string                           `json:"output_contract,omitempty"`
+	OutputFormat                string                           `json:"output_format,omitempty"`
+	DecisionEnvelope            bool                             `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope bool                             `json:"goal_routing_decision_envelope,omitempty"`
+	FormatInvocationSummary     bool                             `json:"format_invocation_summary,omitempty"`
+	FormatInvocationResponse    bool                             `json:"format_invocation_response,omitempty"`
+	FormatTTSMetadata           bool                             `json:"format_tts_metadata,omitempty"`
+	Environment                 map[string]string                `json:"environment,omitempty"`
+	WorkingDirectory            string                           `json:"working_directory,omitempty"`
+	Worktree                    string                           `json:"worktree,omitempty"`
+	Timeout                     time.Duration                    `json:"timeout,omitempty"`
+	WorkPropagation             string                           `json:"work_propagation,omitempty"`
+	Operation                   string                           `json:"operation,omitempty"`
+	OperationBindings           []ResolvedExecutionPolicyBinding `json:"operation_bindings,omitempty"`
+	StopWords                   []string                         `json:"stop_words,omitempty"`
+	RuntimeStopWords            []string                         `json:"runtime_stop_words,omitempty"`
+}
+
+// ExecutionPolicy is retained as the concise Workers vocabulary for callers
+// that do not need the longer resolved-value name.
+type ExecutionPolicy = ResolvedExecutionPolicy
+
+// ResolvedExecutionPolicyBinding preserves authored operation-input policy
+// without exposing Factory Definitions types to Workers.
+type ResolvedExecutionPolicyBinding struct {
+	Slot           string                 `json:"slot"`
+	SelectorSlot   string                 `json:"selector_slot,omitempty"`
+	SelectorLabel  string                 `json:"selector_label,omitempty"`
+	SelectorType   string                 `json:"selector_type,omitempty"`
+	SelectorRole   string                 `json:"selector_role,omitempty"`
+	Config         []work.WorkContentPart `json:"config,omitempty"`
+	DefaultContent []work.WorkContentPart `json:"default_content,omitempty"`
+}
+
 // RunnerSelectionResolver resolves configured provider precedence into the
 // stable native runner contract.
 type RunnerSelectionResolver func(
@@ -108,31 +171,39 @@ const (
 )
 
 type WorkstationExecutionRequest struct {
-	Dispatch                 work.WorkDispatch               `json:"dispatch"`
-	WorkerType               string                          `json:"worker_type,omitempty"`
-	WorkstationType          string                          `json:"workstation_type,omitempty"`
-	RunnerID                 string                          `json:"runner_id,omitempty"`
-	RunnerSelectionSource    RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
-	ExecutorProvider         string                          `json:"executor_provider,omitempty"`
-	ProjectID                string                          `json:"project_id,omitempty"`
-	FactorySessionID         string                          `json:"factory_session_id,omitempty"`
-	RecordingID              string                          `json:"recording_id,omitempty"`
-	Capabilities             *Capabilities                   `json:"capabilities,omitempty"`
-	InputTokens              []any                           `json:"input_tokens,omitempty"`
-	ModelOperation           string                          `json:"model_operation,omitempty"`
-	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
-	Model                    string                          `json:"model,omitempty"`
-	ModelProvider            string                          `json:"model_provider,omitempty"`
-	ReasoningEffort          string                          `json:"reasoning_effort,omitempty"`
-	SystemPrompt             string                          `json:"system_prompt,omitempty"`
-	UserMessage              string                          `json:"user_message,omitempty"`
-	OutputSchema             string                          `json:"output_schema,omitempty"`
-	OutputContract           string                          `json:"output_contract,omitempty"`
-	EnvVars                  map[string]string               `json:"env_vars,omitempty"`
-	ProcessEnvironment       []string                        `json:"-"`
-	Worktree                 string                          `json:"worktree,omitempty"`
-	WorkingDirectory         string                          `json:"working_directory,omitempty"`
-	WorkingDirectoryAuthored bool                            `json:"working_directory_authored,omitempty"`
+	Dispatch                    work.WorkDispatch               `json:"dispatch"`
+	WorkerName                  string                          `json:"worker_name,omitempty"`
+	WorkerType                  string                          `json:"worker_type,omitempty"`
+	WorkstationType             string                          `json:"workstation_type,omitempty"`
+	RunnerID                    string                          `json:"runner_id,omitempty"`
+	RunnerSelectionSource       RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
+	ExecutorProvider            string                          `json:"executor_provider,omitempty"`
+	ProjectID                   string                          `json:"project_id,omitempty"`
+	FactorySessionID            string                          `json:"factory_session_id,omitempty"`
+	RecordingID                 string                          `json:"recording_id,omitempty"`
+	Capabilities                *Capabilities                   `json:"capabilities,omitempty"`
+	InputTokens                 []any                           `json:"input_tokens,omitempty"`
+	ModelOperation              string                          `json:"model_operation,omitempty"`
+	ModelBindings               []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
+	Model                       string                          `json:"model,omitempty"`
+	ModelProvider               string                          `json:"model_provider,omitempty"`
+	ReasoningEffort             string                          `json:"reasoning_effort,omitempty"`
+	Command                     string                          `json:"command,omitempty"`
+	Args                        []string                        `json:"args,omitempty"`
+	FactoryDirectory            string                          `json:"factory_directory,omitempty"`
+	OutputFormat                string                          `json:"output_format,omitempty"`
+	StopToken                   string                          `json:"stop_token,omitempty"`
+	DecisionEnvelope            bool                            `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope bool                            `json:"goal_routing_decision_envelope,omitempty"`
+	SystemPrompt                string                          `json:"system_prompt,omitempty"`
+	UserMessage                 string                          `json:"user_message,omitempty"`
+	OutputSchema                string                          `json:"output_schema,omitempty"`
+	OutputContract              string                          `json:"output_contract,omitempty"`
+	EnvVars                     map[string]string               `json:"env_vars,omitempty"`
+	ProcessEnvironment          []string                        `json:"-"`
+	Worktree                    string                          `json:"worktree,omitempty"`
+	WorkingDirectory            string                          `json:"working_directory,omitempty"`
+	WorkingDirectoryAuthored    bool                            `json:"working_directory_authored,omitempty"`
 	// ResumeSession is the exact detached Providers-owned session identity a
 	// resumed Worker Session must continue. It is intentionally distinct from
 	// configuration's legacy SessionID: this value retains provider-specific
@@ -148,6 +219,7 @@ type WorkstationExecutionRequest struct {
 
 type ProviderInferenceRequest struct {
 	Dispatch                     work.WorkDispatch               `json:"dispatch"`
+	WorkerName                   string                          `json:"worker_name,omitempty"`
 	WorkerType                   string                          `json:"worker_type,omitempty"`
 	WorkstationType              string                          `json:"workstation_type,omitempty"`
 	RunnerID                     string                          `json:"runner_id,omitempty"`
@@ -168,6 +240,14 @@ type ProviderInferenceRequest struct {
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
 	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
+	Command                      string                          `json:"command,omitempty"`
+	Args                         []string                        `json:"args,omitempty"`
+	FactoryDirectory             string                          `json:"factory_directory,omitempty"`
+	OutputContract               string                          `json:"output_contract,omitempty"`
+	OutputFormat                 string                          `json:"output_format,omitempty"`
+	StopToken                    string                          `json:"stop_token,omitempty"`
+	DecisionEnvelope             bool                            `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope  bool                            `json:"goal_routing_decision_envelope,omitempty"`
 	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
@@ -179,6 +259,9 @@ type ProviderInferenceRequest struct {
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
+	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
+	// It is intentionally excluded from serialized provider payloads.
+	TemporaryFiles TemporaryFileSystem `json:"-"`
 }
 
 type RunnerExecutionRequest = ProviderInferenceRequest
@@ -189,11 +272,13 @@ type SubprocessExecutionRequest = CommandRequest
 func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) WorkstationExecutionRequest {
 	clone := request
 	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
+	clone.WorkerName = request.WorkerName
 	if request.Capabilities != nil {
 		capabilities := *request.Capabilities
 		clone.Capabilities = &capabilities
 	}
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
+	clone.Args = append([]string(nil), request.Args...)
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
@@ -204,12 +289,15 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInferenceRequest {
 	clone := request
 	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
+	clone.WorkerName = request.WorkerName
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
+	clone.Args = append([]string(nil), request.Args...)
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.RequiredOptionalCapabilities = append([]RunnerOptionalCapability(nil), request.RequiredOptionalCapabilities...)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.TemporaryFiles = request.TemporaryFiles
 	return clone
 }
 
@@ -297,5 +385,367 @@ func cloneStringSliceMap(values map[string][]string) map[string][]string {
 	for key, items := range values {
 		clone[key] = append([]string(nil), items...)
 	}
+	return clone
+}
+
+var ErrInvalidExecuteRequest = errors.New("invalid Workers execute request")
+
+var ErrExecuteUnavailable = errors.New("Workers execute capability unavailable")
+
+// ErrExecuteCleanupFailed identifies a request-resource cleanup failure. A
+// started attempt reports this as a normalized failed ExecuteResult so the
+// returned result remains the sole completion authority.
+var ErrExecuteCleanupFailed = errors.New("Workers execute cleanup failed")
+
+type ExecutionOutcome string
+
+const (
+	ExecutionOutcomeAccepted ExecutionOutcome = "ACCEPTED"
+	ExecutionOutcomeContinue ExecutionOutcome = "CONTINUE"
+	ExecutionOutcomeRejected ExecutionOutcome = "REJECTED"
+	ExecutionOutcomeFailed   ExecutionOutcome = "FAILED"
+	ExecutionOutcomeCanceled ExecutionOutcome = "CANCELED"
+)
+
+// ExecuteRequest is the complete, detached input for one Workers attempt.
+type ExecuteRequest struct {
+	Correlation ExecutionCorrelation
+	Target      ExecutionTarget
+	Input       ExecutionInput
+	Attempt     AttemptContext
+}
+
+type ExecutionCorrelation struct {
+	FactorySessionID string
+	RuntimeID        string
+	DispatchID       string
+	AttemptID        string
+	RequestID        string
+	TraceID          string
+}
+
+type ExecutionTarget struct {
+	WorkerName       string
+	WorkerType       string
+	WorkstationName  string
+	RunnerID         string
+	Command          string
+	Args             []string
+	FactoryDirectory string
+	Provider         ProviderReference
+	Model            ModelReference
+	Prompt           PromptPolicy
+	Tools            ToolPolicy
+	Output           OutputPolicy
+	Environment      EnvironmentPolicy
+	Workspace        WorkspacePolicy
+	Permissions      PermissionPolicy
+	Timeout          time.Duration
+}
+
+type ProviderReference struct {
+	ID    string
+	Alias string
+}
+
+type ModelReference struct {
+	Name            string
+	Provider        string
+	ReasoningEffort string
+	Locality        string
+}
+
+type PromptPolicy struct {
+	SystemPrompt string
+	UserMessage  string
+	OutputSchema string
+}
+
+type ToolPolicy struct {
+	ExecutionMode                RunnerToolExecutionMode
+	RequiredOptionalCapabilities []RunnerOptionalCapability
+}
+
+type OutputPolicy struct {
+	Contract                    string
+	Format                      string
+	StopToken                   string
+	DecisionEnvelope            bool
+	GoalRoutingDecisionEnvelope bool
+}
+
+type EnvironmentPolicy struct {
+	Vars                   map[string]string
+	ProcessEnvironment     []string
+	WorkingDirectory       string
+	WorkingDirectorySet    bool
+	SkipProcessInheritance bool
+}
+
+type WorkspacePolicy struct {
+	Worktree           string
+	WorkingDirectory   string
+	PrepareWorktree    bool
+	FactoryDirectory   string
+	CheckoutIdentifier string
+}
+
+type PermissionPolicy struct {
+	SkipPermissions bool
+}
+
+type ExecutionInput struct {
+	Work             []WorkInput
+	Invocation       work.InvocationArguments
+	ModelBindings    []ResolvedModelOperationBinding
+	ModelOperation   string
+	PreviousAttempts []AttemptSummary
+	Resume           *ProviderContinuationRef
+}
+
+type WorkInput struct {
+	WorkID       string
+	WorkTypeID   string
+	RequestID    string
+	Content      []work.WorkContentPart
+	Tags         map[string]string
+	Relations    []work.Relation
+	Lineage      WorkLineage
+	AttemptFacts AttemptFacts
+}
+
+type WorkLineage struct {
+	ParentWorkID string
+	TraceID      string
+	OriginRef    string
+}
+
+type AttemptFacts struct {
+	AttemptNumber int
+	LastOutcome   string
+	LastFailure   string
+}
+
+type AttemptContext struct {
+	Number int
+}
+
+type AttemptSummary struct {
+	AttemptID string
+	Outcome   ExecutionOutcome
+	Failure   *ExecutionFailure
+	Finished  time.Time
+}
+
+type ProviderContinuationRef struct {
+	Provider          string
+	ProviderSessionID string
+	ExternalRef       string
+}
+
+type ExecuteResult struct {
+	Correlation  ExecutionCorrelation
+	Outcome      ExecutionOutcome
+	Output       ProposedOutput
+	Failure      *ExecutionFailure
+	Diagnostics  *SafeDiagnostics
+	Metrics      ExecutionMetrics
+	Continuation *ProviderContinuationRef
+}
+
+type ExecutionFailure struct {
+	Type      WorkFailureType
+	Family    WorkFailureFamily
+	Message   string
+	RetryHint bool
+	Detail    *FailureDetail
+}
+
+type ExecutionMetrics struct {
+	Duration   time.Duration
+	Cost       float64
+	RetryCount int
+}
+
+func (request ExecuteRequest) Validate() error {
+	if strings.TrimSpace(request.Correlation.DispatchID) == "" {
+		return fmt.Errorf("%w: dispatch id is required", ErrInvalidExecuteRequest)
+	}
+	if strings.TrimSpace(request.Correlation.AttemptID) == "" {
+		return fmt.Errorf("%w: attempt id is required", ErrInvalidExecuteRequest)
+	}
+	if strings.TrimSpace(request.Target.RunnerID) == "" &&
+		strings.TrimSpace(request.Target.Provider.ID) == "" &&
+		strings.TrimSpace(request.Target.Provider.Alias) == "" &&
+		strings.TrimSpace(request.Target.Model.Name) == "" {
+		return fmt.Errorf("%w: runner, provider, or model target is required", ErrInvalidExecuteRequest)
+	}
+	if request.Target.Timeout < 0 {
+		return fmt.Errorf("%w: timeout must not be negative", ErrInvalidExecuteRequest)
+	}
+	if request.Input.Resume != nil &&
+		strings.TrimSpace(request.Input.Resume.Provider) == "" &&
+		strings.TrimSpace(request.Input.Resume.ProviderSessionID) == "" &&
+		strings.TrimSpace(request.Input.Resume.ExternalRef) == "" {
+		return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
+	}
+	return nil
+}
+
+func (request ExecuteRequest) Clone() ExecuteRequest {
+	clone := request
+	clone.Target = request.Target.Clone()
+	clone.Input = request.Input.Clone()
+	return clone
+}
+
+func (target ExecutionTarget) Clone() ExecutionTarget {
+	clone := target
+	clone.Args = append([]string(nil), target.Args...)
+	clone.Tools.RequiredOptionalCapabilities = append(
+		[]RunnerOptionalCapability(nil),
+		target.Tools.RequiredOptionalCapabilities...,
+	)
+	clone.Environment.Vars = cloneStringMap(target.Environment.Vars)
+	clone.Environment.ProcessEnvironment = append(
+		[]string(nil),
+		target.Environment.ProcessEnvironment...,
+	)
+	return clone
+}
+
+func (input ExecutionInput) Clone() ExecutionInput {
+	clone := input
+	if args := work.CloneInvocationArguments(&input.Invocation); args != nil {
+		clone.Invocation = *args
+	}
+	clone.ModelBindings = CloneResolvedModelOperationBindings(input.ModelBindings)
+	if len(input.Work) > 0 {
+		clone.Work = make([]WorkInput, len(input.Work))
+		for i, item := range input.Work {
+			clone.Work[i] = item.Clone()
+		}
+	}
+	if len(input.PreviousAttempts) > 0 {
+		clone.PreviousAttempts = make([]AttemptSummary, len(input.PreviousAttempts))
+		for i, summary := range input.PreviousAttempts {
+			clone.PreviousAttempts[i] = summary.Clone()
+		}
+	}
+	if input.Resume != nil {
+		resume := *input.Resume
+		clone.Resume = &resume
+	}
+	return clone
+}
+
+func (input WorkInput) Clone() WorkInput {
+	clone := input
+	clone.Content = work.CloneWorkContentParts(input.Content)
+	clone.Tags = cloneStringMap(input.Tags)
+	clone.Relations = append([]work.Relation(nil), input.Relations...)
+	return clone
+}
+
+func (summary AttemptSummary) Clone() AttemptSummary {
+	clone := summary
+	if summary.Failure != nil {
+		failure := summary.Failure.Clone()
+		clone.Failure = &failure
+	}
+	return clone
+}
+
+func (failure ExecutionFailure) Clone() ExecutionFailure {
+	clone := failure
+	clone.Detail = CloneFailureDetail(failure.Detail)
+	return clone
+}
+
+func (result ExecuteResult) Clone() ExecuteResult {
+	clone := result
+	clone.Output = result.Output.Clone()
+	if result.Failure != nil {
+		failure := result.Failure.Clone()
+		clone.Failure = &failure
+	}
+	clone.Diagnostics = cloneSafeDiagnostics(result.Diagnostics)
+	if result.Continuation != nil {
+		continuation := *result.Continuation
+		clone.Continuation = &continuation
+	}
+	return clone
+}
+
+func cloneSafeDiagnostics(diagnostics *SafeDiagnostics) *SafeDiagnostics {
+	if diagnostics == nil {
+		return nil
+	}
+	clone := &SafeDiagnostics{
+		RenderedPrompt: cloneSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
+		Provider:       cloneSafeProviderDiagnostic(diagnostics.Provider),
+		AgentRun:       cloneSafeAgentRunDiagnostic(diagnostics.AgentRun),
+		Invocation:     CloneInvocationDiagnostic(diagnostics.Invocation),
+		Metadata:       cloneStringMap(diagnostics.Metadata),
+	}
+	if diagnostics.Command != nil {
+		clone.Command = &SafeCommandDiagnostic{
+			Command:    diagnostics.Command.Command,
+			Args:       append([]string(nil), diagnostics.Command.Args...),
+			Stdout:     diagnostics.Command.Stdout,
+			Stderr:     diagnostics.Command.Stderr,
+			ExitCode:   diagnostics.Command.ExitCode,
+			TimedOut:   diagnostics.Command.TimedOut,
+			Duration:   diagnostics.Command.Duration,
+			WorkingDir: diagnostics.Command.WorkingDir,
+		}
+	}
+	if diagnostics.Panic != nil {
+		clone.Panic = &PanicDiagnostic{
+			Message: diagnostics.Panic.Message,
+			Stack:   diagnostics.Panic.Stack,
+		}
+	}
+	return clone
+}
+
+func cloneSafeRenderedPromptDiagnostic(
+	diagnostic *SafeRenderedPromptDiagnostic,
+) *SafeRenderedPromptDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	return &SafeRenderedPromptDiagnostic{
+		SystemPromptHash: diagnostic.SystemPromptHash,
+		UserMessageHash:  diagnostic.UserMessageHash,
+		Variables:        cloneStringMap(diagnostic.Variables),
+	}
+}
+
+func cloneSafeProviderDiagnostic(diagnostic *SafeProviderDiagnostic) *SafeProviderDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	return &SafeProviderDiagnostic{
+		Provider:         diagnostic.Provider,
+		Model:            diagnostic.Model,
+		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
+		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
+	}
+}
+
+func cloneSafeAgentRunDiagnostic(diagnostic *SafeAgentRunDiagnostic) *SafeAgentRunDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	clone := &SafeAgentRunDiagnostic{
+		ExecutionBehavior: diagnostic.ExecutionBehavior,
+		FailureClass:      diagnostic.FailureClass,
+		RecoveryAction:    diagnostic.RecoveryAction,
+		ToolPolicy:        diagnostic.ToolPolicy,
+		ToolCallCount:     diagnostic.ToolCallCount,
+	}
+	clone.ToolDiagnostics = append([]AgentRunToolDiagnostic(nil), diagnostic.ToolDiagnostics...)
+	clone.Transcript = append([]AgentRunTranscriptEntry(nil), diagnostic.Transcript...)
 	return clone
 }

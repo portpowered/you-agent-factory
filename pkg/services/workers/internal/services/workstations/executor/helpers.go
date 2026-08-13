@@ -509,10 +509,10 @@ var (
 	observationReportRecommendationPattern = regexp.MustCompile(`(?im)^\s*(?:overall\s+)?recommendation\s*:\s*(pass|reroll)\s*$`)
 )
 
-// validateOutputContract validates provider-neutral semantic contracts after
+// ValidateOutputContract validates provider-neutral semantic contracts after
 // a worker returns. Provider adapters still own transport/schema parsing; this
 // layer owns contracts that cannot be expressed by a provider output mode.
-func validateOutputContract(content, contract string) error {
+func ValidateOutputContract(content, contract string) error {
 	switch strings.TrimSpace(contract) {
 	case "":
 		return nil
@@ -523,6 +523,10 @@ func validateOutputContract(content, contract string) error {
 	default:
 		return fmt.Errorf("unsupported output contract %q", contract)
 	}
+}
+
+func validateOutputContract(content, contract string) error {
+	return ValidateOutputContract(content, contract)
 }
 
 type structuredClipQAVerdict struct {

@@ -52,6 +52,47 @@ func (s *Service) Prepare(
 	return PrepareFactoryGitWorktree(ctx, factoryRoot, worktreeName, s.fileSystem, s.git)
 }
 
+// Release removes a checkout created by Prepare. Reused checkouts remain
+// available to their owner and are never removed by a request-scoped attempt.
+func (s *Service) Release(
+	ctx context.Context,
+	preparation workerexecution.FactoryWorktreePreparation,
+) error {
+	if s == nil || s.git == nil {
+		return fmt.Errorf("Worker worktree Git commander is required")
+	}
+	if preparation.Reused {
+		return nil
+	}
+	checkoutPath := strings.TrimSpace(preparation.CheckoutPath)
+	if checkoutPath == "" {
+		return fmt.Errorf("worktree checkout path is required for release")
+	}
+
+	stdout, stderr, exitCode, runErr := s.git.Run(
+		ctx,
+		filepath.Dir(checkoutPath),
+		"worktree",
+		"remove",
+		"--force",
+		checkoutPath,
+	)
+	if runErr != nil {
+		return fmt.Errorf("git worktree remove: %w", runErr)
+	}
+	if exitCode != 0 {
+		detail := strings.TrimSpace(stderr)
+		if detail == "" {
+			detail = strings.TrimSpace(stdout)
+		}
+		if detail == "" {
+			detail = fmt.Sprintf("git worktree remove exited with status %d", exitCode)
+		}
+		return fmt.Errorf("git worktree remove failed: %s", detail)
+	}
+	return nil
+}
+
 // PrepareFactoryGitWorktree creates or reuses a git worktree checkout for the
 // resolved worktree name under the factory root.
 func PrepareFactoryGitWorktree(

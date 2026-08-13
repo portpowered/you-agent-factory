@@ -24,6 +24,9 @@ type WorkerState struct {
 // InferenceResponse is returned by a provider after model inference.
 type InferenceResponse struct {
 	Content         string                   `json:"content"`
+	Outcome         WorkOutcome              `json:"outcome,omitempty"`
+	Feedback        string                   `json:"feedback,omitempty"`
+	Classification  string                   `json:"classification,omitempty"`
 	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics     *WorkDiagnostics         `json:"diagnostics,omitempty"`
 }

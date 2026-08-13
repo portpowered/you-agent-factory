@@ -184,6 +184,53 @@ func TestPrepareFactoryGitWorktree_ReusesExistingValidWorktree(t *testing.T) {
 	}
 }
 
+func TestServiceReleaseRemovesCreatedWorktree(t *testing.T) {
+	requireGitIntegration(t)
+	repoRoot := initGitRepository(t)
+	factoryRoot := filepath.Join(repoRoot, "factory")
+	if err := os.MkdirAll(factoryRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(factory): %v", err)
+	}
+
+	service, err := New(platformfilesystem.Local{}, execGitCommander{})
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	preparation, err := service.Prepare(context.Background(), factoryRoot, "release-me")
+	if err != nil {
+		t.Fatalf("Prepare(): %v", err)
+	}
+	if preparation.Reused {
+		t.Fatal("Prepare().Reused = true, want a newly-created worktree")
+	}
+
+	if err := service.Release(context.Background(), preparation); err != nil {
+		t.Fatalf("Release(): %v", err)
+	}
+	if _, err := os.Stat(preparation.CheckoutPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("released checkout stat error = %v, want not exist", err)
+	}
+}
+
+func TestServiceReleaseLeavesReusedWorktreeUntouched(t *testing.T) {
+	t.Parallel()
+
+	git := &recordingGitCommander{}
+	service, err := New(platformfilesystem.Local{}, git)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	if err := service.Release(context.Background(), PrepareFactoryGitWorktreeResult{
+		CheckoutPath: "reused-checkout",
+		Reused:       true,
+	}); err != nil {
+		t.Fatalf("Release(reused): %v", err)
+	}
+	if len(git.calls) != 0 {
+		t.Fatalf("Git calls = %#v, want none for reused worktree", git.calls)
+	}
+}
+
 func TestPrepareFactoryGitWorktree_UsesExistingWorktreesParent(t *testing.T) {
 	requireGitIntegration(t)
 	repoRoot := initGitRepository(t)

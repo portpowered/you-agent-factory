@@ -32,6 +32,7 @@ type Config struct {
 	Command          string
 	Args             []string
 	FactoryDirectory string
+	RequestSelected  bool
 }
 
 // Dependencies are the exact effects used by one Script Runner.
@@ -66,7 +67,7 @@ var _ workers.Runner = (*runner)(nil)
 
 // New validates and snapshots a Script Runner and its exact execution edges.
 func New(config Config, dependencies Dependencies) (workers.Runner, error) {
-	if strings.TrimSpace(config.Command) == "" {
+	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
 		return nil, misconfigured("script command is required", nil)
 	}
 	if dependencies.CommandRunner == nil {
@@ -291,8 +292,21 @@ func (r *runner) resolveCommandRequest(
 	tokens []workers.Token,
 ) (workers.CommandRequest, error) {
 	workDir := effectiveWorkDir(request)
+	command := r.command
+	argsTemplate := r.args
+	factoryDirectory := r.factoryDirectory
+	if strings.TrimSpace(request.Command) != "" {
+		command = request.Command
+		argsTemplate = request.Args
+	}
+	if strings.TrimSpace(request.FactoryDirectory) != "" {
+		factoryDirectory = request.FactoryDirectory
+	}
+	if strings.TrimSpace(command) == "" {
+		return workers.CommandRequest{}, fmt.Errorf("script command is required")
+	}
 	templateContext := &workers.Context{
-		FactoryDirectory: r.factoryDirectory,
+		FactoryDirectory: factoryDirectory,
 		WorkDirectory:    workDir,
 		EnvVars:          cloneStringMap(request.EnvVars),
 		ProjectID:        request.ProjectID,
@@ -306,15 +320,15 @@ func (r *runner) resolveCommandRequest(
 	if err != nil {
 		return workers.CommandRequest{}, err
 	}
-	args, err := resolveArgs(r.args, data)
+	args, err := resolveArgs(argsTemplate, data)
 	if err != nil {
 		return workers.CommandRequest{}, err
 	}
 
 	dispatch := request.Dispatch
 	return workers.CommandRequest{
-		Command:                  resolveFactoryScript(r.factoryDirectory, r.command),
-		Args:                     resolveFactoryScripts(r.factoryDirectory, args),
+		Command:                  resolveFactoryScript(factoryDirectory, command),
+		Args:                     resolveFactoryScripts(factoryDirectory, args),
 		Env:                      mergedEnvironment(request.ProcessEnvironment, request.EnvVars),
 		WorkDir:                  workDir,
 		DispatchID:               dispatch.DispatchID,

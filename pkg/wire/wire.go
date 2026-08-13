@@ -286,11 +286,28 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 )
 
 var workerServiceSet = wire.NewSet(
+	provideStatelessWorkersService,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideWorkersFactoryDocsFileSystem,
 	provideWorkerInvocationFactory,
 	provideProviderFromCommandRunnerFactory,
 	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
+)
+
+var statelessWorkersSet = wire.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideStatelessWorkersService,
 )
 
 var cliCommandOperationsSet = wire.NewSet(
@@ -425,6 +442,20 @@ func InjectBundle(
 ) (*initializerapplication.Process, error) {
 	wire.Build(
 		BundleSet,
+	)
+	return nil, nil
+}
+
+// BuildStatelessWorkers composes the standalone Workers Execute root without
+// opening the application command graph, Factory Runtime, or Factory Session.
+// It is a narrow service-root construction boundary used by direct callers
+// that need one detached attempt.
+func BuildStatelessWorkers(
+	ctx context.Context,
+	edges edges.Edges,
+) (workers.Service, error) {
+	wire.Build(
+		statelessWorkersSet,
 	)
 	return nil, nil
 }

@@ -521,6 +521,226 @@ func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	}
 }
 
+func TestExecuteNormalizesAgentOutcomePolicies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		content      string
+		decision     bool
+		goalDecision bool
+		outputFormat string
+		stopToken    string
+		wantOutcome  workers.WorkOutcome
+		wantClass    string
+		wantContent  string
+		wantFeedback string
+	}{
+		{
+			name:         "decision accepted",
+			content:      `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
+			decision:     true,
+			wantOutcome:  workers.OutcomeAccepted,
+			wantContent:  "ship",
+			wantFeedback: "ready",
+		},
+		{
+			name:         "decision continue through output format",
+			content:      `{"decision":"CONTINUE","feedback":"add tests","output":"next"}`,
+			outputFormat: "decision-envelope",
+			wantOutcome:  workers.OutcomeContinue,
+			wantContent:  "next",
+			wantFeedback: "add tests",
+		},
+		{
+			name:         "goal needs changes",
+			content:      `{"decision":"NEEDS-CHANGES","feedback":"revise","output":"hold"}`,
+			decision:     true,
+			goalDecision: true,
+			wantOutcome:  workers.OutcomeAccepted,
+			wantClass:    "needs_changes",
+			wantContent:  "hold",
+			wantFeedback: "revise",
+		},
+		{
+			name:        "stop token accepted",
+			content:     "finished: DONE",
+			stopToken:   "DONE",
+			wantOutcome: workers.OutcomeAccepted,
+			wantContent: "finished: DONE",
+		},
+		{
+			name:        "continue marker",
+			content:     "please review <CONTINUE>",
+			stopToken:   "DONE",
+			wantOutcome: workers.OutcomeContinue,
+			wantContent: "please review <CONTINUE>",
+		},
+		{
+			name:        "missing stop token rejects",
+			content:     "unfinished",
+			stopToken:   "DONE",
+			wantOutcome: workers.OutcomeRejected,
+			wantContent: "unfinished",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runner, err := New(&providersFake{content: test.content}, noopPublisher)
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			request := baseAgentRequest()
+			request.DecisionEnvelope = test.decision
+			request.GoalRoutingDecisionEnvelope = test.goalDecision
+			request.OutputFormat = test.outputFormat
+			request.StopToken = test.stopToken
+
+			result, err := runner.Execute(t.Context(), request)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != test.wantOutcome {
+				t.Fatalf("outcome = %q, want %q", result.Outcome, test.wantOutcome)
+			}
+			if result.Classification != test.wantClass {
+				t.Fatalf("classification = %q, want %q", result.Classification, test.wantClass)
+			}
+			if result.Content != test.wantContent {
+				t.Fatalf("content = %q, want %q", result.Content, test.wantContent)
+			}
+			if result.Feedback != test.wantFeedback {
+				t.Fatalf("feedback = %q, want %q", result.Feedback, test.wantFeedback)
+			}
+		})
+	}
+}
+
+func TestExecuteRejectsInvalidDecisionEnvelope(t *testing.T) {
+	t.Parallel()
+
+	runner, err := New(&providersFake{content: "not-json"}, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := baseAgentRequest()
+	request.DecisionEnvelope = true
+
+	_, err = runner.Execute(t.Context(), request)
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("Execute() error = %v, want *workers.ProviderError", err)
+	}
+	if providerErr.Type != workers.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("ProviderError.Type = %q, want permanent bad request", providerErr.Type)
+	}
+}
+
+func TestExecuteRejectsInvalidRequestsBeforeProviderCall(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*workers.RunnerExecutionRequest)
+	}{
+		{name: "provider identity", mutate: func(request *workers.RunnerExecutionRequest) { request.RunnerID = "" }},
+		{name: "dispatch identity", mutate: func(request *workers.RunnerExecutionRequest) { request.Dispatch.DispatchID = "" }},
+		{name: "prompt", mutate: func(request *workers.RunnerExecutionRequest) {
+			request.SystemPrompt = ""
+			request.UserMessage = ""
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &providersFake{}
+			runner, err := New(fake, noopPublisher)
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			request := baseAgentRequest()
+			test.mutate(&request)
+			if _, err := runner.Execute(t.Context(), request); err == nil {
+				t.Fatal("Execute() error = nil, want validation failure")
+			}
+			if fake.executeCalls != 0 || fake.continueCalls != 0 {
+				t.Fatalf("provider calls execute=%d continue=%d, want no effect", fake.executeCalls, fake.continueCalls)
+			}
+		})
+	}
+}
+
+func TestExecuteNormalizesUnexpectedProviderError(t *testing.T) {
+	t.Parallel()
+
+	runner, err := New(&genericErrorProvidersFake{}, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	_, err = runner.Execute(t.Context(), baseAgentRequest())
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("Execute() error = %v, want *workers.ProviderError", err)
+	}
+	if providerErr.Type != workers.WorkFailureTypeInternalServerError || providerErr.Message != "provider exploded" {
+		t.Fatalf("ProviderError = %#v, want bounded internal provider failure", providerErr)
+	}
+}
+
+func TestNormalizeGoalDecisionAcceptsCharacterizedClassifications(t *testing.T) {
+	t.Parallel()
+
+	for _, decision := range []string{
+		"ACCEPTED",
+		"NEEDS-CHANGES",
+		"TESTS_FAILED",
+		"NEEDS_HUMAN",
+		"BLOCKED",
+		"INTERRUPTED",
+		"FAILED",
+	} {
+		decision := decision
+		t.Run(decision, func(t *testing.T) {
+			t.Parallel()
+			got, err := normalizeGoalDecision(decision)
+			if err != nil {
+				t.Fatalf("normalizeGoalDecision(%q) error = %v", decision, err)
+			}
+			if got == "" {
+				t.Fatalf("normalizeGoalDecision(%q) = empty classification", decision)
+			}
+		})
+	}
+	if _, err := normalizeGoalDecision("UNKNOWN"); err == nil {
+		t.Fatal("normalizeGoalDecision(UNKNOWN) error = nil, want validation error")
+	}
+}
+
+func TestFailureTypeForProviderKindPreservesProviderClassification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		kind providers.ExecuteFailureKind
+		want workers.WorkFailureType
+	}{
+		{kind: providers.ExecuteFailureKindAuthentication, want: workers.WorkFailureTypeAuthFailure},
+		{kind: providers.ExecuteFailureKindInvalidRequest, want: workers.WorkFailureTypePermanentBadRequest},
+		{kind: providers.ExecuteFailureKindCapabilityMismatch, want: workers.WorkFailureTypePermanentBadRequest},
+		{kind: providers.ExecuteFailureKindMisconfigured, want: workers.WorkFailureTypeMisconfigured},
+		{kind: providers.ExecuteFailureKindThrottled, want: workers.WorkFailureTypeThrottled},
+		{kind: providers.ExecuteFailureKindDependency, want: workers.WorkFailureTypeInternalServerError},
+		{kind: providers.ExecuteFailureKindTimeout, want: workers.WorkFailureTypeTimeout},
+		{kind: providers.ExecuteFailureKindUnknown, want: workers.WorkFailureTypeUnknown},
+	}
+	for _, test := range tests {
+		if got := failureTypeForProviderKind(test.kind); got != test.want {
+			t.Errorf("failureTypeForProviderKind(%q) = %q, want %q", test.kind, got, test.want)
+		}
+	}
+}
+
 func baseAgentRequest() workers.RunnerExecutionRequest {
 	return workers.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
@@ -534,6 +754,7 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 
 type providersFake struct {
 	providers.Service
+	content                       string
 	request                       providers.ExecuteRequest
 	continuationReference         *providers.SessionRef
 	continuationResponseReference *providers.SessionRef
@@ -573,7 +794,22 @@ func (fake *providersFake) Execute(
 ) (providers.ExecuteResult, error) {
 	fake.executeCalls++
 	fake.request = request.Clone()
-	return providers.ExecuteResult{Content: "ok"}, nil
+	content := fake.content
+	if content == "" {
+		content = "ok"
+	}
+	return providers.ExecuteResult{Content: content}, nil
+}
+
+type genericErrorProvidersFake struct {
+	providers.Service
+}
+
+func (*genericErrorProvidersFake) Execute(
+	context.Context,
+	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, errors.New("provider exploded")
 }
 
 func (fake *observingProvidersFake) Execute(
