@@ -62,7 +62,7 @@ func executeVarianceReport(cfg config) error {
 	if err != nil {
 		return err
 	}
-	report, err := buildCoverageVarianceReport(cfg.varianceCommit, cfg.suite, samples, floors)
+	report, err := buildCoverageVarianceReport(cfg.varianceCommit, cfg.suite, cfg.varianceJobs, samples, floors)
 	if err != nil {
 		return err
 	}
@@ -233,12 +233,15 @@ func readCoverageVarianceFloors(filename string, lane string) (map[string]covera
 	return floors, nil
 }
 
-func buildCoverageVarianceReport(commit string, lane string, samples []coverageVarianceSample, floors map[string]coverageVarianceCurrentFloor) (coverageVarianceReport, error) {
+func buildCoverageVarianceReport(commit string, lane string, jobs int, samples []coverageVarianceSample, floors map[string]coverageVarianceCurrentFloor) (coverageVarianceReport, error) {
 	if len(samples) < minimumVarianceSamples {
 		return coverageVarianceReport{}, fmt.Errorf("build coverage variance report: requires at least %d profiles, received %d", minimumVarianceSamples, len(samples))
 	}
 	if strings.TrimSpace(commit) == "" {
 		return coverageVarianceReport{}, errors.New("build coverage variance report: unchanged commit is required")
+	}
+	if jobs <= 0 {
+		jobs = defaultCoverageJobs
 	}
 	if err := validateVarianceSampleCompatibility(samples); err != nil {
 		return coverageVarianceReport{}, err
@@ -259,7 +262,7 @@ func buildCoverageVarianceReport(commit string, lane string, samples []coverageV
 	return coverageVarianceReport{
 		commit:        strings.TrimSpace(commit),
 		suite:         lane,
-		command:       "make functional-boundary-check; go run ./cmd/gocoveragecheck -suite functional -jobs 2 -min 0 -total-only -profile <run>/coverage.out -json-output <run>/coverage-summary.json",
+		command:       fmt.Sprintf("make functional-boundary-check; go run ./cmd/gocoveragecheck -suite functional -jobs %d -min 0 -total-only -profile <run>/coverage.out -json-output <run>/coverage-summary.json", jobs),
 		aggregation:   "Parse each count-mode Go coverage profile into canonical source blocks, sum statement counts by backend package, require identical package universes and total statement counts, then derive minimums from exact covered/total ratios.",
 		profileLabels: labels,
 		packages:      rows,

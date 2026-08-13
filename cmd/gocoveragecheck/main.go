@@ -78,6 +78,7 @@ type config struct {
 	varianceProfiles    string
 	varianceOutput      string
 	varianceCommit      string
+	varianceJobs        int
 	jsonOutput          string
 	timingOutput        string
 	min                 float64
@@ -194,6 +195,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.varianceProfiles, "variance-profiles", "", "comma-separated functional coverage profiles to aggregate into a variance report")
 	flag.StringVar(&cfg.varianceOutput, "variance-output", "", "write a deterministic functional coverage variance report to this path")
 	flag.StringVar(&cfg.varianceCommit, "variance-commit", "", "full unchanged commit SHA named by a functional coverage variance report")
+	flag.IntVar(&cfg.varianceJobs, "variance-jobs", defaultCoverageJobs, "package-concurrency setting used to capture the profiles named by a variance report")
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
 	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")

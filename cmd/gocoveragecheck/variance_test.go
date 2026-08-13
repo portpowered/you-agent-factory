@@ -36,7 +36,7 @@ func TestLoadCoverageVarianceProfilesAndRenderReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadCoverageVarianceProfiles() error = %v", err)
 	}
-	report, err := buildCoverageVarianceReport("913a667d2-full", "functional", samples, map[string]coverageVarianceCurrentFloor{
+	report, err := buildCoverageVarianceReport("913a667d2-full", "functional", 2, samples, map[string]coverageVarianceCurrentFloor{
 		packages[0]: {label: "60.00%", floor: coverageFloor(6000), valid: true},
 		packages[1]: {label: "exception"},
 	})
