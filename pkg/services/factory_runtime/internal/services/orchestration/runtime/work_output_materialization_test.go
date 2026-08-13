@@ -140,6 +140,91 @@ func assertCanonicalProposal(
 	}
 }
 
+func TestCanceledAttemptDoesNotMaterializeCompletedOutput(t *testing.T) {
+	ctx := context.Background()
+	planner := dispatchplanningwire.New(func(context.Context, workers.WorkstationDispatchRequest) error {
+		return nil
+	}, nil)
+	workService := &countingMaterializationWorkService{Service: testMaterializationService()}
+	hook := newCanonicalDispatchPlanningResultHook(
+		planner,
+		buildSimpleNet(),
+		buffers.NewTypedBuffer[workers.WorkResult](4),
+		nil,
+		workService,
+		func() string { return "work-cancel-id" },
+		"session-cancel",
+	)
+	dispatch := work.WorkDispatch{
+		DispatchID: "dispatch-cancel-output", TransitionID: "t-process", WorkerType: "mock",
+		WorkstationName: "workstation-a",
+		Execution: work.ExecutionMetadata{
+			RequestID: "request-cancel-output", TraceID: "trace-cancel-output", ReplayKey: "replay-cancel-output",
+			WorkIDs: []string{"source-work"},
+		},
+		InputTokens: workers.InputTokens(workers.Token{Color: workers.Color{
+			WorkID: "source-work", WorkTypeID: "task", DataType: workers.DataTypeWork,
+			TraceID: "trace-cancel-output",
+		}}),
+	}
+	if err := hook.SubmitDispatch(ctx, dispatch); err != nil {
+		t.Fatalf("SubmitDispatch() error = %v", err)
+	}
+	intent, ok := planner.Intent(dispatch.DispatchID)
+	if !ok {
+		t.Fatalf("planner intent for %q is missing", dispatch.DispatchID)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	execute := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		close(started)
+		<-release
+		return workers.ExecuteResult{
+			Correlation: request.Correlation,
+			Outcome:     workers.ExecutionOutcomeAccepted,
+			Output: workers.ProposedOutput{
+				Primary:      []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "losing output"}},
+				ProposedWork: []workers.ProposedWork{{WorkTypeID: "task", Name: "losing-follow-up"}},
+			},
+		}, nil
+	})
+	cfg := &runtimeConfig{
+		executeService: execute,
+		newID:          func() string { return "attempt-cancel-output" },
+		attempts:       newAttemptLifecycle(execute, func() string { return "attempt-cancel-output" }, 1),
+		net:            buildSimpleNet(), workService: workService,
+		workRequestIDs: func() string { return "work-cancel-id" },
+	}
+	callbackDone := make(chan struct{})
+	if err := startThroughStatelessWorkers(ctx, cfg, intent.Action.Request, func(
+		callbackCtx context.Context,
+		request workers.WorkstationDispatchRequest,
+		result workers.WorkstationDispatchResult,
+		err error,
+	) {
+		hook.acceptWorkersResult(callbackCtx, request, result, err)
+		close(callbackDone)
+	}); err != nil {
+		t.Fatalf("startThroughStatelessWorkers() error = %v", err)
+	}
+	<-started
+	if _, err := cancelStatelessAttempt(ctx, cfg, workers.WorkstationDispatchCancelRequest{DispatchID: dispatch.DispatchID}); err != nil {
+		t.Fatalf("cancelStatelessAttempt() error = %v", err)
+	}
+	close(release)
+	<-callbackDone
+	if calls := workService.calls.Load(); calls != 0 {
+		t.Fatalf("MaterializeWorkerOutput() calls = %d, want zero for canceled output", calls)
+	}
+	canonical, ok := hook.resultBuffer.Read()
+	if !ok {
+		t.Fatal("canceled terminal result is missing")
+	}
+	if canonical.Output != "" || len(canonical.RecordedOutputWork) != 0 {
+		t.Fatalf("canceled result carried downstream output: %#v", canonical)
+	}
+}
+
 func TestMaterializeWorkerOutputForDispatchAssignsWorkOwnedIDs(t *testing.T) {
 	t.Parallel()
 
