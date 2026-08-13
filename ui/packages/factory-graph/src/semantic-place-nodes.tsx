@@ -19,6 +19,7 @@ import {
 import { FactoryGraphPlaceTokenCount } from "./semantic-place-token-count.js";
 import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
   type FactoryGraphWorkStateType,
   workStatePhaseSurfaceClassName,
@@ -62,7 +63,6 @@ export type FactoryGraphPlaceNode =
   | FactoryGraphConstraintNode
   | FactoryGraphStatePositionNode;
 
-const DOT_LIMIT = 10;
 const CONTENT_CLASS = "flex min-w-0 w-full flex-col gap-0.5 overflow-hidden";
 
 export function FactoryGraphStatePositionNodeView(
@@ -282,11 +282,12 @@ function FactoryGraphStaticPlaceContent({
 }
 
 function stateMarkers(count: number, locale?: string): ReactNode {
-  if (count === 0) return null;
-  return count > DOT_LIMIT ? (
+  const mode = factoryGraphWorkProgressMode(count);
+  if (mode === "empty") return null;
+  return mode === "total" ? (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemCountLabel(count, locale)}
-      className="inline-flex min-h-5 min-w-7 rounded-full px-2 text-[0.76rem]"
+      className="inline-flex min-h-5 min-w-8 rounded-full px-2 text-sm"
       count={count}
       data-state-work-progress="numeric"
       kind="numeric"

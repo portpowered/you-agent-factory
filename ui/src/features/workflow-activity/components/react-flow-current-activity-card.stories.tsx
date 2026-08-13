@@ -914,10 +914,10 @@ export const StatePositionOneActive = {
   },
 };
 
-export const StatePositionTenActive = {
+export const StatePositionThreeActive = {
   render: () => (
     <CurrentActivityStory
-      snapshot={snapshotWithStateCounts({ "story:ready": 10 })}
+      snapshot={snapshotWithStateCounts({ "story:ready": 3 })}
     />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -928,19 +928,19 @@ export const StatePositionTenActive = {
     const article = stateArticle(stateButton);
 
     await expect(
-      within(article).getByLabelText("10 active items"),
+      within(article).getByLabelText("3 active items"),
     ).toBeVisible();
     expect(
       article.querySelectorAll("[data-state-work-progress-dot]"),
-    ).toHaveLength(10);
+    ).toHaveLength(3);
     expectNoImplementationLabels(canvasElement);
   },
 };
 
-export const StatePositionNumericOverflow = {
+export const StatePositionFourActive = {
   render: () => (
     <CurrentActivityStory
-      snapshot={snapshotWithStateCounts({ "story:ready": 11 })}
+      snapshot={snapshotWithStateCounts({ "story:ready": 4 })}
     />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -951,12 +951,46 @@ export const StatePositionNumericOverflow = {
     const article = stateArticle(stateButton);
 
     await expect(
-      within(article).getByLabelText("11 active items"),
+      within(article).getByLabelText("4 active items"),
     ).toBeVisible();
-    await expect(within(article).getByText("11")).toBeVisible();
+    await expect(within(article).getByText("4")).toBeVisible();
+    await expect(
+      article.querySelector("[data-state-work-progress='numeric']"),
+    ).toBeVisible();
     expect(
       article.querySelector("[data-state-work-progress='dots']"),
     ).toBeNull();
+    expect(article.querySelector("[data-state-work-progress-dot]")).toBeNull();
+    expect(article.textContent).not.toContain("+");
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const StatePositionLargeActive = {
+  render: () => (
+    <CurrentActivityStory
+      snapshot={snapshotWithStateCounts({ "story:ready": 1_000_000 })}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const stateButton = await canvas.findByRole("button", {
+      name: "Select story:ready state",
+    });
+    const article = stateArticle(stateButton);
+
+    await expect(
+      within(article).getByLabelText("1000000 active items"),
+    ).toBeVisible();
+    await expect(within(article).getByText("1000000")).toBeVisible();
+    await expect(
+      article.querySelector("[data-state-work-progress='numeric']"),
+    ).toBeVisible();
+    expect(
+      article.querySelector("[data-state-work-progress='dots']"),
+    ).toBeNull();
+    expect(article.querySelector("[data-state-work-progress-dot]")).toBeNull();
+    expect(article.textContent).not.toContain("+");
     expectNoImplementationLabels(canvasElement);
   },
 };

@@ -117,6 +117,11 @@ export {
   resolveFactoryGraphVisualState,
 } from "./visual-state.js";
 export {
+  FACTORY_GRAPH_WORK_ITEM_MODE_MAXIMUM,
+  type FactoryGraphWorkProgressMode,
+  factoryGraphWorkProgressMode,
+} from "./work-progress-presentation.js";
+export {
   FACTORY_GRAPH_WORK_STATE_TYPES,
   type FactoryGraphWorkStateType,
   WORK_STATE_PHASE_LEGEND_ORDER,
