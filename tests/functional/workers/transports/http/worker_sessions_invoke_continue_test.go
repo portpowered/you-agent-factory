@@ -21,6 +21,9 @@ import (
 
 const remoteWorkerSessionProviderID = "session_fixture_codex_success"
 
+// WSR-FT-014: root.BuildProcess/Process.Execute proves a live Worker Session
+// continuation remains an explicit source/successor lineage with the exact
+// Provider Session through durable public history and portable replay.
 func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -147,14 +150,39 @@ func continueRemoteWorkerSession(t *testing.T, ctx context.Context, client suppo
 	var continuation remoteWorkerSessionContinuation
 	decodeRemoteWorkerJSON(t, continued.Stdout(), &continuation)
 	if !continuation.Accepted || continuation.SourceWorkerSessionID != "remote-source-session" ||
-		continuation.SuccessorWorkerSessionID != "remote-successor-session" {
+		continuation.SuccessorWorkerSessionID != "remote-successor-session" ||
+		continuation.PredecessorWorkerSessionID != "remote-source-session" {
 		t.Fatalf("remote continuation admission = %#v, want accepted source/successor", continuation)
 	}
+
+	listed := waitForRemoteWorkerSessionList(t, ctx, client, env, factoryDir, serverURL)
+	var source, successor *remoteWorkerSessionObservation
+	for index := range listed {
+		switch listed[index].WorkerSessionID {
+		case "remote-source-session":
+			source = &listed[index]
+		case "remote-successor-session":
+			successor = &listed[index]
+		}
+	}
+	if source == nil || successor == nil {
+		t.Fatalf("public continuation observations = source=%#v successor=%#v, want source and successor", source, successor)
+	}
+	if source.ProviderSession == nil || successor.ProviderSession == nil || *source.ProviderSession != *successor.ProviderSession ||
+		source.ProviderSession.ID != remoteWorkerSessionProviderID {
+		t.Fatalf("public continuation Provider Sessions = source=%#v successor=%#v, want exact shared provider identity", source.ProviderSession, successor.ProviderSession)
+	}
+
+	sourceReplay := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
+		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-source-session", "--replay-only")
+	assertRemoteSourceLineageReplay(t, decodeRemoteWorkerNDJSON(t, sourceReplay.Stdout()), "remote-source-session", "remote-successor-session", remoteWorkerSessionProviderID)
 	waitForRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, "remote-successor-session")
 
 	successorStream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-successor-session", "--replay-only")
-	assertRemoteWorkerStreamTerminal(t, decodeRemoteWorkerNDJSON(t, successorStream.Stdout()), "remote-successor-session")
+	successorFrames := decodeRemoteWorkerNDJSON(t, successorStream.Stdout())
+	assertRemoteWorkerStreamTerminal(t, successorFrames, "remote-successor-session")
+	assertRemoteSuccessorLineageReplay(t, successorFrames, "remote-source-session", "remote-successor-session", remoteWorkerSessionProviderID)
 	if !strings.Contains(successorStream.Stdout(), "Codex fixture answer COMPLETE") {
 		t.Fatalf("remote successor stream omitted continued provider output:\n%s", successorStream.Stdout())
 	}
@@ -178,9 +206,11 @@ func assertRemoteContinuationUsesServer(t *testing.T, clientRunner *testutil.Pro
 }
 
 type remoteWorkerSessionObservation struct {
-	WorkerSessionID string                          `json:"workerSessionId"`
-	State           string                          `json:"state"`
-	ProviderSession *remoteWorkerSessionProviderRef `json:"providerSession"`
+	WorkerSessionID            string                          `json:"workerSessionId"`
+	State                      string                          `json:"state"`
+	PredecessorWorkerSessionID string                          `json:"predecessorWorkerSessionId"`
+	SuccessorWorkerSessionID   string                          `json:"successorWorkerSessionId"`
+	ProviderSession            *remoteWorkerSessionProviderRef `json:"providerSession"`
 }
 
 type remoteWorkerSessionProviderRef struct {
@@ -196,11 +226,12 @@ type remoteWorkerSessionTranscript struct {
 }
 
 type remoteWorkerSessionContinuation struct {
-	RequestID                string `json:"requestId"`
-	SourceWorkerSessionID    string `json:"sourceWorkerSessionId"`
-	SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
-	Accepted                 bool   `json:"accepted"`
-	State                    string `json:"state"`
+	RequestID                  string `json:"requestId"`
+	SourceWorkerSessionID      string `json:"sourceWorkerSessionId"`
+	SuccessorWorkerSessionID   string `json:"successorWorkerSessionId"`
+	PredecessorWorkerSessionID string `json:"predecessorWorkerSessionId"`
+	Accepted                   bool   `json:"accepted"`
+	State                      string `json:"state"`
 }
 
 type remoteWorkerSessionListResponse struct {
@@ -215,7 +246,23 @@ type remoteWorkerSessionStreamFrame struct {
 }
 
 type remoteWorkerSessionEvent struct {
-	Payload json.RawMessage `json:"payload"`
+	Payload    json.RawMessage `json:"payload"`
+	SourceType string          `json:"sourceType"`
+}
+
+type remoteWorkerSessionDraft struct {
+	Payload remoteWorkerSessionPayload `json:"payload"`
+}
+
+type remoteWorkerSessionPayload struct {
+	WorkerSessionID string                           `json:"workerSessionId"`
+	Continuation    *remoteWorkerSessionProviderRef  `json:"continuation"`
+	Lineage         *remoteWorkerSessionLineageFacts `json:"lineage"`
+}
+
+type remoteWorkerSessionLineageFacts struct {
+	PredecessorWorkerSessionID string `json:"predecessorWorkerSessionId"`
+	SuccessorWorkerSessionID   string `json:"successorWorkerSessionId"`
 }
 
 type remoteWorkerSessionReplay struct {
@@ -370,6 +417,44 @@ func assertRemoteWorkerStreamTerminal(t *testing.T, frames []remoteWorkerSession
 	if !terminal || !completeSummary {
 		t.Fatalf("Worker Session stream frames = %#v, want terminal and complete replay summary", frames)
 	}
+}
+
+func assertRemoteSourceLineageReplay(t *testing.T, frames []remoteWorkerSessionStreamFrame, sourceID, successorID, providerID string) {
+	t.Helper()
+	for _, frame := range frames {
+		if frame.Delivery == "REPLAY_SUMMARY" || frame.Event.SourceType != "worker_session_lineage" {
+			continue
+		}
+		var draft remoteWorkerSessionDraft
+		if err := json.Unmarshal(frame.Event.Payload, &draft); err != nil {
+			t.Fatalf("decode source continuation lineage payload: %v", err)
+		}
+		if draft.Payload.WorkerSessionID == sourceID && draft.Payload.Lineage != nil &&
+			draft.Payload.Lineage.SuccessorWorkerSessionID == successorID &&
+			draft.Payload.Continuation != nil && draft.Payload.Continuation.ID == providerID {
+			return
+		}
+	}
+	t.Fatalf("source replay frames = %#v, want durable source-to-successor lineage with provider %q", frames, providerID)
+}
+
+func assertRemoteSuccessorLineageReplay(t *testing.T, frames []remoteWorkerSessionStreamFrame, sourceID, successorID, providerID string) {
+	t.Helper()
+	for _, frame := range frames {
+		if frame.Delivery == "REPLAY_SUMMARY" || frame.Event.SourceType != "worker_session_lifecycle" {
+			continue
+		}
+		var draft remoteWorkerSessionDraft
+		if err := json.Unmarshal(frame.Event.Payload, &draft); err != nil {
+			t.Fatalf("decode successor continuation payload: %v", err)
+		}
+		if draft.Payload.WorkerSessionID == successorID && draft.Payload.Lineage != nil &&
+			draft.Payload.Lineage.PredecessorWorkerSessionID == sourceID &&
+			draft.Payload.Continuation != nil && draft.Payload.Continuation.ID == providerID {
+			return
+		}
+	}
+	t.Fatalf("successor replay frames = %#v, want predecessor lineage with provider %q", frames, providerID)
 }
 
 func readRemoteProviderFixture(t *testing.T, provider, caseName, fileName string) []byte {
