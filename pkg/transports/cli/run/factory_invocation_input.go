@@ -458,6 +458,14 @@ func runFactoryInvocation(
 	} else {
 		writeErr = writeInvocationSuccess(invocationCfg, result, streamRenderer)
 	}
+	if outputWriter != nil {
+		if recordedErr := outputWriter.Err(); recordedErr != nil {
+			// The writer failure caused cancellation; preserve that established
+			// root cause instead of allowing the derived cancellation or a later
+			// cleanup error to win classification.
+			return recordedErr
+		}
+	}
 	if err != nil {
 		if writeErr != nil {
 			return errors.Join(MapInvocationFailure(err), writeErr)
@@ -497,7 +505,11 @@ func (writer *responseStreamCancelOnWriteError) Write(payload []byte) (int, erro
 	if err != nil {
 		writer.mu.Lock()
 		if writer.writeErr == nil {
-			writer.writeErr = err
+			writer.writeErr = &InvocationError{
+				Code:    InvocationErrorCodeFailed,
+				Message: err.Error(),
+				Cause:   err,
+			}
 		}
 		writer.mu.Unlock()
 		writer.once.Do(writer.onError)
