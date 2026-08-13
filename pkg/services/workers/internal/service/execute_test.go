@@ -111,6 +111,14 @@ func assertSafeCompletedObservations(t *testing.T, observations []workers.Execut
 	if len(observations) != 2 {
 		t.Fatalf("observations = %#v, want started and terminal", observations)
 	}
+	assertCompletedObservationShape(t, observations)
+	for _, observation := range observations {
+		assertDetachedObservation(t, observation)
+	}
+}
+
+func assertCompletedObservationShape(t *testing.T, observations []workers.ExecutionObservation) {
+	t.Helper()
 	if observations[0].Kind != workers.ExecutionObservationKindStarted {
 		t.Fatalf("first observation = %#v", observations[0])
 	}
@@ -120,20 +128,20 @@ func assertSafeCompletedObservations(t *testing.T, observations []workers.Execut
 	if observations[1].Sequence != 2 {
 		t.Fatalf("terminal sequence = %d, want 2", observations[1].Sequence)
 	}
-	for _, observation := range observations {
-		if observation.Correlation.FactorySessionID != "session-1" ||
-			observation.Correlation.RuntimeID != "runtime-1" ||
-			observation.Correlation.GenerationID != "generation-1" ||
-			observation.Correlation.RequestID != "request-1" ||
-			observation.Correlation.TraceID != "trace-1" {
-			t.Fatalf("observation correlation = %#v", observation.Correlation)
-		}
+}
+
+func assertDetachedObservation(t *testing.T, observation workers.ExecutionObservation) {
+	t.Helper()
+	if observation.Correlation.FactorySessionID != "session-1" ||
+		observation.Correlation.RuntimeID != "runtime-1" ||
+		observation.Correlation.GenerationID != "generation-1" ||
+		observation.Correlation.RequestID != "request-1" ||
+		observation.Correlation.TraceID != "trace-1" {
+		t.Fatalf("observation correlation = %#v", observation.Correlation)
 	}
-	for _, observation := range observations {
-		for _, value := range observation.Metadata {
-			if value == "raw-secret" || value == "secret-system" || value == "secret-user" {
-				t.Fatalf("unsafe value persisted in observation: %#v", observation)
-			}
+	for _, value := range observation.Metadata {
+		if value == "raw-secret" || value == "secret-system" || value == "secret-user" {
+			t.Fatalf("unsafe value persisted in observation: %#v", observation)
 		}
 	}
 }

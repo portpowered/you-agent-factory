@@ -28,54 +28,107 @@ func adaptRunnerRequest(
 	identity string,
 	temporaryFiles workers.TemporaryFileSystem,
 ) workers.RunnerExecutionRequest {
+	context := adaptWorkflowContext(request)
+	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
+	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
+
+	return workers.RunnerExecutionRequest{
+		Dispatch:                     adaptDispatch(request, inputTokens),
+		Correlation:                  request.Correlation,
+		WorkerName:                   request.Target.WorkerName,
+		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
+		WorkstationType:              request.Target.WorkstationName,
+		RunnerID:                     runnerIDForRequest(request, identity),
+		ExecutorProvider:             providerIdentity(request.Target.Provider),
+		ModelOperation:               request.Input.ModelOperation,
+		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+		InputTokens:                  workers.InputTokens(inputTokens...),
+		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
+		UserMessage:                  request.Target.Prompt.UserMessage,
+		OutputSchema:                 request.Target.Prompt.OutputSchema,
+		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
+		RequiredOptionalCapabilities: append([]workers.RunnerOptionalCapability(nil), request.Target.Tools.RequiredOptionalCapabilities...),
+		EnvVars:                      context.envVars,
+		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
+		Worktree:                     worktree,
+		WorkingDirectory:             context.workingDirectory,
+		Model:                        request.Target.Model.Name,
+		ModelProvider:                firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
+		ReasoningEffort:              request.Target.Model.ReasoningEffort,
+		ModelLocality:                request.Target.Model.Locality,
+		Command:                      request.Target.Command,
+		Args:                         append([]string(nil), request.Target.Args...),
+		FactoryDirectory:             context.factoryDirectory,
+		OutputContract:               request.Target.Output.Contract,
+		OutputFormat:                 request.Target.Output.Format,
+		StopToken:                    request.Target.Output.StopToken,
+		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
+		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
+		SessionID:                    providerSessionID(request),
+		ProjectID:                    context.projectID,
+		WorkflowContext:              context.workflow,
+		SkipPermissions:              request.Target.Permissions.SkipPermissions,
+		TemporaryFiles:               temporaryFiles,
+	}
+}
+
+type adaptedWorkflowContext struct {
+	workflow         *workers.Context
+	workingDirectory string
+	factoryDirectory string
+	projectID        string
+	envVars          map[string]string
+}
+
+func runnerIDForRequest(request workers.ExecuteRequest, identity string) string {
 	runnerID := workers.NormalizeRunnerID(request.Target.RunnerID)
 	switch identity {
 	case runners.ScriptIdentity:
-		runnerID = runners.ScriptIdentity
+		return runners.ScriptIdentity
 	case runners.InferenceIdentity:
 		if runnerID == "" {
-			runnerID = runners.InferenceIdentity
+			return runners.InferenceIdentity
 		}
 	default:
 		if runnerID == "" || runnerID == runners.AgentIdentity {
-			runnerID = providerRunnerID(request.Target.Provider)
+			return providerRunnerID(request.Target.Provider)
 		}
 	}
+	return runnerID
+}
 
-	workingDirectory := strings.TrimSpace(request.Target.Environment.WorkingDirectory)
-	if workingDirectory == "" {
-		workingDirectory = strings.TrimSpace(request.Target.Workspace.WorkingDirectory)
+func adaptWorkflowContext(request workers.ExecuteRequest) adaptedWorkflowContext {
+	workflow := request.Input.WorkflowContext.Clone()
+	if workflow == nil {
+		workflow = &workers.Context{}
 	}
-	workflowContext := request.Input.WorkflowContext.Clone()
-	if workflowContext == nil {
-		workflowContext = &workers.Context{}
-	}
-	workingDirectory = firstNonEmpty(workingDirectory, workflowContext.WorkDirectory)
+	workingDirectory := firstNonEmpty(
+		request.Target.Environment.WorkingDirectory,
+		request.Target.Workspace.WorkingDirectory,
+		workflow.WorkDirectory,
+	)
 	factoryDirectory := firstNonEmpty(
 		request.Target.FactoryDirectory,
 		request.Target.Workspace.FactoryDirectory,
-		workflowContext.FactoryDirectory,
+		workflow.FactoryDirectory,
 	)
-	projectID := firstNonEmpty(request.Input.Dispatch.ProjectID, workflowContext.ProjectID)
-	envVars := mergeStringMaps(workflowContext.EnvVars, request.Target.Environment.Vars)
-	workflowContext.FactoryDirectory = factoryDirectory
-	workflowContext.WorkDirectory = workingDirectory
-	workflowContext.ProjectID = projectID
-	workflowContext.EnvVars = cloneStringMap(envVars)
-	workflowContext.SessionID = firstNonEmpty(
-		workflowContext.SessionID,
-		request.Correlation.FactorySessionID,
-	)
-	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
-	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
-	sessionID := ""
-	if request.Input.Resume != nil {
-		sessionID = strings.TrimSpace(request.Input.Resume.ProviderSessionID)
-		if sessionID == "" {
-			sessionID = strings.TrimSpace(request.Input.Resume.ExternalRef)
-		}
+	projectID := firstNonEmpty(request.Input.Dispatch.ProjectID, workflow.ProjectID)
+	envVars := mergeStringMaps(workflow.EnvVars, request.Target.Environment.Vars)
+	workflow.FactoryDirectory = factoryDirectory
+	workflow.WorkDirectory = workingDirectory
+	workflow.ProjectID = projectID
+	workflow.EnvVars = cloneStringMap(envVars)
+	workflow.SessionID = firstNonEmpty(workflow.SessionID, request.Correlation.FactorySessionID)
+	return adaptedWorkflowContext{
+		workflow:         workflow,
+		workingDirectory: workingDirectory,
+		factoryDirectory: factoryDirectory,
+		projectID:        projectID,
+		envVars:          envVars,
 	}
+}
 
+func adaptDispatch(request workers.ExecuteRequest, inputTokens []workers.Token) work.WorkDispatch {
 	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
 	if dispatch.DispatchID == "" {
 		dispatch = work.WorkDispatch{
@@ -96,45 +149,17 @@ func adaptRunnerRequest(
 	dispatch.Execution.RequestID = request.Correlation.RequestID
 	dispatch.Execution.TraceID = request.Correlation.TraceID
 	dispatch.Execution.WorkIDs = workIDs(request.Input.Work)
+	return dispatch
+}
 
-	return workers.RunnerExecutionRequest{
-		Dispatch:                     dispatch,
-		Correlation:                  request.Correlation,
-		WorkerName:                   request.Target.WorkerName,
-		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
-		WorkstationType:              request.Target.WorkstationName,
-		RunnerID:                     runnerID,
-		ExecutorProvider:             providerIdentity(request.Target.Provider),
-		ModelOperation:               request.Input.ModelOperation,
-		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
-		InputTokens:                  workers.InputTokens(inputTokens...),
-		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
-		UserMessage:                  request.Target.Prompt.UserMessage,
-		OutputSchema:                 request.Target.Prompt.OutputSchema,
-		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
-		RequiredOptionalCapabilities: append([]workers.RunnerOptionalCapability(nil), request.Target.Tools.RequiredOptionalCapabilities...),
-		EnvVars:                      envVars,
-		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
-		Worktree:                     worktree,
-		WorkingDirectory:             workingDirectory,
-		Model:                        request.Target.Model.Name,
-		ModelProvider:                firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
-		ReasoningEffort:              request.Target.Model.ReasoningEffort,
-		ModelLocality:                request.Target.Model.Locality,
-		Command:                      request.Target.Command,
-		Args:                         append([]string(nil), request.Target.Args...),
-		FactoryDirectory:             factoryDirectory,
-		OutputContract:               request.Target.Output.Contract,
-		OutputFormat:                 request.Target.Output.Format,
-		StopToken:                    request.Target.Output.StopToken,
-		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
-		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
-		SessionID:                    sessionID,
-		ProjectID:                    projectID,
-		WorkflowContext:              workflowContext,
-		SkipPermissions:              request.Target.Permissions.SkipPermissions,
-		TemporaryFiles:               temporaryFiles,
+func providerSessionID(request workers.ExecuteRequest) string {
+	if request.Input.Resume == nil {
+		return ""
 	}
+	return firstNonEmpty(
+		request.Input.Resume.ProviderSessionID,
+		request.Input.Resume.ExternalRef,
+	)
 }
 
 func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {

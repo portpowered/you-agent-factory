@@ -81,15 +81,7 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 	provider.releaseSurvivingAttempt()
 
 	cancelledResult := awaitConcurrentInvocation(t, cancelledDone)
-	if cancelledResult.err != nil &&
-		!errors.Is(cancelledResult.err, context.Canceled) &&
-		!strings.Contains(cancelledResult.err.Error(), "status = 404") {
-		t.Fatalf("cancelled invocation error = %v", cancelledResult.err)
-	}
-	if cancelledResult.err == nil &&
-		cancelledResult.response.Status != factoryapi.InvocationTerminalStatusCanceled {
-		t.Fatalf("cancelled invocation response = %#v, want CANCELED", cancelledResult.response)
-	}
+	assertCancelledInvocationResult(t, cancelledResult)
 
 	survivingResult := awaitConcurrentInvocation(t, survivingDone)
 	if survivingResult.err != nil {
@@ -130,6 +122,17 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 	}
 	if provider.activeCount() != 0 {
 		t.Fatalf("provider active attempts = %d after terminal outcomes, want 0", provider.activeCount())
+	}
+}
+
+func assertCancelledInvocationResult(t *testing.T, result concurrentInvocationResult) {
+	t.Helper()
+	if result.err != nil && !errors.Is(result.err, context.Canceled) &&
+		!strings.Contains(result.err.Error(), "status = 404") {
+		t.Fatalf("cancelled invocation error = %v", result.err)
+	}
+	if result.err == nil && result.response.Status != factoryapi.InvocationTerminalStatusCanceled {
+		t.Fatalf("cancelled invocation response = %#v, want CANCELED", result.response)
 	}
 }
 

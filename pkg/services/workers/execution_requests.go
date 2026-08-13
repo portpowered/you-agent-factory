@@ -606,6 +606,19 @@ func (request ExecuteRequest) Validate() error {
 	if err := request.Correlation.Validate(); err != nil {
 		return err
 	}
+	if err := validateDetachedDispatch(request); err != nil {
+		return err
+	}
+	if err := validateWorkflowContext(request); err != nil {
+		return err
+	}
+	if err := validateExecutionTarget(request.Target); err != nil {
+		return err
+	}
+	return validateResumeContinuation(request.Input.Resume)
+}
+
+func validateDetachedDispatch(request ExecuteRequest) error {
 	if dispatchID := strings.TrimSpace(request.Input.Dispatch.DispatchID); dispatchID != "" &&
 		dispatchID != strings.TrimSpace(request.Correlation.DispatchID) {
 		return fmt.Errorf("%w: dispatch identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
@@ -620,27 +633,37 @@ func (request ExecuteRequest) Validate() error {
 		strings.TrimSpace(request.Input.Dispatch.Execution.TraceID) != strings.TrimSpace(request.Correlation.TraceID) {
 		return fmt.Errorf("%w: trace identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
 	}
-	if context := request.Input.WorkflowContext; context != nil &&
-		strings.TrimSpace(context.SessionID) != "" &&
-		strings.TrimSpace(context.SessionID) != strings.TrimSpace(request.Correlation.FactorySessionID) {
-		return fmt.Errorf("%w: workflow context session identity conflicts with correlation", ErrInvalidExecuteRequest)
+	return nil
+}
+
+func validateWorkflowContext(request ExecuteRequest) error {
+	context := request.Input.WorkflowContext
+	if context == nil || strings.TrimSpace(context.SessionID) == "" ||
+		strings.TrimSpace(context.SessionID) == strings.TrimSpace(request.Correlation.FactorySessionID) {
+		return nil
 	}
-	if strings.TrimSpace(request.Target.RunnerID) == "" &&
-		strings.TrimSpace(request.Target.Provider.ID) == "" &&
-		strings.TrimSpace(request.Target.Provider.Alias) == "" &&
-		strings.TrimSpace(request.Target.Model.Name) == "" {
+	return fmt.Errorf("%w: workflow context session identity conflicts with correlation", ErrInvalidExecuteRequest)
+}
+
+func validateExecutionTarget(target ExecutionTarget) error {
+	if strings.TrimSpace(target.RunnerID) == "" &&
+		strings.TrimSpace(target.Provider.ID) == "" &&
+		strings.TrimSpace(target.Provider.Alias) == "" &&
+		strings.TrimSpace(target.Model.Name) == "" {
 		return fmt.Errorf("%w: runner, provider, or model target is required", ErrInvalidExecuteRequest)
 	}
-	if request.Target.Timeout < 0 {
+	if target.Timeout < 0 {
 		return fmt.Errorf("%w: timeout must not be negative", ErrInvalidExecuteRequest)
 	}
-	if request.Input.Resume != nil &&
-		strings.TrimSpace(request.Input.Resume.Provider) == "" &&
-		strings.TrimSpace(request.Input.Resume.ProviderSessionID) == "" &&
-		strings.TrimSpace(request.Input.Resume.ExternalRef) == "" {
-		return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
-	}
 	return nil
+}
+
+func validateResumeContinuation(resume *ProviderContinuationRef) error {
+	if resume == nil || strings.TrimSpace(resume.Provider) != "" ||
+		strings.TrimSpace(resume.ProviderSessionID) != "" || strings.TrimSpace(resume.ExternalRef) != "" {
+		return nil
+	}
+	return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
 }
 
 // Validate checks the complete identity required to attribute one detached

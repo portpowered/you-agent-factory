@@ -20,91 +20,118 @@ func (s *Service) normalizeResult(
 	runErr error,
 	duration time.Duration,
 ) workers.ExecuteResult {
-	result := workers.ExecuteResult{
-		Correlation: correlation,
-		Metrics: workers.ExecutionMetrics{
-			Duration: duration,
-		},
-		Diagnostics: safeDiagnosticsFromWork(runnerResult.Diagnostics),
-		Continuation: continuationFromSession(
-			runnerResult.ProviderSession,
-			request.Input.Resume,
-		),
+	result := baseExecuteResult(correlation, request, runnerResult, duration)
+	if runErr == nil {
+		result, runErr = normalizeSuccessfulResult(result, request, runnerResult)
 	}
 	if runErr == nil {
-		result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
-		result.Output = proposedOutputFromRunnerResult(runnerResult)
-		if result.Outcome == workers.ExecutionOutcomeFailed {
-			runErr = errors.New("runner returned failed outcome")
-		} else if result.Outcome == workers.ExecutionOutcomeAccepted {
-			contractErr := workerexecutor.ValidateOutputContract(
-				runnerResult.Content,
-				request.Target.Output.Contract,
+		return result
+	}
+	return normalizeFailedResult(result, request, runnerResult, runErr)
+}
+
+func baseExecuteResult(
+	correlation workers.ExecutionCorrelation,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+	duration time.Duration,
+) workers.ExecuteResult {
+	return workers.ExecuteResult{
+		Correlation:  correlation,
+		Metrics:      workers.ExecutionMetrics{Duration: duration},
+		Diagnostics:  safeDiagnosticsFromWork(runnerResult.Diagnostics),
+		Continuation: continuationFromSession(runnerResult.ProviderSession, request.Input.Resume),
+	}
+}
+
+func normalizeSuccessfulResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+) (workers.ExecuteResult, error) {
+	result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
+	result.Output = proposedOutputFromRunnerResult(runnerResult)
+	switch result.Outcome {
+	case workers.ExecutionOutcomeFailed:
+		return result, errors.New("runner returned failed outcome")
+	case workers.ExecutionOutcomeAccepted:
+		if err := workerexecutor.ValidateOutputContract(runnerResult.Content, request.Target.Output.Contract); err != nil {
+			return result, workers.NewProviderError(
+				workers.WorkFailureTypePermanentBadRequest,
+				"output contract failed",
+				err,
 			)
-			if contractErr != nil {
-				runErr = workers.NewProviderError(
-					workers.WorkFailureTypePermanentBadRequest,
-					"output contract failed",
-					contractErr,
-				)
-			}
 		}
 	}
-	if runErr == nil {
-		return result
-	}
+	return result, nil
+}
 
-	if errors.Is(runErr, context.Canceled) {
-		result.Outcome = workers.ExecutionOutcomeCanceled
-		var providerErr *workers.ProviderError
-		if errors.As(runErr, &providerErr) && providerErr != nil {
-			result.Failure = failureFromError(providerErr)
-		} else if request.Target.RunnerID == "script" {
-			result.Failure = &workers.ExecutionFailure{
-				Type:    workers.WorkFailureTypeUnknown,
-				Family:  workers.WorkFailureFamilyTerminal,
-				Message: "execution cancelled: context canceled",
-			}
-		} else {
-			result.Failure = &workers.ExecutionFailure{
-				Type:    workers.WorkFailureTypeUnknown,
-				Family:  workers.WorkFailureFamilyTerminal,
-				Message: "execution canceled",
-			}
-		}
-		return result
+func normalizeFailedResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+	runErr error,
+) workers.ExecuteResult {
+	switch {
+	case errors.Is(runErr, context.Canceled):
+		return canceledResult(result, request, runErr)
+	case errors.Is(runErr, context.DeadlineExceeded):
+		return timeoutResult(result, runErr)
+	default:
+		return genericFailureResult(result, request, runnerResult, runErr)
 	}
-	if errors.Is(runErr, context.DeadlineExceeded) {
-		result.Outcome = workers.ExecutionOutcomeFailed
-		var providerErr *workers.ProviderError
-		if errors.As(runErr, &providerErr) && providerErr != nil {
-			result.Failure = failureFromError(providerErr)
-		} else {
-			result.Failure = &workers.ExecutionFailure{
-				Type:      workers.WorkFailureTypeTimeout,
-				Family:    workers.WorkFailureFamilyRetryable,
-				Message:   "execution timed out",
-				RetryHint: true,
-				Detail: &workers.FailureDetail{
-					Reason:  workers.WorkFailureTypeTimeout,
-					Message: "execution timed out",
-				},
-			}
-		}
-		return result
-	}
+}
 
+func canceledResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runErr error,
+) workers.ExecuteResult {
+	result.Outcome = workers.ExecutionOutcomeCanceled
+	var providerErr *workers.ProviderError
+	if errors.As(runErr, &providerErr) && providerErr != nil {
+		result.Failure = failureFromError(providerErr)
+		return result
+	}
+	message := "execution canceled"
+	if request.Target.RunnerID == "script" {
+		message = "execution cancelled: context canceled"
+	}
+	result.Failure = &workers.ExecutionFailure{
+		Type: workers.WorkFailureTypeUnknown, Family: workers.WorkFailureFamilyTerminal, Message: message,
+	}
+	return result
+}
+
+func timeoutResult(result workers.ExecuteResult, runErr error) workers.ExecuteResult {
+	result.Outcome = workers.ExecutionOutcomeFailed
+	var providerErr *workers.ProviderError
+	if errors.As(runErr, &providerErr) && providerErr != nil {
+		result.Failure = failureFromError(providerErr)
+		return result
+	}
+	result.Failure = &workers.ExecutionFailure{
+		Type: workers.WorkFailureTypeTimeout, Family: workers.WorkFailureFamilyRetryable,
+		Message: "execution timed out", RetryHint: true,
+		Detail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "execution timed out"},
+	}
+	return result
+}
+
+func genericFailureResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+	runErr error,
+) workers.ExecuteResult {
 	result.Outcome = workers.ExecutionOutcomeFailed
 	result.Failure = failureFromError(runErr)
-	if result.Diagnostics == nil {
-		var providerErr *workers.ProviderError
-		if errors.As(runErr, &providerErr) && providerErr != nil {
+	var providerErr *workers.ProviderError
+	if errors.As(runErr, &providerErr) && providerErr != nil {
+		if result.Diagnostics == nil {
 			result.Diagnostics = safeDiagnosticsFromWork(providerErr.Diagnostics)
 		}
-	}
-	if result.Continuation == nil {
-		var providerErr *workers.ProviderError
-		if errors.As(runErr, &providerErr) && providerErr != nil {
+		if result.Continuation == nil {
 			result.Continuation = continuationFromSession(providerErr.ProviderSession, request.Input.Resume)
 		}
 	}
