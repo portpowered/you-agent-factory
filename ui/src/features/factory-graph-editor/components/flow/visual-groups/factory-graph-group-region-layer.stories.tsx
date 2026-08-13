@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { useState } from "react";
 
 import "../../../../../styles.css";
 import {
   type FactoryGraphGroupRegionInput,
   FactoryGraphGroupRegionLayer,
 } from "@you-agent-factory/factory-graph";
+import type { FactoryLayoutGroup } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
+import { FactoryGraphVisualGroupLayer } from "./factory-graph-visual-group-layer";
 
 const meta = {
   title: "Factory Graph/Group Regions",
@@ -74,8 +77,89 @@ function GroupRegionCanvas({
   );
 }
 
+function EditableGroupCanvas() {
+  const [groups, setGroups] = useState<FactoryLayoutGroup[]>([
+    {
+      bounds: { height: 240, width: 500, x: 50, y: 90 },
+      color: "info",
+      id: "group-editable",
+      label: "Selected editable group",
+      nodeIds: ["draft", "missing-node"],
+    },
+    {
+      bounds: { height: 170, width: 300, x: 300, y: 230 },
+      color: "warning",
+      id: "group-empty",
+      label: "Empty membership",
+      nodeIds: [],
+    },
+  ]);
+  const [selectedGroupId, setSelectedGroupId] = useState("group-editable");
+
+  return (
+    <div className="h-[32rem] w-full bg-background p-4">
+      <ReactFlowProvider>
+        <ReactFlow
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          edges={[]}
+          nodes={overlappingNodes}
+          nodesDraggable={false}
+          proOptions={{ hideAttribution: true }}
+        >
+          <FactoryGraphVisualGroupLayer
+            canEdit
+            groupAriaLabel={(group) =>
+              `${group.label ?? group.id}; use arrow keys to move`
+            }
+            groupOutlineAriaLabel={(group, edge) =>
+              `${group.label ?? group.id} ${edge} outline; use arrow keys to move`
+            }
+            groups={groups}
+            onMoveGroup={(groupId, delta) =>
+              setGroups((current) =>
+                current.map((group) =>
+                  group.id === groupId
+                    ? {
+                        ...group,
+                        bounds: {
+                          ...group.bounds,
+                          x: group.bounds.x + delta.x,
+                          y: group.bounds.y + delta.y,
+                        },
+                      }
+                    : group,
+                ),
+              )
+            }
+            onResizeGroup={(groupId, bounds) =>
+              setGroups((current) =>
+                current.map((group) =>
+                  group.id === groupId ? { ...group, bounds } : group,
+                ),
+              )
+            }
+            onSelectGroup={setSelectedGroupId}
+            resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
+            selectedGroupId={selectedGroupId}
+          />
+          <Background />
+        </ReactFlow>
+      </ReactFlowProvider>
+    </div>
+  );
+}
+
 export const Empty: Story = {
   render: () => <GroupRegionCanvas groups={[]} />,
+};
+
+export const ReadOnly: Story = {
+  render: () => (
+    <GroupRegionCanvas
+      groups={supportedColorGroups.slice(0, 2)}
+      nodes={overlappingNodes}
+    />
+  ),
 };
 
 export const SupportedColors: Story = {
@@ -130,6 +214,41 @@ export const OverlappingContent: Story = {
         },
       ]}
       nodes={overlappingNodes}
+    />
+  ),
+};
+
+export const EditableSelectedFocusedAndResized: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The selected group exposes a label, four outline affordances, and explicit resize handles. Focus the label or outline and use arrow keys to move; focus a resize handle and use arrow keys to resize.",
+      },
+    },
+  },
+  render: () => <EditableGroupCanvas />,
+};
+
+export const EmptyAndMissingMembership: Story = {
+  render: () => (
+    <GroupRegionCanvas
+      groups={[
+        {
+          bounds: { height: 180, width: 300, x: 70, y: 110 },
+          color: "neutral",
+          id: "group-empty-membership",
+          label: "Empty membership",
+          nodeIds: [],
+        },
+        {
+          bounds: { height: 180, width: 300, x: 400, y: 110 },
+          color: "danger",
+          id: "group-missing-members",
+          label: "Missing member IDs stay safe",
+          nodeIds: ["legacy-node-no-longer-present"],
+        },
+      ]}
     />
   ),
 };

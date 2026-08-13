@@ -114,11 +114,11 @@ export async function verifyFactoryGraphVisualGroupEditorWorkflow({
 }
 
 async function dragVisualGroup(page, { deltaX, deltaY }) {
-  const groupBody = page.locator("[data-factory-visual-group-body]").first();
-  await groupBody.waitFor({ state: "visible" });
-  const box = await groupBody.boundingBox();
+  const groupLabel = page.locator("[data-factory-visual-group-label]").first();
+  await groupLabel.waitFor({ state: "visible" });
+  const box = await groupLabel.boundingBox();
   if (!box) {
-    throw new Error("Could not measure visual group body for drag.");
+    throw new Error("Could not measure visual group label for drag.");
   }
 
   const startX = box.x + box.width / 2;

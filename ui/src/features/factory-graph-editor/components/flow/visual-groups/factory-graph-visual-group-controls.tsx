@@ -61,7 +61,7 @@ export function FactoryGraphVisualGroupControls({
   const labelError = trimmedLabel.length === 0 ? emptyLabelError : null;
   const selectedColor = isApprovedFactoryLayoutGroupColor(group.color)
     ? group.color
-    : "primary";
+    : "neutral";
 
   return (
     <section

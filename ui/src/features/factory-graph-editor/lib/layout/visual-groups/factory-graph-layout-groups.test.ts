@@ -321,11 +321,17 @@ describe("factory graph layout groups", () => {
   });
 
   it("maps approved and fallback group colors to css variables", () => {
+    expect(factoryLayoutGroupColorCssVariable("neutral")).toBe(
+      "var(--color-outline-variant)",
+    );
+    expect(factoryLayoutGroupColorCssVariable("danger")).toBe(
+      "var(--color-error)",
+    );
     expect(factoryLayoutGroupColorCssVariable("success")).toBe(
       "var(--color-success)",
     );
     expect(factoryLayoutGroupColorCssVariable("unknown")).toBe(
-      "var(--color-primary)",
+      "var(--color-outline-variant)",
     );
     expect(factoryLayoutGroupColorSurfaceCssVariable("outline")).toBe(
       "var(--color-surface-container-low)",
@@ -337,7 +343,7 @@ describe("factory graph layout groups", () => {
       "var(--color-warning-container)",
     );
     expect(factoryLayoutGroupColorSurfaceCssVariable(undefined)).toBe(
-      "var(--color-primary-container)",
+      "var(--color-surface-container-low)",
     );
   });
 

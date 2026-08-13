@@ -20,7 +20,10 @@ import type {
 } from "../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
-import type { FactoryLayoutGroupNodeGeometry } from "../lib/layout/visual-groups/factory-graph-layout-groups";
+import type {
+  FactoryLayoutGroupColorToken,
+  FactoryLayoutGroupNodeGeometry,
+} from "../lib/layout/visual-groups/factory-graph-layout-groups";
 import type {
   FactoryGraphOperationResult,
   FactoryGraphReactFlowProjection,
@@ -102,7 +105,7 @@ export interface EditableFactoryGraphViewModel {
     renameVisualGroup: (groupId: string, label: string) => void;
     setVisualGroupColor: (
       groupId: string,
-      color: "primary" | "info" | "success" | "warning" | "outline",
+      color: FactoryLayoutGroupColorToken,
     ) => void;
     addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
     removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;

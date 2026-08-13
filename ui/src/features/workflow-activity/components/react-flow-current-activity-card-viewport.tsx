@@ -336,6 +336,7 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId = null,
   selectedWaypointEdgeId = null,
   visualGroupAriaLabel,
+  visualGroupOutlineAriaLabel,
   visualGroupCanEdit = false,
   visualGroupControls = null,
   visualGroupResizeHandleAriaLabel,
@@ -397,6 +398,10 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId?: string | null;
   selectedWaypointEdgeId?: string | null;
   visualGroupAriaLabel?: (group: FactoryLayoutGroup) => string;
+  visualGroupOutlineAriaLabel?: (
+    group: FactoryLayoutGroup,
+    edge: "top" | "right" | "bottom" | "left",
+  ) => string;
   visualGroupCanEdit?: boolean;
   visualGroupResizeHandleAriaLabel?: (
     corner: "ne" | "nw" | "se" | "sw",
@@ -786,6 +791,7 @@ export function CurrentActivityGraphViewport({
                   key="factory-graph-visual-groups"
                   canEdit={visualGroupCanEdit}
                   groupAriaLabel={visualGroupAriaLabel}
+                  groupOutlineAriaLabel={visualGroupOutlineAriaLabel}
                   groups={visualGroups}
                   onMoveGroup={onMoveVisualGroup}
                   onResizeGroup={onResizeVisualGroup}

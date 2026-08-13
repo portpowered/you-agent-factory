@@ -231,6 +231,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
     clearSelectedVisualGroup,
     groups,
     groupAriaLabel: messages.visualGroupAriaLabel,
+    groupOutlineAriaLabel: messages.visualGroupOutlineAriaLabel,
     handleCreateVisualGroup,
     handleDeleteSelectedGroup,
     handleFitSelectedGroup,

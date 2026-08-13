@@ -106,10 +106,17 @@ describe("FactoryGraphVisualGroupControls", () => {
       />,
     );
 
+    expect(
+      screen.getAllByRole("button", { name: /Use .* group color/ }),
+    ).toHaveLength(6);
     await user.click(
       screen.getByRole("button", { name: "Use success group color" }),
     );
     expect(onSetGroupColor).toHaveBeenCalledWith("success");
+    await user.click(
+      screen.getByRole("button", { name: "Use danger group color" }),
+    );
+    expect(onSetGroupColor).toHaveBeenLastCalledWith("danger");
   });
 
   it("invokes delete when the delete group action is activated", async () => {
@@ -267,7 +274,7 @@ describe("FactoryGraphVisualGroupControls", () => {
     await user.click(labelField);
   });
 
-  it("unchecks a member and falls back to the primary color token", async () => {
+  it("unchecks a member and falls back to the neutral color token", async () => {
     const user = userEvent.setup();
     const onToggleNodeMembership = vi.fn();
 
@@ -304,7 +311,7 @@ describe("FactoryGraphVisualGroupControls", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Use primary group color" }),
+      screen.getByRole("button", { name: "Use neutral group color" }),
     ).toHaveAttribute("aria-pressed", "true");
 
     await user.click(

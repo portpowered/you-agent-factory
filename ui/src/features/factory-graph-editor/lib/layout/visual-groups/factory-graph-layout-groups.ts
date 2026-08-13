@@ -36,11 +36,12 @@ export const FACTORY_LAYOUT_GROUP_MIN_SIZE = {
 export const FACTORY_LAYOUT_GROUP_FIT_PADDING = 32;
 
 export const FACTORY_LAYOUT_GROUP_COLOR_TOKENS = [
+  "neutral",
   "primary",
   "info",
   "success",
   "warning",
-  "outline",
+  "danger",
 ] as const;
 
 export type FactoryLayoutGroupColorToken =
@@ -59,30 +60,45 @@ export function isApprovedFactoryLayoutGroupColor(
 export function factoryLayoutGroupColorCssVariable(
   color: string | undefined,
 ): string {
-  if (!isApprovedFactoryLayoutGroupColor(color)) {
-    return "var(--color-primary)";
+  switch (color) {
+    case "danger":
+      return "var(--color-error)";
+    case "info":
+      return "var(--color-info)";
+    case "neutral":
+    case "outline":
+      return "var(--color-outline-variant)";
+    case "primary":
+      return "var(--color-primary)";
+    case "success":
+      return "var(--color-success)";
+    case "warning":
+      return "var(--color-warning)";
+    default:
+      return "var(--color-outline-variant)";
   }
-
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return `var(--color-${color})`;
 }
 
 export function factoryLayoutGroupColorSurfaceCssVariable(
   color: string | undefined,
 ): string {
-  if (color === "outline") {
-    return "var(--color-surface-container-low)";
+  switch (color) {
+    case "danger":
+      return "var(--color-error-container)";
+    case "info":
+      return "var(--color-info-container)";
+    case "neutral":
+    case "outline":
+      return "var(--color-surface-container-low)";
+    case "primary":
+      return "var(--color-primary-container)";
+    case "success":
+      return "var(--color-success-container)";
+    case "warning":
+      return "var(--color-warning-container)";
+    default:
+      return "var(--color-surface-container-low)";
   }
-  if (!isApprovedFactoryLayoutGroupColor(color)) {
-    return "var(--color-primary-container)";
-  }
-
-  if (color === "primary") {
-    return "var(--color-primary-container)";
-  }
-
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return `var(--color-${color}-container)`;
 }
 
 export function factoryLayoutGroups(

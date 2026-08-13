@@ -291,7 +291,13 @@ function createMockVisualGroupLayoutActions(state: {
     setVisualGroupColor: vi.fn(
       (
         groupId: string,
-        color: "primary" | "info" | "success" | "warning" | "outline",
+        color:
+          | "neutral"
+          | "primary"
+          | "info"
+          | "success"
+          | "warning"
+          | "danger",
       ) => {
         state.layout = updateFactoryLayoutGroup(
           state.layout,

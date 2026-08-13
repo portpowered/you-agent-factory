@@ -94,9 +94,13 @@ export interface FactoryGraphEditorMessages {
   edgeWaypointSourceLabel: string;
   edgeWaypointTargetLabel: string;
   visualGroupAriaLabel: (group: { id: string; label?: string }) => string;
+  visualGroupOutlineAriaLabel: (
+    group: { id: string; label?: string },
+    edge: "top" | "right" | "bottom" | "left",
+  ) => string;
   visualGroupColorLabel: string;
   visualGroupColorOptionLabel: (
-    token: "primary" | "info" | "success" | "warning" | "outline",
+    token: "neutral" | "primary" | "info" | "success" | "warning" | "danger",
   ) => string;
   visualGroupEmptyLabelError: string;
   visualGroupInvalidBoundsError: string;
@@ -720,6 +724,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         group.label?.trim()
           ? `Visual group ${group.label.trim()}`
           : `Visual group ${group.id}`,
+      visualGroupOutlineAriaLabel: (group, edge) =>
+        `${group.label?.trim() ? `Visual group ${group.label.trim()}` : `Visual group ${group.id}`} outline ${edge}`,
       visualGroupColorLabel: "Group color",
       visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
       visualGroupEmptyLabelError: "Enter a group label.",
@@ -1172,6 +1178,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         group.label?.trim()
           ? `视觉分组 ${group.label.trim()}`
           : `视觉分组 ${group.id}`,
+      visualGroupOutlineAriaLabel: (group, edge) =>
+        `${group.label?.trim() ? `视觉分组 ${group.label.trim()}` : `视觉分组 ${group.id}`} 边框 ${edge}`,
       visualGroupColorLabel: "分组颜色",
       visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
       visualGroupEmptyLabelError: "请输入分组标签。",
