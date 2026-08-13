@@ -350,6 +350,11 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
+	sessionID := factorysessions.DefaultSessionID
+	firstStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), sessionID),
+	)
 	firstWorkName := "retained-then-live-first-work"
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &firstWorkName,
@@ -358,13 +363,13 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 			"title": "first invocation for retained history",
 		},
 	})
+	retainedFrames := collectResponseEventStreamUntilTerminalRun(t, firstStream, 0, 20*time.Second)
 	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
-
-	sessionID := factorysessions.DefaultSessionID
-	retained := support.GetFactoryResponseEventsAt(t, server.URL(), sessionID)
+	firstStream.Close()
+	retained := responseEventsFromFrames(retainedFrames)
 	if len(retained) < 2 {
 		t.Fatalf(
-			"retained Response Event count = %d, want at least 2 after first invocation",
+			"first invocation Response Event count = %d, want at least 2 before retained replay",
 			len(retained),
 		)
 	}
@@ -393,7 +398,7 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 	})
 
 	maxRetainedSequence := retained[len(retained)-1].Sequence
-	liveFromStream := collectResponseEventStreamUntilQuietAfterSequence(
+	liveFromStream := collectResponseEventStreamUntilTerminalRun(
 		t,
 		stream,
 		maxRetainedSequence,
@@ -515,52 +520,14 @@ func collectResponseEventStreamUntilCount(
 	return collected
 }
 
-func collectResponseEventStreamUntilQuietAfterSequence(
-	t *testing.T,
-	stream *support.FactoryResponseEventStream,
-	afterSequence int64,
-	timeout time.Duration,
-) []support.FactoryResponseEventFrame {
-	t.Helper()
-
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	var collected []support.FactoryResponseEventFrame
-	var quiet *time.Timer
-	var quietC <-chan time.Time
-	for {
-		select {
-		case <-deadline.C:
-			return collected
-		case <-quietC:
-			return collected
-		default:
-			frame, ok := stream.TryNextFrame(50 * time.Millisecond)
-			if !ok {
-				continue
-			}
-			if frame.Event.Sequence <= afterSequence {
-				t.Fatalf(
-					"live continuation frame sequence %d is not after acknowledged sequence %d",
-					frame.Event.Sequence,
-					afterSequence,
-				)
-			}
-			collected = append(collected, frame)
-			if quiet == nil {
-				quiet = time.NewTimer(250 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
-				}
-				quiet.Reset(250 * time.Millisecond)
-			}
-			quietC = quiet.C
-		}
+func responseEventsFromFrames(
+	frames []support.FactoryResponseEventFrame,
+) []factoryapi.FactoryResponseEvent {
+	events := make([]factoryapi.FactoryResponseEvent, 0, len(frames))
+	for _, frame := range frames {
+		events = append(events, frame.Event)
 	}
+	return events
 }
 
 func assertResponseEventsAscendingSequence(

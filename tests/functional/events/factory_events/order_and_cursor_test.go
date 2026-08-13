@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -272,8 +273,10 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 	dir := support.ScaffoldSingleStepFactory(t, "stream-order-close")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("factory event stream provider COMPLETE"),
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
@@ -291,10 +294,12 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 		},
 	})
 
-	collected := collectFactoryEventStreamUntilQuiet(t, stream, 15*time.Second)
-	if len(collected) < 4 {
-		t.Fatalf("live Factory Event count = %d, want at least 4 events before session close", len(collected))
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 15*time.Second)
+	retained := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	if len(retained) < 4 {
+		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(retained))
 	}
+	collected := collectFactoryEventStreamUntilCount(t, stream, len(retained), 15*time.Second)
 	assertFactoryEventsAscendingOrder(t, collected)
 
 	support.CloseFactorySessionAt(t, server.URL(), sessionID)
@@ -310,8 +315,10 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 	dir := support.ScaffoldSingleStepFactory(t, "stream-reconnect-continuity")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("factory event reconnect provider COMPLETE"),
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
@@ -342,10 +349,15 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 			support.FactoryEventReadCursor{AfterEventID: cursorEvent.Id},
 		),
 	)
-	reconnectEvents := collectFactoryEventStreamUntilQuiet(t, reconnectStream, 10*time.Second)
+	fullRetained := server.GetFactoryEvents(t)
+	cursorFullIndex := indexFactoryEventByID(t, fullRetained, cursorEvent.Id)
+	reconnectCount := len(fullRetained) - cursorFullIndex - 1
+	if reconnectCount == 0 {
+		t.Fatalf("retained history has no events after acknowledged cursor %q", cursorEvent.Id)
+	}
+	reconnectEvents := collectFactoryEventStreamUntilCount(t, reconnectStream, reconnectCount, 10*time.Second)
 	reconnectStream.Close()
 
-	fullRetained := server.GetFactoryEvents(t)
 	assertFactoryEventStreamReconnectContinuity(
 		t,
 		acknowledgedPrefix,
@@ -353,46 +365,6 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 		fullRetained,
 		cursorEvent,
 	)
-}
-
-func collectFactoryEventStreamUntilQuiet(
-	t *testing.T,
-	stream *support.FactoryEventStream,
-	timeout time.Duration,
-) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	var collected []factoryapi.FactoryEvent
-	var quiet *time.Timer
-	var quietC <-chan time.Time
-	for {
-		select {
-		case <-deadline.C:
-			return collected
-		case <-quietC:
-			return collected
-		default:
-			event, ok := stream.TryNextEvent(50 * time.Millisecond)
-			if !ok {
-				continue
-			}
-			collected = append(collected, event)
-			if quiet == nil {
-				quiet = time.NewTimer(250 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
-				}
-				quiet.Reset(250 * time.Millisecond)
-			}
-			quietC = quiet.C
-		}
-	}
 }
 
 func collectFactoryEventStreamUntilCount(
@@ -403,6 +375,8 @@ func collectFactoryEventStreamUntilCount(
 ) []factoryapi.FactoryEvent {
 	t.Helper()
 
+	// The expected count comes from the public retained-history snapshot taken
+	// after the named terminal condition; stream quiescence is not completion.
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	var collected []factoryapi.FactoryEvent
@@ -424,6 +398,21 @@ func collectFactoryEventStreamUntilCount(
 		}
 	}
 	return collected
+}
+
+func indexFactoryEventByID(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	eventID string,
+) int {
+	t.Helper()
+	for index, event := range events {
+		if event.Id == eventID {
+			return index
+		}
+	}
+	t.Fatalf("retained Factory Event history has no acknowledged event %q", eventID)
+	return -1
 }
 
 func assertFactoryEventStreamReconnectContinuity(
