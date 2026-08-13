@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -13,6 +14,92 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type runtimeAttempt struct {
+	registry   *registry
+	workerID   string
+	dispatchID string
+	attemptID  string
+	once       sync.Once
+}
+
+func runtimeAttemptContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
+	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
+	attemptID := strings.TrimSpace(req.AttemptID)
+	if attemptID == "" {
+		attemptID = logicalDispatchID
+	}
+	return logicalDispatchID, attemptID
+}
+
+func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
+	r.mu.RLock()
+	ownerID, owned := r.dispatchOwners[logicalDispatchID]
+	r.mu.RUnlock()
+	return owned && ownerID != workerID && attemptID == logicalDispatchID
+}
+
+func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.runtimeAttempts == nil {
+		r.runtimeAttempts = make(map[string]struct{})
+	}
+	if r.dispatchOwners == nil {
+		r.dispatchOwners = make(map[string]string)
+	}
+	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
+		return false
+	}
+	r.dispatchOwners[logicalDispatchID] = workerID
+	r.runtimeAttempts[workerID] = struct{}{}
+	return true
+}
+
+// Complete commits the one terminal Worker Session observation. Runtime has
+// already normalized cancellation and execution outcomes before invoking this
+// hook; Worker Sessions only classifies and durably publishes the detached
+// lifecycle result. The handle is idempotent because a late duplicate callback
+// must not rewrite the terminal record or close recording twice.
+func (a *runtimeAttempt) Complete(
+	ctx context.Context,
+	result workers.WorkstationDispatchResult,
+	dispatchErr error,
+) error {
+	if a == nil || a.registry == nil {
+		return errors.New("worker sessions: runtime attempt is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	a.once.Do(func() {
+		r := a.registry
+		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)
+		state, terminal := dispatchedTerminal("", result, dispatchErr)
+		final, committed := r.commitTerminal(a.workerID, state, terminal)
+		if committed {
+			r.logTerminal(a.workerID, a.attemptID, final)
+			r.publishTerminalRecordOrLog(
+				context.WithoutCancel(ctx),
+				a.workerID,
+				a.attemptID,
+				state,
+				*final.Result,
+			)
+		}
+		r.mu.Lock()
+		delete(r.runtimeAttempts, a.workerID)
+		r.mu.Unlock()
+	})
+	return nil
+}
 
 // classifyTerminal derives the Worker Session terminal outcome from the
 // Workers WorkResult first and the adapter (dispatch) error second, so a

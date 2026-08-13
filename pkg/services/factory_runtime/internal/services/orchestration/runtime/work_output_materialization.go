@@ -23,6 +23,7 @@ func workstationDispatchResultFromExecute(
 		TransitionID:                dispatch.TransitionID,
 		Outcome:                     workers.OutcomeAccepted,
 		Output:                      primaryOutputText(result.Output.Primary),
+		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		Feedback:                    result.Output.Feedback,
 		SelectedClassificationLabel: result.Output.Classification,
 		Metrics: workers.WorkMetrics{

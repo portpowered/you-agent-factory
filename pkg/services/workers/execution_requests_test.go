@@ -179,6 +179,14 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 			AttemptID:  "attempt-1",
 		},
 		Outcome: workerexecution.ExecutionOutcomeAccepted,
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name:    "summary",
+				Pattern: "reports/summary.md",
+				Reason:  workerexecution.ExpectedArtifactVerificationReasonMissing,
+			}},
+		},
 		Output: workerexecution.ProposedOutput{
 			Primary: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText,
@@ -208,6 +216,7 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 	clone.Diagnostics.Command.Args[0] = "--mutated"
 	clone.Diagnostics.Metadata["duration_ms"] = "99"
 	clone.Continuation.ProviderSessionID = "mutated"
+	clone.ArtifactVerification.Entries[0].Name = "mutated"
 
 	if original.Output.Primary[0].Text != "output" {
 		t.Fatalf("original output mutated: %#v", original.Output.Primary)
@@ -223,5 +232,8 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 	}
 	if original.Continuation.ProviderSessionID != "session-1" {
 		t.Fatalf("original continuation mutated: %#v", original.Continuation)
+	}
+	if original.ArtifactVerification.Entries[0].Name != "summary" {
+		t.Fatalf("original artifact verification mutated: %#v", original.ArtifactVerification)
 	}
 }

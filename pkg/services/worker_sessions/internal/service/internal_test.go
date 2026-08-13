@@ -142,6 +142,242 @@ func newTestRegistry(t *testing.T) *registry {
 	return r
 }
 
+type runtimeAttemptBrokenAppender struct{ err error }
+
+func (a *runtimeAttemptBrokenAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return events.AppendResult{}, a.err
+}
+
+type runtimeAttemptClaimRaceAppender struct {
+	service    *internalTestEventsService
+	registry   *registry
+	dispatchID string
+	once       sync.Once
+}
+
+func (a *runtimeAttemptClaimRaceAppender) Append(ctx context.Context, request events.AppendRequest) (events.AppendResult, error) {
+	result, err := a.service.Append(ctx, request)
+	if err == nil {
+		a.once.Do(func() {
+			a.registry.mu.Lock()
+			a.registry.dispatchOwners[a.dispatchID] = "worker-race-owner"
+			a.registry.mu.Unlock()
+		})
+	}
+	return result, err
+}
+
+func runtimeAttemptCompletedDispatch(dispatchID string) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeAccepted,
+		},
+	}
+}
+
+func runtimeAttemptFailedDispatch(dispatchID string) workers.WorkstationDispatchResult {
+	result := runtimeAttemptCompletedDispatch(dispatchID)
+	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeFailed
+	result.Result.Outcome = workers.OutcomeFailed
+	return result
+}
+
+func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
+	r := newTestRegistry(t)
+	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        "worker-1",
+		AttemptID: "attempt-1",
+		Execution: dispatchHandoff("dispatch-1"),
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
+	}
+	if attempt == nil {
+		t.Fatal("BeginRuntimeAttempt() returned a nil handle")
+	}
+
+	r.mu.RLock()
+	_, runtimeOwned := r.runtimeAttempts["worker-1"]
+	ownerID := r.dispatchOwners["dispatch-1"]
+	r.mu.RUnlock()
+	if !runtimeOwned || ownerID != "worker-1" {
+		t.Fatalf("runtime ownership = %v, dispatch owner = %q, want true and worker-1", runtimeOwned, ownerID)
+	}
+	running, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() after BeginRuntimeAttempt error = %v, want nil", err)
+	}
+	if running.State != workersessions.StateRunning {
+		t.Fatalf("session state after BeginRuntimeAttempt = %q, want RUNNING", running.State)
+	}
+
+	if err := attempt.Complete(nil, runtimeAttemptCompletedDispatch("dispatch-1"), nil); err != nil {
+		t.Fatalf("Complete() error = %v, want nil", err)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptFailedDispatch("dispatch-1"), errors.New("late duplicate")); err != nil {
+		t.Fatalf("duplicate Complete() error = %v, want nil", err)
+	}
+	completed, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-1"})
+	if err != nil {
+		t.Fatalf("Get() after Complete error = %v, want nil", err)
+	}
+	if completed.State != workersessions.StateCompleted || completed.Result == nil || completed.Result.Outcome != workersessions.TerminalOutcomeCompleted {
+		t.Fatalf("completed session = %#v, want absorbing COMPLETED result", completed)
+	}
+	r.mu.RLock()
+	_, runtimeOwned = r.runtimeAttempts["worker-1"]
+	r.mu.RUnlock()
+	if runtimeOwned {
+		t.Fatal("runtime attempt ownership remained after Complete")
+	}
+}
+
+func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *testing.T) {
+	t.Run("opening failure terminalizes without claiming runtime ownership", func(t *testing.T) {
+		r := newTestRegistry(t)
+		r.events = &runtimeAttemptBrokenAppender{err: errors.New("opening publication failed")}
+
+		_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			ID:        "worker-opening-failure",
+			Execution: dispatchHandoff("dispatch-opening-failure"),
+		})
+		if !errors.Is(err, workersessions.ErrStartOpeningPublication) {
+			t.Fatalf("BeginRuntimeAttempt() error = %v, want ErrStartOpeningPublication", err)
+		}
+		session, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-opening-failure"})
+		if getErr != nil {
+			t.Fatalf("Get() after opening failure error = %v, want nil", getErr)
+		}
+		if session.State != workersessions.StateFailed {
+			t.Fatalf("session state after opening failure = %q, want FAILED", session.State)
+		}
+		r.mu.RLock()
+		_, runtimeOwned := r.runtimeAttempts["worker-opening-failure"]
+		r.mu.RUnlock()
+		if runtimeOwned {
+			t.Fatal("opening failure claimed runtime ownership")
+		}
+	})
+
+	t.Run("same logical dispatch cannot have two owners", func(t *testing.T) {
+		r := newTestRegistry(t)
+		first, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			ID:        "worker-owner",
+			Execution: dispatchHandoff("dispatch-shared"),
+		})
+		if err != nil {
+			t.Fatalf("first BeginRuntimeAttempt() error = %v, want nil", err)
+		}
+		if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+			ID:        "worker-other",
+			Execution: dispatchHandoff("dispatch-shared"),
+		}); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+			t.Fatalf("conflicting BeginRuntimeAttempt() error = %v, want attempt mismatch", err)
+		}
+		if err := first.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-shared"), nil); err != nil {
+			t.Fatalf("first Complete() error = %v, want nil", err)
+		}
+	})
+}
+
+func TestBeginRuntimeAttempt_NilRegistryAndHandleAreUnavailable(t *testing.T) {
+	var r *registry
+	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("nil registry BeginRuntimeAttempt() error = %v, want ErrStartAdmissionFailed", err)
+	}
+	var attempt *runtimeAttempt
+	if err := attempt.Complete(context.Background(), workers.WorkstationDispatchResult{}, nil); err == nil {
+		t.Fatal("nil runtime attempt Complete() error = nil, want unavailable error")
+	}
+	var publicAttempt workersessions.RuntimeAttempt
+	if err := publicAttempt.Complete(context.Background(), workers.WorkstationDispatchResult{}, nil); err == nil {
+		t.Fatal("nil public runtime attempt Complete() error = nil, want unavailable error")
+	}
+}
+
+func TestBeginRuntimeAttempt_InitializesOwnershipMapsWithNilContext(t *testing.T) {
+	r := newTestRegistry(t)
+	r.mu.Lock()
+	r.runtimeAttempts = nil
+	r.dispatchOwners = nil
+	r.mu.Unlock()
+
+	attempt, err := r.BeginRuntimeAttempt(nil, workersessions.RuntimeAttemptRequest{
+		ID:        "worker-map-init",
+		AttemptID: "attempt-map-init",
+		Execution: dispatchHandoff("dispatch-map-init"),
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
+	}
+	if err := attempt.Complete(nil, runtimeAttemptCompletedDispatch("dispatch-map-init"), nil); err != nil {
+		t.Fatalf("Complete() error = %v, want nil", err)
+	}
+	r.mu.RLock()
+	_, runtimeOwned := r.runtimeAttempts["worker-map-init"]
+	ownerID := r.dispatchOwners["dispatch-map-init"]
+	r.mu.RUnlock()
+	if runtimeOwned || ownerID != "worker-map-init" {
+		t.Fatalf("post-completion ownership = %v, dispatch owner = %q, want false and worker-map-init", runtimeOwned, ownerID)
+	}
+}
+
+func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing.T) {
+	r := newTestRegistry(t)
+	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		Execution: dispatchHandoff("dispatch-invalid"),
+	}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("invalid BeginRuntimeAttempt() error = %v, want ErrInvalidSessionID", err)
+	}
+
+	r.reserveIfAbsent("worker-already-starting")
+	if _, err := r.transitionToStarting("worker-already-starting"); err != nil {
+		t.Fatalf("transitionToStarting() error = %v, want nil", err)
+	}
+	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        "worker-already-starting",
+		Execution: dispatchHandoff("dispatch-already-starting"),
+	}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+		t.Fatalf("already-starting BeginRuntimeAttempt() error = %v, want ErrSessionNotStartable", err)
+	}
+}
+
+func TestRuntimeAttemptClaim_RaceGuardRejectsConflictingOwner(t *testing.T) {
+	r := newTestRegistry(t)
+	r.mu.Lock()
+	r.dispatchOwners["dispatch-race"] = "worker-owner"
+	r.mu.Unlock()
+	if r.claimRuntimeAttempt("dispatch-race", "worker-other", "dispatch-race") {
+		t.Fatal("claimRuntimeAttempt() accepted a conflicting owner")
+	}
+}
+
+func TestBeginRuntimeAttempt_FinalClaimRaceTerminalizesTheAttempt(t *testing.T) {
+	r := newTestRegistry(t)
+	r.events = &runtimeAttemptClaimRaceAppender{
+		service:    newInternalTestEventsService(),
+		registry:   r,
+		dispatchID: "dispatch-final-race",
+	}
+	_, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        "worker-final-race",
+		Execution: dispatchHandoff("dispatch-final-race"),
+	})
+	if !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("final-claim race error = %v, want attempt mismatch", err)
+	}
+	session, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-final-race"})
+	if getErr != nil {
+		t.Fatalf("Get() after final-claim race error = %v, want nil", getErr)
+	}
+	if session.State != workersessions.StateFailed {
+		t.Fatalf("session state after final-claim race = %q, want FAILED", session.State)
+	}
+}
+
 // TestReserveIfAbsent_NewIdentity_IsObservableAsReservedBeforeStartingTransition
 // proves the defect the review flagged is fixed: a brand-new identity is a
 // genuine, Get-observable RESERVED map write, distinct from and before the

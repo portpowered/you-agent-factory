@@ -519,8 +519,9 @@ func (adapter workstationExecuteAdapter) Execute(
 		outcome = workers.ExecutionOutcomeFailed
 	}
 	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     outcome,
+		Correlation:          request.Correlation,
+		Outcome:              outcome,
+		ArtifactVerification: result.Result.ArtifactVerification.Clone(),
 		Output: workers.ProposedOutput{
 			Primary:        []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: result.Result.Output}},
 			Feedback:       result.Result.Feedback,
@@ -652,9 +653,10 @@ func executeResultFromWorkstationDispatch(
 		outcome = workers.ExecutionOutcomeCanceled
 	}
 	executeResult := workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     outcome,
-		Output:      workers.ProposedOutputFromLegacyWorkResult(result.Result),
+		Correlation:          request.Correlation,
+		Outcome:              outcome,
+		Output:               workers.ProposedOutputFromLegacyWorkResult(result.Result),
+		ArtifactVerification: result.Result.ArtifactVerification.Clone(),
 		Metrics: workers.ExecutionMetrics{
 			Duration:   result.Result.Metrics.Duration,
 			Cost:       result.Result.Metrics.Cost,

@@ -549,13 +549,14 @@ type ProviderContinuationRef struct {
 }
 
 type ExecuteResult struct {
-	Correlation  ExecutionCorrelation
-	Outcome      ExecutionOutcome
-	Output       ProposedOutput
-	Failure      *ExecutionFailure
-	Diagnostics  *SafeDiagnostics
-	Metrics      ExecutionMetrics
-	Continuation *ProviderContinuationRef
+	Correlation          ExecutionCorrelation
+	Outcome              ExecutionOutcome
+	Output               ProposedOutput
+	ArtifactVerification *ExpectedArtifactVerification
+	Failure              *ExecutionFailure
+	Diagnostics          *SafeDiagnostics
+	Metrics              ExecutionMetrics
+	Continuation         *ProviderContinuationRef
 }
 
 type ExecutionFailure struct {
@@ -675,6 +676,7 @@ func (failure ExecutionFailure) Clone() ExecutionFailure {
 func (result ExecuteResult) Clone() ExecuteResult {
 	clone := result
 	clone.Output = result.Output.Clone()
+	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	if result.Failure != nil {
 		failure := result.Failure.Clone()
 		clone.Failure = &failure
