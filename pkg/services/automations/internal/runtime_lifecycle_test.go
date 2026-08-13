@@ -243,6 +243,58 @@ func TestRuntimeLifecycle_OpaqueIdentityUsesPresenceAndType(t *testing.T) {
 	}
 }
 
+func TestRuntimeLifecycle_CleansPendingAndMatchingRegistryEntries(t *testing.T) {
+	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service.runtimeActivating["runtime-pending"] = struct{}{}
+	service.clearRuntimeActivation("runtime-pending")
+	if _, ok := service.runtimeActivating["runtime-pending"]; ok {
+		t.Fatal("clearRuntimeActivation() retained the pending activation")
+	}
+
+	instance := &runtimeInstance{}
+	service.runtimes["runtime-active"] = instance
+	service.removeRuntime("runtime-active", &runtimeInstance{})
+	if _, ok := service.runtimes["runtime-active"]; !ok {
+		t.Fatal("removeRuntime() removed a non-matching instance")
+	}
+	service.removeRuntime("runtime-active", instance)
+	if _, ok := service.runtimes["runtime-active"]; ok {
+		t.Fatal("removeRuntime() retained the matching instance")
+	}
+}
+
+func TestRuntimeLifecycle_ClonesSnapshotConfigCollections(t *testing.T) {
+	snapshot := factorydefinitions.RuntimeSnapshot{
+		FactoryDir:     "/factories/example",
+		RuntimeBaseDir: "/runtime/example",
+		EffectiveFactory: factorydefinitions.FactoryConfig{
+			Name:         "example",
+			Workers:      []factorydefinitions.FactoryWorkerConfig{{Name: "effective-worker"}},
+			Workstations: []factorydefinitions.FactoryWorkstationConfig{{Name: "effective-workstation"}},
+		},
+		Workers:      []factorydefinitions.FactoryWorkerConfig{{Name: "runtime-worker"}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{Name: "runtime-workstation"}},
+	}
+	config, err := newRuntimeSnapshotConfig("runtime-example", snapshot)
+	if err != nil {
+		t.Fatalf("newRuntimeSnapshotConfig() error = %v", err)
+	}
+	if config.FactoryDir() != snapshot.FactoryDir || config.RuntimeBaseDir() != snapshot.RuntimeBaseDir || config.RuntimeInstanceID() != "runtime-example" {
+		t.Fatalf("newRuntimeSnapshotConfig() identity = %q, %q, %q", config.FactoryDir(), config.RuntimeBaseDir(), config.RuntimeInstanceID())
+	}
+	if got, ok := config.Worker("runtime-worker"); !ok || got == nil || got.Name != "runtime-worker" {
+		t.Fatalf("runtime worker = %#v, %v", got, ok)
+	}
+	if got, ok := config.Workstation("runtime-workstation"); !ok || got == nil || got.Name != "runtime-workstation" {
+		t.Fatalf("runtime workstation = %#v, %v", got, ok)
+	}
+	config.config.Workers[0].Name = "mutated"
+	config.config.Workstations[0].Name = "mutated"
+	if snapshot.Workers[0].Name != "runtime-worker" || snapshot.Workstations[0].Name != "runtime-workstation" {
+		t.Fatal("newRuntimeSnapshotConfig() shared collection values")
+	}
+}
+
 func runtimeActivationRequestForTest(runtimeID, factoryName string) automations.RuntimeActivationRequest {
 	return automations.RuntimeActivationRequest{
 		RuntimeID:        runtimeID,
