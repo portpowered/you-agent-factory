@@ -201,7 +201,7 @@ func runGoalResponseStreamWithStdout(t *testing.T, stdout *gatedStdoutWriter) *g
 }
 
 // TestCLIWriterFailureCancelsInvocation proves a broken stdout writer ends the
-// CLI response-stream invocation unsuccessfully and cancels in-flight mock-worker
+// CLI response-stream invocation unsuccessfully and cancels in-flight provider
 // external work so no orphaned subprocess remains after the CLI returns.
 func TestCLIWriterFailureCancelsInvocation(t *testing.T) {
 	externalWork := newCancellableExternalWorkRunner()
@@ -226,7 +226,7 @@ func TestCLIWriterFailureCancelsInvocation(t *testing.T) {
 	}
 
 	if err := externalWork.waitFinished(writerFailureScenarioTimeout); err != nil {
-		t.Fatalf("external mock-worker work teardown not observed after CLI returned: %v", err)
+		t.Fatalf("external provider work teardown not observed after CLI returned: %v", err)
 	}
 	if !errors.Is(externalWork.runErr(), context.Canceled) {
 		t.Fatalf("external work cancellation error = %v, want context.Canceled", externalWork.runErr())
@@ -376,6 +376,10 @@ func (writer *inFlightFailureStdoutWriter) diagnosticText() string {
 
 func waitForStdoutBufferedRecords(t *testing.T, writer *inFlightFailureStdoutWriter) {
 	t.Helper()
+	// bufferedCh is the deterministic observation: Write closes it after the
+	// first successful response write. This timeout is only a bounded failure
+	// guard for a broken fixture, so a missing signal cannot hang the test; it
+	// does not establish ordering through polling or scheduler timing.
 	select {
 	case <-writer.bufferedCh:
 	case <-time.After(5 * time.Second):
@@ -388,7 +392,7 @@ func waitForExternalWorkStart(t *testing.T, runner *cancellableExternalWorkRunne
 	select {
 	case <-runner.startedCh:
 	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for mock-worker external work to start")
+		t.Fatal("timed out waiting for provider external work to start")
 	}
 }
 
@@ -401,10 +405,8 @@ func runGoalResponseStreamWriterFailure(
 
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, writerFailureGoalMockWorkers())
 	args := []string{
 		"you", "--json", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
 		"--no-record", "--output", "response-stream",
 		"deterministic writer-failure cancellation contract",
 	}
