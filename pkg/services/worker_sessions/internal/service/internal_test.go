@@ -18,7 +18,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -132,11 +131,7 @@ func (u unusedExecution) Stop(context.Context) error {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	events, err := eventswire.NewService()
-	if err != nil {
-		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
-	}
-	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -2094,6 +2089,160 @@ func (internalTestEventsAppender) Append(context.Context, events.AppendRequest) 
 func newEventsAppenderForInternalTest() EventsAppender {
 	return internalTestEventsAppender{}
 }
+
+// internalTestEventsService is the owner-local Events role used by white-box
+// registry tests. It retains enough real aggregate behavior for opening-topic
+// readiness and replay assertions without constructing the sibling Events
+// wire service from this package.
+type internalTestEventsService struct {
+	mu      sync.Mutex
+	records map[events.Topic][]events.Record
+}
+
+func newInternalTestEventsService() *internalTestEventsService {
+	return &internalTestEventsService{records: make(map[events.Topic][]events.Record)}
+}
+
+func (service *internalTestEventsService) Append(
+	ctx context.Context,
+	request events.AppendRequest,
+) (events.AppendResult, error) {
+	if err := request.Validate(); err != nil {
+		return events.AppendResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return events.AppendResult{}, err
+	}
+
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	records := service.records[request.Topic]
+	for _, record := range records {
+		if record.Identity() != request.Identity() {
+			continue
+		}
+		if reflect.DeepEqual(record.Payload, request.Payload) && record.SchemaID == request.SchemaID {
+			return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeDuplicate}, nil
+		}
+		return events.AppendResult{}, events.ErrOperationFailed
+	}
+	detached := request.Detached()
+	record := events.Record{
+		ID:             events.RecordID{Topic: request.Topic, Position: events.AggregateSequence(len(records) + 1)},
+		SourceType:     detached.SourceType,
+		SourceID:       detached.SourceID,
+		SourceSequence: detached.SourceSequence,
+		SourceEventID:  detached.SourceEventID,
+		SchemaID:       detached.SchemaID,
+		Payload:        detached.Payload,
+	}
+	service.records[request.Topic] = append(records, record.Detached())
+	return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeAccepted}, nil
+}
+
+func (service *internalTestEventsService) AttachSource(
+	ctx context.Context,
+	request events.AttachSourceRequest,
+) (events.AttachSourceResult, error) {
+	if err := request.Validate(); err != nil {
+		return events.AttachSourceResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return events.AttachSourceResult{}, err
+	}
+	return events.AttachSourceResult{
+		ID:      events.AttachmentID{Destination: request.Destination, Source: request.Source},
+		Outcome: events.AttachOutcomeAccepted,
+		StartAt: request.StartAt,
+	}, nil
+}
+
+func (service *internalTestEventsService) Read(
+	ctx context.Context,
+	request events.ReadRequest,
+) (events.ReadResult, error) {
+	if err := request.Validate(); err != nil {
+		return events.ReadResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return events.ReadResult{}, err
+	}
+
+	service.mu.Lock()
+	records := append([]events.Record(nil), service.records[request.Topic]...)
+	service.mu.Unlock()
+	if request.From.Position > events.AggregateSequence(len(records)) {
+		return events.ReadResult{}, events.ErrUnresolvableCursor
+	}
+	retained := events.RetainedRange{
+		Topic:    request.Topic,
+		Earliest: 1,
+		Head:     events.AggregateSequence(len(records)),
+	}
+	if len(records) == 0 {
+		retained.Earliest = 0
+		return events.ReadResult{
+			Next:     request.From,
+			Retained: retained,
+			Outcome:  events.ReadOutcomeAtHead,
+		}, nil
+	}
+	start := int(request.From.Position)
+	if start == len(records) {
+		return events.ReadResult{
+			Next:     events.Cursor{Topic: request.Topic, Position: request.From.Position},
+			Retained: retained,
+			Outcome:  events.ReadOutcomeAtHead,
+		}, nil
+	}
+	end := start + request.Limit
+	if end > len(records) {
+		end = len(records)
+	}
+	page := make([]events.Record, end-start)
+	for index := range page {
+		page[index] = records[start+index].Detached()
+	}
+	return events.ReadResult{
+		Records:  page,
+		Next:     events.Cursor{Topic: request.Topic, Position: page[len(page)-1].ID.Position},
+		Retained: retained,
+		Outcome:  events.ReadOutcomeProgress,
+	}, nil
+}
+
+func (service *internalTestEventsService) Subscribe(
+	ctx context.Context,
+	request events.SubscribeRequest,
+) (events.Subscription, error) {
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	records := append([]events.Record(nil), service.records[request.Topic]...)
+	service.mu.Unlock()
+	index := int(request.From.Position)
+	return events.Subscription(func(nextCtx context.Context) events.Delivery {
+		if err := nextCtx.Err(); err != nil {
+			return events.Delivery{Kind: events.DeliveryCanceled}
+		}
+		if index >= len(records) {
+			return events.Delivery{Kind: events.DeliveryClosed}
+		}
+		record := records[index].Detached()
+		index++
+		return events.Delivery{
+			Kind:   events.DeliveryRecord,
+			Record: record,
+			Cursor: events.Cursor{Topic: request.Topic, Position: record.ID.Position},
+		}
+	}), nil
+}
+
+var _ events.Service = (*internalTestEventsService)(nil)
 
 func TestProviderBindingPublicationEdgesPreserveAttributionAndOrdering(t *testing.T) {
 	t.Run("canonical provider draft", testCanonicalProviderDraftEdges)

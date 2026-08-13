@@ -16,12 +16,14 @@ import (
 	"testing"
 	"time"
 
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -56,9 +58,10 @@ type FunctionalAPIServerConfig struct {
 
 // FunctionalAPIServer owns one daemon invocation on a reusable root Process.
 type FunctionalAPIServer struct {
-	process *ProcessCommand
-	api     *ProcessAPIServer
-	url     string
+	process         *ProcessCommand
+	api             *ProcessAPIServer
+	url             string
+	recordingReader recordings.WorkerRecordingReader
 }
 
 // ConfigureWorkerCommands installs typed functional command edges before the
@@ -129,7 +132,11 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		}
 	})
 	command := StartProcessCommand(t, process, inputs.Input)
-	server := &FunctionalAPIServer{process: command, api: api}
+	var recordingReader recordings.WorkerRecordingReader
+	if applicationProcess, ok := process.(*initializerapplication.Process); ok {
+		recordingReader = root.WorkerRecordingReaderFromProcess(applicationProcess)
+	}
+	server := &FunctionalAPIServer{process: command, api: api, recordingReader: recordingReader}
 	server.url = api.WaitForURL(t)
 	if cfg.WaitForServiceModeRuntime {
 		WaitForStatus(t, server.url, functionalServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
@@ -209,6 +216,15 @@ func (fs *FunctionalAPIServer) URL() string {
 		return ""
 	}
 	return fs.url
+}
+
+// WorkerRecordingReader exposes the detached recording read capability of the
+// same root-built process that hosts this functional server.
+func (fs *FunctionalAPIServer) WorkerRecordingReader() recordings.WorkerRecordingReader {
+	if fs == nil {
+		return nil
+	}
+	return fs.recordingReader
 }
 
 func (fs *FunctionalAPIServer) Done() <-chan struct{} {

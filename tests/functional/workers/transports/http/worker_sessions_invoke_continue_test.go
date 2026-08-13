@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -14,11 +13,10 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -38,7 +36,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	providerOutput := readRemoteProviderFixture(t, "codex", "success", "stdout.jsonl")
 	gate := make(chan struct{})
 	runner := newRemoteInvokeContinueRunner(gate, providerOutput)
-	recordingProbe := newRemoteWorkerRecordingProbe(t, t.TempDir())
+	recordingWriter := newRemoteWorkerRecordingStore()
 
 	factoryDir := support.ScaffoldSingleStepFactory(t, "remote-worker-session-invoke-continue")
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
@@ -50,7 +48,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		Args:                      []string{"--record", filepath.Join(t.TempDir(), "wsr-006-runtime-recording.json")},
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
-			WorkerRecordingWriter: recordingProbe,
+			WorkerRecordingWriter: recordingWriter,
 			FactorySessionRuntimeInstanceIDGenerator: func() string {
 				return "wsr-006-runtime-instance"
 			},
@@ -59,6 +57,10 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 			},
 		},
 	})
+	recordingReader := server.WorkerRecordingReader()
+	if recordingReader == nil {
+		t.Fatal("root-built functional server did not expose a Worker recording reader")
+	}
 	clientRunner := testutil.NewProviderCommandRunner()
 	client := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: clientRunner})
 	support.CleanupProcess(t, client)
@@ -99,7 +101,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 
 	serverURL := server.URL()
 	assertRemoteSourceObservation(t, ctx, client, env, factoryDir, serverURL)
-	continueRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, recordingProbe, runner)
+	continueRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, recordingReader, runner)
 	idempotencyFailure, idempotencyErr := executeRemoteWorkerCLIExpectError(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "continue", "remote-source-session",
 		"--request-id", "remote-continue-request", "--successor-worker-session-id", "remote-other-successor",
@@ -159,7 +161,7 @@ func continueRemoteWorkerSession(
 	env []string,
 	factoryDir,
 	serverURL string,
-	recordingProbe *remoteWorkerRecordingProbe,
+	recordingReader recordings.WorkerRecordingReader,
 	runner *remoteInvokeContinueRunner,
 ) {
 	t.Helper()
@@ -207,7 +209,7 @@ func continueRemoteWorkerSession(
 	if !strings.Contains(successorStream.Stdout(), "Codex fixture answer COMPLETE") {
 		t.Fatalf("remote successor stream omitted continued provider output:\n%s", successorStream.Stdout())
 	}
-	assertRemoteWorkerRecordingParity(t, recordingProbe, runner, *source, *successor, sourceFrames, successorFrames)
+	assertRemoteWorkerRecordingParity(t, recordingReader, runner, *source, *successor, sourceFrames, successorFrames)
 }
 
 func assertRemoteContinuationUsesServer(t *testing.T, clientRunner *testutil.ProviderCommandRunner, runner *remoteInvokeContinueRunner) {
@@ -495,7 +497,7 @@ type remoteWorkerSessionLiveFacts struct {
 
 func assertRemoteWorkerRecordingParity(
 	t *testing.T,
-	probe *remoteWorkerRecordingProbe,
+	reader recordings.WorkerRecordingReader,
 	runner *remoteInvokeContinueRunner,
 	source,
 	successor remoteWorkerSessionObservation,
@@ -503,18 +505,10 @@ func assertRemoteWorkerRecordingParity(
 	successorFrames []remoteWorkerSessionStreamFrame,
 ) {
 	t.Helper()
-	recordingID := probe.recordingID(t)
-	writer, err := recordingswire.NewWorkerRecordingFileWriter(
-		platformreplay.NewLocal(runtime.GOOS),
-		probe.root,
-	)
-	if err != nil {
-		t.Fatalf("construct fresh Worker recording reader: %v", err)
+	if reader == nil {
+		t.Fatal("Worker recording reader is required")
 	}
-	reader, ok := writer.(recordings.WorkerRecordingReader)
-	if !ok {
-		t.Fatal("fresh Worker recording writer does not expose a reader")
-	}
+	recordingID := remoteWorkerRecordingID(t, sourceFrames, successorFrames)
 	snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
 	if err != nil {
 		t.Fatalf("load durable Worker recording %q: %v", recordingID, err)
@@ -601,6 +595,26 @@ func remoteRecordingSession(
 	}
 	t.Fatalf("durable Worker recording omitted Worker Session %q", workerSessionID)
 	return recordings.WorkerSessionRecordingSnapshot{}
+}
+
+func remoteWorkerRecordingID(t *testing.T, streams ...[]remoteWorkerSessionStreamFrame) string {
+	t.Helper()
+	for _, frames := range streams {
+		for _, frame := range frames {
+			if frame.Delivery == "REPLAY_SUMMARY" || frame.Event == nil {
+				continue
+			}
+			var draft remoteWorkerSessionDraft
+			if err := json.Unmarshal(frame.Event.Payload, &draft); err != nil {
+				t.Fatalf("decode Worker recording identity: %v", err)
+			}
+			if draft.Payload.RecordingID != "" {
+				return draft.Payload.RecordingID
+			}
+		}
+	}
+	t.Fatal("Worker stream omitted durable recording identity")
+	return ""
 }
 
 func remoteLiveWorkerSessionFacts(
@@ -741,81 +755,184 @@ func containsRemoteArgSequence(args, want []string) bool {
 	return false
 }
 
-type remoteWorkerRecordingProbe struct {
-	delegate      recordings.WorkerRecordingWriter
-	reader        recordings.WorkerRecordingReader
-	failureWriter recordings.WorkerRecordingFailureWriter
-	root          string
-
-	mu sync.Mutex
-	id string
+// remoteWorkerRecordingStore is the functional test's replaceable durable
+// recording edge. It keeps the public writer/reader contract and the
+// Recordings-owned reducer in the test while avoiding direct construction of
+// the sibling recordings wire package from a transport test.
+type remoteWorkerRecordingStore struct {
+	mu        sync.Mutex
+	snapshots map[string]recordings.WorkerRecordingSnapshot
 }
 
-func newRemoteWorkerRecordingProbe(t *testing.T, root string) *remoteWorkerRecordingProbe {
-	t.Helper()
-	delegate, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
-	if err != nil {
-		t.Fatalf("construct Worker recording file writer: %v", err)
-	}
-	reader, ok := delegate.(recordings.WorkerRecordingReader)
-	if !ok {
-		t.Fatal("Worker recording file writer does not expose a reader")
-	}
-	failureWriter, ok := delegate.(recordings.WorkerRecordingFailureWriter)
-	if !ok {
-		t.Fatal("Worker recording file writer does not expose failure persistence")
-	}
-	return &remoteWorkerRecordingProbe{
-		delegate: delegate, reader: reader, failureWriter: failureWriter, root: root,
-	}
+func newRemoteWorkerRecordingStore() *remoteWorkerRecordingStore {
+	return &remoteWorkerRecordingStore{snapshots: make(map[string]recordings.WorkerRecordingSnapshot)}
 }
 
-func (probe *remoteWorkerRecordingProbe) PersistWorkerRecord(
+func (store *remoteWorkerRecordingStore) PersistWorkerRecord(
 	ctx context.Context,
 	record recordings.WorkerRecordingRecord,
 ) error {
-	if err := probe.delegate.PersistWorkerRecord(ctx, record); err != nil {
+	if store == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	probe.mu.Lock()
-	probe.id = record.RecordingID
-	probe.mu.Unlock()
+	if strings.TrimSpace(record.RecordingID) == "" || strings.TrimSpace(record.WorkerSessionID) == "" {
+		return recordings.ErrInvalidWorkerRecordingRequest
+	}
+	if err := record.Record.Validate(); err != nil {
+		return err
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	snapshot := cloneRemoteWorkerRecordingSnapshot(store.snapshots[record.RecordingID])
+	snapshot.RecordingID = record.RecordingID
+	session := remoteWorkerRecordingSession(&snapshot, record.WorkerSessionID)
+	for _, accepted := range session.Records {
+		if accepted.Identity() != record.Record.Identity() {
+			continue
+		}
+		if reflect.DeepEqual(accepted, record.Record) {
+			return nil
+		}
+		return recordings.ErrWorkerRecordingDuplicate
+	}
+	history := append([]events.Record(nil), session.Records...)
+	history = append(history, record.Record.Detached())
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:       record.RecordingID,
+		WorkerSessionID:   record.WorkerSessionID,
+		Topic:             session.Topic,
+		Failure:           session.Failure,
+		ExecutionTerminal: session.ExecutionTerminal,
+		Records:           history,
+	})
+	if err != nil {
+		return err
+	}
+	applyRemoteWorkerRecordingProjection(session, projection)
+	store.snapshots[record.RecordingID] = snapshot
 	return nil
 }
 
-func (probe *remoteWorkerRecordingProbe) PersistWorkerRecordingFailure(
+func (store *remoteWorkerRecordingStore) PersistWorkerRecordingFailure(
 	ctx context.Context,
 	failure recordings.WorkerRecordingFailure,
 ) error {
-	if err := probe.failureWriter.PersistWorkerRecordingFailure(ctx, failure); err != nil {
+	if store == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	probe.mu.Lock()
-	probe.id = failure.RecordingID
-	probe.mu.Unlock()
+	if strings.TrimSpace(failure.RecordingID) == "" || strings.TrimSpace(failure.WorkerSessionID) == "" {
+		return recordings.ErrInvalidWorkerRecordingRequest
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	snapshot := cloneRemoteWorkerRecordingSnapshot(store.snapshots[failure.RecordingID])
+	snapshot.RecordingID = failure.RecordingID
+	session := remoteWorkerRecordingSession(&snapshot, failure.WorkerSessionID)
+	if failure.Topic != "" {
+		session.Topic = failure.Topic
+	}
+	session.Failure = failure.Code
+	session.ExecutionTerminal = cloneRemoteWorkerRecordingTerminal(failure.ExecutionTerminal)
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:       snapshot.RecordingID,
+		WorkerSessionID:   session.WorkerSessionID,
+		Topic:             session.Topic,
+		Failure:           session.Failure,
+		ExecutionTerminal: session.ExecutionTerminal,
+		Records:           append([]events.Record(nil), session.Records...),
+	})
+	if err != nil {
+		return err
+	}
+	applyRemoteWorkerRecordingProjection(session, projection)
+	store.snapshots[failure.RecordingID] = snapshot
 	return nil
 }
 
-func (probe *remoteWorkerRecordingProbe) LoadWorkerRecording(
+func (store *remoteWorkerRecordingStore) LoadWorkerRecording(
 	ctx context.Context,
 	recordingID string,
 ) (recordings.WorkerRecordingSnapshot, error) {
-	return probe.reader.LoadWorkerRecording(ctx, recordingID)
-}
-
-func (probe *remoteWorkerRecordingProbe) recordingID(t *testing.T) string {
-	t.Helper()
-	probe.mu.Lock()
-	defer probe.mu.Unlock()
-	if probe.id == "" {
-		t.Fatal("Worker recording probe observed no durable recording identity")
+	if store == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
 	}
-	return probe.id
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	if strings.TrimSpace(recordingID) == "" {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	snapshot, ok := store.snapshots[recordingID]
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrWorkerRecordingReplay
+	}
+	return cloneRemoteWorkerRecordingSnapshot(snapshot), nil
 }
 
-var _ recordings.WorkerRecordingWriter = (*remoteWorkerRecordingProbe)(nil)
-var _ recordings.WorkerRecordingReader = (*remoteWorkerRecordingProbe)(nil)
-var _ recordings.WorkerRecordingFailureWriter = (*remoteWorkerRecordingProbe)(nil)
+func remoteWorkerRecordingSession(
+	snapshot *recordings.WorkerRecordingSnapshot,
+	workerSessionID string,
+) *recordings.WorkerSessionRecordingSnapshot {
+	for index := range snapshot.Sessions {
+		if snapshot.Sessions[index].WorkerSessionID == workerSessionID {
+			return &snapshot.Sessions[index]
+		}
+	}
+	snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{WorkerSessionID: workerSessionID})
+	return &snapshot.Sessions[len(snapshot.Sessions)-1]
+}
+
+func applyRemoteWorkerRecordingProjection(
+	session *recordings.WorkerSessionRecordingSnapshot,
+	projection recordings.WorkerRecordingProjection,
+) {
+	session.Topic = projection.Topic
+	session.Status = projection.Status
+	session.LastPosition = projection.LastPosition
+	session.InterruptionReason = projection.InterruptionReason
+	session.ExecutionTerminal = cloneRemoteWorkerRecordingTerminal(projection.ExecutionTerminal)
+	session.Records = append([]events.Record(nil), projection.Records...)
+}
+
+func cloneRemoteWorkerRecordingSnapshot(
+	snapshot recordings.WorkerRecordingSnapshot,
+) recordings.WorkerRecordingSnapshot {
+	clone := snapshot
+	clone.Sessions = make([]recordings.WorkerSessionRecordingSnapshot, len(snapshot.Sessions))
+	for index, session := range snapshot.Sessions {
+		clone.Sessions[index] = session
+		clone.Sessions[index].ExecutionTerminal = cloneRemoteWorkerRecordingTerminal(session.ExecutionTerminal)
+		clone.Sessions[index].Records = make([]events.Record, len(session.Records))
+		for recordIndex, record := range session.Records {
+			clone.Sessions[index].Records[recordIndex] = record.Detached()
+		}
+	}
+	return clone
+}
+
+func cloneRemoteWorkerRecordingTerminal(
+	terminal *recordings.WorkerRecordingTerminal,
+) *recordings.WorkerRecordingTerminal {
+	if terminal == nil {
+		return nil
+	}
+	clone := *terminal
+	return &clone
+}
+
+var _ recordings.WorkerRecordingWriter = (*remoteWorkerRecordingStore)(nil)
+var _ recordings.WorkerRecordingFailureWriter = (*remoteWorkerRecordingStore)(nil)
+var _ recordings.WorkerRecordingReader = (*remoteWorkerRecordingStore)(nil)
 
 type remoteInvokeContinueRunner struct {
 	gate      <-chan struct{}
