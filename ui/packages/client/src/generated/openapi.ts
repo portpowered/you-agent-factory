@@ -94,6 +94,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/worker-sessions/{worker_session_id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause one active Worker Session
+     * @description Cancels the exact admitted Worker Session dispatch through the Workers boundary and returns only after the authoritative PAUSED snapshot is available. Repeated requests are idempotent.
+     */
+    post: operations["pauseWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume one paused Worker Session
+     * @description Admits exactly one continuation of a paused Worker Session using the exact Provider Session association recorded on that session. Repeated requests are idempotent and never select a fallback Provider Session.
+     */
+    post: operations["resumeWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel one Worker Session
+     * @description Requests cancellation of the exact admitted Worker Session dispatch. Cancellation is terminal and repeated requests are idempotent.
+     */
+    post: operations["cancelWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/terminate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Terminate one Worker Session
+     * @description Requests termination of the exact admitted Worker Session dispatch and joins its completion before returning. Repeated and concurrent calls are idempotent and return the canonical terminal snapshot.
+     */
+    post: operations["terminateWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions/{worker_session_id}/events": {
     parameters: {
       query?: never;
@@ -187,7 +267,7 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events
-     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; cursors are scoped to the Worker Session and never fall back to another history. The retained snapshot and live registration share one handoff, so records committed after the captured high-water mark are delivered exactly once. A terminal durable recording carries a COMPLETE, DEGRADED, or INCOMPLETE replay summary and does not wait for an unavailable live source.
      */
     get: operations["streamWorkerSessionEventsBySessionId"];
     put?: never;
@@ -207,9 +287,49 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events by Worker Session identity
-     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; a cursor from another Worker Session, a future position, stale retained history, or an unavailable generation is rejected with a typed error. In follow mode the durable-to-live handoff is atomic and duplicate overlap is suppressed.
      */
     get: operations["streamWorkerSessionEventsByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one Worker Session observation by Worker Session ID
+     * @description Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
+     */
+    get: operations["getWorkerSessionObservationByFactorySessionAndWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one Worker Session transcript by Worker Session ID
+     * @description Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
+     */
+    get: operations["readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1381,6 +1501,19 @@ export interface components {
       source?: components["schemas"]["WorkerSessionInterruptSnapshot"];
       successor?: components["schemas"]["WorkerSessionInterruptSnapshot"];
     };
+    /** @description Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action. */
+    WorkerSessionControlResponse: {
+      /** @description Stable Worker Session identity targeted by the control. */
+      workerSessionId: string;
+      /** @enum {string} */
+      action: WorkerSessionControlResponseAction;
+      /** @enum {string} */
+      outcome: WorkerSessionControlResponseOutcome;
+      /** @enum {string} */
+      state: WorkerSessionControlResponseState;
+      /** @description Exact admitted dispatch identity, or empty before admission. */
+      dispatchId: string;
+    };
     WorkerSessionStartRetryPolicy: {
       /**
        * @description Total provider attempts, where zero and one both mean one attempt. Values above 16 are rejected at the HTTP boundary.
@@ -1450,6 +1583,8 @@ export interface components {
     WorkerSessionTranscriptResponse: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Explicit Factory Session scope used for this transcript read. */
+      factorySessionId?: string;
       providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Work identities correlated with this Worker Session attempt. */
       workIds: string[];
@@ -1467,6 +1602,8 @@ export interface components {
       workerSessionId: string;
       /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
       direct: boolean;
+      /** @description Explicit Factory Session scope used for this observation. */
+      factorySessionId?: string;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
@@ -1493,12 +1630,21 @@ export interface components {
       /** @enum {string} */
       transcript: WorkerSessionObservationTranscript;
       failure?: components["schemas"]["WorkerSessionFailure"];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth?: WorkerSessionObservationRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
     };
     WorkerSessionEvent: {
       delivery: components["schemas"]["WorkerSessionEventDelivery"];
       /** @description Stable Worker Session identity for this stream. */
       workerSessionId: string;
+      /** @description Explicit Factory Session scope used for this event stream. */
+      factorySessionId?: string;
       providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Work identities correlated with the streamed attempt. */
       workIds: string[];
@@ -1510,6 +1656,13 @@ export interface components {
       errorMessage: string | null;
       /** @description Completeness marker when delivery is REPLAY_SUMMARY. */
       replaySummary?: components["schemas"]["WorkerSessionReplaySummary"];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth?: WorkerSessionEventRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string;
     };
     WorkerSessionReplaySummary: {
       /**
@@ -1533,6 +1686,8 @@ export interface components {
      */
     WorkerSessionEventDelivery: WorkerSessionEventDelivery;
     WorkerSessionEventRecord: {
+      /** @description Typed reconnect cursor for this canonical event record. */
+      cursor: components["schemas"]["WorkerSessionEventCursor"];
       /**
        * Format: int64
        * @description Aggregate position assigned by the canonical Events ledger.
@@ -1555,6 +1710,17 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+    };
+    WorkerSessionEventCursor: {
+      /** @description Worker Session identity that owns the acknowledged position. */
+      workerSessionId?: string;
+      /**
+       * Format: int64
+       * @description Exclusive Worker Session event position acknowledged by the client.
+       */
+      position: number;
+      /** @description Durable Factory event-stream generation that issued the position. */
+      streamGenerationId?: string;
     };
     WorkerSessionProviderSessionRef: {
       /** @description Provider identity that issued the correlated session. */
@@ -6881,6 +7047,42 @@ export interface components {
         "application/json": components["schemas"]["WorkerSessionInterruptError"];
       };
     };
+    /** @description The Worker Session lifecycle control conflicts with its current state. */
+    WorkerSessionControlConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session lifecycle control could not reach its authoritative boundary. */
+    WorkerSessionControlUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The server failed while applying the Worker Session lifecycle control. */
+    WorkerSessionControlInternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The durable Worker Session recording could not be read. */
+    WorkerSessionRecordingUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -6989,6 +7191,10 @@ export interface components {
     AfterEventId: string;
     /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
     AfterSequence: number;
+    /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+    WorkerSessionAfterPosition: number;
+    /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+    WorkerSessionStreamGenerationID: string;
     /** @description Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it. */
     ResponseEventAfterSequence: number;
     /** @description Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response. */
@@ -7151,6 +7357,118 @@ export interface operations {
       409: components["responses"]["WorkerSessionInterruptConflict"];
       500: components["responses"]["WorkerSessionInterruptInternalError"];
       503: components["responses"]["WorkerSessionInterruptUnavailable"];
+    };
+  };
+  pauseWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  resumeWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  cancelWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  terminateWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
     };
   };
   streamWorkerSessionEventsByTopLevelWorkerSessionId: {
@@ -7323,6 +7641,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   streamWorkerSessionEventsBySessionId: {
@@ -7336,6 +7655,12 @@ export interface operations {
         id: string;
         /** @description Drain the retained history through a captured Events head without registering a live follower. */
         replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
       };
       header?: never;
       path: {
@@ -7358,6 +7683,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   streamWorkerSessionEventsByWorkerSessionId: {
@@ -7365,6 +7691,12 @@ export interface operations {
       query?: {
         /** @description Drain the retained history through a captured Events head without registering a live follower. */
         replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
       };
       header?: never;
       path: {
@@ -7389,6 +7721,74 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  getWorkerSessionObservationByFactorySessionAndWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One detached Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   getWorkerSessionObservationBySessionId: {
@@ -7422,6 +7822,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   readWorkerSessionTranscriptBySessionId: {
@@ -7464,6 +7865,7 @@ export interface operations {
         };
       };
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   invokeFactorySessionBySessionId: {
@@ -8890,6 +9292,34 @@ export const WorkerSessionInterruptErrorPhase = {
 } as const;
 export type WorkerSessionInterruptErrorPhase =
   (typeof WorkerSessionInterruptErrorPhase)[keyof typeof WorkerSessionInterruptErrorPhase];
+export const WorkerSessionControlResponseAction = {
+  WorkerSessionControlResponseActionPause: "PAUSE",
+  WorkerSessionControlResponseActionResume: "RESUME",
+  WorkerSessionControlResponseActionCancel: "CANCEL",
+  WorkerSessionControlResponseActionTerminate: "TERMINATE",
+} as const;
+export type WorkerSessionControlResponseAction =
+  (typeof WorkerSessionControlResponseAction)[keyof typeof WorkerSessionControlResponseAction];
+export const WorkerSessionControlResponseOutcome = {
+  WorkerSessionControlResponseOutcomeApplied: "APPLIED",
+  WorkerSessionControlResponseOutcomeNoop: "NOOP",
+  WorkerSessionControlResponseOutcomeUnsupported: "UNSUPPORTED",
+  WorkerSessionControlResponseOutcomeFailed: "FAILED",
+} as const;
+export type WorkerSessionControlResponseOutcome =
+  (typeof WorkerSessionControlResponseOutcome)[keyof typeof WorkerSessionControlResponseOutcome];
+export const WorkerSessionControlResponseState = {
+  WorkerSessionControlResponseStateReserved: "RESERVED",
+  WorkerSessionControlResponseStateStarting: "STARTING",
+  WorkerSessionControlResponseStateRunning: "RUNNING",
+  WorkerSessionControlResponseStatePaused: "PAUSED",
+  WorkerSessionControlResponseStateCompleted: "COMPLETED",
+  WorkerSessionControlResponseStateFailed: "FAILED",
+  WorkerSessionControlResponseStateCanceled: "CANCELED",
+  WorkerSessionControlResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionControlResponseState =
+  (typeof WorkerSessionControlResponseState)[keyof typeof WorkerSessionControlResponseState];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -8915,6 +9345,20 @@ export const WorkerSessionObservationTranscript = {
 } as const;
 export type WorkerSessionObservationTranscript =
   (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionObservationRecordingHealth = {
+  WorkerSessionObservationRecordingHealthComplete: "COMPLETE",
+  WorkerSessionObservationRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionObservationRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionObservationRecordingHealth =
+  (typeof WorkerSessionObservationRecordingHealth)[keyof typeof WorkerSessionObservationRecordingHealth];
+export const WorkerSessionEventRecordingHealth = {
+  WorkerSessionEventRecordingHealthComplete: "COMPLETE",
+  WorkerSessionEventRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionEventRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionEventRecordingHealth =
+  (typeof WorkerSessionEventRecordingHealth)[keyof typeof WorkerSessionEventRecordingHealth];
 export const WorkerSessionReplaySummaryKind = {
   replay_summary: "replay-summary",
 } as const;
@@ -9054,6 +9498,17 @@ export const ErrorResponseCode = {
   // The Worker Session event topic did not reach the required readiness barrier.
   WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE:
     "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
+  // The Worker Session event cursor is malformed.
+  WORKER_SESSION_EVENT_CURSOR_INVALID: "WORKER_SESSION_EVENT_CURSOR_INVALID",
+  // The Worker Session event cursor belongs to another Worker Session.
+  WORKER_SESSION_EVENT_CURSOR_FOREIGN: "WORKER_SESSION_EVENT_CURSOR_FOREIGN",
+  // The Worker Session event cursor is ahead of the available history.
+  WORKER_SESSION_EVENT_CURSOR_FUTURE: "WORKER_SESSION_EVENT_CURSOR_FUTURE",
+  // The Worker Session event cursor no longer names retained history.
+  WORKER_SESSION_EVENT_CURSOR_STALE: "WORKER_SESSION_EVENT_CURSOR_STALE",
+  // The Worker Session event cursor's durable stream generation is unavailable.
+  WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE:
+    "WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
   // Worker Session continuation requestId was reused with different inputs.
@@ -9082,43 +9537,50 @@ export const ErrorResponseCode = {
   WORKER_SESSION_INTERRUPT_ADMISSION_FAILED:
     "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
+  WORKER_SESSION_CONTROL_INVALID: "WORKER_SESSION_CONTROL_INVALID",
+  // Requested resource capacity is below the number of units currently in use.
+  WORKER_SESSION_CONTROL_CONFLICT: "WORKER_SESSION_CONTROL_CONFLICT",
+  // The caller's expected Factory revision is no longer current.
+  WORKER_SESSION_CONTROL_FAILED: "WORKER_SESSION_CONTROL_FAILED",
+  // The Factory Session lifecycle does not admit the requested change.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
-  // Requested resource capacity is below the number of units currently in use.
-  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
-  // The caller's expected Factory revision is no longer current.
-  REVISION_CONFLICT: "REVISION_CONFLICT",
-  // The Factory Session lifecycle does not admit the requested change.
-  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
   // A live change was admitted but its runtime application failed.
-  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
+  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
   // The Factory Response Event reconnect cursor is invalid.
-  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
+  REVISION_CONFLICT: "REVISION_CONFLICT",
   // A Factory Response Event filter is invalid.
-  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
+  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
   // The explicitly selected Factory Session for response events does not exist.
-  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
+  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
   // The retained Factory Response Event stream is no longer available.
-  RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
+  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
   // The requested Provider Session provider is not loadable by this API.
-  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
+  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
   // The requested Provider Session identifier kind is not loadable by this API.
-  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
+  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
   // The correlated Worker Session projection is temporarily unavailable.
-  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
+  // The durable Worker Session recording contains corrupt history.
+  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
+  // The durable Worker Session recording could not be read.
+  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
   // The canonical Worker Session event stream is temporarily unavailable.
-  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
   // The requested Worker Session has not reached a terminal state.
-  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  WORKER_SESSION_RECORDING_CORRUPT: "WORKER_SESSION_RECORDING_CORRUPT",
   // The finished Worker Session has no normalized transcript available.
+  WORKER_SESSION_RECORDING_UNAVAILABLE: "WORKER_SESSION_RECORDING_UNAVAILABLE",
+  // Provider Sessions could not project the normalized Worker Session transcript.
+  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  // The requested resource does not exist.
+  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  // The server failed while handling an otherwise valid request.
   WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
-  // Provider Sessions could not project the normalized Worker Session transcript.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
-  // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
-  // The server failed while handling an otherwise valid request.
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 export type ErrorResponseCode =

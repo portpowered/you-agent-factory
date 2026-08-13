@@ -94,6 +94,11 @@ const (
 	ErrorResponseCodeWORKERSESSIONCONTROLCONFLICT                   ErrorResponseCode = "WORKER_SESSION_CONTROL_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONCONTROLFAILED                     ErrorResponseCode = "WORKER_SESSION_CONTROL_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTROLINVALID                    ErrorResponseCode = "WORKER_SESSION_CONTROL_INVALID"
+	ErrorResponseCodeWORKERSESSIONEVENTCURSORFOREIGN                ErrorResponseCode = "WORKER_SESSION_EVENT_CURSOR_FOREIGN"
+	ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE                 ErrorResponseCode = "WORKER_SESSION_EVENT_CURSOR_FUTURE"
+	ErrorResponseCodeWORKERSESSIONEVENTCURSORINVALID                ErrorResponseCode = "WORKER_SESSION_EVENT_CURSOR_INVALID"
+	ErrorResponseCodeWORKERSESSIONEVENTCURSORSTALE                  ErrorResponseCode = "WORKER_SESSION_EVENT_CURSOR_STALE"
+	ErrorResponseCodeWORKERSESSIONEVENTCURSORUNAVAILABLE            ErrorResponseCode = "WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE             ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED          ErrorResponseCode = "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT                 ErrorResponseCode = "WORKER_SESSION_INTERRUPT_CONFLICT"
@@ -102,6 +107,8 @@ const (
 	ErrorResponseCodeWORKERSESSIONINTERRUPTSUCCESSORADMISSIONFAILED ErrorResponseCode = "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                      ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
 	ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID       ErrorResponseCode = "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
+	ErrorResponseCodeWORKERSESSIONRECORDINGCORRUPT                  ErrorResponseCode = "WORKER_SESSION_RECORDING_CORRUPT"
+	ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE              ErrorResponseCode = "WORKER_SESSION_RECORDING_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED                ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
 	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT            ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE                 ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
@@ -1252,6 +1259,13 @@ const (
 	WorkerSessionControlResponseStateTerminated WorkerSessionControlResponseState = "TERMINATED"
 )
 
+// Defines values for WorkerSessionEventRecordingHealth.
+const (
+	WorkerSessionEventRecordingHealthComplete   WorkerSessionEventRecordingHealth = "COMPLETE"
+	WorkerSessionEventRecordingHealthDegraded   WorkerSessionEventRecordingHealth = "DEGRADED"
+	WorkerSessionEventRecordingHealthIncomplete WorkerSessionEventRecordingHealth = "INCOMPLETE"
+)
+
 // Defines values for WorkerSessionEventDelivery.
 const (
 	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
@@ -1293,6 +1307,13 @@ const (
 	WorkerSessionObservationDurationBasisACTIVECLOCK        WorkerSessionObservationDurationBasis = "ACTIVE_CLOCK"
 	WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS WorkerSessionObservationDurationBasis = "RECORDED_TIMESTAMPS"
 	WorkerSessionObservationDurationBasisUNAVAILABLE        WorkerSessionObservationDurationBasis = "UNAVAILABLE"
+)
+
+// Defines values for WorkerSessionObservationRecordingHealth.
+const (
+	WorkerSessionObservationRecordingHealthComplete   WorkerSessionObservationRecordingHealth = "COMPLETE"
+	WorkerSessionObservationRecordingHealthDegraded   WorkerSessionObservationRecordingHealth = "DEGRADED"
+	WorkerSessionObservationRecordingHealthIncomplete WorkerSessionObservationRecordingHealth = "INCOMPLETE"
 )
 
 // Defines values for WorkerSessionObservationState.
@@ -7778,10 +7799,19 @@ type WorkerSessionEvent struct {
 	ErrorCode *string `json:"errorCode"`
 
 	// ErrorMessage Safe source-failure message when delivery is SOURCE_FAILURE.
-	ErrorMessage    *string                         `json:"errorMessage"`
-	Event           WorkerSessionEventRecord        `json:"event"`
-	ProviderSession WorkerSessionProviderSessionRef `json:"providerSession"`
-	ReplaySummary   *WorkerSessionReplaySummary     `json:"replaySummary,omitempty"`
+	ErrorMessage *string                  `json:"errorMessage"`
+	Event        WorkerSessionEventRecord `json:"event"`
+
+	// FactorySessionId Explicit Factory Session scope used for this event stream.
+	FactorySessionId *string                         `json:"factorySessionId,omitempty"`
+	ProviderSession  WorkerSessionProviderSessionRef `json:"providerSession"`
+
+	// RecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
+	RecordingHealth *WorkerSessionEventRecordingHealth `json:"recordingHealth,omitempty"`
+
+	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
+	RecordingHealthReason *string                     `json:"recordingHealthReason,omitempty"`
+	ReplaySummary         *WorkerSessionReplaySummary `json:"replaySummary,omitempty"`
 
 	// WorkIds Work identities correlated with the streamed attempt.
 	WorkIds []string `json:"workIds"`
@@ -7790,11 +7820,28 @@ type WorkerSessionEvent struct {
 	WorkerSessionId string `json:"workerSessionId"`
 }
 
+// WorkerSessionEventRecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
+type WorkerSessionEventRecordingHealth string
+
+// WorkerSessionEventCursor defines model for WorkerSessionEventCursor.
+type WorkerSessionEventCursor struct {
+	// Position Exclusive Worker Session event position acknowledged by the client.
+	Position int64 `json:"position"`
+
+	// StreamGenerationId Durable Factory event-stream generation that issued the position.
+	StreamGenerationId *string `json:"streamGenerationId,omitempty"`
+
+	// WorkerSessionId Worker Session identity that owns the acknowledged position.
+	WorkerSessionId *string `json:"workerSessionId,omitempty"`
+}
+
 // WorkerSessionEventDelivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
 type WorkerSessionEventDelivery string
 
 // WorkerSessionEventRecord defines model for WorkerSessionEventRecord.
 type WorkerSessionEventRecord struct {
+	Cursor WorkerSessionEventCursor `json:"cursor"`
+
 	// Payload Source-native canonical event payload.
 	Payload map[string]interface{} `json:"payload"`
 
@@ -7935,18 +7982,27 @@ type WorkerSessionObservation struct {
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
 
 	// DurationMillis Projected duration in milliseconds when authoritative timing exists.
-	DurationMillis  *int64                           `json:"durationMillis"`
-	EndedAt         *time.Time                       `json:"endedAt"`
-	Failure         *WorkerSessionFailure            `json:"failure,omitempty"`
-	Parse           WorkerSessionParseDiagnostics    `json:"parse"`
-	ProviderSession *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
+	DurationMillis *int64     `json:"durationMillis"`
+	EndedAt        *time.Time `json:"endedAt"`
+
+	// FactorySessionId Explicit Factory Session scope used for this observation.
+	FactorySessionId *string                          `json:"factorySessionId,omitempty"`
+	Failure          *WorkerSessionFailure            `json:"failure,omitempty"`
+	Parse            WorkerSessionParseDiagnostics    `json:"parse"`
+	ProviderSession  *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
 
 	// ProviderSessionAvailable Whether a provider-session identity is available for this attempt.
-	ProviderSessionAvailable bool                               `json:"providerSessionAvailable"`
-	StartedAt                *time.Time                         `json:"startedAt"`
-	State                    WorkerSessionObservationState      `json:"state"`
-	TokenUsage               *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
-	Transcript               WorkerSessionObservationTranscript `json:"transcript"`
+	ProviderSessionAvailable bool `json:"providerSessionAvailable"`
+
+	// RecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
+	RecordingHealth *WorkerSessionObservationRecordingHealth `json:"recordingHealth,omitempty"`
+
+	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
+	RecordingHealthReason *string                            `json:"recordingHealthReason,omitempty"`
+	StartedAt             *time.Time                         `json:"startedAt"`
+	State                 WorkerSessionObservationState      `json:"state"`
+	TokenUsage            *ProviderSessionTokenUsage         `json:"tokenUsage,omitempty"`
+	Transcript            WorkerSessionObservationTranscript `json:"transcript"`
 
 	// TurnId Optional turn correlation identifier.
 	TurnId *string `json:"turnId"`
@@ -7960,6 +8016,9 @@ type WorkerSessionObservation struct {
 
 // WorkerSessionObservationDurationBasis defines model for WorkerSessionObservation.DurationBasis.
 type WorkerSessionObservationDurationBasis string
+
+// WorkerSessionObservationRecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
+type WorkerSessionObservationRecordingHealth string
 
 // WorkerSessionObservationState defines model for WorkerSessionObservation.State.
 type WorkerSessionObservationState string
@@ -8104,8 +8163,11 @@ type WorkerSessionTranscriptResponse struct {
 	AttemptId string `json:"attemptId"`
 
 	// Entries Ordered normalized transcript entries projected by Provider Sessions.
-	Entries         []ProviderSessionTranscriptEntry `json:"entries"`
-	ProviderSession WorkerSessionProviderSessionRef  `json:"providerSession"`
+	Entries []ProviderSessionTranscriptEntry `json:"entries"`
+
+	// FactorySessionId Explicit Factory Session scope used for this transcript read.
+	FactorySessionId *string                         `json:"factorySessionId,omitempty"`
+	ProviderSession  WorkerSessionProviderSessionRef `json:"providerSession"`
 
 	// State Terminal Worker Session lifecycle state at transcript read time.
 	State string `json:"state"`
@@ -8531,8 +8593,14 @@ type WorkListWorkTypeName = string
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
+// WorkerSessionAfterPosition defines model for WorkerSessionAfterPosition.
+type WorkerSessionAfterPosition = int64
+
 // WorkerSessionID defines model for WorkerSessionID.
 type WorkerSessionID = string
+
+// WorkerSessionStreamGenerationID defines model for WorkerSessionStreamGenerationID.
+type WorkerSessionStreamGenerationID = string
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -8612,6 +8680,9 @@ type WorkerSessionInterruptNotFound = WorkerSessionInterruptError
 
 // WorkerSessionInterruptUnavailable Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary.
 type WorkerSessionInterruptUnavailable = WorkerSessionInterruptError
+
+// WorkerSessionRecordingUnavailable defines model for WorkerSessionRecordingUnavailable.
+type WorkerSessionRecordingUnavailable = ErrorResponse
 
 // WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
 type WorkerSessionStartConflict = ErrorResponse
@@ -8749,6 +8820,15 @@ type StreamWorkerSessionEventsBySessionIdParams struct {
 
 	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
 	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+
+	// AfterPosition Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome.
+	AfterPosition *WorkerSessionAfterPosition `form:"after_position,omitempty" json:"after_position,omitempty"`
+
+	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// StreamGenerationId Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
+	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
 // ReadWorkerSessionTranscriptBySessionIdParams defines parameters for ReadWorkerSessionTranscriptBySessionId.
@@ -8767,6 +8847,15 @@ type ReadWorkerSessionTranscriptBySessionIdParams struct {
 type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
 	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+
+	// AfterPosition Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome.
+	AfterPosition *WorkerSessionAfterPosition `form:"after_position,omitempty" json:"after_position,omitempty"`
+
+	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// StreamGenerationId Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
+	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
@@ -13580,6 +13669,30 @@ func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsBySessionId(w http.R
 		return
 	}
 
+	// ------------- Optional query parameter "after_position" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_position", r.URL.Query(), &params.AfterPosition)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_position", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "stream_generation_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "stream_generation_id", r.URL.Query(), &params.StreamGenerationId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stream_generation_id", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StreamWorkerSessionEventsBySessionId(w, r, sessionId, params)
 	}))
@@ -13729,6 +13842,30 @@ func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w 
 	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_position" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_position", r.URL.Query(), &params.AfterPosition)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_position", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "stream_generation_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "stream_generation_id", r.URL.Query(), &params.StreamGenerationId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stream_generation_id", Err: err})
 		return
 	}
 

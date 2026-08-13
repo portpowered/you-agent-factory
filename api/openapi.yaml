@@ -440,6 +440,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/events:
     get:
       tags:
@@ -493,6 +495,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
     get:
       tags:
@@ -528,6 +532,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}:
     get:
       tags:
@@ -551,6 +557,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript:
     get:
       tags:
@@ -580,6 +588,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -621,6 +631,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/transcript:
     get:
       tags:
@@ -668,6 +680,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/invocations:
     post:
       tags:
@@ -2403,6 +2417,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionRecordingUnavailable:
+      description: The durable Worker Session recording could not be read.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     FactorySessionLifecycleControlConflict:
       description: Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId.
       content:
@@ -3395,6 +3415,9 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity.
+        factorySessionId:
+          type: string
+          description: Explicit Factory Session scope used for this transcript read.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
         workIds:
@@ -3441,6 +3464,9 @@ components:
         direct:
           type: boolean
           description: Whether this observation was admitted through the direct top-level Worker Session surface.
+        factorySessionId:
+          type: string
+          description: Explicit Factory Session scope used for this observation.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
           nullable: true
@@ -3510,6 +3536,20 @@ components:
         failure:
           $ref: '#/components/schemas/WorkerSessionFailure'
           nullable: true
+        recordingHealth:
+          type: string
+          enum:
+            - COMPLETE
+            - DEGRADED
+            - INCOMPLETE
+          x-enum-varnames:
+            - WorkerSessionObservationRecordingHealthComplete
+            - WorkerSessionObservationRecordingHealthDegraded
+            - WorkerSessionObservationRecordingHealthIncomplete
+          description: Recordings-owned capture health, independent of Worker execution outcome.
+        recordingHealthReason:
+          type: string
+          description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
         parse:
           $ref: '#/components/schemas/WorkerSessionParseDiagnostics'
     WorkerSessionEvent:
@@ -3529,6 +3569,9 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity for this stream.
+        factorySessionId:
+          type: string
+          description: Explicit Factory Session scope used for this event stream.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
         workIds:
@@ -3552,6 +3595,20 @@ components:
           $ref: '#/components/schemas/WorkerSessionReplaySummary'
           nullable: true
           description: Completeness marker when delivery is REPLAY_SUMMARY.
+        recordingHealth:
+          type: string
+          enum:
+            - COMPLETE
+            - DEGRADED
+            - INCOMPLETE
+          x-enum-varnames:
+            - WorkerSessionEventRecordingHealthComplete
+            - WorkerSessionEventRecordingHealthDegraded
+            - WorkerSessionEventRecordingHealthIncomplete
+          description: Recordings-owned capture health, independent of Worker execution outcome.
+        recordingHealthReason:
+          type: string
+          description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
     WorkerSessionReplaySummary:
       type: object
       additionalProperties: false
@@ -4395,6 +4452,8 @@ components:
             - PROVIDER_UNSUPPORTED
             - SESSION_KIND_UNSUPPORTED
             - PROJECTION_UNAVAILABLE
+            - WORKER_SESSION_RECORDING_CORRUPT
+            - WORKER_SESSION_RECORDING_UNAVAILABLE
             - WORKER_SESSION_STREAM_UNAVAILABLE
             - WORKER_SESSION_TRANSCRIPT_ACTIVE
             - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
@@ -4444,6 +4503,8 @@ components:
             - The requested Provider Session provider is not loadable by this API.
             - The requested Provider Session identifier kind is not loadable by this API.
             - The correlated Worker Session projection is temporarily unavailable.
+            - The durable Worker Session recording contains corrupt history.
+            - The durable Worker Session recording could not be read.
             - The canonical Worker Session event stream is temporarily unavailable.
             - The requested Worker Session has not reached a terminal state.
             - The finished Worker Session has no normalized transcript available.

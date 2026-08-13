@@ -2310,8 +2310,8 @@ components:
       $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
     WorkerSessionContinuationConflict:
       $ref: './components/responses/WorkerSessionContinuationConflict.yaml'
-      WorkerSessionContinuationUnavailable:
-        $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
+    WorkerSessionContinuationUnavailable:
+      $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
     WorkerSessionInterruptBadRequest:
       $ref: './components/responses/WorkerSessionInterruptBadRequest.yaml'
     WorkerSessionInterruptNotFound:
@@ -2330,7 +2330,7 @@ components:
       $ref: './components/responses/WorkerSessionControlInternalError.yaml'
     WorkerSessionRecordingUnavailable:
       $ref: './components/responses/WorkerSessionRecordingUnavailable.yaml'
-      FactorySessionLifecycleControlConflict:
+    FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     FactorySessionResourceCapacityConflict:
       $ref: './components/responses/FactorySessionResourceCapacityConflict.yaml'

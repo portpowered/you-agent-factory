@@ -1577,6 +1577,8 @@ export interface components {
     WorkerSessionTranscriptResponse: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Explicit Factory Session scope used for this transcript read. */
+      factorySessionId?: string;
       providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Work identities correlated with this Worker Session attempt. */
       workIds: string[];
@@ -1594,6 +1596,8 @@ export interface components {
       workerSessionId: string;
       /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
       direct: boolean;
+      /** @description Explicit Factory Session scope used for this observation. */
+      factorySessionId?: string;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
@@ -1620,12 +1624,21 @@ export interface components {
       /** @enum {string} */
       transcript: WorkerSessionObservationTranscript;
       failure?: components["schemas"]["WorkerSessionFailure"];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth?: WorkerSessionObservationRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string;
       parse: components["schemas"]["WorkerSessionParseDiagnostics"];
     };
     WorkerSessionEvent: {
       delivery: components["schemas"]["WorkerSessionEventDelivery"];
       /** @description Stable Worker Session identity for this stream. */
       workerSessionId: string;
+      /** @description Explicit Factory Session scope used for this event stream. */
+      factorySessionId?: string;
       providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Work identities correlated with the streamed attempt. */
       workIds: string[];
@@ -1637,6 +1650,13 @@ export interface components {
       errorMessage: string | null;
       /** @description Completeness marker when delivery is REPLAY_SUMMARY. */
       replaySummary?: components["schemas"]["WorkerSessionReplaySummary"];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth?: WorkerSessionEventRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string;
     };
     WorkerSessionReplaySummary: {
       /**
@@ -7048,6 +7068,15 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The durable Worker Session recording could not be read. */
+    WorkerSessionRecordingUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -7606,6 +7635,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   streamWorkerSessionEventsBySessionId: {
@@ -7647,6 +7677,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   streamWorkerSessionEventsByWorkerSessionId: {
@@ -7684,6 +7715,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   getWorkerSessionObservationByFactorySessionAndWorkerSessionId: {
@@ -7712,6 +7744,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId: {
@@ -7749,6 +7782,7 @@ export interface operations {
         };
       };
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   getWorkerSessionObservationBySessionId: {
@@ -7782,6 +7816,7 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   readWorkerSessionTranscriptBySessionId: {
@@ -7824,6 +7859,7 @@ export interface operations {
         };
       };
       500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   invokeFactorySessionBySessionId: {
@@ -9303,6 +9339,20 @@ export const WorkerSessionObservationTranscript = {
 } as const;
 export type WorkerSessionObservationTranscript =
   (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionObservationRecordingHealth = {
+  WorkerSessionObservationRecordingHealthComplete: "COMPLETE",
+  WorkerSessionObservationRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionObservationRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionObservationRecordingHealth =
+  (typeof WorkerSessionObservationRecordingHealth)[keyof typeof WorkerSessionObservationRecordingHealth];
+export const WorkerSessionEventRecordingHealth = {
+  WorkerSessionEventRecordingHealthComplete: "COMPLETE",
+  WorkerSessionEventRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionEventRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionEventRecordingHealth =
+  (typeof WorkerSessionEventRecordingHealth)[keyof typeof WorkerSessionEventRecordingHealth];
 export const WorkerSessionReplaySummaryKind = {
   replay_summary: "replay-summary",
 } as const;
@@ -9505,12 +9555,16 @@ export const ErrorResponseCode = {
   RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
   // The correlated Worker Session projection is temporarily unavailable.
   RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
-  // The canonical Worker Session event stream is temporarily unavailable.
+  // The durable Worker Session recording contains corrupt history.
   PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
-  // The requested Worker Session has not reached a terminal state.
+  // The durable Worker Session recording could not be read.
   SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
-  // The finished Worker Session has no normalized transcript available.
+  // The canonical Worker Session event stream is temporarily unavailable.
   PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  // The requested Worker Session has not reached a terminal state.
+  WORKER_SESSION_RECORDING_CORRUPT: "WORKER_SESSION_RECORDING_CORRUPT",
+  // The finished Worker Session has no normalized transcript available.
+  WORKER_SESSION_RECORDING_UNAVAILABLE: "WORKER_SESSION_RECORDING_UNAVAILABLE",
   // Provider Sessions could not project the normalized Worker Session transcript.
   WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
   // The requested resource does not exist.
