@@ -257,7 +257,11 @@ func applyRuntimeWorkstationSelection(
 		selection.timeout = parseRuntimeDuration(resolveRuntimeInvocationValue(workstation.Timeout, invocation))
 	}
 	selection.decisionEnvelope = selection.decisionEnvelope ||
-		workstation.OutputContract == "decision"
+		workstation.OutputContract == "decision" ||
+		strings.EqualFold(workstation.OutcomeFormat, interfaces.DecisionEnvelopeOutcomeFormat)
+	selection.goalRoutingDecisionEnvelope = selection.goalRoutingDecisionEnvelope ||
+		(strings.EqualFold(workstation.OutcomeFormat, interfaces.DecisionEnvelopeOutcomeFormat) &&
+			len(workstation.ClassificationRoutes) > 0)
 }
 
 func applyRuntimeConfigSelection(

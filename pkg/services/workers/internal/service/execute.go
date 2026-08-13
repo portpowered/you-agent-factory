@@ -172,6 +172,7 @@ func (s *Service) runRunner(
 	}()
 	if request.Input.MockWorkers != nil {
 		ctx = workers.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
+		ctx = workers.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
 	}
 	if request.Input.ProgressPublisher != nil {
 		ctx = workers.WithProgressPublisher(ctx, request.Input.ProgressPublisher)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -34,5 +35,19 @@ func TestRuntimeWorkstationRouteNamesIncludeWorkerAndWorkstationKeys(t *testing.
 		if _, ok := want[name]; !ok {
 			t.Fatalf("unexpected route name %q in %v", name, names)
 		}
+	}
+}
+
+func TestApplyRuntimeWorkstationSelectionMarksGoalRoutingEnvelope(t *testing.T) {
+	selection := runtimeExecutionSelection{}
+	applyRuntimeWorkstationSelection(&selection, nil, &interfaces.FactoryWorkstationConfig{
+		OutcomeFormat: interfaces.DecisionEnvelopeOutcomeFormat,
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
+			Label: "accepted",
+		}},
+	})
+
+	if !selection.decisionEnvelope || !selection.goalRoutingDecisionEnvelope {
+		t.Fatalf("selection output policy = %#v, want decision and goal-routing envelopes", selection)
 	}
 }

@@ -94,13 +94,19 @@ func (runner *MockWorkerCommandRunner) Run(
 		case MockWorkerRunTypeScript:
 			return runner.runScript(ctx, request, candidate.ScriptConfig)
 		default:
-			return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(request.Command))}, nil
+			return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(
+				request.Command,
+				MockWorkerOutputPolicyFromContext(ctx),
+			))}, nil
 		}
 	}
 	if runner.Config.UnmatchedDispatchPolicy.PassthroughUnmatched() {
 		return runner.runNext(ctx, request)
 	}
-	return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(request.Command))}, nil
+	return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(
+		request.Command,
+		MockWorkerOutputPolicyFromContext(ctx),
+	))}, nil
 }
 
 func (runner *MockWorkerCommandRunner) runScript(
@@ -161,14 +167,29 @@ func (runner *MockWorkerCommandRunner) runNext(
 	return runner.Next.Run(ctx, request)
 }
 
-func mockWorkerAcceptOutput(command string) string {
+func mockWorkerAcceptOutput(command string, policy OutputPolicy) string {
+	acceptedOutput := defaultMockWorkerAcceptedAgentOutput
+	if policy.GoalRoutingDecisionEnvelope {
+		acceptedOutput = marshalMockWorkerJSON(map[string]any{
+			"decision": "accepted",
+			"output":   defaultMockWorkerAcceptedOutput,
+		})
+	} else if policy.DecisionEnvelope ||
+		strings.EqualFold(strings.TrimSpace(policy.Format), "decision-envelope") {
+		acceptedOutput = marshalMockWorkerJSON(map[string]any{
+			"decision": "ACCEPTED",
+			"output":   defaultMockWorkerAcceptedOutput,
+		})
+	} else if stopToken := strings.TrimSpace(policy.StopToken); stopToken != "" {
+		acceptedOutput = defaultMockWorkerAcceptedOutput + "\n" + stopToken
+	}
 	switch strings.TrimSpace(command) {
 	case "codex":
 		return strings.Join([]string{
 			marshalMockWorkerJSON(map[string]any{"type": "turn.started"}),
 			marshalMockWorkerJSON(map[string]any{
 				"type": "item.completed",
-				"item": map[string]any{"id": "message-final", "type": "agent_message", "text": defaultMockWorkerAcceptedAgentOutput},
+				"item": map[string]any{"id": "message-final", "type": "agent_message", "text": acceptedOutput},
 			}),
 			marshalMockWorkerJSON(map[string]any{
 				"type":  "turn.completed",
@@ -177,7 +198,7 @@ func mockWorkerAcceptOutput(command string) string {
 		}, "\n") + "\n"
 	case "claude":
 		return marshalMockWorkerJSON(map[string]any{"type": "system", "subtype": "init", "session_id": "mock-claude-session"}) + "\n" +
-			marshalMockWorkerJSON(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": defaultMockWorkerAcceptedAgentOutput, "session_id": "mock-claude-session"}) + "\n"
+			marshalMockWorkerJSON(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": acceptedOutput, "session_id": "mock-claude-session"}) + "\n"
 	default:
 		return defaultMockWorkerAcceptedOutput
 	}
