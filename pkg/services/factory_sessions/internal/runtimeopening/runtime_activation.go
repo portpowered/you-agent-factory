@@ -244,10 +244,9 @@ func (f *Factory) activationRequestWithReplayInput(
 	// Runtime root activation must receive the same resolved source identity
 	// that Definitions used. In particular, named paths and directory-backed
 	// authored files cannot be rediscovered from the caller's shorthand after
-	// the snapshot has crossed the boundary.
-	if factoryDir != "" {
-		inputs.Definition.Directory = factoryDir
-	}
+	// the snapshot has crossed the boundary. Keep the caller's Directory as
+	// the session/factory-root scope; SourcePath carries the concrete source
+	// identity used to resolve the snapshot.
 	if sourcePath != "" {
 		inputs.Definition.SourcePath = sourcePath
 	}

@@ -635,7 +635,11 @@ func (f *Factory) openForRequest(
 		)
 		if err != nil || input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
 			if err != nil {
-				return f.openRuntime(ctx, request, f.baseLogger)
+				// The loader has already classified and safely detached the
+				// replay input. Propagating that result preserves the one-read
+				// runtime-opening contract; routing the error through openRuntime
+				// would ask the same loader to read the artifact again.
+				return runtimeProducts{}, err
 			}
 			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
 		}
