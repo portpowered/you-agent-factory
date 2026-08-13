@@ -168,6 +168,34 @@ func TestStopSessionSelectsAnotherLiveRuntime(t *testing.T) {
 	}
 }
 
+func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
+	state := newRuntimeBindingState()
+	terminal := registerTestSession(state, "terminal")
+	successor := registerTestSession(state, "successor")
+	terminalHandle := runtimebinding.HandleFromSession(terminal).(*hostedHandleFake)
+	terminalHandle.instance = nil
+	var active runtimebinding.State
+	active.SetActive(context.Background(), terminal.ID, runtimebinding.HandleFromSession(terminal))
+
+	var stopped factory.HostedHandle
+	err := runtimebinding.StopSession(state, &active, terminal.ID, func(handle factory.HostedHandle) error {
+		stopped = handle
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StopSession terminal runtime: %v", err)
+	}
+	if stopped != terminalHandle {
+		t.Fatal("StopSession did not stop the registered terminal handle")
+	}
+	if state.Resolve(terminal.ID) != nil {
+		t.Fatal("terminal session remains registered")
+	}
+	if got := active.Active(); got == nil || got.SessionID != successor.ID {
+		t.Fatalf("active runtime = %#v, want successor session", got)
+	}
+}
+
 func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 	state := newRuntimeBindingState()
 	keep := registerTestSession(state, "keep")

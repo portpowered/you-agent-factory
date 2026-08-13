@@ -39,6 +39,7 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 	baseURL := fixture.baseURL
 	cancelledSessionID := fixture.cancelledSessionID
 	survivingSessionID := fixture.survivingSessionID
+	openedSessionClosed := fixture.openedSessionClosed
 
 	const (
 		cancelledPrompt = "shared-workers-cancelled-prompt"
@@ -76,6 +77,7 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 	if err := <-closeDone; err != nil {
 		t.Fatalf("close cancelled Factory Session: %v", err)
 	}
+	openedSessionClosed.Store(true)
 	provider.releaseSurvivingAttempt()
 
 	cancelledResult := awaitConcurrentInvocation(t, cancelledDone)
@@ -137,16 +139,19 @@ type concurrentInvocationResult struct {
 }
 
 type concurrentSessionWorkersFixture struct {
-	baseURL            string
-	provider           *concurrentSessionWorkersProvider
-	cancelledSessionID string
-	survivingSessionID string
+	baseURL             string
+	provider            *concurrentSessionWorkersProvider
+	cancelledSessionID  string
+	survivingSessionID  string
+	openedSessionClosed *atomic.Bool
 }
 
 func newConcurrentSessionWorkersFixture(t *testing.T) concurrentSessionWorkersFixture {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, concurrentSessionWorkersFactoryConfig())
+	openedDir := support.ScaffoldFactory(t, concurrentSessionWorkersFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, openedDir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	provider := newConcurrentSessionWorkersProvider()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
@@ -158,7 +163,7 @@ func newConcurrentSessionWorkersFixture(t *testing.T) concurrentSessionWorkersFi
 	if defaultSession.Id == "" {
 		t.Fatalf("default Factory Session = %#v, want session identity", defaultSession)
 	}
-	openedSession := support.OpenFactorySessionAt(t, baseURL, dir)
+	openedSession := support.OpenFactorySessionAt(t, baseURL, openedDir)
 	if openedSession.Session == nil || openedSession.Session.Id == "" {
 		t.Fatalf("opened Factory Session = %#v, want session identity", openedSession)
 	}
@@ -171,8 +176,9 @@ func newConcurrentSessionWorkersFixture(t *testing.T) concurrentSessionWorkersFi
 	})
 	return concurrentSessionWorkersFixture{
 		baseURL: baseURL, provider: provider,
-		cancelledSessionID: openedSessionID,
-		survivingSessionID: factorysessions.DefaultSessionID,
+		cancelledSessionID:  openedSessionID,
+		survivingSessionID:  factorysessions.DefaultSessionID,
+		openedSessionClosed: openedSessionClosed,
 	}
 }
 
