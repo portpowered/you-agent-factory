@@ -1,6 +1,7 @@
 package acp_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -13,9 +14,9 @@ import (
 func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "serialize")
 	signals := t.TempDir()
-	promptStarted := filepath.Join(signals, "prompt-started")
+	promptHeld := filepath.Join(signals, "prompt-started")
 	release := filepath.Join(signals, "release")
-	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", promptStarted)
+	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", promptHeld)
 	t.Setenv("YOU_TEST_ACP_RELEASE_SIGNAL", release)
 
 	var starts atomic.Int32
@@ -32,11 +33,14 @@ func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.
 			err      error
 		}{response: response, err: err}
 	}()
-	waitForACPTestFile(t, promptStarted)
+	// The peer writes promptHeld immediately before it waits for release. The
+	// test owns release and does not create it until after this assertion, so
+	// the marker is the synchronization boundary; no timing pad is needed.
+	waitForACPTestFile(t, promptHeld)
 	select {
 	case result := <-results:
-		t.Fatalf("parallel invocation completed before the first prompt was released: response=%#v error=%v", result.response, result.err)
-	case <-time.After(150 * time.Millisecond):
+		t.Fatalf("parallel invocation completed before the first prompt was released: response=%s error=%v", formatACPInvocationResponse(result.response), result.err)
+	default:
 	}
 	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
 		t.Fatalf("release first prompt: %v", err)
@@ -44,7 +48,7 @@ func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.
 	select {
 	case result := <-results:
 		if result.err != nil || result.response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-			t.Fatalf("parallel invocation = %#v, error = %v", result.response, result.err)
+			t.Fatalf("parallel invocation = %s, error = %v", formatACPInvocationResponse(result.response), result.err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for serialized prompts")
@@ -52,6 +56,14 @@ func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.
 	if starts.Load() != 1 {
 		t.Fatalf("ACP process starts = %d, want 1", starts.Load())
 	}
+}
+
+func formatACPInvocationResponse(response factoryapi.FactorySessionSyncExecutionResponse) string {
+	payload, err := json.Marshal(response)
+	if err != nil {
+		return "<unable to marshal response: " + err.Error() + ">"
+	}
+	return string(payload)
 }
 
 func waitForACPTestFile(t *testing.T, path string) {

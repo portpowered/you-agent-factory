@@ -22,12 +22,13 @@ import (
 )
 
 const (
-	acpHelperEnvironment                = "YOU_TEST_ACP_AGENT_HELPER"
-	acpRetryAttemptDirectoryEnvironment = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
-	acpRetryHoldEnvironment             = "YOU_TEST_ACP_RETRY_HOLD"
-	acpDisconnectMarkerEnvironment      = "YOU_TEST_ACP_DISCONNECT_MARKER"
-	acpDisconnectReadyEnvironment       = "YOU_TEST_ACP_DISCONNECT_READY"
-	acpDisconnectReleaseEnvironment     = "YOU_TEST_ACP_DISCONNECT_RELEASE"
+	acpHelperEnvironment                    = "YOU_TEST_ACP_AGENT_HELPER"
+	acpRetryAttemptDirectoryEnvironment     = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
+	acpRetryHoldEnvironment                 = "YOU_TEST_ACP_RETRY_HOLD"
+	acpDisconnectMarkerEnvironment          = "YOU_TEST_ACP_DISCONNECT_MARKER"
+	acpDisconnectReadyEnvironment           = "YOU_TEST_ACP_DISCONNECT_READY"
+	acpDisconnectReleaseEnvironment         = "YOU_TEST_ACP_DISCONNECT_RELEASE"
+	acpPackageConformanceReleaseEnvironment = "YOU_TEST_ACP_PACKAGE_CONFORMANCE_RELEASE"
 )
 
 func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
