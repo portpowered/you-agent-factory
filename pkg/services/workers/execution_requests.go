@@ -367,6 +367,11 @@ var ErrInvalidExecuteRequest = errors.New("invalid Workers execute request")
 
 var ErrExecuteUnavailable = errors.New("Workers execute capability unavailable")
 
+// ErrExecuteCleanupFailed identifies a request-resource cleanup failure. A
+// started attempt reports this as a normalized failed ExecuteResult so the
+// returned result remains the sole completion authority.
+var ErrExecuteCleanupFailed = errors.New("Workers execute cleanup failed")
+
 type ExecutionOutcome string
 
 const (

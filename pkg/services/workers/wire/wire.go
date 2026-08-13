@@ -36,10 +36,11 @@ var (
 // ExecuteOptions are optional process-scoped Execute edges. Omitted values use
 // inert defaults so construction remains side-effect free.
 type ExecuteOptions struct {
-	Observe  workers.ObservationSink
-	Logger   logging.Logger
-	Clock    func() time.Time
-	Worktree workers.FactoryWorktreePreparer
+	Observe        workers.ObservationSink
+	Logger         logging.Logger
+	Clock          func() time.Time
+	Worktree       workers.FactoryWorktreePreparer
+	TemporaryFiles interface{ Cleanup(paths ...string) error }
 }
 
 // NewService constructs an inert Workers root from construction ports. It
@@ -94,7 +95,7 @@ func NewService(
 		executeOptions.Logger,
 		executeOptions.Clock,
 		executeOptions.Worktree,
-		nil,
+		executeOptions.TemporaryFiles,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)

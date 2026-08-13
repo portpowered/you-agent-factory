@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"strings"
@@ -18,7 +19,7 @@ import (
 func (s *Service) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
-) (result workers.ExecuteResult, err error) {
+) (workers.ExecuteResult, error) {
 	if s == nil || s.runners == nil {
 		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
 	}
@@ -38,14 +39,36 @@ func (s *Service) Execute(
 	correlation := request.Correlation
 
 	cleanup := newCleanupRegistry()
-	defer cleanup.run(s.logger)
+	if s.temporaryFiles != nil {
+		cleanup.add(func() error {
+			return s.temporaryFiles.Cleanup()
+		})
+	}
 
-	if err := s.prepareWorkspace(ctx, &request, cleanup); err != nil {
-		return workers.ExecuteResult{}, err
+	identity, err := s.prepareAttempt(ctx, &request, cleanup)
+	if err != nil {
+		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, err)
+	}
+	return s.executeStarted(ctx, request, identity, correlation, cleanup)
+}
+
+func (s *Service) prepareAttempt(
+	ctx context.Context,
+	request *workers.ExecuteRequest,
+	cleanup *cleanupRegistry,
+) (string, error) {
+	if err := s.prepareWorkspace(ctx, request, cleanup); err != nil {
+		return "", err
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return "", contextErr
 	}
 	identity := resolveRunnerIdentity(request.Target)
-	if err := s.authorizeProviderTarget(ctx, &request, identity); err != nil {
-		return workers.ExecuteResult{}, err
+	if err := s.authorizeProviderTarget(ctx, request, identity); err != nil {
+		return "", err
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return "", contextErr
 	}
 	// Selection is validated before the attempt starts so missing/unknown
 	// identities remain pre-start errors. Resolve performs no execution effect.
@@ -53,17 +76,44 @@ func (s *Service) Execute(
 		Identity:             identity,
 		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
 	}); err != nil {
-		return workers.ExecuteResult{}, fmt.Errorf(
+		return "", fmt.Errorf(
 			"%w: resolve runner %q: %v",
 			workers.ErrInvalidExecuteRequest,
 			identity,
 			err,
 		)
 	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return "", contextErr
+	}
+	return identity, nil
+}
+
+func (s *Service) preStartError(
+	ctx context.Context,
+	cleanup *cleanupRegistry,
+	executeErr error,
+) error {
+	cleanupErr := cleanup.run(s.logger)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	return errors.Join(executeErr, cleanupErr)
+}
+
+func (s *Service) executeStarted(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	identity string,
+	correlation workers.ExecutionCorrelation,
+	cleanup *cleanupRegistry,
+) (workers.ExecuteResult, error) {
+	defer cleanup.run(s.logger)
 
 	startedAt := s.clock()
 	sequence := atomic.Int64{}
-	s.emit(ctx, &sequence, workers.ExecutionObservation{
+	observationContext := context.WithoutCancel(ctx)
+	s.emit(observationContext, &sequence, workers.ExecutionObservation{
 		Correlation: correlation,
 		Kind:        workers.ExecutionObservationKindStarted,
 		Timestamp:   startedAt,
@@ -81,25 +131,18 @@ func (s *Service) Execute(
 	execCtx, cancel := s.withTimeout(ctx, request.Target.Timeout)
 	defer cancel()
 
-	var runnerResult workers.RunnerExecutionResult
-	var runErr error
-	func() {
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				runErr = panicFailure(recovered, debug.Stack())
-			}
-		}()
-		adapted := adaptRunnerRequest(request, identity)
-		runnerResult, runErr = s.runners.Execute(execCtx, runners.ExecuteRequest{
-			Identity:             identity,
-			RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
-			Attempt:              adapted,
-		})
-	}()
+	runnerResult, runErr := s.runRunner(execCtx, request, identity)
 
+	if contextErr := execCtx.Err(); contextErr != nil {
+		runErr = contextErr
+	}
+	cleanupErr := cleanup.run(s.logger)
+	if cleanupErr != nil {
+		runErr = errors.Join(runErr, cleanupFailure(cleanupErr))
+	}
 	finishedAt := s.clock()
-	result = s.normalizeResult(correlation, request, runnerResult, runErr, finishedAt.Sub(startedAt))
-	s.emitTerminal(ctx, &sequence, result, finishedAt)
+	result := s.normalizeResult(correlation, request, runnerResult, runErr, finishedAt.Sub(startedAt))
+	s.emitTerminal(observationContext, &sequence, result, finishedAt)
 	s.logger.Info(
 		"workers execute finished",
 		"factory_session_id", correlation.FactorySessionID,
@@ -110,6 +153,23 @@ func (s *Service) Execute(
 		"duration_ms", finishedAt.Sub(startedAt).Milliseconds(),
 	)
 	return result.Clone(), nil
+}
+
+func (s *Service) runRunner(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	identity string,
+) (runnerResult workers.RunnerExecutionResult, runErr error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			runErr = panicFailure(recovered, debug.Stack())
+		}
+	}()
+	return s.runners.Execute(ctx, runners.ExecuteRequest{
+		Identity:             identity,
+		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
+		Attempt:              adaptRunnerRequest(request, identity),
+	})
 }
 
 func (s *Service) withTimeout(
@@ -128,8 +188,14 @@ func (s *Service) prepareWorkspace(
 	cleanup *cleanupRegistry,
 ) error {
 	workspace := request.Target.Workspace
-	if !workspace.PrepareWorktree || s.worktree == nil {
+	if !workspace.PrepareWorktree {
 		return nil
+	}
+	if s.worktree == nil {
+		return fmt.Errorf(
+			"%w: worktree preparer is required when worktree preparation is enabled",
+			workers.ErrInvalidExecuteRequest,
+		)
 	}
 	factoryDirectory := strings.TrimSpace(workspace.FactoryDirectory)
 	checkout := strings.TrimSpace(workspace.CheckoutIdentifier)
@@ -152,12 +218,12 @@ func (s *Service) prepareWorkspace(
 			request.Target.Environment.WorkingDirectory = path
 			request.Target.Environment.WorkingDirectorySet = true
 		}
-		cleanup.add(func() error {
-			// Worktree leases are released by dropping request-scoped ownership.
-			// Concrete checkout deletion remains owned by the Worktree preparer
-			// implementation; Execute only guarantees request-end cleanup hooks run.
-			return nil
-		})
+		if releaser, ok := s.worktree.(factoryWorktreeReleaser); ok {
+			preparation := preparation
+			cleanup.add(func() error {
+				return releaser.Release(context.WithoutCancel(ctx), preparation)
+			})
+		}
 	}
 	return nil
 }
@@ -201,7 +267,7 @@ func (s *Service) emit(
 	}
 	observation.Sequence = sequence.Add(1)
 	observation = observation.Clone()
-	if err := s.observe(ctx, observation); err != nil {
+	if err := deliverObservation(s.observe, context.WithoutCancel(ctx), observation); err != nil {
 		s.logger.Warn(
 			"workers observation delivery failed",
 			"dispatch_id", observation.Correlation.DispatchID,
@@ -212,8 +278,24 @@ func (s *Service) emit(
 	}
 }
 
-func panicFailure(recovered any, stack []byte) error {
-	message := fmt.Sprintf("workers execute panic: %v", recovered)
+func deliverObservation(
+	sink workers.ObservationSink,
+	ctx context.Context,
+	observation workers.ExecutionObservation,
+) (err error) {
+	if sink == nil {
+		return nil
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = errors.New("Workers observation sink panicked")
+		}
+	}()
+	return sink(ctx, observation)
+}
+
+func panicFailure(_ any, stack []byte) error {
+	message := "worker runner panicked"
 	failure := workers.NewProviderError(
 		workers.WorkFailureTypeUnknown,
 		message,
@@ -222,10 +304,26 @@ func panicFailure(recovered any, stack []byte) error {
 	failure.Diagnostics = &workers.WorkDiagnostics{
 		Panic: &workers.PanicDiagnostic{
 			Message: message,
-			Stack:   string(stack),
+			Stack:   boundedPanicStack(stack),
 		},
 	}
 	return failure
+}
+
+func boundedPanicStack(stack []byte) string {
+	const maxPanicStackBytes = 4096
+	if len(stack) > maxPanicStackBytes {
+		stack = stack[:maxPanicStackBytes]
+	}
+	return string(stack)
+}
+
+func cleanupFailure(err error) error {
+	return workers.NewProviderError(
+		workers.WorkFailureTypeInternalServerError,
+		"execution cleanup failed",
+		errors.Join(workers.ErrExecuteCleanupFailed, err),
+	)
 }
 
 func errMisconfigured(message string) error {

@@ -199,8 +199,11 @@ func safeDiagnosticsFromWork(diagnostics *workers.WorkDiagnostics) *workers.Safe
 	}
 	if diagnostics.Panic != nil {
 		safe.Panic = &workers.PanicDiagnostic{
-			Message: diagnostics.Panic.Message,
-			Stack:   diagnostics.Panic.Stack,
+			// Panic values are outside the trusted request boundary and may
+			// contain prompts, credentials, or command input. Keep a stable
+			// classification and the bounded code-location stack only.
+			Message: "worker runner panicked",
+			Stack:   boundedPanicStack([]byte(diagnostics.Panic.Stack)),
 		}
 	}
 	return safe

@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -10,10 +11,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
-// TemporaryFileCleaner releases request-scoped temporary files created during
-// one Execute call. Wire may leave it nil when no temporary-file effect is
-// constructed.
-type TemporaryFileCleaner interface {
+// factoryWorktreeReleaser is an optional owner-provided cleanup edge. The
+// public Workers root exposes only the preparer contract; worktree lifecycle
+// details stay behind the request-scoped Execute implementation.
+type factoryWorktreeReleaser interface {
+	Release(context.Context, workers.FactoryWorktreePreparation) error
+}
+
+// temporaryFileCleaner releases temporary files owned by one Execute call.
+// Wire supplies this exact edge without widening the public Workers root.
+type temporaryFileCleaner interface {
 	Cleanup(paths ...string) error
 }
 
@@ -27,7 +34,7 @@ type Service struct {
 	logger         logging.Logger
 	clock          func() time.Time
 	worktree       workers.FactoryWorktreePreparer
-	temporaryFiles TemporaryFileCleaner
+	temporaryFiles temporaryFileCleaner
 }
 
 // New constructs an inert Execute capability. Construction performs no runner
@@ -39,7 +46,7 @@ func New(
 	logger logging.Logger,
 	clock func() time.Time,
 	worktree workers.FactoryWorktreePreparer,
-	temporaryFiles TemporaryFileCleaner,
+	temporaryFiles temporaryFileCleaner,
 ) (*Service, error) {
 	if runnerService == nil {
 		return nil, errMisconfigured("runners service is required")

@@ -18,7 +18,8 @@ type LocalRuntimeHooks struct {
 
 // ObservationSink receives detached execution observations during one Execute
 // call. Wire injects the exact sink; Workers does not depend on Recordings
-// implementation types.
+// implementation types. Delivery is best-effort: a sink error or panic is
+// logged and never changes the ExecuteResult or terminal outcome.
 type ObservationSink func(context.Context, ExecutionObservation) error
 
 // ExecutionObservationKind identifies one Workers-owned observation category.

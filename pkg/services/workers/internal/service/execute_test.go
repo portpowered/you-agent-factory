@@ -2,6 +2,9 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,20 +39,34 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted {
-		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
-	}
-	if result.Correlation.DispatchID != "dispatch-1" ||
-		result.Correlation.AttemptID != "attempt-1" {
-		t.Fatalf("correlation = %#v", result.Correlation)
-	}
-	if len(result.Output.Primary) != 1 ||
-		result.Output.Primary[0].Text != "accepted-output" {
-		t.Fatalf("output = %#v", result.Output)
-	}
+	assertAcceptedResult(t, result, "dispatch-1", "attempt-1", "accepted-output")
 
 	observationsMu.Lock()
 	defer observationsMu.Unlock()
+	assertSafeCompletedObservations(t, observations)
+}
+
+func assertAcceptedResult(
+	t *testing.T,
+	result workers.ExecuteResult,
+	dispatchID string,
+	attemptID string,
+	content string,
+) {
+	t.Helper()
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if result.Correlation.DispatchID != dispatchID || result.Correlation.AttemptID != attemptID {
+		t.Fatalf("correlation = %#v", result.Correlation)
+	}
+	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != content {
+		t.Fatalf("output = %#v", result.Output)
+	}
+}
+
+func assertSafeCompletedObservations(t *testing.T, observations []workers.ExecutionObservation) {
+	t.Helper()
 	if len(observations) != 2 {
 		t.Fatalf("observations = %#v, want started and terminal", observations)
 	}
@@ -221,10 +238,218 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 	}
 }
 
+func TestExecuteCancellationReachesRunnerAndEmitsOneCanceledTerminalObservation(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	runner := &stubRunner{
+		execute: func(ctx context.Context, _ workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			close(started)
+			<-ctx.Done()
+			return workers.RunnerExecutionResult{}, ctx.Err()
+		},
+	}
+	var observationsMu sync.Mutex
+	var observations []workers.ExecutionObservation
+	service := mustExecuteService(t, runner, func(
+		ctx context.Context,
+		observation workers.ExecutionObservation,
+	) error {
+		if ctx.Err() != nil {
+			t.Errorf("observation context error = %v, want detached context", ctx.Err())
+		}
+		observationsMu.Lock()
+		defer observationsMu.Unlock()
+		observations = append(observations, observation.Clone())
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan workers.ExecuteResult, 1)
+	go func() {
+		result, err := service.Execute(ctx, validExecuteRequest("dispatch-cancel", "attempt-cancel"))
+		if err != nil {
+			t.Errorf("Execute() error = %v", err)
+		}
+		done <- result
+	}()
+	<-started
+	cancel()
+
+	select {
+	case result := <-done:
+		if result.Outcome != workers.ExecutionOutcomeCanceled {
+			t.Fatalf("outcome = %q, want CANCELED", result.Outcome)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Execute() did not return after runner observed cancellation")
+	}
+
+	observationsMu.Lock()
+	defer observationsMu.Unlock()
+	if len(observations) != 2 {
+		t.Fatalf("observations = %#v, want started and canceled terminal", observations)
+	}
+	if observations[0].Kind != workers.ExecutionObservationKindStarted ||
+		observations[1].Kind != workers.ExecutionObservationKindCanceled {
+		t.Fatalf("observation kinds = %#v, want STARTED then CANCELED", observations)
+	}
+	if observations[1].Sequence != 2 || observations[1].Correlation.DispatchID != "dispatch-cancel" {
+		t.Fatalf("terminal observation = %#v, want sequence 2 with correlation", observations[1])
+	}
+}
+
+func TestExecuteCanceledBeforeStartReturnsCanonicalContextError(t *testing.T) {
+	t.Parallel()
+
+	service := mustExecuteService(t, &stubRunner{}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := service.Execute(ctx, validExecuteRequest("dispatch-before-cancel", "attempt-before-cancel"))
+	if err != context.Canceled {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestExecuteRunnerPanicBecomesSafeFailedResult(t *testing.T) {
+	t.Parallel()
+
+	const secret = "panic-secret-value"
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			panic(secret)
+		},
+	}, nil)
+
+	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-panic", "attempt-panic"))
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed {
+		t.Fatalf("outcome = %q, want FAILED", result.Outcome)
+	}
+	if result.Failure == nil || result.Failure.Message != "worker runner panicked" {
+		t.Fatalf("failure = %#v, want stable panic failure", result.Failure)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Panic == nil {
+		t.Fatalf("diagnostics = %#v, want safe panic diagnostics", result.Diagnostics)
+	}
+	if strings.Contains(result.Failure.Message, secret) ||
+		strings.Contains(result.Diagnostics.Panic.Message, secret) ||
+		strings.Contains(result.Diagnostics.Panic.Stack, secret) {
+		t.Fatalf("panic secret escaped safe result: %#v", result)
+	}
+}
+
+func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *testing.T) {
+	t.Parallel()
+
+	cleanupError := errors.New("temporary cleanup failed")
+	var eventsMu sync.Mutex
+	var events []string
+	appendEvent := func(event string) {
+		eventsMu.Lock()
+		defer eventsMu.Unlock()
+		events = append(events, event)
+	}
+	worktree := &recordingWorktree{
+		preparation: workers.FactoryWorktreePreparation{CheckoutPath: "C:/fixture/worktree"},
+		release: func(context.Context, workers.FactoryWorktreePreparation) error {
+			appendEvent("worktree-release")
+			return nil
+		},
+	}
+	temporaryFiles := recordingTemporaryFiles{
+		cleanup: func(...string) error {
+			appendEvent("temporary-cleanup")
+			return cleanupError
+		},
+	}
+	service := mustExecuteServiceWithEdges(
+		t,
+		&stubRunner{content: "output"},
+		func(_ context.Context, observation workers.ExecutionObservation) error {
+			appendEvent("observation-" + string(observation.Kind))
+			return nil
+		},
+		worktree,
+		temporaryFiles,
+	)
+	request := validExecuteRequest("dispatch-cleanup", "attempt-cleanup")
+	request.Target.Workspace = workers.WorkspacePolicy{
+		PrepareWorktree:    true,
+		FactoryDirectory:   "C:/fixture",
+		CheckoutIdentifier: "attempt-cleanup",
+	}
+
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		t.Fatalf("result = %#v, want cleanup FAILED result", result)
+	}
+	if result.Failure.Type != workers.WorkFailureTypeInternalServerError ||
+		result.Failure.Message != "execution cleanup failed" {
+		t.Fatalf("failure = %#v, want typed cleanup failure", result.Failure)
+	}
+
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+	if got, want := events, []string{
+		"observation-STARTED",
+		"worktree-release",
+		"temporary-cleanup",
+		"observation-FAILED",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("events = %#v, want %#v", got, want)
+	}
+}
+
+func TestExecuteObservationSinkFailureDoesNotChangeResult(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	service := mustExecuteService(t, &stubRunner{content: "accepted"}, func(
+		ctx context.Context,
+		_ workers.ExecutionObservation,
+	) error {
+		if ctx.Err() != nil {
+			t.Errorf("observation context error = %v, want nil", ctx.Err())
+		}
+		calls.Add(1)
+		if calls.Load() == 1 {
+			return errors.New("observation sink failed")
+		}
+		panic("observation sink panic")
+	})
+
+	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-observation", "attempt-observation"))
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want best-effort observation policy", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("observation sink calls = %d, want started and terminal", calls.Load())
+	}
+}
+
 func mustExecuteService(
 	t *testing.T,
 	runner workers.Runner,
 	observe workers.ObservationSink,
+) *executeservice.Service {
+	return mustExecuteServiceWithEdges(t, runner, observe, nil, nil)
+}
+
+func mustExecuteServiceWithEdges(
+	t *testing.T,
+	runner workers.Runner,
+	observe workers.ObservationSink,
+	worktree workers.FactoryWorktreePreparer,
+	temporaryFiles interface{ Cleanup(paths ...string) error },
 ) *executeservice.Service {
 	t.Helper()
 	service, err := executeservice.New(
@@ -233,13 +458,47 @@ func mustExecuteService(
 		observe,
 		nil,
 		func() time.Time { return time.Unix(10, 0) },
-		nil,
-		nil,
+		worktree,
+		temporaryFiles,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	return service
+}
+
+type recordingWorktree struct {
+	preparation workers.FactoryWorktreePreparation
+	release     func(context.Context, workers.FactoryWorktreePreparation) error
+}
+
+func (worktree *recordingWorktree) Prepare(
+	context.Context,
+	string,
+	string,
+) (workers.FactoryWorktreePreparation, error) {
+	return worktree.preparation, nil
+}
+
+func (worktree *recordingWorktree) Release(
+	ctx context.Context,
+	preparation workers.FactoryWorktreePreparation,
+) error {
+	if worktree.release == nil {
+		return nil
+	}
+	return worktree.release(ctx, preparation)
+}
+
+type recordingTemporaryFiles struct {
+	cleanup func(...string) error
+}
+
+func (files recordingTemporaryFiles) Cleanup(paths ...string) error {
+	if files.cleanup == nil {
+		return nil
+	}
+	return files.cleanup(paths...)
 }
 
 type stubRunner struct {
