@@ -117,17 +117,19 @@ type Root struct {
 
 var _ Service = Root{}
 
-type runtimeOperations interface {
+func (r Root) runtimeOperations() (interface {
 	RuntimeLifecycle
 	RuntimeStarter
 	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
-}
-
-func (r Root) runtimeOperations() (runtimeOperations, bool) {
+}, bool) {
 	if !rootOperationsAvailable(r.Runtime) {
 		return nil, false
 	}
-	capability, ok := r.Runtime.(runtimeOperations)
+	capability, ok := r.Runtime.(interface {
+		RuntimeLifecycle
+		RuntimeStarter
+		PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+	})
 	return capability, ok && rootOperationsAvailable(capability)
 }
 
