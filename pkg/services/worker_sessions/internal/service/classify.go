@@ -750,6 +750,7 @@ func (r *registry) publishOpeningRecord(
 	}
 	pub.open = true
 	pub.recording = recording
+	pub.recordingID = strings.TrimSpace(payload.RecordingID)
 	pub.provider = workers.CanonicalProviderSessionProvider(provider)
 	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)

@@ -191,6 +191,7 @@ type invocationPreparationOptions struct {
 	continuation     bool
 	requestID        string
 	verifyTopicReady bool
+	lineage          *workers.SessionLineage
 }
 
 type invocationPreparation struct {
@@ -272,7 +273,7 @@ func (r *registry) prepareInvocation(
 		ctx,
 		req.ID,
 		attemptID,
-		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution),
+		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution, options.lineage),
 		providerIdentityForExecution(req.Execution.Execution),
 		workerRecording,
 	); err != nil {
@@ -529,6 +530,9 @@ type publication struct {
 	// recording is the Recordings-owned capture that must remain live until
 	// the terminal Worker record has been durably consumed.
 	recording recordings.WorkerSessionRecording
+	// recordingID remains after recording is closed so a source-side
+	// continuation lineage record can be appended to the same durable sidecar.
+	recordingID string
 }
 
 // publicationFor returns the publication registered for id, or nil if id was

@@ -1611,6 +1611,11 @@ func newPausedContinuationRegistry(t *testing.T) (*registry, *supervision, provi
 			Reference:       reference,
 		},
 	}
+	r.publications["worker-1"] = &publication{
+		open:         true,
+		lastSequence: make(map[sourceKey]events.SourceSequence),
+		accepted:     make(map[events.AppendIdentity]struct{}),
+	}
 	r.supervisions["worker-1"] = supervision
 	return r, supervision, reference
 }

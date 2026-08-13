@@ -156,6 +156,21 @@ func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest
 		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
 		return result, nil
 	}
+	if err := r.publishAttemptLineageRecord(
+		context.WithoutCancel(ctx),
+		req.ID,
+		continuation,
+		workers.AttemptReasonResume,
+		previousDispatchID,
+		supervision.attemptCount(),
+	); err != nil {
+		r.revertContinuation(req.ID, supervision, previousDispatchID)
+		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed, DispatchID: continuation.Execution.Dispatch.DispatchID}
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
+		return result, err
+	}
 	publishErr := r.boundary.PublishWithAdmission(
 		context.WithoutCancel(ctx),
 		continuation,
@@ -246,6 +261,7 @@ func (r *registry) prepareContinuation(
 	}
 	previousDispatchID := supervision.dispatchID
 	supervision.resumeCount++
+	supervision.attemptsMade++
 	continuation := cloneWorkstationDispatchRequest(supervision.execution)
 	continuation.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/resume/%d", previousDispatchID, supervision.resumeCount)
 	continuedReference := reference.Clone()
@@ -270,6 +286,9 @@ func (r *registry) revertContinuation(id string, supervision *supervision, previ
 	supervision.mu.Lock()
 	currentDispatchID := supervision.dispatchID
 	supervision.dispatchID = previousDispatchID
+	if supervision.attemptsMade > 0 {
+		supervision.attemptsMade--
+	}
 	supervision.publishing = false
 	supervision.continuing = false
 	supervision.accepted = true
@@ -957,66 +976,4 @@ func invalidContinuationResult(result workers.WorkstationDispatchResult) workers
 func dispatchCanceled(result workers.WorkstationDispatchResult, dispatchErr error) bool {
 	return result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled ||
 		errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled)
-}
-
-func (r *registry) transitionToPaused(id string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	session, exists := r.sessions[id]
-	if !exists || session.State != workersessions.StateRunning || session.ProviderSessionAssociation == nil {
-		return false
-	}
-	session.State = workersessions.StatePaused
-	r.sessions[id] = session
-	return true
-}
-
-// associateProviderSessionFromResult preserves the Provider Session reference
-// returned by Workers before the terminal lifecycle record can close the
-// session's publication window. A malformed or conflicting Worker result is
-// visible in structured operation logs and never replaces an accepted exact
-// reference; it also never invents a replacement from runner or model state.
-func (r *registry) associateProviderSessionFromResult(
-	id, dispatchID string,
-	result workers.WorkstationDispatchResult,
-) {
-	metadata := result.Result.ProviderSession
-	if metadata == nil {
-		return
-	}
-	_, err := r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
-		WorkerSessionID: id,
-		DispatchID:      dispatchID,
-		Reference: providers.SessionRef{
-			Provider: providers.ID(metadata.Provider),
-			Kind:     metadata.Kind,
-			ID:       metadata.ID,
-		},
-	})
-	if err != nil {
-		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
-	}
-}
-
-func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
-	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled || errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) {
-		if action == workersessions.ControlActionTerminate {
-			return workersessions.StateTerminated, workersessions.TerminalResult{}
-		}
-		return workersessions.StateCanceled, workersessions.TerminalResult{}
-	}
-	terminal := classifyTerminal(dispatchErr, result)
-	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
-		return workersessions.StateCompleted, terminal
-	}
-	return workersessions.StateFailed, terminal
-}
-
-func (r *registry) logTerminal(id, attemptID string, session workersessions.Session) {
-	cause := ""
-	if session.Result != nil {
-		cause = causeKindString(session.Result.Cause)
-	}
-	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
 }

@@ -102,6 +102,28 @@ func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersess
 				Attempts: supervision.attemptCount(),
 			}, nil
 		}
+		previousDispatchID := handoff.Execution.Dispatch.DispatchID
+		if err := r.publishAttemptLineageRecord(
+			context.WithoutCancel(ctx),
+			req.ID,
+			next,
+			workers.AttemptReasonRetry,
+			previousDispatchID,
+			supervision.attemptCount()+1,
+		); err != nil {
+			final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, classifyTerminal(err, workers.WorkstationDispatchResult{}))
+			supervision.mu.Lock()
+			supervision.err = err
+			supervision.publishing = false
+			supervision.mu.Unlock()
+			supervision.signalPublished()
+			supervision.signalDone()
+			if committed {
+				r.logTerminal(req.ID, next.Execution.Dispatch.DispatchID, final)
+				r.publishTerminalRecordOrLog(ctx, req.ID, next.Execution.Dispatch.DispatchID, final.State, *final.Result)
+			}
+			return workersessions.InvokeSessionResult{Session: final, DispatchErr: err, Attempts: supervision.attemptCount()}, nil
+		}
 		handoff = next
 		r.logger.Info(
 			"worker session retry",
@@ -290,6 +312,7 @@ func openingSessionPayload(
 	attemptID string,
 	startedAt time.Time,
 	request workers.WorkstationExecutionRequest,
+	lineages ...*workers.SessionLineage,
 ) workers.SessionPayload {
 	dispatch := request.Dispatch
 	payload := workers.SessionPayload{
@@ -331,14 +354,18 @@ func openingSessionPayload(
 	}
 	if request.ResumeSession != nil {
 		continuation := workers.SessionContinuation{
-			Provider: strings.TrimSpace(string(request.ResumeSession.Provider)),
-			Kind:     strings.TrimSpace(request.ResumeSession.Kind),
-			ID:       strings.TrimSpace(request.ResumeSession.ID),
+			Provider: string(request.ResumeSession.Provider),
+			Kind:     request.ResumeSession.Kind,
+			ID:       request.ResumeSession.ID,
 		}
 		if continuation.Provider != "" || continuation.Kind != "" || continuation.ID != "" {
 			payload.Continuation = &continuation
 			payload.AttemptReason = workers.AttemptReasonResume
 		}
+	}
+	if len(lineages) > 0 && lineages[0] != nil {
+		lineage := lineages[0].Clone()
+		payload.Lineage = &lineage
 	}
 	return payload
 }

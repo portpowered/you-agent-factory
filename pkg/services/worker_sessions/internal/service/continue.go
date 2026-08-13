@@ -3,16 +3,29 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+const (
+	continuationLineageSourceType     events.SourceType     = "worker_session_lineage"
+	continuationLineageSourceSequence events.SourceSequence = 1
+	continuationLineageSourceEventID  events.SourceEventID  = "successor"
+	attemptLineageSourceType          events.SourceType     = "worker_session_attempt"
+	attemptLineageSourceSequence      events.SourceSequence = 1
+	resumeAttemptSourceEventID        events.SourceEventID  = "resume"
+	retryAttemptSourceEventID         events.SourceEventID  = "retry"
 )
 
 // continueTuple is the immutable caller-owned identity of one continuation
@@ -28,6 +41,7 @@ type continuePlan struct {
 	request   workersessions.ContinueRequest
 	execution workers.WorkstationDispatchRequest
 	direct    bool
+	lineage   *workers.SessionLineage
 }
 
 type continuationSourceSnapshot struct {
@@ -164,6 +178,9 @@ func (r *registry) snapshotContinuationSourceLocked(
 	if source.SuccessorWorkerSessionID != "" {
 		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
 	}
+	if requestID := r.continuationSources[source.ID]; requestID != "" && requestID != req.RequestID {
+		return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
+	}
 	if err := validateContinuationSourceAssociation(source); err != nil {
 		return continuationSourceSnapshot{}, err
 	}
@@ -232,14 +249,16 @@ func (r *registry) storeContinuationReservationLocked(
 	continuation workers.WorkstationDispatchRequest,
 ) *continueReplay {
 	source := snapshot.session
-	source.SuccessorWorkerSessionID = req.SuccessorWorkerSessionID
 	r.sessions[source.ID] = source
 	r.sessions[req.SuccessorWorkerSessionID] = workersessions.Session{
 		ID:                         req.SuccessorWorkerSessionID,
 		State:                      workersessions.StateReserved,
 		ProviderSessionAssociation: continuationAssociation(req, continuation, snapshot.turnID, source.ProviderSessionAssociation.Reference),
-		PredecessorWorkerSessionID: req.SourceWorkerSessionID,
 	}
+	if r.continuationSources == nil {
+		r.continuationSources = make(map[string]string)
+	}
+	r.continuationSources[source.ID] = req.RequestID
 	r.publications[req.SuccessorWorkerSessionID] = &publication{}
 	if r.startsDone == nil {
 		r.startsDone = make(chan struct{})
@@ -255,6 +274,11 @@ func (r *registry) storeContinuationReservationLocked(
 			request:   req,
 			execution: continuation,
 			direct:    snapshot.direct,
+			lineage: &workers.SessionLineage{
+				PredecessorWorkerSessionID: req.SourceWorkerSessionID,
+				PreviousDispatchID:         snapshot.dispatchID,
+				PreviousAttemptID:          snapshot.dispatchID,
+			},
 		},
 		done: make(chan struct{}),
 	}
@@ -333,12 +357,15 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 			continuation:     true,
 			requestID:        plan.request.RequestID,
 			verifyTopicReady: true,
+			lineage:          plan.lineage,
 		},
 	)
 	if err != nil {
+		r.releaseContinuationReservation(plan)
 		return r.continuationResult(plan), continuationNotAccepted(err)
 	}
 	if prepared.terminal {
+		r.releaseContinuationReservation(plan)
 		return workersessions.ContinueResult{
 			RequestID:                plan.request.RequestID,
 			SourceWorkerSessionID:    plan.request.SourceWorkerSessionID,
@@ -349,15 +376,225 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 	go r.driveRegisteredInvocation(serverCtx, invoke, prepared.supervision)
 	select {
 	case <-prepared.supervision.admitted:
+		r.commitContinuationLineage(plan)
 		return r.continuationResult(plan), nil
 	case <-prepared.supervision.done:
 		select {
 		case <-prepared.supervision.admitted:
+			r.commitContinuationLineage(plan)
 			return r.continuationResult(plan), nil
 		default:
+			r.releaseContinuationReservation(plan)
 			return r.continuationResult(plan), continuationNotAccepted(r.startAdmissionCause(prepared.supervision))
 		}
 	}
+}
+
+// releaseContinuationReservation clears the source claim when the successor
+// never reaches Workers admission. A reserved-but-unadmitted successor is not
+// lineage evidence, so neither side is mutated into a durable relationship.
+func (r *registry) releaseContinuationReservation(plan continuePlan) {
+	r.mu.Lock()
+	if r.continuationSources[plan.request.SourceWorkerSessionID] == plan.request.RequestID {
+		delete(r.continuationSources, plan.request.SourceWorkerSessionID)
+	}
+	r.mu.Unlock()
+}
+
+// commitContinuationLineage publishes the source-side relationship only after
+// the successor's admission barrier has opened. The source execution is
+// already terminal, so its live capture handle has closed; the optional
+// Recordings writer is therefore fed the exact accepted Events record
+// directly, preserving a durable prefix or an explicit loss classification.
+func (r *registry) commitContinuationLineage(plan continuePlan) {
+	source, err := r.Get(context.Background(), workersessions.GetRequest{ID: plan.request.SourceWorkerSessionID})
+	if err != nil || source.ProviderSessionAssociation == nil {
+		r.releaseContinuationReservation(plan)
+		return
+	}
+	association := source.ProviderSessionAssociation.Clone()
+	reference := association.Reference.Clone()
+	continuation := workers.SessionContinuation{
+		Provider: string(reference.Provider),
+		Kind:     reference.Kind,
+		ID:       reference.ID,
+	}
+	lineage := workers.SessionLineage{SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID}
+	payload := workers.SessionPayload{
+		Status:          string(source.State),
+		WorkerSessionID: source.ID,
+		TurnID:          association.TurnID,
+		DispatchID:      association.DispatchID,
+		AttemptID:       association.AttemptID,
+		Continuation:    &continuation,
+		Lineage:         &lineage,
+	}
+	identity := events.AppendIdentity{
+		SourceType:     continuationLineageSourceType,
+		SourceID:       events.SourceID(source.ID + "/successor/" + plan.request.SuccessorWorkerSessionID),
+		SourceSequence: continuationLineageSourceSequence,
+		SourceEventID:  continuationLineageSourceEventID,
+	}
+	if err := r.publishSessionLineageRecord(context.Background(), source.ID, identity, payload, true); err != nil {
+		r.logger.Info(
+			"worker session continuation lineage publication failed",
+			"sourceWorkerSessionID", source.ID,
+			"successorWorkerSessionID", plan.request.SuccessorWorkerSessionID,
+			"outcome", "append_failed",
+		)
+	}
+
+	r.mu.Lock()
+	if current, exists := r.sessions[source.ID]; exists {
+		if current.SuccessorWorkerSessionID == "" || current.SuccessorWorkerSessionID == plan.request.SuccessorWorkerSessionID {
+			current.SuccessorWorkerSessionID = plan.request.SuccessorWorkerSessionID
+			r.sessions[source.ID] = current
+		}
+	}
+	if current, exists := r.sessions[plan.request.SuccessorWorkerSessionID]; exists {
+		if current.PredecessorWorkerSessionID == "" || current.PredecessorWorkerSessionID == source.ID {
+			current.PredecessorWorkerSessionID = source.ID
+			r.sessions[plan.request.SuccessorWorkerSessionID] = current
+		}
+	}
+	if r.continuationSources[source.ID] == plan.request.RequestID {
+		delete(r.continuationSources, source.ID)
+	}
+	r.mu.Unlock()
+}
+
+// publishSessionLineageRecord appends a lifecycle-shaped Session/UPDATED
+// record under the same per-session publication lock as normal Worker output.
+// allowClosed is used only for the source-side successor link, whose execution
+// terminal necessarily precedes this fact.
+func (r *registry) publishSessionLineageRecord(
+	ctx context.Context,
+	sessionID string,
+	identity events.AppendIdentity,
+	payload workers.SessionPayload,
+	allowClosed bool,
+) error {
+	pub := r.publicationFor(sessionID)
+	if pub == nil {
+		return workersessions.ErrSessionNotFound
+	}
+	payloadJSON, _ := json.Marshal(payload)
+	draft := workers.Draft{
+		Kind:       workers.KindSession,
+		Phase:      workers.PhaseUpdated,
+		Provenance: lifecycleProvenance(""),
+		Payload:    payloadJSON,
+		DispatchID: payload.DispatchID,
+		TurnID:     payload.TurnID,
+	}
+	pub.mu.Lock()
+	if !pub.open && !allowClosed {
+		pub.mu.Unlock()
+		return workersessions.ErrPublicationNotOpen
+	}
+	if pub.accepted == nil {
+		pub.accepted = make(map[events.AppendIdentity]struct{})
+	}
+	if pub.lastSequence == nil {
+		pub.lastSequence = make(map[sourceKey]events.SourceSequence)
+	}
+	key := sourceKey{sourceType: identity.SourceType, sourceID: identity.SourceID}
+	_, alreadyAccepted := pub.accepted[identity]
+	if last := pub.lastSequence[key]; !alreadyAccepted && identity.SourceSequence < last {
+		pub.mu.Unlock()
+		return workersessions.ErrOutOfOrderPublication
+	}
+	appendResult, err := r.appendDraft(ctx, workersessions.Topic(sessionID), identity, workerDraftSchemaID, draft)
+	if err != nil {
+		pub.mu.Unlock()
+		return err
+	}
+	pub.accepted[identity] = struct{}{}
+	if identity.SourceSequence > pub.lastSequence[key] {
+		pub.lastSequence[key] = identity.SourceSequence
+	}
+	recordingID := pub.recordingID
+	liveRecording := pub.recording != nil
+	pub.mu.Unlock()
+
+	if allowClosed && !liveRecording && recordingID != "" {
+		r.persistClosedLineageRecord(ctx, recordingID, sessionID, appendResult.Record)
+	}
+	return nil
+}
+
+func (r *registry) persistClosedLineageRecord(ctx context.Context, recordingID, sessionID string, record events.Record) {
+	writer, ok := r.recording.(recordings.WorkerRecordingWriter)
+	if !ok || writer == nil {
+		r.logger.Info(
+			"worker session continuation lineage recording unavailable",
+			"sessionID", sessionID,
+			"outcome", "unavailable",
+		)
+		return
+	}
+	err := writer.PersistWorkerRecord(context.WithoutCancel(ctx), recordings.WorkerRecordingRecord{
+		RecordingID:     recordingID,
+		WorkerSessionID: sessionID,
+		Record:          record.Detached(),
+	})
+	if err == nil {
+		return
+	}
+	r.logger.Info(
+		"worker session continuation lineage recording failed",
+		"sessionID", sessionID,
+		"outcome", "degraded",
+	)
+	if failureWriter, ok := r.recording.(recordings.WorkerRecordingFailureWriter); ok && failureWriter != nil {
+		_ = failureWriter.PersistWorkerRecordingFailure(context.WithoutCancel(ctx), recordings.WorkerRecordingFailure{
+			RecordingID:     recordingID,
+			WorkerSessionID: sessionID,
+			Topic:           workersessions.Topic(sessionID),
+			Code:            "CONTINUATION_LINEAGE_PERSISTENCE_FAILED",
+		})
+	}
+}
+
+// publishAttemptLineageRecord records a retry or same-session resume before
+// its next Workers handoff. The event is an explicit successor-attempt fact;
+// callers therefore never need to infer chronology from dispatch suffixes.
+func (r *registry) publishAttemptLineageRecord(
+	ctx context.Context,
+	sessionID string,
+	attempt workers.WorkstationDispatchRequest,
+	reason workers.AttemptReason,
+	previousDispatchID string,
+	attemptNumber int,
+) error {
+	currentDispatchID := attempt.Execution.Dispatch.DispatchID
+	lineage := workers.SessionLineage{
+		PreviousDispatchID: previousDispatchID,
+		PreviousAttemptID:  previousDispatchID,
+	}
+	payload := openingSessionPayload(
+		sessionID,
+		currentDispatchID,
+		r.clock.Now(),
+		attempt.Execution,
+		&lineage,
+	)
+	payload.Attempt = attemptNumber
+	payload.AttemptReason = reason
+	if reason == workers.AttemptReasonRetry {
+		payload.Continuation = nil
+	}
+	eventID := retryAttemptSourceEventID
+	if reason == workers.AttemptReasonResume {
+		eventID = resumeAttemptSourceEventID
+	}
+	identity := events.AppendIdentity{
+		SourceType:     attemptLineageSourceType,
+		SourceID:       events.SourceID(sessionID + "/attempt/" + currentDispatchID),
+		SourceSequence: attemptLineageSourceSequence,
+		SourceEventID:  eventID,
+	}
+	return r.publishSessionLineageRecord(ctx, sessionID, identity, payload, false)
 }
 
 func (r *registry) continuationResult(plan continuePlan) workersessions.ContinueResult {

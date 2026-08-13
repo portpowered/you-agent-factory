@@ -38,6 +38,78 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	}
 }
 
+func TestFileWriterLoadsContinuationLineageAppendedAfterExecutionTerminal(t *testing.T) {
+	const (
+		recordingID = "recording-post-terminal-lineage"
+		sessionID   = "worker-post-terminal-lineage"
+	)
+	root := t.TempDir()
+	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := events.Topic("worker-session/" + sessionID + "/events")
+	opening := mustRecord(t, openingAppend(topic, sessionID), 1)
+	terminal := mustRecord(t, terminalAppend(topic, sessionID), 2)
+	lineagePayload, _ := json.Marshal(workers.SessionPayload{
+		Status:          "COMPLETED",
+		WorkerSessionID: sessionID,
+		DispatchID:      "dispatch-post-terminal",
+		AttemptID:       "dispatch-post-terminal",
+		Continuation: &workers.SessionContinuation{
+			Provider: "codex",
+			Kind:     "session_id",
+			ID:       "opaque-provider-session",
+		},
+		Lineage: &workers.SessionLineage{SuccessorWorkerSessionID: "successor-post-terminal"},
+	})
+	lineageDraft, _ := json.Marshal(workers.Draft{
+		Kind:  workers.KindSession,
+		Phase: workers.PhaseUpdated,
+		Provenance: workers.Provenance{
+			Delivery: workers.DeliverySynthesized, Fidelity: workers.FidelityLifecycleOnly,
+			NativeEventType: "worker_session_lineage", Representation: workers.RepresentationNotification,
+		},
+		Payload:    lineagePayload,
+		DispatchID: "dispatch-post-terminal",
+	})
+	lineage := mustRecord(t, events.AppendRequest{
+		Topic:          topic,
+		SourceType:     "worker_session_lineage",
+		SourceID:       "worker-post-terminal-lineage/successor/successor-post-terminal",
+		SourceSequence: 1,
+		SourceEventID:  "successor",
+		SchemaID:       "workers.draft.v1",
+		Payload:        lineageDraft,
+	}, 3)
+	persistWorkerRecoveryPrefix(t, writer, recordingID, sessionID, opening, terminal, lineage)
+
+	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := reopened.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("reopened FileWriter does not expose the durable reader")
+	}
+	snapshot, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(): %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || len(snapshot.Sessions[0].Records) != 3 ||
+		snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete ||
+		snapshot.Sessions[0].Records[2].SourceType != events.SourceType("worker_session_lineage") {
+		t.Fatalf("loaded snapshot = %#v, want complete opening/terminal/lineage history", snapshot)
+	}
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(): %v", err)
+	}
+	if len(replayed.Projection.Records) != 3 || replayed.Projection.Records[2].ID.Position != 3 {
+		t.Fatalf("replayed projection = %#v, want chronological post-terminal lineage", replayed.Projection)
+	}
+}
+
 func TestWorkerRecordingRecoveryAfterRestartPreservesDurablePrefix(t *testing.T) {
 	const (
 		recordingID = "recording-interrupted-recovery"

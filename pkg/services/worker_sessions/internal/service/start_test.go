@@ -2151,7 +2151,11 @@ func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T
 			}, nil
 		},
 	}
-	registry := newRegistryWithExecution(execution)
+	eventsSvc := newEventsAppender()
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
 	request := validStartRequest("worker-retry", "dispatch-1")
 	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
 
@@ -2177,6 +2181,26 @@ func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T
 	}
 	if result.Session.ID != request.ID {
 		t.Fatalf("retry session ID = %q, want %q", result.Session.ID, request.ID)
+	}
+	assertRetryAttemptHistory(t, eventsSvc, request.ID)
+}
+
+func assertRetryAttemptHistory(t *testing.T, eventsSvc events.Service, sessionID string) {
+	t.Helper()
+	topic := workersessions.Topic(sessionID)
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil || len(read.Records) != 3 {
+		t.Fatalf("retry history = %+v, %v, want opening/retry/terminal history", read, err)
+	}
+	retryPayload := decodeSessionPayload(t, decodeDraft(t, read.Records[1]))
+	if read.Records[1].SourceType != events.SourceType("worker_session_attempt") {
+		t.Fatalf("retry source type = %q, want worker_session_attempt", read.Records[1].SourceType)
+	}
+	if retryPayload.AttemptReason != workers.AttemptReasonRetry || retryPayload.Lineage == nil {
+		t.Fatalf("retry record = %#v, want explicit retry lineage", retryPayload)
+	}
+	if retryPayload.Lineage.PreviousDispatchID != "dispatch-1" || retryPayload.DispatchID != "dispatch-1/attempt/2" {
+		t.Fatalf("retry record = %#v, want previous/current attempt lineage", retryPayload)
 	}
 }
 

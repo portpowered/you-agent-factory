@@ -2,12 +2,15 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -783,3 +786,175 @@ func TestCancel_ConcurrentControlsShareOneBoundaryEffect(t *testing.T) {
 // tool call whose content continues rather than a second tool call appearing.
 // Only the Workers dispatch identity changes, and it changes to ".../attempt/N"
 // so Workers can tell the attempts apart.
+
+func readControlHistory(t *testing.T, eventsSvc events.Service, topic events.Topic, limit int) events.ReadResult {
+	t.Helper()
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: limit})
+	if err != nil {
+		t.Fatalf("Read(%q) error = %v", topic, err)
+	}
+	return read
+}
+
+func decodeControlPayload(t *testing.T, record events.Record) workersessions.ControlRecordPayload {
+	t.Helper()
+	var draft workers.Draft
+	if err := json.Unmarshal(record.Payload, &draft); err != nil {
+		t.Fatalf("control draft decode error = %v", err)
+	}
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseUpdated {
+		t.Fatalf("control draft = %#v, want SESSION/UPDATED", draft)
+	}
+	var payload workersessions.ControlRecordPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("control payload decode error = %v", err)
+	}
+	if err := payload.Validate(); err != nil {
+		t.Fatalf("control payload validation error = %v", err)
+	}
+	return payload
+}
+
+func decodeOrderedControlPayloads(t *testing.T, read events.ReadResult, indexes []int) []workersessions.ControlRecordPayload {
+	t.Helper()
+	payloads := make([]workersessions.ControlRecordPayload, 0, len(indexes))
+	for _, index := range indexes {
+		payloads = append(payloads, decodeControlPayload(t, read.Records[index]))
+	}
+	return payloads
+}
+
+func assertPauseResumeControlHistory(t *testing.T, read events.ReadResult, resumedDispatchID string) {
+	t.Helper()
+	records := decodeOrderedControlPayloads(t, read, []int{1, 2, 3, 5})
+	assertControlRequest(t, records[0], workersessions.ControlActionPause, "pause-1")
+	assertControlOutcome(t, records[0], records[1], workersessions.ControlOutcomeApplied, "pause")
+	assertControlRequest(t, records[2], workersessions.ControlActionResume, "resume-1")
+	assertControlOutcome(t, records[2], records[3], workersessions.ControlOutcomeApplied, "resume")
+	if records[1].DispatchID != "dispatch-1" || records[3].DispatchID != resumedDispatchID {
+		t.Fatalf("control dispatch identities = pause %q, resume %q; want exact attempts", records[1].DispatchID, records[3].DispatchID)
+	}
+	assertResumeAttemptLineage(t, read.Records[4])
+}
+
+func assertControlRequest(t *testing.T, payload workersessions.ControlRecordPayload, action workersessions.ControlAction, requestID string) {
+	t.Helper()
+	if payload.RecordType != workersessions.ControlRecordTypeRequest {
+		t.Fatalf("control request payload = %#v, want request", payload)
+	}
+	if payload.Action != action {
+		t.Fatalf("control request action = %q, want %q", payload.Action, action)
+	}
+	if payload.RequestID != requestID {
+		t.Fatalf("control request ID = %q, want %q", payload.RequestID, requestID)
+	}
+}
+
+func assertControlOutcome(t *testing.T, request, outcome workersessions.ControlRecordPayload, want workersessions.ControlOutcome, label string) {
+	t.Helper()
+	if outcome.RecordType != workersessions.ControlRecordTypeOutcome {
+		t.Fatalf("%s outcome payload = %#v, want outcome", label, outcome)
+	}
+	if outcome.Outcome != want {
+		t.Fatalf("%s outcome = %q, want %q", label, outcome.Outcome, want)
+	}
+	if outcome.CorrelationID != request.CorrelationID {
+		t.Fatalf("%s correlation = %q, want request correlation %q", label, outcome.CorrelationID, request.CorrelationID)
+	}
+}
+
+func assertResumeAttemptLineage(t *testing.T, record events.Record) {
+	t.Helper()
+	resumeAttempt := decodeLineageSessionPayload(t, record)
+	if resumeAttempt.AttemptReason != workers.AttemptReasonResume {
+		t.Fatalf("resume attempt reason = %q, want RESUME", resumeAttempt.AttemptReason)
+	}
+	if resumeAttempt.Lineage == nil || resumeAttempt.Lineage.PreviousDispatchID != "dispatch-1" {
+		t.Fatalf("resume attempt lineage = %#v, want previous dispatch", resumeAttempt.Lineage)
+	}
+	if resumeAttempt.Continuation == nil {
+		t.Fatalf("resume attempt continuation = nil, want exact continuation")
+	}
+}
+
+func decodeLineageSessionPayload(t *testing.T, record events.Record) workers.SessionPayload {
+	t.Helper()
+	var draft workers.Draft
+	if err := json.Unmarshal(record.Payload, &draft); err != nil {
+		t.Fatalf("session draft decode error = %v", err)
+	}
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("session payload decode error = %v", err)
+	}
+	return payload
+}
+
+func assertPortableControlHistory(t *testing.T, sessionID string, topic events.Topic, read events.ReadResult) {
+	t.Helper()
+	portable, err := (recordings.WorkerRecordingCodec{}).BuildWorkerPortableRecording(recordings.WorkerRecordingSnapshot{
+		RecordingID: "recording-control-history",
+		Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+			WorkerSessionID: sessionID,
+			Topic:           topic,
+			Status:          recordings.WorkerRecordingStatusCompleted,
+			LastPosition:    read.Records[len(read.Records)-1].ID.Position,
+			Records:         read.Records,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BuildWorkerPortableRecording() error = %v", err)
+	}
+	codec := recordings.WorkerRecordingCodec{}
+	encoded, err := codec.EncodeWorkerPortableRecording(portable)
+	if err != nil {
+		t.Fatalf("EncodeWorkerPortableRecording() error = %v", err)
+	}
+	decoded, err := codec.DecodeWorkerPortableRecording(encoded)
+	if err != nil {
+		t.Fatalf("DecodeWorkerPortableRecording() error = %v", err)
+	}
+	if len(decoded.Records) != len(portable.Records) || decoded.Records[1].Payload == nil ||
+		decoded.Records[1].SourceType != events.SourceType("worker_session_control") ||
+		decoded.Records[5].SourceType != events.SourceType("worker_session_control") {
+		t.Fatalf("portable control records = %#v, want exact ordered control records", decoded.Records)
+	}
+	replayed, err := codec.ReplayWorkerPortableRecording(decoded)
+	if err != nil || replayed.Projection.Status != recordings.WorkerRecordingStatusComplete {
+		t.Fatalf("ReplayWorkerPortableRecording() = %#v, %v, want complete preserved history", replayed, err)
+	}
+}
+
+func assertNaturalControlHistory(t *testing.T, eventsSvc events.Service, topic events.Topic) {
+	t.Helper()
+	read := readControlHistory(t, eventsSvc, topic, 10)
+	if len(read.Records) != 4 {
+		t.Fatalf("natural control history = %+v, want opening/request/outcome/terminal", read)
+	}
+	request := decodeControlPayload(t, read.Records[1])
+	outcome := decodeControlPayload(t, read.Records[2])
+	if request.RecordType != workersessions.ControlRecordTypeRequest || outcome.RecordType != workersessions.ControlRecordTypeOutcome ||
+		outcome.Outcome != workersessions.ControlOutcomeNoop || request.CorrelationID != outcome.CorrelationID {
+		t.Fatalf("natural control bracket = request %#v outcome %#v, want one matching NOOP bracket", request, outcome)
+	}
+}
+
+func assertInterruptControlHistory(t *testing.T, eventsSvc events.Service, topic events.Topic) {
+	t.Helper()
+	read := readControlHistory(t, eventsSvc, topic, 10)
+	if len(read.Records) != 5 {
+		t.Fatalf("interrupt source history = %+v, want opening/request/outcome/terminal/lineage", read)
+	}
+	request := decodeControlPayload(t, read.Records[1])
+	outcome := decodeControlPayload(t, read.Records[2])
+	if request.RecordType != workersessions.ControlRecordTypeRequest || request.Action != workersessions.ControlActionInterrupt ||
+		request.RequestID != "interrupt-history-1" || outcome.RecordType != workersessions.ControlRecordTypeOutcome ||
+		outcome.Action != workersessions.ControlActionInterrupt || outcome.Outcome != workersessions.ControlOutcomeApplied ||
+		request.CorrelationID != outcome.CorrelationID {
+		t.Fatalf("interrupt control bracket = request %#v outcome %#v, want applied matching bracket", request, outcome)
+	}
+	if outcome.DispatchID != "dispatch-source-interrupt" || read.Records[3].ID.Position <= read.Records[2].ID.Position ||
+		read.Records[4].SourceType != events.SourceType("worker_session_lineage") {
+		t.Fatalf("interrupt ordering/dispatch = outcome %#v terminal position %d, want exact dispatch before terminal", outcome, read.Records[3].ID.Position)
+	}
+}
