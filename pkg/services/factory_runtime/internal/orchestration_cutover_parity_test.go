@@ -114,9 +114,9 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
-		newTestRuntimeLedger,
+		testRuntimeOpening(newTestRuntimeLedger),
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
@@ -177,9 +177,9 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
-		newTestRuntimeLedger,
+		testRuntimeOpening(newTestRuntimeLedger),
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},

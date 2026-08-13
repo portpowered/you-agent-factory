@@ -688,18 +688,6 @@ func provideFactorySessionSyncWaitScheduler() factorysessionwire.SyncWaitSchedul
 	return platformclock.Real{}
 }
 
-func provideRecordingsProjectionFactory() factorysessionwire.RecordingsProjectionFactory {
-	return recordingswire.NewProjectionService
-}
-
-func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
-	return func() factoryruntime.RuntimeLedgerFactory {
-		return func(topology recordings.InitialStructureSource, now func() time.Time, definitions factorydefinitions.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
-			return recordingswire.NewRuntimeLedger(topology, now, uuid.NewString(), definitions)
-		}
-	}
-}
-
 func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.PortableRecordingWriter, error) {
 	makeDirectories, createTemporaryFile, removePath, renamePath, _ := provideRecordingFilesystemEffects(edges)
 	return recordingswire.NewPortableRecordingWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
@@ -741,49 +729,6 @@ func provideRecordingFilesystemEffects(
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
 	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
-}
-
-func provideRuntimeRecorderFactory(
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-) recordings.RuntimeRecorderFactory {
-	return func(
-		flushInterval time.Duration,
-		loaded factorydefinitions.LoadedFactorySource,
-		now func() time.Time,
-		recordingID string,
-		recordPath string,
-	) (recordings.RuntimeRecorder, error) {
-		return recordingswire.NewLifecycleRuntimeRecorder(
-			flushInterval,
-			loaded,
-			now,
-			recordingID,
-			recordPath,
-			captureLoadedFactorySnapshot,
-		)
-	}
-}
-
-func provideReplayClockFactory() factorysessionwire.ReplayClockFactory {
-	return recordingswire.NewReplayClock
-}
-
-func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
-	return func(
-		artifact *factorydefinitions.ReplayArtifact,
-	) (
-		workers.Provider,
-		workers.CommandRunner,
-		[]recordings.ReplayHook,
-		recordings.CompletionDeliveryPlanner,
-		error,
-	) {
-		return recordingswire.NewReplayExecution(
-			artifact,
-			factorydefinitionswire.FactorySnapshotJSONDecoder(),
-			factorydefinitionswire.ReplayRuntimeConfigDecoder(),
-		)
-	}
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.

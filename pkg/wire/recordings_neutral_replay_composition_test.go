@@ -12,12 +12,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
-
-type neutralReplayCompositionLedger struct {
-	recordings.Ledger
-}
 
 func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
 	t.Parallel()
@@ -60,18 +55,20 @@ func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testin
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
-	factory := provideRecordingsFactory(
+	root, err := provideRecordingsRoot(
 		serviceedges.Edges{},
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
+		nil,
+		nil,
 	)
-	service := factory(
-		&neutralReplayCompositionLedger{},
-		recordingswire.NewProjectionService(),
-	)
-	if service == nil {
-		t.Fatal("provideRecordingsFactory() returned nil service")
+	if err != nil {
+		t.Fatalf("provideRecordingsRoot() error = %v", err)
 	}
+	if root == nil {
+		t.Fatal("provideRecordingsRoot() returned nil root")
+	}
+	var service recordings.Service = root
 	recording := finalizedNeutralReplayRecording(t, service)
 	assertNeutralReplayTypedFailures(t, service, recording)
 }

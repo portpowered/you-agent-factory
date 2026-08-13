@@ -52,7 +52,7 @@ func PrepareRuntime(
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
-	replayClockFactory ReplayClockFactory,
+	replayClock func(*factorydefinitions.ReplayArtifact) recordings.Clock,
 	hostedPollersFactory AutomationHostedSourcesFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
@@ -158,7 +158,7 @@ func PrepareRuntime(
 		)
 	}
 	selectedClock, clockErr := clockForReplay(
-		clockEdge, load.ReplayArtifact, replayClockFactory, resolveClock,
+		clockEdge, load.ReplayArtifact, replayClock, resolveClock,
 	)
 	if clockErr != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, clockErr
@@ -503,11 +503,11 @@ func firstNonEmpty(values ...string) string {
 func clockForReplay(
 	clock factoryruntime.Clock,
 	artifact *factorydefinitions.ReplayArtifact,
-	replayClockFactory ReplayClockFactory,
+	replayClock func(*factorydefinitions.ReplayArtifact) recordings.Clock,
 	resolveClock factoryruntime.ClockResolver,
 ) (factoryruntime.Clock, error) {
-	if clock == nil && artifact != nil && replayClockFactory != nil {
-		clock = replayClockFactory(artifact)
+	if clock == nil && artifact != nil && replayClock != nil {
+		clock = replayClock(artifact)
 	}
 	if resolveClock == nil {
 		return nil, fmt.Errorf("Factory Runtime clock resolver is required")

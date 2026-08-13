@@ -17,6 +17,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
@@ -163,14 +164,9 @@ var servicesSet = wire.NewSet(
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
-	provideRecordingsProjectionFactory,
-	provideRecordingsFactory,
-	provideRecordingLifecycleFactory,
 	provideFactorySessionReplayInputs,
-	provideRuntimeLedgerFactory,
+	provideRecordingsRoot,
 	provideReplayArtifactStorage,
-	provideRuntimeRecorderFactory,
-	provideReplayClockFactory,
 	provideFactoryRuntimeIDGenerator,
 	provideFactoryRuntimeDirectories,
 	provideFactoryRuntimeInputs,
@@ -217,7 +213,6 @@ var servicesSet = wire.NewSet(
 	provideFactoryRuntimeProviderCommandRunner,
 	provideFactoryRuntimeScriptCommandRunner,
 	provideFactoryRuntimeSessionLoggerFactory,
-	provideReplayExecutionFactory,
 	provideWorkersRetryRandomSource,
 	provideWorkersWorkstationFileSystem,
 	provideWorkersProviderTemporaryFileSystem,
@@ -378,6 +373,8 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
 	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
+	wire.Bind(new(recordings.Service), new(recordings.Root)),
+	wire.Bind(new(recordings.RuntimeOpening), new(recordings.Root)),
 	wire.Bind(new(processcontract.ACPServer), new(acp.Server)),
 	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),

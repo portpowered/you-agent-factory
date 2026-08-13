@@ -121,13 +121,12 @@ func (f *RuntimeFactory) Build(
 	backendScopeID string,
 	clock factory.Clock,
 	recordPath string,
-	recording recordings.RuntimeRecorder,
 	initialFactory *interfaces.FactorySnapshot,
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
-	newRuntimeLedger factory.RuntimeLedgerFactory,
+	recordingsRuntime recordings.RuntimeOpening,
 	loadWorkerExecutors func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error),
 	workerService runtimeWorkstationService,
 	providerInvocation workers.WorkstationRequestExecutor,
@@ -203,9 +202,14 @@ func (f *RuntimeFactory) Build(
 		return nil, err
 	}
 	bundleBuilt := false
+	runtimeScopeOwned := false
+	var runtimeScopeRecorder recordings.RuntimeRecorder
 	defer func() {
 		if !bundleBuilt {
 			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
+			if runtimeScopeOwned && runtimeScopeRecorder != nil {
+				_ = runtimeScopeRecorder.Finalize(clock.Now().UTC())
+			}
 		}
 	}()
 	net, err := f.compileOrchestrationNet(ctx, dir, loadedFactoryCfg.FactoryConfig(), logger)
@@ -214,10 +218,32 @@ func (f *RuntimeFactory) Build(
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(runnerID, loadedFactoryCfg.FactoryConfig())
-	if newRuntimeLedger == nil {
-		return nil, fmt.Errorf("Recordings runtime ledger factory is required")
+	if recordingsRuntime == nil {
+		return nil, fmt.Errorf("Recordings runtime opening is required")
 	}
-	eventHistory := newRuntimeLedger(net, clock.Now, loadedFactoryCfg)
+	loaded, ok := loadedFactoryCfg.(interfaces.LoadedFactorySource)
+	if !ok || loaded == nil {
+		return nil, fmt.Errorf("loaded Factory source is required for Recordings runtime scope")
+	}
+	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
+		Topology:         net,
+		Definitions:      loadedFactoryCfg,
+		LoadedFactory:    loaded,
+		Now:              clock.Now,
+		RecordingID:      runtimeInstanceID,
+		RecordPath:       recordPath,
+		FactorySessionID: sessionID,
+	})
+	if openErr != nil {
+		return nil, openErr
+	}
+	eventHistory := opened.Ledger
+	recording := opened.Recorder
+	runtimeScopeRecorder = opened.Recorder
+	runtimeScopeOwned = opened.Recorder != nil
+	if eventHistory == nil {
+		return nil, fmt.Errorf("Recordings runtime ledger is required")
+	}
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)

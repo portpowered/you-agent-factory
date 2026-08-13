@@ -142,6 +142,54 @@ type RuntimeOpeningRequest struct {
 	FlushInterval time.Duration
 }
 
+// RuntimeScopeRequest contains the runtime-owned values Recordings needs to
+// open one private event stream. The process graph supplies the Recordings
+// root once; callers provide only the topology, identity, clock, and loaded
+// definition values for this runtime.
+type RuntimeScopeRequest struct {
+	Topology         InitialStructureSource
+	Definitions      interfaces.RuntimeDefinitionLookup
+	LoadedFactory    interfaces.LoadedFactorySource
+	Now              func() time.Time
+	RecordingID      string
+	RecordPath       string
+	FlushInterval    time.Duration
+	FactorySessionID string
+}
+
+// RuntimeScopeResult returns the runtime event ledger and optional recorder
+// owned by the shared Recordings root. The ledger and recorder are runtime
+// capabilities, not construction collaborators; they are acquired and
+// finalized by the root's scope owner.
+type RuntimeScopeResult struct {
+	Ledger   RuntimeEventLedger
+	Recorder RuntimeRecorder
+	Scope    RecordingScopeRef
+}
+
+// RuntimeOpening is the Recordings-owned capability used by Factory Runtime
+// and Factory Sessions while opening a runtime. It keeps replay construction,
+// projection selection, and live scope acquisition on the one process root.
+type RuntimeOpening interface {
+	OpenRuntime(context.Context, RuntimeScopeRequest) (RuntimeScopeResult, error)
+	Projection() ProjectionService
+	ReplayClock(*ReplayArtifact) Clock
+	ReplayExecution(*ReplayArtifact) (
+		workerexecution.Provider,
+		workerexecution.CommandRunner,
+		[]ReplayHook,
+		CompletionDeliveryPlanner,
+		error,
+	)
+}
+
+// Root is the complete process-scoped Recordings authority. Runtime opening
+// is an owner capability of this same value, never a second service graph.
+type Root interface {
+	Service
+	RuntimeOpening
+}
+
 // CanonicalEventID is the Recordings-owned identity of one accepted Factory
 // event.
 type CanonicalEventID string
@@ -1627,16 +1675,6 @@ type RuntimeRecorder interface {
 	// final synchronous flush. Repeated calls return the first terminal result.
 	Finalize(time.Time) error
 }
-
-// RuntimeRecorderFactory constructs one session-scoped replay recorder from
-// root Factory Definition contracts.
-type RuntimeRecorderFactory func(
-	time.Duration,
-	interfaces.LoadedFactorySource,
-	func() time.Time,
-	string,
-	string,
-) (RuntimeRecorder, error)
 
 // ReplayExecutionFactory constructs the replay-specific provider, command
 // runner, hooks, and completion policy consumed by existing Factory Runtime

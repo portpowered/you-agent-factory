@@ -252,8 +252,9 @@ type (
 	RuntimeEventLedger                                         = recordingcontracts.RuntimeEventLedger
 	RuntimeLedger                                              = recordingcontracts.RuntimeLedger
 	RuntimeOpeningRequest                                      = recordingcontracts.RuntimeOpeningRequest
+	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
+	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
 	RuntimeRecorder                                            = recordingcontracts.RuntimeRecorder
-	RuntimeRecorderFactory                                     = recordingcontracts.RuntimeRecorderFactory
 	SessionLifecycleControlInput                               = recordingcontracts.SessionLifecycleControlInput
 	SimpleDashboardActiveExecution                             = recordingcontracts.SimpleDashboardActiveExecution
 	SimpleDashboardQueryRequest                                = recordingcontracts.SimpleDashboardQueryRequest
@@ -308,6 +309,21 @@ type (
 	WorldStateView                                             = recordingcontracts.WorldStateView
 	WorldStateViewSchemaVersion                                = recordingcontracts.WorldStateViewSchemaVersion
 )
+
+// RuntimeOpening is the Recordings-owned capability used while Factory
+// Runtime opens a private runtime scope. Replay input loading remains on the
+// same process root so Factory Sessions cannot construct a second Recordings
+// graph for historical replay.
+type RuntimeOpening interface {
+	recordingcontracts.RuntimeOpening
+	ReplayInputLoader
+}
+
+// Root is the complete process-scoped Recordings authority.
+type Root interface {
+	Service
+	RuntimeOpening
+}
 
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable
