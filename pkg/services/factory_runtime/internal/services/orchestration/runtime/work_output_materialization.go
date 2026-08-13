@@ -29,6 +29,36 @@ func materializeWorkerOutputForDispatch(
 		request.Execution.Dispatch,
 		result,
 		workerexecution.ProposedOutputFromLegacyWorkResult(result),
+		false,
+	)
+}
+
+// materializeWorkerOutputForDispatchWithProposal preserves the detached
+// Execute proposal until Runtime has handed it to Work. Legacy WorkResult
+// callers continue through the compatibility mapper above.
+func materializeWorkerOutputForDispatchWithProposal(
+	ctx context.Context,
+	workService work.Service,
+	net *state.Net,
+	idGenerator work.RequestIDGenerator,
+	request workerexecution.WorkstationDispatchRequest,
+	result workerexecution.WorkResult,
+	proposal *workerexecution.ProposedOutput,
+) workerexecution.WorkResult {
+	proposals := workerexecution.ProposedOutputFromLegacyWorkResult(result)
+	fromDetachedOutput := proposal != nil
+	if proposal != nil {
+		proposals = proposal.Clone()
+	}
+	return applyMaterializedWorkerOutput(
+		ctx,
+		workService,
+		net,
+		idGenerator,
+		request.Execution.Dispatch,
+		result,
+		proposals,
+		fromDetachedOutput,
 	)
 }
 
@@ -40,8 +70,10 @@ func applyMaterializedWorkerOutput(
 	dispatch work.WorkDispatch,
 	result workerexecution.WorkResult,
 	proposals workerexecution.ProposedOutput,
+	fromDetachedOutput bool,
 ) workerexecution.WorkResult {
-	if len(proposals.ProposedWork) == 0 {
+	if len(proposals.ProposedWork) == 0 &&
+		(!fromDetachedOutput || !hasMaterializableOutput(proposals)) {
 		return result
 	}
 
@@ -95,6 +127,12 @@ func applyMaterializedWorkerOutput(
 	}
 	next.RecordedOutputWork = append([]work.FactoryWorkItem(nil), materialized.MaterializedWork...)
 	return next
+}
+
+func hasMaterializableOutput(proposals workerexecution.ProposedOutput) bool {
+	return len(proposals.Primary) > 0 ||
+		strings.TrimSpace(proposals.Feedback) != "" ||
+		strings.TrimSpace(proposals.Classification) != ""
 }
 
 func validStatesByTypeFromNet(net *state.Net) map[string]map[string]bool {

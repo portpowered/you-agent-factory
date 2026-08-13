@@ -505,6 +505,7 @@ func workstationDispatchResultFromExecute(
 	executeErr error,
 ) (workers.WorkstationDispatchResult, error) {
 	dispatch := request.Execution.Dispatch
+	proposedOutput := result.Output.Clone()
 	workResult := workers.WorkResult{
 		DispatchID:                  dispatch.DispatchID,
 		TransitionID:                dispatch.TransitionID,
@@ -559,6 +560,7 @@ func workstationDispatchResultFromExecute(
 		WorkstationName: request.WorkstationName,
 		TerminalOutcome: terminal,
 		Result:          workResult,
+		ProposedOutput:  &proposedOutput,
 	}, executeErr
 }
 

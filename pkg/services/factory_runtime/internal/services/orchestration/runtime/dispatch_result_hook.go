@@ -39,6 +39,7 @@ type dispatchPlanningResultHook struct {
 	scheduled         []scheduledDispatchResult
 	asyncErr          error
 	onResult          func()
+	acceptLocks       sync.Map
 	mu                sync.Mutex
 }
 
@@ -73,6 +74,17 @@ func newCanonicalDispatchPlanningResultHook(
 		factorySessionID: factorySessionID,
 		waitCh:           make(chan struct{}, 1),
 	}
+}
+
+// lockDispatchAcceptance serializes terminal callbacks for one dispatch while
+// allowing unrelated dispatches to materialize concurrently. Planner retains
+// one intent per dispatch for the same lifetime, so these small lock entries
+// have the same bounded-by-runtime scope as the existing idempotency state.
+func (h *dispatchPlanningResultHook) lockDispatchAcceptance(dispatchID string) func() {
+	value, _ := h.acceptLocks.LoadOrStore(strings.TrimSpace(dispatchID), &sync.Mutex{})
+	lock := value.(*sync.Mutex)
+	lock.Lock()
+	return lock.Unlock
 }
 
 func (h *dispatchPlanningResultHook) SubmitDispatch(
@@ -159,6 +171,13 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	result workers.WorkstationDispatchResult,
 	dispatchErr error,
 ) {
+	dispatchID := request.Execution.Dispatch.DispatchID
+	if strings.TrimSpace(dispatchID) == "" {
+		dispatchID = result.DispatchID
+	}
+	unlock := h.lockDispatchAcceptance(dispatchID)
+	defer unlock()
+
 	workResult := canonicalWorkResult(request, result, dispatchErr)
 	usedPlanned := false
 	if provider, ok := h.completionPlanner.(plannedCompletionResultProvider); ok {
@@ -179,13 +198,25 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	// from the event ledger. Live Worker proposals are materialized here so
 	// invalid proposals cannot enter Runtime state.
 	if !usedPlanned {
-		workResult = materializeWorkerOutputForDispatch(
+		// A terminal result is an idempotency tombstone. Check it before
+		// materialization so a late callback cannot create another canonical
+		// Work item before Planner classifies it as a duplicate.
+		intent, ok := h.planner.Intent(workResult.DispatchID)
+		if !ok || intent.Result != nil {
+			outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
+			if _, err := h.acceptCanonicalResult(ctx, request, workResult, "", outcome); err != nil {
+				h.recordCanonicalError(err)
+			}
+			return
+		}
+		workResult = materializeWorkerOutputForDispatchWithProposal(
 			ctx,
 			h.workService,
 			h.net,
 			h.workRequestIDs,
 			request,
 			workResult,
+			result.ProposedOutput,
 		)
 	}
 	outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
@@ -244,6 +275,9 @@ func (h *dispatchPlanningResultHook) acceptRootResult(
 	req factory.AcceptDispatchResultRequest,
 	outcome dispatchplanning.TerminalResultOutcome,
 ) (dispatchplanning.RetirementResult, error) {
+	unlock := h.lockDispatchAcceptance(req.DispatchID)
+	defer unlock()
+
 	intent, ok := h.planner.Intent(req.DispatchID)
 	if !ok {
 		return dispatchplanning.RetirementResult{}, fmt.Errorf(

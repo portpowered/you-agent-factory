@@ -117,6 +117,41 @@ func TestMaterializeWorkerOutputForDispatchRejectsUnknownTypeAsFailed(t *testing
 	}
 }
 
+func TestMaterializeWorkerOutputForDispatchRejectsInvalidDetachedProposal(t *testing.T) {
+	t.Parallel()
+
+	result := materializeWorkerOutputForDispatchWithProposal(
+		context.Background(),
+		testMaterializationService(),
+		&state.Net{WorkTypes: map[string]*state.WorkType{"task": {ID: "task"}}},
+		func() string { return "1" },
+		workerexecution.WorkstationDispatchRequest{
+			Execution: workerexecution.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{
+					DispatchID: "dispatch-detached-invalid",
+					Execution:  work.ExecutionMetadata{WorkIDs: []string{"work-1"}},
+				},
+			},
+		},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		&workerexecution.ProposedOutput{
+			ProposedWork: []workerexecution.ProposedWork{{
+				WorkTypeID: "missing",
+				Name:       "invalid-follow-up",
+			}},
+		},
+	)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want FAILED", result.Outcome)
+	}
+	if len(result.RecordedOutputWork) != 0 {
+		t.Fatalf("invalid detached proposal entered Runtime state: %#v", result.RecordedOutputWork)
+	}
+	if !strings.Contains(result.Error, "worker output materialization") {
+		t.Fatalf("error = %q, want materialization detail", result.Error)
+	}
+}
+
 func TestMaterializeWorkerOutputForDispatchNoopWithoutProposals(t *testing.T) {
 	t.Parallel()
 

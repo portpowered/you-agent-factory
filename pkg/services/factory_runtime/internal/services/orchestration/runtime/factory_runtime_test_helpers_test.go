@@ -29,6 +29,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -99,7 +100,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
 		}),
-		nil,
+		workwire.NewRuntimeService(nil, nil, nil, nil, nil),
 		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
 		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
 	)

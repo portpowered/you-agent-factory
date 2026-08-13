@@ -17,6 +17,11 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 			Outcome:     workers.ExecutionOutcomeAccepted,
 			Output: workers.ProposedOutput{
 				Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "done"}},
+				ProposedWork: []workers.ProposedWork{{
+					WorkTypeID: "review",
+					Name:       "review-1",
+					State:      "init",
+				}},
 			},
 		}, nil
 	})
@@ -78,6 +83,10 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 	}
 	if got.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCompleted || got.Result.Output != "done" {
 		t.Fatalf("dispatch result = %#v", got)
+	}
+	if got.ProposedOutput == nil || len(got.ProposedOutput.ProposedWork) != 1 ||
+		got.ProposedOutput.ProposedWork[0].Name != "review-1" {
+		t.Fatalf("detached proposed output = %#v", got.ProposedOutput)
 	}
 	if observed.Correlation.DispatchID != "dispatch-1" || observed.Correlation.AttemptID != "attempt-1" {
 		t.Fatalf("correlation = %#v", observed.Correlation)

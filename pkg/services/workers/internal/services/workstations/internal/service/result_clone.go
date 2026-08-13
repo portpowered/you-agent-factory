@@ -12,6 +12,10 @@ import (
 // caller independent ownership of mutable result metadata.
 func cloneDispatchResult(result workers.WorkstationDispatchResult) workers.WorkstationDispatchResult {
 	result.Result = cloneWorkResult(result.Result)
+	if result.ProposedOutput != nil {
+		proposed := result.ProposedOutput.Clone()
+		result.ProposedOutput = &proposed
+	}
 	return result
 }
 

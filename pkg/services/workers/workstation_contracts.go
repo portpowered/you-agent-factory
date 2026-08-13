@@ -118,6 +118,10 @@ type WorkstationDispatchResult struct {
 	WorkstationName string
 	TerminalOutcome WorkstationDispatchTerminalOutcome
 	Result          WorkResult
+	// ProposedOutput is a transient detached Worker proposal. Runtime passes it
+	// to Work for validation and canonical identity assignment before applying
+	// the result; it must never cross a durable WorkResult boundary directly.
+	ProposedOutput *ProposedOutput `json:"-"`
 }
 
 // WorkstationDispatchCancelRequest identifies one accepted dispatch.
