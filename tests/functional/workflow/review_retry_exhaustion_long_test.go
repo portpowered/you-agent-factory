@@ -33,7 +33,7 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 3 {
 		t.Errorf("expected swe called 3 times, got %d", got)

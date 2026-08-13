@@ -14,12 +14,44 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
+// TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome proves the
+// compile-only gate observes real tagged source without executing the test.
+func TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
+
+	validPackage := writeFunctionallongFixture(t, repoRoot, false)
+	output, err := runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"FUNCTIONAL_LONG_PACKAGES="+validPackage,
+		"test-functional-long-compile",
+	)
+	if err != nil {
+		t.Fatalf("valid tagged fixture failed compile-only gate: %v\n%s", err, output)
+	}
+
+	invalidPackage := writeFunctionallongFixture(t, repoRoot, true)
+	output, err = runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"FUNCTIONAL_LONG_PACKAGES="+invalidPackage,
+		"test-functional-long-compile",
+	)
+	if err == nil {
+		t.Fatalf("invalid tagged fixture unexpectedly passed compile-only gate:\n%s", output)
+	}
+	if !strings.Contains(output, "functionallongCompileGateIntentionalError") {
+		t.Fatalf("compile-only gate failed without reporting the invalid tagged fixture:\n%s", output)
+	}
+}
+
 // TestFunctionalLaneTargetsSeparateCachedAndFreshModes proves the two public
 // Make targets keep the same boundary and runner settings while selecting
 // Go's cache mode versus explicit execution.
 func TestFunctionalLaneTargetsSeparateCachedAndFreshModes(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
+	fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
 if [ "$1" = "run" ]; then
   printf '%s\n' "$*" >> "$FUNCTIONAL_LANE_ARGS"
 fi

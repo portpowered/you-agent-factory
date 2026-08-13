@@ -181,7 +181,7 @@ Process the input task.
 func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {
 	support.SkipLongFunctional(t, "slow partial-batch throttled-provider failure sweep")
 	dir, runner := throttledProviderFailureFixture(t)
-	_, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 5*time.Second)
 	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
@@ -190,7 +190,7 @@ func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFail
 		t.Fatalf("expected provider runner called 4 times, got %d", runner.CallCount())
 	}
 
-	assertListedFailedWorkID(t, listedWork, "work-provider-throttle-requeue")
+	assertListedFailedWorkID(t, listed, "work-provider-throttle-requeue")
 }
 
 func throttledProviderFailureFixture(t *testing.T) (string, *testutil.ProviderCommandRunner) {

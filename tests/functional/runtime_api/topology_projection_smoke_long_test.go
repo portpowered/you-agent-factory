@@ -121,7 +121,7 @@ func assertTopologyWorkstation(t *testing.T, factory factoryapi.Factory, name, w
 		t.Fatal("public RUN_REQUEST Factory has no workstations")
 	}
 	for _, workstation := range *factory.Workstations {
-		if workstation.Name == name && workstation.Worker == workerName {
+		if workstation.Name == name && workstation.Worker != nil && *workstation.Worker == workerName {
 			if !reflect.DeepEqual(topologyRouteIDs(workstation.OnContinue), wantContinue) {
 				t.Fatalf("workstation %q continue routes = %#v, want %#v", name, topologyRouteIDs(workstation.OnContinue), wantContinue)
 			}

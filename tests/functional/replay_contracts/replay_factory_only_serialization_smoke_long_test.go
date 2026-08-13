@@ -177,7 +177,7 @@ func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workst
 	t.Helper()
 
 	for _, workstation := range workstations {
-		if workstation.Name != name || workstation.Worker != worker {
+		if workstation.Name != name || workstation.Worker == nil || *workstation.Worker != worker {
 			continue
 		}
 		if stringPointerValue(workstation.Type) != interfaces.WorkstationTypeAgent {

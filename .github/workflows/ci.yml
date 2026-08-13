@@ -198,6 +198,9 @@ jobs:
         if: matrix.suite == 'functional'
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Compile functionallong test packages
+        if: matrix.suite == 'unit'
+        run: make test-functional-long-compile
       - name: Build backend
         if: matrix.suite == 'unit'
         run: make build

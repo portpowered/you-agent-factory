@@ -16,8 +16,9 @@ import (
 func (fs *functionalAPIServer) SubmitWork(t *testing.T, workTypeID string, payload json.RawMessage) string {
 	t.Helper()
 
+	name := "bootstrap-portability-submit"
 	req := factoryapi.SubmitWorkRequest{
-		Name:         "bootstrap-portability-submit",
+		Name:         &name,
 		WorkTypeName: workTypeID,
 		Payload:      payload,
 	}
