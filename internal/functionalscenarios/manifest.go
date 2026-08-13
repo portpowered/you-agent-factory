@@ -124,13 +124,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "cli/you.serve.acp":
 		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":
-		scenario.Status = StatusCovered
-		scenario.Lane = LaneLong
-		scenario.ReviewedReason = ""
-		scenario.Evidence = []Evidence{
-			{Test: "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", Boundary: InterfaceCLI},
-			{Test: "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes", Boundary: InterfaceCLI},
-		}
+		applySubmitBatchEvidence(scenario)
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
 	case "cli/you.work.approval.list", "cli/you.work.approval.show":
@@ -163,6 +157,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/startWorkerSession":
 		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive", InterfaceREST)
+	case "rest/interruptWorkerSession":
+		markCovered(scenario, LaneShort, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource", InterfaceREST)
 	case "rest/cancelWorkerSession":
 		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot", InterfaceREST)
 	case "rest/getWorkerSessionObservationByFactorySessionAndWorkerSessionId", "rest/getWorkerSessionObservationByWorkerSessionId":
@@ -217,6 +213,16 @@ func markCovered(scenario *Scenario, lane, test, boundary string) {
 	scenario.Lane = lane
 	scenario.ReviewedReason = ""
 	scenario.Evidence = []Evidence{{Test: test, Boundary: boundary}}
+}
+
+func applySubmitBatchEvidence(scenario *Scenario) {
+	scenario.Status = StatusCovered
+	scenario.Lane = LaneLong
+	scenario.ReviewedReason = ""
+	scenario.Evidence = []Evidence{
+		{Test: "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", Boundary: InterfaceCLI},
+		{Test: "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes", Boundary: InterfaceCLI},
+	}
 }
 
 func appendEvidence(scenario *Scenario, test, boundary string) {

@@ -20,6 +20,7 @@ var knownRuntimeEmissionAnchors = map[recordings.FactoryEventType]string{
 	recordings.FactoryEventTypeWorkRequest:                   "pkg/services/recordings/internal/events/event_history.go RecordWorkRequest",
 	recordings.FactoryEventTypeRelationshipChangeRequest:     "pkg/services/recordings/internal/events/event_history.go RecordRelationshipChange",
 	recordings.FactoryEventTypeDispatchRequest:               "pkg/services/recordings/internal/events/event_history.go RecordWorkstationRequest",
+	recordings.FactoryEventTypeHumanApprovalRequested:        "pkg/services/recordings/internal/events/event_history.go RecordHumanApprovalRequested",
 	recordings.FactoryEventTypeDispatchWorkerSessionAssoc:    "pkg/services/recordings/internal/events/event_history.go RecordDispatchWorkerSessionAssociation",
 	recordings.FactoryEventTypeDispatchResponse:              "pkg/services/recordings/internal/events/event_history.go RecordWorkstationResponse",
 	recordings.FactoryEventTypeFactoryStateResponse:          "pkg/services/recordings/internal/events/event_history.go RecordFactoryStateChange",
@@ -69,6 +70,9 @@ func TestPublicEmittableFactoryEventKinds_CoversKnownRuntimeEmissionAnchors(t *t
 		}
 	}
 
+	if len(inventory) != len(knownRuntimeEmissionAnchors) {
+		t.Fatalf("public inventory length = %d, want exactly %d known runtime emission anchors", len(inventory), len(knownRuntimeEmissionAnchors))
+	}
 }
 
 func TestPublicEmittableFactoryEventKinds_IsSortedAndStable(t *testing.T) {
