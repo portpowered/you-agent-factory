@@ -50,8 +50,4 @@ func TestProvideAutomationsRootConstructsThroughAutomationsWire(t *testing.T) {
 	if root.Runtime == nil {
 		t.Fatal("constructed root has no runtime capability")
 	}
-	var runtime automations.RuntimeOperations = root
-	if runtime == nil {
-		t.Fatal("constructed root is not assignable to RuntimeOperations")
-	}
 }

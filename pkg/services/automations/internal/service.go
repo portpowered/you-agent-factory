@@ -20,7 +20,6 @@ import (
 )
 
 var _ automations.Service = (*Service)(nil)
-var _ automations.RuntimeOperations = (*Service)(nil)
 
 // Clock is the automation time source needed for scheduling and supervision.
 type Clock = automations.Clock

@@ -112,10 +112,24 @@ func (prepared PreparedInvocationSchedules) Abort() {
 type Root struct {
 	Operations Service
 	Lifecycle  RuntimeLifecycle
-	Runtime    RuntimeOperations
+	Runtime    any
 }
 
 var _ Service = Root{}
+
+type runtimeOperations interface {
+	RuntimeLifecycle
+	RuntimeStarter
+	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+}
+
+func (r Root) runtimeOperations() (runtimeOperations, bool) {
+	if !rootOperationsAvailable(r.Runtime) {
+		return nil, false
+	}
+	capability, ok := r.Runtime.(runtimeOperations)
+	return capability, ok && rootOperationsAvailable(capability)
+}
 
 func rootOperationsAvailable(operations any) bool {
 	if operations == nil {
@@ -207,8 +221,10 @@ func (r Root) ActivateRuntime(
 	request RuntimeActivationRequest,
 ) (RuntimeActivationResult, error) {
 	lifecycle := r.Lifecycle
-	if !rootOperationsAvailable(lifecycle) && rootOperationsAvailable(r.Runtime) {
-		lifecycle = r.Runtime
+	if !rootOperationsAvailable(lifecycle) {
+		if capability, ok := r.runtimeOperations(); ok {
+			lifecycle = capability
+		}
 	}
 	if !rootOperationsAvailable(lifecycle) {
 		return RuntimeActivationResult{}, unavailableRootError("ActivateRuntime")
@@ -222,8 +238,10 @@ func (r Root) DeactivateRuntime(
 	request RuntimeDeactivationRequest,
 ) (RuntimeDeactivationResult, error) {
 	lifecycle := r.Lifecycle
-	if !rootOperationsAvailable(lifecycle) && rootOperationsAvailable(r.Runtime) {
-		lifecycle = r.Runtime
+	if !rootOperationsAvailable(lifecycle) {
+		if capability, ok := r.runtimeOperations(); ok {
+			lifecycle = capability
+		}
 	}
 	if !rootOperationsAvailable(lifecycle) {
 		return RuntimeDeactivationResult{}, unavailableRootError("DeactivateRuntime")
@@ -235,10 +253,11 @@ func (r Root) DeactivateRuntime(
 // Activation remains separate so input preseed can complete before source
 // goroutines are published to the runtime host.
 func (r Root) StartRuntime(ctx context.Context, runtimeID string) error {
-	if !rootOperationsAvailable(r.Runtime) {
+	capability, ok := r.runtimeOperations()
+	if !ok {
 		return unavailableRootError("StartRuntime")
 	}
-	return r.Runtime.StartRuntime(ctx, runtimeID)
+	return capability.StartRuntime(ctx, runtimeID)
 }
 
 // PrepareInvocationSchedules prepares runtime-owned schedules without
@@ -247,10 +266,11 @@ func (r Root) PrepareInvocationSchedules(
 	ctx context.Context,
 	request InvocationScheduleRequest,
 ) (PreparedInvocationSchedules, error) {
-	if !rootOperationsAvailable(r.Runtime) {
+	capability, ok := r.runtimeOperations()
+	if !ok {
 		return PreparedInvocationSchedules{}, unavailableRootError("PrepareInvocationSchedules")
 	}
-	return r.Runtime.PrepareInvocationSchedules(ctx, request)
+	return capability.PrepareInvocationSchedules(ctx, request)
 }
 
 // ReconcileRequest carries desired automation specs and observed instance facts
