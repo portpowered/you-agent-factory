@@ -126,13 +126,44 @@ func (service *testStatelessExecutionService) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
+	service.start(ctx, request)
+	if service.startErr != nil {
+		return workers.ExecuteResult{}, service.startErr
+	}
+	if service.service == nil {
+		return workers.ExecuteResult{}, fmt.Errorf("test stateless execution service is not configured")
+	}
+	legacy := testLegacyRequestFromExecute(request)
+	result, err := service.service.DispatchWorkstation(ctx, legacy)
+	if ctx.Err() != nil {
+		_, _ = service.service.CancelWorkstationDispatch(
+			context.WithoutCancel(ctx),
+			workers.WorkstationDispatchCancelRequest{
+				DispatchID: legacy.Execution.Dispatch.DispatchID,
+			},
+		)
+	}
+	if err != nil {
+		return workers.ExecuteResult{}, err
+	}
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     executeOutcomeFromWorkstationResult(result),
+		Failure:     executeFailureFromWorkResult(result.Result),
+		Output:      workers.ProposedOutputFromLegacyWorkResult(result.Result),
+	}, nil
+}
+
+func (service *testStatelessExecutionService) start(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) {
 	service.startOnce.Do(func() {
 		requestExecutor := testWorkstationRequestExecutor{executors: service.executors}
 		bindings := make([]workers.AssembledRuntimeBinding, 0, len(service.executors)+1)
 		for workerType := range service.executors {
 			bindings = append(bindings, workers.AssembledRuntimeBinding{
-				RoleName: workerType,
-				RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+				RoleName: workerType, RoleKind: workers.RuntimeBuildRoleKindWorkstation,
 				Executor: requestExecutor,
 			})
 		}
@@ -142,12 +173,16 @@ func (service *testStatelessExecutionService) Execute(
 			Executor: requestExecutor,
 		})
 		if service.service != nil {
-			_, service.startErr = service.service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{Bindings: bindings})
+			_, service.startErr = service.service.StartWorkstationPool(
+				ctx, workers.WorkstationPoolStartRequest{Bindings: bindings},
+			)
 		}
 	})
-	if service.startErr != nil {
-		return workers.ExecuteResult{}, service.startErr
-	}
+}
+
+func testLegacyRequestFromExecute(
+	request workers.ExecuteRequest,
+) workers.WorkstationDispatchRequest {
 	dispatchID := request.Correlation.DispatchID
 	if request.Target.WorkstationName == workers.ProviderInvocationRoute {
 		dispatchID = request.Correlation.AttemptID
@@ -156,18 +191,18 @@ func (service *testStatelessExecutionService) Execute(
 	if dispatch.DispatchID == "" {
 		dispatch.TransitionID = request.Target.WorkstationName
 	}
-	if dispatch.WorkstationName == "" {
-		dispatch.WorkstationName = request.Target.WorkstationName
-	}
-	if dispatch.WorkerType == "" {
-		dispatch.WorkerType = request.Target.WorkerType
-	}
+	dispatch.WorkstationName = firstRuntimeValue(
+		dispatch.WorkstationName, request.Target.WorkstationName,
+	)
+	dispatch.WorkerType = firstRuntimeValue(
+		dispatch.WorkerType, request.Target.WorkerType,
+	)
 	dispatch.DispatchID = dispatchID
 	dispatch.Execution.RequestID = request.Correlation.RequestID
 	dispatch.Execution.TraceID = request.Correlation.TraceID
 	dispatch.Execution.WorkIDs = workInputIDs(request.Input.Work)
 	dispatch.InputTokens = workers.InputTokens(workTokens(request.Input.Work)...)
-	legacy := workers.WorkstationDispatchRequest{
+	return workers.WorkstationDispatchRequest{
 		WorkstationName: request.Target.WorkstationName,
 		Execution: workers.WorkstationExecutionRequest{
 			Dispatch:                    dispatch,
@@ -207,31 +242,19 @@ func (service *testStatelessExecutionService) Execute(
 			ResumeSession:               providerSessionRefFromContinuation(request.Input.Resume),
 		},
 	}
-	if service.service == nil {
-		return workers.ExecuteResult{}, fmt.Errorf("test stateless execution service is not configured")
+}
+
+func executeFailureFromWorkResult(result workers.WorkResult) *workers.ExecutionFailure {
+	if result.FailureMetadata == nil && strings.TrimSpace(result.Error) == "" {
+		return nil
 	}
-	result, err := service.service.DispatchWorkstation(ctx, legacy)
-	if ctx.Err() != nil {
-		// The production path cancels Execute through its context. This
-		// compatibility adapter also exposes the old cancellation observation
-		// used by pre-WSE tests without moving ownership back to Workers.
-		_, _ = service.service.CancelWorkstationDispatch(
-			context.WithoutCancel(ctx),
-			workers.WorkstationDispatchCancelRequest{DispatchID: dispatch.DispatchID},
-		)
+	failure := &workers.ExecutionFailure{Message: result.Error}
+	if result.FailureMetadata != nil {
+		failure.Family = result.FailureMetadata.Family
+		failure.Type = result.FailureMetadata.Type
+		failure.RetryHint = workers.FailureDecisionFromMetadata(result.FailureMetadata).Retryable
 	}
-	if err != nil {
-		return workers.ExecuteResult{}, err
-	}
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     executeOutcomeFromWorkstationResult(result),
-		Output: workers.ProposedOutput{
-			Primary:        []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: result.Result.Output}},
-			Feedback:       result.Result.Feedback,
-			Classification: result.Result.SelectedClassificationLabel,
-		},
-	}, nil
+	return failure
 }
 
 func executeOutcomeFromWorkstationResult(result workers.WorkstationDispatchResult) workers.ExecutionOutcome {

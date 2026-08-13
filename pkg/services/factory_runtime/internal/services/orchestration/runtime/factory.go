@@ -79,7 +79,7 @@ type appliedOperatorMove struct {
 type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
-	executeService            workers.ExecuteService
+	executeService            executeCapability
 	attempts                  *attemptLifecycle
 	attemptCapacity           int
 	newID                     factory.IDGenerator
@@ -120,7 +120,7 @@ var _ TickableFactory = (*factoryImpl)(nil)
 func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
-	statelessService workers.ExecuteService,
+	statelessService executeCapability,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,

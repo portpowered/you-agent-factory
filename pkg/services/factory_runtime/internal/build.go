@@ -30,6 +30,10 @@ const defaultSessionID = "~default"
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type runtimeWorkstationService = workers.WorkstationExecutionService
 
+type runtimeExecuteService interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
 type RuntimeFactory struct {
 	quorumPolicy              interfaces.QuorumPolicyService
 	outputShaping             interfaces.InvocationOutputShapingService
@@ -358,7 +362,14 @@ func assembleRuntimeBundle(
 			workerExecutors[workerType] = workerExecutorDecorator(workerType, executor)
 		}
 	}
-	statelessService := executeServiceFromWorkstation(workerService)
+	workstationBoundary := buildRuntimeWorkstationBoundary(
+		workerPoolBoundaryFactory,
+		workerService,
+		workerExecutors,
+		net,
+		providerInvocation,
+	)
+	statelessService := executeServiceFromWorkstation(workerService, workstationBoundary)
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
 		effectiveSubmissionRecorder = submissionRecorder
@@ -404,78 +415,6 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
-}
-
-func executeServiceFromWorkstation(service runtimeWorkstationService) workers.ExecuteService {
-	if service == nil {
-		return nil
-	}
-	if execute, ok := service.(workers.ExecuteService); ok {
-		return execute
-	}
-	return workstationExecuteAdapter{service: service}
-}
-
-// workstationExecuteAdapter is retained only for callers that still provide
-// the pre-stateless Workers test/composition port. The concrete Runtime
-// constructor receives only ExecuteService; production Workers services take
-// the direct branch above.
-type workstationExecuteAdapter struct {
-	service runtimeWorkstationService
-}
-
-func (adapter workstationExecuteAdapter) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	if adapter.service == nil {
-		return workers.ExecuteResult{}, fmt.Errorf("Workers Execute service is unavailable")
-	}
-	dispatch := work.WorkDispatch{
-		DispatchID:      request.Correlation.DispatchID,
-		TransitionID:    request.Target.WorkstationName,
-		WorkerType:      request.Target.WorkerType,
-		WorkstationName: request.Target.WorkstationName,
-		Execution: work.ExecutionMetadata{
-			RequestID: request.Correlation.RequestID,
-			TraceID:   request.Correlation.TraceID,
-			WorkIDs:   make([]string, 0, len(request.Input.Work)),
-		},
-	}
-	for _, input := range request.Input.Work {
-		dispatch.Execution.WorkIDs = append(dispatch.Execution.WorkIDs, input.WorkID)
-	}
-	result, err := adapter.service.DispatchWorkstation(ctx, workers.WorkstationDispatchRequest{
-		WorkstationName: request.Target.WorkstationName,
-		Execution: workers.WorkstationExecutionRequest{
-			Dispatch:         dispatch,
-			WorkerName:       request.Target.WorkerName,
-			WorkerType:       request.Target.WorkerType,
-			RunnerID:         request.Target.RunnerID,
-			FactorySessionID: request.Correlation.FactorySessionID,
-		},
-	})
-	if err != nil {
-		return workers.ExecuteResult{}, err
-	}
-	outcome := workers.ExecutionOutcomeAccepted
-	switch result.Result.Outcome {
-	case workers.OutcomeContinue:
-		outcome = workers.ExecutionOutcomeContinue
-	case workers.OutcomeRejected:
-		outcome = workers.ExecutionOutcomeRejected
-	case workers.OutcomeFailed:
-		outcome = workers.ExecutionOutcomeFailed
-	}
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     outcome,
-		Output: workers.ProposedOutput{
-			Primary:        []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: result.Result.Output}},
-			Feedback:       result.Result.Feedback,
-			Classification: result.Result.SelectedClassificationLabel,
-		},
-	}, nil
 }
 
 // workerRecordingIdentity keeps the Worker source-native recording identity

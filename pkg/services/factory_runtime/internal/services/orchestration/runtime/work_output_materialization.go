@@ -8,7 +8,116 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func workstationDispatchResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+	executeErr error,
+) (workers.WorkstationDispatchResult, error) {
+	dispatch := request.Execution.Dispatch
+	proposedOutput := result.Output.Clone()
+	workResult := workers.WorkResult{
+		DispatchID:                  dispatch.DispatchID,
+		TransitionID:                dispatch.TransitionID,
+		Outcome:                     workers.OutcomeAccepted,
+		Output:                      primaryOutputText(result.Output.Primary),
+		Feedback:                    result.Output.Feedback,
+		SelectedClassificationLabel: result.Output.Classification,
+		Metrics: workers.WorkMetrics{
+			Duration:   result.Metrics.Duration,
+			Cost:       result.Metrics.Cost,
+			RetryCount: result.Metrics.RetryCount,
+		},
+		ProviderSession: providerSessionFromContinuation(result.Continuation),
+	}
+	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
+	switch result.Outcome {
+	case workers.ExecutionOutcomeContinue:
+		workResult.Outcome = workers.OutcomeContinue
+	case workers.ExecutionOutcomeRejected:
+		workResult.Outcome = workers.OutcomeRejected
+	case workers.ExecutionOutcomeFailed:
+		workResult.Outcome = workers.OutcomeFailed
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	case workers.ExecutionOutcomeCanceled:
+		workResult.Outcome = workers.OutcomeFailed
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+	default:
+		if result.Outcome != workers.ExecutionOutcomeAccepted {
+			workResult.Outcome = workers.OutcomeFailed
+			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+		}
+	}
+	if result.Failure != nil {
+		workResult.Error = strings.TrimSpace(result.Failure.Message)
+		workResult.FailureMetadata = &workers.WorkFailureMetadata{
+			Family: result.Failure.Family,
+			Type:   result.Failure.Type,
+		}
+	}
+	if executeErr != nil && terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+		workResult.Outcome = workers.OutcomeFailed
+		if strings.TrimSpace(workResult.Error) == "" {
+			workResult.Error = executeErr.Error()
+		}
+	}
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled && strings.TrimSpace(workResult.Error) == "" {
+		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+	}
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatch.DispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: terminal,
+		Result:          workResult,
+		ProposedOutput:  &proposedOutput,
+	}, executeErr
+}
+
+func primaryOutputText(parts []work.WorkContentPart) string {
+	for _, part := range parts {
+		switch part.Type.Normalized() {
+		case work.WorkContentPartTypeText:
+			if strings.TrimSpace(part.Text) != "" {
+				return part.Text
+			}
+		case work.WorkContentPartTypeJSON:
+			if len(part.JSON) > 0 {
+				return string(part.JSON)
+			}
+		case work.WorkContentPartTypeImage, work.WorkContentPartTypeAudio, work.WorkContentPartTypeBinary:
+			if strings.TrimSpace(part.URL) != "" {
+				return part.URL
+			}
+			if strings.TrimSpace(part.File) != "" {
+				return part.File
+			}
+		}
+	}
+	return ""
+}
+
+func providerSessionFromContinuation(
+	continuation *workers.ProviderContinuationRef,
+) *workers.ProviderSessionMetadata {
+	if continuation == nil {
+		return nil
+	}
+	id := strings.TrimSpace(continuation.ProviderSessionID)
+	if id == "" {
+		id = strings.TrimSpace(continuation.ExternalRef)
+	}
+	if id == "" && strings.TrimSpace(continuation.Provider) == "" {
+		return nil
+	}
+	return &workers.ProviderSessionMetadata{
+		Provider: continuation.Provider,
+		Kind:     "session",
+		ID:       id,
+	}
+}
 
 // materializeWorkerOutputForDispatch validates Worker-proposed output through
 // Work before the result enters Runtime state. Invalid proposals flip the

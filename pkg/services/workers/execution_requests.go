@@ -1,7 +1,6 @@
 package workers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -415,14 +414,6 @@ type ExecuteRequest struct {
 	Target      ExecutionTarget
 	Input       ExecutionInput
 	Attempt     AttemptContext
-}
-
-// ExecuteService is the narrow stateless execution port consumed by Factory
-// Runtime. The aggregate Service keeps transitional construction operations
-// available to older composition paths, while this port carries only detached
-// request/result values across the Runtime boundary.
-type ExecuteService interface {
-	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
 }
 
 type ExecutionCorrelation struct {

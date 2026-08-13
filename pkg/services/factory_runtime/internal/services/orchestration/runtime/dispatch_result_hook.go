@@ -39,7 +39,7 @@ type dispatchPlanningResultHook struct {
 	scheduled         []scheduledDispatchResult
 	asyncErr          error
 	onResult          func()
-	acceptLocks       sync.Map
+	acceptanceStates  sync.Map
 	mu                sync.Mutex
 }
 
@@ -52,6 +52,80 @@ func (h *dispatchPlanningResultHook) SetOnBufferedResult(fn func()) {
 type scheduledDispatchResult struct {
 	deliveryTick int
 	result       workerexecution.WorkResult
+}
+
+// dispatchAcceptanceState coordinates the one potentially blocking Work
+// materialization per dispatch without holding a lock across planner or Work
+// calls. The planner remains the durable terminal authority; this state only
+// shares the detached canonical result that concurrent contenders submit.
+type dispatchAcceptanceState struct {
+	mu            sync.Mutex
+	ready         chan struct{}
+	initialized   bool
+	materializing bool
+	result        workerexecution.WorkResult
+	outcome       dispatchplanning.TerminalResultOutcome
+}
+
+func newDispatchAcceptanceState() *dispatchAcceptanceState {
+	return &dispatchAcceptanceState{ready: make(chan struct{})}
+}
+
+func (s *dispatchAcceptanceState) claimRoot(
+	result workerexecution.WorkResult,
+	outcome dispatchplanning.TerminalResultOutcome,
+) (workerexecution.WorkResult, dispatchplanning.TerminalResultOutcome, <-chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.initialized {
+		s.initialized = true
+		s.result = result
+		s.outcome = outcome
+		close(s.ready)
+		return result, outcome, nil
+	}
+	if s.materializing {
+		return workerexecution.WorkResult{}, "", s.ready
+	}
+	return s.result, s.outcome, nil
+}
+
+func (s *dispatchAcceptanceState) claimWorker() (
+	workerexecution.WorkResult,
+	dispatchplanning.TerminalResultOutcome,
+	<-chan struct{},
+	bool,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.initialized {
+		s.initialized = true
+		s.materializing = true
+		return workerexecution.WorkResult{}, "", nil, true
+	}
+	if s.materializing {
+		return workerexecution.WorkResult{}, "", s.ready, false
+	}
+	return s.result, s.outcome, nil, false
+}
+
+func (s *dispatchAcceptanceState) finishWorker(
+	result workerexecution.WorkResult,
+	outcome dispatchplanning.TerminalResultOutcome,
+) {
+	s.mu.Lock()
+	s.result = result
+	s.outcome = outcome
+	s.materializing = false
+	close(s.ready)
+	s.mu.Unlock()
+}
+
+func (s *dispatchAcceptanceState) wait() (workerexecution.WorkResult, dispatchplanning.TerminalResultOutcome) {
+	<-s.ready
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.result, s.outcome
 }
 
 type dispatchHookSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
@@ -76,15 +150,12 @@ func newCanonicalDispatchPlanningResultHook(
 	}
 }
 
-// lockDispatchAcceptance serializes terminal callbacks for one dispatch while
-// allowing unrelated dispatches to materialize concurrently. Planner retains
-// one intent per dispatch for the same lifetime, so these small lock entries
-// have the same bounded-by-runtime scope as the existing idempotency state.
-func (h *dispatchPlanningResultHook) lockDispatchAcceptance(dispatchID string) func() {
-	value, _ := h.acceptLocks.LoadOrStore(strings.TrimSpace(dispatchID), &sync.Mutex{})
-	lock := value.(*sync.Mutex)
-	lock.Lock()
-	return lock.Unlock
+func (h *dispatchPlanningResultHook) acceptanceState(dispatchID string) *dispatchAcceptanceState {
+	value, _ := h.acceptanceStates.LoadOrStore(
+		strings.TrimSpace(dispatchID),
+		newDispatchAcceptanceState(),
+	)
+	return value.(*dispatchAcceptanceState)
 }
 
 func (h *dispatchPlanningResultHook) SubmitDispatch(
@@ -171,56 +242,104 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	result workers.WorkstationDispatchResult,
 	dispatchErr error,
 ) {
-	dispatchID := request.Execution.Dispatch.DispatchID
-	if strings.TrimSpace(dispatchID) == "" {
-		dispatchID = result.DispatchID
-	}
-	unlock := h.lockDispatchAcceptance(dispatchID)
-	defer unlock()
-
+	dispatchID := firstRuntimeValue(
+		request.Execution.Dispatch.DispatchID, result.DispatchID,
+	)
 	workResult := canonicalWorkResult(request, result, dispatchErr)
-	usedPlanned := false
-	if provider, ok := h.completionPlanner.(plannedCompletionResultProvider); ok {
-		planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
-		if err != nil {
-			h.recordCanonicalError(err)
-			return
-		}
-		if hasPlanned && (workResult.Outcome != workerexecution.OutcomeFailed ||
-			planned.Outcome == workerexecution.OutcomeFailed) {
-			planned.DispatchID = request.Execution.Dispatch.DispatchID
-			planned.TransitionID = request.Execution.Dispatch.TransitionID
-			workResult = planned
-			usedPlanned = true
-		}
+	planned, usedPlanned, err := h.plannedWorkersResult(request, workResult)
+	if err != nil {
+		h.recordCanonicalError(err)
+		return
 	}
-	// Replay/planned completions already carry Work-owned OutputWork identity
-	// from the event ledger. Live Worker proposals are materialized here so
-	// invalid proposals cannot enter Runtime state.
-	if !usedPlanned {
-		// A terminal result is an idempotency tombstone. Check it before
-		// materialization so a late callback cannot create another canonical
-		// Work item before Planner classifies it as a duplicate.
-		intent, ok := h.planner.Intent(workResult.DispatchID)
-		if !ok || intent.Result != nil {
-			outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
-			if _, err := h.acceptCanonicalResult(ctx, request, workResult, "", outcome); err != nil {
-				h.recordCanonicalError(err)
-			}
-			return
-		}
-		workResult = materializeWorkerOutputForDispatchWithProposal(
-			ctx,
-			h.workService,
-			h.net,
-			h.workRequestIDs,
-			request,
-			workResult,
-			result.ProposedOutput,
-		)
+	if usedPlanned {
+		h.acceptPlannedWorkersResult(ctx, request, dispatchID, result, planned)
+		return
 	}
+	h.acceptLiveWorkersResult(ctx, request, dispatchID, result, workResult)
+}
+
+func (h *dispatchPlanningResultHook) plannedWorkersResult(
+	request workers.WorkstationDispatchRequest,
+	workResult workerexecution.WorkResult,
+) (workerexecution.WorkResult, bool, error) {
+	provider, ok := h.completionPlanner.(plannedCompletionResultProvider)
+	if !ok {
+		return workResult, false, nil
+	}
+	planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
+	if err != nil || !hasPlanned ||
+		(workResult.Outcome == workerexecution.OutcomeFailed &&
+			planned.Outcome != workerexecution.OutcomeFailed) {
+		return workResult, false, err
+	}
+	planned.DispatchID = request.Execution.Dispatch.DispatchID
+	planned.TransitionID = request.Execution.Dispatch.TransitionID
+	return planned, true, nil
+}
+
+func (h *dispatchPlanningResultHook) acceptPlannedWorkersResult(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	dispatchID string,
+	result workers.WorkstationDispatchResult,
+	workResult workerexecution.WorkResult,
+) {
 	outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
-	if _, err := h.acceptCanonicalResult(ctx, request, workResult, "", outcome); err != nil {
+	state := h.acceptanceState(dispatchID)
+	workResult, outcome, wait := state.claimRoot(workResult, outcome)
+	if wait != nil {
+		workResult, outcome = state.wait()
+	}
+	h.recordAcceptedResult(ctx, request, workResult, outcome)
+}
+
+func (h *dispatchPlanningResultHook) acceptLiveWorkersResult(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	dispatchID string,
+	result workers.WorkstationDispatchResult,
+	workResult workerexecution.WorkResult,
+) {
+	intent, ok := h.planner.Intent(workResult.DispatchID)
+	if !ok || intent.Result != nil {
+		outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
+		h.recordAcceptedResult(ctx, request, workResult, outcome)
+		return
+	}
+	state := h.acceptanceState(dispatchID)
+	sharedResult, sharedOutcome, wait, materializer := state.claimWorker()
+	if wait != nil {
+		workResult, outcome := state.wait()
+		h.recordAcceptedResult(ctx, request, workResult, outcome)
+		return
+	}
+	if materializer {
+		workResult = materializeWorkerOutputForDispatchWithProposal(
+			ctx, h.workService, h.net, h.workRequestIDs, request,
+			workResult, result.ProposedOutput,
+		)
+		state.finishWorker(
+			workResult,
+			workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome),
+		)
+	} else {
+		workResult = sharedResult
+		h.recordAcceptedResult(ctx, request, workResult, sharedOutcome)
+		return
+	}
+	h.recordAcceptedResult(
+		ctx, request, workResult,
+		workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome),
+	)
+}
+
+func (h *dispatchPlanningResultHook) recordAcceptedResult(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	result workerexecution.WorkResult,
+	outcome dispatchplanning.TerminalResultOutcome,
+) {
+	if _, err := h.acceptCanonicalResult(ctx, request, result, "", outcome); err != nil {
 		h.recordCanonicalError(err)
 	}
 }
@@ -275,9 +394,6 @@ func (h *dispatchPlanningResultHook) acceptRootResult(
 	req factory.AcceptDispatchResultRequest,
 	outcome dispatchplanning.TerminalResultOutcome,
 ) (dispatchplanning.RetirementResult, error) {
-	unlock := h.lockDispatchAcceptance(req.DispatchID)
-	defer unlock()
-
 	intent, ok := h.planner.Intent(req.DispatchID)
 	if !ok {
 		return dispatchplanning.RetirementResult{}, fmt.Errorf(
@@ -298,6 +414,11 @@ func (h *dispatchPlanningResultHook) acceptRootResult(
 	case dispatchplanning.TerminalResultOutcomeCancelled:
 		workResult.Outcome = workerexecution.OutcomeFailed
 		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+	}
+	state := h.acceptanceState(req.DispatchID)
+	workResult, outcome, wait := state.claimRoot(workResult, outcome)
+	if wait != nil {
+		workResult, outcome = state.wait()
 	}
 	return h.acceptCanonicalResult(ctx, intent.Action.Request, workResult, req.WorkID, outcome)
 }
@@ -366,7 +487,8 @@ func (h *dispatchPlanningResultHook) acceptCanonicalResult(
 		h.mu.Unlock()
 		return retired, nil
 	}
-	if !h.resultBuffer.Write(ctx, result) {
+	wrote := h.resultBuffer.Write(ctx, result)
+	if !wrote {
 		h.mu.Lock()
 		h.scheduled = append(h.scheduled, scheduledDispatchResult{result: result})
 		h.notifyCanonicalResultLocked()
