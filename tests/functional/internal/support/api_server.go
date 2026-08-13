@@ -256,9 +256,8 @@ func (fs *FunctionalAPIServer) WaitForExitError(t testing.TB, timeout time.Durat
 	}
 }
 
-// GetFactoryEvents reads the canonical public session event stream. The
-// endpoint first replays retained history, so a short quiet period yields a
-// stable observation without reaching into the runtime service graph.
+// GetFactoryEvents reads the canonical public session event stream's committed
+// retained history through its public retained-count boundary.
 func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
 	return GetFactoryEventsAt(t, fs.URL())
@@ -339,7 +338,16 @@ func ProbeFactoryEventStreamRecoveryAt(
 // session endpoint without requiring the FunctionalAPIServer wrapper.
 func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent {
 	t.Helper()
-	return readFactoryEventsFromURL(t, DefaultSessionEventsURL(baseURL))
+	return GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
+}
+
+// GetFactoryEventsForSessionAt reads the committed retained Factory Event
+// history for one explicitly selected session. The public stream's retained
+// count header makes this a bounded snapshot read; it never waits for stream
+// quietness.
+func GetFactoryEventsForSessionAt(t testing.TB, baseURL, sessionID string) []factoryapi.FactoryEvent {
+	t.Helper()
+	return readFactoryEventsFromURL(t, SessionEventsURL(baseURL, sessionID))
 }
 
 // GetWorkerSessionEventsByIDAt drains the public provider-neutral Worker
