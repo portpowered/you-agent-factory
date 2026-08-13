@@ -17,6 +17,8 @@ export function WorkerSessionTimelineEntryView({
   entry,
   messages,
   onNavigateToWorkerSession,
+  position = entry.canonical.position,
+  totalEntries,
 }: WorkerSessionTimelineEntryDetailsProps) {
   const categoryLabel =
     messages.categoryLabel[entry.category] ?? messages.unknownCategoryLabel;
@@ -32,6 +34,8 @@ export function WorkerSessionTimelineEntryView({
 
   return (
     <li
+      aria-posinset={position}
+      aria-setsize={totalEntries}
       className="min-w-0"
       data-worker-session-timeline-entry-position={entry.canonical.position}
     >

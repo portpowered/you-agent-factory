@@ -215,6 +215,160 @@ describe("WorkerSessionTimelineContent recording health", () => {
   });
 });
 
+describe("WorkerSessionTimelineContent bounded windows", () => {
+  it("mounts one bounded window and returns to the live tail with pending activity", () => {
+    const messages = getWorkerSessionTimelineMessages("en");
+    const { container, rerender } = render(
+      <WorkerSessionTimelineContent
+        state={timelineState({
+          entries: manyEntries(201),
+          isFollowing: true,
+          status: "live",
+        })}
+        workerSessionID={WORKER_SESSION_ID}
+      />,
+    );
+
+    expect(timelineRows(container)).toHaveLength(200);
+    expect(
+      screen.getByText(messages.windowRangeLabel(2, 201, 201)),
+    ).toBeTruthy();
+    expect(timelineRows(container)[0]).toHaveAttribute(
+      "data-worker-session-timeline-entry-position",
+      "2",
+    );
+
+    const earlierButton = requireTimelineButton(
+      container,
+      messages.earlierEventsAction,
+    );
+    fireEvent.click(earlierButton);
+    expect(timelineRows(container)).toHaveLength(200);
+    expect(timelineRows(container)[0]).toHaveAttribute(
+      "data-worker-session-timeline-entry-position",
+      "1",
+    );
+
+    rerender(
+      <WorkerSessionTimelineContent
+        state={timelineState({
+          entries: manyEntries(203),
+          isFollowing: true,
+          status: "live",
+        })}
+        workerSessionID={WORKER_SESSION_ID}
+      />,
+    );
+    expect(timelineRows(container)).toHaveLength(200);
+    const newActivityButton = requireTimelineButton(
+      container,
+      messages.newActivityAction(2),
+    );
+    expect(newActivityButton).toBeTruthy();
+    expect(timelineRows(container)[0]).toHaveAttribute(
+      "data-worker-session-timeline-entry-position",
+      "1",
+    );
+
+    fireEvent.click(newActivityButton);
+    expect(timelineRows(container)[0]).toHaveAttribute(
+      "data-worker-session-timeline-entry-position",
+      "4",
+    );
+    expect(
+      findTimelineButton(container, messages.newActivityAction(2)),
+    ).toBeNull();
+  });
+});
+
+describe("WorkerSessionTimelineContent live focus", () => {
+  it("does not move focus when a live record appends", () => {
+    const retainedRecord = draftRecord(1, "MESSAGE", "COMPLETED", {
+      contentBlocks: [{ kind: "TEXT", text: "retained" }],
+      role: "assistant",
+    });
+    const { container, rerender } = render(
+      <WorkerSessionTimelineContent
+        state={timelineState({
+          entries: projectEntries([retainedRecord]),
+          isFollowing: true,
+          status: "live",
+        })}
+        workerSessionID={WORKER_SESSION_ID}
+      />,
+    );
+    const detailsButton = container.querySelector<HTMLButtonElement>(
+      "button[aria-expanded]",
+    );
+    if (!detailsButton) {
+      throw new Error("expected a focusable details button");
+    }
+    detailsButton.focus();
+
+    rerender(
+      <WorkerSessionTimelineContent
+        state={timelineState({
+          entries: projectEntries([
+            retainedRecord,
+            draftRecord(2, "PROGRESS", "UPDATED", { status: "RUNNING" }),
+          ]),
+          isFollowing: true,
+          status: "live",
+        })}
+        workerSessionID={WORKER_SESSION_ID}
+      />,
+    );
+
+    expect(container.ownerDocument.activeElement).toBe(detailsButton);
+  });
+});
+
+describe("WorkerSessionTimelineContent large details", () => {
+  it("uses semantic row positions and a keyboard-operable disclosure for large bodies", () => {
+    const messages = getWorkerSessionTimelineMessages("en");
+    const longText = "long body ".repeat(500);
+    render(
+      <WorkerSessionTimelineContent
+        state={timelineState({
+          entries: projectEntries([
+            draftRecord(1, "MESSAGE", "COMPLETED", {
+              contentBlocks: [{ kind: "TEXT", text: longText }],
+              role: "assistant",
+            }),
+          ]),
+          status: "completed",
+        })}
+        workerSessionID={WORKER_SESSION_ID}
+      />,
+    );
+
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveAttribute("aria-posinset", "1");
+    expect(row).toHaveAttribute("aria-setsize", "1");
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.detailsLabel(false) }),
+    );
+
+    const boundedContent = document.querySelector(
+      "details[data-worker-session-timeline-bounded-content='true']",
+    );
+    if (!(boundedContent instanceof HTMLDetailsElement)) {
+      throw new Error("expected a native bounded content disclosure");
+    }
+    expect(boundedContent.open).toBe(false);
+    const boundedSummary = boundedContent.querySelector("summary");
+    if (!boundedSummary) {
+      throw new Error("expected a bounded content summary");
+    }
+    fireEvent.click(boundedSummary);
+    expect(boundedContent.open).toBe(true);
+    expect(boundedSummary.textContent).toBe(messages.collapseContentAction);
+    expect(boundedContent.textContent).toContain(
+      `${longText.slice(0, 4_000)}…`,
+    );
+  });
+});
+
 function timelineState(
   overrides: Partial<UseWorkerSessionTimelineResult> = {},
 ): UseWorkerSessionTimelineResult {
@@ -240,6 +394,58 @@ function projectEntries(
   records: WorkerSessionEventRecord[],
 ): WorkerSessionTimelineEntry[] {
   return projectWorkerSessionTimeline(records);
+}
+
+function manyEntries(count: number): WorkerSessionTimelineEntry[] {
+  return Array.from({ length: count }, (_, index) => ({
+    canonical: {
+      cursor: {
+        position: index + 1,
+        streamGenerationId: "generation-ui",
+        workerSessionId: WORKER_SESSION_ID,
+      },
+      position: index + 1,
+      schemaId: "workers.draft.v1",
+      sourceEventId: `ui-event-${index + 1}`,
+      sourceId: WORKER_SESSION_ID,
+      sourceSequence: index + 1,
+      sourceType: "worker_session",
+    },
+    category: "progress",
+    key: `ui-event-${index + 1}`,
+    kind: "PROGRESS",
+    phase: "UPDATED",
+  }));
+}
+
+function timelineRows(container: HTMLElement): Element[] {
+  return Array.from(
+    container.querySelectorAll(
+      "li[data-worker-session-timeline-entry-position]",
+    ),
+  );
+}
+
+function findTimelineButton(
+  container: HTMLElement,
+  label: string,
+): HTMLButtonElement | null {
+  return (
+    Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === label,
+    ) ?? null
+  );
+}
+
+function requireTimelineButton(
+  container: HTMLElement,
+  label: string,
+): HTMLButtonElement {
+  const button = findTimelineButton(container, label);
+  if (!button) {
+    throw new Error(`expected timeline button: ${label}`);
+  }
+  return button;
 }
 
 function draftRecord(

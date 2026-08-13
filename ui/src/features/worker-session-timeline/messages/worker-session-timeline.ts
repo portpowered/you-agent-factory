@@ -27,13 +27,16 @@ export interface WorkerSessionTimelineMessages {
   ariaLabel: string;
   cachedInputTokensLabel: string;
   collapseDetailsLabel: string;
+  collapseContentAction: string;
   completedState: string;
   continuationLabel: string;
   detailsLabel: (expanded: boolean) => string;
   dispatchLabel: string;
+  earlierEventsAction: string;
   emptyState: string;
   eventListLabel: string;
   eventPositionLabel: (position: number) => string;
+  expandContentAction: string;
   failureLabel: string;
   genericMetadataLabel: string;
   genericSchemaLabel: (schemaID: string) => string;
@@ -44,8 +47,10 @@ export interface WorkerSessionTimelineMessages {
   liveFollowingState: string;
   messageRoleLabel: (role: string) => string;
   messageTextLabel: string;
+  laterEventsAction: string;
   modelLabel: string;
   modelProviderLabel: string;
+  newActivityAction: (count: number) => string;
   noDetailState: string;
   openWorkerSessionLabel: (workerSessionID: string) => string;
   outputTokensLabel: string;
@@ -73,6 +78,8 @@ export interface WorkerSessionTimelineMessages {
   terminalOutcomeLabel: (outcome: WorkerTimelineTerminalOutcome) => string;
   terminalOutcomeHeading: string;
   timelineTitle: string;
+  windowNavigationLabel: string;
+  windowRangeLabel: (start: number, end: number, total: number) => string;
   toolArgumentsLabel: string;
   toolCallIDLabel: string;
   toolLabel: string;
@@ -101,13 +108,16 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       ariaLabel: "Worker Session timeline",
       cachedInputTokensLabel: "Cached input tokens",
       collapseDetailsLabel: "Collapse details",
+      collapseContentAction: "Hide full content",
       completedState: "Worker Session delivery is complete.",
       continuationLabel: "Continuation",
       detailsLabel: (expanded) => (expanded ? "Hide details" : "Show details"),
       dispatchLabel: "Dispatch",
+      earlierEventsAction: "Earlier events",
       emptyState: "No canonical Worker Session records were retained.",
       eventListLabel: "Canonical Worker Session events",
       eventPositionLabel: (position) => `Canonical position ${position}`,
+      expandContentAction: "Show full content",
       failureLabel: "Failure",
       genericMetadataLabel: "Forward-compatible event metadata",
       genericSchemaLabel: (schemaID) => `Unknown schema ${schemaID}`,
@@ -121,8 +131,11 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       liveFollowingState: "Following live Worker Session activity.",
       messageRoleLabel: (role) => `Role: ${role}`,
       messageTextLabel: "Message",
+      laterEventsAction: "Later events",
       modelLabel: "Model",
       modelProviderLabel: "Model provider",
+      newActivityAction: (count) =>
+        `View ${count} new ${count === 1 ? "event" : "events"}`,
       noDetailState:
         "This canonical event has no additional displayable detail.",
       openWorkerSessionLabel: (workerSessionID) =>
@@ -161,6 +174,9 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
             : "Canceled",
       terminalOutcomeHeading: "Terminal outcome",
       timelineTitle: "Worker Session timeline",
+      windowNavigationLabel: "Timeline window navigation",
+      windowRangeLabel: (start, end, total) =>
+        `Events ${start}–${end} of ${total}`,
       toolArgumentsLabel: "Arguments",
       toolCallIDLabel: "Tool call ID",
       toolLabel: "Tool",
@@ -200,13 +216,16 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       ariaLabel: "Worker 会话时间线",
       cachedInputTokensLabel: "缓存输入令牌",
       collapseDetailsLabel: "折叠详情",
+      collapseContentAction: "隐藏完整内容",
       completedState: "Worker 会话记录已传递完成。",
       continuationLabel: "继续关系",
       detailsLabel: (expanded) => (expanded ? "隐藏详情" : "显示详情"),
       dispatchLabel: "分派",
+      earlierEventsAction: "更早的事件",
       emptyState: "没有保留的规范 Worker 会话记录。",
       eventListLabel: "规范 Worker 会话事件",
       eventPositionLabel: (position) => `规范位置 ${position}`,
+      expandContentAction: "显示完整内容",
       failureLabel: "失败",
       genericMetadataLabel: "前向兼容事件元数据",
       genericSchemaLabel: (schemaID) => `未知架构 ${schemaID}`,
@@ -220,8 +239,10 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       liveFollowingState: "正在跟踪 Worker 会话实时活动。",
       messageRoleLabel: (role) => `角色：${role}`,
       messageTextLabel: "消息",
+      laterEventsAction: "更晚的事件",
       modelLabel: "模型",
       modelProviderLabel: "模型提供方",
+      newActivityAction: (count) => `查看 ${count} 个新事件`,
       noDetailState: "此规范事件没有可显示的其他详情。",
       openWorkerSessionLabel: (workerSessionID) =>
         `打开 Worker 会话 ${workerSessionID}`,
@@ -258,6 +279,9 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
             ? "失败"
             : "已取消",
       terminalOutcomeHeading: "终端结果",
+      windowNavigationLabel: "时间线窗口导航",
+      windowRangeLabel: (start, end, total) =>
+        `事件 ${start}–${end}，共 ${total} 个`,
       timelineTitle: "Worker 会话时间线",
       toolArgumentsLabel: "参数",
       toolCallIDLabel: "工具调用 ID",

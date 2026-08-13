@@ -6,7 +6,7 @@ import {
   Text,
 } from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
@@ -23,6 +23,10 @@ import type {
 } from "../lib/worker-session-timeline-projection-types";
 import type { WorkerSessionTimelineStreamStatus } from "../lib/worker-session-timeline-stream";
 import {
+  getWorkerSessionTimelineWindow,
+  moveWorkerSessionTimelineWindow,
+} from "../lib/worker-session-timeline-window";
+import {
   getWorkerSessionTimelineMessages,
   type WorkerSessionTimelineMessages,
   type WorkerSessionTimelineRecordingHealth,
@@ -30,6 +34,7 @@ import {
 } from "../messages/worker-session-timeline";
 import { BoundedText } from "./worker-session-timeline-detail-primitives";
 import { WorkerSessionTimelineEntryView } from "./worker-session-timeline-entry";
+import { WorkerSessionTimelineWindowControls } from "./worker-session-timeline-window-controls";
 
 export interface WorkerSessionTimelineProps
   extends UseWorkerSessionTimelineOptions {
@@ -114,11 +119,65 @@ export function WorkerSessionTimelineContent({
   const messages = getWorkerSessionTimelineMessages(locale);
   const terminal = latestTerminal(state.entries);
   const viewStatus = toViewStatus(state.status, state.entries.length);
+  const eventListID = useId();
+  const [followingTail, setFollowingTail] = useState(true);
+  const [requestedWindowStart, setRequestedWindowStart] = useState<
+    number | null
+  >(null);
+  const [tailSeenCount, setTailSeenCount] = useState(state.entries.length);
+  const previousWorkerSessionID = useRef(workerSessionID);
+  const workerSessionChanged =
+    previousWorkerSessionID.current !== workerSessionID;
+  const effectiveFollowingTail = workerSessionChanged || followingTail;
+  const timelineWindow = getWorkerSessionTimelineWindow(
+    state.entries,
+    effectiveFollowingTail ? null : requestedWindowStart,
+  );
+  const pendingLiveCount =
+    state.isFollowing && !workerSessionChanged && !followingTail
+      ? Math.max(0, state.entries.length - tailSeenCount)
+      : 0;
+
+  useEffect(() => {
+    if (previousWorkerSessionID.current === workerSessionID) {
+      return;
+    }
+    previousWorkerSessionID.current = workerSessionID;
+    setFollowingTail(true);
+    setRequestedWindowStart(null);
+    setTailSeenCount(state.entries.length);
+  }, [state.entries.length, workerSessionID]);
+
+  const moveWindow = (direction: "earlier" | "later") => {
+    const nextStart = moveWorkerSessionTimelineWindow(
+      timelineWindow.start,
+      direction,
+      state.entries.length,
+    );
+    const tailStart = getWorkerSessionTimelineWindow(state.entries, null).start;
+    if (followingTail) {
+      setTailSeenCount(state.entries.length);
+    }
+    if (nextStart >= tailStart) {
+      setFollowingTail(true);
+      setRequestedWindowStart(null);
+      return;
+    }
+    setFollowingTail(false);
+    setRequestedWindowStart(nextStart);
+  };
+
+  const returnToLatest = () => {
+    setFollowingTail(true);
+    setRequestedWindowStart(null);
+    setTailSeenCount(state.entries.length);
+  };
 
   return (
     <section
       aria-label={messages.ariaLabel}
-      className={cn("grid min-w-0 gap-3", className)}
+      aria-busy={state.status === "loading" || state.status === "reconnecting"}
+      className={cn("grid min-w-0 gap-3 overflow-x-hidden", className)}
       data-worker-session-timeline-status={viewStatus}
       data-worker-session-timeline-worker-session-id={
         workerSessionID ?? undefined
@@ -139,18 +198,33 @@ export function WorkerSessionTimelineContent({
           state={state}
         />
       ) : null}
+      <WorkerSessionTimelineWindowControls
+        eventListID={eventListID}
+        messages={messages}
+        onMove={moveWindow}
+        onReturnToLatest={returnToLatest}
+        pendingLiveCount={pendingLiveCount}
+        timelineWindow={timelineWindow}
+        totalEntries={state.entries.length}
+      />
       {state.entries.length > 0 ? (
         <ol
           aria-label={messages.eventListLabel}
           className="grid min-w-0 gap-3"
+          data-worker-session-timeline-visible-count={
+            timelineWindow.entries.length
+          }
           data-worker-session-timeline-events="true"
+          id={eventListID}
         >
-          {state.entries.map((entry) => (
+          {timelineWindow.entries.map((entry, index) => (
             <WorkerSessionTimelineEntryView
               entry={entry}
               key={entry.key}
               messages={messages}
               onNavigateToWorkerSession={onNavigateToWorkerSession}
+              position={timelineWindow.start + index + 1}
+              totalEntries={state.entries.length}
             />
           ))}
         </ol>
@@ -231,6 +305,8 @@ function TerminalOutcomeSummary({
       </Text>
       {terminal.failure?.message ? (
         <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.failureLabel}
           value={terminal.failure.message}
         />

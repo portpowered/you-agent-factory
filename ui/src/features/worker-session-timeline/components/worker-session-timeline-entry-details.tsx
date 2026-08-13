@@ -1,9 +1,9 @@
-import { Label } from "@you-agent-factory/components/primitives";
 import type {
   WorkerSessionTimelineEntry,
   WorkerTimelineContentBlock,
 } from "../lib/worker-session-timeline-projection-types";
 import type { WorkerSessionTimelineMessages } from "../messages/worker-session-timeline";
+import { WorkerSessionTimelineContentBlockDetails } from "./worker-session-timeline-content-block-details";
 import {
   BoundedCode,
   BoundedText,
@@ -17,6 +17,8 @@ export interface WorkerSessionTimelineEntryDetailsProps {
   entry: WorkerSessionTimelineEntry;
   messages: WorkerSessionTimelineMessages;
   onNavigateToWorkerSession?: (workerSessionID: string) => void;
+  position?: number;
+  totalEntries?: number;
 }
 
 export function EntryStructuredDetails({
@@ -167,7 +169,12 @@ function MessageDetails({
           />
         ) : null}
         {messageText ? (
-          <BoundedText label={messages.messageTextLabel} value={messageText} />
+          <BoundedText
+            collapseLabel={messages.collapseContentAction}
+            expandLabel={messages.expandContentAction}
+            label={messages.messageTextLabel}
+            value={messageText}
+          />
         ) : null}
         {message.delta ? (
           <DetailList
@@ -196,7 +203,7 @@ function MessageDetails({
           />
         ) : null}
         {message.contentBlocks?.map((block) => (
-          <ContentBlockDetails
+          <WorkerSessionTimelineContentBlockDetails
             block={block}
             key={contentBlockKey(block)}
             messages={messages}
@@ -204,38 +211,6 @@ function MessageDetails({
         ))}
       </div>
     </DetailSection>
-  );
-}
-
-function ContentBlockDetails({
-  block,
-  messages,
-}: {
-  block: WorkerTimelineContentBlock;
-  messages: WorkerSessionTimelineMessages;
-}) {
-  return (
-    <section
-      aria-label={messages.messageTextLabel}
-      className="grid min-w-0 gap-2"
-    >
-      <Label>{block.kind}</Label>
-      {block.text ? (
-        <BoundedText label={messages.messageTextLabel} value={block.text} />
-      ) : null}
-      {block.argumentsSummary !== undefined ? (
-        <BoundedCode
-          label={messages.toolArgumentsLabel}
-          value={block.argumentsSummary}
-        />
-      ) : null}
-      {block.structuredOutput !== undefined ? (
-        <BoundedCode
-          label={messages.toolResultLabel}
-          value={block.structuredOutput}
-        />
-      ) : null}
-    </section>
   );
 }
 
@@ -265,12 +240,16 @@ function ReasoningDetails({
       />
       {reasoning.summary ? (
         <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.reasoningSnapshotLabel}
           value={reasoning.summary}
         />
       ) : null}
       {reasoning.summaryDelta ? (
         <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.reasoningDeltaLabel}
           value={reasoning.summaryDelta}
         />
@@ -303,18 +282,24 @@ function ToolDetails({
       />
       {tool.argumentsSummary !== undefined ? (
         <BoundedCode
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.toolArgumentsLabel}
           value={tool.argumentsSummary}
         />
       ) : null}
       {tool.outputDelta ? (
         <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.toolOutputLabel}
           value={tool.outputDelta}
         />
       ) : null}
       {tool.resultSummary !== undefined ? (
         <BoundedCode
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.toolResultLabel}
           value={tool.resultSummary}
         />
@@ -399,7 +384,12 @@ function FailureDetails({
         ]}
       />
       {failure.message ? (
-        <BoundedText label={messages.failureLabel} value={failure.message} />
+        <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
+          label={messages.failureLabel}
+          value={failure.message}
+        />
       ) : null}
     </DetailSection>
   );
@@ -423,6 +413,8 @@ function TerminalDetails({
       ) : null}
       {terminal.failure?.message ? (
         <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
           label={messages.failureLabel}
           value={terminal.failure.message}
         />
