@@ -1,4 +1,5 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: this projection keeps canonical factory graph mapping rules together.
+import { factoryGraphNodeFamilyRole } from "@you-agent-factory/factory-graph";
 import type {
   DashboardEdgeOutcomeKind,
   DashboardPlaceKind,
@@ -17,7 +18,6 @@ import {
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
@@ -31,8 +31,10 @@ import {
 } from "../../flowchart/lib/workstation-icon-metadata";
 import { factoryBundledDocDisplayLabel } from "./factory-bundled-docs";
 
-export const CURRENT_ACTIVITY_DOC_NODE_WIDTH = 168;
-export const CURRENT_ACTIVITY_DOC_NODE_HEIGHT = 86;
+export const CURRENT_ACTIVITY_DOC_NODE_WIDTH =
+  factoryGraphNodeFamilyRole("doc").defaultDimensions.width;
+export const CURRENT_ACTIVITY_DOC_NODE_HEIGHT =
+  factoryGraphNodeFamilyRole("doc").defaultDimensions.height;
 
 interface FactoryGraphSeedNode {
   displayLabel?: string;
@@ -267,23 +269,7 @@ function nodeKindForFactoryGraphNode(
 }
 
 function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
-  switch (node.kind) {
-    case "doc":
-      return {
-        height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
-        width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-      };
-    case "resource":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.resource;
-    case "work-state":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND["work-state"];
-    case "worker":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.worker;
-    case "work-type":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND["work-type"];
-    case "workstation":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.workstation;
-  }
+  return factoryGraphNodeFamilyRole(node.kind).defaultDimensions;
 }
 
 function seedNodeFromFactoryGraphNode(

@@ -4,6 +4,11 @@ import {
 } from "@you-agent-factory/components/graphs";
 import type { ReactNode } from "react";
 
+import {
+  factoryGraphNodeFamilyForShellType,
+  factoryGraphNodeFamilyRole,
+} from "./node-family.js";
+
 export type FactoryGraphPlaceNodeType =
   | "constraint"
   | "doc"
@@ -52,12 +57,17 @@ export function FactoryGraphNodeShell({
     tone: handle.tone ?? factoryGraphHandleToneFromId(handle.id),
   }));
   const activeHints = nodeType === "workstation" ? zAxisIncompleteHints : null;
+  const familyRole = factoryGraphNodeFamilyRole(
+    factoryGraphNodeFamilyForShellType(nodeType),
+  );
 
   return (
     <div className="relative h-full min-w-0 w-full">
       <GraphNodeShell
         className={className}
         data-current-activity-node-type={nodeType}
+        data-graph-node-family={familyRole.family}
+        data-graph-node-shape={familyRole.shape}
         handles={packageHandles}
         nodeKind={nodeType}
         showStateIndicator={false}

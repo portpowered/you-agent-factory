@@ -1,3 +1,4 @@
+import { factoryGraphNodeFamilyRole } from "@you-agent-factory/factory-graph";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk.bundled.js";
 import type {
   DashboardEdgeOutcomeKind,
@@ -72,14 +73,6 @@ export interface GraphLayout {
   width: number;
 }
 
-const WORKSTATION_NODE_WIDTH = 156;
-const WORKSTATION_NODE_HEIGHT = 196;
-const STATE_NODE_WIDTH = 164;
-const STATE_NODE_HEIGHT = 86;
-const RESOURCE_NODE_WIDTH = 168;
-const RESOURCE_NODE_HEIGHT = STATE_NODE_HEIGHT;
-const CONSTRAINT_NODE_WIDTH = 156;
-const CONSTRAINT_NODE_HEIGHT = 58;
 interface GraphSeedNode extends ElkNode {
   height: number;
   id: string;
@@ -143,18 +136,18 @@ function placeNodeDimensions(place: DashboardPlaceRef): {
   width: number;
 } {
   if (place.kind === "work_state") {
-    return { height: STATE_NODE_HEIGHT, width: STATE_NODE_WIDTH };
+    return factoryGraphNodeFamilyRole("work-state").defaultDimensions;
   }
   if (place.kind === "resource") {
-    return { height: RESOURCE_NODE_HEIGHT, width: RESOURCE_NODE_WIDTH };
+    return factoryGraphNodeFamilyRole("resource").defaultDimensions;
   }
-  return { height: CONSTRAINT_NODE_HEIGHT, width: CONSTRAINT_NODE_WIDTH };
+  return factoryGraphNodeFamilyRole("constraint").defaultDimensions;
 }
 
 function workstationNodeDimensions(
   _workstation: DashboardWorkstationNode | undefined,
 ): { height: number; width: number } {
-  return { height: WORKSTATION_NODE_HEIGHT, width: WORKSTATION_NODE_WIDTH };
+  return factoryGraphNodeFamilyRole("workstation").defaultDimensions;
 }
 
 function fallbackPlaceRef(placeId: string): DashboardPlaceRef {

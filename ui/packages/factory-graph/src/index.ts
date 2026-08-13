@@ -5,6 +5,21 @@ export {
   projectFactoryGraphReplayFlow,
 } from "./factory-graph-replay-surface.js";
 export {
+  FACTORY_GRAPH_NODE_FAMILIES,
+  FACTORY_GRAPH_NODE_FAMILY_ROLES,
+  type FactoryGraphNodeDimensionResolution,
+  type FactoryGraphNodeDimensionSource,
+  type FactoryGraphNodeDimensions,
+  type FactoryGraphNodeFamily,
+  type FactoryGraphNodeFamilyRole,
+  type FactoryGraphNodeShape,
+  type FactoryGraphNodeShellType,
+  factoryGraphNodeFamilyDimensions,
+  factoryGraphNodeFamilyForShellType,
+  factoryGraphNodeFamilyRole,
+  resolveFactoryGraphNodeDimensions,
+} from "./node-family.js";
+export {
   type FactoryGraphDocNode,
   type FactoryGraphDocNodeData,
   FactoryGraphDocNodeView,
@@ -85,6 +100,19 @@ export {
   type FactoryGraphSource,
   isFactoryGraphSource,
 } from "./source.js";
+export {
+  type FactoryGraphValidationState,
+  type FactoryGraphVisualBorderRole,
+  type FactoryGraphVisualEmphasis,
+  type FactoryGraphVisualFocusRole,
+  type FactoryGraphVisualGlowRole,
+  type FactoryGraphVisualLifecycleRole,
+  type FactoryGraphVisualState,
+  type FactoryGraphVisualStateInput,
+  type FactoryGraphVisualStatusRole,
+  type FactoryGraphVisualStatusTreatment,
+  resolveFactoryGraphVisualState,
+} from "./visual-state.js";
 export {
   FACTORY_GRAPH_WORK_STATE_TYPES,
   type FactoryGraphWorkStateType,
