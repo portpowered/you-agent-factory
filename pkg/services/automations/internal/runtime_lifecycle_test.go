@@ -134,9 +134,19 @@ func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {
+	config := newRuntimeSnapshotConfigForTest()
+	assertRuntimeSnapshotIdentity(t, config)
+	assertRuntimeSnapshotLookups(t, config)
+	assertNilRuntimeSnapshotConfig(t)
+	validStates := map[string]map[string]bool{"task": {"ready": true}}
+	assertValidStatesClone(t, validStates)
+	assertRuntimeFilesystemConfig(t, validStates)
+}
+
+func newRuntimeSnapshotConfigForTest() *runtimeSnapshotConfig {
 	worker := factorydefinitions.FactoryWorkerConfig{Name: "worker-a"}
 	workstation := factorydefinitions.FactoryWorkstationConfig{Name: "workstation-a"}
-	config := &runtimeSnapshotConfig{
+	return &runtimeSnapshotConfig{
 		factoryDir:     "/factories/example",
 		runtimeBaseDir: "/runtime/example",
 		runtimeID:      "runtime-example",
@@ -146,12 +156,20 @@ func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {
 			Workstations: []factorydefinitions.FactoryWorkstationConfig{workstation},
 		},
 	}
+}
+
+func assertRuntimeSnapshotIdentity(t *testing.T, config *runtimeSnapshotConfig) {
+	t.Helper()
 	if config.FactoryDir() != "/factories/example" || config.RuntimeBaseDir() != "/runtime/example" || config.RuntimeInstanceID() != "runtime-example" {
 		t.Fatalf("runtimeSnapshotConfig identity = %q, %q, %q", config.FactoryDir(), config.RuntimeBaseDir(), config.RuntimeInstanceID())
 	}
 	if got := config.FactoryConfig(); got == nil || got.Name != "example" {
 		t.Fatalf("FactoryConfig() = %#v, want example", got)
 	}
+}
+
+func assertRuntimeSnapshotLookups(t *testing.T, config *runtimeSnapshotConfig) {
+	t.Helper()
 	if got, ok := config.Worker("worker-a"); !ok || got == nil || got.Name != "worker-a" {
 		t.Fatalf("Worker(worker-a) = %#v, %v", got, ok)
 	}
@@ -164,7 +182,10 @@ func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {
 	if _, ok := config.Workstation("missing"); ok {
 		t.Fatal("Workstation(missing) unexpectedly resolved")
 	}
+}
 
+func assertNilRuntimeSnapshotConfig(t *testing.T) {
+	t.Helper()
 	var nilConfig *runtimeSnapshotConfig
 	if nilConfig.FactoryDir() != "" || nilConfig.RuntimeBaseDir() != "" || nilConfig.RuntimeInstanceID() != "" || nilConfig.FactoryConfig() != nil {
 		t.Fatal("nil runtimeSnapshotConfig returned non-empty identity")
@@ -175,8 +196,10 @@ func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {
 	if _, ok := nilConfig.Workstation("workstation-a"); ok {
 		t.Fatal("nil runtimeSnapshotConfig resolved a workstation")
 	}
+}
 
-	validStates := map[string]map[string]bool{"task": {"ready": true}}
+func assertValidStatesClone(t *testing.T, validStates map[string]map[string]bool) {
+	t.Helper()
 	clonedStates := cloneValidStates(validStates)
 	clonedStates["task"]["ready"] = false
 	if validStates["task"]["ready"] != true {
@@ -185,7 +208,10 @@ func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {
 	if cloneValidStates(nil) != nil {
 		t.Fatal("cloneValidStates(nil) returned a non-nil map")
 	}
+}
 
+func assertRuntimeFilesystemConfig(t *testing.T, validStates map[string]map[string]bool) {
+	t.Helper()
 	filesystem := runtimeFilesystemConfig(
 		"/factories/example",
 		automations.RuntimeFilesystemInputs{

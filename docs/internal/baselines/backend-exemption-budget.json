@@ -417,12 +417,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_definitions/wire/wire.go#NewService",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/factory_definitions/wire/wire_test.go#TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -2842,12 +2836,6 @@
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go#newWireFoldPreservationService",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_definitions/wire/wire.go#NewService",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },

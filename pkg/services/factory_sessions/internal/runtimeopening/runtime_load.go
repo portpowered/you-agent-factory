@@ -25,6 +25,12 @@ type RuntimeLoad struct {
 	SessionLogger     *zap.Logger
 }
 
+type runtimeReplayLoad struct {
+	legacyArtifact    *factorydefinitions.ReplayArtifact
+	portableRecording *recording.PortableRecording
+	historicalReplay  *recordingreplay.RecordingReplayProjection
+}
+
 func LoadRuntime(
 	dir string,
 	executionBaseDir string,
@@ -91,37 +97,20 @@ func loadRuntime(
 	if logger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory returned nil")
 	}
-	var legacyArtifact *factorydefinitions.ReplayArtifact
-	if replayPath != "" {
-		if replayInputs == nil {
-			return RuntimeLoad{}, fmt.Errorf("Factory Session replay input capability is required")
-		}
-		var result recording.LoadReplayInputResult
-		var err error
-		if preloadedReplayInput != nil {
-			result = *preloadedReplayInput
-		} else {
-			result, err = replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
-		}
-		if err != nil {
-			var inputErr *recording.ReplayInputError
-			if errors.As(err, &inputErr) && inputErr.Family == recording.ReplayInputFamilyLegacy {
-				return RuntimeLoad{}, fmt.Errorf("load factory config: %w", err)
-			}
-			return RuntimeLoad{}, fmt.Errorf("load portable replay: %w", err)
-		}
-		if result.Portable != nil {
-			projection, err := recordingreplay.ReplayRecording(*result.Portable)
-			if err != nil {
-				return RuntimeLoad{}, fmt.Errorf("load portable replay: inspect historical recording: %w", err)
-			}
-			return RuntimeLoad{
-				PortableRecording: result.Portable,
-				HistoricalReplay:  &projection,
-				SessionLogger:     logger,
-			}, nil
-		}
-		legacyArtifact = result.Legacy
+	replayLoad, err := loadRuntimeReplay(
+		replayPath,
+		replayInputs,
+		preloadedReplayInput,
+	)
+	if err != nil {
+		return RuntimeLoad{}, err
+	}
+	if replayLoad.portableRecording != nil {
+		return RuntimeLoad{
+			PortableRecording: replayLoad.portableRecording,
+			HistoricalReplay:  replayLoad.historicalReplay,
+			SessionLogger:     logger,
+		}, nil
 	}
 
 	logger.Info("loading factory config", zap.String("dir", dir))
@@ -134,7 +123,7 @@ func loadRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		legacyArtifact,
+		replayLoad.legacyArtifact,
 		resolvedSnapshot,
 	)
 	if err != nil {
@@ -148,7 +137,7 @@ func loadRuntime(
 			loaded.PortableBundledFileReplacements(),
 		)
 	}
-	warnReplayMetadataMismatches(
+	reportRuntimeReplayMetadata(
 		dir,
 		replayPath,
 		workstationLoader,
@@ -162,6 +151,64 @@ func loadRuntime(
 		ReplayArtifact:   artifact,
 		SessionLogger:    logger,
 	}, nil
+}
+
+func loadRuntimeReplay(
+	replayPath string,
+	replayInputs recording.ReplayInputLoader,
+	preloadedReplayInput *recording.LoadReplayInputResult,
+) (runtimeReplayLoad, error) {
+	if replayPath == "" {
+		return runtimeReplayLoad{}, nil
+	}
+	if replayInputs == nil {
+		return runtimeReplayLoad{}, fmt.Errorf("Factory Session replay input capability is required")
+	}
+	var result recording.LoadReplayInputResult
+	var err error
+	if preloadedReplayInput != nil {
+		result = *preloadedReplayInput
+	} else {
+		result, err = replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
+	}
+	if err != nil {
+		var inputErr *recording.ReplayInputError
+		if errors.As(err, &inputErr) && inputErr.Family == recording.ReplayInputFamilyLegacy {
+			return runtimeReplayLoad{}, fmt.Errorf("load factory config: %w", err)
+		}
+		return runtimeReplayLoad{}, fmt.Errorf("load portable replay: %w", err)
+	}
+	if result.Portable == nil {
+		return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
+	}
+	projection, err := recordingreplay.ReplayRecording(*result.Portable)
+	if err != nil {
+		return runtimeReplayLoad{}, fmt.Errorf("load portable replay: inspect historical recording: %w", err)
+	}
+	return runtimeReplayLoad{
+		portableRecording: result.Portable,
+		historicalReplay:  &projection,
+	}, nil
+}
+
+func reportRuntimeReplayMetadata(
+	dir string,
+	replayPath string,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	artifact *factorydefinitions.ReplayArtifact,
+	logger *zap.Logger,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+) {
+	warnReplayMetadataMismatches(
+		dir,
+		replayPath,
+		workstationLoader,
+		artifact,
+		logger,
+		loadFactory,
+		captureLoadedFactorySnapshot,
+	)
 }
 
 func loadRuntimeConfig(

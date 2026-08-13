@@ -271,85 +271,140 @@ func (f *Factory) activationRequestWithReplayInput(
 	request *factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (factoryruntime.RuntimeActivationRequest, error) {
+	opening, runtimeID, err := f.activationOpening(request)
+	if err != nil {
+		return factoryruntime.RuntimeActivationRequest{}, err
+	}
+	sessionID := sessionIDForOpening(opening)
+	resolution, err := f.resolveActivationSnapshot(ctx, opening, preloadedReplayInput, sessionID)
+	if err != nil {
+		return factoryruntime.RuntimeActivationRequest{}, err
+	}
+	normalizeActivationSnapshot(
+		&resolution.snapshot,
+		resolution.factoryDir,
+		resolution.sourcePath,
+		resolution.runtimeBaseDir,
+		sessionID,
+		opening.Recordings.WorkflowID,
+	)
+	inputs := runtimeActivationInputs(opening)
+	// Runtime root activation must receive the same resolved source identity
+	// that Definitions used. In particular, named paths and directory-backed
+	// authored files cannot be rediscovered from the caller's shorthand after
+	// the snapshot has crossed the boundary. Keep the caller's Directory as
+	// the session/factory-root scope; SourcePath carries the concrete source
+	// identity used to resolve the snapshot.
+	if resolution.sourcePath != "" {
+		inputs.Definition.SourcePath = resolution.sourcePath
+	}
+	return factoryruntime.RuntimeActivationRequest{
+		RuntimeID:        runtimeID,
+		FactorySessionID: sessionID,
+		Snapshot:         resolution.snapshot,
+		Runtime:          opening.FactoryRuntime,
+		Inputs:           inputs,
+	}, nil
+}
+
+type activationSnapshotResolution struct {
+	snapshot       factorydefinitions.RuntimeSnapshot
+	factoryDir     string
+	sourcePath     string
+	runtimeBaseDir string
+}
+
+func (f *Factory) activationOpening(
+	request *factorysessions.RuntimeOpeningRequest,
+) (factorysessions.RuntimeOpeningRequest, string, error) {
 	if request == nil {
-		return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("open Factory Runtime: runtime opening request is required")
+		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime opening request is required")
 	}
 	opening := *request
 	runtimeID := strings.TrimSpace(opening.FactoryRuntime.RuntimeInstanceID)
+	if runtimeID != "" {
+		return opening, runtimeID, nil
+	}
+	if f.generateRuntimeInstanceID == nil {
+		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime instance ID generator is required")
+	}
+	runtimeID = strings.TrimSpace(f.generateRuntimeInstanceID())
 	if runtimeID == "" {
-		if f.generateRuntimeInstanceID == nil {
-			return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("open Factory Runtime: runtime instance ID generator is required")
-		}
-		runtimeID = strings.TrimSpace(f.generateRuntimeInstanceID())
-		if runtimeID == "" {
-			return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("open Factory Runtime: runtime instance ID generator returned an empty identity")
-		}
-		opening.FactoryRuntime.RuntimeInstanceID = runtimeID
+		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime instance ID generator returned an empty identity")
 	}
-	var (
-		factoryDir       string
-		sourcePath       string
-		runtimeBaseDir   string
-		snapshot         factorydefinitions.RuntimeSnapshot
-		snapshotResolved bool
-		err              error
-	)
-	sessionID := sessionIDForOpening(opening)
+	opening.FactoryRuntime.RuntimeInstanceID = runtimeID
+	return opening, runtimeID, nil
+}
+
+func (f *Factory) resolveActivationSnapshot(
+	ctx context.Context,
+	opening factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	sessionID string,
+) (activationSnapshotResolution, error) {
 	if replaySnapshot, ok, err := f.resolveLegacyReplaySnapshot(ctx, opening, preloadedReplayInput); err != nil {
-		return factoryruntime.RuntimeActivationRequest{}, err
+		return activationSnapshotResolution{}, err
 	} else if ok {
-		snapshot = replaySnapshot
-		factoryDir = strings.TrimSpace(snapshot.FactoryDir)
-		runtimeBaseDir = strings.TrimSpace(opening.FactoryDefinition.ExecutionBaseDir)
-		if runtimeBaseDir == "" {
-			runtimeBaseDir = strings.TrimSpace(snapshot.RuntimeBaseDir)
-		}
-		snapshotResolved = true
+		return activationSnapshotResolution{
+			snapshot:       replaySnapshot,
+			factoryDir:     strings.TrimSpace(replaySnapshot.FactoryDir),
+			runtimeBaseDir: firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, replaySnapshot.RuntimeBaseDir),
+		}, nil
 	}
-	if !snapshotResolved {
-		factoryDir, sourcePath, err = f.resolveActivationDefinitionSource(opening)
-		if err != nil {
-			return factoryruntime.RuntimeActivationRequest{}, err
-		}
-		if factoryDir == "" && sourcePath == "" {
-			return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("open Factory Runtime: Factory Definition directory is required")
-		}
-		runtimeBaseDir = strings.TrimSpace(opening.FactoryDefinition.ExecutionBaseDir)
-		if runtimeBaseDir == "" {
-			runtimeBaseDir = factoryDir
-		}
-		if runtimeBaseDir == "" {
-			runtimeBaseDir = sourcePath
-		}
+	factoryDir, sourcePath, err := f.resolveActivationDefinitionSource(opening)
+	if err != nil {
+		return activationSnapshotResolution{}, err
 	}
-	name := filepath.Base(filepath.Clean(factoryDir))
-	if name == "." || name == string(filepath.Separator) || name == "" {
-		name = "runtime"
+	if factoryDir == "" && sourcePath == "" {
+		return activationSnapshotResolution{}, fmt.Errorf("open Factory Runtime: Factory Definition directory is required")
 	}
-	if !snapshotResolved {
-		if f.factoryDefinitions == nil {
-			return factoryruntime.RuntimeActivationRequest{}, runtimeSnapshotResolverUnavailable()
-		}
-		resolved, resolveErr := f.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
-			// SourcePath is the concrete authored file for direct layouts. Do not
-			// send the retained directory as FactoryDir as the Definitions root
-			// rejects two distinct source identities.
-			FactoryDir:       "",
-			SourcePath:       sourcePath,
-			ExecutionBaseDir: runtimeBaseDir,
-			Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
-				FactorySessionID: sessionID,
-				WorkflowID:       opening.Recordings.WorkflowID,
-			},
-		})
-		if resolveErr != nil {
-			return factoryruntime.RuntimeActivationRequest{}, resolveErr
-		}
-		snapshot, err = resolved.Snapshot.Clone()
-		if err != nil {
-			return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("open Factory Runtime: detach resolved Factory Definition snapshot: %w", err)
-		}
+	runtimeBaseDir := firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, factoryDir, sourcePath)
+	snapshot, err := f.resolveActivationDefinitionSnapshot(ctx, sourcePath, runtimeBaseDir, opening, sessionID)
+	if err != nil {
+		return activationSnapshotResolution{}, err
 	}
+	return activationSnapshotResolution{
+		snapshot:       snapshot,
+		factoryDir:     factoryDir,
+		sourcePath:     sourcePath,
+		runtimeBaseDir: runtimeBaseDir,
+	}, nil
+}
+
+func (f *Factory) resolveActivationDefinitionSnapshot(
+	ctx context.Context,
+	sourcePath, runtimeBaseDir string,
+	opening factorysessions.RuntimeOpeningRequest,
+	sessionID string,
+) (factorydefinitions.RuntimeSnapshot, error) {
+	if f.factoryDefinitions == nil {
+		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
+	}
+	resolved, err := f.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
+		// SourcePath is the concrete authored file for direct layouts. Do not
+		// send the retained directory as FactoryDir as the Definitions root
+		// rejects two distinct source identities.
+		SourcePath:       sourcePath,
+		ExecutionBaseDir: runtimeBaseDir,
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			FactorySessionID: sessionID,
+			WorkflowID:       opening.Recordings.WorkflowID,
+		},
+	})
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, err
+	}
+	snapshot, err := resolved.Snapshot.Clone()
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf("open Factory Runtime: detach resolved Factory Definition snapshot: %w", err)
+	}
+	return snapshot, nil
+}
+
+func normalizeActivationSnapshot(
+	snapshot *factorydefinitions.RuntimeSnapshot,
+	factoryDir, sourcePath, runtimeBaseDir, sessionID, workflowID string,
+) {
 	if strings.TrimSpace(snapshot.FactoryDir) == "" {
 		snapshot.FactoryDir = factoryDir
 		if strings.TrimSpace(snapshot.FactoryDir) == "" && strings.TrimSpace(sourcePath) != "" {
@@ -360,35 +415,32 @@ func (f *Factory) activationRequestWithReplayInput(
 		snapshot.RuntimeBaseDir = runtimeBaseDir
 	}
 	if snapshot.EffectiveFactory.Name == "" {
-		snapshot.EffectiveFactory.Name = name
+		snapshot.EffectiveFactory.Name = runtimeFactoryName(factoryDir)
 	}
 	snapshot.Invocation.FactorySessionID = sessionID
-	if workflowID := strings.TrimSpace(opening.Recordings.WorkflowID); workflowID != "" {
+	if workflowID = strings.TrimSpace(workflowID); workflowID != "" {
 		snapshot.Invocation.WorkflowID = workflowID
 	}
 	if snapshot.DefinitionVersion == nil {
-		// Older authored Factory files predate persisted version metadata. Keep
-		// their established opening behavior while making the version explicit
-		// in the activation request.
 		snapshot.DefinitionVersion = &factorydefinitions.FactoryVersion{Logical: 1}
 	}
-	inputs := runtimeActivationInputs(opening)
-	// Runtime root activation must receive the same resolved source identity
-	// that Definitions used. In particular, named paths and directory-backed
-	// authored files cannot be rediscovered from the caller's shorthand after
-	// the snapshot has crossed the boundary. Keep the caller's Directory as
-	// the session/factory-root scope; SourcePath carries the concrete source
-	// identity used to resolve the snapshot.
-	if sourcePath != "" {
-		inputs.Definition.SourcePath = sourcePath
+}
+
+func runtimeFactoryName(factoryDir string) string {
+	name := filepath.Base(filepath.Clean(factoryDir))
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return "runtime"
 	}
-	return factoryruntime.RuntimeActivationRequest{
-		RuntimeID:        runtimeID,
-		FactorySessionID: sessionID,
-		Snapshot:         snapshot,
-		Runtime:          opening.FactoryRuntime,
-		Inputs:           inputs,
-	}, nil
+	return name
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func sessionIDForOpening(opening factorysessions.RuntimeOpeningRequest) string {
@@ -403,52 +455,21 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 	opening factorysessions.RuntimeOpeningRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (factorydefinitions.RuntimeSnapshot, bool, error) {
-	if strings.TrimSpace(opening.Recordings.ReplayPath) == "" ||
-		(preloadedReplayInput == nil && f.replayInputs == nil) {
+	if !legacyReplayRequested(opening, preloadedReplayInput, f.replayInputs != nil) {
 		return factorydefinitions.RuntimeSnapshot{}, false, nil
 	}
-	var input recordings.LoadReplayInputResult
-	if preloadedReplayInput != nil {
-		input = *preloadedReplayInput
-	} else {
-		loaded, err := f.replayInputs.LoadReplayInput(
-			recordings.LoadReplayInputRequest{Path: opening.Recordings.ReplayPath},
-		)
-		if err != nil {
-			return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: load replay input for activation: %w", err)
-		}
-		input = loaded
+	input, err := f.loadReplayInputForActivation(opening, preloadedReplayInput)
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, err
 	}
 	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
 		return factorydefinitions.RuntimeSnapshot{}, false, nil
 	}
-	if f.factoryDefinitions == nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, runtimeSnapshotResolverUnavailable()
-	}
-	if f.decodeReplayConfig == nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: replay Factory Definition decoder is required")
-	}
-	replayConfig, err := f.decodeReplayConfig(input.Legacy.Factory)
+	replayConfig, err := f.decodeLegacyReplayConfig(input.Legacy.Factory)
 	if err != nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: decode replay Factory Definition: %w", err)
+		return factorydefinitions.RuntimeSnapshot{}, false, err
 	}
-	if replayConfig == nil {
-		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf("open Factory Runtime: replay Factory Definition is empty")
-	}
-	factoryDir := strings.TrimSpace(replayConfig.FactoryDir())
-	runtimeBaseDir := strings.TrimSpace(opening.FactoryDefinition.ExecutionBaseDir)
-	if runtimeBaseDir == "" {
-		runtimeBaseDir = strings.TrimSpace(replayConfig.RuntimeBaseDir())
-	}
-	if factoryDir == "" {
-		factoryDir = runtimeBaseDir
-	}
-	if factoryDir == "" {
-		factoryDir = "."
-	}
-	if runtimeBaseDir == "" {
-		runtimeBaseDir = factoryDir
-	}
+	factoryDir, runtimeBaseDir := legacyReplayPaths(opening, replayConfig)
 	resolved, err := f.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
 		Canonical:        append([]byte(nil), []byte(*input.Legacy.Factory)...),
 		ExecutionBaseDir: runtimeBaseDir,
@@ -471,6 +492,60 @@ func (f *Factory) resolveLegacyReplaySnapshot(
 		snapshot.RuntimeBaseDir = runtimeBaseDir
 	}
 	return snapshot, true, nil
+}
+
+func legacyReplayRequested(
+	opening factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	replayInputsAvailable bool,
+) bool {
+	return strings.TrimSpace(opening.Recordings.ReplayPath) != "" && (preloadedReplayInput != nil || replayInputsAvailable)
+}
+
+func (f *Factory) loadReplayInputForActivation(
+	opening factorysessions.RuntimeOpeningRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+) (recordings.LoadReplayInputResult, error) {
+	if preloadedReplayInput != nil {
+		return *preloadedReplayInput, nil
+	}
+	loaded, err := f.replayInputs.LoadReplayInput(
+		recordings.LoadReplayInputRequest{Path: opening.Recordings.ReplayPath},
+	)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("open Factory Runtime: load replay input for activation: %w", err)
+	}
+	return loaded, nil
+}
+
+func (f *Factory) decodeLegacyReplayConfig(
+	factoryJSON *factorydefinitions.FactorySnapshot,
+) (factorydefinitions.ReplayRuntimeConfig, error) {
+	if f.factoryDefinitions == nil {
+		return nil, runtimeSnapshotResolverUnavailable()
+	}
+	if f.decodeReplayConfig == nil {
+		return nil, fmt.Errorf("open Factory Runtime: replay Factory Definition decoder is required")
+	}
+	replayConfig, err := f.decodeReplayConfig(factoryJSON)
+	if err != nil {
+		return nil, fmt.Errorf("open Factory Runtime: decode replay Factory Definition: %w", err)
+	}
+	if replayConfig == nil {
+		return nil, fmt.Errorf("open Factory Runtime: replay Factory Definition is empty")
+	}
+	return replayConfig, nil
+}
+
+func legacyReplayPaths(
+	opening factorysessions.RuntimeOpeningRequest,
+	replayConfig factorydefinitions.ReplayRuntimeConfig,
+) (string, string) {
+	factoryDir := strings.TrimSpace(replayConfig.FactoryDir())
+	runtimeBaseDir := firstNonEmptyString(opening.FactoryDefinition.ExecutionBaseDir, replayConfig.RuntimeBaseDir())
+	factoryDir = firstNonEmptyString(factoryDir, runtimeBaseDir, ".")
+	runtimeBaseDir = firstNonEmptyString(runtimeBaseDir, factoryDir)
+	return factoryDir, runtimeBaseDir
 }
 
 func (f *Factory) resolveActivationDefinitionSource(

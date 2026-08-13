@@ -151,34 +151,55 @@ func detach(
 	loaded factorydefinitions.MutableLoadedFactorySource,
 	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
 ) (factorydefinitions.RuntimeSnapshot, error) {
-	sourceConfig := loaded.FactoryConfig()
-	config, err := factorydefinitions.CloneFactoryConfig(sourceConfig)
+	config, err := cloneRuntimeSnapshotConfig(loaded.FactoryConfig())
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, err
 	}
+	snapshot := newRuntimeSnapshot(loaded, invocation, *config)
+	appendRuntimeSnapshotWorkersAndSources(&snapshot, *config)
+	appendRuntimeSnapshotPromptSources(&snapshot, loaded)
+	return snapshot, nil
+}
+
+func cloneRuntimeSnapshotConfig(
+	sourceConfig *factorydefinitions.FactoryConfig,
+) (*factorydefinitions.FactoryConfig, error) {
+	config, err := factorydefinitions.CloneFactoryConfig(sourceConfig)
+	if err != nil {
+		return nil, err
+	}
 	if config == nil {
-		return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf("loaded Factory has no effective configuration")
+		return nil, fmt.Errorf("loaded Factory has no effective configuration")
 	}
 	// CloneFactoryConfig intentionally follows the persisted JSON shape. The
 	// loaded runtime source also carries value-only worker metadata that is
-	// excluded from that shape (for example concurrency and operator defaults),
-	// so restore those fields through the worker/workstation clone helpers.
-	for index := range config.Workers {
-		if index < len(sourceConfig.Workers) {
-			config.Workers[index] = factorydefinitions.CloneWorkerConfig(sourceConfig.Workers[index])
+	// excluded from that shape, so restore those fields through the worker and
+	// workstation clone helpers.
+	if sourceConfig != nil {
+		for index := range config.Workers {
+			if index < len(sourceConfig.Workers) {
+				config.Workers[index] = factorydefinitions.CloneWorkerConfig(sourceConfig.Workers[index])
+			}
+		}
+		for index := range config.Workstations {
+			if index < len(sourceConfig.Workstations) {
+				config.Workstations[index] = factorydefinitions.CloneWorkstationConfig(sourceConfig.Workstations[index])
+			}
 		}
 	}
-	for index := range config.Workstations {
-		if index < len(sourceConfig.Workstations) {
-			config.Workstations[index] = factorydefinitions.CloneWorkstationConfig(sourceConfig.Workstations[index])
-		}
-	}
+	return config, nil
+}
 
+func newRuntimeSnapshot(
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
+	config factorydefinitions.FactoryConfig,
+) factorydefinitions.RuntimeSnapshot {
 	snapshot := factorydefinitions.RuntimeSnapshot{
 		FactoryDir:        loaded.FactoryDir(),
 		RuntimeBaseDir:    loaded.RuntimeBaseDir(),
 		Invocation:        invocation,
-		EffectiveFactory:  *config,
+		EffectiveFactory:  config,
 		Workers:           make([]factorydefinitions.FactoryWorkerConfig, 0, len(config.Workers)),
 		Workstations:      make([]factorydefinitions.FactoryWorkstationConfig, 0, len(config.Workstations)),
 		AutomationSources: make([]factorydefinitions.RuntimeAutomationSource, 0),
@@ -189,7 +210,13 @@ func detach(
 		version := *config.Version
 		snapshot.DefinitionVersion = &version
 	}
+	return snapshot
+}
 
+func appendRuntimeSnapshotWorkersAndSources(
+	snapshot *factorydefinitions.RuntimeSnapshot,
+	config factorydefinitions.FactoryConfig,
+) {
 	workersByName := make(map[string]factorydefinitions.FactoryWorkerConfig, len(config.Workers))
 	for _, worker := range config.Workers {
 		cloned := factorydefinitions.CloneWorkerConfig(worker)
@@ -204,31 +231,36 @@ func detach(
 			snapshot.AutomationSources = append(snapshot.AutomationSources, source)
 		}
 	}
+}
 
-	if promptSources, ok := loaded.(factorydefinitions.RuntimePromptSourceLookup); ok {
-		for _, worker := range snapshot.Workers {
-			if source, exists := promptSources.WorkerPromptSource(worker.Name); exists {
-				snapshot.PromptSources = append(snapshot.PromptSources, factorydefinitions.RuntimePromptSource{
-					Role:       "worker",
-					Name:       worker.Name,
-					Path:       source.Path,
-					IsTemplate: source.IsTemplate,
-				})
-			}
-		}
-		for _, workstation := range snapshot.Workstations {
-			if source, exists := promptSources.WorkstationPromptSource(workstation.Name); exists {
-				snapshot.PromptSources = append(snapshot.PromptSources, factorydefinitions.RuntimePromptSource{
-					Role:       "workstation",
-					Name:       workstation.Name,
-					Path:       source.Path,
-					IsTemplate: source.IsTemplate,
-				})
-			}
+func appendRuntimeSnapshotPromptSources(
+	snapshot *factorydefinitions.RuntimeSnapshot,
+	loaded factorydefinitions.MutableLoadedFactorySource,
+) {
+	promptSources, ok := loaded.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok {
+		return
+	}
+	for _, worker := range snapshot.Workers {
+		if source, exists := promptSources.WorkerPromptSource(worker.Name); exists {
+			snapshot.PromptSources = append(snapshot.PromptSources, factorydefinitions.RuntimePromptSource{
+				Role:       "worker",
+				Name:       worker.Name,
+				Path:       source.Path,
+				IsTemplate: source.IsTemplate,
+			})
 		}
 	}
-
-	return snapshot, nil
+	for _, workstation := range snapshot.Workstations {
+		if source, exists := promptSources.WorkstationPromptSource(workstation.Name); exists {
+			snapshot.PromptSources = append(snapshot.PromptSources, factorydefinitions.RuntimePromptSource{
+				Role:       "workstation",
+				Name:       workstation.Name,
+				Path:       source.Path,
+				IsTemplate: source.IsTemplate,
+			})
+		}
+	}
 }
 
 func automationSource(

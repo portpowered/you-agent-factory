@@ -161,6 +161,12 @@ func TestLifecycleOutcomeClassAndEventMaterialization(t *testing.T) {
 }
 
 func TestLiveChangeContractsNormalizeAndClassifyErrors(t *testing.T) {
+	assertLiveChangeErrorClassification(t)
+	assertLiveChangeNormalization(t)
+}
+
+func assertLiveChangeErrorClassification(t *testing.T) {
+	t.Helper()
 	var nilError *LiveChangeError
 	if nilError.Error() != "live change error" || nilError.Unwrap() != nil || nilError.Is(nil) {
 		t.Fatal("nil LiveChangeError methods are not stable")
@@ -177,7 +183,10 @@ func TestLiveChangeContractsNormalizeAndClassifyErrors(t *testing.T) {
 	if !errors.Is((&LiveChangeError{Cause: wrapped}).Unwrap(), wrapped) {
 		t.Fatal("live change cause was not retained for local matching")
 	}
+}
 
+func assertLiveChangeNormalization(t *testing.T) {
+	t.Helper()
 	normalized, err := NormalizeLiveChangeRequest(LiveChangeRequest{
 		RequestID:        " request-a ",
 		ExpectedRevision: 2,
@@ -202,5 +211,4 @@ func TestLiveChangeContractsNormalizeAndClassifyErrors(t *testing.T) {
 			t.Fatalf("NormalizeLiveChangeRequest(%#v) unexpectedly succeeded", request)
 		}
 	}
-
 }

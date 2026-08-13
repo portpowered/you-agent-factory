@@ -47,32 +47,8 @@ func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 		t.Fatalf("canonical loader received aliased request bytes %q", receivedCanonical)
 	}
 
-	if first.Snapshot.FactoryDir != "/factories/alpha" {
-		t.Fatalf("FactoryDir = %q, want /factories/alpha", first.Snapshot.FactoryDir)
-	}
-	if first.Snapshot.RuntimeBaseDir != "/execution/base" {
-		t.Fatalf("RuntimeBaseDir = %q, want /execution/base", first.Snapshot.RuntimeBaseDir)
-	}
-	if first.Snapshot.DefinitionVersion == nil || first.Snapshot.DefinitionVersion.Logical != 7 {
-		t.Fatalf("DefinitionVersion = %#v, want logical version 7", first.Snapshot.DefinitionVersion)
-	}
-	if first.Snapshot.EffectiveFactory.Workers[0].Concurrency != 3 ||
-		first.Snapshot.Workers[0].RuntimeDefaultModel != "runtime-model" {
-		t.Fatalf("runtime worker facts = %#v / %#v, want runtime metadata preserved", first.Snapshot.EffectiveFactory.Workers[0], first.Snapshot.Workers[0])
-	}
-	if len(first.Snapshot.AutomationSources) != 1 ||
-		first.Snapshot.AutomationSources[0].Kind != factorydefinitions.RuntimeAutomationSourceKindCron {
-		t.Fatalf("AutomationSources = %#v, want one cron source", first.Snapshot.AutomationSources)
-	}
-	if len(first.Snapshot.PromptSources) != 2 {
-		t.Fatalf("PromptSources = %#v, want worker and workstation sources", first.Snapshot.PromptSources)
-	}
-
-	first.Snapshot.EffectiveFactory.Workers[0].Auth.SecretRef = "mutated"
-	first.Snapshot.Workers[0].Args[0] = "mutated"
-	first.Snapshot.Workstations[0].Env["TOKEN"] = "mutated"
-	first.Snapshot.AutomationSources[0].Workstation.Env["TOKEN"] = "mutated"
-	first.Snapshot.PromptSources[0].Path = "mutated"
+	assertInitialRuntimeSnapshot(t, first.Snapshot)
+	mutateRuntimeSnapshot(first.Snapshot)
 
 	second, err := resolver.ResolveRuntimeSnapshot(
 		context.Background(),
@@ -85,20 +61,55 @@ func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRuntimeSnapshot(second) error = %v", err)
 	}
-	if second.Snapshot.EffectiveFactory.Workers[0].Auth.SecretRef != "secret-ref" {
-		t.Fatalf("second effective worker Auth = %#v, was affected by first result", second.Snapshot.EffectiveFactory.Workers[0].Auth)
+	assertDetachedRuntimeSnapshot(t, second.Snapshot)
+}
+
+func assertInitialRuntimeSnapshot(t *testing.T, snapshot factorydefinitions.RuntimeSnapshot) {
+	t.Helper()
+	if snapshot.FactoryDir != "/factories/alpha" {
+		t.Fatalf("FactoryDir = %q, want /factories/alpha", snapshot.FactoryDir)
 	}
-	if second.Snapshot.Workers[0].Args[0] != "--safe" {
-		t.Fatalf("second worker Args = %#v, was affected by first result", second.Snapshot.Workers[0].Args)
+	if snapshot.RuntimeBaseDir != "/execution/base" {
+		t.Fatalf("RuntimeBaseDir = %q, want /execution/base", snapshot.RuntimeBaseDir)
 	}
-	if second.Snapshot.Workstations[0].Env["TOKEN"] != "value" {
-		t.Fatalf("second workstation Env = %#v, was affected by first result", second.Snapshot.Workstations[0].Env)
+	if snapshot.DefinitionVersion == nil || snapshot.DefinitionVersion.Logical != 7 {
+		t.Fatalf("DefinitionVersion = %#v, want logical version 7", snapshot.DefinitionVersion)
 	}
-	if second.Snapshot.AutomationSources[0].Workstation.Env["TOKEN"] != "value" {
-		t.Fatalf("second automation workstation Env = %#v, was affected by first result", second.Snapshot.AutomationSources[0].Workstation.Env)
+	if snapshot.EffectiveFactory.Workers[0].Concurrency != 3 || snapshot.Workers[0].RuntimeDefaultModel != "runtime-model" {
+		t.Fatalf("runtime worker facts = %#v / %#v, want runtime metadata preserved", snapshot.EffectiveFactory.Workers[0], snapshot.Workers[0])
 	}
-	if second.Snapshot.PromptSources[0].Path != "workers/agent.md" {
-		t.Fatalf("second prompt source = %#v, was affected by first result", second.Snapshot.PromptSources[0])
+	if len(snapshot.AutomationSources) != 1 || snapshot.AutomationSources[0].Kind != factorydefinitions.RuntimeAutomationSourceKindCron {
+		t.Fatalf("AutomationSources = %#v, want one cron source", snapshot.AutomationSources)
+	}
+	if len(snapshot.PromptSources) != 2 {
+		t.Fatalf("PromptSources = %#v, want worker and workstation sources", snapshot.PromptSources)
+	}
+}
+
+func mutateRuntimeSnapshot(snapshot factorydefinitions.RuntimeSnapshot) {
+	snapshot.EffectiveFactory.Workers[0].Auth.SecretRef = "mutated"
+	snapshot.Workers[0].Args[0] = "mutated"
+	snapshot.Workstations[0].Env["TOKEN"] = "mutated"
+	snapshot.AutomationSources[0].Workstation.Env["TOKEN"] = "mutated"
+	snapshot.PromptSources[0].Path = "mutated"
+}
+
+func assertDetachedRuntimeSnapshot(t *testing.T, snapshot factorydefinitions.RuntimeSnapshot) {
+	t.Helper()
+	if snapshot.EffectiveFactory.Workers[0].Auth.SecretRef != "secret-ref" {
+		t.Fatalf("second effective worker Auth = %#v, was affected by first result", snapshot.EffectiveFactory.Workers[0].Auth)
+	}
+	if snapshot.Workers[0].Args[0] != "--safe" {
+		t.Fatalf("second worker Args = %#v, was affected by first result", snapshot.Workers[0].Args)
+	}
+	if snapshot.Workstations[0].Env["TOKEN"] != "value" {
+		t.Fatalf("second workstation Env = %#v, was affected by first result", snapshot.Workstations[0].Env)
+	}
+	if snapshot.AutomationSources[0].Workstation.Env["TOKEN"] != "value" {
+		t.Fatalf("second automation workstation Env = %#v, was affected by second result", snapshot.AutomationSources[0].Workstation.Env)
+	}
+	if snapshot.PromptSources[0].Path != "workers/agent.md" {
+		t.Fatalf("second prompt source = %#v, was affected by first result", snapshot.PromptSources[0])
 	}
 }
 
