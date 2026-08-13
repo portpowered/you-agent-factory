@@ -42,7 +42,13 @@ type runtimeAutomationService interface {
 
 type runtimeAutomationLifecycle interface {
 	automations.Service
-	automations.RuntimeLifecycle
+	ActivateRuntime(context.Context, automations.RuntimeActivationRequest) (automations.RuntimeActivationResult, error)
+	DeactivateRuntime(context.Context, automations.RuntimeDeactivationRequest) (automations.RuntimeDeactivationResult, error)
+	StartRuntime(context.Context, string) error
+}
+
+type runtimeAutomationStarter interface {
+	StartRuntime(context.Context, string) error
 }
 
 // PreseedRuntimeInputs materializes listener-backed inputs before execution.
@@ -103,12 +109,12 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 	sidecarCtx, cancel := context.WithCancel(ctx)
 	handle.SidecarCancel = cancel
 	lifecycle, lifecycleActive := s.automation.(runtimeAutomationLifecycle)
-	var runtimeStarter automations.RuntimeStarter
+	var runtimeStarter runtimeAutomationStarter
 	if lifecycleActive {
 		if _, err := lifecycle.ActivateRuntime(sidecarCtx, runtimeActivationRequest(handle.Bundle, s.enabled)); err != nil {
 			return s.failStart(handle, cancel, fmt.Errorf("activate automation runtime: %w", err))
 		}
-		starter, ok := s.automation.(automations.RuntimeStarter)
+		starter, ok := s.automation.(runtimeAutomationStarter)
 		if !ok {
 			return s.failStart(handle, cancel, fmt.Errorf("automations runtime starter is required"))
 		}

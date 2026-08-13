@@ -1,27 +1,9 @@
 package automations
 
 import (
-	"context"
-
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-// RuntimeLifecycle is the Automations-owned lifecycle capability for one
-// activated Factory Runtime. The capability is deliberately separate from
-// Service so ordinary reconciliation and status consumers cannot mutate the
-// runtime registry.
-type RuntimeLifecycle interface {
-	ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
-	DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
-}
-
-// RuntimeStarter is an internal composition capability used by Factory
-// Runtime to preserve the existing preseed-then-start ordering. Activation
-// allocates detached source state; StartRuntime begins its effects.
-type RuntimeStarter interface {
-	StartRuntime(context.Context, string) error
-}
 
 // RuntimeActivationRequest carries the detached definition and the exact
 // runtime-scoped effects needed by Automations to activate its sources.

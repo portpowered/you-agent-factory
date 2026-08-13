@@ -98,8 +98,6 @@ func (c *runtimeSnapshotConfig) Workstation(name string) (*interfaces.FactoryWor
 }
 
 var _ interfaces.RuntimeConfigLookup = (*runtimeSnapshotConfig)(nil)
-var _ automations.RuntimeLifecycle = (*Service)(nil)
-var _ automations.RuntimeStarter = (*Service)(nil)
 
 func (s *Service) ActivateRuntime(
 	ctx context.Context,
@@ -297,7 +295,7 @@ func normalizeRuntimeActivationRequest(
 	if len(request.Snapshot.Workstations) == 0 {
 		request.Snapshot.Workstations = append([]interfaces.FactoryWorkstationConfig(nil), request.Snapshot.EffectiveFactory.Workstations...)
 	}
-	cloned, err := interfaces.CloneRuntimeSnapshot(request.Snapshot)
+	cloned, err := request.Snapshot.Clone()
 	if err != nil {
 		return automations.RuntimeActivationRequest{}, runtimeLifecycleError(
 			"ActivateRuntime", automations.ErrorCodeInvalid, err,

@@ -92,7 +92,7 @@ type FactoryDefinitionsPorts struct {
 	Validator                     factorydefinitions.Validator
 	NamedPaths                    factorydefinitions.NamedPathResolver
 	Service                       factorydefinitions.Service
-	RuntimeRouter                 factorysessions.DefinitionRuntimeRouter
+	RuntimeRouter                 *factorysessions.DefinitionRuntimeRouter
 	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
 	LoadFactory                   factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory              factorydefinitions.LoadedFactorySourceFactory
@@ -190,7 +190,7 @@ type Factory struct {
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
 	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
 	factoryDefinitions               factorydefinitions.Service
-	definitionRuntimeRouter          factorysessions.DefinitionRuntimeRouter
+	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
 	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
@@ -216,7 +216,7 @@ type Factory struct {
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
 	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
-	runtimeRoot                      factoryruntime.Root
+	runtimeRoot                      FactoryRuntimeRoot
 	clock                            factoryruntime.Clock
 	providerOverride                 workers.Provider
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder

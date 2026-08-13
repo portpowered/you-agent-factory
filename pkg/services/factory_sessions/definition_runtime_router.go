@@ -24,20 +24,12 @@ var (
 // DefinitionRuntimeRouter routes the process-scoped Definitions root to the
 // session-owned host and activation capabilities that become available when a
 // Factory Session is opened. The router contains only runtime capability
-// state; it does not construct a service or another dependency graph.
-type DefinitionRuntimeRouter interface {
-	Host() DefinitionHost
-	ActivationGateway() DefinitionActivationGateway
-	Bind(string, DefinitionHost, DefinitionActivationGateway) error
-	Unbind(string)
-}
-
-type definitionRuntimeRouter struct {
+// state; it does not construct a service or another dependency graph. Its
+// zero value is ready for use by the process composition layer.
+type DefinitionRuntimeRouter struct {
 	mu      sync.RWMutex
 	current string
 	targets map[string]definitionRuntimeTarget
-	host    definitionHostRouter
-	gateway definitionActivationGatewayRouter
 }
 
 type definitionRuntimeTarget struct {
@@ -45,30 +37,21 @@ type definitionRuntimeTarget struct {
 	gateway DefinitionActivationGateway
 }
 
-// NewDefinitionRuntimeRouter constructs the inert routing capability supplied
-// to the singular Factory Definitions root during process composition.
-func NewDefinitionRuntimeRouter() DefinitionRuntimeRouter {
-	router := &definitionRuntimeRouter{targets: make(map[string]definitionRuntimeTarget)}
-	router.host.router = router
-	router.gateway.router = router
-	return router
-}
-
-func (r *definitionRuntimeRouter) Host() DefinitionHost {
+func (r *DefinitionRuntimeRouter) Host() DefinitionHost {
 	if r == nil {
 		return nil
 	}
-	return r.host
+	return definitionHostRouter{router: r}
 }
 
-func (r *definitionRuntimeRouter) ActivationGateway() DefinitionActivationGateway {
+func (r *DefinitionRuntimeRouter) ActivationGateway() DefinitionActivationGateway {
 	if r == nil {
 		return nil
 	}
-	return r.gateway
+	return definitionActivationGatewayRouter{router: r}
 }
 
-func (r *definitionRuntimeRouter) Bind(
+func (r *DefinitionRuntimeRouter) Bind(
 	sessionID string,
 	host DefinitionHost,
 	gateway DefinitionActivationGateway,
@@ -89,6 +72,9 @@ func (r *definitionRuntimeRouter) Bind(
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.targets == nil {
+		r.targets = make(map[string]definitionRuntimeTarget)
+	}
 	if existing, ok := r.targets[sessionID]; ok {
 		if existing.host == host && existing.gateway == gateway {
 			return nil
@@ -102,7 +88,7 @@ func (r *definitionRuntimeRouter) Bind(
 	return nil
 }
 
-func (r *definitionRuntimeRouter) Unbind(sessionID string) {
+func (r *DefinitionRuntimeRouter) Unbind(sessionID string) {
 	if r == nil {
 		return
 	}
@@ -127,7 +113,7 @@ func (r *definitionRuntimeRouter) Unbind(sessionID string) {
 	}
 }
 
-func (r *definitionRuntimeRouter) target(sessionID string) (definitionRuntimeTarget, error) {
+func (r *DefinitionRuntimeRouter) target(sessionID string) (definitionRuntimeTarget, error) {
 	if r == nil {
 		return definitionRuntimeTarget{}, ErrDefinitionRuntimeUnavailable
 	}
@@ -152,7 +138,7 @@ func (r *definitionRuntimeRouter) target(sessionID string) (definitionRuntimeTar
 }
 
 type definitionHostRouter struct {
-	router *definitionRuntimeRouter
+	router *DefinitionRuntimeRouter
 }
 
 func (h definitionHostRouter) target(sessionID string) (DefinitionHost, error) {
@@ -256,7 +242,7 @@ func (h definitionHostRouter) ReplaceFactoryLayoutAtDir(
 }
 
 type definitionActivationGatewayRouter struct {
-	router *definitionRuntimeRouter
+	router *DefinitionRuntimeRouter
 }
 
 func (g definitionActivationGatewayRouter) target(sessionID string) (DefinitionActivationGateway, error) {

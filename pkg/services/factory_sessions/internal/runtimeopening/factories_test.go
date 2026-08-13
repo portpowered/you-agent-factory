@@ -460,7 +460,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			Validator:                     validatorConstructionStub{},
 			NamedPaths:                    namedPathsConstructionStub{},
 			Service:                       factoryDefinitionsConstructionStub{},
-			RuntimeRouter:                 factorysessions.NewDefinitionRuntimeRouter(),
+			RuntimeRouter:                 &factorysessions.DefinitionRuntimeRouter{},
 			InitialFactorySnapshotFactory: inertRuntimeOpeningFunction[factorydefinitions.InitialFactorySnapshotFactory](calls),
 			LoadFactory:                   inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
 			NewLoadedFactory:              inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),

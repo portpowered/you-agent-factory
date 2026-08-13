@@ -42,7 +42,11 @@ func NewService(
 	workersPublisher WorkersPublisher,
 	workersCanceler WorkersCanceler,
 	activation ...factoryruntime.RuntimeActivationOperation,
-) (factoryruntime.Root, error) {
+) (interface {
+	factoryruntime.Service
+	Activate(context.Context, factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error)
+	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
+}, error) {
 	var publisher dispatchplanning.WorkersPublisher
 	if workersPublisher != nil {
 		publisher = func(ctx context.Context, request workers.WorkstationDispatchRequest) error {

@@ -10,7 +10,7 @@ import (
 )
 
 func TestDefinitionRuntimeRouter_IsolatesBindingsAndRetainsTheOtherSession(t *testing.T) {
-	router := NewDefinitionRuntimeRouter()
+	router := &DefinitionRuntimeRouter{}
 	alphaHost := definitionRouterHostStub{sessionID: "alpha"}
 	alphaGateway := definitionRouterGatewayStub{sessionID: "alpha"}
 	betaHost := definitionRouterHostStub{sessionID: "beta"}
@@ -48,7 +48,7 @@ func TestDefinitionRuntimeRouter_IsolatesBindingsAndRetainsTheOtherSession(t *te
 }
 
 func TestDefinitionRuntimeRouter_EquivalentBindIsIdempotentAndConflictDoesNotReplace(t *testing.T) {
-	router := NewDefinitionRuntimeRouter()
+	router := &DefinitionRuntimeRouter{}
 	host := definitionRouterHostStub{sessionID: "session"}
 	gateway := definitionRouterGatewayStub{sessionID: "session"}
 	if err := router.Bind("session", host, gateway); err != nil {
@@ -69,7 +69,7 @@ func TestDefinitionRuntimeRouter_EquivalentBindIsIdempotentAndConflictDoesNotRep
 func TestDefinitionRuntimeRouter_DefaultHostServesExplicitSession(t *testing.T) {
 	t.Parallel()
 
-	router := NewDefinitionRuntimeRouter()
+	router := &DefinitionRuntimeRouter{}
 	host := definitionRouterHostStub{sessionID: "default-host"}
 	gateway := definitionRouterGatewayStub{sessionID: "default-host"}
 	if err := router.Bind(DefaultSessionID, host, gateway); err != nil {
@@ -86,7 +86,7 @@ func TestDefinitionRuntimeRouter_DefaultHostServesExplicitSession(t *testing.T) 
 }
 
 func TestDefinitionRuntimeRouter_ForwardsEveryBoundCapability(t *testing.T) {
-	router := NewDefinitionRuntimeRouter()
+	router := &DefinitionRuntimeRouter{}
 	session := &factorydefinitions.DefinitionSession{ID: "session"}
 	hostValidateErr := errors.New("host validation")
 	hostReplaceErr := errors.New("host replace")

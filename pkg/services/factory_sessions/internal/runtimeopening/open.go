@@ -52,7 +52,7 @@ func openRuntime(
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
 	factoryDefinitions factorydefinitions.Service,
-	definitionRuntimeRouter factorysessions.DefinitionRuntimeRouter,
+	definitionRuntimeRouter *factorysessions.DefinitionRuntimeRouter,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,

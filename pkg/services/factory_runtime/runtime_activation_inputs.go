@@ -107,9 +107,9 @@ type RuntimeActivationOperatorDefaults struct {
 	ConfigPath          string
 }
 
-// CloneRuntimeActivationInputs detaches all nested slices, maps, and pointer
-// values before the Runtime root stores an activation request.
-func CloneRuntimeActivationInputs(inputs RuntimeActivationInputs) RuntimeActivationInputs {
+// Clone detaches all nested slices, maps, and pointer values before the
+// Runtime root stores an activation request.
+func (inputs RuntimeActivationInputs) Clone() RuntimeActivationInputs {
 	cloned := inputs
 	if inputs.Workers.InvocationSkipPermissionsOverride != nil {
 		value := *inputs.Workers.InvocationSkipPermissionsOverride

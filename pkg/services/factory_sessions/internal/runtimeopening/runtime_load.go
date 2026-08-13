@@ -239,7 +239,7 @@ func loadRuntimeSnapshot(
 	if newLoadedFactory == nil {
 		return nil, fmt.Errorf("Factory Definitions loaded-source factory is required")
 	}
-	snapshot, err := factorydefinitions.CloneRuntimeSnapshot(*resolved)
+	snapshot, err := resolved.Clone()
 	if err != nil {
 		return nil, fmt.Errorf("clone resolved Factory Definition snapshot: %w", err)
 	}

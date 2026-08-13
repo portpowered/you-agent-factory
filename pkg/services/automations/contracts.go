@@ -111,23 +111,28 @@ func (prepared PreparedInvocationSchedules) Abort() {
 // composing a peer and invoke explicit methods on Root.
 type Root struct {
 	Operations Service
-	Lifecycle  RuntimeLifecycle
+	Lifecycle interface {
+		ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
+		DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+	}
 	Runtime    any
 }
 
 var _ Service = Root{}
 
 func (r Root) runtimeOperations() (interface {
-	RuntimeLifecycle
-	RuntimeStarter
+	ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
+	DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+	StartRuntime(context.Context, string) error
 	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
 }, bool) {
 	if !rootOperationsAvailable(r.Runtime) {
 		return nil, false
 	}
 	capability, ok := r.Runtime.(interface {
-		RuntimeLifecycle
-		RuntimeStarter
+		ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
+		DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+		StartRuntime(context.Context, string) error
 		PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
 	})
 	return capability, ok && rootOperationsAvailable(capability)

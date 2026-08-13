@@ -123,6 +123,7 @@ type (
 	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
 	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
+	FactoryRuntimeRoot                     = runtimeopening.FactoryRuntimeRoot
 	RuntimeRootFactory                     = runtimeopening.RuntimeRootFactory
 	RuntimeOpening                         = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
@@ -137,6 +138,12 @@ type (
 	StdioOpeningService                 = executionopening.StdioOpeningService
 	RuntimeVisualizationSinkOwner       = factoryvisualization.RuntimeSinkOwner
 )
+
+// NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
+// routing capability used by the canonical process graph.
+func NewDefinitionRuntimeRouter() *factorysessions.DefinitionRuntimeRouter {
+	return &factorysessions.DefinitionRuntimeRouter{}
+}
 
 // RuntimeAssemblyFromService narrows the one Wire-constructed Factory
 // Sessions root to its owner-private runtime capability. The assertion is

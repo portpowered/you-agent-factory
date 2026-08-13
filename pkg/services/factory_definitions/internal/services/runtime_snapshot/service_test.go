@@ -1,4 +1,4 @@
-package runtimesnapshot
+package runtimesnapshot_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	runtimesnapshotwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/wire"
 )
 
 func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
@@ -15,7 +16,7 @@ func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 
 	source := newTestLoadedSource()
 	var receivedCanonical []byte
-	resolver, err := New(
+	resolver, err := runtimesnapshotwire.NewService(
 		func(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			receivedCanonical = payload
 			return source, nil
@@ -105,7 +106,7 @@ func TestResolveRuntimeSnapshotEquivalentRequestsProduceEquivalentValues(t *test
 	t.Parallel()
 
 	source := newTestLoadedSource()
-	resolver, err := New(
+	resolver, err := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
 		},
@@ -141,7 +142,7 @@ func TestResolveRuntimeSnapshotRejectsInvalidRequestBeforeLoading(t *testing.T) 
 	t.Parallel()
 
 	called := false
-	resolver, err := New(
+	resolver, err := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			called = true
 			return nil, nil
@@ -172,7 +173,7 @@ func TestResolveRuntimeSnapshotPreservesTypedLoaderFailure(t *testing.T) {
 	t.Parallel()
 
 	cause := factorydefinitions.ErrInvalidNamedFactory
-	resolver, err := New(
+	resolver, err := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, cause
 		},

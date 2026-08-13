@@ -34,7 +34,7 @@ type Root struct {
 	deactivating bool
 }
 
-var _ factoryruntime.Root = (*Root)(nil)
+var _ factoryruntime.Service = (*Root)(nil)
 
 type runtimeActivationState struct {
 	request factoryruntime.RuntimeActivationRequest
@@ -100,7 +100,7 @@ func (r *Root) Activate(
 	if err := validateActivationContext(ctx); err != nil {
 		return factoryruntime.RuntimeActivationResult{}, err
 	}
-	normalized, err := factoryruntime.NormalizeRuntimeActivationRequest(request)
+	normalized, err := request.Normalize()
 	if err != nil {
 		return factoryruntime.RuntimeActivationResult{}, err
 	}

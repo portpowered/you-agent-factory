@@ -1,6 +1,7 @@
 package runtimeopening
 
 import (
+	"context"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -66,7 +67,13 @@ type WorkersRuntimeFactory = func(
 // selected by the canonical process composition package, while the activation
 // callback remains owned by Factory Sessions because it assembles the session
 // product handoff.
-type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (factoryruntime.Root, error)
+type FactoryRuntimeRoot interface {
+	factoryruntime.Service
+	Activate(context.Context, factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error)
+	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
+}
+
+type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (FactoryRuntimeRoot, error)
 
 type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
 

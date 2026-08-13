@@ -285,7 +285,11 @@ func TestRuntimeRootDeactivationRetainsStateUntilCleanupSucceeds(t *testing.T) {
 func newRuntimeRoot(
 	t *testing.T,
 	activation factoryruntime.RuntimeActivationOperation,
-) factoryruntime.Root {
+) interface {
+	factoryruntime.Service
+	Activate(context.Context, factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error)
+	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
+} {
 	t.Helper()
 	root, err := factoryruntimewire.NewService(
 		func() string { return "runtime-activation-test-id" },

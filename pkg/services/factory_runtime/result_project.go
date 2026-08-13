@@ -1,7 +1,10 @@
 package factory
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -10,6 +13,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+func hashLabel(path, text string) string {
+	digest := sha256.Sum256([]byte(path + "\n" + text))
+	return fmt.Sprintf("artifact-%s", hex.EncodeToString(digest[:8]))
+}
 
 // ProjectPrimaryResult maps one validated workflow result to WorkContent parts.
 func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interfaces.FactorySessionArtifactState) ([]work.WorkContentPart, Result) {

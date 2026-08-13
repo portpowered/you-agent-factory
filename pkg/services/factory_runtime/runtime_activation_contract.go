@@ -192,17 +192,9 @@ type RuntimeActivationOperation func(
 	RuntimeActivationRequest,
 ) (*RuntimeActivation, error)
 
-// Root is the process-scoped Factory Runtime contract. Service operations are
-// available after Activate publishes a fully initialized Runtime delegate.
-type Root interface {
-	Service
-	Activate(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
-	Deactivate(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
-}
-
-// NormalizeRuntimeActivationRequest validates and detaches an activation
-// request before it is handed to the root's injected start operation.
-func NormalizeRuntimeActivationRequest(request RuntimeActivationRequest) (RuntimeActivationRequest, error) {
+// Normalize validates and detaches an activation request before it is handed
+// to the root's injected start operation.
+func (request RuntimeActivationRequest) Normalize() (RuntimeActivationRequest, error) {
 	runtimeID := strings.TrimSpace(request.RuntimeID)
 	sessionID := strings.TrimSpace(request.FactorySessionID)
 	switch {
@@ -247,7 +239,7 @@ func NormalizeRuntimeActivationRequest(request RuntimeActivationRequest) (Runtim
 		)
 	}
 
-	cloned, err := factorydefinitions.CloneRuntimeSnapshot(snapshot)
+	cloned, err := snapshot.Clone()
 	if err != nil {
 		return RuntimeActivationRequest{}, runtimeActivationError(
 			RuntimeActivationErrorInvalidSnapshot,
@@ -259,7 +251,7 @@ func NormalizeRuntimeActivationRequest(request RuntimeActivationRequest) (Runtim
 	request.RuntimeID = runtimeID
 	request.FactorySessionID = sessionID
 	request.Runtime.RuntimeInstanceID = runtimeID
-	request.Inputs = CloneRuntimeActivationInputs(request.Inputs)
+	request.Inputs = request.Inputs.Clone()
 	request.Snapshot = cloned
 	return request, nil
 }

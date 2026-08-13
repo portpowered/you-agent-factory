@@ -18,6 +18,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefinitionActivationGateway is retained as the Sessions implementation's
+// view of the gateway contract, whose authoritative definition belongs to
+// Factory Definitions. It is a value contract, not a second Sessions service
+// authority.
+type DefinitionActivationGateway = interfaces.DefinitionActivationGateway
+
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
 type InvocationMetric = internalcontracts.InvocationMetric
