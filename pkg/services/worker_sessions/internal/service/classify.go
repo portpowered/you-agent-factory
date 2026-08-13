@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -858,4 +859,53 @@ func (r *registry) publishTerminalRecordOrLog(ctx context.Context, id, attemptID
 			"outcome", "publish_failed",
 		)
 	}
+}
+
+// associateProviderSessionFromResult preserves the Provider Session reference
+// returned by Workers before the terminal lifecycle record can close the
+// session's publication window. A malformed or conflicting Worker result is
+// visible in structured operation logs and never replaces an accepted exact
+// reference; it also never invents a replacement from runner or model state.
+func (r *registry) associateProviderSessionFromResult(
+	id, dispatchID string,
+	result workers.WorkstationDispatchResult,
+) {
+	metadata := result.Result.ProviderSession
+	if metadata == nil {
+		return
+	}
+	_, err := r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: id,
+		DispatchID:      dispatchID,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(metadata.Provider),
+			Kind:     metadata.Kind,
+			ID:       metadata.ID,
+		},
+	})
+	if err != nil {
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+	}
+}
+
+func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
+	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled || errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		if action == workersessions.ControlActionTerminate {
+			return workersessions.StateTerminated, workersessions.TerminalResult{}
+		}
+		return workersessions.StateCanceled, workersessions.TerminalResult{}
+	}
+	terminal := classifyTerminal(dispatchErr, result)
+	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
+		return workersessions.StateCompleted, terminal
+	}
+	return workersessions.StateFailed, terminal
+}
+
+func (r *registry) logTerminal(id, attemptID string, session workersessions.Session) {
+	cause := ""
+	if session.Result != nil {
+		cause = causeKindString(session.Result.Cause)
+	}
+	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
 }
