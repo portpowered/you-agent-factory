@@ -1,0 +1,76 @@
+{
+  "summary": "Remedies are limited to package-specific evidence. The four in-scope latent-red packages repeat their existing functional exercise in all five samples, so their floors remain unchanged. The only functional manifest entry changed by this lane is loadedsource, whose exact sampled minimum is below its prior epsilon-tolerated floor.",
+  "remedies": [
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "classification": "deterministic functional exercise",
+      "observedEvidence": "55/62 in every run; swing 0.0000 pp; floor 80.64%; headroom +8.0697 pp",
+      "remedy": "Retain 80.64%; existing functional exercise is repeatable and preserves regression detection."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
+      "classification": "deterministic functional exercise",
+      "observedEvidence": "282/441 in every run; swing 0.0000 pp; floor 60.10%; headroom +3.8456 pp",
+      "remedy": "Retain 60.10%; no source or floor change is justified by the sample."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/jsonvalue",
+      "classification": "deterministic functional exercise",
+      "observedEvidence": "34/49 in every run; swing 0.0000 pp; floor 67.34%; headroom +2.0478 pp",
+      "remedy": "Retain 67.34%; existing functional exercise is repeatable."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
+      "classification": "deterministic functional exercise",
+      "observedEvidence": "133/171 in every run; swing 0.0000 pp; floor 76.31%; headroom +1.4678 pp",
+      "remedy": "Retain 76.31%; existing functional exercise is repeatable."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+      "classification": "inherent concurrent variance, epsilon-only pass",
+      "observedEvidence": "57/77 in every run; minimum 74.0260%; prior floor 74.13% exceeded the observation by 0.1040 pp",
+      "remedy": "Lower only this entry to the safe two-decimal minimum 74.02%; keep the 0.25 pp epsilon and blocking gate unchanged."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
+      "classification": "inherent concurrent variance, owner lane",
+      "observedEvidence": "New sample: 168/267, 167/267, 169/267, 167/267, 167/267; supplied owner-lane minimum 167/267",
+      "remedy": "Inherit main's 62.54% entry from the merged owner lane; this lane does not edit the package or manifest entry."
+    }
+  ],
+  "suppliedEvidence": [
+    {
+      "packages": [
+        "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service"
+      ],
+      "text": "CI run 31699727541 measured dispatch-planning at 167/267 statements (62.5468%) against a 62.92% floor on one attempt and passed on a second attempt for the same main commit."
+    },
+    {
+      "packages": [
+        "github.com/portpowered/infinite-you/pkg/platform/jsonvalue",
+        "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+        "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
+        "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
+        "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+      ],
+      "text": "The operator comparison covered 348 numeric floors, identified 112 packages with at most 0.25 percentage points of headroom, and identified five latent-red package cases where observed swing exceeded headroom."
+    },
+    {
+      "packages": [
+        "github.com/portpowered/infinite-you/pkg/platform/jsonvalue",
+        "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+        "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
+        "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
+        "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+      ],
+      "text": "The five supplied latent-red cases are authoredmodel/workers, runtimebinding, platform/jsonvalue, processlifecycle, and dispatch-planning. Dispatch-planning remains owned by its separate lane and is reported here without editing its package or manifest entry."
+    },
+    {
+      "packages": [
+        "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+        "github.com/portpowered/infinite-you/pkg/services/work/internal/proposalmaterialization"
+      ],
+      "text": "The supplied comparison identifies loadedsource as an epsilon-only pass and proposalmaterialization as a sampling-range case; their independent counts in this new sample set are shown in the table when those packages are measurable."
+    }
+  ]
+}

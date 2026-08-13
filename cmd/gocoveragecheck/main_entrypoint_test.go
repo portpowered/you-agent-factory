@@ -205,57 +205,27 @@ func TestMainRejectsNegativePackageFloorEpsilonBeforeCoverageWork(t *testing.T) 
 	}
 }
 
-func TestMainUpdateManifestIgnoresEpsilonForRejectAndRaise(t *testing.T) {
+func TestMainRejectsSingleProfileManifestUpdateBeforeCoverage(t *testing.T) {
 	configPackage := modulePath + "/pkg/config"
-	cases := []struct {
-		name       string
-		minimum    string
-		command    commandRunnerFunc
-		wantExit   int
-		wantStatus string
-	}{
-		{name: "rejects decrease at epsilon boundary", minimum: "0.25", command: fakeGoCoverageCommandWithMeasuredZeroConfig, wantExit: 1, wantStatus: "status=rejected"},
-		{name: "raises improved floor", minimum: "80.00", command: fakeGoCoverageCommandPassing, wantStatus: "status=raised"},
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "80.00")
+	called := false
+	_, stderr, exitCode := runMainForTest(t, []string{
+		"-suite=unit",
+		"-update-manifest=" + manifestPath,
+		"-update-profiles=one.out",
+	}, func(commandInvocation) (string, string, error) {
+		called = true
+		return "", "", nil
+	})
+
+	if called {
+		t.Fatal("main() started coverage work for a single-profile manifest update")
 	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			manifestPath := writePackageMinimumManifest(t, "unit", configPackage, tc.minimum)
-			before, err := os.ReadFile(manifestPath)
-			if err != nil {
-				t.Fatalf("read manifest before update: %v", err)
-			}
-			args := []string{
-				"-min=0",
-				"-suite=unit",
-				"-update-manifest=" + manifestPath,
-				"-package-floor-epsilon=0.25",
-				"-coverpkg=" + configPackage,
-				"-packages=./pkg/config",
-			}
-			stdout, stderr, exitCode := runMainForTest(t, args, tc.command)
-
-			if exitCode != tc.wantExit {
-				t.Fatalf("main() exit code = %d, want %d; stderr=%q", exitCode, tc.wantExit, stderr)
-			}
-			if !strings.Contains(stdout, tc.wantStatus) {
-				t.Fatalf("main() stdout = %q, want %q", stdout, tc.wantStatus)
-			}
-			after, err := os.ReadFile(manifestPath)
-			if err != nil {
-				t.Fatalf("read manifest after update: %v", err)
-			}
-			if tc.wantExit == 1 {
-				if string(after) != string(before) {
-					t.Fatalf("rejected update mutated manifest:\n%s\n---\n%s", before, after)
-				}
-				return
-			}
-			if !strings.Contains(string(after), `"minimum": 100.00`) {
-				t.Fatalf("raised manifest = %s, want 100.00 floor", after)
-			}
-		})
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr, "requires at least 5 profiles") {
+		t.Fatalf("main() stderr = %q, want actionable insufficient-sample diagnostic", stderr)
 	}
 }
 
