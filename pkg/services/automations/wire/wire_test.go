@@ -153,6 +153,22 @@ func (stubFilesystemInputReader) ReadDir(string) ([]fs.DirEntry, error) { return
 func (stubFilesystemInputReader) ReadFile(string) ([]byte, error)       { return nil, nil }
 func (stubFilesystemInputReader) Stat(string) (fs.FileInfo, error)      { return nil, nil }
 
+type secretRuntimePathsStub struct{}
+
+func (secretRuntimePathsStub) FactoryDir() string     { return "/factory" }
+func (secretRuntimePathsStub) RuntimeBaseDir() string { return "/runtime" }
+
+func TestHostedLinearSecretResolverWrapperDelegatesToInjectedEffects(t *testing.T) {
+	resolver := automationswire.NewHostedLinearSecretResolver(
+		func(string) string { return "env-secret" },
+		func(string) ([]byte, error) { return nil, nil },
+	)
+	got, err := resolver(context.Background(), secretRuntimePathsStub{}, "secrets/api-key")
+	if err != nil || got != "env-secret" {
+		t.Fatalf("NewHostedLinearSecretResolver() = %q, %v; want env-secret, nil", got, err)
+	}
+}
+
 // Peer-behavior coverage pairs Service and Root success/failure paths in one test.
 func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()

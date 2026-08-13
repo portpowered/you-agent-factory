@@ -3,12 +3,15 @@ package internal
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -294,6 +297,56 @@ func TestRuntimeLifecycle_ClonesSnapshotConfigCollections(t *testing.T) {
 		t.Fatal("newRuntimeSnapshotConfig() shared collection values")
 	}
 }
+
+func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
+	service := New(zap.NewNop(), nil, nil, "workflow", "", nil, nil, nil)
+	watcher := service.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
+		Dir:            t.TempDir(),
+		Files:          watcherInputFilesystem{},
+		WalkDirectory:  filepath.WalkDir,
+		WorkRequestIDs: func() string { return "watcher-test" },
+		Submitter:      func(context.Context, work.WorkRequest) error { return nil },
+	})
+	if watcher == nil {
+		t.Fatal("NewFilesystemWatcher() returned nil for a constructed service")
+	}
+
+	var nilService *Service
+	if nilService.NewFilesystemWatcher(automations.FilesystemWatcherConfig{}) != nil {
+		t.Fatal("NewFilesystemWatcher() returned a watcher for a nil service")
+	}
+}
+
+func TestServiceDefaultEdgesRemainSafeForNilAndMissingCommandRunner(t *testing.T) {
+	var nilService *Service
+	if root := nilService.Root(); root.Operations != nil || root.Lifecycle != nil || root.Runtime != nil {
+		t.Fatalf("nil service Root() = %#v, want empty root", root)
+	}
+	if nilService.logger() == nil || nilService.commandRunner() == nil || nilService.supervisorClock() == nil {
+		t.Fatal("nil service default collaborators were not supplied")
+	}
+	if _, err := (unavailableCommandRunner{}).Run(context.Background(), workers.CommandRequest{}); err == nil || err.Error() != "automation command runner is required" {
+		t.Fatalf("unavailable command runner error = %v", err)
+	}
+}
+
+func TestCloneStringMapDetachesOptionalTags(t *testing.T) {
+	if cloneStringMap(nil) != nil {
+		t.Fatal("cloneStringMap(nil) returned a non-nil map")
+	}
+	original := map[string]string{"key": "value"}
+	cloned := cloneStringMap(original)
+	cloned["key"] = "changed"
+	if original["key"] != "value" {
+		t.Fatal("cloneStringMap() shared its backing map")
+	}
+}
+
+type watcherInputFilesystem struct{}
+
+func (watcherInputFilesystem) ReadDir(name string) ([]fs.DirEntry, error) { return os.ReadDir(name) }
+func (watcherInputFilesystem) ReadFile(name string) ([]byte, error)       { return os.ReadFile(name) }
+func (watcherInputFilesystem) Stat(name string) (fs.FileInfo, error)      { return os.Stat(name) }
 
 func runtimeActivationRequestForTest(runtimeID, factoryName string) automations.RuntimeActivationRequest {
 	return automations.RuntimeActivationRequest{
