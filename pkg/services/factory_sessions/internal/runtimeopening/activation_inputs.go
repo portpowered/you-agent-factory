@@ -35,6 +35,7 @@ func runtimeOpeningRequestFromActivation(
 		),
 		FactoryRuntime: request.Runtime,
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+			FactorySessionID:  request.FactorySessionID,
 			PersistencePolicy: factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
 			BackendScopeID:    request.Inputs.Session.BackendScopeID,
 			SystemConfigHome:  request.Inputs.Session.SystemConfigHome,

@@ -64,6 +64,25 @@ func TestDefinitionRuntimeRouter_EquivalentBindIsIdempotentAndConflictDoesNotRep
 	}
 }
 
+func TestDefinitionRuntimeRouter_DefaultHostServesExplicitSession(t *testing.T) {
+	t.Parallel()
+
+	router := NewDefinitionRuntimeRouter()
+	host := definitionRouterHostStub{sessionID: "default-host"}
+	gateway := definitionRouterGatewayStub{sessionID: "default-host"}
+	if err := router.Bind(DefaultSessionID, host, gateway); err != nil {
+		t.Fatalf("Bind(default) error = %v", err)
+	}
+
+	resolved, err := router.Host().RequireSession("session-1")
+	if err != nil {
+		t.Fatalf("RequireSession(explicit) error = %v", err)
+	}
+	if resolved == nil || resolved.ID != "default-host" {
+		t.Fatalf("resolved session = %#v, want default host session", resolved)
+	}
+}
+
 type definitionRouterHostStub struct {
 	factorydefinitions.SessionHost
 	sessionID string

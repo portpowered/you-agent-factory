@@ -23,6 +23,7 @@ import (
 
 type preparedRuntime struct {
 	Definition          factorydefinitions.RuntimeOpeningRequest
+	DefinitionSnapshot  *factorydefinitions.RuntimeSnapshot
 	Runtime             factoryruntime.RuntimeOpeningRequest
 	Session             factorysessions.SessionRuntimeOpeningRequest
 	Workers             workers.RuntimeOpeningRequest
@@ -61,6 +62,8 @@ func PrepareRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
 ) (
 	prepared preparedRuntime,
 	root RuntimeRoot,
@@ -85,7 +88,7 @@ func PrepareRuntime(
 	prepared = preparedRuntime{
 		Definition: definitionRequest, Runtime: runtimeRequest, Session: sessionRequest,
 		Workers: workerRequest, Recordings: recordingRequest, ModelCacheDirectory: modelCacheDirectory,
-		OperatorDefaults: operatorDefaults,
+		OperatorDefaults: operatorDefaults, DefinitionSnapshot: definitionSnapshot,
 	}
 	root, err = ResolveRuntimeRoot(prepared.Definition.Directory, baseLogger, prepared.Runtime.RuntimeInstanceID, generateRuntimeInstanceID, resolveHome)
 	if err != nil {
@@ -106,7 +109,7 @@ func PrepareRuntime(
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
-	load, err = LoadRuntime(
+	load, err = loadRuntime(
 		selectedDefinitionPath,
 		prepared.Definition.ExecutionBaseDir,
 		prepared.Recordings.ReplayPath,
@@ -119,6 +122,9 @@ func PrepareRuntime(
 		replayInputs,
 		captureLoadedFactorySnapshot,
 		newSessionLogger,
+		prepared.DefinitionSnapshot,
+		replayInput,
+		prepared.Session.FactorySessionID,
 	)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err

@@ -137,6 +137,14 @@ func (r *definitionRuntimeRouter) target(sessionID string) (definitionRuntimeTar
 		sessionID = r.current
 	}
 	target, ok := r.targets[sessionID]
+	if !ok && sessionID != DefaultSessionID {
+		// The process-scoped default host owns the live session registry and can
+		// serve explicitly identified sessions opened through that registry. A
+		// separately bound session still wins above; this fallback keeps the
+		// singular Definitions root usable for the common default-host layout
+		// without weakening explicit binding isolation.
+		target, ok = r.targets[DefaultSessionID]
+	}
 	if !ok {
 		return definitionRuntimeTarget{}, fmt.Errorf("%w: %s", ErrDefinitionRuntimeUnavailable, sessionID)
 	}

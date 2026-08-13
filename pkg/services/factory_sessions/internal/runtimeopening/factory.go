@@ -525,6 +525,34 @@ func (f *Factory) openRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	logger *zap.Logger,
 ) (runtimeProducts, error) {
+	return f.openRuntimeWithOptions(ctx, request, logger, nil, nil)
+}
+
+func (f *Factory) openRuntimeWithSnapshot(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	logger *zap.Logger,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+) (runtimeProducts, error) {
+	return f.openRuntimeWithOptions(ctx, request, logger, definitionSnapshot, nil)
+}
+
+func (f *Factory) openRuntimeWithReplayInput(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	logger *zap.Logger,
+	replayInput *recordings.LoadReplayInputResult,
+) (runtimeProducts, error) {
+	return f.openRuntimeWithOptions(ctx, request, logger, nil, replayInput)
+}
+
+func (f *Factory) openRuntimeWithOptions(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	logger *zap.Logger,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
+) (runtimeProducts, error) {
 	return openRuntime(
 		ctx, request, logger,
 		f.clock,
@@ -572,6 +600,8 @@ func (f *Factory) openRuntime(
 		f.generateRuntimeInstanceID,
 		f.resolveHome,
 		f.providerIdentities,
+		definitionSnapshot,
+		replayInput,
 	)
 }
 
@@ -593,7 +623,23 @@ func (f *Factory) openForRequest(
 	// acquire live Runtime state. Legacy replay artifacts still use the normal
 	// activation path and therefore retain the live replay behavior.
 	if request != nil && request.Recordings.ReplayPath != "" {
-		return f.openRuntime(ctx, request, f.baseLogger)
+		// A compatibility Factory without a Runtime root still needs the direct
+		// historical/replay opener used by narrow tests and migration callers.
+		// Canonical Wire always supplies the root, so classify the input there
+		// before deciding whether activation is required.
+		if f.runtimeRoot == nil || f.replayInputs == nil {
+			return f.openRuntime(ctx, request, f.baseLogger)
+		}
+		input, err := f.replayInputs.LoadReplayInput(
+			recordings.LoadReplayInputRequest{Path: request.Recordings.ReplayPath},
+		)
+		if err != nil || input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
+			if err != nil {
+				return f.openRuntime(ctx, request, f.baseLogger)
+			}
+			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
+		}
+		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
 	}
 	return f.openActivatedRuntime(ctx, request)
 }

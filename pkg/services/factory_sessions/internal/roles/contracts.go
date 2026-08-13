@@ -296,6 +296,7 @@ type RuntimeAssembly interface {
 		runtimeSidecars factorysessions.RuntimeSidecars,
 		durableExecution durableexecution.Service,
 		factoryDefinitions factorydefinitions.Service,
+		factorySessionID string,
 		dir string,
 		executionBaseDir string,
 		runtimeMode factorydefinitions.RuntimeMode,

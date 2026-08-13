@@ -11,6 +11,9 @@ import (
 // SessionRuntimeOpeningRequest contains Factory Session identity,
 // persistence, startup, and hosting values for one runtime.
 type SessionRuntimeOpeningRequest struct {
+	// FactorySessionID correlates the opened runtime with its owning Factory
+	// Session. Empty values use the process's primary session alias.
+	FactorySessionID  string
 	PersistencePolicy PersistencePolicy
 	BackendScopeID    string
 	SystemConfigHome  string

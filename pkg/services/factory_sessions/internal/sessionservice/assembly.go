@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -170,6 +171,7 @@ func (a *Assembly) Complete(
 	runtimeSidecars factorysessions.RuntimeSidecars,
 	durableExecution durableexecution.Service,
 	factoryDefinitions factorydefinitions.Service,
+	factorySessionID string,
 	dir string,
 	executionBaseDir string,
 	runtimeMode factorydefinitions.RuntimeMode,
@@ -197,18 +199,27 @@ func (a *Assembly) Complete(
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
+	sessionID := strings.TrimSpace(factorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	isDefault := sessionID == factorysessions.DefaultSessionID
+	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
+	if isDefault {
+		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
+	}
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
 	session := livesession.New(
-		factorysessions.DefaultSessionID,
+		sessionID,
 		startupRuntime.Directory(),
 		startupRuntime.FolderDirectory(),
 		startupRuntime.LoadedRuntimeConfig().RuntimeBaseDir(),
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		target,
 		&runtimebinding.SessionState{Instance: startupRuntime, Spec: &startupSpec},
-		true,
+		isDefault,
 		filepath.Base(startupRuntime.FolderDirectory()),
 		clock,
 		a.sessionIDs,

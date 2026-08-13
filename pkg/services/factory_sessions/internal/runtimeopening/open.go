@@ -77,6 +77,8 @@ func openRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
 ) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
@@ -87,6 +89,11 @@ func openRuntime(
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
 	sessionRequest := request.FactorySession
+	sessionID := strings.TrimSpace(sessionRequest.FactorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	sessionRequest.FactorySessionID = sessionID
 	workerRequest := request.Workers
 	recordingRequest := request.Recordings
 	modelCacheDirectory := request.ModelCacheDirectory
@@ -118,6 +125,8 @@ func openRuntime(
 		generateRuntimeInstanceID,
 		resolveHome,
 		providerIdentities,
+		definitionSnapshot,
+		replayInput,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -197,7 +206,7 @@ func openRuntime(
 	}
 	var initialProgressPublisher workers.ProgressPublisher
 	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
-		initialProgressPublisher = inferenceProgressPublisherFactory(factorysessions.DefaultSessionID)
+		initialProgressPublisher = inferenceProgressPublisherFactory(sessionID)
 	}
 	sessionBuildRuntimes := &sessionBuildRuntimeSink{}
 	cleanup.Add(func() error {
@@ -248,7 +257,7 @@ func openRuntime(
 			configured.Recordings.ReplayPath == "",
 			configured.Recordings.RecordPath,
 			configured.Recordings.WorkflowID,
-			factorysessions.DefaultSessionID,
+			sessionID,
 			nil,
 			loadFactory,
 			providerOverride,
@@ -318,6 +327,7 @@ func openRuntime(
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
+		sessionID,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -345,6 +355,7 @@ func openRuntime(
 		runtimeSidecars,
 		factorysessionexecutionService,
 		factoryDefinitions,
+		sessionID,
 		configured.Definition.Directory,
 		configured.Definition.ExecutionBaseDir,
 		configured.Runtime.Mode,
@@ -369,14 +380,14 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	if err := definitionRuntimeRouter.Bind(
-		factorysessions.DefaultSessionID,
+		sessionID,
 		definitionHost,
 		definitionActivationGateway,
 	); err != nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
 	}
 	cleanup.Add(func() error {
-		definitionRuntimeRouter.Unbind(factorysessions.DefaultSessionID)
+		definitionRuntimeRouter.Unbind(sessionID)
 		return nil
 	})
 	if workFactory == nil {
@@ -396,7 +407,7 @@ func openRuntime(
 	if err := bindRuntimeRecordingLifecycle(
 		runtimeRecording,
 		recordingLifecycle,
-		recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID},
+		recordings.CanonicalEventScope{FactorySessionID: sessionID},
 	); err != nil {
 		return runtimeProducts{}, err
 	}
@@ -465,6 +476,7 @@ func startFactoryWebhookSubscription(
 	ledger recordings.Ledger,
 	loaded factorydefinitions.MutableLoadedFactorySource,
 	active bool,
+	sessionID string,
 ) (webhooks.Subscription, error) {
 	if !active || loaded == nil || !hasEnabledWebhooks(loaded.FactoryConfig()) {
 		return nil, nil
@@ -475,7 +487,10 @@ func startFactoryWebhookSubscription(
 	if recordingsService == nil {
 		return nil, fmt.Errorf("construct runtime scope: Recordings service is required for Webhooks")
 	}
-	scope := recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID}
+	if strings.TrimSpace(sessionID) == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
 	return webhooksService.Start(ctx, webhooks.StartRequest{
 		Definitions:      loaded.FactoryConfig().Webhooks,
 		Events:           recordingsService,
