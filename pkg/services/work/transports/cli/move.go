@@ -129,7 +129,7 @@ func (service *service) Move(cfg MoveConfig) error {
 		return fmt.Errorf("move work failed (%d)", resp.StatusCode)
 	}
 
-	newState := stateNameFromWork(moved)
+	// The response may already reflect scheduler progress; report the requested target.
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -139,13 +139,13 @@ func (service *service) Move(cfg MoveConfig) error {
 		response.Duration.Milliseconds(),
 		cfg.WorkID,
 		previousState,
-		newState,
+		stateName,
 	)
 
 	result := MoveSuccessResult{
 		WorkID:        cfg.WorkID,
 		PreviousState: previousState,
-		NewState:      newState,
+		NewState:      stateName,
 		SessionID:     clidiag.SessionLabel(cfg.SessionID),
 		EndpointPath:  moveEndpoint.Path,
 	}

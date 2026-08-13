@@ -2,17 +2,24 @@ package runtime_api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	runtimeAPILogObservationTimeout  = 2 * time.Second
+	runtimeAPILogObservationInterval = 10 * time.Millisecond
 )
 
 func TestFunctionalAPIServer_UsesProductionRuntimeFileLoggingDefault(t *testing.T) {
@@ -103,22 +110,48 @@ func collectRuntimeLogFiles(t *testing.T, dir string) []string {
 func requireRuntimeAPILogMessage(t *testing.T, path, message string) map[string]any {
 	t.Helper()
 
+	// The status endpoint can become ready before the asynchronous runtime-log
+	// appender flushes its startup record. Observe only the target file and
+	// message at a bounded interval so this test does not sleep or retry the
+	// whole application scenario.
+	deadline := time.NewTimer(runtimeAPILogObservationTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(runtimeAPILogObservationInterval)
+	defer ticker.Stop()
+
+	for {
+		record, found, err := readRuntimeAPILogMessage(path, message)
+		if err != nil {
+			t.Fatalf("observe runtime log %q for msg %q: %v", path, message, err)
+		}
+		if found {
+			return record
+		}
+
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out after %s waiting for runtime log %q to contain msg %q", runtimeAPILogObservationTimeout, path, message)
+		}
+	}
+}
+
+func readRuntimeAPILogMessage(path, message string) (map[string]any, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
+		return nil, false, fmt.Errorf("read file: %w", err)
 	}
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for lineNumber, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		var record map[string]any
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
+			return nil, false, fmt.Errorf("decode structured JSON at line %d: %w; line: %s", lineNumber+1, err, line)
 		}
 		if record["msg"] == message {
-			return record
+			return record, true, nil
 		}
 	}
-	t.Fatalf("runtime log %s missing msg %q", path, message)
-	return nil
+	return nil, false, nil
 }
