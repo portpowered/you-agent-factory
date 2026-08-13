@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -424,6 +426,47 @@ func TestBuildProcessDefersAndOpensOneFactoryRuntime(t *testing.T) {
 	}
 	if err := second.Close(context.Background()); err != nil {
 		t.Fatalf("second Process.Close() error = %v", err)
+	}
+}
+
+// TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions proves that
+// one inert process graph can open two Factory Sessions without rebuilding a
+// Work or Recordings root or leaking one execution's runtime identity into the
+// other.
+func TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions(t *testing.T) {
+	t.Parallel()
+
+	var openedRuntimeIDs []string
+	edges := serviceedges.Edges{
+		FactorySessionRuntimeInstanceIDGenerator: func() string {
+			id := fmt.Sprintf("root-runtime-%d", len(openedRuntimeIDs)+1)
+			openedRuntimeIDs = append(openedRuntimeIDs, id)
+			return id
+		},
+	}
+	process, err := BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	for index := 0; index < 2; index++ {
+		factoryDir := rootFactoryWithProvider(t, "codex")
+		if err := process.Execute(Input{
+			Args: []string{
+				"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record",
+			},
+			Env:              homeEnvironment(t.TempDir()),
+			Context:          context.Background(),
+			WorkingDirectory: factoryDir,
+		}); err != nil {
+			t.Fatalf("Process.Execute(run %d) error = %v", index+1, err)
+		}
+	}
+	if !slices.Equal(openedRuntimeIDs, []string{"root-runtime-1", "root-runtime-2"}) {
+		t.Fatalf("runtime IDs = %v, want two isolated runtime identities", openedRuntimeIDs)
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("Process.Close() error = %v", err)
 	}
 }
 
