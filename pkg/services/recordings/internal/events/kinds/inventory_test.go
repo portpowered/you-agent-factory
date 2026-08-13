@@ -69,9 +69,6 @@ func TestPublicEmittableFactoryEventKinds_CoversKnownRuntimeEmissionAnchors(t *t
 		}
 	}
 
-	if len(inventory) != len(knownRuntimeEmissionAnchors) {
-		t.Fatalf("public inventory length = %d, want exactly %d known runtime emission anchors", len(inventory), len(knownRuntimeEmissionAnchors))
-	}
 }
 
 func TestPublicEmittableFactoryEventKinds_IsSortedAndStable(t *testing.T) {

@@ -1211,10 +1211,15 @@
       "name": "interruptWorkerSession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/invokeFactorySessionBySessionId",

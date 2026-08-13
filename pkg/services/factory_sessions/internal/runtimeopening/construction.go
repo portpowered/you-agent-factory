@@ -470,7 +470,7 @@ func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *fact
 	if request == nil {
 		return fmt.Errorf("Factory Session request is required to resolve backend scope")
 	}
-	if strings.TrimSpace(request.BackendScopeID) != "" {
+	if strings.TrimSpace(replayPath) != "" || strings.TrimSpace(request.BackendScopeID) != "" {
 		return nil
 	}
 	if ensure == nil {
