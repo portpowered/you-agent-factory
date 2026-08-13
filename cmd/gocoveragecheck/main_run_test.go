@@ -63,6 +63,122 @@ func TestExecuteReportsPassingCoverage(t *testing.T) {
 	}
 }
 
+func TestExecuteReportsPackageSummariesWhenManifestValidationFails(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	configPackage := modulePath + "/pkg/config"
+	servicePackage := modulePath + "/pkg/service"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "100.00")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        strings.Join([]string{configPackage, servicePackage}, ","),
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "measured unit package \""+servicePackage+"\" has no manifest entry") {
+		t.Fatalf("execute() error = %v, want missing-manifest validation failure", err)
+	}
+
+	wantSummaries := configPackage + "\tcoverage: 100.0% of statements\n" + servicePackage + "\tcoverage: 100.0% of statements\n"
+	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") || !strings.Contains(got, wantSummaries) {
+		t.Fatalf("execute() stdout = %q, want total and exact package summaries", got)
+	}
+	if strings.Contains(stdout.String(), "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteReportsPackageSummariesForCompleteManifest(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "100.00")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v", err)
+	}
+
+	got := stdout.String()
+	wantSummary := configPackage + "\tcoverage: 100.0% of statements\n"
+	if strings.Count(got, wantSummary) != 1 {
+		t.Fatalf("execute() stdout = %q, want one package summary %q", got, wantSummary)
+	}
+	if !strings.Contains(got, "Go coverage 100.0% meets minimum 0.0%.") {
+		t.Fatalf("execute() stdout = %q, want success message", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteDoesNotReportPackageSummariesWhenMeasurementFails(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandTestFailsWithoutDetail
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:      0,
+		coverpkg: modulePath + "/pkg/config",
+		packages: "./pkg/config",
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("execute() stdout = %q, want no package summaries without a valid measurement", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
 func TestExecuteTotalOnlyReportsIndependentSuiteCoverageWithPackageSummaries(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter

@@ -40,6 +40,18 @@ type coverageManifestException struct {
 	RemovalGate   string `json:"removalGate"`
 }
 
+type coverageManifestValidationError struct {
+	err error
+}
+
+func (err *coverageManifestValidationError) Error() string {
+	return err.err.Error()
+}
+
+func (err *coverageManifestValidationError) Unwrap() error {
+	return err.err
+}
+
 func createCoverageManifest(filename string, lane string, totals map[string]packageCoverageTotals, packages []string) error {
 	manifest, err := newCoverageManifest(lane, totals, packages)
 	if err != nil {
@@ -160,7 +172,7 @@ func readCoverageManifestAtModeWithTotals(data []byte, expectedLane string, meas
 		return coverageManifest{}, err
 	}
 	if err := validateCoverageManifestAtModeWithTotals(manifest, expectedLane, measuredPackages, now, requireComplete, measuredTotals); err != nil {
-		return coverageManifest{}, err
+		return coverageManifest{}, &coverageManifestValidationError{err: err}
 	}
 	return manifest, nil
 }
