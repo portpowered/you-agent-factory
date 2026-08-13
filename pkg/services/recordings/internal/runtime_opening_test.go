@@ -115,7 +115,23 @@ func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T)
 	if status.Status.AcceptedEvents != 1 {
 		t.Fatalf("active recording events = %d, want initial snapshot event", status.Status.AcceptedEvents)
 	}
-
+	opened.Ledger.RecordRunRequest()
+	scopeStatus, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
+		Scope: opened.Scope,
+	})
+	if err != nil || scopeStatus.Status.LastEvent == nil {
+		t.Fatalf("QueryRecordingScope(active) = (%#v, %v), want initial cursor", scopeStatus, err)
+	}
+	nextSequence := scopeStatus.Status.LastEvent.Sequence + 1
+	scopeEvent := scopedScopeEvent("runtime-scope-event", nextSequence, scopeStatus.Status.EventScope)
+	scopeEvent.Cursor.StreamGenerationID = scopeStatus.Status.LastEvent.StreamGenerationID
+	appended, err := root.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
+		Scope: opened.Scope,
+		Event: scopeEvent,
+	})
+	if err != nil || appended.Status.AcceptedEvents != 2 {
+		t.Fatalf("AppendRecordingScopeEvent(active) = (%#v, %v), want second accepted event", appended, err)
+	}
 	finishedAt := now().Add(time.Second)
 	if err := opened.Recorder.Finalize(finishedAt); err != nil {
 		t.Fatalf("Finalize(active): %v", err)
@@ -129,8 +145,8 @@ func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T)
 	if err != nil {
 		t.Fatalf("QueryRecordingStatus(finalized): %v", err)
 	}
-	if status.Status.State != recordings.RecordingFinalized || status.Status.AcceptedEvents != 2 {
-		t.Fatalf("finalized active recording = %#v, want FINALIZED with initial and terminal events", status.Status)
+	if status.Status.State != recordings.RecordingFinalized || status.Status.AcceptedEvents != 3 {
+		t.Fatalf("finalized active recording = %#v, want FINALIZED with initial, scoped, and terminal events", status.Status)
 	}
 	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
 		Scope: opened.Scope,

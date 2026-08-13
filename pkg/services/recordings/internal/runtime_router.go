@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -24,8 +25,8 @@ type runtimeLedgerRouter struct {
 	typeRecorders []func(interfaces.FactoryEventType)
 }
 
-func newRuntimeLedgerRouter() *runtimeLedgerRouter {
-	fallback := recordingevents.NewRuntimeLedger(nil, time.Now, "recordings-root", nil)
+func newRuntimeLedgerRouter(now func() time.Time) *runtimeLedgerRouter {
+	fallback := recordingevents.NewRuntimeLedger(nil, now, "recordings-root", nil)
 	return &runtimeLedgerRouter{
 		fallback: fallback,
 		routes:   make(map[string]recordings.RuntimeEventLedger),
@@ -103,6 +104,9 @@ func (router *runtimeLedgerRouter) CanonicalEvents() []interfaces.FactoryEvent {
 	fallback := router.fallback
 	router.mu.RUnlock()
 	if len(ledgers) == 0 {
+		if fallback == nil {
+			return nil
+		}
 		return fallback.CanonicalEvents()
 	}
 	events := make([]interfaces.FactoryEvent, 0)
@@ -202,6 +206,30 @@ func (router *runtimeLedgerRouter) AppendRecordedEvent(
 	if ledger != nil {
 		ledger.AppendRecordedEvent(event)
 	}
+}
+
+func (router *runtimeLedgerRouter) AppendRecordedEventWithValidation(
+	event interfaces.FactoryEvent,
+	validate func(interfaces.FactoryEvent) error,
+) (interfaces.FactoryEvent, error) {
+	if router == nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("recordings ledger router is unavailable")
+	}
+	scope := ""
+	if event.Context.SessionID != nil {
+		scope = strings.TrimSpace(*event.Context.SessionID)
+	}
+	ledger := router.route(scope)
+	appender, ok := ledger.(interface {
+		AppendRecordedEventWithValidation(
+			interfaces.FactoryEvent,
+			func(interfaces.FactoryEvent) error,
+		) (interfaces.FactoryEvent, error)
+	})
+	if !ok {
+		return interfaces.FactoryEvent{}, fmt.Errorf("recordings ledger does not support atomic append")
+	}
+	return appender.AppendRecordedEventWithValidation(event, validate)
 }
 
 var _ recordings.Ledger = (*runtimeLedgerRouter)(nil)

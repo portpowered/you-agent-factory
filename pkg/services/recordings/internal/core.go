@@ -35,7 +35,9 @@ type combinedService struct {
 	canonicalLedger canonicalledger.Service
 
 	lifecycleMu sync.Mutex
+	recordingMu sync.Mutex
 	replayByKey map[string]*recordings.ReplayArtifact
+	clock       recordings.RecordingClock
 
 	scopeMu     sync.RWMutex
 	scopeIssuer string
@@ -258,10 +260,35 @@ func NewServiceWithLifecycleEffects(
 		replayService:     replaywire.NewService(lifecycle, projection),
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
 		replayByKey:       make(map[string]*recordings.ReplayArtifact),
+		clock:             firstRecordingClock(clocks),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
 	service.scopeByRef = make(map[recordings.RecordingScopeRef]*recordingScopeBinding)
 	return service
+}
+
+func firstRecordingClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
+	for _, clock := range clocks {
+		if clock != nil {
+			return clock
+		}
+	}
+	return nil
+}
+
+func recordingClockNow(clocks ...recordings.RecordingClock) func() time.Time {
+	clock := firstRecordingClock(clocks)
+	if clock == nil {
+		return nil
+	}
+	return func() time.Time { return clock.Now() }
+}
+
+func (service *combinedService) recordingFinishedAt() time.Time {
+	if service == nil || service.clock == nil {
+		return time.Time{}
+	}
+	return service.clock.Now().UTC()
 }
 
 func NewRuntimeLedger(

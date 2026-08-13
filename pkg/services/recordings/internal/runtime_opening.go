@@ -29,7 +29,7 @@ func NewRuntimeRoot(
 	replayInputs recordings.ReplayInputLoader,
 	clocks ...recordings.RecordingClock,
 ) recordings.Root {
-	router := newRuntimeLedgerRouter()
+	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
 	projection := NewProjectionService()
 	var writer recordings.RecordingSnapshotWriter
 	var tickers recordings.RecordingFlushTickerFactory
@@ -124,11 +124,7 @@ func (service *combinedService) OpenRuntime(
 	if request.Now == nil {
 		return recordings.RuntimeScopeResult{}, fmt.Errorf("Recordings runtime clock is required")
 	}
-	streamGenerationID := strings.TrimSpace(request.RecordingID)
-	if streamGenerationID == "" {
-		streamGenerationID = "recordings-runtime"
-	}
-	streamGenerationID += "-" + strings.TrimSpace(request.FactorySessionID)
+	streamGenerationID := runtimeStreamGenerationID(request)
 	ledger := NewRuntimeLedger(
 		request.Topology,
 		request.Now,
@@ -169,6 +165,7 @@ func (service *combinedService) OpenRuntime(
 		request.RecordingID,
 		request.RecordPath,
 		service.runtimeSnapshotCapture,
+		streamGenerationID,
 	)
 	if err != nil {
 		return recordings.RuntimeScopeResult{}, err
@@ -217,6 +214,14 @@ func (service *combinedService) OpenRuntime(
 
 func requestScope(request recordings.RuntimeScopeRequest) recordings.CanonicalEventScope {
 	return recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(request.FactorySessionID)}
+}
+
+func runtimeStreamGenerationID(request recordings.RuntimeScopeRequest) string {
+	recordingID := strings.TrimSpace(request.RecordingID)
+	if recordingID == "" {
+		recordingID = "recordings-runtime"
+	}
+	return recordingID + "-" + strings.TrimSpace(request.FactorySessionID)
 }
 
 // closeRuntimeRecordingScope records the terminal state already produced by
