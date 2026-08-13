@@ -210,7 +210,8 @@ func (process *hardKillCLIProcess) stopWith(terminate func() error) error {
 	if process == nil || process.command == nil {
 		return nil
 	}
-	if err := process.killWith(terminate); err != nil {
+	terminated, err := process.killWith(terminate)
+	if err != nil {
 		return err
 	}
 	if _, exited := process.waitForExit(hardKillProcessExitTimeout); !exited {
@@ -220,7 +221,12 @@ func (process *hardKillCLIProcess) stopWith(terminate func() error) error {
 	if !scanned {
 		return fmt.Errorf("stdout scanner did not finish within %s", hardKillProcessExitTimeout)
 	}
-	if scanErr != nil {
+	// Cmd.Wait closes a StdoutPipe after reaping the child. When this helper's
+	// intentional termination wins that ordering race, the scanner can observe
+	// the terminal descriptor close as fs.ErrClosed instead of EOF. The process
+	// has already been reaped here, so accept only that expected terminal error;
+	// every other scanner error remains actionable.
+	if scanErr != nil && !(terminated && errors.Is(scanErr, os.ErrClosed)) {
 		return fmt.Errorf("stdout scanner: %w", scanErr)
 	}
 	return nil
@@ -230,17 +236,18 @@ func (process *hardKillCLIProcess) kill() error {
 	if process == nil || process.command == nil || process.command.Process == nil {
 		return nil
 	}
-	return process.killWith(process.command.Process.Kill)
+	_, err := process.killWith(process.command.Process.Kill)
+	return err
 }
 
-func (process *hardKillCLIProcess) killWith(terminate func() error) error {
+func (process *hardKillCLIProcess) killWith(terminate func() error) (bool, error) {
 	if process.command.Process == nil || process.command.ProcessState != nil {
-		return nil
+		return false, nil
 	}
 	if err := terminate(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return fmt.Errorf("kill process: %w", err)
+		return false, fmt.Errorf("kill process: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 func (process *hardKillCLIProcess) waitForExit(timeout time.Duration) (error, bool) {
