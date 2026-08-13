@@ -314,7 +314,7 @@ func run(cfg config) (coverageResult, error) {
 		if !filepath.IsAbs(manifestPath) {
 			manifestPath = filepath.Join(repoRoot, manifestPath)
 		}
-		manifest, err := readCoverageManifestFile(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries))
+		manifest, err := readCoverageManifestFileWithTotals(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries), result.packageTotals)
 		if err != nil {
 			return coverageResult{}, err
 		}

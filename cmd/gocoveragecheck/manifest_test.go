@@ -263,6 +263,51 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 	}
 }
 
+func TestValidateCoverageManifestReportsAllMissingPackagesWithMeasurements(t *testing.T) {
+	t.Parallel()
+
+	alpha := modulePath + "/pkg/alpha"
+	beta := modulePath + "/pkg/beta"
+	zeta := modulePath + "/pkg/zeta"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "functional",
+		Packages: []coverageManifestEntry{
+			{Package: alpha, Minimum: json.RawMessage("80.00")},
+		},
+	}
+	err := validateCoverageManifestAtWithTotals(
+		manifest,
+		"functional",
+		[]string{zeta, alpha, beta},
+		time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC),
+		map[string]packageCoverageTotals{
+			beta: {coveredStatements: 2, totalStatements: 3},
+			zeta: {},
+		},
+	)
+	if err == nil {
+		t.Fatal("validateCoverageManifestAtWithTotals() unexpectedly succeeded")
+	}
+
+	message := err.Error()
+	if !strings.Contains(message, "measured functional packages have no manifest entry") {
+		t.Fatalf("missing-entry error = %q, want functional lane diagnostic", message)
+	}
+	if strings.Count(message, "has no manifest entry") != 2 {
+		t.Fatalf("missing-entry error = %q, want one line per missing package", message)
+	}
+	if !strings.Contains(message, `measured functional package "`+beta+`" has no manifest entry; measured coverage 66.66%`) {
+		t.Fatalf("missing-entry error = %q, want truncated two-decimal beta measurement", message)
+	}
+	if !strings.Contains(message, `measured functional package "`+zeta+`" has no manifest entry; no measurable statements`) {
+		t.Fatalf("missing-entry error = %q, want no-measurable-statements classification", message)
+	}
+	if strings.Index(message, beta) > strings.Index(message, zeta) {
+		t.Fatalf("missing packages are not sorted by import path: %q", message)
+	}
+}
+
 func TestCheckCoverageManifestAppliesRawStatementEpsilon(t *testing.T) {
 	t.Parallel()
 
