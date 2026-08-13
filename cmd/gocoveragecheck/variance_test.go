@@ -50,6 +50,7 @@ func TestLoadCoverageVarianceProfilesAndRenderReport(t *testing.T) {
 	wantParts := []string{
 		"**Sampling commit:** `913a667d2-full`",
 		"Run count:** 5 complete profiles",
+		"Profile labels:** `run-01`, `run-02`, `run-03`, `run-04`, `run-05`",
 		"3/5 | 4/5 | 2/5 | 5/5 | 4/5 | 40.0000% | 100.0000% | 60.0000 pp | 40.00% | 60.00% | -20.0000 pp",
 		"1/2 | 1/2 | 1/2 | 2/2 | 1/2 | 50.0000% | 100.0000% | 50.0000 pp | 50.00% | exception | n/a pp",
 		"Supplied operator evidence (not part of the new sample set)",

@@ -18,6 +18,7 @@ const minimumVarianceSamples = 5
 
 type coverageVarianceSample struct {
 	path   string
+	label  string
 	header string
 	totals map[string]packageCoverageTotals
 }
@@ -156,7 +157,21 @@ func readCoverageVarianceProfile(profilePath string, repoRoot string) (coverageV
 	if len(totals) == 0 {
 		return coverageVarianceSample{}, fmt.Errorf("aggregate coverage variance: profile %q contains no measurable backend packages", profilePath)
 	}
-	return coverageVarianceSample{path: profilePath, header: header, totals: totals}, nil
+	return coverageVarianceSample{
+		path:   profilePath,
+		label:  coverageVarianceProfileLabel(profilePath),
+		header: header,
+		totals: totals,
+	}, nil
+}
+
+func coverageVarianceProfileLabel(profilePath string) string {
+	directory := filepath.Base(filepath.Dir(profilePath))
+	if strings.HasPrefix(directory, "run-") {
+		return directory
+	}
+	filename := filepath.Base(profilePath)
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
 }
 
 func validateVarianceSampleCompatibility(samples []coverageVarianceSample) error {
@@ -257,12 +272,15 @@ func buildCoverageVarianceReport(commit string, lane string, jobs int, samples [
 	}
 	labels := make([]string, len(samples))
 	for index := range labels {
-		labels[index] = fmt.Sprintf("run-%02d", index+1)
+		labels[index] = samples[index].label
+		if labels[index] == "" {
+			labels[index] = fmt.Sprintf("run-%02d", index+1)
+		}
 	}
 	return coverageVarianceReport{
 		commit:        strings.TrimSpace(commit),
 		suite:         lane,
-		command:       fmt.Sprintf("make functional-boundary-check; go run ./cmd/gocoveragecheck -suite functional -jobs %d -min 0 -total-only -profile <run>/coverage.out -json-output <run>/coverage-summary.json", jobs),
+		command:       fmt.Sprintf("bash scripts/ci/run-functional-test-viz.sh (functional lane -jobs %d); then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs %d", jobs, jobs),
 		aggregation:   "Parse each count-mode Go coverage profile into canonical source blocks, sum statement counts by backend package, require identical package universes and total statement counts, then derive minimums from exact covered/total ratios.",
 		profileLabels: labels,
 		packages:      rows,
@@ -340,6 +358,7 @@ func renderCoverageVarianceReport(report coverageVarianceReport) ([]byte, error)
 	fmt.Fprintf(&output, "- **Run count:** %d complete profiles\n", len(report.profileLabels))
 	fmt.Fprintf(&output, "- **Command:** `%s`\n", report.command)
 	fmt.Fprintf(&output, "- **Aggregation:** %s\n\n", report.aggregation)
+	fmt.Fprintf(&output, "- **Profile labels:** `%s` (labels preserve the source artifact directory; omitted labels identify captures that were not accepted as complete samples)\n\n", strings.Join(report.profileLabels, "`, `"))
 	fmt.Fprintln(&output, "## New sample set")
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "The table preserves exact covered/total statement counts for every measured backend package. Percentages are display values; the sample floor is truncated to two decimal places from the exact minimum ratio, so it cannot exceed that observation. Headroom is the exact minimum percentage minus the current numeric functional floor.")
