@@ -19,6 +19,8 @@ const PALETTE_FIXTURES = [
       "--color-af-foundation-info-ink": "#B5EDF4",
       "--color-af-foundation-ink": "#F7F2E8",
       "--color-af-foundation-overlay": "#FFFFFF",
+      "--color-on-surface-variant": "rgba(247, 242, 232, 0.78)",
+      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
       "--color-af-foundation-success-ink": "#A7F0C4",
       "--color-af-foundation-surface": "#181F2B",
     },
@@ -36,6 +38,8 @@ const PALETTE_FIXTURES = [
       "--color-af-foundation-info-ink": "#1F6178",
       "--color-af-foundation-ink": "#1A2228",
       "--color-af-foundation-overlay": "#000000",
+      "--color-on-surface-variant": "rgba(26, 34, 40, 0.78)",
+      "--color-outline-variant": "rgba(0, 0, 0, 0.18)",
       "--color-af-foundation-success-ink": "#1F6F49",
       "--color-af-foundation-surface": "#FFFFFF",
     },
@@ -53,6 +57,8 @@ const PALETTE_FIXTURES = [
       "--color-af-foundation-info-ink": "#B8EDF8",
       "--color-af-foundation-ink": "#E6E0E9",
       "--color-af-foundation-overlay": "#FFFFFF",
+      "--color-on-surface-variant": "rgba(230, 224, 233, 0.78)",
+      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
       "--color-af-foundation-success-ink": "#A8F0C8",
       "--color-af-foundation-surface": "#1D1B20",
     },
@@ -70,6 +76,8 @@ const PALETTE_FIXTURES = [
       "--color-af-foundation-info-ink": "#B0E0F2",
       "--color-af-foundation-ink": "#E6EDF3",
       "--color-af-foundation-overlay": "#FFFFFF",
+      "--color-on-surface-variant": "rgba(230, 237, 243, 0.78)",
+      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
       "--color-af-foundation-success-ink": "#A4E8C4",
       "--color-af-foundation-surface": "#161B22",
     },
@@ -87,6 +95,8 @@ const PALETTE_FIXTURES = [
       "--color-af-foundation-info-ink": "#B0E8D8",
       "--color-af-foundation-ink": "#EEF2E4",
       "--color-af-foundation-overlay": "#FFFFFF",
+      "--color-on-surface-variant": "rgba(238, 242, 228, 0.78)",
+      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
       "--color-af-foundation-success-ink": "#A8E8BC",
       "--color-af-foundation-surface": "#1A1D15",
     },
@@ -180,6 +190,15 @@ describe("buildWorkstationPromptTheme", () => {
           background,
         ),
       ).toBeGreaterThanOrEqual(3);
+      expect(theme.colors["scrollbarSlider.background"]).toBe(
+        tokens["--color-outline-variant"],
+      );
+      expect(theme.colors["scrollbarSlider.hoverBackground"]).toBe(
+        tokens["--color-on-surface-variant"],
+      );
+      expect(theme.colors["scrollbarSlider.activeBackground"]).toBe(
+        tokens["--color-on-surface-variant"],
+      );
       expect(findRuleForeground(theme, "delimiter.template")).not.toBe(
         theme.colors["editor.foreground"],
       );
@@ -222,6 +241,15 @@ describe("buildWorkstationGuardSelectorTheme", () => {
           background,
         ),
       ).toBeGreaterThanOrEqual(3);
+      expect(theme.colors["scrollbarSlider.background"]).toBe(
+        tokens["--color-outline-variant"],
+      );
+      expect(theme.colors["scrollbarSlider.hoverBackground"]).toBe(
+        tokens["--color-on-surface-variant"],
+      );
+      expect(theme.colors["scrollbarSlider.activeBackground"]).toBe(
+        tokens["--color-on-surface-variant"],
+      );
     },
   );
 });

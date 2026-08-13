@@ -26,8 +26,10 @@ platform controlled.
 The Radix viewport is an intentional exception: its shared primitive hides the
 native scrollbar and renders exactly one custom track/thumb. It must not be
 converted to native scrolling or receive a duplicate scrollbar. Monaco's
-synthetic slider is a separate token projection and keeps its existing editor
-dimensions and guard-selector zero-width behavior.
+synthetic slider is a separate token projection: its resting
+`scrollbarSlider.background` uses `outline-variant`, while hover and active use
+`on-surface-variant`. It keeps its existing editor dimensions and guard-selector
+zero-width behavior.
 
 ## Production native-scrollport audit
 
@@ -59,3 +61,8 @@ overflow ownership and interaction. Direct browser verification must create
 actual overflow and exercise document, textarea, vertical, horizontal, Radix,
 Monaco, and graph-menu surfaces at narrow and desktop widths, 200% zoom, and
 forced-colors where supported.
+
+Monaco theme coverage proves that prompt, document, and guard-selector themes
+receive the same palette-derived slider roles. Direct browser verification must
+also confirm actual editor overflow, palette switching, keyboard and pointer
+interaction, and the guard-selector's hidden scrollbar contract.
