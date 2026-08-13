@@ -345,6 +345,10 @@ export async function runStorybookCI({
       ]);
     }
     await Promise.race([
+      runCommand(["run", "storybook:monaco-scrollbar-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:factory-graph-touch-check"]),
       serverExit,
     ]);

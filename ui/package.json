@@ -48,6 +48,7 @@
     "storybook:customer-factory-emulator-demos-check": "node scripts/verify-customer-factory-emulator-demos-browser.mjs",
     "storybook:factory-emulator-acceptance-check": "node scripts/run-factory-emulator-acceptance-browser.mjs",
     "storybook:header-responsive-check": "node scripts/verify-dashboard-header-responsive-browser.mjs",
+    "storybook:monaco-scrollbar-check": "node scripts/verify-monaco-scrollbar-200-percent-browser.mjs",
     "storybook:dashboard-viewport-check": "node scripts/verify-dashboard-viewport-browser.mjs",
     "storybook:dashboard-session-reconciliation-check": "node scripts/verify-dashboard-session-reconciliation-browser.mjs",
     "storybook:dashboard-open-new-factory-check": "node scripts/verify-dashboard-open-new-factory-browser.mjs",
