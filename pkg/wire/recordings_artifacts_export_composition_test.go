@@ -33,6 +33,7 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 		platformreplay.Local{},
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideRecordingsRoot() error = %v", err)

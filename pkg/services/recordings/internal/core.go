@@ -3,10 +3,12 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -49,6 +51,7 @@ type combinedService struct {
 	replaySnapshotDecoder  factorydefinitions.FactorySnapshotJSONDecoder
 	replayConfigDecoder    factorydefinitions.ReplayRuntimeConfigDecoder
 	replayInputs           recordings.ReplayInputLoader
+	logger                 logging.Logger
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -243,6 +246,55 @@ func NewServiceWithLifecycleEffects(
 	publication portableArtifactPublication,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logging.NoopLogger{},
+		clocks...,
+	)
+}
+
+// NewServiceWithLifecycleEffectsAndLogger constructs the Recordings root with
+// the process logger selected by canonical Wire. The logger is intentionally
+// separate from the legacy test-friendly constructor so existing owner tests
+// continue to exercise a no-op service without manufacturing an application
+// logging graph.
+func NewServiceWithLifecycleEffectsAndLogger(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logger,
+		clocks...,
+	)
+}
+
+func newServiceWithLifecycleEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
 	if ledger == nil || projection == nil {
 		return nil
 	}
@@ -261,10 +313,46 @@ func NewServiceWithLifecycleEffects(
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
 		replayByKey:       make(map[string]*recordings.ReplayArtifact),
 		clock:             firstRecordingClock(clocks),
+		logger:            logging.EnsureLogger(logger),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
 	service.scopeByRef = make(map[recordings.RecordingScopeRef]*recordingScopeBinding)
 	return service
+}
+
+type recordingOperationLog struct {
+	logger logging.Logger
+	fields []any
+}
+
+func (service *combinedService) startOperationLog(
+	name string,
+	ref recordings.RecordingScopeRef,
+	scope recordings.CanonicalEventScope,
+) recordingOperationLog {
+	var logger logging.Logger = logging.NoopLogger{}
+	if service != nil {
+		logger = logging.EnsureLogger(service.logger)
+	}
+	fields := []any{"operation", name}
+	if !ref.IsZero() {
+		fields = append(fields, "scope_ref", ref.String())
+	}
+	if scope.FactorySessionID != "" {
+		fields = append(fields, "factory_session_id", scope.FactorySessionID)
+	}
+	logger.Info("recordings operation started", fields...)
+	return recordingOperationLog{logger: logger, fields: fields}
+}
+
+func (operation recordingOperationLog) finish(err error) {
+	fields := append([]any(nil), operation.fields...)
+	fields = append(fields, "outcome", "success")
+	if err != nil {
+		fields[len(fields)-1] = "error"
+		fields = append(fields, "error_type", fmt.Sprintf("%T", err))
+	}
+	operation.logger.Info("recordings operation finished", fields...)
 }
 
 func firstRecordingClock(clocks []recordings.RecordingClock) recordings.RecordingClock {

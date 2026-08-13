@@ -79,7 +79,9 @@ func validRecordingScopeToken(value string) bool {
 func (service *combinedService) BeginRecordingScope(
 	ctx context.Context,
 	request recordings.BeginRecordingScopeRequest,
-) (recordings.BeginRecordingScopeResult, error) {
+) (result recordings.BeginRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.begin", recordings.RecordingScopeRef{}, request.Scope)
+	defer func() { operation.finish(err) }()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.BeginRecordingScopeResult{}, err
 	}
@@ -143,7 +145,10 @@ func scopeRecordingID(
 func (service *combinedService) AppendRecordingScopeEvent(
 	ctx context.Context,
 	request recordings.AppendRecordingScopeEventRequest,
-) (recordings.AppendRecordingScopeEventResult, error) {
+) (result recordings.AppendRecordingScopeEventResult, err error) {
+	// Event append is a high-volume path; lifecycle and query operations emit
+	// per-operation logs while append remains observable through its canonical
+	// event and terminal status projections.
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.AppendRecordingScopeEventResult{}, err
 	}
@@ -246,7 +251,9 @@ func validRecordingScopeEvent(
 func (service *combinedService) FlushRecordingScope(
 	ctx context.Context,
 	request recordings.FlushRecordingScopeRequest,
-) (recordings.FlushRecordingScopeResult, error) {
+) (result recordings.FlushRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.flush", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.FlushRecordingScopeResult{}, err
 	}
@@ -259,21 +266,23 @@ func (service *combinedService) FlushRecordingScope(
 	if binding.closed {
 		return recordings.FlushRecordingScopeResult{}, recordings.ErrRecordingScopeClosed
 	}
-	result, err := service.FlushRecording(recordings.FlushRecordingRequest{
+	flushed, err := service.FlushRecording(recordings.FlushRecordingRequest{
 		RecordingID: binding.recordingID,
 	})
 	if err != nil {
 		return recordings.FlushRecordingScopeResult{}, err
 	}
 	return recordings.FlushRecordingScopeResult{
-		Status: scopeStatusFrom(request.Scope, result.Status),
+		Status: scopeStatusFrom(request.Scope, flushed.Status),
 	}, nil
 }
 
 func (service *combinedService) FinalizeRecordingScope(
 	ctx context.Context,
 	request recordings.FinalizeRecordingScopeRequest,
-) (recordings.FinalizeRecordingScopeResult, error) {
+) (result recordings.FinalizeRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.finalize", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, err := service.recordingScope(request.Scope)
 	if err != nil {
 		return recordings.FinalizeRecordingScopeResult{}, err
@@ -321,7 +330,9 @@ func (service *combinedService) finalizeRecordingScopeLocked(
 func (service *combinedService) CloseRecordingScope(
 	ctx context.Context,
 	request recordings.CloseRecordingScopeRequest,
-) (recordings.CloseRecordingScopeResult, error) {
+) (result recordings.CloseRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.close", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, err := service.recordingScope(request.Scope)
 	if err != nil {
 		return recordings.CloseRecordingScopeResult{}, err
@@ -351,7 +362,9 @@ func (service *combinedService) CloseRecordingScope(
 func (service *combinedService) QueryRecordingScope(
 	ctx context.Context,
 	request recordings.QueryRecordingScopeRequest,
-) (recordings.QueryRecordingScopeResult, error) {
+) (result recordings.QueryRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.status", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.QueryRecordingScopeResult{}, err
 	}

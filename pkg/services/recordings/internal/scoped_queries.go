@@ -14,7 +14,9 @@ import (
 func (service *combinedService) OpenRecordingScope(
 	ctx context.Context,
 	request recordings.OpenRecordingScopeRequest,
-) (recordings.OpenRecordingScopeResult, error) {
+) (result recordings.OpenRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.open", recordings.RecordingScopeRef{}, request.Scope)
+	defer func() { operation.finish(err) }()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.OpenRecordingScopeResult{}, err
 	}
@@ -129,7 +131,9 @@ func scopeEventPrefix(
 func (service *combinedService) SubscribeRecordingScope(
 	ctx context.Context,
 	request recordings.SubscribeRecordingScopeRequest,
-) (recordings.SubscribeRecordingScopeResult, error) {
+) (result recordings.SubscribeRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.subscribe", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, err := service.recordingScope(request.Scope)
 	if err != nil {
 		return recordings.SubscribeRecordingScopeResult{}, err
@@ -152,7 +156,7 @@ func (service *combinedService) SubscribeRecordingScope(
 		}
 		return recordings.SubscribeRecordingScopeResult{Subscription: subscription}, nil
 	}
-	result, err := service.canonicalLedger.SubscribeFrom(ctx, recordings.SubscribeRequest{
+	subscribed, err := service.canonicalLedger.SubscribeFrom(ctx, recordings.SubscribeRequest{
 		Cursor: request.Cursor,
 		Scope:  binding.eventScope,
 	})
@@ -160,7 +164,7 @@ func (service *combinedService) SubscribeRecordingScope(
 		return recordings.SubscribeRecordingScopeResult{}, err
 	}
 	return recordings.SubscribeRecordingScopeResult{
-		Subscription: result.Subscription,
+		Subscription: subscribed.Subscription,
 	}, nil
 }
 
@@ -244,7 +248,9 @@ func (service *combinedService) validateScopeCursor(
 func (service *combinedService) LoadReplayRecordingScope(
 	ctx context.Context,
 	request recordings.LoadReplayRecordingScopeRequest,
-) (recordings.LoadReplayRecordingScopeResult, error) {
+) (result recordings.LoadReplayRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.replay_load", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, snapshot, err := service.scopeSnapshot(
 		ctx,
 		request.Scope,
@@ -267,7 +273,9 @@ func (service *combinedService) LoadReplayRecordingScope(
 func (service *combinedService) CreateReplayPlanScope(
 	ctx context.Context,
 	request recordings.CreateReplayPlanScopeRequest,
-) (recordings.CreateReplayPlanScopeResult, error) {
+) (result recordings.CreateReplayPlanScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.replay_plan", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, err := service.recordingScope(request.Scope)
 	if err != nil {
 		return recordings.CreateReplayPlanScopeResult{}, err
@@ -302,7 +310,9 @@ func (service *combinedService) CreateReplayPlanScope(
 func (service *combinedService) ObserveReplayScope(
 	ctx context.Context,
 	request recordings.ObserveReplayScopeRequest,
-) (recordings.ObserveReplayScopeResult, error) {
+) (result recordings.ObserveReplayScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.replay_observe", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.ObserveReplayScopeResult{}, err
 	}
@@ -359,7 +369,9 @@ func (service *combinedService) scopeSnapshot(
 func (service *combinedService) ReconstructRecordingScope(
 	ctx context.Context,
 	request recordings.ReconstructRecordingScopeRequest,
-) (recordings.ReconstructRecordingScopeResult, error) {
+) (result recordings.ReconstructRecordingScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.project", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	_, snapshot, err := service.scopeSnapshot(ctx, request.Scope, false, request.Through)
 	if err != nil {
 		return recordings.ReconstructRecordingScopeResult{}, err
@@ -381,7 +393,9 @@ func (service *combinedService) ReconstructRecordingScope(
 func (service *combinedService) QuerySimpleDashboardScope(
 	ctx context.Context,
 	request recordings.QuerySimpleDashboardScopeRequest,
-) (recordings.QuerySimpleDashboardScopeResult, error) {
+) (result recordings.QuerySimpleDashboardScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.dashboard", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	projected, err := service.ReconstructRecordingScope(ctx, recordings.ReconstructRecordingScopeRequest{
 		Scope:        request.Scope,
 		Through:      request.Through,
@@ -406,7 +420,9 @@ func (service *combinedService) QuerySimpleDashboardScope(
 func (service *combinedService) QueryWorkstationRequestsScope(
 	ctx context.Context,
 	request recordings.QueryWorkstationRequestsScopeRequest,
-) (recordings.QueryWorkstationRequestsScopeResult, error) {
+) (result recordings.QueryWorkstationRequestsScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.workstation_requests", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	projected, err := service.ReconstructRecordingScope(ctx, recordings.ReconstructRecordingScopeRequest{
 		Scope:        request.Scope,
 		Through:      request.Through,
@@ -431,7 +447,9 @@ func (service *combinedService) QueryWorkstationRequestsScope(
 func (service *combinedService) BuildPortableArtifactScope(
 	ctx context.Context,
 	request recordings.BuildPortableArtifactScopeRequest,
-) (recordings.BuildPortableArtifactScopeResult, error) {
+) (result recordings.BuildPortableArtifactScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.artifact_build", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, snapshot, err := service.scopeSnapshot(ctx, request.Scope, false, nil)
 	if err != nil {
 		return recordings.BuildPortableArtifactScopeResult{}, err
@@ -454,7 +472,9 @@ func (service *combinedService) BuildPortableArtifactScope(
 func (service *combinedService) ExportPortableArtifactScope(
 	ctx context.Context,
 	request recordings.ExportPortableArtifactScopeRequest,
-) (recordings.ExportPortableArtifactScopeResult, error) {
+) (result recordings.ExportPortableArtifactScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.artifact_export", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, snapshot, err := service.scopeSnapshot(ctx, request.Scope, false, nil)
 	if err != nil {
 		return recordings.ExportPortableArtifactScopeResult{}, err
@@ -478,7 +498,9 @@ func (service *combinedService) ExportPortableArtifactScope(
 func (service *combinedService) ReadPortableArtifactScope(
 	ctx context.Context,
 	request recordings.ReadPortableArtifactScopeRequest,
-) (recordings.ReadPortableArtifactScopeResult, error) {
+) (result recordings.ReadPortableArtifactScopeResult, err error) {
+	operation := service.startOperationLog("recording_scope.artifact_read", request.Scope, recordings.CanonicalEventScope{})
+	defer func() { operation.finish(err) }()
 	binding, snapshot, err := service.scopeSnapshot(ctx, request.Scope, false, nil)
 	if err != nil {
 		return recordings.ReadPortableArtifactScopeResult{}, err

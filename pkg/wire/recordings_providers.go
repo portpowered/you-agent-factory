@@ -23,6 +23,7 @@ func provideRecordingsRoot(
 	storage platformreplay.Storage,
 	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
 ) (recordings.Root, error) {
 	makeDirectories, createTemporaryFile, removePath, renamePath, readFile := provideRecordingFilesystemEffects(edges)
 	return recordingswire.NewRuntimeRoot(
@@ -37,6 +38,7 @@ func provideRecordingsRoot(
 		factorydefinitionswire.FactorySnapshotJSONDecoder(),
 		factorydefinitionswire.ReplayRuntimeConfigDecoder(),
 		replayInputs,
+		logger,
 		platformclock.Real{},
 	)
 }

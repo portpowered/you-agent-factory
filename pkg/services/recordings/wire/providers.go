@@ -74,6 +74,7 @@ func NewRuntimeRoot(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Root, error) {
 	publication, err := recordingsinternal.NewPortableArtifactPublication(
@@ -94,6 +95,7 @@ func NewRuntimeRoot(
 		decodeSnapshot,
 		decodeRuntimeConfig,
 		replayInputs,
+		logger,
 		clocks...,
 	)
 	if root == nil {
