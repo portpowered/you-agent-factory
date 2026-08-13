@@ -56,19 +56,6 @@ type ReplayInputLoader interface {
 	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 }
 
-// LoadReplayInputRequest selects one historical replay input by filesystem
-// path.
-type LoadReplayInputRequest struct {
-	Path string
-}
-
-// LoadReplayInputResult contains exactly one of Portable or Legacy,
-// depending on which replay input family the selected path contained.
-type LoadReplayInputResult struct {
-	Portable *PortableRecording
-	Legacy   *ReplayArtifact
-}
-
 // ReplayInputFamily identifies the historical replay document family selected
 // while loading a path-based replay input.
 type ReplayInputFamily string

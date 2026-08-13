@@ -167,11 +167,25 @@ type RuntimeScopeResult struct {
 	Scope    RecordingScopeRef
 }
 
+// LoadReplayInputRequest selects one historical replay input by filesystem
+// path before a runtime recording scope exists.
+type LoadReplayInputRequest struct {
+	Path string
+}
+
+// LoadReplayInputResult contains exactly one of Portable or Legacy, depending
+// on which replay input family the selected path contained.
+type LoadReplayInputResult struct {
+	Portable *PortableRecording
+	Legacy   *ReplayArtifact
+}
+
 // RuntimeOpening is the Recordings-owned capability used by Factory Runtime
 // and Factory Sessions while opening a runtime. It keeps replay construction,
 // projection selection, and live scope acquisition on the one process root.
 type RuntimeOpening interface {
 	OpenRuntime(context.Context, RuntimeScopeRequest) (RuntimeScopeResult, error)
+	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 	Projection() ProjectionService
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (

@@ -130,6 +130,8 @@ type (
 	LiveRecordingTargetRequest                                 = recordingcontracts.LiveRecordingTargetRequest
 	LoadReplayArtifactRequest                                  = recordingcontracts.LoadReplayArtifactRequest
 	LoadReplayArtifactResult                                   = recordingcontracts.LoadReplayArtifactResult
+	LoadReplayInputRequest                                     = recordingcontracts.LoadReplayInputRequest
+	LoadReplayInputResult                                      = recordingcontracts.LoadReplayInputResult
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
 	LoadReplayRecordingResult                                  = recordingcontracts.LoadReplayRecordingResult
 	MetadataMismatchWarning                                    = recordingcontracts.MetadataMismatchWarning
@@ -315,16 +317,10 @@ type (
 // Runtime opens a private runtime scope. Replay input loading remains on the
 // same process root so Factory Sessions cannot construct a second Recordings
 // graph for historical replay.
-type RuntimeOpening interface {
-	recordingcontracts.RuntimeOpening
-	ReplayInputLoader
-}
+type RuntimeOpening = recordingcontracts.RuntimeOpening
 
 // Root is the complete process-scoped Recordings authority.
-type Root interface {
-	Service
-	RuntimeOpening
-}
+type Root = recordingcontracts.Root
 
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable
