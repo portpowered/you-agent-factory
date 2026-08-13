@@ -40,6 +40,18 @@ type coverageManifestException struct {
 	RemovalGate   string `json:"removalGate"`
 }
 
+type coverageManifestValidationError struct {
+	err error
+}
+
+func (err *coverageManifestValidationError) Error() string {
+	return err.err.Error()
+}
+
+func (err *coverageManifestValidationError) Unwrap() error {
+	return err.err
+}
+
 func createCoverageManifest(filename string, lane string, totals map[string]packageCoverageTotals, packages []string) error {
 	manifest, err := newCoverageManifest(lane, totals, packages)
 	if err != nil {
@@ -133,6 +145,10 @@ func readCoverageManifest(data []byte, expectedLane string, measuredPackages []s
 	return readCoverageManifestAt(data, expectedLane, measuredPackages, time.Now().UTC())
 }
 
+func readCoverageManifestWithTotals(data []byte, expectedLane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals) (coverageManifest, error) {
+	return readCoverageManifestAtModeWithTotals(data, expectedLane, measuredPackages, time.Now().UTC(), true, measuredTotals)
+}
+
 func readCoverageManifestAt(data []byte, expectedLane string, measuredPackages []string, now time.Time) (coverageManifest, error) {
 	return readCoverageManifestAtMode(data, expectedLane, measuredPackages, now, true)
 }
@@ -142,6 +158,10 @@ func readCoverageManifestForUpdate(data []byte, expectedLane string, measuredPac
 }
 
 func readCoverageManifestAtMode(data []byte, expectedLane string, measuredPackages []string, now time.Time, requireComplete bool) (coverageManifest, error) {
+	return readCoverageManifestAtModeWithTotals(data, expectedLane, measuredPackages, now, requireComplete, nil)
+}
+
+func readCoverageManifestAtModeWithTotals(data []byte, expectedLane string, measuredPackages []string, now time.Time, requireComplete bool, measuredTotals map[string]packageCoverageTotals) (coverageManifest, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var manifest coverageManifest
@@ -151,8 +171,8 @@ func readCoverageManifestAtMode(data []byte, expectedLane string, measuredPackag
 	if err := ensureJSONEOF(decoder); err != nil {
 		return coverageManifest{}, err
 	}
-	if err := validateCoverageManifestAtMode(manifest, expectedLane, measuredPackages, now, requireComplete); err != nil {
-		return coverageManifest{}, err
+	if err := validateCoverageManifestAtModeWithTotals(manifest, expectedLane, measuredPackages, now, requireComplete, measuredTotals); err != nil {
+		return coverageManifest{}, &coverageManifestValidationError{err: err}
 	}
 	return manifest, nil
 }
@@ -175,7 +195,15 @@ func validateCoverageManifestAt(manifest coverageManifest, expectedLane string, 
 	return validateCoverageManifestAtMode(manifest, expectedLane, measuredPackages, now, true)
 }
 
+func validateCoverageManifestAtWithTotals(manifest coverageManifest, expectedLane string, measuredPackages []string, now time.Time, measuredTotals map[string]packageCoverageTotals) error {
+	return validateCoverageManifestAtModeWithTotals(manifest, expectedLane, measuredPackages, now, true, measuredTotals)
+}
+
 func validateCoverageManifestAtMode(manifest coverageManifest, expectedLane string, measuredPackages []string, now time.Time, requireComplete bool) error {
+	return validateCoverageManifestAtModeWithTotals(manifest, expectedLane, measuredPackages, now, requireComplete, nil)
+}
+
+func validateCoverageManifestAtModeWithTotals(manifest coverageManifest, expectedLane string, measuredPackages []string, now time.Time, requireComplete bool, measuredTotals map[string]packageCoverageTotals) error {
 	if manifest.Version != coverageManifestVersion {
 		return fmt.Errorf("validate go coverage manifest: version %d is unsupported; expected %d", manifest.Version, coverageManifestVersion)
 	}
@@ -217,13 +245,43 @@ func validateCoverageManifestAtMode(manifest coverageManifest, expectedLane stri
 		previous = entry.Package
 	}
 	if requireComplete {
-		for _, importPath := range measuredPackages {
+		missing := make([]string, 0)
+		for importPath := range measured {
 			if _, ok := seen[importPath]; !ok {
-				return fmt.Errorf("validate go coverage manifest: measured %s package %q has no manifest entry", expectedLane, importPath)
+				missing = append(missing, importPath)
 			}
+		}
+		if len(missing) > 0 {
+			slices.Sort(missing)
+			return formatMissingCoverageManifestEntries(expectedLane, missing, measuredTotals)
 		}
 	}
 	return nil
+}
+
+func formatMissingCoverageManifestEntries(lane string, missing []string, measuredTotals map[string]packageCoverageTotals) error {
+	lines := make([]string, 0, len(missing))
+	for _, importPath := range missing {
+		line := fmt.Sprintf("- measured %s package %q has no manifest entry", lane, importPath)
+		if measuredTotals != nil {
+			totals := measuredTotals[importPath]
+			switch {
+			case totals.totalStatements == 0 && totals.coveredStatements == 0:
+				line += "; no measurable statements"
+			case totals.totalStatements > 0:
+				floor, err := coverageFloorFromTotals(totals)
+				if err != nil {
+					line += fmt.Sprintf("; measured coverage unavailable: %v", err)
+				} else {
+					line += fmt.Sprintf("; measured coverage %s%%", floor)
+				}
+			default:
+				line += "; measured coverage unavailable"
+			}
+		}
+		lines = append(lines, line)
+	}
+	return fmt.Errorf("validate go coverage manifest: measured %s packages have no manifest entry:\n%s", lane, strings.Join(lines, "\n"))
 }
 
 func dateOnlyUTC(value time.Time) time.Time {
@@ -232,11 +290,20 @@ func dateOnlyUTC(value time.Time) time.Time {
 }
 
 func readCoverageManifestFile(filename string, lane string, measuredPackages []string) (coverageManifest, error) {
+	return readCoverageManifestFileWithTotals(filename, lane, measuredPackages, nil)
+}
+
+func readCoverageManifestFileWithTotals(filename string, lane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals) (coverageManifest, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return coverageManifest{}, fmt.Errorf("read %s go coverage manifest: %w", lane, err)
 	}
-	manifest, err := readCoverageManifest(data, lane, measuredPackages)
+	var manifest coverageManifest
+	if measuredTotals == nil {
+		manifest, err = readCoverageManifest(data, lane, measuredPackages)
+	} else {
+		manifest, err = readCoverageManifestWithTotals(data, lane, measuredPackages, measuredTotals)
+	}
 	if err != nil {
 		return coverageManifest{}, err
 	}

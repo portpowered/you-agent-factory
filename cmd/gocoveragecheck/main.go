@@ -131,6 +131,10 @@ func execute(cfg config) error {
 	}
 	result, err := run(cfg)
 	if err != nil {
+		var validationErr *coverageManifestValidationError
+		if errors.As(err, &validationErr) {
+			writePackageCoverageSummaries(result.packageSummaries)
+		}
 		return err
 	}
 
@@ -143,9 +147,7 @@ func execute(cfg config) error {
 	}
 	failures = append(failures, result.packageMinimumFailures...)
 
-	for _, summary := range result.packageSummaries {
-		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
-	}
+	writePackageCoverageSummaries(result.packageSummaries)
 	if cfg.generateManifest != "" {
 		if err := createCoverageManifest(cfg.generateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries)); err != nil {
 			return err
@@ -309,13 +311,18 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
+	fmt.Fprintln(stdoutWriter, totalLine)
 	if !cfg.totalOnly && strings.TrimSpace(cfg.packageManifest) != "" {
 		manifestPath := cfg.packageManifest
 		if !filepath.IsAbs(manifestPath) {
 			manifestPath = filepath.Join(repoRoot, manifestPath)
 		}
-		manifest, err := readCoverageManifestFile(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries))
+		manifest, err := readCoverageManifestFileWithTotals(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries), result.packageTotals)
 		if err != nil {
+			var validationErr *coverageManifestValidationError
+			if errors.As(err, &validationErr) {
+				return result, err
+			}
 			return coverageResult{}, err
 		}
 		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilon(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon)
@@ -323,8 +330,13 @@ func run(cfg config) (coverageResult, error) {
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
 	}
-	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil
+}
+
+func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
+	for _, summary := range summaries {
+		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
+	}
 }
 
 func (cfg config) testJobs() int {

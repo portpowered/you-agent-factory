@@ -139,6 +139,7 @@ func TestReadCoverageManifestValidatesContract(t *testing.T) {
 		{name: "invalid percentage", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":100.01}]}`, measured: []string{configPackage}, want: "between 0.00 and 100.00"},
 		{name: "imprecise percentage", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.0}]}`, measured: []string{configPackage}, want: "exactly two decimal places"},
 		{name: "both entry forms", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.00,"exception":{"kind":"migration"}}]}`, measured: []string{configPackage}, want: "exactly one"},
+		{name: "neither entry form", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `"}]}`, measured: []string{configPackage}, want: "exactly one"},
 		{name: "malformed exception", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","exception":{"kind":"coverage","justification":"low coverage","owner":"team","deadline":"soon","removalGate":"more tests"}}]}`, measured: []string{configPackage}, want: "must be measurement or migration"},
 		{name: "unknown field", manifest: `{"version":1,"lane":"unit","unknown":true,"packages":[]}`, measured: nil, want: "unknown field"},
 	}
@@ -260,6 +261,51 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 				t.Fatalf("regression failures are not in stable package order: %v", failures)
 			}
 		})
+	}
+}
+
+func TestValidateCoverageManifestReportsAllMissingPackagesWithMeasurements(t *testing.T) {
+	t.Parallel()
+
+	alpha := modulePath + "/pkg/alpha"
+	beta := modulePath + "/pkg/beta"
+	zeta := modulePath + "/pkg/zeta"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "functional",
+		Packages: []coverageManifestEntry{
+			{Package: alpha, Minimum: json.RawMessage("80.00")},
+		},
+	}
+	err := validateCoverageManifestAtWithTotals(
+		manifest,
+		"functional",
+		[]string{zeta, alpha, beta},
+		time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC),
+		map[string]packageCoverageTotals{
+			beta: {coveredStatements: 2, totalStatements: 3},
+			zeta: {},
+		},
+	)
+	if err == nil {
+		t.Fatal("validateCoverageManifestAtWithTotals() unexpectedly succeeded")
+	}
+
+	message := err.Error()
+	if !strings.Contains(message, "measured functional packages have no manifest entry") {
+		t.Fatalf("missing-entry error = %q, want functional lane diagnostic", message)
+	}
+	if strings.Count(message, "has no manifest entry") != 2 {
+		t.Fatalf("missing-entry error = %q, want one line per missing package", message)
+	}
+	if !strings.Contains(message, `measured functional package "`+beta+`" has no manifest entry; measured coverage 66.66%`) {
+		t.Fatalf("missing-entry error = %q, want truncated two-decimal beta measurement", message)
+	}
+	if !strings.Contains(message, `measured functional package "`+zeta+`" has no manifest entry; no measurable statements`) {
+		t.Fatalf("missing-entry error = %q, want no-measurable-statements classification", message)
+	}
+	if strings.Index(message, beta) > strings.Index(message, zeta) {
+		t.Fatalf("missing packages are not sorted by import path: %q", message)
 	}
 }
 
