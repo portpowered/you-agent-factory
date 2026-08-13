@@ -91,6 +91,25 @@ func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *tes
 	}
 }
 
+func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T) {
+	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	base := runtimeActivationRequestForTest("runtime-opaque-effects", "same")
+	base.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
+	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
+		t.Fatalf("ActivateRuntime(base) error = %v", err)
+	}
+
+	duplicate := runtimeActivationRequestForTest("runtime-opaque-effects", "same")
+	duplicate.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
+	result, err := service.ActivateRuntime(context.Background(), duplicate)
+	if err != nil {
+		t.Fatalf("ActivateRuntime(equivalent opaque effects) error = %v", err)
+	}
+	if !result.Idempotent || result.State != automations.RuntimeLifecycleActivated {
+		t.Fatalf("ActivateRuntime(equivalent opaque effects) = %#v, want idempotent activated result", result)
+	}
+}
+
 func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
 	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
 	request := runtimeActivationRequestForTest("runtime-scheduler", "scheduler")

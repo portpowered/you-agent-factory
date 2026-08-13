@@ -493,8 +493,10 @@ func runtimeActivationMatches(instance *runtimeInstance, request automations.Run
 // activated runtime. Runtime inputs contain effect interfaces and callbacks,
 // so they cannot be compared with reflect.DeepEqual as a whole: non-nil
 // functions are never deeply equal, while an omitted callback is materially
-// different from an installed one. Keep deterministic identity for opaque
-// effects and deep-copy the plain filesystem policy values.
+// different from an installed one. Keep presence and type identity for opaque
+// effects and deep-copy the plain filesystem policy values. Effect instances
+// are intentionally not compared by address: callers commonly construct
+// equivalent ports for each activation request.
 type runtimeActivationInputIdentity struct {
 	startSchedulers bool
 	submitter       opaqueActivationIdentity
@@ -512,8 +514,6 @@ type runtimeFilesystemInputIdentity struct {
 type opaqueActivationIdentity struct {
 	present  bool
 	typeName string
-	pointer  uintptr
-	value    any
 }
 
 func newRuntimeActivationInputIdentity(inputs automations.RuntimeActivationInputs) runtimeActivationInputIdentity {
@@ -547,14 +547,10 @@ func newOpaqueActivationIdentity(value any) opaqueActivationIdentity {
 		if reflected.IsNil() {
 			return opaqueActivationIdentity{}
 		}
-		identity.pointer = reflected.Pointer()
 	case reflect.Pointer, reflect.Chan, reflect.UnsafePointer:
 		if reflected.IsNil() {
 			return opaqueActivationIdentity{}
 		}
-		identity.pointer = reflected.Pointer()
-	default:
-		identity.value = reflected.Interface()
 	}
 	return identity
 }
@@ -566,10 +562,7 @@ func (identity opaqueActivationIdentity) matches(other opaqueActivationIdentity)
 	if !identity.present {
 		return true
 	}
-	if identity.pointer != 0 || other.pointer != 0 {
-		return identity.pointer == other.pointer
-	}
-	return reflect.DeepEqual(identity.value, other.value)
+	return true
 }
 
 func (identity runtimeActivationInputIdentity) matches(inputs automations.RuntimeActivationInputs) bool {
