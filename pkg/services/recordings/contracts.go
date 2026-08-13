@@ -255,6 +255,7 @@ type (
 	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
 	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
 	RuntimeRecorder                                            = recordingcontracts.RuntimeRecorder
+	RuntimeRecorderFactory                                     = recordingcontracts.RuntimeRecorderFactory
 	SessionLifecycleControlInput                               = recordingcontracts.SessionLifecycleControlInput
 	SimpleDashboardActiveExecution                             = recordingcontracts.SimpleDashboardActiveExecution
 	SimpleDashboardQueryRequest                                = recordingcontracts.SimpleDashboardQueryRequest

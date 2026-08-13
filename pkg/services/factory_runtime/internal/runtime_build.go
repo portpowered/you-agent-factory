@@ -22,6 +22,19 @@ type ProgressPublisherFactory func(string) workers.ProgressPublisher
 type DispatchCompletionFactory func(string) func(string)
 type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFactory
 
+type runtimeOpeningWithFlush struct {
+	recordings.RuntimeOpening
+	flushInterval time.Duration
+}
+
+func (opening runtimeOpeningWithFlush) OpenRuntime(
+	ctx context.Context,
+	request recordings.RuntimeScopeRequest,
+) (recordings.RuntimeScopeResult, error) {
+	request.FlushInterval = opening.flushInterval
+	return opening.RuntimeOpening.OpenRuntime(ctx, request)
+}
+
 // newRuntimeBuild constructs the canonical runtime-build service from decomposed process
 // configuration and domain collaborators.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -70,8 +83,7 @@ func NewRuntimeBuild(
 	completionFactory DispatchCompletionFactory,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
-	runtimeLedgerFactory factory.RuntimeLedgerFactory,
-	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
+	recordingsRuntime recordings.RuntimeOpening,
 	loadFactory factory.LoadedFactoryLoader,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*runtimebuild.Service, error) {
@@ -161,8 +173,7 @@ func NewRuntimeBuild(
 				runtimeFactory,
 				dispatchCompleted,
 				worldStateProjector,
-				runtimeLedgerFactory,
-				runtimeRecorderFactory,
+				recordingsRuntime,
 				initialFactorySnapshot,
 			)
 		},
@@ -203,8 +214,7 @@ func buildBundle(
 	runtimeFactory *RuntimeFactory,
 	dispatchCompleted func(string),
 	worldStateProjector factory.WorldStateProjector,
-	runtimeLedgerFactory factory.RuntimeLedgerFactory,
-	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
+	recordingsRuntime recordings.RuntimeOpening,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*factoryhost.Bundle, error) {
 	loadedFactoryCfg, ok := spec.LoadedFactoryCfg.(factorydefinitions.LoadedFactorySource)
@@ -218,18 +228,8 @@ func buildBundle(
 	if sessionID == "" {
 		return nil, fmt.Errorf("default Factory Session ID is required")
 	}
-	if runtimeRecorderFactory == nil {
-		return nil, fmt.Errorf("Recordings runtime recorder factory is required")
-	}
-	recording, err := runtimeRecorderFactory(
-		recordFlushInterval,
-		loadedFactoryCfg,
-		spec.Clock.Now,
-		spec.RuntimeInstanceID,
-		spec.RecordPath,
-	)
-	if err != nil {
-		return nil, err
+	if recordingsRuntime == nil {
+		return nil, fmt.Errorf("Recordings runtime opening is required")
 	}
 	var initialFactory *factorydefinitions.FactorySnapshot
 	var snapshotErr error
@@ -256,6 +256,7 @@ func buildBundle(
 	// against the Factory Session stream. An absent factory leaves the route
 	// unbound, which is how a runtime declares it hosts no such Worker.
 	var providerInvocation workers.WorkstationRequestExecutor
+	var err error
 	if providerInvocationFactory != nil {
 		providerInvocation, err = providerInvocationFactory(
 			spec.ProviderCommandRunner,
@@ -291,13 +292,15 @@ func buildBundle(
 		strings.TrimSpace(backendScopeID),
 		spec.Clock,
 		spec.RecordPath,
-		recording,
 		initialFactory,
 		spec.SubmissionHooks,
 		spec.CompletionPlanner,
 		spec.PetriMutationRecorder,
 		worldStateProjector,
-		runtimeLedgerFactory,
+		runtimeOpeningWithFlush{
+			RuntimeOpening: recordingsRuntime,
+			flushInterval:  recordFlushInterval,
+		},
 		func(history recordings.WorkerEventRecorder, logger *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return loadWorkerOptions(
 				workerExecution,
