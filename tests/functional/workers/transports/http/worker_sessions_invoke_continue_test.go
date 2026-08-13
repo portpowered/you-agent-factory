@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -12,8 +14,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -33,6 +38,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	providerOutput := readRemoteProviderFixture(t, "codex", "success", "stdout.jsonl")
 	gate := make(chan struct{})
 	runner := newRemoteInvokeContinueRunner(gate, providerOutput)
+	recordingProbe := newRemoteWorkerRecordingProbe(t, t.TempDir())
 
 	factoryDir := support.ScaffoldSingleStepFactory(t, "remote-worker-session-invoke-continue")
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
@@ -41,8 +47,13 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       env,
+		Args:                      []string{"--record", filepath.Join(t.TempDir(), "wsr-006-runtime-recording.json")},
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
+			WorkerRecordingWriter: recordingProbe,
+			FactorySessionRuntimeInstanceIDGenerator: func() string {
+				return "wsr-006-runtime-instance"
+			},
 			ProviderSessionResolveHomeDirectory: func() (string, error) {
 				return homeDir, nil
 			},
@@ -88,7 +99,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 
 	serverURL := server.URL()
 	assertRemoteSourceObservation(t, ctx, client, env, factoryDir, serverURL)
-	continueRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL)
+	continueRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, recordingProbe, runner)
 	idempotencyFailure, idempotencyErr := executeRemoteWorkerCLIExpectError(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "continue", "remote-source-session",
 		"--request-id", "remote-continue-request", "--successor-worker-session-id", "remote-other-successor",
@@ -141,7 +152,16 @@ func assertRemoteSourceObservation(t *testing.T, ctx context.Context, client sup
 	assertRemoteWorkerStreamTerminal(t, decodeRemoteWorkerNDJSON(t, stream.Stdout()), "remote-source-session")
 }
 
-func continueRemoteWorkerSession(t *testing.T, ctx context.Context, client support.Process, env []string, factoryDir, serverURL string) {
+func continueRemoteWorkerSession(
+	t *testing.T,
+	ctx context.Context,
+	client support.Process,
+	env []string,
+	factoryDir,
+	serverURL string,
+	recordingProbe *remoteWorkerRecordingProbe,
+	runner *remoteInvokeContinueRunner,
+) {
 	t.Helper()
 	continued := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "continue", "remote-source-session",
@@ -175,7 +195,8 @@ func continueRemoteWorkerSession(t *testing.T, ctx context.Context, client suppo
 
 	sourceReplay := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-source-session", "--replay-only")
-	assertRemoteSourceLineageReplay(t, decodeRemoteWorkerNDJSON(t, sourceReplay.Stdout()), "remote-source-session", "remote-successor-session", remoteWorkerSessionProviderID)
+	sourceFrames := decodeRemoteWorkerNDJSON(t, sourceReplay.Stdout())
+	assertRemoteSourceLineageReplay(t, sourceFrames, "remote-source-session", "remote-successor-session", remoteWorkerSessionProviderID)
 	waitForRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, "remote-successor-session")
 
 	successorStream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
@@ -186,6 +207,7 @@ func continueRemoteWorkerSession(t *testing.T, ctx context.Context, client suppo
 	if !strings.Contains(successorStream.Stdout(), "Codex fixture answer COMPLETE") {
 		t.Fatalf("remote successor stream omitted continued provider output:\n%s", successorStream.Stdout())
 	}
+	assertRemoteWorkerRecordingParity(t, recordingProbe, runner, *source, *successor, sourceFrames, successorFrames)
 }
 
 func assertRemoteContinuationUsesServer(t *testing.T, clientRunner *testutil.ProviderCommandRunner, runner *remoteInvokeContinueRunner) {
@@ -246,8 +268,9 @@ type remoteWorkerSessionStreamFrame struct {
 }
 
 type remoteWorkerSessionEvent struct {
-	Payload    json.RawMessage `json:"payload"`
-	SourceType string          `json:"sourceType"`
+	Payload       json.RawMessage `json:"payload"`
+	SourceType    string          `json:"sourceType"`
+	SourceEventID string          `json:"sourceEventId"`
 }
 
 type remoteWorkerSessionDraft struct {
@@ -256,6 +279,12 @@ type remoteWorkerSessionDraft struct {
 
 type remoteWorkerSessionPayload struct {
 	WorkerSessionID string                           `json:"workerSessionId"`
+	RecordingID     string                           `json:"recordingId"`
+	DispatchID      string                           `json:"dispatchId"`
+	AttemptID       string                           `json:"attemptId"`
+	Attempt         int                              `json:"attempt"`
+	AttemptReason   string                           `json:"attemptReason"`
+	StartedAt       *time.Time                       `json:"startedAt"`
 	Continuation    *remoteWorkerSessionProviderRef  `json:"continuation"`
 	Lineage         *remoteWorkerSessionLineageFacts `json:"lineage"`
 }
@@ -263,6 +292,8 @@ type remoteWorkerSessionPayload struct {
 type remoteWorkerSessionLineageFacts struct {
 	PredecessorWorkerSessionID string `json:"predecessorWorkerSessionId"`
 	SuccessorWorkerSessionID   string `json:"successorWorkerSessionId"`
+	PreviousDispatchID         string `json:"previousDispatchId"`
+	PreviousAttemptID          string `json:"previousAttemptId"`
 }
 
 type remoteWorkerSessionReplay struct {
@@ -457,6 +488,214 @@ func assertRemoteSuccessorLineageReplay(t *testing.T, frames []remoteWorkerSessi
 	t.Fatalf("successor replay frames = %#v, want predecessor lineage with provider %q", frames, providerID)
 }
 
+type remoteWorkerSessionLiveFacts struct {
+	opening *remoteWorkerSessionPayload
+	lineage *remoteWorkerSessionPayload
+}
+
+func assertRemoteWorkerRecordingParity(
+	t *testing.T,
+	probe *remoteWorkerRecordingProbe,
+	runner *remoteInvokeContinueRunner,
+	source,
+	successor remoteWorkerSessionObservation,
+	sourceFrames,
+	successorFrames []remoteWorkerSessionStreamFrame,
+) {
+	t.Helper()
+	recordingID := probe.recordingID(t)
+	writer, err := recordingswire.NewWorkerRecordingFileWriter(
+		platformreplay.NewLocal(runtime.GOOS),
+		probe.root,
+	)
+	if err != nil {
+		t.Fatalf("construct fresh Worker recording reader: %v", err)
+	}
+	reader, ok := writer.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("fresh Worker recording writer does not expose a reader")
+	}
+	snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
+	if err != nil {
+		t.Fatalf("load durable Worker recording %q: %v", recordingID, err)
+	}
+	if snapshot.RecordingID != recordingID || len(snapshot.Sessions) != 2 {
+		t.Fatalf("durable Worker recording = %#v, want recording %q with source and successor", snapshot, recordingID)
+	}
+
+	providerCallsBefore := len(runner.requestsSnapshot())
+	codec := recordings.WorkerRecordingCodec{}
+	for _, expected := range []struct {
+		observation remoteWorkerSessionObservation
+		frames      []remoteWorkerSessionStreamFrame
+	}{
+		{observation: source, frames: sourceFrames},
+		{observation: successor, frames: successorFrames},
+	} {
+		session := remoteRecordingSession(t, snapshot, expected.observation.WorkerSessionID)
+		if session.Status != recordings.WorkerRecordingStatusComplete {
+			t.Fatalf("durable Worker Session %q health = %q, want COMPLETE", session.WorkerSessionID, session.Status)
+		}
+		durableReplay, err := codec.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+			Snapshot:        snapshot,
+			WorkerSessionID: session.WorkerSessionID,
+		})
+		if err != nil {
+			t.Fatalf("replay durable Worker Session %q: %v", session.WorkerSessionID, err)
+		}
+		portable, err := codec.ExportWorkerPortableRecording(snapshot, session.WorkerSessionID)
+		if err != nil {
+			t.Fatalf("export portable Worker Session %q: %v", session.WorkerSessionID, err)
+		}
+		encoded, err := codec.EncodeWorkerPortableRecording(portable)
+		if err != nil {
+			t.Fatalf("encode portable Worker Session %q: %v", session.WorkerSessionID, err)
+		}
+		decoded, err := codec.DecodeWorkerPortableRecording(encoded)
+		if err != nil {
+			t.Fatalf("decode portable Worker Session %q: %v", session.WorkerSessionID, err)
+		}
+		if !reflect.DeepEqual(portable, decoded) {
+			t.Fatalf("portable Worker Session %q changed during encode/decode", session.WorkerSessionID)
+		}
+		portableReplay, err := codec.ReplayWorkerPortableRecording(decoded)
+		if err != nil {
+			t.Fatalf("replay portable Worker Session %q: %v", session.WorkerSessionID, err)
+		}
+		if !reflect.DeepEqual(durableReplay.Projection, portableReplay.Projection) {
+			t.Fatalf("durable and portable Worker Session %q projections differ:\ndurable=%#v\nportable=%#v", session.WorkerSessionID, durableReplay.Projection, portableReplay.Projection)
+		}
+		if !portableReplay.Projection.Complete || portableReplay.Projection.Terminal == nil {
+			t.Fatalf("portable Worker Session %q replay = %#v, want complete terminal history", session.WorkerSessionID, portableReplay.Projection)
+		}
+
+		liveFacts := remoteLiveWorkerSessionFacts(t, expected.frames, session.WorkerSessionID)
+		portableFacts := remotePortableWorkerSessionFacts(t, portable)
+		if !reflect.DeepEqual(*liveFacts.opening, *portableFacts.opening) {
+			t.Fatalf("live and portable opening facts for %q differ:\nlive=%#v\nportable=%#v", session.WorkerSessionID, *liveFacts.opening, *portableFacts.opening)
+		}
+		if liveFacts.lineage == nil || portableFacts.lineage == nil || !reflect.DeepEqual(*liveFacts.lineage, *portableFacts.lineage) {
+			t.Fatalf("live and portable continuation lineage facts for %q differ:\nlive=%#v\nportable=%#v", session.WorkerSessionID, liveFacts.lineage, portableFacts.lineage)
+		}
+		if expected.observation.ProviderSession == nil {
+			t.Fatalf("live Worker Session %q has no Provider Session", session.WorkerSessionID)
+		}
+		wantOpeningContinuation := liveFacts.opening.Lineage != nil && liveFacts.opening.Lineage.PredecessorWorkerSessionID != ""
+		assertRemotePortableProviderFacts(t, portable, *expected.observation.ProviderSession, *liveFacts.lineage, wantOpeningContinuation)
+	}
+	if providerCallsAfter := len(runner.requestsSnapshot()); providerCallsAfter != providerCallsBefore {
+		t.Fatalf("portable Worker recording replay changed provider calls from %d to %d", providerCallsBefore, providerCallsAfter)
+	}
+}
+
+func remoteRecordingSession(
+	t *testing.T,
+	snapshot recordings.WorkerRecordingSnapshot,
+	workerSessionID string,
+) recordings.WorkerSessionRecordingSnapshot {
+	t.Helper()
+	for _, session := range snapshot.Sessions {
+		if session.WorkerSessionID == workerSessionID {
+			return session
+		}
+	}
+	t.Fatalf("durable Worker recording omitted Worker Session %q", workerSessionID)
+	return recordings.WorkerSessionRecordingSnapshot{}
+}
+
+func remoteLiveWorkerSessionFacts(
+	t *testing.T,
+	frames []remoteWorkerSessionStreamFrame,
+	workerSessionID string,
+) remoteWorkerSessionLiveFacts {
+	t.Helper()
+	var facts remoteWorkerSessionLiveFacts
+	for _, frame := range frames {
+		if frame.Delivery == "REPLAY_SUMMARY" || frame.Event == nil {
+			continue
+		}
+		var draft remoteWorkerSessionDraft
+		if err := json.Unmarshal(frame.Event.Payload, &draft); err != nil {
+			t.Fatalf("decode live Worker Session %q facts: %v", workerSessionID, err)
+		}
+		if draft.Payload.WorkerSessionID != workerSessionID {
+			continue
+		}
+		payload := draft.Payload
+		if frame.Event.SourceType == "worker_session_lineage" || payload.Lineage != nil {
+			facts.lineage = &payload
+		}
+		if frame.Event.SourceType == "worker_session_lifecycle" &&
+			(frame.Event.SourceEventID == "started" || payload.StartedAt != nil) {
+			facts.opening = &payload
+		}
+	}
+	if facts.opening == nil || facts.lineage == nil {
+		t.Fatalf("live Worker Session %q facts = %#v, want opening and continuation lineage", workerSessionID, facts)
+	}
+	return facts
+}
+
+func remotePortableWorkerSessionFacts(
+	t *testing.T,
+	portable recordings.WorkerPortableRecording,
+) remoteWorkerSessionLiveFacts {
+	t.Helper()
+	var facts remoteWorkerSessionLiveFacts
+	for _, record := range portable.Records {
+		var draft remoteWorkerSessionDraft
+		if err := json.Unmarshal(record.Payload, &draft); err != nil {
+			t.Fatalf("decode portable Worker Session %q facts: %v", portable.Identity.WorkerSessionID, err)
+		}
+		if draft.Payload.WorkerSessionID != portable.Identity.WorkerSessionID {
+			continue
+		}
+		payload := draft.Payload
+		if string(record.SourceType) == "worker_session_lineage" || payload.Lineage != nil {
+			facts.lineage = &payload
+		}
+		if string(record.SourceType) == "worker_session_lifecycle" &&
+			(string(record.SourceEventID) == "started" || payload.StartedAt != nil) {
+			facts.opening = &payload
+		}
+	}
+	if facts.opening == nil || facts.lineage == nil {
+		t.Fatalf("portable Worker Session %q facts = %#v, want opening and continuation lineage", portable.Identity.WorkerSessionID, facts)
+	}
+	return facts
+}
+
+func assertRemotePortableProviderFacts(
+	t *testing.T,
+	portable recordings.WorkerPortableRecording,
+	want remoteWorkerSessionProviderRef,
+	lineage remoteWorkerSessionPayload,
+	wantOpeningContinuation bool,
+) {
+	t.Helper()
+	if portable.Provider.Provider != want.Provider {
+		t.Fatalf("portable Worker Session %q provider attribution = %#v, want provider=%q", portable.Identity.WorkerSessionID, portable.Provider, want.Provider)
+	}
+	if portable.Provider.ProviderSessionRef != "" && portable.Provider.ProviderSessionRef != want.ID {
+		t.Fatalf("portable Worker Session %q provider session attribution = %q, want empty or exact id %q", portable.Identity.WorkerSessionID, portable.Provider.ProviderSessionRef, want.ID)
+	}
+	lineageContinuation := lineage.Continuation
+	if lineageContinuation == nil || lineageContinuation.Provider != want.Provider || lineageContinuation.Kind != want.Kind || lineageContinuation.ID != want.ID {
+		t.Fatalf("portable Worker Session %q lineage continuation = %#v, want exact provider reference %#v", portable.Identity.WorkerSessionID, lineageContinuation, want)
+	}
+	if wantOpeningContinuation {
+		continuation := portable.Correlation.Continuation
+		if continuation == nil || continuation.Provider != want.Provider || continuation.Kind != want.Kind || continuation.ID != want.ID {
+			t.Fatalf("portable Worker Session %q opening continuation = %#v, want exact provider reference %#v", portable.Identity.WorkerSessionID, continuation, want)
+		}
+	} else if portable.Correlation.Continuation != nil {
+		t.Fatalf("portable source Worker Session %q opening continuation = %#v, want no opening continuation", portable.Identity.WorkerSessionID, portable.Correlation.Continuation)
+	}
+	if portable.Correlation.DispatchID == "" || portable.Correlation.AttemptID == "" {
+		t.Fatalf("portable Worker Session %q correlation = %#v, want explicit dispatch and attempt identities", portable.Identity.WorkerSessionID, portable.Correlation)
+	}
+}
+
 func readRemoteProviderFixture(t *testing.T, provider, caseName, fileName string) []byte {
 	t.Helper()
 	path := filepath.Join(testutil.MustRepoRoot(t), filepath.FromSlash(support.ProviderSessionFixturePath(provider, caseName, fileName)))
@@ -501,6 +740,82 @@ func containsRemoteArgSequence(args, want []string) bool {
 	}
 	return false
 }
+
+type remoteWorkerRecordingProbe struct {
+	delegate      recordings.WorkerRecordingWriter
+	reader        recordings.WorkerRecordingReader
+	failureWriter recordings.WorkerRecordingFailureWriter
+	root          string
+
+	mu sync.Mutex
+	id string
+}
+
+func newRemoteWorkerRecordingProbe(t *testing.T, root string) *remoteWorkerRecordingProbe {
+	t.Helper()
+	delegate, err := recordingswire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	if err != nil {
+		t.Fatalf("construct Worker recording file writer: %v", err)
+	}
+	reader, ok := delegate.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("Worker recording file writer does not expose a reader")
+	}
+	failureWriter, ok := delegate.(recordings.WorkerRecordingFailureWriter)
+	if !ok {
+		t.Fatal("Worker recording file writer does not expose failure persistence")
+	}
+	return &remoteWorkerRecordingProbe{
+		delegate: delegate, reader: reader, failureWriter: failureWriter, root: root,
+	}
+}
+
+func (probe *remoteWorkerRecordingProbe) PersistWorkerRecord(
+	ctx context.Context,
+	record recordings.WorkerRecordingRecord,
+) error {
+	if err := probe.delegate.PersistWorkerRecord(ctx, record); err != nil {
+		return err
+	}
+	probe.mu.Lock()
+	probe.id = record.RecordingID
+	probe.mu.Unlock()
+	return nil
+}
+
+func (probe *remoteWorkerRecordingProbe) PersistWorkerRecordingFailure(
+	ctx context.Context,
+	failure recordings.WorkerRecordingFailure,
+) error {
+	if err := probe.failureWriter.PersistWorkerRecordingFailure(ctx, failure); err != nil {
+		return err
+	}
+	probe.mu.Lock()
+	probe.id = failure.RecordingID
+	probe.mu.Unlock()
+	return nil
+}
+
+func (probe *remoteWorkerRecordingProbe) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	return probe.reader.LoadWorkerRecording(ctx, recordingID)
+}
+
+func (probe *remoteWorkerRecordingProbe) recordingID(t *testing.T) string {
+	t.Helper()
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if probe.id == "" {
+		t.Fatal("Worker recording probe observed no durable recording identity")
+	}
+	return probe.id
+}
+
+var _ recordings.WorkerRecordingWriter = (*remoteWorkerRecordingProbe)(nil)
+var _ recordings.WorkerRecordingReader = (*remoteWorkerRecordingProbe)(nil)
+var _ recordings.WorkerRecordingFailureWriter = (*remoteWorkerRecordingProbe)(nil)
 
 type remoteInvokeContinueRunner struct {
 	gate      <-chan struct{}
