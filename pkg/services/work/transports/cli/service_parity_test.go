@@ -240,12 +240,12 @@ func TestConstructedService_MoveHumanOutputPreservesMoveSummary(t *testing.T) {
 		case r.Method == http.MethodGet:
 			writeJSONResponse(t, w, factoryapi.Work{
 				WorkId: stringPtr("work-move-1"),
-				State:  &factoryapi.WorkState{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				State:  &factoryapi.WorkState{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
 			})
 		case r.Method == http.MethodPost:
 			writeJSONResponse(t, w, factoryapi.Work{
 				WorkId: stringPtr("work-move-1"),
-				State:  &factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				State:  &factoryapi.WorkState{Name: "processing", Type: factoryapi.WorkStateTypePROCESSING},
 			})
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
@@ -259,7 +259,7 @@ func TestConstructedService_MoveHumanOutputPreservesMoveSummary(t *testing.T) {
 		Context:   context.Background(),
 		Server:    strings.TrimSuffix(srv.URL, "/"),
 		WorkID:    "work-move-1",
-		StateName: "complete",
+		StateName: "init",
 		Output:    &out,
 		HTTP:      testHTTPProtocol(t),
 	})
@@ -269,8 +269,8 @@ func TestConstructedService_MoveHumanOutputPreservesMoveSummary(t *testing.T) {
 
 	want := "" +
 		"Work ID:\twork-move-1\n" +
-		"Previous state:\tinit\n" +
-		"New state:\tcomplete\n" +
+		"Previous state:\tfailed\n" +
+		"New state:\tinit\n" +
 		"Session ID:\t~default\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
@@ -290,7 +290,7 @@ func TestConstructedService_MoveJSONOutputEmitsStableEnvelope(t *testing.T) {
 		case r.Method == http.MethodPost:
 			writeJSONResponse(t, w, factoryapi.Work{
 				WorkId: stringPtr("work-move-1"),
-				State:  &factoryapi.WorkState{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				State:  &factoryapi.WorkState{Name: "processing", Type: factoryapi.WorkStateTypePROCESSING},
 			})
 		}
 	}))

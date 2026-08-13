@@ -129,7 +129,10 @@ func (service *service) Move(cfg MoveConfig) error {
 		return fmt.Errorf("move work failed (%d)", resp.StatusCode)
 	}
 
-	newState := stateNameFromWork(moved)
+	// The move response is a read-after-write projection and may already show
+	// scheduler progress. Report the successful operator-applied target rather
+	// than allowing that later state to replace the requested transition.
+	newState := stateName
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
