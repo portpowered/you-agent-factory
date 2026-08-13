@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 )
 
 const defaultMockWorkerAcceptedOutput = "mock worker accepted"
+const defaultMockWorkerAcceptedAgentOutput = defaultMockWorkerAcceptedOutput + "\nCOMPLETE"
 
 // MockWorkerCommandRunner is the root-contract test seam used to prove that
 // provider command adapters preserve Workers dispatch correlation. Full mock
@@ -15,6 +18,60 @@ const defaultMockWorkerAcceptedOutput = "mock worker accepted"
 type MockWorkerCommandRunner struct {
 	Config *MockWorkersConfig
 	Next   CommandRunner
+}
+
+// ContextualMockWorkerCommandRunner applies the request-scoped mock config
+// carried by Workers Execute without making a process command edge mutable.
+// With no config it preserves the wrapped command runner, including its
+// optional streaming capability.
+type ContextualMockWorkerCommandRunner struct {
+	Next CommandRunner
+}
+
+func NewContextualMockWorkerCommandRunner(next CommandRunner) CommandRunner {
+	return ContextualMockWorkerCommandRunner{Next: next}
+}
+
+func (runner ContextualMockWorkerCommandRunner) Run(
+	ctx context.Context,
+	request CommandRequest,
+) (CommandResult, error) {
+	config := MockWorkersConfigFromContext(ctx)
+	if config == nil {
+		return runner.runNext(ctx, request)
+	}
+	return (&MockWorkerCommandRunner{Config: config, Next: runner.Next}).Run(ctx, request)
+}
+
+func (runner ContextualMockWorkerCommandRunner) RunStreaming(
+	ctx context.Context,
+	request CommandRequest,
+	observer OutputChunkObserver,
+) (CommandResult, error) {
+	config := MockWorkersConfigFromContext(ctx)
+	if config == nil {
+		if streaming, ok := runner.Next.(interface {
+			RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+		}); ok {
+			return streaming.RunStreaming(ctx, request, observer)
+		}
+		result, err := runner.runNext(ctx, request)
+		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+		return result, err
+	}
+	result, err := (&MockWorkerCommandRunner{Config: config, Next: runner.Next}).Run(ctx, request)
+	publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+	return result, err
+}
+
+func (runner ContextualMockWorkerCommandRunner) runNext(
+	ctx context.Context,
+	request CommandRequest,
+) (CommandResult, error) {
+	if runner.Next == nil {
+		return CommandResult{}, errors.New("contextual mock worker next command runner is required")
+	}
+	return runner.Next.Run(ctx, request)
 }
 
 func (runner *MockWorkerCommandRunner) Run(
@@ -35,7 +92,7 @@ func (runner *MockWorkerCommandRunner) Run(
 		case MockWorkerRunTypeReject:
 			return mockWorkerRejectResult(request.Command, candidate.RejectConfig), nil
 		case MockWorkerRunTypeScript:
-			return CommandResult{Stderr: []byte("root mock worker does not execute scripts"), ExitCode: 1}, nil
+			return runner.runScript(ctx, request, candidate.ScriptConfig)
 		default:
 			return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(request.Command))}, nil
 		}
@@ -44,6 +101,54 @@ func (runner *MockWorkerCommandRunner) Run(
 		return runner.runNext(ctx, request)
 	}
 	return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(request.Command))}, nil
+}
+
+func (runner *MockWorkerCommandRunner) runScript(
+	ctx context.Context,
+	request CommandRequest,
+	config *MockWorkerScriptConfig,
+) (CommandResult, error) {
+	if config == nil {
+		return CommandResult{Stderr: []byte("mock scriptConfig is required"), ExitCode: 1}, nil
+	}
+	scriptContext := ctx
+	if config.Timeout != "" {
+		timeout, err := time.ParseDuration(config.Timeout)
+		if err != nil {
+			return CommandResult{
+				Stderr:   []byte(fmt.Sprintf("invalid mock script timeout %q: %v", config.Timeout, err)),
+				ExitCode: 1,
+			}, nil
+		}
+		if timeout > 0 {
+			var cancel context.CancelFunc
+			scriptContext, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+	}
+
+	scriptRequest := request
+	scriptRequest.Command = config.Command
+	scriptRequest.Args = append([]string(nil), config.Args...)
+	scriptRequest.Env = MergeCommandEnv(
+		request.Env,
+		CommandEnvEntriesFromMap(mockWorkerOriginalCommandEnv(request)),
+		CommandEnvEntriesFromMap(config.Env),
+	)
+	scriptRequest.Stdin = []byte(config.Stdin)
+	if config.WorkingDirectory != "" {
+		scriptRequest.WorkDir = config.WorkingDirectory
+	}
+	return runner.runNext(scriptContext, scriptRequest)
+}
+
+func mockWorkerOriginalCommandEnv(request CommandRequest) map[string]string {
+	args, _ := json.Marshal(request.Args)
+	return map[string]string{
+		"YOU_MOCK_WORKER_COMMAND":   request.Command,
+		"YOU_MOCK_WORKER_ARGS_JSON": string(args),
+		"YOU_MOCK_WORKER_TYPE":      request.WorkerType,
+	}
 }
 
 func (runner *MockWorkerCommandRunner) runNext(
@@ -59,13 +164,20 @@ func (runner *MockWorkerCommandRunner) runNext(
 func mockWorkerAcceptOutput(command string) string {
 	switch strings.TrimSpace(command) {
 	case "codex":
-		return marshalMockWorkerJSON(map[string]any{
-			"type": "item.completed",
-			"item": map[string]any{"id": "message-final", "type": "agent_message", "text": defaultMockWorkerAcceptedOutput},
-		}) + "\n"
+		return strings.Join([]string{
+			marshalMockWorkerJSON(map[string]any{"type": "turn.started"}),
+			marshalMockWorkerJSON(map[string]any{
+				"type": "item.completed",
+				"item": map[string]any{"id": "message-final", "type": "agent_message", "text": defaultMockWorkerAcceptedAgentOutput},
+			}),
+			marshalMockWorkerJSON(map[string]any{
+				"type":  "turn.completed",
+				"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+			}),
+		}, "\n") + "\n"
 	case "claude":
 		return marshalMockWorkerJSON(map[string]any{"type": "system", "subtype": "init", "session_id": "mock-claude-session"}) + "\n" +
-			marshalMockWorkerJSON(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": defaultMockWorkerAcceptedOutput, "session_id": "mock-claude-session"}) + "\n"
+			marshalMockWorkerJSON(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": defaultMockWorkerAcceptedAgentOutput, "session_id": "mock-claude-session"}) + "\n"
 	default:
 		return defaultMockWorkerAcceptedOutput
 	}
@@ -87,6 +199,7 @@ func mockWorkerRejectResult(command string, config *MockWorkerRejectConfig) Comm
 			"error": map[string]any{"message": "mock worker rejected the dispatch"},
 		}) + "\n")
 		result.Stderr = nil
+		result.ExitCode = 0
 	}
 	return result
 }

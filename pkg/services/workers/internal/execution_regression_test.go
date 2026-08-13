@@ -40,7 +40,6 @@ func agentInvocationRuntimeService(providersService providers.Service, publisher
 		platformfilesystem.Local{},
 	)
 	return &Service{
-		sessions:                inertCurrentRuntimeResolver{},
 		executorBuilder:         executorBuilder,
 		progressPublisher:       publisher,
 		clock:                   time.Now,
@@ -292,7 +291,6 @@ func (e recordingSensitiveExecutor) Execute(
 func newTestFullRuntimeService(t *testing.T, logger *zap.Logger) *Service {
 	t.Helper()
 	runtime, err := NewRuntime(
-		inertCurrentRuntimeResolver{},
 		testModelsService{},
 		testProvidersService{},
 		models.RuntimeScopeRef{},

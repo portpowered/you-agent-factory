@@ -10,7 +10,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -44,7 +43,7 @@ func (testProvidersService) Execute(context.Context, providers.ExecuteRequest) (
 func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	base := func(provider, script workers.CommandRunner, publisher workers.ProgressPublisher, allocator workers.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
 		_, err := New(
-			inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, provider, script, publisher, allocator,
+			testModelsService{}, testProvidersService{}, provider, script, publisher, allocator,
 			logger, false, "", "", "", nil, nil, now, os.Environ, os.Getwd, nil, nil, nil, nil,
 			testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 			testRetryRandom,
@@ -75,7 +74,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		})
 	}
 	_, err := New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
+		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
@@ -86,7 +85,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing worktree preparer error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
+		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, nil,
 		testRetryRandom,
@@ -97,7 +96,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing agent-run harness error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
+		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		nil,
@@ -108,7 +107,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing retry random source error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
+		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
@@ -119,7 +118,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing workstation filesystem error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
+		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
 		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
@@ -150,10 +149,7 @@ func TestNewInvocationRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 // TestNewRuntimeConstructionPreservesInjectedLoggerForWorkstationPool proves
 // the logger supplied at construction keeps reaching a freshly constructed
 // runtime's workstation pool. Every Factory Session build reaches its Workers
-// runtime through this same construction path (workers.SessionBuildFactory,
-// reached via the Workers wire construction boundary from
-// factory_runtime/internal/runtime_build.go), so this generic construction
-// proof also covers session-build construction.
+// runtime through the same construction path used by Factory Runtime.
 func TestNewRuntimeConstructionPreservesInjectedLoggerForWorkstationPool(t *testing.T) {
 	t.Parallel()
 
@@ -176,12 +172,6 @@ func TestNewRuntimeConstructionPreservesInjectedLoggerForWorkstationPool(t *test
 			logs.All(),
 		)
 	}
-}
-
-type inertCurrentRuntimeResolver struct{}
-
-func (inertCurrentRuntimeResolver) CurrentRuntime() *factorysessions.LiveRuntime {
-	return nil
 }
 
 type testModelsService struct {
@@ -362,7 +352,6 @@ func newTestServiceWithDependencies(
 ) *Service {
 	t.Helper()
 	service, err := New(
-		inertCurrentRuntimeResolver{},
 		testModelsService{},
 		testProvidersService{},
 		providerRunner,

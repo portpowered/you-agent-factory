@@ -425,10 +425,6 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 	}
 }
 
-func provideWorkerExecutionFactory() factorysessionwire.WorkerExecutionFactory {
-	return factorysessionwire.NewWorkerExecutionRuntime
-}
-
 func provideFactoryRuntimeClockResolver() factoryruntime.ClockResolver {
 	return func(clock factoryruntime.Clock) factoryruntime.Clock {
 		if clock != nil {

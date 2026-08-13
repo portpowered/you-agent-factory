@@ -3,13 +3,9 @@ package runtimeopening
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"reflect"
 	"slices"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -23,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -348,10 +345,7 @@ func assertWebhooksPortsRetained(t *testing.T, factory *Factory, dependencies ru
 func assertWorkersPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Workers
-	assertRuntimeOpeningDependencyIdentity(t, "Workers execution", factory.workerExecutionFactory, group.ExecutionFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Workers runtime", factory.workersRuntimeFactory, group.RuntimeFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Workers hooks", factory.workersLocalRuntimeHooksFactory, group.LocalRuntimeHooksFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Workers command adapter", factory.adaptWorkerCommandRunner, group.AdaptCommandRunner)
+	assertRuntimeOpeningDependencyIdentity(t, "Workers service", factory.workerService, group.Service)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers provider adapter", factory.providerFromCommandRunnerFactory, group.ProviderFromCommandRunnerFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers provider command runner", factory.providerCommandRunner, group.ProviderCommandRunner)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers script command runner", factory.scriptCommandRunner, group.ScriptCommandRunner)
@@ -427,10 +421,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
 		{"Recordings root", func(d *runtimeOpeningFixture) { d.Recordings.Root = nil }},
 		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
-		{"Workers execution factory", func(d *runtimeOpeningFixture) { d.Workers.ExecutionFactory = nil }},
-		{"Workers runtime factory", func(d *runtimeOpeningFixture) { d.Workers.RuntimeFactory = nil }},
-		{"Workers local runtime hooks factory", func(d *runtimeOpeningFixture) { d.Workers.LocalRuntimeHooksFactory = nil }},
-		{"Workers command runner adapter", func(d *runtimeOpeningFixture) { d.Workers.AdaptCommandRunner = nil }},
+		{"Workers service", func(d *runtimeOpeningFixture) { d.Workers.Service = nil }},
 		{"Workers provider-from-command-runner factory", func(d *runtimeOpeningFixture) { d.Workers.ProviderFromCommandRunnerFactory = nil }},
 		{"Workers provider command runner", func(d *runtimeOpeningFixture) { d.Workers.ProviderCommandRunner = nil }},
 		{"Workers script command runner", func(d *runtimeOpeningFixture) { d.Workers.ScriptCommandRunner = nil }},
@@ -489,10 +480,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		Recordings: &RecordingsPorts{Root: &recordingsRootConstructionStub{}},
 		Webhooks:   &WebhooksPorts{Service: webhooksConstructionStub{}},
 		Workers: &WorkersPorts{
-			ExecutionFactory:                 inertRuntimeOpeningFunction[WorkerExecutionFactory](calls),
-			RuntimeFactory:                   inertRuntimeOpeningFunction[WorkersRuntimeFactory](calls),
-			LocalRuntimeHooksFactory:         inertRuntimeOpeningFunction[WorkersLocalRuntimeHooksFactory](calls),
-			AdaptCommandRunner:               inertRuntimeOpeningFunction[WorkerCommandRunnerAdapter](calls),
+			Service:                          &workersConstructionStub{},
 			ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
 			ProviderCommandRunner:            workersRootBindingProbeRunner{tag: "provider"},
 			ScriptCommandRunner:              workersRootBindingProbeRunner{tag: "script"},
@@ -545,6 +533,13 @@ func (*recordingsRootConstructionStub) Projection() recordings.ProjectionService
 }
 
 type webhooksConstructionStub struct{ webhooks.Service }
+type workersConstructionStub struct{ workers.Service }
+
+type workersRootBindingProbeRunner struct{ tag string }
+
+func (workersRootBindingProbeRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
 
 type constructionMaterializer struct{ calls *int }
 
@@ -596,124 +591,3 @@ func (stub *recordingsRootConstructionStub) LoadReplayInput(
 }
 
 var _ recordings.Root = (*recordingsRootConstructionStub)(nil)
-
-// TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot proves the
-// operation path consumes the process root's private runtime capability
-// directly. The compatibility ForRuntime method deliberately returns an
-// error, so any accidental child-service construction fails this test.
-func TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot(t *testing.T) {
-	t.Parallel()
-
-	root := &concurrentFactorySessionsRoot{}
-	modelsRoot := &concurrentModelsRoot{}
-	factory := newOpeningCoordinatorFactory(t, modelsRoot)
-	factory.factorySessionsService = root
-	factory.factorySessionsRuntimeAssembly = root
-
-	wantFailure := errors.New("worker opening failed")
-	var runtimeCalls, runtimeMismatches int
-	failure := &openingCoordinatorFailure{
-		err:             wantFailure,
-		wantRuntime:     root,
-		runtimeCalls:    &runtimeCalls,
-		runtimeMismatch: &runtimeMismatches,
-		mu:              &sync.Mutex{},
-	}
-	factory.workerExecutionFactory = failure.openWorkerExecution
-
-	requests := []*factorysessions.RuntimeOpeningRequest{
-		{
-			FactoryDefinition:   factoryDefinitionRequest(t.TempDir()),
-			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "scope-first"},
-			ModelCacheDirectory: "/cache/first",
-		},
-		{
-			FactoryDefinition:   factoryDefinitionRequest(t.TempDir()),
-			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "scope-second"},
-			ModelCacheDirectory: "/cache/second",
-		},
-	}
-	results := make(chan error, len(requests))
-	var wait sync.WaitGroup
-	for _, request := range requests {
-		request := request
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			_, err := factory.openRuntime(context.Background(), request, zap.NewNop())
-			results <- err
-		}()
-	}
-	wait.Wait()
-	close(results)
-
-	for err := range results {
-		if !errors.Is(err, wantFailure) {
-			t.Fatalf("concurrent openRuntime() error = %v, want worker failure", err)
-		}
-	}
-	if runtimeCalls != len(requests) {
-		t.Fatalf("worker runtime-root calls = %d, want %d", runtimeCalls, len(requests))
-	}
-	if runtimeMismatches != 0 {
-		t.Fatalf("worker runtime-root mismatches = %d, want none", runtimeMismatches)
-	}
-	if got := root.forRuntimeCalls.Load(); got != 0 {
-		t.Fatalf("compatibility ForRuntime calls = %d, want none", got)
-	}
-	if got := modelsRoot.opens.Load(); got != int32(len(requests)) {
-		t.Fatalf("Models root open calls = %d, want %d", got, len(requests))
-	}
-	if got := modelsRoot.closes.Load(); got != int32(len(requests)) {
-		t.Fatalf("Models root close calls = %d, want one private close per failed session", got)
-	}
-}
-
-func factoryDefinitionRequest(directory string) factorydefinitions.RuntimeOpeningRequest {
-	return factorydefinitions.RuntimeOpeningRequest{Directory: directory}
-}
-
-type concurrentFactorySessionsRoot struct {
-	factorysessions.Service
-	roles.RuntimeAssembly
-	forRuntimeCalls atomic.Int32
-}
-
-func (root *concurrentFactorySessionsRoot) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
-	root.forRuntimeCalls.Add(1)
-	return nil, errors.New("ForRuntime must not be called")
-}
-
-func (root *concurrentFactorySessionsRoot) CurrentRuntime() *factorysessions.LiveRuntime {
-	return nil
-}
-
-func (root *concurrentFactorySessionsRoot) InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher {
-	return nil
-}
-
-type concurrentModelsRoot struct {
-	models.Service
-	opens  atomic.Int32
-	closes atomic.Int32
-}
-
-func (root *concurrentModelsRoot) OpenRuntimeScope(
-	context.Context,
-	models.OpenRuntimeScopeRequest,
-) (models.OpenRuntimeScopeResult, error) {
-	sequence := root.opens.Add(1)
-	scope, err := (models.RuntimeScopeRef{}).Parse(fmt.Sprintf("factory-session:concurrent:%d", sequence))
-	if err != nil {
-		return models.OpenRuntimeScopeResult{}, err
-	}
-	return models.OpenRuntimeScopeResult{Scope: scope}, nil
-}
-
-func (root *concurrentModelsRoot) CloseRuntimeScope(
-	context.Context,
-	models.CloseRuntimeScopeRequest,
-) (models.CloseRuntimeScopeResult, error) {
-	root.closes.Add(1)
-	return models.CloseRuntimeScopeResult{Closed: true}, nil
-}

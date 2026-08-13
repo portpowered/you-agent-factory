@@ -170,6 +170,12 @@ func (s *Service) runRunner(
 			runErr = panicFailure(recovered, debug.Stack())
 		}
 	}()
+	if request.Input.MockWorkers != nil {
+		ctx = workers.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
+	}
+	if request.Input.ProgressPublisher != nil {
+		ctx = workers.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
+	}
 	return s.runners.Execute(ctx, runners.ExecuteRequest{
 		Identity:             identity,
 		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,

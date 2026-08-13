@@ -1,5 +1,13 @@
 package workers
 
+// PromptRenderer renders an authored workstation prompt from explicit input
+// tokens and workflow context. It is an optional Workers capability used by
+// Factory Runtime's detached execution path; the context is request-scoped
+// and never recovered from a Factory Session.
+type PromptRenderer interface {
+	RenderPrompt(string, []Token, *Context) (string, error)
+}
+
 type PromptTemplateVariableCategory string
 
 const (

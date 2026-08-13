@@ -17,8 +17,10 @@ func stubWorkerSessionsFactory(workers.WorkstationPoolBoundary, platformclock.So
 	return nil, nil
 }
 
+type stubWorkersService struct{ workers.Service }
+
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -29,7 +31,7 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil)
+	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{})
 	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
 		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
 	}
@@ -38,14 +40,29 @@ func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 	}
 }
 
+func TestNewAssemblyRequiresWorkersService(t *testing.T) {
+	runtimeFactory := &RuntimeFactory{}
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil)
+	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
+		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
+	}
+	if assembly != nil {
+		t.Fatalf("NewAssembly(nil Workers service) = %#v, want nil assembly", assembly)
+	}
+}
+
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory)
+	workerService := stubWorkersService{}
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService)
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}
 	if assembly == nil || assembly.runtimeFactory != runtimeFactory {
 		t.Fatalf("NewAssembly() = %#v, want supplied Runtime Factory", assembly)
+	}
+	if assembly.workerService != workerService {
+		t.Fatalf("NewAssembly() worker service = %#v, want supplied service", assembly.workerService)
 	}
 }
 

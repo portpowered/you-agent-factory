@@ -136,6 +136,7 @@ func (f *RuntimeFactory) Build(
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
+	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	if f == nil || f.newID == nil {
 		return nil, fmt.Errorf("Factory Runtime ID generator is required")
@@ -259,6 +260,10 @@ func (f *RuntimeFactory) Build(
 			return nil, err
 		}
 	}
+	var mockWorkersConfig *workers.MockWorkersConfig
+	if len(mockWorkersConfigs) > 0 {
+		mockWorkersConfig = mockWorkersConfigs[0]
+	}
 
 	bundle, err := assembleRuntimeBundle(
 		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
@@ -270,6 +275,7 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
 		workerService,
+		mockWorkersConfig,
 		providerInvocation,
 		workerSessionsFactory,
 		f.workerPoolBoundaryFactory,
@@ -325,6 +331,7 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
+	mockWorkersConfig *workers.MockWorkersConfig,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
@@ -340,6 +347,9 @@ func assembleRuntimeBundle(
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) (*factoryhost.Bundle, error) {
+	if workerExecutors == nil {
+		workerExecutors = make(map[string]workers.WorkerExecutor)
+	}
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
@@ -414,6 +424,11 @@ func assembleRuntimeBundle(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetMockWorkersConfig(*workers.MockWorkersConfig)
+	}); ok {
+		configurable.SetMockWorkersConfig(mockWorkersConfig)
 	}
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err

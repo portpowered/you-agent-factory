@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // modelsRuntimeBind carries the process-scoped Models root and the opaque
@@ -73,53 +72,6 @@ func (cleanup *runtimeOpeningCleanup) Close() error {
 
 func (cleanup *runtimeOpeningCleanup) Unwind(cause error) error {
 	return errors.Join(cause, cleanup.Close())
-}
-
-// sessionBuildRuntimeSink accumulates every independently constructed
-// session-build Workers runtime for one Factory Session, so they close
-// together at session shutdown even though each is built at its own later
-// time (for example a named-factory activation, long after the Factory
-// Session's own opening returned). Add and Close are safe to call
-// concurrently: a later Factory Session build can race session shutdown.
-// Once closed, Add reports false and registers nothing -- the caller then
-// owns closing the runtime it just built instead of leaking it.
-type sessionBuildRuntimeSink struct {
-	mu      sync.Mutex
-	closed  bool
-	runtime []workers.RuntimeService
-}
-
-func (sink *sessionBuildRuntimeSink) Add(runtime workers.RuntimeService) bool {
-	if sink == nil || runtime == nil {
-		return true
-	}
-	sink.mu.Lock()
-	defer sink.mu.Unlock()
-	if sink.closed {
-		return false
-	}
-	sink.runtime = append(sink.runtime, runtime)
-	return true
-}
-
-func (sink *sessionBuildRuntimeSink) Close(ctx context.Context) error {
-	if sink == nil {
-		return nil
-	}
-	sink.mu.Lock()
-	if sink.closed {
-		sink.mu.Unlock()
-		return nil
-	}
-	sink.closed = true
-	runtimes := append([]workers.RuntimeService(nil), sink.runtime...)
-	sink.runtime = nil
-	sink.mu.Unlock()
-	var result error
-	for index := len(runtimes) - 1; index >= 0; index-- {
-		result = errors.Join(result, runtimes[index].Close(ctx))
-	}
-	return result
 }
 
 func bindModelsRuntimeScope(

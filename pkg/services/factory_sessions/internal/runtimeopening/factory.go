@@ -143,10 +143,9 @@ type RecordingsPorts struct {
 
 // WorkersPorts contains Workers-owned opening collaborators.
 type WorkersPorts struct {
-	ExecutionFactory                 WorkerExecutionFactory
-	RuntimeFactory                   WorkersRuntimeFactory
-	LocalRuntimeHooksFactory         WorkersLocalRuntimeHooksFactory
-	AdaptCommandRunner               WorkerCommandRunnerAdapter
+	// Service is the one process-scoped Workers root. Factory Session opening
+	// consumes it as a capability and never constructs a replacement runtime.
+	Service                          workers.Service
 	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 	ProviderCommandRunner            ProviderCommandRunner
 	ScriptCommandRunner              ScriptCommandRunner
@@ -176,7 +175,7 @@ type OperatorSettingsPorts struct {
 // application transport binding is composed by the canonical Wire adapter.
 type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
-	workerExecutionFactory           WorkerExecutionFactory
+	workerService                    workers.Service
 	modelService                     models.Service
 	automationService                automations.Service
 	factorySessionsService           factorysessions.Service
@@ -184,11 +183,9 @@ type Factory struct {
 	recordingsRoot                   recordings.Root
 	replayInputs                     recordings.ReplayInputLoader
 	webhooksService                  webhooks.Service
-	workersRuntimeFactory            WorkersRuntimeFactory
 	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
 	providerInvocationFactory        factoryruntime.ProviderInvocationExecutorFactory
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
 	factoryDefinitions               factorydefinitions.Service
 	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
@@ -208,7 +205,6 @@ type Factory struct {
 	resolveClock                     factoryruntime.ClockResolver
 	newSessionLogger                 factoryruntime.SessionLoggerFactory
 	baseLogger                       *zap.Logger
-	adaptWorkerCommandRunner         WorkerCommandRunnerAdapter
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 	processRuntimeFactory            roles.ProcessRuntimeFactory
 	ensureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
@@ -263,7 +259,7 @@ func NewFactory(
 
 	factory := &Factory{
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
-		workerExecutionFactory:           workersPorts.ExecutionFactory,
+		workerService:                    workersPorts.Service,
 		modelService:                     modelsPorts.Service,
 		automationService:                automationsPorts.Service,
 		factorySessionsService:           factorySessions.Service,
@@ -272,11 +268,9 @@ func NewFactory(
 		recordingsRoot:                   recordingsPorts.Root,
 		replayInputs:                     recordingsPorts.Root,
 		webhooksService:                  webhooksPorts.Service,
-		workersRuntimeFactory:            workersPorts.RuntimeFactory,
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
-		workersLocalRuntimeHooksFactory:  workersPorts.LocalRuntimeHooksFactory,
 		factoryDefinitions:               factoryDefinitions.Service,
 		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
@@ -296,7 +290,6 @@ func NewFactory(
 		resolveClock:                     factoryRuntime.ResolveClock,
 		newSessionLogger:                 factoryRuntime.NewSessionLogger,
 		baseLogger:                       factoryRuntime.Logger,
-		adaptWorkerCommandRunner:         workersPorts.AdaptCommandRunner,
 		providerFromCommandRunnerFactory: workersPorts.ProviderFromCommandRunnerFactory,
 		processRuntimeFactory:            factorySessions.ProcessRuntimeFactory,
 		ensureOperatorBackendScope:       operatorSettings.EnsureBackendScope,
@@ -459,11 +452,10 @@ func validateWorkers(group *WorkersPorts) error {
 	if err := requireRuntimeOpeningPorts("Workers", group); err != nil {
 		return err
 	}
+	if missingRuntimeOpeningDependency(group.Service) {
+		return fmt.Errorf("Factory Sessions runtime-opening Workers service is required")
+	}
 	return validateRuntimeOpeningRequirements("Workers",
-		runtimeOpeningRequirement{"execution factory", group.ExecutionFactory},
-		runtimeOpeningRequirement{"runtime factory", group.RuntimeFactory},
-		runtimeOpeningRequirement{"local runtime hooks factory", group.LocalRuntimeHooksFactory},
-		runtimeOpeningRequirement{"command runner adapter", group.AdaptCommandRunner},
 		runtimeOpeningRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
 		runtimeOpeningRequirement{"provider command runner", group.ProviderCommandRunner},
 		runtimeOpeningRequirement{"script command runner", group.ScriptCommandRunner},
@@ -565,17 +557,15 @@ func (f *Factory) openRuntimeWithOptions(
 		f.submissionRecorder,
 		f.dispatchRecorder,
 		f.durableExecutionFactory,
-		f.workerExecutionFactory,
+		f.workerService,
 		f.modelService,
 		f.automationService,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsRoot,
-		f.workersRuntimeFactory,
 		f.workersRuntimeExecutorsFactory,
 		f.providerInvocationFactory,
 		f.workersMockCommandRunnerFactory,
-		f.workersLocalRuntimeHooksFactory,
 		f.factoryDefinitions,
 		f.definitionRuntimeRouter,
 		f.factoryScaffoldInitializer,
@@ -595,7 +585,6 @@ func (f *Factory) openRuntimeWithOptions(
 		f.webhooksService,
 		f.resolveClock,
 		f.newSessionLogger,
-		f.adaptWorkerCommandRunner,
 		f.providerFromCommandRunnerFactory,
 		f.processRuntimeFactory,
 		f.ensureOperatorBackendScope,

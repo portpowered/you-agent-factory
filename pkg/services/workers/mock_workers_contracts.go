@@ -70,6 +70,41 @@ func NewEmptyMockWorkersConfig() *MockWorkersConfig {
 	return &MockWorkersConfig{MockWorkers: []MockWorkerConfig{}}
 }
 
+// Clone returns a detached copy suitable for carrying one mock-worker
+// selection into a request-scoped execution. The Workers root never retains a
+// caller-owned config or its nested mutable values.
+func (config *MockWorkersConfig) Clone() *MockWorkersConfig {
+	if config == nil {
+		return nil
+	}
+	clone := &MockWorkersConfig{
+		UnmatchedDispatchPolicy: config.UnmatchedDispatchPolicy,
+		MockWorkers:             make([]MockWorkerConfig, len(config.MockWorkers)),
+	}
+	for index, worker := range config.MockWorkers {
+		clone.MockWorkers[index] = worker
+		clone.MockWorkers[index].WorkInputs = append(
+			[]MockWorkInputSelector(nil),
+			worker.WorkInputs...,
+		)
+		if worker.ScriptConfig != nil {
+			script := *worker.ScriptConfig
+			script.Args = append([]string(nil), worker.ScriptConfig.Args...)
+			script.Env = cloneStringMap(worker.ScriptConfig.Env)
+			clone.MockWorkers[index].ScriptConfig = &script
+		}
+		if worker.RejectConfig != nil {
+			reject := *worker.RejectConfig
+			if worker.RejectConfig.ExitCode != nil {
+				exitCode := *worker.RejectConfig.ExitCode
+				reject.ExitCode = &exitCode
+			}
+			clone.MockWorkers[index].RejectConfig = &reject
+		}
+	}
+	return clone
+}
+
 type MockWorkersConfigFileSystem interface{ ReadFile(string) ([]byte, error) }
 type MockWorkersConfigLoader func(string) (*MockWorkersConfig, error)
 

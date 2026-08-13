@@ -21,6 +21,7 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 func provideWorkerRecordingReader(
@@ -107,5 +108,10 @@ func provideWorkerSessionsFactoryWithRecorder(
 // in the canonical composition root. Factory Runtime consumes only the
 // factoryruntime composition contract.
 func provideWorkstationPoolBoundaryFactory() factoryruntime.WorkstationPoolBoundaryFactory {
-	return workers.NewWorkstationPoolBoundary
+	return func(config workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary {
+		config.ServiceFactory = func() workers.WorkstationExecutionService {
+			return workerswire.NewWorkstationPool(logging.NoopLogger{})
+		}
+		return workers.NewWorkstationPoolBoundary(config)
+	}
 }

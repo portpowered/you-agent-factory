@@ -97,6 +97,7 @@ func NewService(
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
+		scriptDependencies.FactoryDocs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)

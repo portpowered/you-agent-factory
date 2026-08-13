@@ -4,13 +4,9 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -429,90 +425,6 @@ func TestRuntimeOpeningCleanupPreservesPrimaryErrorAndAggregatesCleanupFailures(
 	}
 }
 
-func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T) {
-	t.Parallel()
-
-	var events []string
-	modelRoot := &recordingModelsService{events: &events}
-	laterErr := errors.New("worker runtime opening failed")
-	failure := &openingCoordinatorFailure{events: &events, err: laterErr}
-	factory := newOpeningCoordinatorFactory(t, modelRoot)
-	factory.workerExecutionFactory = failure.openWorkerExecution
-	_, err := factory.openRuntime(
-		context.Background(),
-		&factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition:   factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
-			ModelCacheDirectory: "/cache/models",
-		},
-		zap.NewNop(),
-	)
-	if !errors.Is(err, laterErr) {
-		t.Fatalf("openRuntime() error = %v, want later-step failure", err)
-	}
-	if !slices.Equal(events, []string{"models-open", "later-step-failed", "models-close"}) {
-		t.Fatalf("opening events = %v, want scope cleanup after later-step failure", events)
-	}
-	if len(modelRoot.closeRequests) != 1 {
-		t.Fatalf("CloseRuntimeScope requests = %d, want exactly 1", len(modelRoot.closeRequests))
-	}
-	if len(modelRoot.openRequests) != 1 || modelRoot.openRequests[0].Config.CacheDirectory != "/cache/models" {
-		t.Fatalf(
-			"OpenRuntimeScope requests = %#v, want the Factory Sessions opening request's model cache directory",
-			modelRoot.openRequests,
-		)
-	}
-}
-
-// TestBTRCP0RuntimeOpeningPartialFailureCharacterization freezes the late
-// Automations acquisition failure boundary: already-acquired worker and
-// Models resources unwind in reverse order, cleanup errors remain joined with
-// the initiating error, and no later runtime assembly effect is attempted.
-func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
-	t.Parallel()
-
-	var events []string
-	modelRoot := &recordingModelsService{events: &events}
-	workerCloseErr := errors.New("worker runtime cleanup failed")
-	worker := &openingCoordinatorWorker{events: &events, closeErr: workerCloseErr}
-	assembler := &openingCoordinatorRuntimeAssembler{events: &events}
-	factory := newOpeningCoordinatorFactory(t, modelRoot)
-	factory.workerExecutionFactory = worker.openWorkerExecution
-	factory.factoryRuntimeAssembler = assembler
-	_, err := factory.openRuntime(
-		context.Background(),
-		&factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition:   factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
-			ModelCacheDirectory: "/cache/models",
-		},
-		zap.NewNop(),
-	)
-	if err == nil || !strings.Contains(err.Error(), "Automations service is required") {
-		t.Fatalf("openRuntime() error = %v, want original Automations opening failure", err)
-	}
-	if !errors.Is(err, workerCloseErr) {
-		t.Fatalf("openRuntime() error = %v, want joined worker cleanup failure", err)
-	}
-	if !slices.Equal(events, []string{
-		"models-open",
-		"worker-open",
-		"worker-close",
-		"models-close",
-	}) {
-		t.Fatalf("opening events = %v, want reverse cleanup of acquired resources only", events)
-	}
-	if slices.Contains(events, "runtime-assembly") {
-		t.Fatal("Factory Runtime assembly ran after the Automations opening failure")
-	}
-	if worker.closed != 1 {
-		t.Fatalf("worker Close calls = %d, want exactly 1", worker.closed)
-	}
-	if len(modelRoot.closeRequests) != 1 {
-		t.Fatalf("CloseRuntimeScope requests = %d, want exactly 1", len(modelRoot.closeRequests))
-	}
-}
-
 func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Factory {
 	t.Helper()
 	sessionsRoot := openingCoordinatorSessionsRoot{
@@ -520,6 +432,7 @@ func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Fa
 	}
 	return &Factory{
 		durableExecutionFactory:        openingCoordinatorDurableExecution,
+		workerService:                  openingCoordinatorWorkersService{},
 		modelService:                   modelService,
 		factorySessionsService:         sessionsRoot,
 		factorySessionsRuntimeAssembly: sessionsRoot,
@@ -532,163 +445,10 @@ func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Fa
 		loadFactory:                    openingCoordinatorLoadFactory,
 		resolveClock:                   openingCoordinatorResolveClock,
 		newSessionLogger:               openingCoordinatorSessionLogger,
-		adaptWorkerCommandRunner:       openingCoordinatorAdaptCommandRunner,
 		generateRuntimeInstanceID:      func() string { return "runtime-opening-cleanup-test" },
 		resolveHome:                    func() (string, error) { return t.TempDir(), nil },
 		providerIdentities:             func(identity string) (string, error) { return identity, nil },
 	}
-}
-
-type openingCoordinatorFailure struct {
-	events          *[]string
-	err             error
-	wantRuntime     roles.CurrentRuntimeResolver
-	runtimeCalls    *int
-	runtimeMismatch *int
-	mu              *sync.Mutex
-}
-
-type openingCoordinatorWorker struct {
-	events   *[]string
-	closeErr error
-	closed   int
-}
-
-type openingCoordinatorRuntimeAssembler struct {
-	events *[]string
-}
-
-func (assembler *openingCoordinatorRuntimeAssembler) Assemble(
-	context.Context,
-	string,
-	string,
-	bool,
-	string,
-	string,
-	string,
-	factorydefinitions.WorkstationLoader,
-	factoryruntime.LoadedFactoryLoader,
-	workers.Provider,
-	workers.CommandRunner,
-	workers.CommandRunner,
-	*workers.MockWorkersConfig,
-	factorydefinitions.RuntimeMode,
-	factoryruntime.Scheduler,
-	map[string]workers.WorkerExecutor,
-	func(string, workers.WorkerExecutor) workers.WorkerExecutor,
-	bool,
-	recordings.SubmissionRecorder,
-	recordings.DispatchRecorder,
-	string,
-	factoryruntime.RuntimeLogStorageConfig,
-	factoryruntime.RuntimeFileLoggingPolicy,
-	factoryruntime.RuntimeMetricsPolicy,
-	string,
-	factoryruntime.RuntimeMetricsStorageConfig,
-	time.Duration,
-	string,
-	string,
-	bool,
-	bool,
-	*bool,
-	factoryruntime.Clock,
-	*zap.Logger,
-	workers.RuntimeService,
-	workers.SessionBuildFactory,
-	factoryruntime.ProviderInvocationExecutorFactory,
-	factoryruntime.WorkersRuntimeExecutorsFactory,
-	factoryruntime.WorkersMockCommandRunnerFactory,
-	func(string) workers.ProgressPublisher,
-	func(string) func(string),
-	factoryruntime.PetriMutationRecorder,
-	factoryruntime.WorldStateProjector,
-	recordings.RuntimeOpening,
-	factorydefinitions.InitialFactorySnapshotFactory,
-	string,
-	string,
-	string,
-	factorydefinitions.MutableLoadedFactorySource,
-	string,
-	*factorydefinitions.ReplayArtifact,
-	automations.Service,
-	bool,
-) (
-	factoryruntime.ReplacementBuilder,
-	factoryruntime.HostedInstance,
-	factoryruntime.SessionBuildSpec,
-	factoryruntime.Lifecycle,
-	factoryruntime.Sidecars,
-	error,
-) {
-	*assembler.events = append(*assembler.events, "runtime-assembly")
-	return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, nil
-}
-
-func (worker *openingCoordinatorWorker) openWorkerExecution(
-	factoryruntime.RuntimeOpeningRequest,
-	workers.RuntimeOpeningRequest,
-	factoryruntime.Clock,
-	*zap.Logger,
-	workers.CommandRunner,
-	workers.CommandRunner,
-	workers.ProgressPublisher,
-	workers.PTYAllocator,
-	workers.Provider,
-	roles.CurrentRuntimeResolver,
-	models.Service,
-	models.RuntimeScopeRef,
-	work.Service,
-	WorkersRuntimeFactory,
-	[]operatorconfig.ACPIntegration,
-	func(workers.RuntimeService) bool,
-) (workers.RuntimeService, workers.SessionBuildFactory, error) {
-	*worker.events = append(*worker.events, "worker-open")
-	return openingCoordinatorWorkerRuntime{worker: worker}, nil, nil
-}
-
-type openingCoordinatorWorkerRuntime struct {
-	workers.Service
-	worker *openingCoordinatorWorker
-}
-
-func (runtime openingCoordinatorWorkerRuntime) Close(context.Context) error {
-	runtime.worker.closed++
-	*runtime.worker.events = append(*runtime.worker.events, "worker-close")
-	return runtime.worker.closeErr
-}
-
-func (failure *openingCoordinatorFailure) openWorkerExecution(
-	_ factoryruntime.RuntimeOpeningRequest,
-	_ workers.RuntimeOpeningRequest,
-	_ factoryruntime.Clock,
-	_ *zap.Logger,
-	_ workers.CommandRunner,
-	_ workers.CommandRunner,
-	_ workers.ProgressPublisher,
-	_ workers.PTYAllocator,
-	_ workers.Provider,
-	runtime roles.CurrentRuntimeResolver,
-	_ models.Service,
-	_ models.RuntimeScopeRef,
-	_ work.Service,
-	_ WorkersRuntimeFactory,
-	_ []operatorconfig.ACPIntegration,
-	_ func(workers.RuntimeService) bool,
-) (workers.RuntimeService, workers.SessionBuildFactory, error) {
-	if failure.events != nil {
-		*failure.events = append(*failure.events, "later-step-failed")
-	}
-	if failure.mu != nil {
-		failure.mu.Lock()
-		if failure.runtimeCalls != nil {
-			(*failure.runtimeCalls)++
-		}
-		if failure.runtimeMismatch != nil && runtime != failure.wantRuntime {
-			(*failure.runtimeMismatch)++
-		}
-		failure.mu.Unlock()
-	}
-	return nil, nil, failure.err
 }
 
 func openingCoordinatorDurableExecution(
@@ -704,7 +464,6 @@ func openingCoordinatorDurableExecution(
 ) (DurableExecution, error) {
 	return DurableExecution{}, nil
 }
-
 
 func openingCoordinatorInitializeScaffold(string) error {
 	return nil
@@ -736,9 +495,7 @@ func openingCoordinatorSessionLogger(*zap.Logger, string, string, string) *zap.L
 	return zap.NewNop()
 }
 
-func openingCoordinatorAdaptCommandRunner(platformprocess.CommandRunner) workers.CommandRunner {
-	return nil
-}
+type openingCoordinatorWorkersService struct{ workers.Service }
 
 type openingCoordinatorSessionsRoot struct {
 	factorysessions.Service

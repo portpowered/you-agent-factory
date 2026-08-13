@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
@@ -143,10 +145,7 @@ func failureFromError(err error) *workers.ExecutionFailure {
 			failureType = metadata.Type
 			family = metadata.Family
 		}
-		message := strings.TrimSpace(providerErr.Message)
-		if message == "" {
-			message = strings.TrimSpace(providerErr.Error())
-		}
+		message := normalizedProviderFailureMessage(providerErr)
 		if message == "" {
 			message = "worker execution failed"
 		}
@@ -174,6 +173,24 @@ func failureFromError(err error) *workers.ExecutionFailure {
 			Message: message,
 		},
 	}
+}
+
+func normalizedProviderFailureMessage(providerErr *workers.ProviderError) string {
+	if providerErr == nil {
+		return ""
+	}
+	message := strings.TrimSpace(providerErr.Message)
+	if message == "" {
+		return strings.TrimSpace(providerErr.Error())
+	}
+	// Provider-owned normalized failures carry the Providers sentinel through
+	// Cause. Preserve the public provider-error prefix for those failures, but
+	// leave Workers-owned typed failures (panic, cleanup, and contract errors)
+	// at their established customer-facing message.
+	if errors.Is(providerErr.Cause, providers.ErrExecuteFailed) {
+		return fmt.Sprintf("%s: %s", providerErr.Error(), message)
+	}
+	return message
 }
 
 func continuationFromSession(

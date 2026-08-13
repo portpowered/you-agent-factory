@@ -23,6 +23,7 @@ type Service struct {
 	worktree        workers.FactoryWorktreePreparer
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error
 	temporaryFiles  workers.TemporaryFileSystem
+	factoryDocs     workers.FactoryDocsLoader
 }
 
 // New constructs an inert Execute capability. Construction performs no runner
@@ -36,12 +37,17 @@ func New(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
+	factoryDocs ...workers.FactoryDocsLoader,
 ) (*Service, error) {
 	if runnerService == nil {
 		return nil, errMisconfigured("runners service is required")
 	}
 	if clock == nil {
 		return nil, errMisconfigured("clock is required")
+	}
+	var docsLoader workers.FactoryDocsLoader
+	if len(factoryDocs) > 0 {
+		docsLoader = factoryDocs[0]
 	}
 	return &Service{
 		runners:         runnerService,
@@ -52,5 +58,6 @@ func New(
 		worktree:        worktree,
 		worktreeRelease: worktreeRelease,
 		temporaryFiles:  temporaryFiles,
+		factoryDocs:     docsLoader,
 	}, nil
 }

@@ -485,6 +485,9 @@ type OutputPolicy struct {
 	StopToken                   string
 	DecisionEnvelope            bool
 	GoalRoutingDecisionEnvelope bool
+	// ScriptClassifier asks the Runtime-owned dispatch adapter to reduce a
+	// script classifier's stdout to its final label before route matching.
+	ScriptClassifier bool
 }
 
 type EnvironmentPolicy struct {
@@ -523,6 +526,13 @@ type ExecutionInput struct {
 	// WorkflowContext is the complete detached context selected for this
 	// attempt. Workers never recovers it from a Factory Session or Runtime.
 	WorkflowContext *Context
+	// MockWorkers carries an optional request-scoped testing override. It is
+	// detached at Execute ingress and is consumed only by command-boundary
+	// adapters; it is never stored on the process Workers root.
+	MockWorkers *MockWorkersConfig
+	// ProgressPublisher carries the Runtime-selected observation sink for this
+	// attempt. It is an execution capability, not retained Workers state.
+	ProgressPublisher ProgressPublisher `json:"-"`
 }
 
 type WorkInput struct {
@@ -704,6 +714,7 @@ func (input ExecutionInput) Clone() ExecutionInput {
 		clone.Resume = &resume
 	}
 	clone.WorkflowContext = input.WorkflowContext.Clone()
+	clone.MockWorkers = input.MockWorkers.Clone()
 	return clone
 }
 

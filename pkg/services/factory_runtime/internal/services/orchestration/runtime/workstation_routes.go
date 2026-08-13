@@ -1,6 +1,10 @@
 package runtime
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -53,11 +57,14 @@ type runtimeExecutionSelection struct {
 	modelProvider               string
 	modelLocality               string
 	reasoningEffort             string
+	modelOperation              string
+	scriptClassifier            bool
 	capabilities                *workers.Capabilities
 	command                     string
 	args                        []string
 	factoryDirectory            string
 	systemPrompt                string
+	promptTemplate              string
 	userMessage                 string
 	outputSchema                string
 	outputContract              string
@@ -83,6 +90,9 @@ func resolveRuntimeExecutionSelection(
 	if lookup, ok := runtimeDefinitionLookup(cfg); ok {
 		applyRuntimeDefinitionSelection(cfg, lookup, request, &selection)
 	}
+	if selection.factoryDirectory == "" && cfg != nil && cfg.workflowContext != nil {
+		selection.factoryDirectory = strings.TrimSpace(cfg.workflowContext.FactoryDirectory)
+	}
 	finalizeRuntimeExecutionSelection(&selection, inputs)
 	return selection
 }
@@ -98,6 +108,7 @@ func initialRuntimeExecutionSelection(
 		model:                       strings.TrimSpace(execution.Model),
 		modelProvider:               strings.TrimSpace(execution.ModelProvider),
 		reasoningEffort:             strings.TrimSpace(execution.ReasoningEffort),
+		modelOperation:              strings.TrimSpace(execution.ModelOperation),
 		capabilities:                cloneRuntimeCapabilities(execution.Capabilities),
 		command:                     execution.Command,
 		args:                        append([]string(nil), execution.Args...),
@@ -175,8 +186,12 @@ func applyRuntimeWorkstationSelection(
 ) {
 	selection.runnerID = firstRuntimeValue(selection.runnerID, workstation.Runner)
 	selection.systemPrompt = firstRuntimeValue(selection.systemPrompt, workstation.Body)
+	selection.promptTemplate = firstRuntimeValue(selection.promptTemplate, workstation.PromptTemplate)
 	selection.outputSchema = firstRuntimeValue(selection.outputSchema, workstation.OutputSchema)
 	selection.outputContract = firstRuntimeValue(selection.outputContract, workstation.OutputContract)
+	selection.modelOperation = firstRuntimeValue(selection.modelOperation, workstation.Operation)
+	selection.scriptClassifier = workstation.Type == interfaces.WorkstationTypeClassify &&
+		selection.workerType == interfaces.WorkerTypeScript
 	selection.outputFormat = firstRuntimeValue(selection.outputFormat, workstation.OutcomeFormat)
 	selection.workingDirectory = firstRuntimeValue(selection.workingDirectory, workstation.WorkingDirectory)
 	selection.workingDirectoryAuthored = selection.workingDirectoryAuthored ||
@@ -216,16 +231,89 @@ func finalizeRuntimeExecutionSelection(
 	if selection.modelProvider == "" {
 		selection.modelProvider = selection.providerID
 	}
+	// A request-selected script worker has no provider/model target. A factory
+	// runner default can still be present on the workstation, so resolve the
+	// script route after authored worker/workstation selection but before the
+	// generic provider fallback.
+	if strings.TrimSpace(selection.command) != "" &&
+		selection.providerID == "" && selection.model == "" {
+		selection.runnerID = "script"
+	}
+	if selection.runnerID == "" && selection.model != "" &&
+		selection.workerType != interfaces.WorkerTypeInference {
+		// MODEL_WORKER is the provider-backed agent route. The inference runner
+		// is reserved for an explicitly authored INFERENCE_WORKER; legacy model
+		// workers default to the Codex provider when no provider was authored.
+		selection.runnerID = workers.RunnerIDCodex
+	}
 	if selection.runnerID == "" && selection.providerID == "" && selection.model == "" {
 		selection.runnerID = workers.RunnerIDCodex
 	}
-	if selection.userMessage == "" {
+	if selection.workingDirectory == "" {
+		// Detached execution must carry the same default workspace that the
+		// legacy workstation executor derived from RuntimeConfig.
+		selection.workingDirectory = selection.factoryDirectory
+	}
+	selection.workingDirectory = resolveRuntimePath(selection.factoryDirectory, selection.workingDirectory)
+	if selection.userMessage == "" && selection.promptTemplate == "" {
 		selection.userMessage = workInputMessage(inputs)
 	}
 	if selection.toolExecutionMode == "" {
 		selection.toolExecutionMode = workers.RunnerToolExecutionModeDisabled
 	}
 	selection.environment = mergeRuntimeStringMaps(nil, selection.environment)
+}
+
+func renderRuntimePrompt(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	inputs []workers.WorkInput,
+) error {
+	if selection == nil || selection.userMessage != "" || selection.promptTemplate == "" {
+		return nil
+	}
+	if cfg == nil || cfg.promptRenderer == nil {
+		// Legacy test and adapter callers may not provide the optional renderer.
+		// Preserve their detached execution behavior by using the same payload
+		// fallback as an empty authored prompt.
+		selection.userMessage = workInputMessage(inputs)
+		return nil
+	}
+	rendered, err := cfg.promptRenderer.RenderPrompt(
+		selection.promptTemplate,
+		tokens,
+		workflowContext,
+	)
+	if err != nil {
+		return fmt.Errorf("render workstation prompt: %w", err)
+	}
+	selection.userMessage = rendered
+	return nil
+}
+
+func resolveRuntimePath(baseDir, value string) string {
+	if strings.TrimSpace(value) == "" {
+		return value
+	}
+	normalized := filepath.FromSlash(value)
+	if filepath.IsAbs(normalized) && (!portableRuntimeRootedPath(value) || pathExists(normalized)) {
+		return filepath.Clean(normalized)
+	}
+	if portableRuntimeRootedPath(value) && strings.TrimSpace(baseDir) != "" {
+		return filepath.Clean(filepath.Join(baseDir, normalized))
+	}
+	return filepath.Clean(normalized)
+}
+
+func portableRuntimeRootedPath(value string) bool {
+	return filepath.VolumeName(value) == "" && strings.HasPrefix(value, "/")
+}
+
+func pathExists(value string) bool {
+	_, err := os.Stat(value)
+	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
 func runtimeDefinitionLookup(cfg *runtimeConfig) (interfaces.RuntimeDefinitionLookup, bool) {

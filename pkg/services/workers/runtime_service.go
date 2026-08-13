@@ -38,17 +38,3 @@ type RuntimeService interface {
 
 	Close(context.Context) error
 }
-
-// SessionBuildFactory constructs an independent Workers runtime for one
-// Factory Session build, reaching the same canonical Workers construction
-// boundary used to build the Factory Session's own runtime. A nil argument
-// preserves the provider command runner, script command runner, or progress
-// publisher the Factory Session's own runtime was constructed with; a
-// non-nil argument supplies the final per-build value explicitly.
-// SessionBuildFactory never derives configuration by reading an already-built
-// RuntimeService's dependencies.
-type SessionBuildFactory func(
-	providerCommandRunner CommandRunner,
-	scriptCommandRunner CommandRunner,
-	progressPublisher ProgressPublisher,
-) (RuntimeService, error)

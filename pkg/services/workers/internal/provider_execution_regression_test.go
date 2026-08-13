@@ -122,7 +122,6 @@ func providerInvocationRuntimeService(
 		platformfilesystem.Local{},
 	)
 	return &Service{
-		sessions:                inertCurrentRuntimeResolver{},
 		executorBuilder:         executorBuilder,
 		providerCommandRunner:   providerRunner,
 		progressPublisher:       publisher,

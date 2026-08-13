@@ -12,11 +12,9 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
@@ -29,7 +27,6 @@ import (
 // Service is the canonical Worker execution application service.
 type Service struct {
 	Root
-	sessions                          CurrentRuntimeResolver
 	models                            models.Service
 	modelsScope                       models.RuntimeScopeRef
 	providers                         providers.Service
@@ -129,10 +126,6 @@ func (owned *ownedProviderLifecycles) Close(ctx context.Context) error {
 	return result
 }
 
-type CurrentRuntimeResolver interface {
-	CurrentRuntime() *factorysessions.LiveRuntime
-}
-
 // ModelInvocationExecutor builds a direct executor for one model-bound Worker.
 type ModelInvocationExecutor func(
 	interfaces.RuntimeConfigLookup,
@@ -140,16 +133,11 @@ type ModelInvocationExecutor func(
 	string,
 ) (workers.WorkstationRequestExecutor, error)
 
-type workflowContextProvider interface {
-	WorkflowContext() *workerexecution.Context
-}
-
 // New constructs a Worker execution service from injected dependencies.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func New(
-	sessions CurrentRuntimeResolver,
 	modelService models.Service,
 	providersService providers.Service,
 	providerCommandRunner workers.CommandRunner,
@@ -183,9 +171,6 @@ func New(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (*Service, error) {
-	if sessions == nil {
-		return nil, fmt.Errorf("construct Worker execution service: Factory Session runtime is required")
-	}
 	if modelService == nil {
 		return nil, fmt.Errorf("construct Worker execution service: Models service is required")
 	}
@@ -244,7 +229,6 @@ func New(
 		decisionEnvelopeService,
 	).WithRunWorktree(runWorktree).WithRunReasoningEffort(workerReasoningEffort)
 	return &Service{
-		sessions:                          sessions,
 		models:                            modelService,
 		providers:                         providersService,
 		scriptFactory:                     scriptFactory,
@@ -389,14 +373,11 @@ func (s *Service) modelInvocationExecutor(
 
 // CurrentModelRuntimeConfig returns the selected session's runtime configuration.
 func (s *Service) CurrentModelRuntimeConfig() interfaces.RuntimeConfigLookup {
-	if s == nil || s.sessions == nil {
-		return nil
-	}
-	runtime := s.sessions.CurrentRuntime()
-	if runtime == nil {
-		return nil
-	}
-	return runtime.RuntimeConfig
+	// Direct model invocation is no longer resolved from a selected Factory
+	// Session. Runtime-started execution carries its complete target and
+	// workflow context in ExecuteRequest; this legacy role has no implicit
+	// runtime to consult.
+	return nil
 }
 
 // BuildModelInvocationExecutor constructs a direct executor through the same
@@ -415,14 +396,8 @@ func (s *Service) BuildModelInvocationExecutor(runtimeCfg interfaces.RuntimeConf
 	if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(workerDef, s.invocationSkipPermissionsOverride); err != nil {
 		return nil, fmt.Errorf("worker %q: %w", workerName, err)
 	}
-	var workflowContext *workerexecution.Context
-	if selected := s.sessions.CurrentRuntime(); selected != nil && selected.Factory != nil {
-		if provider, ok := selected.Factory.(workflowContextProvider); ok {
-			workflowContext = provider.WorkflowContext()
-		}
-	}
 	result, err := s.executorBuilder.Build(
-		runtimeCfg, workerName, s.factoryRunnerID, workflowContext,
+		runtimeCfg, workerName, s.factoryRunnerID, nil,
 		logging.NewZapLogger(s.logger, s.verbose),
 		s.invocationSkipPermissionsOverride, s.providerOverride,
 		s.progressPublisher, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,

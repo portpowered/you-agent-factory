@@ -78,9 +78,8 @@ func NewRuntimeBuild(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
-	workerExecution workers.RuntimeService,
+	workerService workers.Service,
 	workerSessionsFactory factory.WorkerSessionsFactory,
-	sessionBuildFactory workers.SessionBuildFactory,
 	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
@@ -121,9 +120,6 @@ func NewRuntimeBuild(
 		runtimeFactory.newID,
 		baseLogger,
 		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			if sessionBuildFactory == nil {
-				return nil, fmt.Errorf("Workers session-build runtime factory is required")
-			}
 			var progressPublisher workers.ProgressPublisher
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
@@ -135,13 +131,8 @@ func NewRuntimeBuild(
 			// creates Worker Sessions, ensuring reference-bearing progress cannot
 			// reach the response stream before its Worker Session association.
 			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher).WithUnassociatedProgressFallback()
-			runtimeWorkers, err := sessionBuildFactory(
-				spec.ProviderCommandRunner,
-				spec.CommandRunnerOverride,
-				providerSessionProgress.Publish,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("construct runtime Worker service: %w", err)
+			if workerService == nil {
+				return nil, fmt.Errorf("Workers service is required")
 			}
 			var dispatchCompleted func(string)
 			if completionFactory != nil {
@@ -170,7 +161,8 @@ func NewRuntimeBuild(
 				verbose,
 				skipRunnerPrerequisiteValidation,
 				invocationSkipPermissionsOverride,
-				runtimeWorkers,
+				workerService,
+				mockWorkersConfig,
 				workerSessionsFactory,
 				runtimeExecutorsFactory,
 				providerSessionProgress,
@@ -211,7 +203,8 @@ func buildBundle(
 	verbose bool,
 	skipRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	workerExecution workers.RuntimeService,
+	workerExecution workers.Service,
+	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
@@ -272,7 +265,7 @@ func buildBundle(
 		}
 	}
 
-	return runtimeFactory.Build(
+	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
 		spec.FolderPath,
@@ -307,8 +300,12 @@ func buildBundle(
 			flushInterval:  recordFlushInterval,
 		},
 		func(history recordings.WorkerEventRecorder, logger *zap.Logger) (map[string]workers.WorkerExecutor, error) {
+			runtimeService, ok := workerExecution.(workers.RuntimeService)
+			if !ok || runtimeExecutorsFactory == nil {
+				return nil, nil
+			}
 			return loadWorkerOptions(
-				workerExecution,
+				runtimeService,
 				runtimeExecutorsFactory,
 				spec,
 				factoryRunnerID,
@@ -325,7 +322,17 @@ func buildBundle(
 		providerInvocation,
 		workerSessionsFactory,
 		dispatchCompleted,
+		mockWorkersConfig,
 	)
+	if err != nil {
+		return nil, err
+	}
+	if configurable, ok := bundle.Factory.(interface {
+		SetProgressPublisher(workers.ProgressPublisher)
+	}); ok {
+		configurable.SetProgressPublisher(providerSessionProgress.Publish)
+	}
+	return bundle, nil
 }
 
 // bindProviderSessionProgress keeps the Workers progress bridge session-local:
@@ -394,11 +401,11 @@ func executeServiceFromWorkstation(
 	if service == nil {
 		return nil
 	}
-	if boundary != nil {
-		return workstationExecuteAdapter{boundary: boundary}
-	}
 	if execute, ok := service.(runtimeExecuteService); ok {
 		return execute
+	}
+	if boundary != nil {
+		return workstationExecuteAdapter{boundary: boundary}
 	}
 	return workstationExecuteAdapter{service: service}
 }

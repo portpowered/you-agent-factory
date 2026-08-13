@@ -68,7 +68,6 @@ func newTestServiceWithDependenciesAndProviders(
 ) *Service {
 	t.Helper()
 	service, err := New(
-		inertCurrentRuntimeResolver{},
 		testModelsService{},
 		providersService,
 		providerRunner,

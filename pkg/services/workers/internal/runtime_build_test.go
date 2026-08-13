@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -26,8 +25,7 @@ type recordingRuntimeAssembly struct {
 var _ runtimeassembly.Service = (*recordingRuntimeAssembly)(nil)
 
 type inertConstructionSpy struct {
-	currentRuntimeCalls int
-	commandCalls        int
+	commandCalls int
 }
 
 type rootDispatchExecutor struct {
@@ -69,11 +67,6 @@ func (executor *rootDispatchExecutor) Execute(
 		panic(executor.panic)
 	}
 	return executor.result, executor.err
-}
-
-func (spy *inertConstructionSpy) CurrentRuntime() *factorysessions.LiveRuntime {
-	spy.currentRuntimeCalls++
-	return nil
 }
 
 func (spy *inertConstructionSpy) Run(
@@ -652,15 +645,13 @@ func TestRuntimeAssemblyConstructionAndBuildAreInert(t *testing.T) {
 		t.Fatalf("newRuntimeAssembly() error = %v", err)
 	}
 	var root workers.Service = &Service{
-		sessions:              spy,
 		providerCommandRunner: spy,
 		scriptCommandRunner:   spy,
 		Root:                  RootFrom(assembly, nil),
 	}
-	if spy.currentRuntimeCalls != 0 || spy.commandCalls != 0 {
+	if spy.commandCalls != 0 {
 		t.Fatalf(
-			"construction side effects = current runtime %d, commands %d; want zero",
-			spy.currentRuntimeCalls,
+			"construction side effects = commands %d; want zero",
 			spy.commandCalls,
 		)
 	}
@@ -678,10 +669,9 @@ func TestRuntimeAssemblyConstructionAndBuildAreInert(t *testing.T) {
 	if len(result.Bindings) != 2 {
 		t.Fatalf("BuildRuntime() bindings = %#v, want two", result.Bindings)
 	}
-	if spy.currentRuntimeCalls != 0 || spy.commandCalls != 0 {
+	if spy.commandCalls != 0 {
 		t.Fatalf(
-			"assembly side effects = current runtime %d, commands %d; want zero",
-			spy.currentRuntimeCalls,
+			"assembly side effects = commands %d; want zero",
 			spy.commandCalls,
 		)
 	}

@@ -154,10 +154,28 @@ func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
 			Tags:       cloneStringMap(input.Tags),
 			Relations:  append([]work.Relation(nil), input.Relations...),
 			Content:    work.CloneWorkContentParts(input.Content),
+			Payload:    payloadFromContent(input.Content),
 		}
 		tokens = append(tokens, workers.Token{Color: color})
 	}
 	return tokens
+}
+
+func payloadFromContent(content []work.WorkContentPart) []byte {
+	if len(content) == 0 {
+		return nil
+	}
+	var builder strings.Builder
+	for _, part := range content {
+		if part.Type.Normalized() != work.WorkContentPartTypeText {
+			continue
+		}
+		builder.WriteString(part.Text)
+	}
+	if builder.Len() == 0 {
+		return nil
+	}
+	return []byte(builder.String())
 }
 
 func providerRunnerID(provider workers.ProviderReference) string {

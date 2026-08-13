@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 // ExecuteCapability is the request-scoped Execute owner composed into the
@@ -27,6 +28,8 @@ type Root struct {
 }
 
 var _ workers.Service = (*Root)(nil)
+
+var _ workers.PromptTemplates = (*Root)(nil)
 
 // NewRoot constructs the inert Workers root from parent-private runtime
 // assembly and workstation owners.
@@ -187,3 +190,46 @@ func (r *Root) InvokeModel(
 ) (modelinference.Result, error) {
 	return modelinference.Result{}, fmt.Errorf("factory service runtime is not available")
 }
+
+// BuildPromptTemplateContract keeps editor-facing prompt validation on the
+// process-scoped Workers root. Prompt inspection is pure and does not require
+// a Factory Session or a live Runtime.
+func (*Root) BuildPromptTemplateContract(inputCount int, docPaths []string) workers.PromptTemplateContract {
+	return workerprompting.BuildPromptTemplateContract(inputCount, docPaths)
+}
+
+// ValidatePromptTemplate keeps editor-facing prompt validation on the
+// process-scoped Workers root. The request is evaluated from explicit prompt
+// data and has no session lookup side effect.
+func (*Root) ValidatePromptTemplate(
+	template string,
+	inputCount int,
+	docPaths []string,
+) workers.PromptTemplateValidationResult {
+	return workerprompting.ValidatePromptTemplate(template, inputCount, docPaths)
+}
+
+// RenderPrompt forwards the optional request-scoped renderer owned by the
+// concrete Workers service. Keeping this capability on the root preserves the
+// process composition boundary without exposing the implementation owner to
+// Factory Runtime.
+func (r *Root) RenderPrompt(
+	template string,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+) (string, error) {
+	if r == nil || r.execute == nil {
+		return "", fmt.Errorf("render Worker prompt: execution service is unavailable")
+	}
+	renderer, ok := r.execute.(workers.PromptRenderer)
+	if !ok {
+		return "", fmt.Errorf("render Worker prompt: renderer is unavailable")
+	}
+	return renderer.RenderPrompt(template, tokens, workflowContext)
+}
+
+// RuntimeOwnsModelEventRecording marks the process-scoped detached root. The
+// Factory Runtime records model boundary events against its own ledger after a
+// request completes; Workers itself remains independent of Factory Session
+// recording state.
+func (*Root) RuntimeOwnsModelEventRecording() bool { return true }

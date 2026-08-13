@@ -45,6 +45,10 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 	if queueCapacity <= 0 {
 		queueCapacity = DefaultRuntimePoolBindingCapacity
 	}
+	service := cfg.Service
+	if cfg.ServiceFactory != nil {
+		service = cfg.ServiceFactory()
+	}
 	adapter := workerExecutorRequestAdapter{executors: cfg.Executors}
 	bindings := assembleWorkstationPoolBindings(cfg.RouteNames, adapter, capacity, queueCapacity)
 	if cfg.ProviderInvocation != nil {
@@ -64,7 +68,7 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 		})
 	}
 	return &workstationPoolBoundary{
-		service:  cfg.Service,
+		service:  service,
 		bindings: bindings,
 		async:    cfg.Async,
 	}

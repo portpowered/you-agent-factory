@@ -105,6 +105,15 @@ func (r *runner) Execute(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
+	effective := *r
+	effective.publish = workers.ProgressPublisherFromContext(ctx, r.publish)
+	return effective.execute(ctx, request)
+}
+
+func (r *runner) execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}

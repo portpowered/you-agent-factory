@@ -6,6 +6,7 @@ import (
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -62,8 +63,9 @@ func NewRuntimeFactory(
 func NewAssembly(
 	runtimeFactory *RuntimeFactory,
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
+	workerService workers.Service,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory)
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator

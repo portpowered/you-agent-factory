@@ -155,12 +155,14 @@ func startStatelessAttemptWithRequestMode(
 		start = cfg.attempts.startRetry
 	}
 	prepare := runtimeAttemptPreparation(cfg, request, executeRequest, allowRetry)
+	prepare = prepareDetachedModelRecording(cfg, prepare)
 	if prepare == nil {
 		return start(
 			ctx,
 			executeRequest,
 			async,
 			func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+				result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 				dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 					request,
 					result,
@@ -177,6 +179,7 @@ func startStatelessAttemptWithRequestMode(
 		executeRequest,
 		async,
 		func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 				request,
 				result,
@@ -189,6 +192,37 @@ func startStatelessAttemptWithRequestMode(
 		allowRetry,
 		prepare,
 	)
+}
+
+func normalizeScriptClassifierResult(
+	target workers.ExecutionTarget,
+	result workers.ExecuteResult,
+) workers.ExecuteResult {
+	if !target.Output.ScriptClassifier || strings.TrimSpace(target.RunnerID) != "script" ||
+		result.Outcome != workers.ExecutionOutcomeAccepted {
+		return result
+	}
+	output := strings.TrimSpace(primaryOutputText(result.Output.Primary))
+	if output == "" {
+		return result
+	}
+	lines := strings.Split(output, "\n")
+	label := strings.TrimSpace(lines[len(lines)-1])
+	result.Output.Primary = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
+		Text: label,
+	}}
+	result.Output.Classification = label
+	return result
+}
+
+func normalizeDetachedExecutionResult(
+	cfg *runtimeConfig,
+	request workers.ExecuteRequest,
+	result workers.ExecuteResult,
+) workers.ExecuteResult {
+	result = normalizeScriptClassifierResult(request.Target, result)
+	return verifyExpectedArtifactsForDispatch(cfg, request, result)
 }
 
 // runtimeRecordingRequest carries process-owned recording, runtime, and
@@ -240,6 +274,7 @@ func runtimeAttemptPreparation(
 			return nil, err
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 				request,
 				result,
@@ -293,26 +328,39 @@ func executeRequestFromWorkstationRequest(
 	execution := request.Execution
 	dispatch := execution.Dispatch
 	workstationName := firstRuntimeValue(request.WorkstationName, dispatch.WorkstationName)
+	request.WorkstationName = workstationName
 	inputs, invocation, attemptNumber := workInputsFromDispatch(dispatch)
 	correlation, err := executionCorrelationFromDispatch(cfg, execution, dispatch)
 	if err != nil {
 		return workers.ExecuteRequest{}, err
 	}
 	selection := resolveRuntimeExecutionSelection(cfg, request, inputs)
+	workflowContext := runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext)
+	if err := renderRuntimePrompt(
+		cfg,
+		&selection,
+		workers.WorkDispatchInputTokens(dispatch),
+		workflowContext,
+		inputs,
+	); err != nil {
+		return workers.ExecuteRequest{}, err
+	}
 	return workers.ExecuteRequest{
 		Correlation: correlation,
 		Target: executionTargetFromSelection(
 			selection, workstationName, execution.ProcessEnvironment,
 		),
 		Input: workers.ExecutionInput{
-			Work:            inputs,
-			Dispatch:        work.CloneWorkDispatch(dispatch),
-			RecordingID:     execution.RecordingID,
-			Invocation:      invocation,
-			ModelBindings:   workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
-			ModelOperation:  execution.ModelOperation,
-			Resume:          continuationFromLegacySession(execution.ResumeSession),
-			WorkflowContext: runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext),
+			Work:              inputs,
+			Dispatch:          work.CloneWorkDispatch(dispatch),
+			RecordingID:       execution.RecordingID,
+			Invocation:        invocation,
+			ModelBindings:     workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelOperation:    firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
+			Resume:            continuationFromLegacySession(execution.ResumeSession),
+			WorkflowContext:   workflowContext,
+			MockWorkers:       cfg.mockWorkersConfig.Clone(),
+			ProgressPublisher: cfg.progressPublisher,
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
@@ -392,8 +440,12 @@ func executionTargetFromSelection(
 	processEnvironment []string,
 ) workers.ExecutionTarget {
 	return workers.ExecutionTarget{
-		WorkerName:       selection.workerName,
-		WorkerType:       selection.workerType,
+		WorkerName: selection.workerName,
+		// WorkerType is the authored worker identity carried into command
+		// requests. The definition taxonomy remains available in the runtime
+		// selection for route decisions, while mock and provider adapters match
+		// the customer-facing worker name.
+		WorkerType:       firstRuntimeValue(selection.workerName, selection.workerType),
 		WorkstationName:  workstationName,
 		RunnerID:         selection.runnerID,
 		Capabilities:     cloneRuntimeCapabilities(selection.capabilities),
@@ -422,6 +474,7 @@ func executionTargetFromSelection(
 			Contract:                    selection.outputContract,
 			DecisionEnvelope:            selection.decisionEnvelope,
 			GoalRoutingDecisionEnvelope: selection.goalRoutingDecisionEnvelope,
+			ScriptClassifier:            selection.scriptClassifier,
 		},
 		Timeout: selection.timeout,
 		Environment: workers.EnvironmentPolicy{
@@ -461,11 +514,21 @@ func workInputsFromDispatch(dispatch work.WorkDispatch) ([]workers.WorkInput, wo
 		if len(token.History.FailureLog) > 0 {
 			lastFailure = token.History.FailureLog[len(token.History.FailureLog)-1].Error
 		}
+		content := work.CloneWorkContentParts(token.Color.Content)
+		if len(content) == 0 && len(token.Color.Payload) > 0 {
+			// Older admitted Work tokens carry their canonical text in Payload.
+			// Preserve that input when detached execution crosses into the newer
+			// content-shaped Worker contract.
+			content = []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: string(token.Color.Payload),
+			}}
+		}
 		inputs = append(inputs, workers.WorkInput{
 			WorkID:     token.Color.WorkID,
 			WorkTypeID: token.Color.WorkTypeID,
 			RequestID:  token.Color.RequestID,
-			Content:    work.CloneWorkContentParts(token.Color.Content),
+			Content:    content,
 			Tags:       cloneRuntimeStringMap(token.Color.Tags),
 			Relations:  append([]work.Relation(nil), token.Color.Relations...),
 			Lineage: workers.WorkLineage{

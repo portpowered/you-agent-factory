@@ -51,8 +51,6 @@ type FactoryRuntimeAssembler interface {
 		*bool,
 		factoryruntime.Clock,
 		*zap.Logger,
-		workers.RuntimeService,
-		workers.SessionBuildFactory,
 		factoryruntime.ProviderInvocationExecutorFactory,
 		factoryruntime.WorkersRuntimeExecutorsFactory,
 		factoryruntime.WorkersMockCommandRunnerFactory,
