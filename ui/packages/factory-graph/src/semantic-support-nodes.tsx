@@ -4,13 +4,15 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
-  FactoryGraphNodeShell,
   type FactoryGraphNodeHandle,
+  FactoryGraphNodeShell,
 } from "./semantic-node-shell.js";
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeVisualIconClassName,
 } from "./semantic-node-style.js";
+import { resolveFactoryGraphVisualState } from "./visual-state.js";
 
 /** The portion of a Factory place needed by the original semantic node views. */
 export interface FactoryGraphPlaceRef {
@@ -22,6 +24,7 @@ export interface FactoryGraphPlaceRef {
 
 export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
   kind: "worker";
@@ -36,6 +39,7 @@ export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
 
 export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
   isDefaultWorkType?: boolean;
@@ -56,6 +60,7 @@ export type FactoryGraphWorkTypeNode = Node<
 
 export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
   kind: "resource";
@@ -75,11 +80,20 @@ export type FactoryGraphResourceNode = Node<
 /** Original Factory worker node, with host-owned worker selection. */
 export function FactoryGraphWorkerNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphWorkerNode>) {
   const workerName = resolveWorkerName(data);
   const label = `worker:${workerName}`;
   const workerLabel = semanticLabel("worker", data.locale);
   const selectable = data.onSelectWorker !== undefined;
+  const selected = data.selectedWorker || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "worker",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+  });
   const content = (
     <span
       aria-label={label}
@@ -90,7 +104,10 @@ export function FactoryGraphWorkerNodeView({
     >
       <span className="sr-only">{label}</span>
       <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-info"
+        className={classNames(
+          "h-3.5 w-3.5 shrink-0",
+          factoryGraphNodeVisualIconClassName(visualState, "text-info"),
+        )}
         kind="worker"
         label={workerLabel}
       />
@@ -112,23 +129,24 @@ export function FactoryGraphWorkerNodeView({
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
-          selected: data.selectedWorker,
+          selected,
         }),
-        data.activeFlow &&
-          !data.selectedWorker &&
-          "border-af-success-border shadow-af-success-chip",
-        data.selectedWorker && "border-primary shadow-af-accent-selected",
-        data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}
       nodeType="worker"
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-label={selectLabel("worker", workerName, data.locale)}
-          aria-pressed={data.selectedWorker}
+          aria-pressed={selected}
           className="grid min-w-0 gap-0.5 overflow-hidden"
-          data-selected-worker={data.selectedWorker ? "true" : undefined}
+          data-selected-worker={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorker?.(workerName);
@@ -146,11 +164,21 @@ export function FactoryGraphWorkerNodeView({
 /** Original Factory work-type node, with host-owned selection and validation. */
 export function FactoryGraphWorkTypeNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphWorkTypeNode>) {
   const name = workTypeName(data.place);
   const label = `work-type:${name}`;
   const workTypeLabel = semanticLabel("work-type", data.locale);
   const selectable = data.onSelectWorkType !== undefined;
+  const selected = (data.selectedWorkType ?? false) || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "work-type",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
   const content = (
     <span
       aria-hidden={selectable ? true : undefined}
@@ -161,7 +189,10 @@ export function FactoryGraphWorkTypeNodeView({
     >
       {selectable ? null : <span className="sr-only">{label}</span>}
       <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-info"
+        className={classNames(
+          "h-3.5 w-3.5 shrink-0",
+          factoryGraphNodeVisualIconClassName(visualState, "text-info"),
+        )}
         kind="work-type"
         label={workTypeLabel}
       />
@@ -195,27 +226,27 @@ export function FactoryGraphWorkTypeNodeView({
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
-          selected: data.selectedWorkType,
+          selected,
           validationError: data.validationError,
         }),
-        data.activeFlow && "border-info shadow-af-info-chip",
-        data.muted && "opacity-[0.45]",
-        data.validationError &&
-          "ring-2 ring-af-danger-border motion-safe:animate-pulse",
-        data.selectedWorkType &&
-          !data.validationError &&
-          "border-primary shadow-af-accent-selected",
       )}
       handles={data.handles}
       nodeType="workType"
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-invalid={data.validationError ? true : undefined}
           aria-label={selectLabel("work type", name, data.locale)}
-          aria-pressed={data.selectedWorkType}
+          aria-pressed={selected}
           className="grid min-w-0 gap-0.5 overflow-hidden"
-          data-selected-work-type={data.selectedWorkType ? "true" : undefined}
+          data-selected-work-type={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorkType?.(name);
@@ -233,10 +264,19 @@ export function FactoryGraphWorkTypeNodeView({
 /** Original Factory resource node, with host-owned resource selection. */
 export function FactoryGraphResourceNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphResourceNode>) {
   const label = resourceName(data.place);
   const resourceLabel = semanticLabel("resource", data.locale);
   const selectable = data.onSelectResource !== undefined;
+  const selected = data.selectedResource || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "resource",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+  });
   const content = (
     <FactoryGraphResourceNodeContent
       label={label}
@@ -244,6 +284,7 @@ export function FactoryGraphResourceNodeView({
       place={data.place}
       resourceLabel={resourceLabel}
       tokenCount={data.tokenCount}
+      visualState={visualState}
     />
   );
   return (
@@ -254,23 +295,24 @@ export function FactoryGraphResourceNodeView({
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
-          selected: data.selectedResource,
+          selected,
         }),
-        data.activeFlow &&
-          !data.selectedResource &&
-          "border-af-success-border shadow-af-success-chip",
-        data.selectedResource && "border-primary shadow-af-accent-selected",
-        data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}
       nodeType="resource"
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-label={selectLabel("resource", label, data.locale)}
-          aria-pressed={data.selectedResource}
+          aria-pressed={selected}
           className="flex min-w-0 w-full flex-col overflow-hidden"
-          data-selected-resource={data.selectedResource ? "true" : undefined}
+          data-selected-resource={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectResource?.(label);
@@ -291,12 +333,14 @@ function FactoryGraphResourceNodeContent({
   place,
   resourceLabel,
   tokenCount,
+  visualState,
 }: {
   label: string;
   locale?: string;
   place: FactoryGraphPlaceRef;
   resourceLabel: string;
   tokenCount: number;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   return (
     <div className="flex min-w-0 w-full flex-col overflow-hidden">
@@ -311,7 +355,10 @@ function FactoryGraphResourceNodeContent({
           title={resourceLabel}
         >
           <GraphSemanticIcon
-            className="h-3.5 w-3.5 text-success"
+            className={classNames(
+              "h-3.5 w-3.5",
+              factoryGraphNodeVisualIconClassName(visualState, "text-success"),
+            )}
             kind="resource"
             label={resourceLabel}
           />

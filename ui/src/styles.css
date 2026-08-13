@@ -143,6 +143,12 @@
   --shadow-af-info-chip: 0 0 0 2px rgb(from var(--color-af-info) r g b / 0.12);
   --shadow-af-accent-chip: 0 0 0 2px
     rgb(from var(--color-af-accent) r g b / 0.18);
+  /* Factory graph visual-state role tokens. */
+  --color-af-graph-focus-indicator: var(--color-af-foundation-ink);
+  --shadow-af-graph-danger: 0 0 0 2px
+    rgb(from var(--color-af-danger) r g b / 0.2);
+  --shadow-af-graph-validation-warning: 0 0 0 2px var(--color-warning);
+  --shadow-af-graph-validation-danger: 0 0 0 2px var(--color-error);
 }
 
 @layer base {
@@ -390,6 +396,43 @@
 
   [data-legend-flow] {
     animation: agent-flow-legend 1.15s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-current-activity-flow] .agent-flow-node--active,
+    [data-legend-flow] {
+      animation: none;
+      transition-duration: 0.01ms;
+    }
+  }
+
+  [data-graph-reduced-motion="true"] .agent-flow-node--active,
+  [data-graph-reduced-motion="true"] [data-legend-flow] {
+    animation: none;
+    transition-duration: 0.01ms;
+  }
+
+  /* Factory graph visual-state decoration: keep semantic content and
+     high-priority borders/focus indicators at full contrast while muting the
+     lower-priority node surface. */
+  [data-graph-visual-muted="true"] {
+    isolation: isolate;
+  }
+
+  [data-graph-visual-muted="true"]::before {
+    position: absolute;
+    z-index: 0;
+    inset: 0.18rem;
+    border-radius: inherit;
+    background: var(--color-surface);
+    content: "";
+    opacity: 0.68;
+    pointer-events: none;
+  }
+
+  [data-graph-visual-muted="true"] > div:not([data-node-handle-rail]) {
+    position: relative;
+    z-index: 1;
   }
 
   [data-bento-card-id] {

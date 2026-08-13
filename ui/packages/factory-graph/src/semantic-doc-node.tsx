@@ -2,14 +2,24 @@ import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 
 import { GraphSemanticIcon } from "./semantic-icon.js";
-import { FactoryGraphNodeShell, type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
+import {
+  type FactoryGraphNodeHandle,
+  FactoryGraphNodeShell,
+} from "./semantic-node-shell.js";
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeVisualIconClassName,
 } from "./semantic-node-style.js";
+import {
+  type FactoryGraphVisualState,
+  resolveFactoryGraphVisualState,
+} from "./visual-state.js";
 
 export interface FactoryGraphDocNodeData extends Record<string, unknown> {
+  activeFlow?: boolean;
   displayLabel: string;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   fileType?: string;
   handles: FactoryGraphNodeHandle[];
@@ -18,6 +28,8 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
   onSelectDoc?: (targetPath: string) => void;
   selectedDoc: boolean;
   targetPath: string;
+  validationError?: boolean;
+  muted?: boolean;
 }
 
 export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
@@ -25,29 +37,51 @@ export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
 /** Original Factory document node, with host-owned selection callback. */
 export function FactoryGraphDocNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphDocNode>) {
   const selectable = data.onSelectDoc !== undefined;
   const docLabel = "Document";
+  const selected = data.selectedDoc || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "doc",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
 
   return (
     <FactoryGraphNodeShell
       className={[
         factoryGraphNodeSurfaceClassName("neutral"),
         "justify-center text-left text-on-surface",
-        factoryGraphNodeHoverClassName({ selected: data.selectedDoc }),
-        data.selectedDoc && "border-primary shadow-af-accent-selected",
+        factoryGraphNodeHoverClassName({
+          activeFlow: data.activeFlow,
+          muted: data.muted,
+          selected,
+          validationError: data.validationError,
+        }),
       ]
         .filter(Boolean)
         .join(" ")}
       handles={data.handles}
       nodeType="doc"
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-label={selectDocLabel(data.displayLabel, data.locale)}
-          aria-pressed={data.selectedDoc}
+          aria-invalid={data.validationError ? true : undefined}
+          aria-pressed={selected}
           className="grid min-w-0 gap-0.5 overflow-hidden"
-          data-selected-doc={data.selectedDoc ? "true" : undefined}
+          data-selected-doc={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectDoc?.(data.targetPath);
@@ -57,6 +91,7 @@ export function FactoryGraphDocNodeView({
             displayLabel={data.displayLabel}
             docLabel={docLabel}
             targetPath={data.targetPath}
+            visualState={visualState}
           />
         </GraphNodeButton>
       ) : (
@@ -64,6 +99,7 @@ export function FactoryGraphDocNodeView({
           displayLabel={data.displayLabel}
           docLabel={docLabel}
           targetPath={data.targetPath}
+          visualState={visualState}
         />
       )}
     </FactoryGraphNodeShell>
@@ -74,16 +110,21 @@ function FactoryGraphDocNodeContent({
   displayLabel,
   docLabel,
   targetPath,
+  visualState,
 }: {
   displayLabel: string;
   docLabel: string;
   targetPath: string;
+  visualState: FactoryGraphVisualState;
 }) {
   return (
     <div className="grid min-w-0 gap-1 px-2 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
         <GraphSemanticIcon
-          className="text-on-surface-variant"
+          className={factoryGraphNodeVisualIconClassName(
+            visualState,
+            "text-on-surface-variant",
+          )}
           kind="doc"
           label={docLabel}
         />

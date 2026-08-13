@@ -54,6 +54,10 @@ describe("ActivityGraphNodeShell z-axis incomplete hints", () => {
       container.querySelector('[data-node-handle-badge="right-source"]'),
     ).toBeTruthy();
 
+    const shell = container.querySelector("[data-graph-node-family]");
+    expect(shell?.getAttribute("data-graph-node-family")).toBe("worker");
+    expect(shell?.getAttribute("data-graph-node-shape")).toBe("worker");
+
     const content = screen.getByText("Worker").parentElement;
     expect(content?.className).toContain("pl-6");
     expect(content?.className).toContain("pr-6");

@@ -5,6 +5,21 @@ export {
   projectFactoryGraphReplayFlow,
 } from "./factory-graph-replay-surface.js";
 export {
+  FACTORY_GRAPH_NODE_FAMILIES,
+  FACTORY_GRAPH_NODE_FAMILY_ROLES,
+  type FactoryGraphNodeDimensionResolution,
+  type FactoryGraphNodeDimensionSource,
+  type FactoryGraphNodeDimensions,
+  type FactoryGraphNodeFamily,
+  type FactoryGraphNodeFamilyRole,
+  type FactoryGraphNodeShape,
+  type FactoryGraphNodeShellType,
+  factoryGraphNodeFamilyDimensions,
+  factoryGraphNodeFamilyForShellType,
+  factoryGraphNodeFamilyRole,
+  resolveFactoryGraphNodeDimensions,
+} from "./node-family.js";
+export {
   type FactoryGraphDocNode,
   type FactoryGraphDocNodeData,
   FactoryGraphDocNodeView,
@@ -31,6 +46,9 @@ export {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeTitleClassName,
+  factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeVisualStateClassName,
+  factoryGraphNodeVisualStatusSurfaceClassName,
 } from "./semantic-node-style.js";
 export {
   FACTORY_GRAPH_NODE_TYPES,
@@ -85,6 +103,24 @@ export {
   type FactoryGraphSource,
   isFactoryGraphSource,
 } from "./source.js";
+export {
+  type FactoryGraphValidationState,
+  type FactoryGraphVisualBorderRole,
+  type FactoryGraphVisualEmphasis,
+  type FactoryGraphVisualFocusRole,
+  type FactoryGraphVisualGlowRole,
+  type FactoryGraphVisualLifecycleRole,
+  type FactoryGraphVisualState,
+  type FactoryGraphVisualStateInput,
+  type FactoryGraphVisualStatusRole,
+  type FactoryGraphVisualStatusTreatment,
+  resolveFactoryGraphVisualState,
+} from "./visual-state.js";
+export {
+  FACTORY_GRAPH_WORK_ITEM_MODE_MAXIMUM,
+  type FactoryGraphWorkProgressMode,
+  factoryGraphWorkProgressMode,
+} from "./work-progress-presentation.js";
 export {
   FACTORY_GRAPH_WORK_STATE_TYPES,
   type FactoryGraphWorkStateType,

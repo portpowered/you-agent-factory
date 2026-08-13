@@ -12,7 +12,11 @@
  * Semantic families are status-only; do not substitute for accent emphasis.
  */
 
-@theme {
+/*
+ * Keep the public role vocabulary in the compiled bundle even when a host
+ * consumes a role through var() rather than a generated utility class.
+ */
+@theme static {
   /* --- Neutral roles --- */
   --color-background: var(--color-af-foundation-background);
   --color-surface: var(--color-af-foundation-surface);

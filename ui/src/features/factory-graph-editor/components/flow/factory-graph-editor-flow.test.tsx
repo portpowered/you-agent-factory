@@ -460,17 +460,27 @@ describe("factory graph editor work state lifecycle styling", () => {
       factoryDefinition: lifecycleFactoryDefinition,
     });
 
-    const expectSurface = async (title: string) => {
+    const expectSurface = async (title: string, surfaceClass: string) => {
       const node = (await screen.findByTitle(title)).closest("article");
       expect(node).not.toBeNull();
-      expect(node?.className).toContain("border-info-border");
-      expect(node?.className).toContain("bg-info-container");
+      for (const className of surfaceClass.split(" ")) {
+        expect(node?.className).toContain(className);
+      }
     };
 
-    await expectSurface("story:queued");
-    await expectSurface("story:review");
-    await expectSurface("story:done");
-    await expectSurface("story:failed");
+    await expectSurface("story:queued", "border-info-border bg-info-container");
+    await expectSurface(
+      "story:review",
+      "border-af-success-border bg-warning-container",
+    );
+    await expectSurface(
+      "story:done",
+      "border-af-success-border bg-success-container",
+    );
+    await expectSurface(
+      "story:failed",
+      "border-af-danger-border bg-error-container",
+    );
   });
 
   it("keeps non-work-state nodes on existing kind styling", async () => {

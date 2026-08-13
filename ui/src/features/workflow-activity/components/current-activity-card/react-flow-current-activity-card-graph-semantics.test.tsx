@@ -384,7 +384,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
-        ?.className.includes("opacity-[0.45]"),
+        ?.className.includes("agent-flow-node--muted"),
     ).toBe(true);
   });
 
@@ -883,7 +883,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       .getByLabelText("agent-slot")
       .closest("article");
     expect(idleStateArticle.querySelector("article")?.className).toContain(
-      "opacity-[0.45]",
+      "agent-flow-node--muted",
     );
     expect(idleResourceArticle?.className).toContain("border-outline");
     expect(idleResourceArticle?.className).not.toContain("opacity-[0.45]");

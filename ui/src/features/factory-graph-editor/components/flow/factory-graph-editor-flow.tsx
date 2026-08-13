@@ -1,7 +1,10 @@
 import type { Edge, NodeProps } from "@xyflow/react";
 import {
   FactoryGraphWorkstationGuardedControlCard,
+  factoryGraphNodeFamilyForShellType,
+  factoryGraphNodeVisualIconClassName,
   factoryGraphWorkstationPresentation,
+  resolveFactoryGraphVisualState,
 } from "@you-agent-factory/factory-graph";
 
 import { cn } from "../../../../lib/cn";
@@ -114,6 +117,31 @@ function FactoryGraphEditorNodeView({
     return <FactoryGraphEditorWorkerNodeView data={data} selected={selected} />;
   }
 
+  return <FactoryGraphEditorSemanticNodeView data={data} selected={selected} />;
+}
+
+function FactoryGraphEditorSemanticNodeView({
+  data,
+  selected,
+}: {
+  data: FactoryGraphEditorNode["data"];
+  selected: boolean;
+}) {
+  const shellNodeType = editorShellNodeType(data.kind);
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: factoryGraphNodeFamilyForShellType(shellNodeType),
+    focused: data.focused,
+    lifecycle:
+      data.kind === "work-state"
+        ? data.workStateType
+        : data.kind === "workstation" && data.active
+          ? "PROCESSING"
+          : undefined,
+    muted: data.muted,
+    selected,
+    validation: data.validationMessage !== null ? "error" : undefined,
+  });
   const surfaceClassName =
     data.kind === "work-state"
       ? workStatePhaseSurfaceClassName(data.workStateType)
@@ -155,92 +183,137 @@ function FactoryGraphEditorNodeView({
           ),
       )}
       handles={data.connectionAnchors}
-      nodeType={data.kind === "workstation" ? "workstation" : "resource"}
+      nodeType={shellNodeType}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        lifecycle: visualState.lifecycle,
+        muted: data.muted,
+        selected,
+        validation: visualState.validation,
+      }}
       zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
-      <div className="grid h-full min-w-0 content-start gap-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-            <span
-              className="flex min-h-5 shrink-0 items-center"
-              data-factory-entity-semantic-icon
-              title={data.kindLabel}
-            >
-              <GraphSemanticIcon
-                className={cn("h-4 w-4", semanticIconClassName)}
-                kind={semanticIconKind}
-                label={semanticIconLabel}
-              />
-            </span>
-            <ActivityGraphNodeBadge weight="label">
-              {semanticIconLabel}
-            </ActivityGraphNodeBadge>
-          </div>
-          {data.kind === "work-type" && data.isDefaultWorkType ? (
-            <ActivityGraphNodeBadge
-              className="shrink-0"
-              role="status"
-              tone="info"
-              weight="label"
-            >
-              {data.defaultWorkTypeLabel}
-            </ActivityGraphNodeBadge>
-          ) : null}
-          {workstationPresentation?.schedulingLabel ? (
-            <ActivityGraphNodeBadge
-              className="shrink-0"
-              tone="neutral"
-              weight="label"
-            >
-              {workstationPresentation.schedulingLabel}
-            </ActivityGraphNodeBadge>
-          ) : null}
-          {data.draftStatus === "addition" ? (
-            <ActivityGraphNodeBadge
-              className="shrink-0"
-              tone="warning"
-              weight="label"
-            >
-              {data.pendingLabel}
-            </ActivityGraphNodeBadge>
-          ) : null}
-          {data.draftStatus === "removal" ? (
-            <ActivityGraphNodeBadge
-              className="shrink-0"
-              tone="danger"
-              weight="label"
-            >
-              {data.removingLabel}
-            </ActivityGraphNodeBadge>
-          ) : null}
+      <FactoryGraphEditorNodeContent
+        data={data}
+        semanticIconClassName={semanticIconClassName}
+        semanticIconKind={semanticIconKind}
+        semanticIconLabel={semanticIconLabel}
+        visualState={visualState}
+        workstationPresentation={workstationPresentation}
+      />
+    </ActivityGraphNodeShell>
+  );
+}
+
+function FactoryGraphEditorNodeContent({
+  data,
+  semanticIconClassName,
+  semanticIconKind,
+  semanticIconLabel,
+  visualState,
+  workstationPresentation,
+}: {
+  data: FactoryGraphEditorNode["data"];
+  semanticIconClassName: string;
+  semanticIconKind: GraphSemanticIconKind;
+  semanticIconLabel: string;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
+  workstationPresentation?: ReturnType<
+    typeof factoryGraphWorkstationPresentation
+  >;
+}) {
+  return (
+    <div className="grid h-full min-w-0 content-start gap-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+          <span
+            className="flex min-h-5 shrink-0 items-center"
+            data-factory-entity-semantic-icon
+            title={data.kindLabel}
+          >
+            <GraphSemanticIcon
+              className={cn(
+                "h-4 w-4",
+                factoryGraphNodeVisualIconClassName(
+                  visualState,
+                  semanticIconClassName,
+                ),
+              )}
+              kind={semanticIconKind}
+              label={semanticIconLabel}
+            />
+          </span>
+          <ActivityGraphNodeBadge weight="label">
+            {semanticIconLabel}
+          </ActivityGraphNodeBadge>
         </div>
-        <p
-          className={cn(
-            "m-0",
-            activityGraphNodeTitleClassName(
-              data.kind === "workstation"
-                ? "font-mono text-[1rem]"
-                : "font-mono text-[0.88rem]",
-            ),
-          )}
-          data-factory-entity-title
-          title={data.label}
-        >
-          {data.label}
-        </p>
-        {workstationPresentation ? (
-          <FactoryGraphWorkstationGuardedControlCard
-            locale={data.locale}
-            presentation={workstationPresentation}
-          />
+        {data.kind === "work-type" && data.isDefaultWorkType ? (
+          <ActivityGraphNodeBadge
+            className="shrink-0"
+            role="status"
+            tone="info"
+            weight="label"
+          >
+            {data.defaultWorkTypeLabel}
+          </ActivityGraphNodeBadge>
         ) : null}
-        {data.canEditConnections ? (
-          <p className="m-0 text-[0.65rem] leading-5 text-on-surface-subtle">
-            {data.connectionHint}
-          </p>
+        {workstationPresentation?.schedulingLabel ? (
+          <ActivityGraphNodeBadge
+            className="shrink-0"
+            tone="neutral"
+            weight="label"
+          >
+            {workstationPresentation.schedulingLabel}
+          </ActivityGraphNodeBadge>
+        ) : null}
+        {data.draftStatus === "addition" ? (
+          <ActivityGraphNodeBadge
+            className="shrink-0"
+            role="status"
+            tone="warning"
+            weight="label"
+          >
+            {data.pendingLabel}
+          </ActivityGraphNodeBadge>
+        ) : null}
+        {data.draftStatus === "removal" ? (
+          <ActivityGraphNodeBadge
+            className="shrink-0"
+            role="status"
+            tone="danger"
+            weight="label"
+          >
+            {data.removingLabel}
+          </ActivityGraphNodeBadge>
         ) : null}
       </div>
-    </ActivityGraphNodeShell>
+      <p
+        className={cn(
+          "m-0",
+          activityGraphNodeTitleClassName(
+            data.kind === "workstation"
+              ? "font-mono text-[1rem]"
+              : "font-mono text-[0.88rem]",
+          ),
+        )}
+        data-factory-entity-title
+        title={data.label}
+      >
+        {data.label}
+      </p>
+      {workstationPresentation ? (
+        <FactoryGraphWorkstationGuardedControlCard
+          locale={data.locale}
+          presentation={workstationPresentation}
+        />
+      ) : null}
+      {data.canEditConnections ? (
+        <p className="m-0 text-[0.65rem] leading-5 text-on-surface-subtle">
+          {data.connectionHint}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -251,6 +324,14 @@ function FactoryGraphEditorWorkerNodeView({
   data: FactoryGraphEditorNode["data"];
   selected: boolean;
 }) {
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "worker",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationMessage !== null ? "error" : undefined,
+  });
   return (
     <ActivityGraphNodeShell
       className={cn(
@@ -271,6 +352,13 @@ function FactoryGraphEditorWorkerNodeView({
       )}
       handles={data.connectionAnchors}
       nodeType="worker"
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: visualState.validation,
+      }}
       zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
       <div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden">
@@ -281,7 +369,10 @@ function FactoryGraphEditorWorkerNodeView({
             title={data.kindLabel}
           >
             <GraphSemanticIcon
-              className="h-3.5 w-3.5 text-info"
+              className={cn(
+                "h-3.5 w-3.5",
+                factoryGraphNodeVisualIconClassName(visualState, "text-info"),
+              )}
               kind="active-work"
               label={data.kindLabel}
             />
@@ -314,6 +405,26 @@ function FactoryGraphEditorWorkerNodeView({
       </div>
     </ActivityGraphNodeShell>
   );
+}
+
+function editorShellNodeType(
+  kind: FactoryGraphNodeKind,
+):
+  | "constraint"
+  | "doc"
+  | "resource"
+  | "statePosition"
+  | "worker"
+  | "workType"
+  | "workstation" {
+  switch (kind) {
+    case "work-state":
+      return "statePosition";
+    case "work-type":
+      return "workType";
+    default:
+      return kind;
+  }
 }
 
 function semanticIconKindForNodeKind(

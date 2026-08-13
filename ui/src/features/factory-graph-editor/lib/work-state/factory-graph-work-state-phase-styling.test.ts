@@ -9,15 +9,28 @@ import {
 
 describe("factory graph work state phase styling", () => {
   it.each([
-    ["INITIAL", "queue", "text-info"],
-    ["PROCESSING", "processing", "text-warning"],
-    ["TERMINAL", "terminal", "text-success"],
-    ["FAILED", "failed", "text-error"],
+    ["INITIAL", "queue", "text-info", "border-info-border bg-info-container"],
+    [
+      "PROCESSING",
+      "processing",
+      "text-warning",
+      "border-af-success-border bg-warning-container",
+    ],
+    [
+      "TERMINAL",
+      "terminal",
+      "text-success",
+      "border-af-success-border bg-success-container",
+    ],
+    [
+      "FAILED",
+      "failed",
+      "text-error",
+      "border-af-danger-border bg-error-container",
+    ],
   ] as const)(
     "maps %s to phase surface and icon styling",
-    (type, iconKind, iconClass) => {
-      const surfaceClass = "border-info-border bg-info-container";
-
+    (type, iconKind, iconClass, surfaceClass) => {
       expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
       expect(workStatePhaseSwatchClassName(type)).toBe(surfaceClass);
       expect(workStatePhaseSemanticIconKind(type)).toBe(iconKind);

@@ -10,6 +10,7 @@ import {
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeVisualIconClassName,
 } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
 import {
@@ -30,6 +31,7 @@ import {
   factoryGraphWorkstationPresentation as workstationPresentation,
   factoryGraphWorkstationTitleClassName as workstationTitleClassName,
 } from "./semantic-workstation-presentation.js";
+import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import type { FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
 
 export type {
@@ -45,6 +47,7 @@ export interface FactoryGraphWorkstationNodeData
   extends Record<string, unknown> {
   active: boolean;
   activeFlow: boolean;
+  focused?: boolean;
   executions: FactoryGraphActiveExecution[];
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
@@ -75,6 +78,7 @@ const VISIBLE_WORK_ITEM_LIMIT = 3;
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
 export function FactoryGraphWorkstationNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphWorkstationNode>) {
   const presentation = workstationPresentation(
     data.workstationSemantics,
@@ -87,41 +91,52 @@ export function FactoryGraphWorkstationNodeView({
   const entries = data.executions.flatMap((execution) =>
     (execution.work_items ?? []).map((workItem) => ({ execution, workItem })),
   );
+  const selected = data.selectedWorkstation || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "workstation",
+    focused: data.focused,
+    lifecycle: data.active ? "PROCESSING" : undefined,
+    muted: data.muted,
+    selected,
+  });
   const className = classNames(
     factoryGraphNodeSurfaceClassName("workstation"),
     "min-w-0 w-full justify-start overflow-hidden border-2",
-    factoryGraphNodeHoverClassName(
-      { muted: data.muted, selected: data.selectedWorkstation },
-      "primary",
-    ),
+    factoryGraphNodeHoverClassName({ muted: data.muted, selected }, "primary"),
     "border-info-border",
     presentation.borderClassName,
-    data.active &&
-      !data.selectedWorkstation &&
-      "border-af-success-border shadow-af-success-chip",
-    data.activeFlow &&
-      !data.selectedWorkstation &&
-      "agent-flow-node--active ring-2 ring-af-success-border",
-    data.selectedWorkstation && "border-primary shadow-af-accent-selected",
     data.selectedWorkID !== null &&
       "border-info-border shadow-af-info-selected",
-    data.muted && "opacity-[0.45]",
   );
   return (
     <FactoryGraphNodeShell
       className={className}
       handles={data.handles}
       nodeType="workstation"
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        lifecycle: data.active ? "PROCESSING" : undefined,
+        muted: data.muted,
+        selected,
+      }}
       zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
       {data.summaryOnly ? (
-        <Summary data={data} presentation={presentation} title={title} />
+        <Summary
+          data={data}
+          presentation={presentation}
+          title={title}
+          visualState={visualState}
+        />
       ) : (
         <ActiveContent
           data={data}
           entries={entries}
           presentation={presentation}
           title={title}
+          visualState={visualState}
         />
       )}
     </FactoryGraphNodeShell>
@@ -132,10 +147,12 @@ function Summary({
   data,
   presentation,
   title,
+  visualState,
 }: {
   data: FactoryGraphWorkstationNodeData;
   presentation: WorkstationPresentation;
   title: string;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   return (
     <div
@@ -151,12 +168,10 @@ function Summary({
             : undefined
         }
         aria-pressed={
-          data.onSelectWorkstation ? data.selectedWorkstation : undefined
+          data.onSelectWorkstation ? visualState.selection : undefined
         }
         className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
-        data-selected-workstation={
-          data.selectedWorkstation ? "true" : undefined
-        }
+        data-selected-workstation={visualState.selection ? "true" : undefined}
         disabled={data.onSelectWorkstation === undefined}
         onClick={
           data.onSelectWorkstation
@@ -168,7 +183,11 @@ function Summary({
         }
         title={title}
       >
-        <Header presentation={presentation} title={title} />
+        <Header
+          presentation={presentation}
+          title={title}
+          visualState={visualState}
+        />
       </GraphNodeButton>
       <FactoryGraphWorkstationGuardedControlCard
         locale={data.locale}
@@ -183,6 +202,7 @@ function ActiveContent({
   entries,
   presentation,
   title,
+  visualState,
 }: {
   data: FactoryGraphWorkstationNodeData;
   entries: Array<{
@@ -191,15 +211,22 @@ function ActiveContent({
   }>;
   presentation: WorkstationPresentation;
   title: string;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
-  const header = <Header presentation={presentation} title={title} />;
+  const header = (
+    <Header
+      presentation={presentation}
+      title={title}
+      visualState={visualState}
+    />
+  );
   return (
     <div
       className="grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]"
       data-active={data.active ? "true" : undefined}
       data-selected-work={data.selectedWorkID !== null ? "true" : undefined}
-      data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
+      data-selected-workstation={visualState.selection ? "true" : undefined}
       data-workstation-control-role={presentation.controlRole}
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
@@ -207,7 +234,7 @@ function ActiveContent({
       {data.onSelectWorkstation ? (
         <GraphNodeButton
           aria-label={selectWorkstationLabel(title, data.locale)}
-          aria-pressed={data.selectedWorkstation}
+          aria-pressed={visualState.selection}
           className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
           onClick={(event) => {
             event.stopPropagation();
@@ -317,10 +344,12 @@ function Header({
   compact = false,
   presentation,
   title,
+  visualState,
 }: {
   compact?: boolean;
   presentation: WorkstationPresentation;
   title: string;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   return (
     <>
@@ -334,7 +363,13 @@ function Header({
         title={presentation.label}
       >
         <GraphSemanticIcon
-          className={classNames("h-4 w-4", presentation.className)}
+          className={classNames(
+            "h-4 w-4",
+            factoryGraphNodeVisualIconClassName(
+              visualState,
+              presentation.className,
+            ),
+          )}
           kind={presentation.iconKind}
           label={presentation.label}
         />
