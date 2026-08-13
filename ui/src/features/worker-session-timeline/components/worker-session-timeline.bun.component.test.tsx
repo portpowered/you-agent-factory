@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
 import type {
@@ -21,6 +22,7 @@ import {
 } from "../lib/worker-session-timeline-projection";
 import { getWorkerSessionTimelineMessages } from "../messages/worker-session-timeline";
 import { WorkerSessionTimelineContent } from "./worker-session-timeline";
+import { BoundedCode } from "./worker-session-timeline-detail-primitives";
 import { WorkerSessionTimelineWidget } from "./worker-session-timeline-widget";
 
 const WORKER_SESSION_ID = "worker-session-ui-1";
@@ -337,9 +339,11 @@ describe("WorkerSessionTimelineContent live focus", () => {
 });
 
 describe("WorkerSessionTimelineContent large details", () => {
-  it("uses semantic row positions and a keyboard-operable disclosure for large bodies", () => {
+  it("uses semantic row positions and reveals the full text after keyboard expansion", async () => {
+    const user = userEvent.setup();
     const messages = getWorkerSessionTimelineMessages("en");
-    const longText = "long body ".repeat(500);
+    const textSentinel = "TEXT_FULL_CONTENT_SENTINEL";
+    const longText = `${"long body ".repeat(400)}${textSentinel}`;
     render(
       <WorkerSessionTimelineContent
         state={timelineState({
@@ -369,16 +373,52 @@ describe("WorkerSessionTimelineContent large details", () => {
       throw new Error("expected a native bounded content disclosure");
     }
     expect(boundedContent.open).toBe(false);
+    expect(boundedContent.textContent).not.toContain(textSentinel);
     const boundedSummary = boundedContent.querySelector("summary");
     if (!boundedSummary) {
       throw new Error("expected a bounded content summary");
     }
-    fireEvent.click(boundedSummary);
+    boundedSummary.focus();
+    await user.keyboard("{Enter}");
     expect(boundedContent.open).toBe(true);
     expect(boundedSummary.textContent).toBe(messages.collapseContentAction);
-    expect(boundedContent.textContent).toContain(
-      `${longText.slice(0, 4_000)}…`,
+    expect(boundedContent.textContent).toContain(textSentinel);
+  });
+
+  it("reveals the full structured/code body after keyboard expansion", async () => {
+    const user = userEvent.setup();
+    const messages = getWorkerSessionTimelineMessages("en");
+    const codeSentinel = "CODE_FULL_CONTENT_SENTINEL";
+    const longStructuredValue = {
+      output: `${"structured body ".repeat(400)}${codeSentinel}`,
+    };
+
+    render(
+      <BoundedCode
+        collapseLabel={messages.collapseContentAction}
+        expandLabel={messages.expandContentAction}
+        label={messages.toolResultLabel}
+        value={longStructuredValue}
+      />,
     );
+
+    const boundedContent = document.querySelector(
+      "details[data-worker-session-timeline-bounded-content='true']",
+    );
+    if (!(boundedContent instanceof HTMLDetailsElement)) {
+      throw new Error("expected a native bounded content disclosure");
+    }
+    expect(boundedContent.textContent).not.toContain(codeSentinel);
+
+    const boundedSummary = boundedContent.querySelector("summary");
+    if (!boundedSummary) {
+      throw new Error("expected a bounded content summary");
+    }
+    boundedSummary.focus();
+    await user.keyboard("{Enter}");
+
+    expect(boundedContent.open).toBe(true);
+    expect(boundedContent.textContent).toContain(codeSentinel);
   });
 });
 

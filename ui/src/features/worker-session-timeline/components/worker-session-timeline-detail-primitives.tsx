@@ -105,15 +105,18 @@ export function BoundedText({
   label: string;
   value: string;
 }) {
+  const preview = boundedText(value);
   return (
     <BoundedValue
       collapseLabel={collapseLabel}
       expandLabel={expandLabel}
       label={label}
       long={value.length > MAX_DISPLAY_TEXT_LENGTH}
-    >
-      <Text className="m-0 whitespace-pre-wrap">{boundedText(value)}</Text>
-    </BoundedValue>
+      collapsedContent={
+        <Text className="m-0 whitespace-pre-wrap">{preview}</Text>
+      }
+      expandedContent={<Text className="m-0 whitespace-pre-wrap">{value}</Text>}
+    />
   );
 }
 
@@ -129,39 +132,40 @@ export function BoundedCode({
   value: WorkerTimelineJSONValue;
 }) {
   const formattedValue = formatJSONValue(value);
+  const preview = boundedText(formattedValue);
   return (
     <BoundedValue
       collapseLabel={collapseLabel}
       expandLabel={expandLabel}
       label={label}
       long={formattedValue.length > MAX_DISPLAY_TEXT_LENGTH}
-    >
-      <pre className="af-body-code m-0 max-h-64 min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words">
-        <code>{boundedText(formattedValue)}</code>
-      </pre>
-    </BoundedValue>
+      collapsedContent={renderCodeContent(preview)}
+      expandedContent={renderCodeContent(formattedValue)}
+    />
   );
 }
 
 function BoundedValue({
-  children,
   collapseLabel,
+  collapsedContent,
   expandLabel,
+  expandedContent,
   label,
   long,
 }: {
-  children: ReactNode;
   collapseLabel?: string;
+  collapsedContent: ReactNode;
   expandLabel?: string;
+  expandedContent: ReactNode;
   label: string;
   long: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const visibleExpandLabel = expandLabel ?? label;
   const visibleCollapseLabel = collapseLabel ?? label;
-  const content = (
+  const content = (body: ReactNode) => (
     <div className="max-h-64 min-w-0 max-w-full overflow-auto rounded-md border border-outline bg-surface-container-high p-3 [overflow-wrap:anywhere]">
-      {children}
+      {body}
     </div>
   );
 
@@ -175,15 +179,32 @@ function BoundedValue({
           onToggle={(event) => setExpanded(event.currentTarget.open)}
           open={expanded}
         >
-          <summary className="cursor-pointer break-words px-1 py-1 text-sm font-semibold text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: native summary is the disclosure control and receives keyboard toggles. */}
+          <summary
+            className="cursor-pointer break-words px-1 py-1 text-sm font-semibold text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setExpanded((current) => !current);
+              }
+            }}
+          >
             {expanded ? visibleCollapseLabel : visibleExpandLabel}
           </summary>
-          {content}
+          {content(expanded ? expandedContent : collapsedContent)}
         </details>
       ) : (
-        content
+        content(collapsedContent)
       )}
     </div>
+  );
+}
+
+function renderCodeContent(value: string): ReactNode {
+  return (
+    <pre className="af-body-code m-0 max-h-64 min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words">
+      <code>{value}</code>
+    </pre>
   );
 }
 

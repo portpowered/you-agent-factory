@@ -340,7 +340,10 @@ async function installWorkerSessionRoutes(
   return requests;
 }
 
-async function selectReplayWork(page) {
+async function selectReplayWork(page, expect) {
+  // Replay hydration can render the Work picker after the shared interaction
+  // timeout under CI load; keep this recovery local to the replay scenario.
+  const replaySelectionTimeoutMs = 30_000;
   const workstationButton = page.getByRole("button", {
     name: /^Select plan workstation$/i,
   });
@@ -358,9 +361,14 @@ async function selectReplayWork(page) {
   const workItemButton = page
     .getByRole("button", { name: /^Select work item / })
     .first();
+  await expect
+    .poll(() => workItemButton.count(), {
+      timeout: replaySelectionTimeoutMs,
+    })
+    .toBeGreaterThan(0);
   await workItemButton.waitFor({
     state: "visible",
-    timeout: uiInteractionTimeoutMs,
+    timeout: replaySelectionTimeoutMs,
   });
   await workItemButton.focus();
   await workItemButton.press("Enter");
@@ -536,7 +544,7 @@ describe("Worker Session timeline browser integration", () => {
         await browserPage.page
           .getByRole("heading", { level: 1, name: "U", exact: true })
           .waitFor({ timeout: uiInteractionTimeoutMs });
-        await selectReplayWork(browserPage.page);
+        await selectReplayWork(browserPage.page, expect);
 
         const timelineCard = browserPage.page.locator(
           '[data-bento-card-id="worker-session-timeline"]',
@@ -654,7 +662,7 @@ describe("Worker Session timeline browser integration", () => {
         await browserPage.page
           .getByRole("heading", { level: 1, name: "U", exact: true })
           .waitFor({ timeout: uiInteractionTimeoutMs });
-        await selectReplayWork(browserPage.page);
+        await selectReplayWork(browserPage.page, expect);
 
         const timeline = browserPage.page
           .locator('[data-bento-card-id="worker-session-timeline"]')
@@ -774,7 +782,7 @@ describe("Worker Session timeline browser integration", () => {
         await browserPage.page
           .getByRole("heading", { level: 1, name: "U", exact: true })
           .waitFor({ timeout: uiInteractionTimeoutMs });
-        await selectReplayWork(browserPage.page);
+        await selectReplayWork(browserPage.page, expect);
         await browserPage.page.setViewportSize({ height: 900, width: 1440 });
 
         const timeline = browserPage.page
