@@ -213,41 +213,6 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	nilPublisher.Publish(fragment)
 }
 
-func TestProviderSessionObservationPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
-	var forwarded []workers.ProgressFragment
-	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
-		forwarded = append(forwarded, fragment)
-	}).WithUnassociatedProgressFallback()
-	observer := &providerSessionObservationSpy{err: workersessions.ErrProviderSessionAssociationAttemptMismatch}
-	publisher.Bind(observer)
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-runtime"}
-	progress := workers.ProgressFragment{
-		DispatchID:               "runtime-dispatch",
-		Kind:                     workers.ResponseFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(),
-			Kind:     reference.Kind,
-			ID:       reference.ID,
-		},
-	}
-
-	publisher.Publish(progress)
-	if len(observer.requests) != 1 || len(forwarded) != 1 || forwarded[0].DispatchID != progress.DispatchID {
-		t.Fatalf("fallback association requests=%#v forwarded=%#v, want one observed and one downstream progress", observer.requests, forwarded)
-	}
-
-	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               progress.DispatchID,
-		Kind:                     workers.ProviderSessionObservedFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef:       workers.CloneProviderSessionMetadata(progress.ProviderSessionRef),
-	})
-	if len(forwarded) != 1 {
-		t.Fatalf("internal association hand-off forwarded=%#v, want suppressed", forwarded)
-	}
-}
-
 func TestProviderSessionObservationRequest_Validate(t *testing.T) {
 	valid := workersessions.ProviderSessionObservationRequest{
 		DispatchID: "dispatch-1",

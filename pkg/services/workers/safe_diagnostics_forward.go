@@ -20,11 +20,11 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeW
 	)
 }
 
-// SafeDiagnosticsFromWorkDiagnostics projects the full persistence-safe
-// execution diagnostics contract used by ExecuteResult. It is separate from
+// ToSafeDiagnostics projects the full persistence-safe execution diagnostics
+// contract used by ExecuteResult. It is separate from
 // SafeWorkDiagnosticsFromWorkDiagnostics, whose narrower shape is the
 // canonical dashboard/event projection and omits command/panic fields.
-func SafeDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeDiagnostics {
+func (diagnostics *WorkDiagnostics) ToSafeDiagnostics() *SafeDiagnostics {
 	if diagnostics == nil {
 		return nil
 	}
@@ -65,11 +65,10 @@ func SafeDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeDiagn
 	return out
 }
 
-// WorkDiagnosticsFromSafeDiagnostics rehydrates the worker-facing diagnostic
-// shape at the legacy WorkResult boundary. Safe diagnostics have already
-// removed request secrets, so the reverse mapping cannot restore stdin or
-// environment values.
-func WorkDiagnosticsFromSafeDiagnostics(diagnostics *SafeDiagnostics) *WorkDiagnostics {
+// ToWorkDiagnostics rehydrates the worker-facing diagnostic shape at the
+// legacy WorkResult boundary. Safe diagnostics have already removed request
+// secrets, so the reverse mapping cannot restore stdin or environment values.
+func (diagnostics *SafeDiagnostics) ToWorkDiagnostics() *WorkDiagnostics {
 	if diagnostics == nil {
 		return nil
 	}

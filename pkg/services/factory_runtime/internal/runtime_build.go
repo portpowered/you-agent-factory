@@ -661,7 +661,7 @@ func executeResultFromWorkstationDispatch(
 			RetryCount: result.Result.Metrics.RetryCount,
 		},
 		Continuation: continuationFromWorkstationSession(result.Result.ProviderSession),
-		Diagnostics:  workers.SafeDiagnosticsFromWorkDiagnostics(result.Result.Diagnostics),
+		Diagnostics:  result.Result.Diagnostics.ToSafeDiagnostics(),
 	}
 	if result.Result.FailureMetadata != nil || strings.TrimSpace(result.Result.Error) != "" {
 		executeResult.Failure = executionFailureFromWorkstationResult(result.Result, dispatchErr)

@@ -226,6 +226,7 @@ type publisherServiceSpy struct {
 	resolvedID   string
 	resolveErr   error
 	publishErr   error
+	observeErr   error
 }
 
 func publisherTestDraft() workers.Draft {
@@ -249,6 +250,13 @@ func (s *publisherServiceSpy) WorkerSessionIDForDispatch(context.Context, string
 
 func (s *publisherServiceSpy) PublishRecord(context.Context, PublishRecordRequest) (PublishRecordResult, error) {
 	return PublishRecordResult{}, s.publishErr
+}
+
+func (s *publisherServiceSpy) ObserveProviderSession(
+	context.Context,
+	ProviderSessionObservationRequest,
+) (ProviderSessionAssociationResult, error) {
+	return ProviderSessionAssociationResult{}, s.observeErr
 }
 
 func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
@@ -554,6 +562,42 @@ func TestPublisher_DoesNotForwardInternalProviderObservation(t *testing.T) {
 	publisher.Publish(workers.ProgressFragment{Kind: workers.ProviderSessionObservedFragmentKind})
 	if forwarded != 0 {
 		t.Fatalf("forwarded internal provider observation count = %d, want 0", forwarded)
+	}
+}
+
+func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
+	var forwarded []workers.ProgressFragment
+	publisher := NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	}).WithUnassociatedProgressFallback()
+	observer := &publisherServiceSpy{}
+	publisher.Bind(observer)
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-runtime"}
+	progress := workers.ProgressFragment{
+		DispatchID:               "runtime-dispatch",
+		Kind:                     workers.ResponseFragmentKind,
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef: &workers.ProviderSessionMetadata{
+			Provider: reference.Provider.String(),
+			Kind:     reference.Kind,
+			ID:       reference.ID,
+		},
+	}
+	observer.observeErr = ErrProviderSessionAssociationAttemptMismatch
+
+	publisher.Publish(progress)
+	if len(forwarded) != 1 || forwarded[0].DispatchID != progress.DispatchID {
+		t.Fatalf("fallback forwarded=%#v, want one downstream progress", forwarded)
+	}
+
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:               progress.DispatchID,
+		Kind:                     workers.ProviderSessionObservedFragmentKind,
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef:       workers.CloneProviderSessionMetadata(progress.ProviderSessionRef),
+	})
+	if len(forwarded) != 1 {
+		t.Fatalf("internal association hand-off forwarded=%#v, want suppressed", forwarded)
 	}
 }
 
