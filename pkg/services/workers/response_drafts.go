@@ -181,7 +181,10 @@ type SessionPayload struct {
 	ProviderSelection *SessionProviderSelection `json:"providerSelection,omitempty"`
 	Model             string                    `json:"model,omitempty"`
 	ReasoningEffort   string                    `json:"reasoningEffort,omitempty"`
-	Capabilities      *Capabilities             `json:"capabilities,omitempty"`
+	// WorkingDirectory is the resolved execution directory retained for public
+	// Worker Session stream correlation.
+	WorkingDirectory string        `json:"workingDirectory,omitempty"`
+	Capabilities     *Capabilities `json:"capabilities,omitempty"`
 	// Title carries a mid-lifecycle Chat Session display-title change (only
 	// meaningful with Phase == PhaseUpdated; lifecycle phases leave it nil).
 	// A nil Title declares no title change, matching acp-go-sdk's own

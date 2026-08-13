@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	s8WorkerASuccessorID = "s8-worker-a-replacement"
+	s8WorkerASuccessorID = "s8-successor-a"
 	s8InterruptRequestID = "s8-interrupt-request"
 	s8ReplacementMessage = "replace repository A instruction only"
 	s8ReplacementOutput  = "S8 repository A replacement provider output"
@@ -156,15 +156,27 @@ func finishS8InterruptScenario(
 	scenario.runner.release(t, scenario.repositoryB.path, s8InterruptCallBInitial)
 	waitS8Stream(t, streamA, s8WorkerAID)
 	waitS8Stream(t, streamB, s8WorkerBID)
-	assertS8StreamIsolation(t, streamB.writer.bytes(), s8WorkerBID, s8ProviderSessionB, s8OutputB, s8WorkerASuccessorID, scenario.repositoryA.path, s8ReplacementMessage)
-	assertS8CanceledStreamIsolation(t, streamA.writer.bytes(), s8WorkerAID, s8ProviderSessionA, s8WorkerASuccessorID, scenario.repositoryB.path, s8MessageB)
+	sourceCorrelation := s8Correlation{
+		repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: s8DispatchAID,
+		workerSessionID: s8WorkerAID, providerSessionID: s8ProviderSessionA, message: s8MessageA, output: s8OutputA,
+	}
+	successorCorrelation := s8Correlation{
+		repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: successor.AttemptID,
+		workerSessionID: s8WorkerASuccessorID, providerSessionID: s8ProviderSessionA, message: s8ReplacementMessage, output: s8ReplacementOutput,
+	}
+	bCorrelation := s8Correlation{
+		repository: scenario.repositoryB.path, marker: scenario.repositoryB.marker, dispatchID: s8DispatchBID,
+		workerSessionID: s8WorkerBID, providerSessionID: s8ProviderSessionB, message: s8MessageB, output: s8OutputB,
+	}
+	assertS8StreamIsolation(t, streamB.writer.bytes(), bCorrelation, sourceCorrelation, successorCorrelation)
+	assertS8CanceledStreamIsolation(t, streamA.writer.bytes(), sourceCorrelation, successorCorrelation, bCorrelation)
 
 	retainedSource := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerAID)
 	retainedSuccessor := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerASuccessorID)
 	retainedB := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8WorkerBID)
-	assertS8CanceledRetainedStream(t, retainedSource, s8WorkerAID, s8ProviderSessionA, s8WorkerASuccessorID, scenario.repositoryB.path, s8MessageB)
-	assertS8RetainedStream(t, retainedSuccessor, s8WorkerASuccessorID, s8ProviderSessionA, s8ReplacementOutput, s8WorkerBID, scenario.repositoryB.path, s8MessageB)
-	assertS8RetainedStream(t, retainedB, s8WorkerBID, s8ProviderSessionB, s8OutputB, s8WorkerASuccessorID, scenario.repositoryA.path, s8ReplacementMessage)
+	assertS8CanceledRetainedStream(t, retainedSource, sourceCorrelation, successorCorrelation, bCorrelation)
+	assertS8RetainedStream(t, retainedSuccessor, successorCorrelation, sourceCorrelation, bCorrelation)
+	assertS8RetainedStream(t, retainedB, bCorrelation, sourceCorrelation, successorCorrelation)
 
 	completed := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
 	if len(completed) != 3 {
@@ -181,7 +193,7 @@ func finishS8InterruptScenario(
 	assertS8Observation(t, finalSuccessor, s8WorkerASuccessorID, "COMPLETED", s8ProviderSessionA, successor.AttemptID)
 	assertS8Observation(t, finalB, s8WorkerBID, "COMPLETED", s8ProviderSessionB, s8DispatchBID)
 
-	assertS8InterruptProviderRequests(t, scenario.runner.requests(), scenario.repositoryA, scenario.repositoryB)
+	assertS8InterruptProviderRequests(t, scenario.runner.requests(), scenario.runner.markers(), sourceCorrelation, successorCorrelation, bCorrelation)
 	if scenario.runner.cancellationCount(s8InterruptCallAInitial) != 1 || scenario.runner.cancellationCount(s8InterruptCallBInitial) != 0 || scenario.runner.cancellationCount(s8InterruptCallASuccessor) != 0 {
 		t.Fatalf("provider cancellation counts = A initial:%d A successor:%d B:%d, want 1/0/0", scenario.runner.cancellationCount(s8InterruptCallAInitial), scenario.runner.cancellationCount(s8InterruptCallASuccessor), scenario.runner.cancellationCount(s8InterruptCallBInitial))
 	}
@@ -247,32 +259,34 @@ func assertS8Observation(
 func assertS8CanceledStreamIsolation(
 	t *testing.T,
 	stdout []byte,
-	workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage string,
+	own s8Correlation,
+	foreign ...s8Correlation,
 ) {
 	t.Helper()
 	frames := decodeS8Stream(t, string(stdout))
 	if len(frames) == 0 {
-		t.Fatalf("canceled stream for %q returned no frames", workerSessionID)
+		t.Fatalf("canceled stream for %q returned no frames", own.workerSessionID)
 	}
-	assertS8Frames(t, frames, workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage)
+	assertS8Frames(t, frames, own, false, foreign...)
 	for _, frame := range frames {
 		if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
 			return
 		}
 	}
-	t.Fatalf("canceled stream for %q omitted terminal delivery: %#v", workerSessionID, frames)
+	t.Fatalf("canceled stream for %q omitted terminal delivery: %#v", own.workerSessionID, frames)
 }
 
 func assertS8CanceledRetainedStream(
 	t *testing.T,
 	frames []s8StreamFrame,
-	workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage string,
+	own s8Correlation,
+	foreign ...s8Correlation,
 ) {
 	t.Helper()
 	if len(frames) == 0 {
-		t.Fatalf("retained canceled stream for %q returned no frames", workerSessionID)
+		t.Fatalf("retained canceled stream for %q returned no frames", own.workerSessionID)
 	}
-	assertS8Frames(t, frames, workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage)
+	assertS8Frames(t, frames, own, false, foreign...)
 	var terminal, complete bool
 	for _, frame := range frames {
 		if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
@@ -283,7 +297,7 @@ func assertS8CanceledRetainedStream(
 		}
 	}
 	if !terminal || !complete {
-		t.Fatalf("retained canceled stream for %q = %#v, want terminal and complete replay summary", workerSessionID, frames)
+		t.Fatalf("retained canceled stream for %q = %#v, want terminal and complete replay summary", own.workerSessionID, frames)
 	}
 }
 
@@ -307,6 +321,7 @@ type s8InterruptProviderCall struct {
 
 type s8InterruptProviderCase struct {
 	repository string
+	marker     string
 	calls      []*s8InterruptProviderCall
 	next       int
 }
@@ -316,6 +331,7 @@ type s8InterruptProviderRunner struct {
 	stdout             []byte
 	cases              map[string]*s8InterruptProviderCase
 	requestLog         []platformprocess.CommandRequest
+	markerLog          map[string][]string
 	order              []string
 	invocationCounts   map[string]int
 	cancellationCounts map[string]int
@@ -327,6 +343,7 @@ func newS8InterruptProviderRunner(stdout []byte, repositoryA, repositoryB s8Repo
 		cases: map[string]*s8InterruptProviderCase{
 			repositoryA.path: {
 				repository: repositoryA.path,
+				marker:     repositoryA.marker,
 				calls: []*s8InterruptProviderCall{
 					newS8InterruptProviderCall(s8InterruptCallAInitial, s8ProviderSessionA, s8OutputA),
 					newS8InterruptProviderCall(s8InterruptCallASuccessor, s8ProviderSessionA, s8ReplacementOutput),
@@ -334,6 +351,7 @@ func newS8InterruptProviderRunner(stdout []byte, repositoryA, repositoryB s8Repo
 			},
 			repositoryB.path: {
 				repository: repositoryB.path,
+				marker:     repositoryB.marker,
 				calls: []*s8InterruptProviderCall{
 					newS8InterruptProviderCall(s8InterruptCallBInitial, s8ProviderSessionB, s8OutputB),
 				},
@@ -341,6 +359,7 @@ func newS8InterruptProviderRunner(stdout []byte, repositoryA, repositoryB s8Repo
 		},
 		invocationCounts:   make(map[string]int),
 		cancellationCounts: make(map[string]int),
+		markerLog:          make(map[string][]string),
 	}
 }
 
@@ -399,18 +418,42 @@ func (runner *s8InterruptProviderRunner) run(
 
 func (runner *s8InterruptProviderRunner) nextCall(request platformprocess.CommandRequest) (*s8InterruptProviderCall, error) {
 	runner.mu.Lock()
-	defer runner.mu.Unlock()
 	providerCase := runner.cases[request.WorkDir]
 	if providerCase == nil {
+		runner.mu.Unlock()
 		return nil, fmt.Errorf("unexpected S8 interrupt provider working directory %q", request.WorkDir)
 	}
 	if providerCase.next >= len(providerCase.calls) {
+		runner.mu.Unlock()
 		return nil, fmt.Errorf("unexpected duplicate S8 interrupt provider call in %q", request.WorkDir)
 	}
 	call := providerCase.calls[providerCase.next]
 	providerCase.next++
+	marker := providerCase.marker
+	foreignMarkers := make([]string, 0, len(runner.cases)-1)
+	for _, other := range runner.cases {
+		if other.repository != request.WorkDir {
+			foreignMarkers = append(foreignMarkers, other.marker)
+		}
+	}
+	runner.mu.Unlock()
+	observedMarker, err := readS8RepositoryMarker(request.WorkDir)
+	if err != nil {
+		return nil, err
+	}
+	if observedMarker != marker {
+		return nil, fmt.Errorf("S8 interrupt provider working directory %q marker = %q, want %q", request.WorkDir, observedMarker, marker)
+	}
+	for _, foreignMarker := range foreignMarkers {
+		if observedMarker == foreignMarker {
+			return nil, fmt.Errorf("S8 interrupt provider working directory %q observed foreign marker %q", request.WorkDir, observedMarker)
+		}
+	}
+	runner.mu.Lock()
 	runner.requestLog = append(runner.requestLog, cloneS8CommandRequest(request))
+	runner.markerLog[request.WorkDir] = append(runner.markerLog[request.WorkDir], observedMarker)
 	runner.invocationCounts[call.kind]++
+	runner.mu.Unlock()
 	return call, nil
 }
 
@@ -500,6 +543,16 @@ func (runner *s8InterruptProviderRunner) requests() []platformprocess.CommandReq
 	return requests
 }
 
+func (runner *s8InterruptProviderRunner) markers() map[string][]string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	markers := make(map[string][]string, len(runner.markerLog))
+	for repository, values := range runner.markerLog {
+		markers[repository] = append([]string(nil), values...)
+	}
+	return markers
+}
+
 func (runner *s8InterruptProviderRunner) cancellationCount(kind string) int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -526,53 +579,33 @@ func (runner *s8InterruptProviderRunner) assertOrder(t *testing.T, required ...s
 func assertS8InterruptProviderRequests(
 	t *testing.T,
 	requests []platformprocess.CommandRequest,
-	repositoryA, repositoryB s8Repository,
+	markers map[string][]string,
+	correlations ...s8Correlation,
 ) {
 	t.Helper()
-	if len(requests) != 3 {
+	if len(requests) != 3 || len(correlations) != 3 {
 		t.Fatalf("provider command requests = %d, want A initial, A successor, and B initial: %#v", len(requests), requests)
 	}
+	assertS8ProviderMarkers(t, markers, correlations...)
 	byRepository := map[string][]platformprocess.CommandRequest{}
 	for _, request := range requests {
-		if request.Command != "codex" {
-			t.Fatalf("provider command = %q, want codex", request.Command)
-		}
 		byRepository[request.WorkDir] = append(byRepository[request.WorkDir], request)
 	}
-	if len(byRepository[repositoryA.path]) != 2 || len(byRepository[repositoryB.path]) != 1 {
+	if len(byRepository[correlations[0].repository]) != 2 || len(byRepository[correlations[2].repository]) != 1 {
 		t.Fatalf("provider requests by repository = %#v, want A:2 B:1", byRepository)
 	}
 
-	initialA := byRepository[repositoryA.path][0]
-	successorA := byRepository[repositoryA.path][1]
-	initialB := byRepository[repositoryB.path][0]
-	assertS8ProviderRequest(t, initialA, repositoryA.path, s8MessageA, false, s8ReplacementMessage, s8MessageB)
-	assertS8ProviderRequest(t, successorA, repositoryA.path, s8ReplacementMessage, true, s8MessageA, s8MessageB)
-	assertS8ProviderRequest(t, initialB, repositoryB.path, s8MessageB, false, s8MessageA, s8ReplacementMessage)
-	if !strings.Contains(strings.Join(successorA.Args, " "), s8ProviderSessionA) {
-		t.Fatalf("successor A provider args = %#v, want resumed Provider Session %q", successorA.Args, s8ProviderSessionA)
+	initialA := byRepository[correlations[0].repository][0]
+	successorA := byRepository[correlations[0].repository][1]
+	initialB := byRepository[correlations[2].repository][0]
+	assertS8ProviderRequest(t, initialA, correlations[0], correlations[1], correlations[2])
+	assertS8ProviderRequest(t, successorA, correlations[1], correlations[0], correlations[2])
+	assertS8ProviderRequest(t, initialB, correlations[2], correlations[0], correlations[1])
+	if !strings.Contains(strings.Join(successorA.Args, " "), correlations[1].providerSessionID) {
+		t.Fatalf("successor A provider args = %#v, want resumed Provider Session %q", successorA.Args, correlations[1].providerSessionID)
 	}
-}
-
-func assertS8ProviderRequest(
-	t *testing.T,
-	request platformprocess.CommandRequest,
-	repository, required string,
-	resumeExpected bool,
-	forbidden ...string,
-) {
-	t.Helper()
-	requestText := strings.Join([]string{request.Command, strings.Join(request.Args, " "), string(request.Stdin), strings.Join(request.Env, "\n"), request.WorkDir}, "\n")
-	if request.WorkDir != repository || !strings.Contains(requestText, required) {
-		t.Fatalf("provider request %s = %#v, want repository %q and input %q", required, request, repository, required)
-	}
-	for _, value := range forbidden {
-		if strings.Contains(requestText, value) {
-			t.Fatalf("provider request %s contains forbidden input %q: %#v", required, value, request)
-		}
-	}
-	if strings.Contains(strings.Join(request.Args, " "), "resume") != resumeExpected {
-		t.Fatalf("provider request %s resume flag = %t, want %t: %#v", required, strings.Contains(strings.Join(request.Args, " "), "resume"), resumeExpected, request.Args)
+	if !strings.Contains(strings.Join(successorA.Args, " "), "resume") {
+		t.Fatalf("successor A provider args = %#v, want resume", successorA.Args)
 	}
 }
 

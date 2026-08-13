@@ -34,6 +34,58 @@ const (
 	s8OutputB          = "S8 repository B provider output"
 )
 
+type s8Correlation struct {
+	repository        string
+	marker            string
+	dispatchID        string
+	workerSessionID   string
+	providerSessionID string
+	message           string
+	output            string
+}
+
+func (correlation s8Correlation) tokens() []string {
+	return []string{
+		correlation.marker,
+		correlation.repository,
+		correlation.dispatchID,
+		correlation.workerSessionID,
+		correlation.providerSessionID,
+		correlation.message,
+		correlation.output,
+	}
+}
+
+func (correlation s8Correlation) owns(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, own := range correlation.tokens() {
+		if own == token {
+			return true
+		}
+	}
+	return false
+}
+
+type s8ManagerScenario struct {
+	ctx         context.Context
+	manager     support.Process
+	env         []string
+	factoryDir  string
+	server      *support.FunctionalAPIServer
+	repositoryA s8Repository
+	repositoryB s8Repository
+	runner      *s8RemoteProviderRunner
+}
+
+type s8ManagerOverlap struct {
+	streamA      s8StreamCapture
+	streamB      s8StreamCapture
+	correlationA s8Correlation
+	correlationB s8Correlation
+}
+
 // TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers proves the first S8
 // story through the public manager boundary. The server and manager processes
 // both come from root.BuildProcess; only the provider command edge is replaced.
@@ -45,6 +97,17 @@ func TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers(t *testing.T) {
 	// provider-edge signals and public CLI stream observations below.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
+	scenario := newS8ManagerScenario(t, ctx)
+	defer scenario.runner.releaseAll()
+	defer scenario.server.Stop(t)
+
+	overlap := startS8ManagerWorkers(t, scenario)
+	assertS8ManagerOverlap(t, scenario, overlap)
+	finishS8ManagerScenario(t, scenario, overlap)
+}
+
+func newS8ManagerScenario(t *testing.T, ctx context.Context) s8ManagerScenario {
+	t.Helper()
 
 	factoryDir := support.ScaffoldSingleStepFactory(t, "s8-manager-scenario")
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig("codex", "functional-model"))
@@ -56,8 +119,8 @@ func TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers(t *testing.T) {
 	stdout := readS8ProviderFixture(t, "stdout.jsonl")
 	rollout := readS8ProviderFixture(t, "rollout.jsonl")
 	runner := newS8RemoteProviderRunner(stdout,
-		s8RemoteProviderCase{repository: repositoryA.path, sessionID: s8ProviderSessionA, output: s8OutputA, release: make(chan struct{}), started: make(chan struct{})},
-		s8RemoteProviderCase{repository: repositoryB.path, sessionID: s8ProviderSessionB, output: s8OutputB, release: make(chan struct{}), started: make(chan struct{})},
+		s8RemoteProviderCase{repository: repositoryA.path, marker: repositoryA.marker, sessionID: s8ProviderSessionA, output: s8OutputA, release: make(chan struct{}), started: make(chan struct{})},
+		s8RemoteProviderCase{repository: repositoryB.path, marker: repositoryB.marker, sessionID: s8ProviderSessionB, output: s8OutputB, release: make(chan struct{}), started: make(chan struct{})},
 	)
 	writeS8CodexRollout(t, homeDir, s8ProviderSessionA, rollout, s8OutputA)
 	writeS8CodexRollout(t, homeDir, s8ProviderSessionB, rollout, s8OutputB)
@@ -78,57 +141,80 @@ func TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers(t *testing.T) {
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	})
 	support.CleanupProcess(t, manager)
+	return s8ManagerScenario{
+		ctx: ctx, manager: manager, env: env, factoryDir: factoryDir, server: server,
+		repositoryA: repositoryA, repositoryB: repositoryB, runner: runner,
+	}
+}
 
-	invokeS8RemoteWorker(t, ctx, manager, env, repositoryA.path, server.URL(), s8RemoteWorkerInvocation{
+func startS8ManagerWorkers(t *testing.T, scenario s8ManagerScenario) s8ManagerOverlap {
+	t.Helper()
+	invokeS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.server.URL(), s8RemoteWorkerInvocation{
 		requestID: s8RequestAID, workerSessionID: s8WorkerAID, dispatchID: s8DispatchAID,
-		repository: repositoryA.path, message: s8MessageA,
+		repository: scenario.repositoryA.path, message: s8MessageA,
 	})
-	runner.waitStarted(t, repositoryA.path)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path)
 
-	invokeS8RemoteWorker(t, ctx, manager, env, repositoryB.path, server.URL(), s8RemoteWorkerInvocation{
+	invokeS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.server.URL(), s8RemoteWorkerInvocation{
 		requestID: s8RequestBID, workerSessionID: s8WorkerBID, dispatchID: s8DispatchBID,
-		repository: repositoryB.path, message: s8MessageB,
+		repository: scenario.repositoryB.path, message: s8MessageB,
 	})
-	runner.waitStarted(t, repositoryB.path)
+	scenario.runner.waitStarted(t, scenario.repositoryB.path)
 
-	streamA := startS8LiveStream(t, ctx, manager, env, repositoryA.path, server.URL(), s8WorkerAID)
-	streamA.writer.waitFirstWrite(t, s8WorkerAID)
-	streamB := startS8LiveStream(t, ctx, manager, env, repositoryB.path, server.URL(), s8WorkerBID)
-	streamB.writer.waitFirstWrite(t, s8WorkerBID)
+	return s8ManagerOverlap{
+		streamA: startS8LiveStream(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.server.URL(), s8WorkerAID),
+		streamB: startS8LiveStream(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.server.URL(), s8WorkerBID),
+		correlationA: s8Correlation{
+			repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: s8DispatchAID,
+			workerSessionID: s8WorkerAID, providerSessionID: s8ProviderSessionA, message: s8MessageA, output: s8OutputA,
+		},
+		correlationB: s8Correlation{
+			repository: scenario.repositoryB.path, marker: scenario.repositoryB.marker, dispatchID: s8DispatchBID,
+			workerSessionID: s8WorkerBID, providerSessionID: s8ProviderSessionB, message: s8MessageB, output: s8OutputB,
+		},
+	}
+}
 
-	active := listS8RemoteWorkers(t, ctx, manager, env, factoryDir, server.URL())
+func assertS8ManagerOverlap(t *testing.T, scenario s8ManagerScenario, overlap s8ManagerOverlap) {
+	t.Helper()
+	overlap.streamA.writer.waitFirstWrite(t, s8WorkerAID)
+	overlap.streamB.writer.waitFirstWrite(t, s8WorkerBID)
+
+	active := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.server.URL())
 	if len(active) != 2 {
 		t.Fatalf("active direct Worker Sessions = %d, want two: %#v", len(active), active)
 	}
 	assertS8ActiveObservation(t, findS8Observation(t, active, s8WorkerAID), s8WorkerAID, s8ProviderSessionA)
 	assertS8ActiveObservation(t, findS8Observation(t, active, s8WorkerBID), s8WorkerBID, s8ProviderSessionB)
 
-	showA := showS8RemoteWorker(t, ctx, manager, env, repositoryA.path, server.URL(), s8WorkerAID)
-	showB := showS8RemoteWorker(t, ctx, manager, env, repositoryB.path, server.URL(), s8WorkerBID)
+	showA := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.server.URL(), s8WorkerAID)
+	showB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.server.URL(), s8WorkerBID)
 	assertS8ActiveObservation(t, showA, s8WorkerAID, s8ProviderSessionA)
 	assertS8ActiveObservation(t, showB, s8WorkerBID, s8ProviderSessionB)
+}
 
-	runner.release(t, repositoryA.path)
-	runner.release(t, repositoryB.path)
-	waitS8Stream(t, streamA, s8WorkerAID)
-	waitS8Stream(t, streamB, s8WorkerBID)
-	assertS8StreamIsolation(t, streamA.writer.bytes(), s8WorkerAID, s8ProviderSessionA, s8OutputA, s8WorkerBID, repositoryB.path, s8MessageB)
-	assertS8StreamIsolation(t, streamB.writer.bytes(), s8WorkerBID, s8ProviderSessionB, s8OutputB, s8WorkerAID, repositoryA.path, s8MessageA)
+func finishS8ManagerScenario(t *testing.T, scenario s8ManagerScenario, overlap s8ManagerOverlap) {
+	t.Helper()
+	scenario.runner.release(t, scenario.repositoryA.path)
+	scenario.runner.release(t, scenario.repositoryB.path)
+	waitS8Stream(t, overlap.streamA, s8WorkerAID)
+	waitS8Stream(t, overlap.streamB, s8WorkerBID)
+	assertS8StreamIsolation(t, overlap.streamA.writer.bytes(), overlap.correlationA, overlap.correlationB)
+	assertS8StreamIsolation(t, overlap.streamB.writer.bytes(), overlap.correlationB, overlap.correlationA)
 
-	retainedA := replayS8RemoteWorker(t, ctx, manager, env, repositoryA.path, server.URL(), s8WorkerAID)
-	retainedB := replayS8RemoteWorker(t, ctx, manager, env, repositoryB.path, server.URL(), s8WorkerBID)
-	assertS8RetainedStream(t, retainedA, s8WorkerAID, s8ProviderSessionA, s8OutputA, s8WorkerBID, repositoryB.path, s8MessageB)
-	assertS8RetainedStream(t, retainedB, s8WorkerBID, s8ProviderSessionB, s8OutputB, s8WorkerAID, repositoryA.path, s8MessageA)
+	retainedA := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.server.URL(), s8WorkerAID)
+	retainedB := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.server.URL(), s8WorkerBID)
+	assertS8RetainedStream(t, retainedA, overlap.correlationA, overlap.correlationB)
+	assertS8RetainedStream(t, retainedB, overlap.correlationB, overlap.correlationA)
 
-	completed := listS8RemoteWorkers(t, ctx, manager, env, factoryDir, server.URL())
+	completed := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.server.URL())
 	if len(completed) != 2 {
 		t.Fatalf("completed direct Worker Sessions = %d, want two: %#v", len(completed), completed)
 	}
 	assertS8CompletedObservation(t, findS8Observation(t, completed, s8WorkerAID), s8WorkerAID, s8ProviderSessionA)
 	assertS8CompletedObservation(t, findS8Observation(t, completed, s8WorkerBID), s8WorkerBID, s8ProviderSessionB)
 
-	assertS8ProviderRequests(t, runner.requests(), repositoryA, repositoryB)
-	server.Stop(t)
+	assertS8ProviderRequests(t, scenario.runner.requests(), scenario.runner.markers(), overlap.correlationA, overlap.correlationB)
 }
 
 type s8Repository struct {
@@ -362,9 +448,13 @@ type s8StreamFrame struct {
 }
 
 type s8StreamEvent struct {
-	Position   uint64          `json:"position"`
-	SourceType string          `json:"sourceType"`
-	Payload    json.RawMessage `json:"payload"`
+	Position       uint64          `json:"position"`
+	SourceType     string          `json:"sourceType"`
+	SourceID       string          `json:"sourceId"`
+	SourceSequence uint64          `json:"sourceSequence"`
+	SourceEventID  string          `json:"sourceEventId"`
+	SchemaID       string          `json:"schemaId"`
+	Payload        json.RawMessage `json:"payload"`
 }
 
 type s8ReplaySummary struct {
@@ -401,17 +491,18 @@ func decodeS8Stream(t *testing.T, stdout string) []s8StreamFrame {
 func assertS8StreamIsolation(
 	t *testing.T,
 	stdout []byte,
-	workerSessionID, providerSessionID, output, foreignWorkerSessionID, foreignRepository, foreignMessage string,
+	own s8Correlation,
+	foreign ...s8Correlation,
 ) {
 	t.Helper()
 	frames := decodeS8Stream(t, string(stdout))
 	if len(frames) == 0 {
-		t.Fatalf("live stream for %q returned no frames", workerSessionID)
+		t.Fatalf("live stream for %q returned no frames", own.workerSessionID)
 	}
-	if !bytes.Contains(stdout, []byte(output)) {
-		t.Fatalf("live stream for %q omitted its provider output %q:\n%s", workerSessionID, output, stdout)
+	if !bytes.Contains(stdout, []byte(own.output)) {
+		t.Fatalf("live stream for %q omitted its provider output %q:\n%s", own.workerSessionID, own.output, stdout)
 	}
-	assertS8Frames(t, frames, workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage)
+	assertS8Frames(t, frames, own, true, foreign...)
 	var terminal bool
 	for _, frame := range frames {
 		if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
@@ -419,27 +510,28 @@ func assertS8StreamIsolation(
 		}
 	}
 	if !terminal {
-		t.Fatalf("live stream for %q omitted terminal delivery: %#v", workerSessionID, frames)
+		t.Fatalf("live stream for %q omitted terminal delivery: %#v", own.workerSessionID, frames)
 	}
 }
 
 func assertS8RetainedStream(
 	t *testing.T,
 	frames []s8StreamFrame,
-	workerSessionID, providerSessionID, output, foreignWorkerSessionID, foreignRepository, foreignMessage string,
+	own s8Correlation,
+	foreign ...s8Correlation,
 ) {
 	t.Helper()
 	if len(frames) == 0 {
-		t.Fatalf("retained stream for %q returned no frames", workerSessionID)
+		t.Fatalf("retained stream for %q returned no frames", own.workerSessionID)
 	}
 	encoded, err := json.Marshal(frames)
 	if err != nil {
-		t.Fatalf("encode retained stream for %q: %v", workerSessionID, err)
+		t.Fatalf("encode retained stream for %q: %v", own.workerSessionID, err)
 	}
-	if !bytes.Contains(encoded, []byte(output)) {
-		t.Fatalf("retained stream for %q omitted provider output %q: %s", workerSessionID, output, encoded)
+	if !bytes.Contains(encoded, []byte(own.output)) {
+		t.Fatalf("retained stream for %q omitted provider output %q: %s", own.workerSessionID, own.output, encoded)
 	}
-	assertS8Frames(t, frames, workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage)
+	assertS8Frames(t, frames, own, true, foreign...)
 	var terminal, complete bool
 	for _, frame := range frames {
 		if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
@@ -450,40 +542,146 @@ func assertS8RetainedStream(
 		}
 	}
 	if !terminal || !complete {
-		t.Fatalf("retained stream for %q = %#v, want terminal and complete replay summary", workerSessionID, frames)
+		t.Fatalf("retained stream for %q = %#v, want terminal and complete replay summary", own.workerSessionID, frames)
 	}
+}
+
+type s8FrameEvidence struct {
+	worker, provider, dispatch, repository, message, output, workingDirectory, event bool
 }
 
 func assertS8Frames(
 	t *testing.T,
 	frames []s8StreamFrame,
-	workerSessionID, providerSessionID, foreignWorkerSessionID, foreignRepository, foreignMessage string,
+	own s8Correlation,
+	requireOutput bool,
+	foreign ...s8Correlation,
 ) {
 	t.Helper()
+	evidence := s8FrameEvidence{}
 	var previousPosition uint64
 	for index, frame := range frames {
 		if frame.ReplaySummary != nil {
 			continue
 		}
-		if frame.WorkerSessionID != "" && frame.WorkerSessionID != workerSessionID {
-			t.Fatalf("stream frame %d Worker Session = %q, want %q", index, frame.WorkerSessionID, workerSessionID)
+		previousPosition = inspectS8Frame(t, index, frame, own, foreign, previousPosition, &evidence)
+	}
+	if !evidence.worker || !evidence.provider || !evidence.dispatch || !evidence.repository ||
+		!evidence.workingDirectory || !evidence.event || (requireOutput && !evidence.output) {
+		encoded, _ := json.Marshal(frames)
+		t.Fatalf("stream for %q omitted own correlation: %#v frames=%s", own.workerSessionID, evidence, encoded)
+	}
+}
+
+func inspectS8Frame(
+	t *testing.T,
+	index int,
+	frame s8StreamFrame,
+	own s8Correlation,
+	foreign []s8Correlation,
+	previousPosition uint64,
+	evidence *s8FrameEvidence,
+) uint64 {
+	t.Helper()
+	encoded, err := json.Marshal(frame)
+	if err != nil {
+		t.Fatalf("encode stream frame %d for %q: %v", index, own.workerSessionID, err)
+	}
+	assertS8ForeignFrame(t, index, encoded, own, foreign)
+	if frame.WorkerSessionID != "" && frame.WorkerSessionID != own.workerSessionID {
+		t.Fatalf("stream frame %d Worker Session = %q, want %q", index, frame.WorkerSessionID, own.workerSessionID)
+	}
+	if frame.WorkerSessionID == own.workerSessionID {
+		evidence.worker = true
+	}
+	if frame.ProviderSession != nil {
+		if frame.ProviderSession.Provider != "codex" || frame.ProviderSession.ID != own.providerSessionID {
+			t.Fatalf("stream frame %d Provider Session = %#v, want codex/%q", index, frame.ProviderSession, own.providerSessionID)
 		}
-		if frame.ProviderSession != nil && (frame.ProviderSession.Provider != "codex" || frame.ProviderSession.ID != providerSessionID) {
-			t.Fatalf("stream frame %d Provider Session = %#v, want codex/%q", index, frame.ProviderSession, providerSessionID)
-		}
-		if frame.Event != nil {
-			if frame.Event.Position <= previousPosition {
-				t.Fatalf("stream frame positions for %q are not increasing: previous=%d current=%d", workerSessionID, previousPosition, frame.Event.Position)
+		evidence.provider = true
+	}
+	return inspectS8StreamEvent(t, index, frame.Event, own, previousPosition, evidence)
+}
+
+func assertS8ForeignFrame(t *testing.T, index int, encoded []byte, own s8Correlation, foreign []s8Correlation) {
+	t.Helper()
+	for _, correlation := range foreign {
+		for _, token := range correlation.tokens() {
+			if token == "" || own.owns(token) ||
+				(token == correlation.dispatchID && strings.HasPrefix(own.dispatchID, token+"/continue/")) {
+				continue
 			}
-			previousPosition = frame.Event.Position
-			payload := string(frame.Event.Payload)
-			for _, foreign := range []string{foreignWorkerSessionID, foreignRepository, foreignMessage} {
-				if strings.Contains(payload, foreign) {
-					t.Fatalf("stream frame %d for %q contains foreign correlation %q: %s", index, workerSessionID, foreign, payload)
-				}
+			if bytes.Contains(encoded, []byte(token)) {
+				t.Fatalf("stream frame %d for %q contains foreign correlation %q: %s", index, own.workerSessionID, token, encoded)
 			}
 		}
 	}
+}
+
+func inspectS8StreamEvent(
+	t *testing.T,
+	index int,
+	event *s8StreamEvent,
+	own s8Correlation,
+	previousPosition uint64,
+	evidence *s8FrameEvidence,
+) uint64 {
+	t.Helper()
+	if event == nil {
+		return previousPosition
+	}
+	evidence.event = true
+	if event.SourceType == "" || event.SourceID == "" || event.SourceEventID == "" || event.SchemaID == "" {
+		t.Fatalf("stream frame %d for %q has incomplete event identity: %#v", index, own.workerSessionID, event)
+	}
+	if event.Position <= previousPosition {
+		t.Fatalf("stream frame positions for %q are not increasing: previous=%d current=%d", own.workerSessionID, previousPosition, event.Position)
+	}
+	eventEncoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("encode stream event %d for %q: %v", index, own.workerSessionID, err)
+	}
+	evidence.dispatch = evidence.dispatch || bytes.Contains(eventEncoded, []byte(own.dispatchID))
+	evidence.repository = evidence.repository || bytes.Contains(eventEncoded, []byte(own.repository))
+	evidence.message = evidence.message || bytes.Contains(eventEncoded, []byte(own.message))
+	evidence.output = evidence.output || bytes.Contains(eventEncoded, []byte(own.output))
+	if directory, ok := s8JSONStringValue(event.Payload, "workingDirectory"); ok {
+		if directory != own.repository {
+			t.Fatalf("stream frame %d for %q workingDirectory = %q, want %q", index, own.workerSessionID, directory, own.repository)
+		}
+		evidence.repository = true
+		evidence.workingDirectory = true
+	}
+	return event.Position
+}
+
+func s8JSONStringValue(payload json.RawMessage, key string) (string, bool) {
+	var value any
+	if err := json.Unmarshal(payload, &value); err != nil {
+		return "", false
+	}
+	return findS8JSONStringValue(value, key)
+}
+
+func findS8JSONStringValue(value any, key string) (string, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if candidate, ok := typed[key].(string); ok {
+			return candidate, true
+		}
+		for _, nested := range typed {
+			if found, ok := findS8JSONStringValue(nested, key); ok {
+				return found, true
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if found, ok := findS8JSONStringValue(nested, key); ok {
+				return found, true
+			}
+		}
+	}
+	return "", false
 }
 
 type s8StreamCapture struct {
@@ -563,6 +761,7 @@ func (writer *s8SignalWriter) bytes() []byte {
 
 type s8RemoteProviderCase struct {
 	repository  string
+	marker      string
 	sessionID   string
 	output      string
 	release     chan struct{}
@@ -576,12 +775,14 @@ type s8RemoteProviderRunner struct {
 	cases      []s8RemoteProviderCase
 	stdout     []byte
 	requestLog []platformprocess.CommandRequest
+	markerLog  map[string][]string
 }
 
 func newS8RemoteProviderRunner(stdout []byte, cases ...s8RemoteProviderCase) *s8RemoteProviderRunner {
 	return &s8RemoteProviderRunner{
-		cases:  append([]s8RemoteProviderCase(nil), cases...),
-		stdout: append([]byte(nil), stdout...),
+		cases:     append([]s8RemoteProviderCase(nil), cases...),
+		stdout:    append([]byte(nil), stdout...),
+		markerLog: make(map[string][]string),
 	}
 }
 
@@ -606,8 +807,30 @@ func (runner *s8RemoteProviderRunner) run(
 	if err != nil {
 		return platformprocess.CommandResult{}, err
 	}
+	marker, err := readS8RepositoryMarker(request.WorkDir)
+	if err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	if marker != caseForRequest.marker {
+		return platformprocess.CommandResult{}, fmt.Errorf("S8 provider working directory %q marker = %q, want %q", request.WorkDir, marker, caseForRequest.marker)
+	}
+	runner.mu.Lock()
+	foreignMarkers := make([]string, 0, len(runner.cases)-1)
+	for index := range runner.cases {
+		other := &runner.cases[index]
+		if other.repository != request.WorkDir {
+			foreignMarkers = append(foreignMarkers, other.marker)
+		}
+	}
+	runner.mu.Unlock()
+	for _, foreignMarker := range foreignMarkers {
+		if marker == foreignMarker {
+			return platformprocess.CommandResult{}, fmt.Errorf("S8 provider working directory %q observed foreign marker %q", request.WorkDir, marker)
+		}
+	}
 	runner.mu.Lock()
 	runner.requestLog = append(runner.requestLog, cloneS8CommandRequest(request))
+	runner.markerLog[request.WorkDir] = append(runner.markerLog[request.WorkDir], marker)
 	runner.mu.Unlock()
 
 	output := bytes.ReplaceAll(runner.stdout, []byte("session_fixture_codex_success"), []byte(caseForRequest.sessionID))
@@ -677,6 +900,16 @@ func (runner *s8RemoteProviderRunner) requests() []platformprocess.CommandReques
 	return requests
 }
 
+func (runner *s8RemoteProviderRunner) markers() map[string][]string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	markers := make(map[string][]string, len(runner.markerLog))
+	for repository, values := range runner.markerLog {
+		markers[repository] = append([]string(nil), values...)
+	}
+	return markers
+}
+
 func (runner *s8RemoteProviderRunner) releaseAll() {
 	for index := range runner.cases {
 		runner.cases[index].releaseOnce.Do(func() { close(runner.cases[index].release) })
@@ -690,56 +923,105 @@ func cloneS8CommandRequest(request platformprocess.CommandRequest) platformproce
 	return request
 }
 
-func assertS8ProviderRequests(t *testing.T, requests []platformprocess.CommandRequest, repositoryA, repositoryB s8Repository) {
+func assertS8ProviderRequests(
+	t *testing.T,
+	requests []platformprocess.CommandRequest,
+	markers map[string][]string,
+	correlations ...s8Correlation,
+) {
 	t.Helper()
-	if len(requests) != 2 {
-		t.Fatalf("provider command requests = %d, want two: %#v", len(requests), requests)
+	if len(requests) != len(correlations) {
+		t.Fatalf("provider command requests = %d, want %d: %#v", len(requests), len(correlations), requests)
 	}
-	want := map[string]struct {
-		repository string
-		message    string
-		foreign    string
-	}{
-		s8RequestAID: {repository: repositoryA.path, message: s8MessageA, foreign: s8MessageB},
-		s8RequestBID: {repository: repositoryB.path, message: s8MessageB, foreign: s8MessageA},
+	assertS8ProviderMarkers(t, markers, correlations...)
+	byRepository := make(map[string]s8Correlation, len(correlations))
+	for _, correlation := range correlations {
+		byRepository[correlation.repository] = correlation
 	}
-	seenRepositories := make(map[string]bool, len(requests))
+	seenRepositories := make(map[string]bool, len(correlations))
 	for index, request := range requests {
 		if request.Command != "codex" {
 			t.Fatalf("provider request %d command = %q, want codex", index, request.Command)
 		}
-		if request.WorkDir != repositoryA.path && request.WorkDir != repositoryB.path {
-			t.Fatalf("provider request %d working directory = %q, want one of the two repositories", index, request.WorkDir)
+		expected, ok := byRepository[request.WorkDir]
+		if !ok {
+			t.Fatalf("provider request %d working directory = %q, want one of %#v", index, request.WorkDir, byRepository)
 		}
 		seenRepositories[request.WorkDir] = true
-		requestText := strings.Join([]string{request.Command, strings.Join(request.Args, " "), string(request.Stdin), strings.Join(request.Env, "\n"), request.WorkDir}, "\n")
-		var expected struct {
-			repository string
-			message    string
-			foreign    string
+		foreign := make([]s8Correlation, 0, len(correlations)-1)
+		for _, correlation := range correlations {
+			if correlation.repository != expected.repository {
+				foreign = append(foreign, correlation)
+			}
 		}
-		if request.WorkDir == repositoryA.path {
-			expected = want[s8RequestAID]
-		} else {
-			expected = want[s8RequestBID]
-		}
-		if !strings.Contains(string(request.Stdin), expected.message) || !strings.Contains(requestText, expected.repository) {
-			t.Fatalf("provider request %d = %#v, want repository %q and message %q", index, request, expected.repository, expected.message)
-		}
-		if strings.Contains(requestText, expected.foreign) {
-			t.Fatalf("provider request %d contains foreign message %q: %#v", index, expected.foreign, request)
-		}
-		foreignRepository := repositoryB.path
-		if request.WorkDir == repositoryB.path {
-			foreignRepository = repositoryA.path
-		}
-		if strings.Contains(requestText, foreignRepository) && request.WorkDir != foreignRepository {
-			t.Fatalf("provider request %d contains foreign repository %q: %#v", index, foreignRepository, request)
+		assertS8ProviderRequest(t, request, expected, foreign...)
+	}
+	for _, correlation := range correlations {
+		if !seenRepositories[correlation.repository] {
+			t.Fatalf("provider request repositories = %#v, want repository %q", seenRepositories, correlation.repository)
 		}
 	}
-	if !seenRepositories[repositoryA.path] || !seenRepositories[repositoryB.path] {
-		t.Fatalf("provider request repositories = %#v, want both distinct repositories", seenRepositories)
+}
+
+func assertS8ProviderMarkers(t *testing.T, markers map[string][]string, correlations ...s8Correlation) {
+	t.Helper()
+	expectedRepositories := make(map[string]s8Correlation, len(correlations))
+	for _, correlation := range correlations {
+		expectedRepositories[correlation.repository] = correlation
 	}
+	if len(markers) != len(expectedRepositories) {
+		t.Fatalf("provider edge marker observations = %#v, want one repository per correlation", markers)
+	}
+	for _, correlation := range expectedRepositories {
+		observed := markers[correlation.repository]
+		if len(observed) == 0 {
+			t.Fatalf("provider edge observed no marker for repository %q", correlation.repository)
+		}
+		for _, marker := range observed {
+			if marker != correlation.marker {
+				t.Fatalf("provider edge marker for %q = %q, want own marker %q", correlation.repository, marker, correlation.marker)
+			}
+			for _, foreign := range correlations {
+				if foreign.repository != correlation.repository && marker == foreign.marker {
+					t.Fatalf("provider edge marker for %q = foreign marker %q", correlation.repository, marker)
+				}
+			}
+		}
+	}
+}
+
+func assertS8ProviderRequest(
+	t *testing.T,
+	request platformprocess.CommandRequest,
+	own s8Correlation,
+	foreign ...s8Correlation,
+) {
+	t.Helper()
+	if request.Command != "codex" {
+		t.Fatalf("provider request command = %q, want codex", request.Command)
+	}
+	requestText := strings.Join([]string{request.Command, strings.Join(request.Args, " "), string(request.Stdin), strings.Join(request.Env, "\n"), request.WorkDir}, "\n")
+	if request.WorkDir != own.repository || !strings.Contains(string(request.Stdin), own.message) {
+		t.Fatalf("provider request = %#v, want repository %q and message %q", request, own.repository, own.message)
+	}
+	for _, correlation := range foreign {
+		for _, token := range correlation.tokens() {
+			if own.owns(token) {
+				continue
+			}
+			if strings.Contains(requestText, token) {
+				t.Fatalf("provider request for %q contains foreign correlation %q: %#v", own.repository, token, request)
+			}
+		}
+	}
+}
+
+func readS8RepositoryMarker(repository string) (string, error) {
+	contents, err := os.ReadFile(filepath.Join(repository, "S8_MARKER"))
+	if err != nil {
+		return "", fmt.Errorf("read S8 repository marker in %q: %w", repository, err)
+	}
+	return strings.TrimSpace(string(contents)), nil
 }
 
 func readS8ProviderFixture(t *testing.T, fileName string) []byte {

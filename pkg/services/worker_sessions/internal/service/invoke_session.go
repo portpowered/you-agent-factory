@@ -312,6 +312,7 @@ func openingSessionPayload(
 		AttemptReason:    workers.AttemptReasonInitial,
 		Model:            strings.TrimSpace(request.Model),
 		ReasoningEffort:  strings.TrimSpace(request.ReasoningEffort),
+		WorkingDirectory: strings.TrimSpace(request.WorkingDirectory),
 		Capabilities:     cloneCapabilities(request.Capabilities),
 	}
 	if payload.WorkerType = strings.TrimSpace(request.WorkerType); payload.WorkerType == "" {
