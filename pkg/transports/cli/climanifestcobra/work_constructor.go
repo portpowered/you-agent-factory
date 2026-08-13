@@ -98,46 +98,15 @@ func NewWorkFamilyComponentsFromManifest(
 		return WorkFamilyComponents{}, err
 	}
 
-	work, err := buildWorkCommandFromRecord(workRecord)
+	work, err := buildNonRunnableWorkCommand(workRecord)
 	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
+		return WorkFamilyComponents{}, err
 	}
-	if workRecord.Runnable {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %q must remain non-runnable", workRecord.ID)
-	}
-	approval, err := buildWorkCommandFromRecord(approvalRecord)
+	approval, err := buildNonRunnableWorkCommand(approvalRecord)
 	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
+		return WorkFamilyComponents{}, err
 	}
-	if approvalRecord.Runnable {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %q must remain non-runnable", approvalRecord.ID)
-	}
-	approvalList, err := buildRunnableWorkLeaf(approvalListRecord, registry, bindings)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	approvalShow, err := buildRunnableWorkLeaf(approvalShowRecord, registry, bindings)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-
-	list, err := buildRunnableWorkLeaf(listRecord, registry, bindings)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	watch, err := buildRunnableWorkLeaf(watchRecord, registry, bindings)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	show, err := buildRunnableWorkLeaf(showRecord, registry, bindings)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	move, err := buildRunnableWorkLeaf(moveRecord, registry, bindings)
-	if err != nil {
-		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
-	}
-	visualize, err := buildRunnableWorkLeaf(visualizeRecord, registry, bindings)
+	leaves, err := buildRunnableWorkLeaves(registry, bindings, approvalListRecord, approvalShowRecord, listRecord, watchRecord, showRecord, moveRecord, visualizeRecord)
 	if err != nil {
 		return WorkFamilyComponents{}, fmt.Errorf("build work family command: %w", err)
 	}
@@ -145,14 +114,32 @@ func NewWorkFamilyComponentsFromManifest(
 	return WorkFamilyComponents{
 		Work:         work,
 		Approval:     approval,
-		ApprovalList: approvalList,
-		ApprovalShow: approvalShow,
-		List:         list,
-		Watch:        watch,
-		Show:         show,
-		Move:         move,
-		Visualize:    visualize,
+		ApprovalList: leaves[0], ApprovalShow: leaves[1], List: leaves[2],
+		Watch: leaves[3], Show: leaves[4], Move: leaves[5], Visualize: leaves[6],
 	}, nil
+}
+
+func buildNonRunnableWorkCommand(record climanifest.Command) (*cobra.Command, error) {
+	cmd, err := buildWorkCommandFromRecord(record)
+	if err != nil {
+		return nil, fmt.Errorf("build work family command: %w", err)
+	}
+	if record.Runnable {
+		return nil, fmt.Errorf("build work family command: %q must remain non-runnable", record.ID)
+	}
+	return cmd, nil
+}
+
+func buildRunnableWorkLeaves(registry *commandregistry.Registry, bindings WorkFamilyBindings, records ...climanifest.Command) ([]*cobra.Command, error) {
+	leaves := make([]*cobra.Command, 0, len(records))
+	for _, record := range records {
+		leaf, err := buildRunnableWorkLeaf(record, registry, bindings)
+		if err != nil {
+			return nil, err
+		}
+		leaves = append(leaves, leaf)
+	}
+	return leaves, nil
 }
 
 func buildRunnableWorkLeaf(

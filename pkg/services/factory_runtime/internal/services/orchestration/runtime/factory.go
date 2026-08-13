@@ -176,9 +176,7 @@ func New(
 	if workerPoolBoundaryFactory == nil {
 		return nil, fmt.Errorf("a canonical Workers pool-boundary factory is required")
 	}
-	if runtimeMode == "" {
-		runtimeMode = interfaces.RuntimeModeBatch
-	}
+	runtimeMode = normalizeRuntimeMode(runtimeMode)
 	cfg := &runtimeConfig{
 		net:                       net,
 		scheduler:                 runtimeScheduler,
@@ -283,6 +281,13 @@ func New(
 	return impl, nil
 }
 
+func normalizeRuntimeMode(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
+
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	if cfg.scheduler != nil {
 		scheduler.ApplyRuntimeConfig(cfg.scheduler, cfg.runtimeConfig)
@@ -293,6 +298,10 @@ func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 
 func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator) (*token_transformer.Transformer, []subsystems.Subsystem) {
 	workIDGen := petri.NewWorkIDGenerator()
+	var replayIDs factory.ReplayDispatchIDResolver
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayDispatchIDResolver); ok {
+		replayIDs = resolver
+	}
 	sharedTransformer := token_transformer.New(
 		cfg.net.Places,
 		cfg.net.WorkTypes,
@@ -312,7 +321,8 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			logger,
 			cfg.runtimeConfig,
 			cfg.clock.Now,
-			newID),
+			newID,
+			replayIDs),
 
 		subsystems.NewHistory(logger),
 		subsystems.NewTransitioner(
@@ -919,21 +929,6 @@ func (f *factoryImpl) observePostResumeBufferedDrain(drainedCount int) {
 	)
 }
 
-func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState {
-	if f.eventHistory == nil {
-		return nil
-	}
-	if f.cfg == nil || f.cfg.worldStateProjector == nil {
-		return nil
-	}
-	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
-	if err != nil {
-		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)
-		return nil
-	}
-	return &state
-}
-
 func lifecycleControlStatusFromWorldState(worldState *interfaces.FactoryWorldState, factoryState string) string {
 	_ = factoryState
 	if worldState != nil && worldState.SessionBracket != nil {
@@ -967,37 +962,6 @@ func (a *schedulerAdapter) SupportsRepeatedTransitionBindings() bool {
 		return false
 	}
 	return scheduler.SupportsRepeatedTransitionBindings(a.inner)
-}
-
-func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], worldState *interfaces.FactoryWorldState) interfaces.RuntimeStatus {
-	if currentState == interfaces.FactoryStateCompleted || currentState == interfaces.FactoryStateFailed {
-		return interfaces.RuntimeStatusFinished
-	}
-
-	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWork(snapshot.Marking, f.topology) {
-		return interfaces.RuntimeStatusActive
-	}
-
-	return interfaces.RuntimeStatusIdle
-}
-
-func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool {
-	if topology == nil {
-		return false
-	}
-
-	for _, token := range marking.Tokens {
-		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkTypeID == "" {
-			continue
-		}
-
-		category := topology.StateCategoryForPlace(token.PlaceID)
-		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {

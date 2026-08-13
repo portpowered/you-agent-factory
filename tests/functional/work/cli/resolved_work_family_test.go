@@ -20,133 +20,95 @@ import (
 // TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs proves list,
 // watch, show, move, and visualize work CLI commands execute through resolved handlers.
 func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testing.T) {
-	var listed workcli.ListConfig
-	var watched workcli.WatchConfig
-	var shown workcli.ShowConfig
-	var moved workcli.MoveConfig
-	var approvalListed workcli.ListHumanApprovalsConfig
-	var approvalShown workcli.ShowHumanApprovalConfig
-	handlers := commandregistry.ResolvedWorkHandlers{
-		ApprovalList: commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{
-			ListHumanApprovals: func(cfg workcli.ListHumanApprovalsConfig) error {
-				approvalListed = cfg
-				_, err := io.WriteString(cfg.Output, "approval-listed\n")
-				return err
-			},
-		}),
-		ApprovalShow: commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{
-			ShowHumanApproval: func(cfg workcli.ShowHumanApprovalConfig) error {
-				approvalShown = cfg
-				_, err := io.WriteString(cfg.Output, "approval-shown\n")
-				return err
-			},
-		}),
-		List: commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{
-			ListWork: func(cfg workcli.ListConfig) error {
-				listed = cfg
-				_, err := io.WriteString(cfg.Output, "listed\n")
-				return err
-			},
-		}),
-		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
-			DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
-				return cmd.ErrOrStderr()
-			},
-			WatchWork: func(cfg workcli.WatchConfig) error {
-				watched = cfg
-				_, err := io.WriteString(cfg.Output, "watched\n")
-				return err
-			},
-		}),
-		Show: commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{
-			ShowWork: func(cfg workcli.ShowConfig) error {
-				shown = cfg
-				_, err := io.WriteString(cfg.Output, "shown\n")
-				return err
-			},
-		}),
-		Move: commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{
-			MoveWork: func(cfg workcli.MoveConfig) error {
-				moved = cfg
-				_, err := io.WriteString(cfg.Output, "moved\n")
-				return err
-			},
-		}),
-		Visualize: commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{
-			VisualizeWork: func(cfg workcli.VisualizeConfig) error {
-				return workcli.Visualize(func(request workservice.VisualizationRequest) (string, error) {
-					if request.BatchFile != "batch.json" || request.Format != "markdown-mermaid" {
-						return "", fmt.Errorf("visualization request = %#v", request)
-					}
-					return "visualized\n", nil
-				}, cfg)
-			},
-		}),
-	}
+	observed := &resolvedWorkFamilyObservations{}
+	handlers := resolvedWorkFamilyHandlers(observed)
+	assertResolvedWorkFamilyCommands(t, handlers)
+	assertResolvedWorkFamilyObservations(t, observed)
+}
 
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--json", "--debug", "work", "approval", "list",
-		"--session", "session-approval",
-	}, "approval-listed\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--verbose", "work", "approval", "show",
-		"approval-1", "--session", "session-approval",
-	}, "approval-shown\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--json", "--debug", "work", "list",
-		"--session", "session-a", "--state-name", "review", "--state-type", "PROCESSING",
-		"--name", "PRD", "--work-type-name", "story", "--trace-id", "trace-a",
-		"--sort-by", "state.type", "--max-results", "7", "--next-token", "cursor-a",
-	}, "listed\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--debug", "work", "watch",
-		"--session", "session-w", "--follow",
-	}, "watched\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--debug", "work", "watch",
-		"--session", "session-w", "--follow",
-	}, "watched\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--json", "work", "show",
-		"--session", "session-b", "work-b",
-	}, "shown\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"--server", "https://factory.example", "--verbose", "work", "move",
-		"--session", "session-c", "--request-id", "request-c", "work-c", "complete",
-	}, "moved\n")
-	assertResolvedWorkExecution(t, handlers, []string{
-		"work", "visualize", "--format", "markdown-mermaid", "batch.json",
-	}, "visualized\n")
+type resolvedWorkFamilyObservations struct {
+	listed         workcli.ListConfig
+	watched        workcli.WatchConfig
+	shown          workcli.ShowConfig
+	moved          workcli.MoveConfig
+	approvalListed workcli.ListHumanApprovalsConfig
+	approvalShown  workcli.ShowHumanApprovalConfig
+}
 
-	if approvalListed.Server != "https://factory.example" || approvalListed.SessionID != "session-approval" ||
-		!approvalListed.JSON || !approvalListed.Verbose || !approvalListed.Debug {
-		t.Fatalf("approval list config = %#v, want stable local and inherited inputs", approvalListed)
+func resolvedWorkFamilyHandlers(observed *resolvedWorkFamilyObservations) commandregistry.ResolvedWorkHandlers {
+	return commandregistry.ResolvedWorkHandlers{
+		ApprovalList: commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{ListHumanApprovals: func(cfg workcli.ListHumanApprovalsConfig) error {
+			observed.approvalListed = cfg
+			_, err := io.WriteString(cfg.Output, "approval-listed\n")
+			return err
+		}}),
+		ApprovalShow: commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{ShowHumanApproval: func(cfg workcli.ShowHumanApprovalConfig) error {
+			observed.approvalShown = cfg
+			_, err := io.WriteString(cfg.Output, "approval-shown\n")
+			return err
+		}}),
+		List: commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{ListWork: func(cfg workcli.ListConfig) error {
+			observed.listed = cfg
+			_, err := io.WriteString(cfg.Output, "listed\n")
+			return err
+		}}),
+		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{DiagnosticsWriter: func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }, WatchWork: func(cfg workcli.WatchConfig) error {
+			observed.watched = cfg
+			_, err := io.WriteString(cfg.Output, "watched\n")
+			return err
+		}}),
+		Show: commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{ShowWork: func(cfg workcli.ShowConfig) error {
+			observed.shown = cfg
+			_, err := io.WriteString(cfg.Output, "shown\n")
+			return err
+		}}),
+		Move: commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{MoveWork: func(cfg workcli.MoveConfig) error {
+			observed.moved = cfg
+			_, err := io.WriteString(cfg.Output, "moved\n")
+			return err
+		}}),
+		Visualize: commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{VisualizeWork: func(cfg workcli.VisualizeConfig) error {
+			return workcli.Visualize(func(request workservice.VisualizationRequest) (string, error) {
+				if request.BatchFile != "batch.json" || request.Format != "markdown-mermaid" {
+					return "", fmt.Errorf("visualization request = %#v", request)
+				}
+				return "visualized\n", nil
+			}, cfg)
+		}}),
 	}
-	if approvalShown.Server != "https://factory.example" || approvalShown.SessionID != "session-approval" ||
-		approvalShown.ApprovalID != "approval-1" || !approvalShown.Verbose || approvalShown.Debug {
-		t.Fatalf("approval show config = %#v, want stable local and inherited inputs", approvalShown)
+}
+
+func assertResolvedWorkFamilyCommands(t *testing.T, handlers commandregistry.ResolvedWorkHandlers) {
+	t.Helper()
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--json", "--debug", "work", "approval", "list", "--session", "session-approval"}, "approval-listed\n")
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--verbose", "work", "approval", "show", "approval-1", "--session", "session-approval"}, "approval-shown\n")
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--json", "--debug", "work", "list", "--session", "session-a", "--state-name", "review", "--state-type", "PROCESSING", "--name", "PRD", "--work-type-name", "story", "--trace-id", "trace-a", "--sort-by", "state.type", "--max-results", "7", "--next-token", "cursor-a"}, "listed\n")
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--debug", "work", "watch", "--session", "session-w", "--follow"}, "watched\n")
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--debug", "work", "watch", "--session", "session-w", "--follow"}, "watched\n")
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--json", "work", "show", "--session", "session-b", "work-b"}, "shown\n")
+	assertResolvedWorkExecution(t, handlers, []string{"--server", "https://factory.example", "--verbose", "work", "move", "--session", "session-c", "--request-id", "request-c", "work-c", "complete"}, "moved\n")
+	assertResolvedWorkExecution(t, handlers, []string{"work", "visualize", "--format", "markdown-mermaid", "batch.json"}, "visualized\n")
+}
+
+func assertResolvedWorkFamilyObservations(t *testing.T, observed *resolvedWorkFamilyObservations) {
+	t.Helper()
+	if observed.approvalListed.Server != "https://factory.example" || observed.approvalListed.SessionID != "session-approval" || !observed.approvalListed.JSON || !observed.approvalListed.Verbose || !observed.approvalListed.Debug {
+		t.Fatalf("approval list config = %#v, want stable local and inherited inputs", observed.approvalListed)
 	}
-	if listed.Server != "https://factory.example" || listed.SessionID != "session-a" ||
-		listed.StateName != "review" || listed.StateType != "PROCESSING" ||
-		listed.Name != "PRD" || listed.WorkTypeName != "story" || listed.TraceID != "trace-a" ||
-		listed.SortBy != "state.type" || listed.MaxResults != 7 ||
-		listed.NextToken != "cursor-a" || listed.Terminal || listed.NonTerminal || listed.Counts ||
-		!listed.JSON || !listed.Verbose || !listed.Debug {
-		t.Fatalf("list config = %#v, want stable local and inherited inputs", listed)
+	if observed.approvalShown.Server != "https://factory.example" || observed.approvalShown.SessionID != "session-approval" || observed.approvalShown.ApprovalID != "approval-1" || !observed.approvalShown.Verbose || observed.approvalShown.Debug {
+		t.Fatalf("approval show config = %#v, want stable local and inherited inputs", observed.approvalShown)
 	}
-	if watched.Server != "https://factory.example" || watched.SessionID != "session-w" ||
-		!watched.SessionIDExplicit || !watched.Follow || !watched.Verbose || !watched.Debug ||
-		watched.Diagnostics == nil {
-		t.Fatalf("watch config = %#v, want stable local and inherited inputs", watched)
+	if observed.listed.Server != "https://factory.example" || observed.listed.SessionID != "session-a" || observed.listed.StateName != "review" || observed.listed.StateType != "PROCESSING" || observed.listed.Name != "PRD" || observed.listed.WorkTypeName != "story" || observed.listed.TraceID != "trace-a" || observed.listed.SortBy != "state.type" || observed.listed.MaxResults != 7 || observed.listed.NextToken != "cursor-a" || observed.listed.Terminal || observed.listed.NonTerminal || observed.listed.Counts || !observed.listed.JSON || !observed.listed.Verbose || !observed.listed.Debug {
+		t.Fatalf("list config = %#v, want stable local and inherited inputs", observed.listed)
 	}
-	if shown.Server != "https://factory.example" || shown.SessionID != "session-b" ||
-		shown.WorkID != "work-b" || !shown.JSON {
-		t.Fatalf("show config = %#v, want stable local and inherited inputs", shown)
+	if observed.watched.Server != "https://factory.example" || observed.watched.SessionID != "session-w" || !observed.watched.SessionIDExplicit || !observed.watched.Follow || !observed.watched.Verbose || !observed.watched.Debug || observed.watched.Diagnostics == nil {
+		t.Fatalf("watch config = %#v, want stable local and inherited inputs", observed.watched)
 	}
-	if moved.Server != "https://factory.example" || moved.SessionID != "session-c" ||
-		moved.WorkID != "work-c" || moved.StateName != "complete" ||
-		moved.RequestID != "request-c" || !moved.Verbose {
-		t.Fatalf("move config = %#v, want stable local and inherited inputs", moved)
+	if observed.shown.Server != "https://factory.example" || observed.shown.SessionID != "session-b" || observed.shown.WorkID != "work-b" || !observed.shown.JSON {
+		t.Fatalf("show config = %#v, want stable local and inherited inputs", observed.shown)
+	}
+	if observed.moved.Server != "https://factory.example" || observed.moved.SessionID != "session-c" || observed.moved.WorkID != "work-c" || observed.moved.StateName != "complete" || observed.moved.RequestID != "request-c" || !observed.moved.Verbose {
+		t.Fatalf("move config = %#v, want stable local and inherited inputs", observed.moved)
 	}
 }
 

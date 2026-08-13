@@ -155,6 +155,13 @@ func TestFactoryEventHistory_RecordHumanApprovalRequestedFollowsDispatchAndConta
 	history.RecordWorkstationRequest(7, record, eventTime)
 	history.RecordHumanApprovalRequested(7, record, eventTime)
 	events := generatedHistoryEvents(t, history)
+	assertHumanApprovalEventSequence(t, events)
+	assertHumanApprovalEventPayload(t, events[1])
+	assertHumanApprovalEventDoesNotCopyWorkPayload(t, events[1])
+}
+
+func assertHumanApprovalEventSequence(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
 	if len(events) != 2 {
 		t.Fatalf("canonical events = %d, want DISPATCH_REQUEST plus HUMAN_APPROVAL_REQUESTED", len(events))
 	}
@@ -171,8 +178,11 @@ func TestFactoryEventHistory_RecordHumanApprovalRequestedFollowsDispatchAndConta
 	if got := stringSliceValueForEventHistoryTest(events[1].Context.WorkIds); len(got) != 1 || got[0] != "work-approval-1" {
 		t.Fatalf("approval event Work IDs = %#v, want ordered work correlation", got)
 	}
+}
 
-	payload, err := events[1].Payload.AsHumanApprovalRequestedEventPayload()
+func assertHumanApprovalEventPayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	payload, err := event.Payload.AsHumanApprovalRequestedEventPayload()
 	if err != nil {
 		t.Fatalf("decode approval payload: %v", err)
 	}
@@ -183,7 +193,11 @@ func TestFactoryEventHistory_RecordHumanApprovalRequestedFollowsDispatchAndConta
 	}) {
 		t.Fatalf("approval payload = %#v, want fixed decisions and pending status", payload)
 	}
-	encoded, err := json.Marshal(events[1])
+}
+
+func assertHumanApprovalEventDoesNotCopyWorkPayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	encoded, err := json.Marshal(event)
 	if err != nil {
 		t.Fatalf("marshal approval event: %v", err)
 	}

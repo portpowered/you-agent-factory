@@ -96,3 +96,7 @@ func preparedLayoutPersistence() factorydefinitions.Persistence {
 	}
 	return persistence
 }
+
+func definitionStringPtr(value string) *string {
+	return &value
+}

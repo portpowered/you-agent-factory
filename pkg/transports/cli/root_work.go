@@ -792,57 +792,6 @@ func generatedCommandInputs(cmd *cobra.Command) (map[string]any, error) {
 	return values, nil
 }
 
-func executeGeneratedHumanApprovalList(
-	cmd *cobra.Command,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	list func(workcli.ListHumanApprovalsConfig) error,
-) error {
-	if list == nil {
-		return fmt.Errorf("human approval list service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.approval.list.flag.session")
-	if err != nil {
-		return err
-	}
-	return list(workcli.ListHumanApprovalsConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func executeGeneratedHumanApprovalShow(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	show func(workcli.ShowHumanApprovalConfig) error,
-) error {
-	if show == nil {
-		return fmt.Errorf("human approval show service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.approval.show.flag.session")
-	if err != nil {
-		return err
-	}
-	return show(workcli.ShowHumanApprovalConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		ApprovalID: args[0], JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
 func executeGeneratedWorkList(
 	cmd *cobra.Command,
 	globals *cliGlobalOptions,

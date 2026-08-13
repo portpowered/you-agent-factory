@@ -26,6 +26,7 @@ type (
 	CompletedDispatch                                          = recordingcontracts.CompletedDispatch
 	CompletionDeliveryPlanner                                  = recordingcontracts.CompletionDeliveryPlanner
 	ReplayWorkerSessionIDResolver                              = recordingcontracts.ReplayWorkerSessionIDResolver
+	ReplayDispatchIDResolver                                   = recordingcontracts.ReplayDispatchIDResolver
 	CreateReplayPlanRequest                                    = recordingcontracts.CreateReplayPlanRequest
 	CreateReplayPlanResult                                     = recordingcontracts.CreateReplayPlanResult
 	DecodePortableArtifactRequest                              = recordingcontracts.DecodePortableArtifactRequest

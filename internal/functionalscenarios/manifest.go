@@ -133,6 +133,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		}
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
+	case "cli/you.work.approval.list", "cli/you.work.approval.show":
+		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors", InterfaceCLI)
 	case "cli/you.work.watch":
 		markCovered(scenario, LaneLong, "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal", InterfaceCLI)
 	case "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream":

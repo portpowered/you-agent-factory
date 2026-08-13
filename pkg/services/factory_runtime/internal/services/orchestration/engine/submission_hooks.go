@@ -95,3 +95,102 @@ func consumedTokenIDs(tokens []factorytoken.Token) []string {
 	}
 	return ids
 }
+
+func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.GeneratedSubmissionBatch, defaultSource string) (int, error) {
+	total := 0
+	for i := range batches {
+		batch := batches[i]
+		source := generatedSubmissionSource(batch, defaultSource)
+		normalized, requestID, err := e.normalizeGeneratedSubmissionBatch(batch)
+		if err != nil {
+			return total, err
+		}
+		if e.skipGeneratedSubmissionRequest(requestID, source) {
+			continue
+		}
+		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
+		if err != nil {
+			return total, err
+		}
+		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
+		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
+		if source == externalSubmissionHookName {
+			e.signalObservableProjection(requestID)
+		}
+		total += len(tokens)
+	}
+	return total, nil
+}
+
+func generatedSubmissionSource(batch workdomain.GeneratedSubmissionBatch, defaultSource string) string {
+	if batch.Metadata.Source != "" {
+		return batch.Metadata.Source
+	}
+	if defaultSource != "" {
+		return defaultSource
+	}
+	return "generated-batch"
+}
+
+func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch workdomain.GeneratedSubmissionBatch) ([]workdomain.SubmitRequest, string, error) {
+	normalized, err := workdomain.NormalizeGeneratedSubmissionBatch(batch, workdomain.WorkRequestNormalizeOptions{ValidWorkTypes: e.validWorkTypes(), ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes), IDGenerator: e.workRequestIDs})
+	if err != nil {
+		return nil, "", err
+	}
+	requestID := ""
+	if len(normalized) > 0 {
+		requestID = normalized[0].RequestID
+	}
+	return normalized, requestID, nil
+}
+
+func (e *FactoryEngine) skipGeneratedSubmissionRequest(requestID, source string) bool {
+	if requestID == "" || source == externalSubmissionHookName {
+		return false
+	}
+	_, exists := e.workRequests[requestID]
+	return exists
+}
+
+func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.SubmitRequest) ([]*factorytoken.Token, error) {
+	now := e.clock.Now()
+	tokens := make([]*factorytoken.Token, 0, len(normalized))
+	for _, req := range normalized {
+		token, err := e.transformer.InitialTokenFromSubmit(req, now)
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, token)
+	}
+	return tokens, nil
+}
+
+func (e *FactoryEngine) recordGeneratedSubmissionRequest(requestID, source string, batch workdomain.GeneratedSubmissionBatch, normalized []workdomain.SubmitRequest) {
+	e.workRequests[requestID] = workdomain.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
+	if e.recordWorkRequest == nil {
+		return
+	}
+	record := workdomain.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
+	record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
+	e.recordWorkRequest(e.runtimeState.TickCount, record)
+}
+
+func (e *FactoryEngine) recordGeneratedSubmissionTokens(source string, normalized []workdomain.SubmitRequest, tokens []*factorytoken.Token) {
+	parentIDs := make(map[string]struct{})
+	for index, token := range tokens {
+		e.runtimeState.Marking.RecordParentChildRegistration(token)
+		if token.Color.ParentID != "" {
+			parentIDs[token.Color.ParentID] = struct{}{}
+		}
+		if e.recordSubmission != nil {
+			e.recordSubmission(workdomain.FactorySubmissionRecord{SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index), ObservedTick: e.runtimeState.TickCount, Request: normalized[index], Source: source})
+		}
+		e.runtimeState.Marking.AddToken(token)
+		if e.recordWorkInput != nil {
+			e.recordWorkInput(e.runtimeState.TickCount, normalized[index], *token)
+		}
+	}
+	for parentID := range parentIDs {
+		e.runtimeState.Marking.CompleteParentChildRegistration(parentID)
+	}
+}

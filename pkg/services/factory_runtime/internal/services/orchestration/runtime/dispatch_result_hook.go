@@ -14,6 +14,7 @@ import (
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -785,4 +786,42 @@ func observationContextError(ctx context.Context) error {
 		return workersessions.ErrObservationCanceled
 	}
 	return nil
+}
+
+func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState {
+	if f.eventHistory == nil || f.cfg == nil || f.cfg.worldStateProjector == nil {
+		return nil
+	}
+	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
+	if err != nil {
+		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)
+		return nil
+	}
+	return &state
+}
+
+func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], worldState *interfaces.FactoryWorldState) interfaces.RuntimeStatus {
+	if currentState == interfaces.FactoryStateCompleted || currentState == interfaces.FactoryStateFailed {
+		return interfaces.RuntimeStatusFinished
+	}
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWork(snapshot.Marking, f.topology) {
+		return interfaces.RuntimeStatusActive
+	}
+	return interfaces.RuntimeStatusIdle
+}
+
+func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool {
+	if topology == nil {
+		return false
+	}
+	for _, token := range marking.Tokens {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkTypeID == "" {
+			continue
+		}
+		category := topology.StateCategoryForPlace(token.PlaceID)
+		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
+			return true
+		}
+	}
+	return false
 }

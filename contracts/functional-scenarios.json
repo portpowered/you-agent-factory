@@ -480,20 +480,30 @@
       "name": "you work approval list",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.work.approval.show",
       "name": "you work approval show",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.work.list",
@@ -1201,15 +1211,10 @@
       "name": "interruptWorkerSession",
       "interface": "rest",
       "classification": "operation",
-      "status": "covered",
+      "status": "missing",
       "lane": "short",
       "executionClass": "deterministic",
-      "evidence": [
-        {
-          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
-          "boundary": "rest"
-        }
-      ]
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "rest/invokeFactorySessionBySessionId",

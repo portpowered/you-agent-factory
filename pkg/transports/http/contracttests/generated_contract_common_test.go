@@ -14,6 +14,30 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+func assertGeneratedWorkRequestEventRoundTrip(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal generated FactoryEvent: %v", err)
+	}
+	var roundTripped factoryapi.FactoryEvent
+	decodeRoundTripJSON(t, encoded, &roundTripped, "round-tripped FactoryEvent")
+	roundTrippedPayload, err := roundTripped.Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode round-tripped work request payload: %v", err)
+	}
+	if roundTripped.Context.RequestId == nil || *roundTripped.Context.RequestId != "request-1" {
+		t.Fatalf("round-tripped context.requestId = %#v, want request-1", roundTripped.Context.RequestId)
+	}
+	if roundTripped.Context.TraceIds == nil || len(*roundTripped.Context.TraceIds) != 2 {
+		t.Fatalf("round-tripped context.traceIds = %#v, want two trace ids", roundTripped.Context.TraceIds)
+	}
+	if roundTrippedPayload.Works == nil || len(*roundTrippedPayload.Works) != 1 || (*roundTrippedPayload.Works)[0].WorkId == nil || *(*roundTrippedPayload.Works)[0].WorkId != "work-1" {
+		t.Fatalf("round-tripped payload.works = %#v, want work-1 preserved", roundTrippedPayload.Works)
+	}
+}
+
 func TestOpenAPIAuthoring_ResponseEventStreamDeclaresEphemeralSSEContract(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	paths, ok := doc["paths"].(map[string]any)

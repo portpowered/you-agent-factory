@@ -117,6 +117,19 @@ func TestReconstructCanonicalFactoryWorldStateProjectsPendingHumanApprovalFromRe
 	if err != nil {
 		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
 	}
+	assertPendingHumanApprovalProjection(t, state, sessionID, requestID, dispatchID, workIDs, traceIDs)
+
+	replayed, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{structure, dispatch, approval}, 1)
+	if err != nil {
+		t.Fatalf("replay after reconnect: %v", err)
+	}
+	if !reflect.DeepEqual(state.PendingHumanApprovalsByID, replayed.PendingHumanApprovalsByID) {
+		t.Fatalf("replayed pending approvals = %#v, want stable projection %#v", replayed.PendingHumanApprovalsByID, state.PendingHumanApprovalsByID)
+	}
+}
+
+func assertPendingHumanApprovalProjection(t *testing.T, state interfaces.FactoryWorldState, sessionID, requestID, dispatchID string, workIDs, traceIDs []string) {
+	t.Helper()
 	if len(state.PendingHumanApprovalsByID) != 1 {
 		t.Fatalf("pending approvals = %#v, want one replayed approval", state.PendingHumanApprovalsByID)
 	}
@@ -138,14 +151,6 @@ func TestReconstructCanonicalFactoryWorldStateProjectsPendingHumanApprovalFromRe
 	}
 	if _, ok := state.ActiveDispatches[dispatchID]; !ok {
 		t.Fatalf("active dispatches = %#v, want claimed dispatch retained while approval is pending", state.ActiveDispatches)
-	}
-
-	replayed, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{structure, dispatch, approval}, 1)
-	if err != nil {
-		t.Fatalf("replay after reconnect: %v", err)
-	}
-	if !reflect.DeepEqual(state.PendingHumanApprovalsByID, replayed.PendingHumanApprovalsByID) {
-		t.Fatalf("replayed pending approvals = %#v, want stable projection %#v", replayed.PendingHumanApprovalsByID, state.PendingHumanApprovalsByID)
 	}
 }
 

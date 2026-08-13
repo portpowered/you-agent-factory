@@ -3,12 +3,14 @@ package commandregistry_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	cligenerated "github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
@@ -31,6 +33,186 @@ func TestResolvedWorkListRejectsMutuallyExclusiveTerminalityBeforeHandler(t *tes
 	if called {
 		t.Fatal("list handler was called after mutually-exclusive flag validation")
 	}
+}
+
+func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
+	stringInput := func(id string) resolvedTestValue {
+		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("value")}
+	}
+	boolInput := func(id string) resolvedTestValue {
+		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}
+	}
+	local := []resolvedTestValue{
+		stringInput("you.work.list.flag.state-name"), stringInput("you.work.list.flag.state-type"), stringInput("you.work.list.flag.name"), stringInput("you.work.list.flag.work-type-name"), stringInput("you.work.list.flag.trace-id"), stringInput("you.work.list.flag.sort-by"), boolInput("you.work.list.flag.terminal"), boolInput("you.work.list.flag.non-terminal"), {id: "you.work.list.flag.max-results", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(1)}, stringInput("you.work.list.flag.next-token"), boolInput("you.work.list.flag.counts"), stringInput("you.work.list.flag.session"), stringInput("you.work.show.arg.0"), stringInput("you.work.show.flag.session"), stringInput("you.work.move.arg.0"), stringInput("you.work.move.arg.1"), stringInput("you.work.move.flag.session"), stringInput("you.work.move.flag.request-id"), stringInput("you.work.visualize.arg.0"), stringInput("you.work.visualize.flag.format"),
+	}
+	globals := []resolvedTestValue{stringInput("you.flag.server"), {id: "you.flag.json", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}, {id: "you.flag.verbose", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}, {id: "you.flag.debug", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}}
+	noList := func(workcli.ListConfig) error { return nil }
+	noShow := func(workcli.ShowConfig) error { return nil }
+	noMove := func(workcli.MoveConfig) error { return nil }
+	noVisualize := func(workcli.VisualizeConfig) error { return nil }
+	tests := []struct {
+		name    string
+		handler commandregistry.ResolvedWorkRunE
+		missing []string
+	}{
+		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{ListWork: noList}), []string{"you.work.list.flag.state-name", "you.work.list.flag.state-type", "you.work.list.flag.name", "you.work.list.flag.work-type-name", "you.work.list.flag.trace-id", "you.work.list.flag.sort-by", "you.work.list.flag.terminal", "you.work.list.flag.non-terminal", "you.work.list.flag.max-results", "you.work.list.flag.next-token", "you.work.list.flag.counts", "you.work.list.flag.session"}},
+		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{ShowWork: noShow}), []string{"you.work.show.arg.0", "you.work.show.flag.session"}},
+		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{MoveWork: noMove}), []string{"you.work.move.arg.0", "you.work.move.arg.1", "you.work.move.flag.session", "you.work.move.flag.request-id"}},
+		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{VisualizeWork: noVisualize}), []string{"you.work.visualize.arg.0", "you.work.visualize.flag.format"}},
+	}
+	for _, test := range tests {
+		missingInputs := test.missing
+		if test.name != "visualize" {
+			missingInputs = append(missingInputs, "you.flag.server", "you.flag.json", "you.flag.verbose", "you.flag.debug")
+		}
+		for _, missing := range missingInputs {
+			t.Run(test.name+"/"+missing, func(t *testing.T) {
+				inputs := resolvedTestInputsWithout(t, local, missing)
+				inherited := resolvedTestInputsWithout(t, globals, missing)
+				err := test.handler(&cobra.Command{}, inputs, inherited)
+				var accessErr *resolvedinput.AccessError
+				if !errors.As(err, &accessErr) || accessErr.InputID != missing {
+					t.Fatalf("handler error = %v, want missing stable input %q", err, missing)
+				}
+			})
+		}
+	}
+}
+
+func TestVerifyWorkRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
+	manifest, err := cligenerated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkFamilyManifest() error = %v", err)
+	}
+	registry := commandregistry.NewRegistry()
+	for _, commandID := range []string{"you.work.approval.list", "you.work.approval.show", "you.work.list", "you.work.watch", "you.work.show", "you.work.move", "you.work.visualize"} {
+		if err := registry.Register(commandID, noopRunE); err != nil {
+			t.Fatalf("Register(%q) error = %v", commandID, err)
+		}
+	}
+	if err := registry.VerifyWorkRunnableCoverage(manifest); err != nil {
+		t.Fatalf("VerifyWorkRunnableCoverage() error = %v", err)
+	}
+}
+
+func TestResolvedWorkAdaptersRequireServices(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler commandregistry.ResolvedWorkRunE
+	}{
+		{"approval list", commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{})},
+		{"approval show", commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{})},
+		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{})},
+		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{})},
+		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{})},
+		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{})},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.handler(&cobra.Command{}, resolvedinput.Inputs{}, resolvedinput.Inputs{})
+			if err == nil || !strings.Contains(err.Error(), "service is required") {
+				t.Fatalf("handler error = %v, want required service error", err)
+			}
+		})
+	}
+}
+
+func TestResolvedApprovalAdaptersMapStableInputsIntoFreshRequests(t *testing.T) {
+	var listRequests []workcli.ListHumanApprovalsConfig
+	list := commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{ListHumanApprovals: func(cfg workcli.ListHumanApprovalsConfig) error { listRequests = append(listRequests, cfg); return nil }, DiagnosticsWriter: func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }})
+	var showRequests []workcli.ShowHumanApprovalConfig
+	show := commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{ShowHumanApproval: func(cfg workcli.ShowHumanApprovalConfig) error { showRequests = append(showRequests, cfg); return nil }, DiagnosticsWriter: func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }})
+	executeResolvedApprovalList(t, list, []string{"--server", "https://factory.example", "--json", "--debug", "work", "approval", "list", "--session", "session-alpha"}, io.Discard, io.Discard, context.Background())
+	executeResolvedApprovalShow(t, show, []string{"--server", "https://factory.example", "--json", "--debug", "work", "approval", "show", "approval-alpha", "--session", "session-alpha"}, io.Discard, io.Discard, context.Background())
+	assertResolvedApprovalListRequest(t, listRequests)
+	assertResolvedApprovalShowRequest(t, showRequests)
+}
+
+func assertResolvedApprovalListRequest(t *testing.T, requests []workcli.ListHumanApprovalsConfig) {
+	t.Helper()
+	if len(requests) != 1 {
+		t.Fatalf("approval list request count = %d, want 1", len(requests))
+	}
+	request := requests[0]
+	if request.Server != "https://factory.example" || request.SessionID != "session-alpha" || !request.JSON || !request.Verbose || !request.Debug {
+		t.Fatalf("approval list config = %#v, want resolved request values", request)
+	}
+	if request.Output == nil || request.Diagnostics == nil || request.Context == nil {
+		t.Fatalf("approval list config = %#v, want runtime output, diagnostics, and context", request)
+	}
+}
+
+func assertResolvedApprovalShowRequest(t *testing.T, requests []workcli.ShowHumanApprovalConfig) {
+	t.Helper()
+	if len(requests) != 1 {
+		t.Fatalf("approval show request count = %d, want 1", len(requests))
+	}
+	request := requests[0]
+	if request.Server != "https://factory.example" || request.SessionID != "session-alpha" || request.ApprovalID != "approval-alpha" || !request.JSON || !request.Verbose || !request.Debug {
+		t.Fatalf("approval show config = %#v, want resolved request values", request)
+	}
+	if request.Output == nil || request.Diagnostics == nil || request.Context == nil {
+		t.Fatalf("approval show config = %#v, want runtime output, diagnostics, and context", request)
+	}
+}
+
+func TestResolvedApprovalAdaptersRejectMissingResolvedInputs(t *testing.T) {
+	list := commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{ListHumanApprovals: func(workcli.ListHumanApprovalsConfig) error { return nil }})
+	if err := list(&cobra.Command{}, resolvedinput.Inputs{}, resolvedinput.Inputs{}); err == nil || !strings.Contains(err.Error(), "resolve human approval list inputs") {
+		t.Fatalf("approval list missing local inputs error = %v", err)
+	}
+	if err := list(&cobra.Command{}, resolvedTestInputs(t, resolvedTestValue{id: "you.work.approval.list.flag.session", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("session-alpha")}), resolvedinput.Inputs{}); err == nil || !strings.Contains(err.Error(), "resolve human approval list inputs") {
+		t.Fatalf("approval list missing inherited inputs error = %v", err)
+	}
+	show := commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{ShowHumanApproval: func(workcli.ShowHumanApprovalConfig) error { return nil }})
+	if err := show(&cobra.Command{}, resolvedinput.Inputs{}, resolvedinput.Inputs{}); err == nil || !strings.Contains(err.Error(), "resolve human approval show inputs") {
+		t.Fatalf("approval show missing local inputs error = %v", err)
+	}
+	if err := show(&cobra.Command{}, resolvedTestInputs(t, resolvedTestValue{id: "you.work.approval.show.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("approval-alpha")}, resolvedTestValue{id: "you.work.approval.show.flag.session", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("session-alpha")}), resolvedinput.Inputs{}); err == nil || !strings.Contains(err.Error(), "resolve human approval show inputs") {
+		t.Fatalf("approval show missing inherited inputs error = %v", err)
+	}
+}
+
+func executeResolvedApprovalList(t *testing.T, list commandregistry.ResolvedWorkRunE, args []string, output, diagnostics io.Writer, ctx context.Context) {
+	t.Helper()
+	if err := executeResolvedApprovalListError(t, list, args, output, diagnostics, ctx); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+}
+
+func executeResolvedApprovalListError(t *testing.T, list commandregistry.ResolvedWorkRunE, args []string, output, diagnostics io.Writer, ctx context.Context) error {
+	t.Helper()
+	noop := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil }
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(commandregistry.ResolvedWorkHandlers{ApprovalList: list, ApprovalShow: noop, List: noop, Show: noop, Move: noop, Visualize: noop})
+	if err != nil {
+		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
+	}
+	root.SetOut(output)
+	root.SetErr(diagnostics)
+	root.SetContext(ctx)
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+func executeResolvedApprovalShow(t *testing.T, show commandregistry.ResolvedWorkRunE, args []string, output, diagnostics io.Writer, ctx context.Context) {
+	t.Helper()
+	if err := executeResolvedApprovalShowError(t, show, args, output, diagnostics, ctx); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+}
+
+func executeResolvedApprovalShowError(t *testing.T, show commandregistry.ResolvedWorkRunE, args []string, output, diagnostics io.Writer, ctx context.Context) error {
+	t.Helper()
+	noop := func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil }
+	root, err := climanifestcobra.NewResolvedWorkCommandTree(commandregistry.ResolvedWorkHandlers{ApprovalList: noop, ApprovalShow: show, List: noop, Show: noop, Move: noop, Visualize: noop})
+	if err != nil {
+		t.Fatalf("NewResolvedWorkCommandTree() error = %v", err)
+	}
+	root.SetOut(output)
+	root.SetErr(diagnostics)
+	root.SetContext(ctx)
+	root.SetArgs(args)
+	return root.Execute()
 }
 
 func TestWorkWatchCommandMapsDefaultAndExplicitSessionModes(t *testing.T) {

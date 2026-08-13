@@ -60,56 +60,55 @@ workstations:
 	}
 
 	for extension, document := range documents {
-		extension, document := extension, document
 		t.Run(extension, func(t *testing.T) {
 			t.Parallel()
-
-			path := filepath.Join(t.TempDir(), "factory."+extension)
-			writeTestSource(t, path, document)
-
-			source, err := NewFactorySourceLoader(localTestFileSystem{})(path)
-			if err != nil {
-				t.Fatalf("load %s source: %v", extension, err)
-			}
-			generated, err := factoryconfig.DecodeAuthoredFactoryAPI(source.Data)
-			if err != nil {
-				t.Fatalf("decode %s source: %v", extension, err)
-			}
-			if generated.Workstations == nil || len(*generated.Workstations) != 1 {
-				t.Fatalf("generated workstations = %#v, want one workstation", generated.Workstations)
-			}
-			workstation := (*generated.Workstations)[0]
-			if workstation.Type == nil || *workstation.Type != factoryapi.HUMANAPPROVAL {
-				t.Fatalf("generated workstation type = %#v, want HUMAN_APPROVAL", workstation.Type)
-			}
-			if workstation.Worker != nil {
-				t.Fatalf("generated human approval worker = %q, want omitted", *workstation.Worker)
-			}
-
-			cfg, err := factoryconfig.FactoryConfigFromOpenAPI(generated)
-			if err != nil {
-				t.Fatalf("map %s source: %v", extension, err)
-			}
-			assertHumanApprovalWorkstationRoundTrip(t, cfg.Workstations)
-
-			flattened, err := factoryconfig.NewFactoryConfigMapper().Flatten(&cfg)
-			if err != nil {
-				t.Fatalf("flatten %s source: %v", extension, err)
-			}
-			if strings.Contains(string(flattened), `"worker"`) {
-				t.Fatalf("flattened human approval unexpectedly declares a worker: %s", flattened)
-			}
-			if !strings.Contains(string(flattened), `"type":"HUMAN_APPROVAL"`) {
-				t.Fatalf("flattened human approval lost its type: %s", flattened)
-			}
-
-			expanded, err := factoryconfig.NewFactoryConfigMapper().Expand(flattened)
-			if err != nil {
-				t.Fatalf("expand flattened %s source: %v", extension, err)
-			}
-			assertHumanApprovalWorkstationRoundTrip(t, expanded.Workstations)
+			assertHumanApprovalSourceRoundTrip(t, extension, document)
 		})
 	}
+}
+
+func assertHumanApprovalSourceRoundTrip(t *testing.T, extension, document string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "factory."+extension)
+	writeTestSource(t, path, document)
+	source, err := NewFactorySourceLoader(localTestFileSystem{})(path)
+	if err != nil {
+		t.Fatalf("load %s source: %v", extension, err)
+	}
+	generated, err := factoryconfig.DecodeAuthoredFactoryAPI(source.Data)
+	if err != nil {
+		t.Fatalf("decode %s source: %v", extension, err)
+	}
+	if generated.Workstations == nil || len(*generated.Workstations) != 1 {
+		t.Fatalf("generated workstations = %#v, want one workstation", generated.Workstations)
+	}
+	workstation := (*generated.Workstations)[0]
+	if workstation.Type == nil || *workstation.Type != factoryapi.HUMANAPPROVAL {
+		t.Fatalf("generated workstation type = %#v, want HUMAN_APPROVAL", workstation.Type)
+	}
+	if workstation.Worker != nil {
+		t.Fatalf("generated human approval worker = %q, want omitted", *workstation.Worker)
+	}
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("map %s source: %v", extension, err)
+	}
+	assertHumanApprovalWorkstationRoundTrip(t, cfg.Workstations)
+	flattened, err := factoryconfig.NewFactoryConfigMapper().Flatten(&cfg)
+	if err != nil {
+		t.Fatalf("flatten %s source: %v", extension, err)
+	}
+	if strings.Contains(string(flattened), `"worker"`) {
+		t.Fatalf("flattened human approval unexpectedly declares a worker: %s", flattened)
+	}
+	if !strings.Contains(string(flattened), `"type":"HUMAN_APPROVAL"`) {
+		t.Fatalf("flattened human approval lost its type: %s", flattened)
+	}
+	expanded, err := factoryconfig.NewFactoryConfigMapper().Expand(flattened)
+	if err != nil {
+		t.Fatalf("expand flattened %s source: %v", extension, err)
+	}
+	assertHumanApprovalWorkstationRoundTrip(t, expanded.Workstations)
 }
 
 func assertHumanApprovalWorkstationRoundTrip(t *testing.T, workstations []factorydefinitions.FactoryWorkstationConfig) {
@@ -118,21 +117,30 @@ func assertHumanApprovalWorkstationRoundTrip(t *testing.T, workstations []factor
 		t.Fatalf("workstations = %#v, want one workstation", workstations)
 	}
 	workstation := workstations[0]
-	if workstation.ID != "release-approval" {
-		t.Fatalf("workstation id = %q, want release-approval", workstation.ID)
+	assertHumanApprovalIdentity(t, workstation)
+	assertHumanApprovalDescription(t, workstation)
+	assertHumanApprovalRoutes(t, workstation)
+}
+
+func assertHumanApprovalIdentity(t *testing.T, workstation factorydefinitions.FactoryWorkstationConfig) {
+	t.Helper()
+	if workstation.ID != "release-approval" || workstation.Type != factorydefinitions.WorkstationTypeHumanApproval || workstation.WorkerTypeName != "" {
+		t.Fatalf("workstation identity = %#v, want stable HUMAN_APPROVAL without worker", workstation)
 	}
-	if workstation.Type != factorydefinitions.WorkstationTypeHumanApproval {
-		t.Fatalf("workstation type = %q, want HUMAN_APPROVAL", workstation.Type)
-	}
-	if workstation.WorkerTypeName != "" {
-		t.Fatalf("workstation worker = %q, want empty", workstation.WorkerTypeName)
-	}
+}
+
+func assertHumanApprovalDescription(t *testing.T, workstation factorydefinitions.FactoryWorkstationConfig) {
+	t.Helper()
 	if workstation.Description == nil || workstation.Description.Type != factorydefinitions.NameValueTypeLocalizableAsset || workstation.Description.Value != "Confirm release" {
 		t.Fatalf("workstation description = %#v, want localizable Confirm release", workstation.Description)
 	}
 	if len(workstation.Description.Locales) != 2 || workstation.Description.Locales[1] != "fr-FR" || workstation.Description.Values["fr-FR"] != "Confirmer la version" {
 		t.Fatalf("workstation localized description = %#v, want en-US/fr-FR values", workstation.Description)
 	}
+}
+
+func assertHumanApprovalRoutes(t *testing.T, workstation factorydefinitions.FactoryWorkstationConfig) {
+	t.Helper()
 	if len(workstation.Inputs) != 1 || workstation.Inputs[0].StateName != "awaiting-approval" {
 		t.Fatalf("workstation inputs = %#v, want awaiting-approval", workstation.Inputs)
 	}

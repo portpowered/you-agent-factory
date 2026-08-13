@@ -1674,6 +1674,12 @@ type ReplayWorkerSessionIDResolver interface {
 	WorkerSessionIDForDispatch(work.WorkDispatch) (string, bool)
 }
 
+// ReplayDispatchIDResolver preserves the canonical dispatch identity recorded
+// for a dispatch when replay reconstructs it through the live Factory Runtime.
+type ReplayDispatchIDResolver interface {
+	DispatchIDForDispatch(work.WorkDispatch) (string, bool)
+}
+
 // WorkerEventRecorder is the provider-neutral recording capability exposed to
 // the Workers service during runtime construction.
 type WorkerEventRecorder interface {

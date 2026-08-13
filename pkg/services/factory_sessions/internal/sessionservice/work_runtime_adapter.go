@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -66,10 +67,53 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names, runtimeReadFacts{
 			dispatches: snapshot.Dispatches, dispatchHistory: snapshot.DispatchHistory, results: snapshot.Results,
 		})
+		item.HumanApproval = runtimeHumanApprovalForWork(a.sessionID, token.Color.WorkID, snapshot.Dispatches, snapshot.Topology)
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
 	return result, nil
+}
+
+func runtimeHumanApprovalForWork(
+	sessionID string,
+	workID string,
+	dispatches map[string]*factoryruntime.DispatchEntry,
+	topology *factoryruntime.Net,
+) *work.HumanApprovalReadModel {
+	if workID == "" || topology == nil || len(dispatches) == 0 {
+		return nil
+	}
+	dispatchIDs := make([]string, 0, len(dispatches))
+	for dispatchID := range dispatches {
+		dispatchIDs = append(dispatchIDs, dispatchID)
+	}
+	sort.Strings(dispatchIDs)
+	for _, dispatchID := range dispatchIDs {
+		entry := dispatches[dispatchID]
+		if entry == nil {
+			continue
+		}
+		transition := topology.Transitions[entry.TransitionID]
+		if transition == nil || transition.Type != factoryruntime.PetriTransitionHumanApproval {
+			continue
+		}
+		for _, token := range entry.ConsumedTokens {
+			if token.Color.WorkID != workID {
+				continue
+			}
+			return &work.HumanApprovalReadModel{
+				ApprovalID: approvalIDForDispatch(entry.DispatchID), SessionID: sessionID,
+				DispatchID: entry.DispatchID, WorkstationID: entry.TransitionID,
+				WorkstationName: entry.WorkstationName, Decisions: []string{"APPROVE", "REJECT"},
+				Status: "PENDING",
+			}
+		}
+	}
+	return nil
+}
+
+func approvalIDForDispatch(dispatchID string) string {
+	return "approval-" + dispatchID
 }
 
 type runtimeReadFacts struct {
