@@ -53,9 +53,9 @@ Execute the script.
 
 	close(runner.releaseCh)
 	support.WaitForTerminalStatus(t, server.URL(), timeoutCompanionRunTimeout)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", workID, "task", traceID, nil)
+	assertListedWorkIdentity(t, listed, "done", workID, "task", traceID, nil)
 	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 		factoryapi.WorkOutcomeAccepted,
