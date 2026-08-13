@@ -132,7 +132,7 @@ endef
 .PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
-.PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
+.PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 .PHONY: frontend-verification backend-verification ui-backend-integration local-inference-verification
 
@@ -176,6 +176,14 @@ default:
 	$(MAKE) build
 	$(MAKE) test
 	$(MAKE) lint
+
+# Local pre-push guidance: run both independent Go coverage reports before
+# pushing. A build or typecheck does not substitute for either completed run.
+coverage-help:
+	$(info Local pre-push checks: run both independent Go coverage reports before pushing.)
+	$(info   make test-unit-coverage       backend unit/package coverage report)
+	$(info   make test-functional-coverage independent functional coverage report)
+	$(info A build or typecheck alone does not replace either completed coverage run.)
 
 build:
 	$(GO) build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
