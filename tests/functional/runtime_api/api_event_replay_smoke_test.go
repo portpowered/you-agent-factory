@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// portos:func-length-exception owner=agent-factory reason=event-replay-functional-smoke review=2026-07-18 removal=split-runtime-recording-projection-and-api-assertions-before-next-event-replay-smoke-change
 func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
@@ -82,6 +81,7 @@ func collectEventReplayOutcome(
 			outcome.workRequest = event
 		case factoryapi.FactoryEventTypeDispatchRequest:
 			outcome.request = event
+		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
 			if !released {
 				outcome.activeSession = support.GetDefaultSession(t, server.URL())
 				close(releaseDispatch)
