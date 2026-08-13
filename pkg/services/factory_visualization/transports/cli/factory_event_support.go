@@ -858,3 +858,21 @@ func formatHumanResultUpdated(event interfaces.FactoryEvent) string {
 	}
 	return message
 }
+
+// isHumanTerminalSuccessClaim identifies the two lifecycle events whose
+// success wording must wait for the terminal invocation result. Cancellation
+// can race with a completed Factory Session, so presenting either claim live
+// would make a final CANCELED invocation read as successful. Other lifecycle
+// events remain live progress.
+func isHumanTerminalSuccessClaim(event interfaces.FactoryEvent) bool {
+	switch event.Type {
+	case interfaces.FactoryEventTypeSessionResultUpdated:
+		payload, ok := decodeFactoryEventPayload[interfaces.FactorySessionResultUpdatedEventPayload](event)
+		return ok && payload.ResultStatus == interfaces.FactorySessionResultStatusFinal
+	case interfaces.FactoryEventTypeSessionCompleted:
+		payload, ok := decodeFactoryEventPayload[interfaces.FactorySessionCompletedEventPayload](event)
+		return ok && payload.FinalStatus == interfaces.FactorySessionLifecycleStatusSucceeded
+	default:
+		return false
+	}
+}

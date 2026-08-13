@@ -434,7 +434,7 @@ func runFactoryInvocation(
 	// err is preserved below so the CLI still reports failure and exit-code
 	// semantics for the cleanup error are not lost.
 	writeErr := writeFactoryInvocationOutcome(invocationCfg, result, streamRenderer)
-	return finishFactoryInvocation(err, writeErr, outputWriter)
+	return finishFactoryInvocation(err, writeErr, outputWriter, result)
 }
 
 func runFactoryInvocationWithoutTerminalResult(

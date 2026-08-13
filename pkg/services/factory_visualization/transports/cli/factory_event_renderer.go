@@ -57,8 +57,9 @@ type factoryEventStream interface {
 }
 
 type humanFactoryEventRenderer struct {
-	stream   factoryEventStream
-	progress *humanWorkerProgressRenderer
+	stream                 factoryEventStream
+	progress               *humanWorkerProgressRenderer
+	pendingTerminalSuccess []interfaces.FactoryEvent
 }
 
 func newHumanFactoryEventRenderer(
@@ -72,9 +73,20 @@ func newHumanFactoryEventRenderer(
 }
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
-	if renderer != nil {
-		renderer.progress.PresentFactoryEvents(events)
-		renderer.stream.PresentFactoryEvents(events)
+	if renderer == nil {
+		return
+	}
+	renderer.progress.PresentFactoryEvents(events)
+	liveEvents := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if isHumanTerminalSuccessClaim(event) {
+			renderer.pendingTerminalSuccess = append(renderer.pendingTerminalSuccess, event)
+			continue
+		}
+		liveEvents = append(liveEvents, event)
+	}
+	if len(liveEvents) > 0 {
+		renderer.stream.PresentFactoryEvents(liveEvents)
 	}
 }
 
@@ -92,6 +104,10 @@ func (renderer *humanFactoryEventRenderer) WriteFinalInvocationResult(
 		return fmt.Errorf("Factory Event renderer is nil")
 	}
 	renderer.progress.Stop()
+	if result.Status == interfaces.InvocationTerminalStatusCompleted {
+		renderer.stream.PresentFactoryEvents(renderer.pendingTerminalSuccess)
+	}
+	renderer.pendingTerminalSuccess = nil
 	_, err := renderer.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
 		if result.Status == interfaces.InvocationTerminalStatusCompleted {
 			text, textErr := invocationPrimaryResultText(result.PrimaryResult)
