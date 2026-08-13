@@ -643,8 +643,7 @@
           "workType": "project"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     },
     {
       "inputs": [
@@ -670,8 +669,7 @@
           "workType": "project"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     },
     {
       "inputs": [
@@ -698,8 +696,7 @@
           "workType": "project"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     },
     {
       "guards": [
@@ -722,8 +719,7 @@
           "workType": "delivery-task"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     },
     {
       "guards": [
@@ -746,8 +742,7 @@
           "workType": "delivery-task"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     },
     {
       "guards": [
@@ -771,8 +766,7 @@
           "workType": "project"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     }
   ]
 }

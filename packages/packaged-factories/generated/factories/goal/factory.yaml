@@ -165,4 +165,3 @@ workstations:
         - state: failed
           workType: goal
       type: LOGICAL_MOVE
-      worker: ""

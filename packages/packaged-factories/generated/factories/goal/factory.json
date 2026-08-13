@@ -180,8 +180,7 @@
           "workType": "goal"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     }
   ]
 }

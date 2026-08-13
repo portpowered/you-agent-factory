@@ -332,8 +332,7 @@
           "workType": "parallel-plan"
         }
       ],
-      "type": "LOGICAL_MOVE",
-      "worker": ""
+      "type": "LOGICAL_MOVE"
     }
   ]
 }

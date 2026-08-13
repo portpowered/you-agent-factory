@@ -250,4 +250,3 @@ workstations:
         - state: failed
           workType: parallel-plan
       type: LOGICAL_MOVE
-      worker: ""
