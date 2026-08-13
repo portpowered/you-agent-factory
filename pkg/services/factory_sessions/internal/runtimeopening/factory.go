@@ -182,6 +182,7 @@ type Factory struct {
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsRoot                   recordings.Root
+	replayInputs                     recordings.ReplayInputLoader
 	webhooksService                  webhooks.Service
 	workersRuntimeFactory            WorkersRuntimeFactory
 	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
@@ -269,6 +270,7 @@ func NewFactory(
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
 		recordingsRoot:                   recordingsPorts.Root,
+		replayInputs:                     recordingsPorts.Root,
 		webhooksService:                  webhooksPorts.Service,
 		workersRuntimeFactory:            workersPorts.RuntimeFactory,
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,

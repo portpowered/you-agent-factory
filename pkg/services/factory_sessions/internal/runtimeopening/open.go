@@ -390,27 +390,6 @@ func openRuntime(
 		definitionRuntimeRouter.Unbind(sessionID)
 		return nil
 	})
-	if workFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory is required")
-	}
-	workDomain := workFactory(runtimeService)
-	if workDomain == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory returned nil service")
-	}
-	if recordingLifecycleFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory is required")
-	}
-	recordingLifecycle := recordingLifecycleFactory(startupRuntime.RecordingLedger(), recordingProjections)
-	if recordingLifecycle == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory returned nil lifecycle")
-	}
-	if err := bindRuntimeRecordingLifecycle(
-		runtimeRecording,
-		recordingLifecycle,
-		recordings.CanonicalEventScope{FactorySessionID: sessionID},
-	); err != nil {
-		return runtimeProducts{}, err
-	}
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}

@@ -217,7 +217,10 @@ func runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) 
 		return automations.RuntimeActivationRequest{RuntimeID: bundle.RuntimeInstanceID}
 	}
 	snapshot := interfaces.RuntimeSnapshot{
-		FactoryDir:       bundle.RuntimeCfg.FactoryDir(),
+		// The runtime host directory is the active session scope. A replayed
+		// loaded config may retain the recorded source directory, but automation
+		// watchers and scheduler effects must never observe that historical path.
+		FactoryDir:       bundle.Dir,
 		RuntimeBaseDir:   bundle.RuntimeCfg.RuntimeBaseDir(),
 		EffectiveFactory: *cfg,
 		Workers:          append([]interfaces.FactoryWorkerConfig(nil), cfg.Workers...),
