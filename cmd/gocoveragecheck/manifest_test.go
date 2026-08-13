@@ -139,6 +139,7 @@ func TestReadCoverageManifestValidatesContract(t *testing.T) {
 		{name: "invalid percentage", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":100.01}]}`, measured: []string{configPackage}, want: "between 0.00 and 100.00"},
 		{name: "imprecise percentage", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.0}]}`, measured: []string{configPackage}, want: "exactly two decimal places"},
 		{name: "both entry forms", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.00,"exception":{"kind":"migration"}}]}`, measured: []string{configPackage}, want: "exactly one"},
+		{name: "neither entry form", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `"}]}`, measured: []string{configPackage}, want: "exactly one"},
 		{name: "malformed exception", manifest: `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","exception":{"kind":"coverage","justification":"low coverage","owner":"team","deadline":"soon","removalGate":"more tests"}}]}`, measured: []string{configPackage}, want: "must be measurement or migration"},
 		{name: "unknown field", manifest: `{"version":1,"lane":"unit","unknown":true,"packages":[]}`, measured: nil, want: "unknown field"},
 	}
