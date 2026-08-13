@@ -20,6 +20,7 @@ import type {
 } from "../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
+import type { FactoryLayoutGroupNodeGeometry } from "../lib/layout/visual-groups/factory-graph-layout-groups";
 import type {
   FactoryGraphOperationResult,
   FactoryGraphReactFlowProjection,
@@ -87,10 +88,17 @@ export interface EditableFactoryGraphViewModel {
       y: number;
       zoom: number;
     }) => void;
-    createVisualGroup: (center: {
-      x: number;
-      y: number;
-    }) => { id: string } | null;
+    createVisualGroup: (
+      center: { x: number; y: number },
+      options?: {
+        nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+        nodeIds?: readonly string[];
+      },
+    ) => { id: string } | null;
+    fitVisualGroup: (
+      groupId: string,
+      nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+    ) => void;
     renameVisualGroup: (groupId: string, label: string) => void;
     setVisualGroupColor: (
       groupId: string,

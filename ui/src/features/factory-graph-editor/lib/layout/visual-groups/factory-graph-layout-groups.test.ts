@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: group layout scenarios share the canonical layout fixtures and history helpers.
 import { describe, expect, it } from "vitest";
 import {
   createDefaultFactoryLayout,
@@ -12,6 +13,7 @@ import {
   createFactoryLayoutGroup,
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
+  FACTORY_LAYOUT_GROUP_FIT_PADDING,
   factoryLayoutGroupById,
   factoryLayoutGroupCanvasNodeOptions,
   factoryLayoutGroupColorCssVariable,
@@ -19,6 +21,8 @@ import {
   factoryLayoutGroupContainsNode,
   factoryLayoutGroups,
   factoryLayoutGroupsEqual,
+  fitFactoryLayoutGroup,
+  fitFactoryLayoutGroupBounds,
   isApprovedFactoryLayoutGroupColor,
   moveFactoryLayoutGroupByDelta,
   removeFactoryLayoutGroup,
@@ -445,5 +449,54 @@ describe("factory graph layout groups", () => {
       { id: "workstation:review", label: "Review" },
       { id: "worker:writer", label: "Writer" },
     ]);
+  });
+
+  it("fits mixed-size members with the shared region padding", () => {
+    const nodeGeometryById = new Map([
+      ["node-a", { height: 40, position: { x: 100, y: 120 }, width: 80 }],
+      ["node-b", { height: 60, position: { x: 280, y: 200 }, width: 120 }],
+    ]);
+
+    expect(
+      fitFactoryLayoutGroupBounds({
+        nodeGeometryById,
+        nodeIds: ["node-a", "node-b"],
+      }),
+    ).toEqual({
+      height: 140 + FACTORY_LAYOUT_GROUP_FIT_PADDING * 2,
+      width: 300 + FACTORY_LAYOUT_GROUP_FIT_PADDING * 2,
+      x: 100 - FACTORY_LAYOUT_GROUP_FIT_PADDING,
+      y: 120 - FACTORY_LAYOUT_GROUP_FIT_PADDING,
+    });
+  });
+
+  it("ignores missing members and safely no-ops when none resolve", () => {
+    const group = createFactoryLayoutGroup({
+      bounds: { height: 200, width: 300, x: 10, y: 20 },
+      id: "group-1",
+      layout: createDefaultFactoryLayout(),
+      nodeIds: ["node-a", "legacy-node"],
+    });
+    const layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), group);
+    const nodeGeometryById = new Map([
+      ["node-a", { height: 40, position: { x: 100, y: 120 }, width: 80 }],
+    ]);
+
+    const fitted = fitFactoryLayoutGroup(layout, "group-1", nodeGeometryById);
+    expect(factoryLayoutGroupById(fitted, "group-1")?.bounds).toEqual({
+      height: 104,
+      width: 144,
+      x: 68,
+      y: 88,
+    });
+
+    const unchanged = fitFactoryLayoutGroup(layout, "group-1", new Map());
+    expect(unchanged).toBe(layout);
+    expect(
+      fitFactoryLayoutGroupBounds({
+        nodeGeometryById: new Map(),
+        nodeIds: [],
+      }),
+    ).toBeNull();
   });
 });

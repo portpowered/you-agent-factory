@@ -36,6 +36,9 @@ import {
   createFactoryLayoutGroup,
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
+  type FactoryLayoutGroupNodeGeometry,
+  fitFactoryLayoutGroup,
+  fitFactoryLayoutGroupBounds,
   moveFactoryLayoutGroupByDelta,
   removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
@@ -234,24 +237,45 @@ export function createHookTestGraphEditorDraftState(
   return state;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: shared visual-group mock actions mirror the production layout action surface.
 function createMockVisualGroupLayoutActions(state: {
   hasChanges: boolean;
   layout: ReturnType<typeof createDefaultFactoryLayout>;
   layoutDirty: boolean;
 }) {
   return {
-    createVisualGroup: vi.fn((center: { x: number; y: number }) => {
-      const groupId = createFactoryLayoutGroupId(state.layout);
-      const group = createFactoryLayoutGroup({
-        bounds: defaultFactoryLayoutGroupBounds(center),
-        id: groupId,
-        layout: state.layout,
-      });
-      state.layout = addFactoryLayoutGroup(state.layout, group);
-      state.hasChanges = true;
-      state.layoutDirty = true;
-      return group;
-    }),
+    createVisualGroup: vi.fn(
+      (
+        center: { x: number; y: number },
+        options?: {
+          nodeGeometryById?: ReadonlyMap<
+            string,
+            FactoryLayoutGroupNodeGeometry
+          >;
+          nodeIds?: readonly string[];
+        },
+      ) => {
+        const groupId = createFactoryLayoutGroupId(state.layout);
+        const nodeIds = [...new Set(options?.nodeIds ?? [])];
+        const bounds =
+          nodeIds.length > 0 && options?.nodeGeometryById
+            ? fitFactoryLayoutGroupBounds({
+                nodeGeometryById: options.nodeGeometryById,
+                nodeIds,
+              })
+            : null;
+        const group = createFactoryLayoutGroup({
+          bounds: bounds ?? defaultFactoryLayoutGroupBounds(center),
+          id: groupId,
+          layout: state.layout,
+          nodeIds,
+        });
+        state.layout = addFactoryLayoutGroup(state.layout, group);
+        state.hasChanges = true;
+        state.layoutDirty = true;
+        return group;
+      },
+    ),
     renameVisualGroup: vi.fn((groupId: string, label: string) => {
       state.layout = updateFactoryLayoutGroup(
         state.layout,
@@ -317,6 +341,20 @@ function createMockVisualGroupLayoutActions(state: {
         bounds: { height: number; width: number; x: number; y: number },
       ) => {
         state.layout = resizeFactoryLayoutGroup(state.layout, groupId, bounds);
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    fitVisualGroup: vi.fn(
+      (
+        groupId: string,
+        nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+      ) => {
+        state.layout = fitFactoryLayoutGroup(
+          state.layout,
+          groupId,
+          nodeGeometryById,
+        );
         state.hasChanges = true;
         state.layoutDirty = true;
       },
@@ -560,6 +598,7 @@ function createMockEditableFactoryGraphActions(
     },
     updateLayoutViewport: layoutDraftState.updateViewport,
     createVisualGroup: layoutDraftState.createVisualGroup,
+    fitVisualGroup: layoutDraftState.fitVisualGroup,
     renameVisualGroup: layoutDraftState.renameVisualGroup,
     setVisualGroupColor: layoutDraftState.setVisualGroupColor,
     addNodeToVisualGroup: layoutDraftState.addNodeToVisualGroup,

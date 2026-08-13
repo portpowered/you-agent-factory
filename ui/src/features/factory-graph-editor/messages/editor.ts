@@ -107,6 +107,7 @@ export interface FactoryGraphEditorMessages {
   visualGroupMembershipStaleNodeLabel: (nodeId: string) => string;
   visualGroupSelectedLabel: string;
   visualGroupDeleteLabel: string;
+  visualGroupFitLabel: string;
   visualGroupResizeHandleLabel: (corner: "ne" | "nw" | "se" | "sw") => string;
   toolbarCreateGroupDescription: string;
   toolbarCreateGroupLabel: string;
@@ -734,6 +735,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `Saved member ${nodeId} is no longer on the canvas.`,
       visualGroupSelectedLabel: "Selected visual group",
       visualGroupDeleteLabel: "Delete group",
+      visualGroupFitLabel: "Fit to members",
       visualGroupResizeHandleLabel: (corner) =>
         `Resize group from ${corner} corner`,
       toolbarCreateGroupDescription: "Create a labeled background group",
@@ -1183,6 +1185,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `已保存的成员 ${nodeId} 已不在画布上。`,
       visualGroupSelectedLabel: "已选视觉分组",
       visualGroupDeleteLabel: "删除分组",
+      visualGroupFitLabel: "适配成员",
       visualGroupResizeHandleLabel: (corner) => `从 ${corner} 角调整分组大小`,
       toolbarCreateGroupDescription: "创建带标签的背景分组",
       toolbarCreateGroupLabel: "创建分组",

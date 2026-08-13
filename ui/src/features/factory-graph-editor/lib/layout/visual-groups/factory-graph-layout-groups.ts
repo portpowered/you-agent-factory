@@ -11,6 +11,12 @@ export type FactoryLayoutGroupCanvasNodeOption = {
   label: string;
 };
 
+export type FactoryLayoutGroupNodeGeometry = {
+  height: number;
+  position: FactoryLayoutPoint;
+  width: number;
+};
+
 export type FactoryLayoutGroup = NonNullable<
   components["schemas"]["Factory"]["layout"]
 >["groups"] extends (infer TGroup)[] | undefined
@@ -26,6 +32,8 @@ export const FACTORY_LAYOUT_GROUP_MIN_SIZE = {
   height: 80,
   width: 120,
 } as const;
+
+export const FACTORY_LAYOUT_GROUP_FIT_PADDING = 32;
 
 export const FACTORY_LAYOUT_GROUP_COLOR_TOKENS = [
   "primary",
@@ -123,6 +131,7 @@ export function createFactoryLayoutGroup(input: {
   id: string;
   label?: string;
   layout: FactoryLayout;
+  nodeIds?: readonly string[];
 }): FactoryLayoutGroup {
   const color = input.color ?? "primary";
   const group: FactoryLayoutGroup = {
@@ -134,7 +143,7 @@ export function createFactoryLayoutGroup(input: {
     },
     id: input.id,
     label: input.label ?? defaultFactoryLayoutGroupLabel(input.layout),
-    nodeIds: [],
+    nodeIds: [...new Set(input.nodeIds ?? [])],
   };
 
   if (color !== undefined) {
@@ -295,6 +304,64 @@ export function clampFactoryLayoutGroupBounds(
   };
 }
 
+export function fitFactoryLayoutGroupBounds(input: {
+  nodeIds: readonly string[];
+  nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+}): FactoryLayoutGroup["bounds"] | null {
+  const memberGeometry = input.nodeIds
+    .map((nodeId) => input.nodeGeometryById.get(nodeId))
+    .filter(isValidFactoryLayoutGroupNodeGeometry);
+
+  if (memberGeometry.length === 0) {
+    return null;
+  }
+
+  const minX = Math.min(
+    ...memberGeometry.map((geometry) => geometry.position.x),
+  );
+  const minY = Math.min(
+    ...memberGeometry.map((geometry) => geometry.position.y),
+  );
+  const maxX = Math.max(
+    ...memberGeometry.map((geometry) => geometry.position.x + geometry.width),
+  );
+  const maxY = Math.max(
+    ...memberGeometry.map((geometry) => geometry.position.y + geometry.height),
+  );
+  const padding = FACTORY_LAYOUT_GROUP_FIT_PADDING;
+
+  return clampFactoryLayoutGroupBounds({
+    height: maxY - minY + padding * 2,
+    width: maxX - minX + padding * 2,
+    x: minX - padding,
+    y: minY - padding,
+  });
+}
+
+export function fitFactoryLayoutGroup(
+  layout: FactoryLayout,
+  groupId: string,
+  nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+): FactoryLayout {
+  const group = factoryLayoutGroupById(layout, groupId);
+  if (!group) {
+    return layout;
+  }
+
+  const bounds = fitFactoryLayoutGroupBounds({
+    nodeGeometryById,
+    nodeIds: group.nodeIds ?? [],
+  });
+  if (!bounds) {
+    return layout;
+  }
+
+  return updateFactoryLayoutGroup(layout, groupId, (currentGroup) => ({
+    ...currentGroup,
+    bounds,
+  }));
+}
+
 export function moveFactoryLayoutGroupByDelta(
   layout: FactoryLayout,
   groupId: string,
@@ -341,4 +408,18 @@ export function resizeFactoryLayoutGroup(
     ...group,
     bounds: clampFactoryLayoutGroupBounds(bounds),
   }));
+}
+
+function isValidFactoryLayoutGroupNodeGeometry(
+  geometry: FactoryLayoutGroupNodeGeometry | undefined,
+): geometry is FactoryLayoutGroupNodeGeometry {
+  return (
+    geometry !== undefined &&
+    Number.isFinite(geometry.position.x) &&
+    Number.isFinite(geometry.position.y) &&
+    Number.isFinite(geometry.width) &&
+    Number.isFinite(geometry.height) &&
+    geometry.width > 0 &&
+    geometry.height > 0
+  );
 }

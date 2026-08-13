@@ -115,6 +115,7 @@ describe("FactoryGraphVisualGroupControls", () => {
   it("invokes delete when the delete group action is activated", async () => {
     const user = userEvent.setup();
     const onDeleteGroup = vi.fn();
+    const onFitGroup = vi.fn();
 
     render(
       <FactoryGraphVisualGroupControls
@@ -123,6 +124,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         colorOptionLabel={(token) => `Use ${token} group color`}
         boundsError={null}
         deleteGroupLabel="Delete group"
+        fitGroupLabel="Fit to members"
         emptyLabelError="Enter a group label."
         group={{
           bounds: { height: 120, width: 200, x: 0, y: 0 },
@@ -139,6 +141,7 @@ describe("FactoryGraphVisualGroupControls", () => {
           `Saved member ${nodeId} is no longer on the canvas.`
         }
         onDeleteGroup={onDeleteGroup}
+        onFitGroup={onFitGroup}
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
@@ -147,6 +150,8 @@ describe("FactoryGraphVisualGroupControls", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Fit to members" }));
+    expect(onFitGroup).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Delete group" }));
     expect(onDeleteGroup).toHaveBeenCalledTimes(1);
   });
