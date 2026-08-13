@@ -5,7 +5,7 @@ GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
 ifeq ($(OS),Windows_NT)
-BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
+BUN_BIN     := $(shell where.exe bun >/dev/null 2>&1 && echo bun)
 else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
 endif
