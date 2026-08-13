@@ -6,17 +6,12 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
-type recordingsFactoryLedger struct {
-	recordings.Ledger
-}
-
-func TestProvideRecordingsFactoryConstructsThroughRecordingsWire(t *testing.T) {
+func TestProvideRecordingsRootConstructsThroughRecordingsWire(t *testing.T) {
 	t.Parallel()
 
-	factory := provideRecordingsFactory(
+	root, err := provideRecordingsRoot(
 		serviceedges.Edges{},
 		recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -24,15 +19,16 @@ func TestProvideRecordingsFactoryConstructsThroughRecordingsWire(t *testing.T) {
 			},
 		),
 		platformreplay.Local{},
+		nil,
+		nil,
 	)
-	service := factory(
-		&recordingsFactoryLedger{},
-		recordingswire.NewProjectionService(),
-	)
-	if service == nil {
-		t.Fatal("provideRecordingsFactory() returned nil service")
+	if err != nil {
+		t.Fatalf("provideRecordingsRoot() error = %v", err)
 	}
-	var published recordings.Service = service
+	if root == nil {
+		t.Fatal("provideRecordingsRoot() returned nil root")
+	}
+	var published recordings.Service = root
 	if _, err := published.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
 		RecordingID: "missing-wire-factory-root",
 	}); err == nil {
