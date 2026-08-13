@@ -231,6 +231,11 @@ func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
 			t.Fatalf("stdout line claims successful primary result after interrupt:\n%s", output)
 		}
 	}
+	for _, forbidden := range []string{"final output updated: FINAL", "factory completed: SUCCEEDED"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("stdout contains successful-completion claim %q after interrupt:\n%s", forbidden, output)
+		}
+	}
 }
 
 var humanTextStreamForbiddenEnvelopeLiterals = []string{
