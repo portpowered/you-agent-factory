@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -34,12 +35,17 @@ func buildCoverageTestArgs(commonArgs []string, profilePath string, timingEnable
 
 // buildCoverageInvocationPlan keeps the ordinary one-process invocation on
 // every platform unless a Windows command would exceed the conservative bound.
-// Windows batches retain all fixed go test flags and execute each resolved test
-// package exactly once. Each batch writes an isolated profile that the caller
-// merges with mergeCoverageProfiles after execution, including profiles from
-// failed subprocesses when they were produced.
-func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, profilePath string, timingEnabled bool, targetOS string) (coverageInvocationPlan, error) {
-	directArgs := buildCoverageTestArgs(commonArgs, profilePath, timingEnabled, testPackages)
+// A compactPackageArgs set is used only for that direct invocation; if it does
+// not fit, Windows batches retain all fixed go test flags and execute each
+// resolved test package exactly once. Each batch writes an isolated profile
+// that the caller merges with mergeCoverageProfiles after execution, including
+// profiles from failed subprocesses when they were produced.
+func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, profilePath string, timingEnabled bool, targetOS string, compactPackageArgs ...[]string) (coverageInvocationPlan, error) {
+	directPackageArgs := testPackages
+	if len(compactPackageArgs) > 0 && len(compactPackageArgs[0]) > 0 {
+		directPackageArgs = compactPackageArgs[0]
+	}
+	directArgs := buildCoverageTestArgs(commonArgs, profilePath, timingEnabled, directPackageArgs)
 	if targetOS != "windows" || coverageCommandFitsWindowsLimit(directArgs) {
 		return coverageInvocationPlan{
 			invocations: []commandInvocation{{
@@ -112,6 +118,126 @@ func appendCoverageInvocation(plan *coverageInvocationPlan, commonArgs []string,
 	})
 }
 
+// compactGoPackagePatterns returns disjoint Go package patterns whose expansion
+// is exactly selectedPackages. The allPackages input is the package universe
+// used to prove that a pattern does not pull an excluded lane into go test.
+func compactGoPackagePatterns(allPackages []string, selectedPackages []string, packageRoot string) ([]string, error) {
+	allSet, selectedSet, err := buildGoPackageSets(allPackages, selectedPackages, packageRoot)
+	if err != nil {
+		return nil, err
+	}
+	patterns := collectCompactGoPackagePatterns(allSet, selectedSet, packageRoot)
+	if err := validateCompactGoPackagePatterns(patterns, allSet, selectedSet); err != nil {
+		return nil, err
+	}
+	return patterns, nil
+}
+
+func buildGoPackageSets(allPackages []string, selectedPackages []string, packageRoot string) (map[string]struct{}, map[string]struct{}, error) {
+	if strings.TrimSpace(packageRoot) == "" {
+		return nil, nil, errors.New("compact go package patterns: package root is empty")
+	}
+
+	allSet := make(map[string]struct{}, len(allPackages))
+	for _, packagePath := range allPackages {
+		packagePath = strings.TrimSpace(packagePath)
+		if packagePath != "" {
+			allSet[packagePath] = struct{}{}
+		}
+	}
+	selectedSet := make(map[string]struct{}, len(selectedPackages))
+	for _, packagePath := range selectedPackages {
+		packagePath = strings.TrimSpace(packagePath)
+		if packagePath == "" {
+			continue
+		}
+		if !strings.HasPrefix(packagePath, packageRoot) || (len(packagePath) > len(packageRoot) && packagePath[len(packageRoot)] != '/') {
+			return nil, nil, fmt.Errorf("compact go package patterns: selected package %q is outside root %q", packagePath, packageRoot)
+		}
+		if _, ok := allSet[packagePath]; !ok {
+			return nil, nil, fmt.Errorf("compact go package patterns: selected package %q is missing from package universe", packagePath)
+		}
+		selectedSet[packagePath] = struct{}{}
+	}
+	if len(selectedSet) == 0 {
+		return nil, nil, errors.New("compact go package patterns: no selected packages")
+	}
+	return allSet, selectedSet, nil
+}
+
+func collectCompactGoPackagePatterns(allSet map[string]struct{}, selectedSet map[string]struct{}, packageRoot string) []string {
+	patterns := make([]string, 0)
+	var visit func(string)
+	visit = func(prefix string) {
+		descendants := make([]string, 0)
+		for packagePath := range allSet {
+			if packagePath == prefix || strings.HasPrefix(packagePath, prefix+"/") {
+				descendants = append(descendants, packagePath)
+			}
+		}
+		if len(descendants) == 0 {
+			return
+		}
+		allSelected := true
+		for _, packagePath := range descendants {
+			if _, ok := selectedSet[packagePath]; !ok {
+				allSelected = false
+				break
+			}
+		}
+		if allSelected {
+			patterns = append(patterns, prefix+"/...")
+			return
+		}
+		if _, ok := selectedSet[prefix]; ok {
+			patterns = append(patterns, prefix)
+		}
+
+		children := make(map[string]struct{})
+		for _, packagePath := range descendants {
+			if packagePath == prefix {
+				continue
+			}
+			rest := strings.TrimPrefix(packagePath, prefix+"/")
+			child := strings.SplitN(rest, "/", 2)[0]
+			children[child] = struct{}{}
+		}
+		childNames := make([]string, 0, len(children))
+		for child := range children {
+			childNames = append(childNames, child)
+		}
+		sort.Strings(childNames)
+		for _, child := range childNames {
+			visit(prefix + "/" + child)
+		}
+	}
+	visit(packageRoot)
+	sort.Strings(patterns)
+	return patterns
+}
+
+func validateCompactGoPackagePatterns(patterns []string, allSet map[string]struct{}, selectedSet map[string]struct{}) error {
+	matched := make(map[string]struct{}, len(selectedSet))
+	for _, pattern := range patterns {
+		subtree := strings.HasSuffix(pattern, "/...")
+		prefix := strings.TrimSuffix(pattern, "/...")
+		for packagePath := range allSet {
+			if packagePath == prefix || (subtree && strings.HasPrefix(packagePath, prefix+"/")) {
+				matched[packagePath] = struct{}{}
+			}
+		}
+	}
+	if len(matched) != len(selectedSet) {
+		return fmt.Errorf("compact go package patterns: selected %d packages but patterns match %d (%v)", len(selectedSet), len(matched), patterns)
+	}
+	for packagePath := range matched {
+		if _, ok := selectedSet[packagePath]; !ok {
+			return fmt.Errorf("compact go package patterns: pattern set includes unselected package %q", packagePath)
+		}
+	}
+	return nil
+}
+
 func batchProfilePath(batchDir string, index int) string {
 	return filepath.Join(batchDir, fmt.Sprintf("coverage-%06d.out", index))
 }
@@ -154,9 +280,9 @@ func windowsCommandLineArgLength(arg string) int {
 // cfg.timingOutput is set, it combines every batch's -json stdout before
 // writing the timing summary, so a failed or crashed lane still leaves
 // trustworthy (possibly incomplete) diagnostics on disk.
-func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string) error {
+func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, compactPackageArgs ...[]string) error {
 	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, timingEnabled, targetOS)
+	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, timingEnabled, targetOS, compactPackageArgs...)
 	if err != nil {
 		return err
 	}

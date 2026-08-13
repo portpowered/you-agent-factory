@@ -336,7 +336,8 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 
-	if err := runGoTestCoverageLane(cfg, coverageTestArgs, testPackages, profilePath, repoRoot, coverPackages, targetOS, "run go test coverage lane"); err != nil {
+	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS)
+	if err := runGoTestCoverageLane(cfg, coverageTestArgs, testPackages, profilePath, repoRoot, coverPackages, targetOS, "run go test coverage lane", testPackageArgs); err != nil {
 		return coverageResult{}, err
 	}
 	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
@@ -476,6 +477,23 @@ func listGoPackages(patterns []string, include func(string) bool, requireNonTest
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 	return packages, nil
+}
+
+func compactUnitTestPackageArgs(cfg config, testPackages []string, targetOS string) []string {
+	// The compact patterns are safe only for the default unit package universe:
+	// custom package lists and functional packages retain their existing args.
+	if targetOS != "windows" || (cfg.suite != "" && cfg.suite != "unit") || strings.TrimSpace(cfg.packages) != "" {
+		return nil
+	}
+	allPackages, err := listGoPackages([]string{"./pkg/..."}, func(string) bool { return true }, false)
+	if err != nil {
+		return nil
+	}
+	patterns, err := compactGoPackagePatterns(allPackages, testPackages, modulePath+"/pkg")
+	if err != nil {
+		return nil
+	}
+	return patterns
 }
 
 func parseGoListPackageLine(line string) (string, int, bool) {

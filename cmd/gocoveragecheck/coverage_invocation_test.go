@@ -12,6 +12,89 @@ import (
 	"testing"
 )
 
+func TestCompactGoPackagePatternsPreserveSelectedPackageSet(t *testing.T) {
+	root := "example.com/project/pkg"
+	allPackages := []string{
+		root + "/alpha",
+		root + "/alpha/one",
+		root + "/alpha/two",
+		root + "/beta",
+		root + "/beta/excluded",
+		root + "/gamma/one",
+		root + "/gamma/two",
+	}
+	selectedPackages := []string{
+		root + "/alpha",
+		root + "/alpha/one",
+		root + "/alpha/two",
+		root + "/beta",
+		root + "/gamma/one",
+		root + "/gamma/two",
+	}
+
+	patterns, err := compactGoPackagePatterns(allPackages, selectedPackages, root)
+	if err != nil {
+		t.Fatalf("compactGoPackagePatterns() error = %v", err)
+	}
+	want := []string{root + "/alpha/...", root + "/beta", root + "/gamma/..."}
+	if !reflect.DeepEqual(patterns, want) {
+		t.Fatalf("compactGoPackagePatterns() = %v, want %v", patterns, want)
+	}
+
+	matched := make(map[string]struct{})
+	for _, pattern := range patterns {
+		subtree := strings.HasSuffix(pattern, "/...")
+		prefix := strings.TrimSuffix(pattern, "/...")
+		for _, packagePath := range allPackages {
+			if packagePath == prefix || (subtree && strings.HasPrefix(packagePath, prefix+"/")) {
+				matched[packagePath] = struct{}{}
+			}
+		}
+	}
+	if len(matched) != len(selectedPackages) {
+		t.Fatalf("compact patterns matched %d packages, want %d", len(matched), len(selectedPackages))
+	}
+	for _, packagePath := range selectedPackages {
+		if _, ok := matched[packagePath]; !ok {
+			t.Fatalf("compact patterns omitted selected package %q", packagePath)
+		}
+	}
+	if _, ok := matched[root+"/beta/excluded"]; ok {
+		t.Fatal("compact patterns included excluded package")
+	}
+}
+
+func TestCompactUnitTestPackageArgsUsesExactPackageUniverse(t *testing.T) {
+	originalCommandRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalCommandRunner })
+
+	root := modulePath + "/pkg"
+	allPackages := []string{
+		root + "/alpha",
+		root + "/alpha/one",
+		root + "/alpha/two",
+		root + "/beta",
+		root + "/beta/excluded",
+	}
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		if len(invocation.args) == 0 || invocation.args[0] != "list" {
+			return "", "", fmt.Errorf("unexpected package-list invocation: %v", invocation.args)
+		}
+		lines := make([]string, 0, len(allPackages))
+		for _, packagePath := range allPackages {
+			lines = append(lines, packagePath+"\t1")
+		}
+		return strings.Join(lines, "\n"), "", nil
+	}
+
+	selectedPackages := []string{root + "/alpha", root + "/alpha/one", root + "/alpha/two", root + "/beta"}
+	patterns := compactUnitTestPackageArgs(config{}, selectedPackages, "windows")
+	want := []string{root + "/alpha/...", root + "/beta"}
+	if !reflect.DeepEqual(patterns, want) {
+		t.Fatalf("compactUnitTestPackageArgs() = %v, want %v", patterns, want)
+	}
+}
+
 func TestBuildCoverageInvocationPlanBatchesOversizedWindowsCommand(t *testing.T) {
 	commonArgs := []string{
 		"test",
@@ -131,6 +214,46 @@ func TestOversizedWindowsInvocationFailsBeforeBoundedPlanPasses(t *testing.T) {
 		if err := rejectOversizedInvocation(invocation); err != nil {
 			t.Fatalf("bounded invocation %d failed process-length check: %v", index, err)
 		}
+	}
+}
+
+func TestBuildCoverageInvocationPlanUsesBoundedCompactPackageArguments(t *testing.T) {
+	commonArgs := []string{
+		"test",
+		"-coverpkg=" + modulePath + "/pkg/...",
+		"-p=2",
+		"-count=1",
+		"-short",
+		"-covermode=count",
+		"-timeout=10m",
+	}
+	testPackages := makeOversizedTestPackages(500)
+	compactPackageArgs := []string{modulePath + "/pkg/initializer/...", modulePath + "/pkg/root/..."}
+	profilePath := filepath.Join(t.TempDir(), "coverage.out")
+
+	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, false, "windows", compactPackageArgs)
+	if err != nil {
+		t.Fatalf("buildCoverageInvocationPlan() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := plan.cleanup(); cleanupErr != nil {
+			t.Errorf("cleanup compact invocation plan: %v", cleanupErr)
+		}
+	})
+	if len(plan.invocations) != 1 {
+		t.Fatalf("planned invocations = %d, want one compact invocation", len(plan.invocations))
+	}
+	invocation := plan.invocations[0]
+	if got := windowsCommandLine(invocation.args); got > windowsCoverageCommandLineLimit {
+		t.Fatalf("compact invocation length = %d, want <= safe limit %d", got, windowsCoverageCommandLineLimit)
+	}
+	for _, packageArg := range compactPackageArgs {
+		if !slicesContains(invocation.args, packageArg) {
+			t.Fatalf("compact invocation args = %v, missing package pattern %q", invocation.args, packageArg)
+		}
+	}
+	if slicesContains(invocation.args, testPackages[0]) {
+		t.Fatalf("compact invocation unexpectedly contains concrete package %q", testPackages[0])
 	}
 }
 
