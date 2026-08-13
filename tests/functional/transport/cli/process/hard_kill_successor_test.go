@@ -190,7 +190,14 @@ func (process *hardKillCLIProcess) waitForBoundedFailure(t testing.TB, role stri
 	if !scanned {
 		t.Fatalf("%s stdout scanner did not finish within %s: stdout=%q stderr=%q process=%s", role, hardKillProcessExitTimeout, process.stdoutText(), process.stderrText(), process.processState())
 	}
-	if scanErr != nil {
+	// waitForExit above already reaped the child, so Cmd.Wait has closed the
+	// StdoutPipe by this point. The scanner can therefore observe that terminal
+	// descriptor close as fs.ErrClosed instead of EOF, the same race stopWith
+	// tolerates when this helper's own termination wins it. Here the process is
+	// known to have exited on its own, so accept only that expected terminal
+	// error; every other scanner error remains actionable. Truncated output stays
+	// detectable because callers still assert on stdout contents.
+	if scanErr != nil && !(exited && errors.Is(scanErr, os.ErrClosed)) {
 		t.Fatalf("%s stdout scanner failed: %v; stdout=%q stderr=%q process=%s", role, scanErr, process.stdoutText(), process.stderrText(), process.processState())
 	}
 	if waitErr == nil {
