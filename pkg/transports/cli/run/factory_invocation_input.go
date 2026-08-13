@@ -389,11 +389,13 @@ func runFactoryInvocation(
 
 	invocationCfg := cfg
 	invokeCtx := ctx
+	var outputWriter *responseStreamCancelOnWriteError
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && cfg.Output != nil {
 		var cancel context.CancelFunc
 		invokeCtx, cancel = context.WithCancel(ctx)
 		defer cancel()
-		invocationCfg.Output = responseStreamOutputCancelOnWriteError(cfg.Output, cancel)
+		outputWriter = newResponseStreamCancelOnWriteError(cfg.Output, cancel)
+		invocationCfg.Output = outputWriter
 	}
 
 	streamRenderer, err := invocationFactoryEventRenderer(invocationCfg, presentation)
@@ -423,6 +425,17 @@ func runFactoryInvocation(
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest)
 	result := outcome.Result
 	if result.Status == "" {
+		// A lossless response stream writes Factory Events on its own drain
+		// goroutine. A writer failure cancels invokeCtx immediately, so the
+		// invocation can return before that goroutine has recorded the failure.
+		// Drain the stream before classifying an undetermined outcome so the
+		// caller receives the writer failure instead of a generic cancellation.
+		if outputWriter != nil && streamRenderer != nil {
+			streamRenderer.StopProgressRendering()
+			if writeErr := outputWriter.Err(); writeErr != nil {
+				return MapInvocationFailure(writeErr)
+			}
+		}
 		if err == nil {
 			// InvokeFactory returned neither a determined terminal result nor
 			// an error: without this explicit invariant failure, a nil err
@@ -458,12 +471,19 @@ type responseStreamCancelOnWriteError struct {
 	writer  io.Writer
 	onError func()
 	once    sync.Once
+
+	mu       sync.Mutex
+	writeErr error
 }
 
 func responseStreamOutputCancelOnWriteError(writer io.Writer, onError context.CancelFunc) io.Writer {
 	if writer == nil || onError == nil {
 		return writer
 	}
+	return newResponseStreamCancelOnWriteError(writer, onError)
+}
+
+func newResponseStreamCancelOnWriteError(writer io.Writer, onError context.CancelFunc) *responseStreamCancelOnWriteError {
 	return &responseStreamCancelOnWriteError{
 		writer: writer,
 		onError: func() {
@@ -475,9 +495,23 @@ func responseStreamOutputCancelOnWriteError(writer io.Writer, onError context.Ca
 func (writer *responseStreamCancelOnWriteError) Write(payload []byte) (int, error) {
 	written, err := writer.writer.Write(payload)
 	if err != nil {
+		writer.mu.Lock()
+		if writer.writeErr == nil {
+			writer.writeErr = err
+		}
+		writer.mu.Unlock()
 		writer.once.Do(writer.onError)
 	}
 	return written, err
+}
+
+func (writer *responseStreamCancelOnWriteError) Err() error {
+	if writer == nil {
+		return nil
+	}
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return writer.writeErr
 }
 
 func invocationTarget(

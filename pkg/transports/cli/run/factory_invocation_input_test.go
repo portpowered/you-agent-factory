@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -13,8 +14,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -432,6 +436,96 @@ func TestResponseStreamOutputCancelOnWriteErrorCancelsInvocationContext(t *testi
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for invocation cancellation after stdout write failure")
 	}
+	wrapped, ok := writer.(*responseStreamCancelOnWriteError)
+	if !ok {
+		t.Fatalf("writer type = %T, want responseStreamCancelOnWriteError", writer)
+	}
+	if !errors.Is(wrapped.Err(), writeErr) {
+		t.Fatalf("recorded writer error = %v, want %v", wrapped.Err(), writeErr)
+	}
+}
+
+func TestRunFactoryInvocationPreservesWriterFailureBeforeTerminalResult(t *testing.T) {
+	t.Parallel()
+
+	writeErr := errors.New("broken stdout pipe")
+	presentation := &captureResponsePresentation{}
+	invocation := undeterminedWriterFailureInvocation{
+		output: func() io.Writer { return presentation.output },
+	}
+	err := runFactoryInvocation(
+		context.Background(),
+		RunConfig{
+			InvocationOutputMode: InvocationOutputResponseStream,
+			JSONOutput:           true,
+			Output:               errorWriter{err: writeErr},
+		},
+		factorysessions.InvocationTarget{},
+		factoryapi.InvocationRequest{},
+		invocation,
+		presentation,
+		nil,
+	)
+	if err == nil || !errors.Is(err, writeErr) {
+		t.Fatalf("runFactoryInvocation() error = %v, want writer failure %v", err, writeErr)
+	}
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) || invocationErr.Code != InvocationErrorCodeFailed {
+		t.Fatalf("runFactoryInvocation() error = %v, want failed InvocationError", err)
+	}
+}
+
+type undeterminedWriterFailureInvocation struct {
+	output func() io.Writer
+}
+
+func (undeterminedWriterFailureInvocation) InvokeModel(
+	context.Context,
+	factorysessions.InvocationTarget,
+	string,
+	models.Request,
+) (models.Result, error) {
+	return models.Result{}, errors.New("model invocation is not part of this test")
+}
+
+func (undeterminedWriterFailureInvocation) ResolveModelInvocationFactoryDir(string) (string, error) {
+	return "", errors.New("model invocation is not part of this test")
+}
+
+func (undeterminedWriterFailureInvocation) ExportModelInvocationArtifact(string, string) error {
+	return errors.New("model invocation is not part of this test")
+}
+
+func (invocation undeterminedWriterFailureInvocation) InvokeFactory(
+	ctx context.Context,
+	_ factorysessions.InvocationTarget,
+	_ factorysessions.InvocationRequest,
+) (factorysessions.FactoryInvocationOutcome, error) {
+	if invocation.output == nil || invocation.output() == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("test response output is unavailable")
+	}
+	_, err := invocation.output().Write([]byte("event"))
+	if err == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("test writer unexpectedly succeeded")
+	}
+	return factorysessions.FactoryInvocationOutcome{}, ctx.Err()
+}
+
+type captureResponsePresentation struct {
+	fakeResponsePresentation
+	output io.Writer
+}
+
+func (presentation *captureResponsePresentation) OpenLosslessFactoryEventStream(
+	writer io.Writer,
+	encode factoryvisualization.FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	Finalize(factoryvisualization.FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	presentation.output = writer
+	return presentation.fakeResponsePresentation.OpenLosslessFactoryEventStream(writer, encode)
 }
 
 type errorWriter struct {

@@ -245,6 +245,7 @@ func TestCLIWriterFailureCancelsInvocation(t *testing.T) {
 
 type cancellableExternalWorkRunner struct {
 	startedCh   chan struct{}
+	startedOnce sync.Once
 	startedFlag atomic.Bool
 	finished    chan struct{}
 	finishOnce  sync.Once
@@ -255,17 +256,14 @@ type cancellableExternalWorkRunner struct {
 
 func newCancellableExternalWorkRunner() *cancellableExternalWorkRunner {
 	return &cancellableExternalWorkRunner{
-		startedCh: make(chan struct{}, 1),
+		startedCh: make(chan struct{}),
 		finished:  make(chan struct{}),
 	}
 }
 
 func (runner *cancellableExternalWorkRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.startedFlag.Store(true)
-	select {
-	case runner.startedCh <- struct{}{}:
-	default:
-	}
+	runner.startedOnce.Do(func() { close(runner.startedCh) })
 	<-ctx.Done()
 	runner.mu.Lock()
 	runner.err = ctx.Err()
@@ -300,9 +298,11 @@ type inFlightFailureStdoutWriter struct {
 	externalWork *cancellableExternalWorkRunner
 	gate         chan struct{}
 
-	attempts    atomic.Int64
-	failArmed   atomic.Bool
-	releaseOnce sync.Once
+	attempts     atomic.Int64
+	failArmed    atomic.Bool
+	releaseOnce  sync.Once
+	bufferedCh   chan struct{}
+	bufferedOnce sync.Once
 
 	mu         sync.Mutex
 	buffer     bytes.Buffer
@@ -320,11 +320,15 @@ func newInFlightFailureStdoutWriter(
 		failErr:      failErr,
 		externalWork: externalWork,
 		gate:         make(chan struct{}),
+		bufferedCh:   make(chan struct{}),
 		done:         make(chan struct{}),
 	}
+	// The runner start releases the first response write. That write is
+	// retained as pre-failure output and arms the injected failure; the next
+	// response write returns failErr, which cancels the runner's context.
 	go func() {
-		for externalWork != nil && !externalWork.started() {
-			time.Sleep(time.Millisecond)
+		if externalWork != nil {
+			<-externalWork.startedCh
 		}
 		writer.release()
 	}()
@@ -349,6 +353,9 @@ func (writer *inFlightFailureStdoutWriter) Write(payload []byte) (int, error) {
 	if err != nil {
 		return written, err
 	}
+	if written > 0 {
+		writer.bufferedOnce.Do(func() { close(writer.bufferedCh) })
+	}
 	if writer.externalWork != nil && writer.externalWork.started() {
 		writer.failArmed.Store(true)
 	}
@@ -369,14 +376,11 @@ func (writer *inFlightFailureStdoutWriter) diagnosticText() string {
 
 func waitForStdoutBufferedRecords(t *testing.T, writer *inFlightFailureStdoutWriter) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if strings.TrimSpace(writer.String()) != "" {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	select {
+	case <-writer.bufferedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for buffered stdout records before mid-stream writer failure")
 	}
-	t.Fatal("timed out waiting for buffered stdout records before mid-stream writer failure")
 }
 
 func waitForExternalWorkStart(t *testing.T, runner *cancellableExternalWorkRunner) {
