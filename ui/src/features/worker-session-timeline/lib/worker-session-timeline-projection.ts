@@ -216,17 +216,23 @@ function legacySessionPhase(
 ): string {
   switch (schemaId.slice("worker_session.".length)) {
     case "started":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "STARTED";
     case "running":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "UPDATED";
     case "completed":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "COMPLETED";
     case "failed":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "FAILED";
     case "canceled":
     case "cancelled":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "CANCELED";
     default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return optionalString(payload.phase) ?? "UPDATED";
   }
 }

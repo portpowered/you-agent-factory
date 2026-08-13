@@ -327,6 +327,7 @@ function validateRecordCursor(
   ) {
     return {
       code: "CURSOR_INVALID",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       message: "Worker Session event cursor is invalid.",
     };
   }
@@ -337,6 +338,7 @@ function validateRecordCursor(
   ) {
     return {
       code: "CURSOR_FOREIGN",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       message: "Worker Session event cursor belongs to another Worker Session.",
     };
   }
@@ -349,6 +351,7 @@ function validateRecordCursor(
     return {
       code: "CURSOR_GENERATION_MISMATCH",
       message:
+        // hardcoded-ui-copy-exception: non-product-diagnostic
         "Worker Session event cursor belongs to another stream generation.",
     };
   }
@@ -373,6 +376,7 @@ function validateRecordPosition(
   if (record.position > lastPosition + 1) {
     return {
       code: "CURSOR_GAP",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       message: "Worker Session event stream contains a cursor gap.",
     };
   }
@@ -382,6 +386,7 @@ function validateRecordPosition(
         record.position === lastPosition
           ? "CURSOR_POSITION_CONFLICT"
           : "CURSOR_OUT_OF_ORDER",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       message: "Worker Session event stream returned records out of order.",
     };
   }

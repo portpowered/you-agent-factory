@@ -341,10 +341,13 @@ export function terminalOutcomeFor(
   }
   switch (phase) {
     case "COMPLETED":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "SUCCESS";
     case "FAILED":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "FAILURE";
     case "CANCELED":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "CANCELED";
     default:
       break;
@@ -357,13 +360,16 @@ export function terminalOutcomeFor(
     case "COMPLETED":
     case "SUCCEEDED":
     case "SUCCESS":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "SUCCESS";
     case "FAILED":
     case "FAILURE":
     case "ERROR":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "FAILURE";
     case "CANCELED":
     case "CANCELLED":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "CANCELED";
     default:
       return undefined;
