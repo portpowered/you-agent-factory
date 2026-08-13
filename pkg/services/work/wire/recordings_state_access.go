@@ -9,10 +9,18 @@ import (
 	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
+// RecordingsStateAccessRoot is the narrow Recordings projection port needed by
+// Work list/get reads. Scope lifecycle and replay capabilities stay behind the
+// owning Recordings root and are not required by this adapter.
+type RecordingsStateAccessRoot interface {
+	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
+	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
+}
+
 // RecordingsStateAccessService projects Recordings-backed Work list/get reads onto
 // the Work service root for peers that must depend on Service rather than
 // transitional sibling or owner-internal implementation packages.
-func RecordingsStateAccessService(root recordings.Service) work.Service {
+func RecordingsStateAccessService(root RecordingsStateAccessRoot) work.Service {
 	if root == nil {
 		return nil
 	}

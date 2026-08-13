@@ -3,14 +3,13 @@ package wire
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 )
 
 // NewRecordingsRootService constructs the private state_access subservice for
 // Recordings-backed reads when no live session adapter is available.
-func NewRecordingsRootService(root recordings.Service) stateaccess.Service {
+func NewRecordingsRootService(root RecordingsReadRoot) stateaccess.Service {
 	return NewService(
 		nilSessionResolver{},
 		NewRecordingsAdapter(root),
@@ -22,7 +21,7 @@ func NewRecordingsRootService(root recordings.Service) stateaccess.Service {
 func ListWorkFromRecordingsRoot(
 	ctx context.Context,
 	sessionID string,
-	root recordings.Service,
+	root RecordingsReadRoot,
 	options work.ListOptions,
 ) (work.ListResult, error) {
 	return NewRecordingsRootService(root).ListWork(ctx, sessionID, options)
@@ -34,7 +33,7 @@ func GetWorkFromRecordingsRoot(
 	ctx context.Context,
 	sessionID string,
 	workID string,
-	root recordings.Service,
+	root RecordingsReadRoot,
 ) (work.ReadModel, error) {
 	return NewRecordingsRootService(root).GetWork(ctx, sessionID, workID)
 }
