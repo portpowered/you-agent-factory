@@ -19,21 +19,22 @@ import (
 // the session's Recordings-owned RecordingLifecycle capability without
 // becoming a second lifecycle owner.
 type lifecycleRuntimeRecorder struct {
-	mu            sync.Mutex
-	lifecycle     recordings.RecordingLifecycle
-	requestedID   recordings.LifecycleRecordingID
-	recordingID   recordings.LifecycleRecordingID
-	scope         recordings.CanonicalEventScope
-	target        recordings.LifecycleArtifactReference
-	flushInterval time.Duration
-	now           func() time.Time
-	startedAt     time.Time
-	initialEvent  factoryruntime.FactoryEvent
-	seen          map[string]struct{}
-	nextSequence  recordings.CanonicalEventSequence
-	finalizeErr   error
-	stopErr       error
-	pending       []pendingRuntimeRecording
+	mu                 sync.Mutex
+	lifecycle          recordings.RecordingLifecycle
+	requestedID        recordings.LifecycleRecordingID
+	recordingID        recordings.LifecycleRecordingID
+	scope              recordings.CanonicalEventScope
+	target             recordings.LifecycleArtifactReference
+	flushInterval      time.Duration
+	now                func() time.Time
+	startedAt          time.Time
+	streamGenerationID string
+	initialEvent       factoryruntime.FactoryEvent
+	seen               map[string]struct{}
+	nextSequence       recordings.CanonicalEventSequence
+	finalizeErr        error
+	stopErr            error
+	pending            []pendingRuntimeRecording
 }
 
 type pendingRuntimeRecording struct {
@@ -53,6 +54,7 @@ func NewLifecycleRuntimeRecorder(
 	recordingID string,
 	recordPath string,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	streamGenerationIDs ...string,
 ) (recordings.RuntimeRecorder, error) {
 	if strings.TrimSpace(recordPath) == "" {
 		return nil, nil
@@ -81,14 +83,19 @@ func NewLifecycleRuntimeRecorder(
 	if err != nil {
 		return nil, err
 	}
+	streamGenerationID := strings.TrimSpace(recordingID)
+	if len(streamGenerationIDs) > 0 && strings.TrimSpace(streamGenerationIDs[0]) != "" {
+		streamGenerationID = strings.TrimSpace(streamGenerationIDs[0])
+	}
 	return &lifecycleRuntimeRecorder{
-		requestedID:   recordings.LifecycleRecordingID(strings.TrimSpace(recordingID)),
-		target:        recordings.LifecycleArtifactReference(recordPath),
-		flushInterval: flushInterval,
-		now:           now,
-		startedAt:     recordedAt,
-		initialEvent:  artifact.Events[0],
-		seen:          make(map[string]struct{}),
+		requestedID:        recordings.LifecycleRecordingID(strings.TrimSpace(recordingID)),
+		target:             recordings.LifecycleArtifactReference(recordPath),
+		flushInterval:      flushInterval,
+		now:                now,
+		startedAt:          recordedAt,
+		streamGenerationID: streamGenerationID,
+		initialEvent:       artifact.Events[0],
+		seen:               make(map[string]struct{}),
 	}, nil
 }
 
@@ -191,11 +198,24 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	if _, exists := recorder.seen[event.Id]; exists {
 		return nil
 	}
-	event.Context.Sequence = int(recorder.nextSequence)
-	canonical := canonicalpkg.CanonicalEventFromFactory(event, string(recorder.recordingID))
+	nextSequence := recorder.nextSequence
+	if status, err := recorder.lifecycle.Status(recordings.LifecycleStatusRequest{
+		RecordingID: recorder.recordingID,
+	}); err == nil && status.Status.LastEvent != nil {
+		currentNext := recordings.CanonicalEventSequence(status.Status.LastEvent.Sequence + 1)
+		if currentNext > nextSequence {
+			nextSequence = currentNext
+		}
+	}
+	event.Context.Sequence = int(nextSequence)
+	streamGenerationID := recorder.streamGenerationID
+	if streamGenerationID == "" {
+		streamGenerationID = string(recorder.recordingID)
+	}
+	canonical := canonicalpkg.CanonicalEventFromFactory(event, streamGenerationID)
 	canonical.Scope = recorder.scope
-	canonical.Sequence = recorder.nextSequence
-	canonical.Cursor.Sequence = recorder.nextSequence
+	canonical.Sequence = nextSequence
+	canonical.Cursor.Sequence = nextSequence
 	result, err := recorder.lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
 		RecordingID: recorder.recordingID,
 		Event:       lifecycleEventFromCanonical(canonical),

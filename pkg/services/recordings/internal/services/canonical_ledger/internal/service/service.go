@@ -19,6 +19,13 @@ type Service struct {
 	appendMu sync.Mutex
 }
 
+type validatingAppender interface {
+	AppendRecordedEventWithValidation(
+		factorydefinitions.FactoryEvent,
+		func(factorydefinitions.FactoryEvent) error,
+	) (factorydefinitions.FactoryEvent, error)
+}
+
 var _ canonicalledger.Service = (*Service)(nil)
 
 // New constructs the canonical ledger owner over the runtime ledger seam.
@@ -55,6 +62,53 @@ func (service *Service) Append(
 		return acceptedAppendResult(retained, generationID), nil
 	}
 	return recordings.AppendRecordedEventResult{}, nil
+}
+
+// AppendWithValidation accepts the lifecycle owner before publishing the
+// canonical event. The concrete process ledger validates and commits both
+// sides while its append lock is held; unsupported test or legacy ledgers are
+// rejected instead of falling back to a non-atomic append.
+func (service *Service) AppendWithValidation(
+	request recordings.AppendRecordedEventRequest,
+	validate func(recordings.CanonicalEvent) error,
+) (recordings.AppendRecordedEventResult, error) {
+	if !canonical.ValidAppendEvent(request.Event) {
+		return recordings.AppendRecordedEventResult{}, recordings.ErrInvalidAppendEvent
+	}
+	service.appendMu.Lock()
+	defer service.appendMu.Unlock()
+
+	generationID := service.ledger.StreamGenerationID()
+	if retained, ok := retainedEventByID(service.ledger.CanonicalEvents(), string(request.Event.ID)); ok {
+		result := acceptedAppendResult(retained, generationID)
+		if validate != nil {
+			if err := validate(result.Event); err != nil {
+				return recordings.AppendRecordedEventResult{}, err
+			}
+		}
+		return result, nil
+	}
+
+	legacy := canonical.FactoryEventFromCanonical(request.Event)
+	legacy.Context.Sequence = 0
+	if request.Event.Scope.FactorySessionID != "" {
+		sequence := int(nextScopedSequence(service.ledger.CanonicalEvents(), request.Event.Scope))
+		legacy.Context.SessionSequence = &sequence
+	}
+	appender, ok := service.ledger.(validatingAppender)
+	if !ok {
+		return recordings.AppendRecordedEventResult{}, recordings.ErrRecordingWriteRejected
+	}
+	appended, err := appender.AppendRecordedEventWithValidation(legacy, func(event factorydefinitions.FactoryEvent) error {
+		if validate == nil {
+			return nil
+		}
+		return validate(canonical.CanonicalEventFromFactory(event, generationID))
+	})
+	if err != nil {
+		return recordings.AppendRecordedEventResult{}, err
+	}
+	return acceptedAppendResult(appended, generationID), nil
 }
 
 func acceptedAppendResult(

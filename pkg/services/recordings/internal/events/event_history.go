@@ -608,14 +608,28 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 }
 
 func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) interfaces.FactoryEvent {
+	appended, _ := h.appendEventWithValidation(event, nil)
+	return appended
+}
+
+func (h *FactoryEventHistory) appendEventWithValidation(
+	event interfaces.FactoryEvent,
+	validate func(interfaces.FactoryEvent) error,
+) (interfaces.FactoryEvent, error) {
 	if h == nil {
-		return interfaces.FactoryEvent{}
+		return interfaces.FactoryEvent{}, fmt.Errorf("factory event history is unavailable")
 	}
 	h.mu.Lock()
 	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
 	event.Context.Sequence = len(h.events)
 	h.assignLiveChangeSessionSequenceLocked(&event)
 	event = enrichFactoryChangeSequence(event)
+	if validate != nil {
+		if err := validate(event.Clone()); err != nil {
+			h.mu.Unlock()
+			return interfaces.FactoryEvent{}, err
+		}
+	}
 	h.events = append(h.events, event)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
@@ -639,7 +653,7 @@ func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) interfa
 			stream.signalOverflow()
 		}
 	}
-	return event.Clone()
+	return event.Clone(), nil
 }
 
 func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, context interfaces.FactoryEventContext, payload any) interfaces.FactoryEvent {
