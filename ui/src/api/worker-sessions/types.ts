@@ -5,6 +5,8 @@ import type {
 
 export type WorkerSessionEventRecord =
   components["schemas"]["WorkerSessionEventRecord"];
+export type WorkerSessionObservation =
+  components["schemas"]["WorkerSessionObservation"];
 export type WorkerSessionEventCursor =
   components["schemas"]["WorkerSessionEventCursor"];
 export type WorkerSessionReplaySummary =

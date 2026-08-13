@@ -131,6 +131,8 @@ function resolveStoredWidgetType(
       return DASHBOARD_WIDGET_IDS.terminalWork;
     case DASHBOARD_WIDGET_IDS.trace:
       return DASHBOARD_WIDGET_IDS.trace;
+    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
+      return DASHBOARD_WIDGET_IDS.workerSessionTimeline;
     case DASHBOARD_WIDGET_IDS.workGraph:
       return DASHBOARD_WIDGET_IDS.workGraph;
     case DASHBOARD_WIDGET_IDS.workOutcomeChart:

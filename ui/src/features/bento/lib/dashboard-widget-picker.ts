@@ -11,6 +11,7 @@ export const DASHBOARD_WIDGET_PICKER_WIDGET_TYPES = [
   DASHBOARD_WIDGET_IDS.workOutcomeChart,
   DASHBOARD_WIDGET_IDS.submitWork,
   DASHBOARD_WIDGET_IDS.trace,
+  DASHBOARD_WIDGET_IDS.workerSessionTimeline,
 ] as const;
 
 export type DashboardWidgetPickerWidgetType =

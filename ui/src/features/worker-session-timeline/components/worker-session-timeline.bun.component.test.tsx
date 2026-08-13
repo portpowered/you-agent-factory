@@ -1,7 +1,19 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: timeline state, detail, window, and target cases share one deterministic harness.
 import { describe, expect, it, mock } from "bun:test";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
 
-import type { WorkerSessionEventRecord } from "../../../api/worker-sessions";
+import type {
+  WorkerSessionEventRecord,
+  WorkerSessionObservation,
+} from "../../../api/worker-sessions";
 import type { UseWorkerSessionTimelineResult } from "../hooks/useWorkerSessionTimeline";
 import {
   projectWorkerSessionTimeline,
@@ -9,6 +21,7 @@ import {
 } from "../lib/worker-session-timeline-projection";
 import { getWorkerSessionTimelineMessages } from "../messages/worker-session-timeline";
 import { WorkerSessionTimelineContent } from "./worker-session-timeline";
+import { WorkerSessionTimelineWidget } from "./worker-session-timeline-widget";
 
 const WORKER_SESSION_ID = "worker-session-ui-1";
 
@@ -368,6 +381,80 @@ describe("WorkerSessionTimelineContent large details", () => {
     );
   });
 });
+
+describe("WorkerSessionTimelineWidget target selection", () => {
+  it("selects a Worker Session target from the selected Work before rendering its timeline", async () => {
+    const loadWorkerSessionTargets = async () => [observation("worker-1")];
+
+    render(
+      <WorkerSessionTimelineWidget
+        enabled={false}
+        factorySessionID="factory-1"
+        loadWorkerSessionTargets={loadWorkerSessionTargets}
+        stateOverride={timelineState({ status: "ready-empty" })}
+        workID="work-1"
+        workerSessionID={null}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+
+    const messages = getWorkerSessionTimelineMessages("en");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", {
+          name: messages.sessionTargetSelectLabel,
+        }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText(messages.timelineTitle)).toBeTruthy();
+  });
+
+  it("keeps the explicit empty target state separate from the timeline", () => {
+    const messages = getWorkerSessionTimelineMessages("en");
+
+    render(
+      <WorkerSessionTimelineWidget
+        enabled={false}
+        factorySessionID="factory-1"
+        stateOverride={timelineState({ status: "ready-empty" })}
+        workerSessionID={null}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+
+    expect(screen.getByText(messages.workSelectionRequired)).toBeTruthy();
+    expect(screen.queryByText(messages.emptyState)).toBeNull();
+  });
+});
+
+function createQueryWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function QueryWrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
+function observation(workerSessionId: string): WorkerSessionObservation {
+  return {
+    attemptId: "attempt-1",
+    direct: false,
+    durationBasis: "UNAVAILABLE",
+    durationMillis: null,
+    endedAt: null,
+    parse: { errors: [], ignored: 0 },
+    providerSessionAvailable: false,
+    startedAt: null,
+    state: "RUNNING",
+    transcript: "AVAILABLE",
+    turnId: null,
+    workIds: ["work-1"],
+    workerSessionId,
+  } as WorkerSessionObservation;
+}
 
 function timelineState(
   overrides: Partial<UseWorkerSessionTimelineResult> = {},

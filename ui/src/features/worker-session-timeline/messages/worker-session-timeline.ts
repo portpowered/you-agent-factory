@@ -74,6 +74,16 @@ export interface WorkerSessionTimelineMessages {
   sourceErrorHeading: string;
   sourceLabel: string;
   sourceSequenceLabel: (sequence: number) => string;
+  sessionTargetEmpty: string;
+  sessionTargetError: string;
+  sessionTargetLoading: string;
+  sessionTargetOption: (
+    workerSessionID: string,
+    attemptID: string,
+    state: string,
+  ) => string;
+  sessionTargetRetry: string;
+  sessionTargetSelectLabel: string;
   successorLabel: string;
   terminalOutcomeLabel: (outcome: WorkerTimelineTerminalOutcome) => string;
   terminalOutcomeHeading: string;
@@ -93,6 +103,7 @@ export interface WorkerSessionTimelineMessages {
   unknownCategoryLabel: string;
   usageLabel: string;
   usageModelLabel: string;
+  workSelectionRequired: string;
   categoryLabel: Record<WorkerTimelineEntryCategory, string>;
   phaseLabel: (phase: string) => string;
 }
@@ -165,6 +176,14 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       sourceErrorHeading: "Worker Session records could not be loaded",
       sourceLabel: "Source",
       sourceSequenceLabel: (sequence) => `Source sequence ${sequence}`,
+      sessionTargetEmpty:
+        "No Worker Session attempts are correlated with this Work.",
+      sessionTargetError: "Worker Session attempts could not be loaded.",
+      sessionTargetLoading: "Loading Worker Session attempts…",
+      sessionTargetOption: (workerSessionID, attemptID, state) =>
+        `${workerSessionID} · ${attemptID} · ${state}`,
+      sessionTargetRetry: "Retry Worker Session lookup",
+      sessionTargetSelectLabel: "Worker Session attempt",
       successorLabel: "Successor Worker Session",
       terminalOutcomeLabel: (outcome) =>
         outcome === "SUCCESS"
@@ -190,6 +209,8 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       unknownCategoryLabel: "Canonical event",
       usageLabel: "Usage",
       usageModelLabel: "Usage model",
+      workSelectionRequired:
+        "Select a Work item to inspect its Worker Session timeline.",
       categoryLabel: {
         error: "Error",
         "file-change": "File change",
@@ -271,6 +292,13 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       sourceErrorHeading: "无法加载 Worker 会话记录",
       sourceLabel: "来源",
       sourceSequenceLabel: (sequence) => `来源序列 ${sequence}`,
+      sessionTargetEmpty: "没有与此工作关联的 Worker 会话尝试。",
+      sessionTargetError: "无法加载 Worker 会话尝试。",
+      sessionTargetLoading: "正在加载 Worker 会话尝试…",
+      sessionTargetOption: (workerSessionID, attemptID, state) =>
+        `${workerSessionID} · ${attemptID} · ${state}`,
+      sessionTargetRetry: "重试 Worker 会话查找",
+      sessionTargetSelectLabel: "Worker 会话尝试",
       successorLabel: "后继 Worker 会话",
       terminalOutcomeLabel: (outcome) =>
         outcome === "SUCCESS"
@@ -296,6 +324,7 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       unknownCategoryLabel: "规范事件",
       usageLabel: "用量",
       usageModelLabel: "用量模型",
+      workSelectionRequired: "选择一个工作项以查看其 Worker 会话时间线。",
       categoryLabel: {
         error: "错误",
         "file-change": "文件变更",

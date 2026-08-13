@@ -6,12 +6,11 @@ import {
   Text,
 } from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
 import { cn } from "../../../lib/cn";
-import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
 import {
   type UseWorkerSessionTimelineOptions,
   type UseWorkerSessionTimelineResult,
@@ -45,12 +44,6 @@ export interface WorkerSessionTimelineProps
   stateOverride?: UseWorkerSessionTimelineResult;
 }
 
-export interface WorkerSessionTimelineWidgetProps
-  extends WorkerSessionTimelineProps {
-  headerAction?: ReactNode;
-  widgetId?: string;
-}
-
 export function WorkerSessionTimeline({
   className,
   locale,
@@ -71,31 +64,6 @@ export function WorkerSessionTimeline({
       state={state}
       workerSessionID={hookOptions.workerSessionID}
     />
-  );
-}
-
-/** Dashboard chrome for consumers that need a selectable Worker Session card. */
-export function WorkerSessionTimelineWidget({
-  headerAction,
-  locale,
-  widgetId = "worker-session-timeline",
-  ...timelineProps
-}: WorkerSessionTimelineWidgetProps) {
-  const messages = getWorkerSessionTimelineMessages(locale);
-
-  return (
-    <DashboardWidgetFrame
-      bodyScroll={false}
-      headerAction={headerAction}
-      title={messages.timelineTitle}
-      widgetId={widgetId}
-    >
-      <WorkerSessionTimeline
-        {...timelineProps}
-        locale={locale}
-        showHeading={false}
-      />
-    </DashboardWidgetFrame>
   );
 }
 

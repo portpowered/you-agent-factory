@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { act, renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import type {
   OpenWorkerSessionEventStreamOptions,
   WorkerSessionEventFrame,
   WorkerSessionEventSourceLike,
+  WorkerSessionObservation,
 } from "../../../api/worker-sessions";
 import { useWorkerSessionTimeline } from "./useWorkerSessionTimeline";
+import { useWorkerSessionTimelineTarget } from "./useWorkerSessionTimelineTarget";
 
 class TestEventSource implements WorkerSessionEventSourceLike {
   public onerror: ((event: Event) => void) | null = null;
@@ -271,3 +275,90 @@ describe("useWorkerSessionTimeline", () => {
     expect(result.current.records).toHaveLength(1);
   });
 });
+
+describe("useWorkerSessionTimelineTarget", () => {
+  it("loads Worker Session targets for the selected Work and selects the first server-ordered attempt", async () => {
+    const loadTargets = vi
+      .fn()
+      .mockResolvedValue([
+        observation("worker-1", "attempt-1"),
+        observation("worker-2", "attempt-2"),
+      ]);
+
+    const { result } = renderHook(
+      () =>
+        useWorkerSessionTimelineTarget({
+          factorySessionID: "factory-1",
+          loadTargets,
+          workID: "work-1",
+        }),
+      { wrapper: createQueryWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("ready");
+    });
+
+    expect(loadTargets).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factorySessionID: "factory-1",
+        workID: "work-1",
+      }),
+    );
+    expect(result.current.selectedWorkerSessionID).toBe("worker-1");
+
+    act(() => {
+      result.current.setSelectedWorkerSessionID("worker-2");
+    });
+    expect(result.current.selectedWorkerSessionID).toBe("worker-2");
+  });
+
+  it("does not query until both the Factory Session and Work are selected", () => {
+    const loadTargets = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useWorkerSessionTimelineTarget({
+          factorySessionID: null,
+          loadTargets,
+          workID: null,
+        }),
+      { wrapper: createQueryWrapper() },
+    );
+
+    expect(result.current.status).toBe("idle");
+    expect(loadTargets).not.toHaveBeenCalled();
+  });
+});
+
+function createQueryWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return function QueryWrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
+function observation(
+  workerSessionId: string,
+  attemptId: string,
+): WorkerSessionObservation {
+  return {
+    attemptId,
+    direct: false,
+    durationBasis: "UNAVAILABLE",
+    durationMillis: null,
+    endedAt: null,
+    parse: { errors: [], ignored: 0 },
+    providerSessionAvailable: false,
+    startedAt: null,
+    state: "RUNNING",
+    transcript: "AVAILABLE",
+    turnId: null,
+    workIds: ["work-1"],
+    workerSessionId,
+  } as WorkerSessionObservation;
+}

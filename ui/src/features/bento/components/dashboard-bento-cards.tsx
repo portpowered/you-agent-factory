@@ -25,6 +25,8 @@ import type { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcom
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import { WorkTotalsWidget } from "../../work-totals/components/work-totals-widget";
 import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
+import { WorkerSessionTimelineWidget } from "../../worker-session-timeline/components/worker-session-timeline-widget";
+import { getWorkerSessionTimelineMessages } from "../../worker-session-timeline/messages/worker-session-timeline";
 import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
 import type { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
@@ -499,11 +501,47 @@ function buildSingletonWidgetCard({
           />
         ),
       };
+    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
+      return buildWorkerSessionTimelineCard({
+        currentSelection,
+        headerAction,
+        layoutItem,
+        locale,
+        selectedSessionID,
+      });
     default:
       throw new Error(
         `unsupported dashboard widget type: ${layoutItem.widgetType}`,
       );
   }
+}
+
+function buildWorkerSessionTimelineCard({
+  currentSelection,
+  headerAction,
+  layoutItem,
+  locale,
+  selectedSessionID,
+}: Pick<
+  DashboardWidgetCardBuilderArgs,
+  "currentSelection" | "layoutItem" | "locale" | "selectedSessionID"
+> & {
+  headerAction: ReactNode;
+}): AgentBentoLayoutCard {
+  return {
+    id: layoutItem.id,
+    widgetType: layoutItem.widgetType,
+    children: (
+      <WorkerSessionTimelineWidget
+        factorySessionID={selectedSessionID}
+        headerAction={headerAction}
+        locale={locale}
+        widgetId={layoutItem.id}
+        workID={currentSelection.selectedWorkID}
+        workerSessionID={null}
+      />
+    ),
+  };
 }
 
 function getDashboardWidgetTitle(widgetType: string, locale?: string): string {
@@ -528,6 +566,8 @@ function getDashboardWidgetTitle(widgetType: string, locale?: string): string {
       return getWorkOutcomeMessages(locale).chart.cardTitle;
     case DASHBOARD_WIDGET_IDS.workTotals:
       return getWorkTotalsMessages(locale).cardTitle;
+    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
+      return getWorkerSessionTimelineMessages(locale).timelineTitle;
     default:
       return widgetType;
   }
