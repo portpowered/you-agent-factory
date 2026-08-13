@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -240,6 +241,7 @@ func runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) 
 			for workType := range bundle.Net.WorkTypes {
 				knownWorkTypes = append(knownWorkTypes, workType)
 			}
+			sort.Strings(knownWorkTypes)
 		}
 		request.Inputs.Filesystem = automations.RuntimeFilesystemInputs{
 			Files:             bundle.InputFiles,
