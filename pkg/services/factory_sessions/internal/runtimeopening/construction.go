@@ -133,7 +133,7 @@ func PrepareRuntime(
 		return prepared, root, load, nil, load.SessionLogger, nil
 	}
 	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, root.BaseLogger); err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
 		load.LoadedFactoryCfg,
