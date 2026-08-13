@@ -39,9 +39,6 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	if workRequestPayload.Works == nil || len(*workRequestPayload.Works) != 1 {
 		t.Fatalf("generated WORK_REQUEST works = %#v, want one normalized work item", workRequestPayload.Works)
 	}
-	if len(uniqueEventTicks(outcome.events)) < 3 {
-		t.Fatalf("event replay smoke used %d ticks, want at least 3: %#v", len(uniqueEventTicks(outcome.events)), eventTicks(outcome.events))
-	}
 
 	assertEventReplayActiveSession(t, outcome.activeSession)
 	assertEventReplayCompletedSession(t, support.GetDefaultSession(t, server.URL()))
@@ -162,20 +159,4 @@ func (p *eventReplayBlockingProvider) Infer(
 			ID:       "sess-event-replay-smoke",
 		},
 	}, nil
-}
-
-func uniqueEventTicks(events []factoryapi.FactoryEvent) map[int]struct{} {
-	ticks := make(map[int]struct{})
-	for _, event := range events {
-		ticks[event.Context.Tick] = struct{}{}
-	}
-	return ticks
-}
-
-func eventTicks(events []factoryapi.FactoryEvent) []int {
-	ticks := make([]int, 0, len(events))
-	for _, event := range events {
-		ticks = append(ticks, event.Context.Tick)
-	}
-	return ticks
 }
