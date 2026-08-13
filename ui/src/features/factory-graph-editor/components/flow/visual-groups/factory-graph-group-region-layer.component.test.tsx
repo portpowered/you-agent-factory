@@ -1,13 +1,13 @@
 // @component-test-runner vitest
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import {
   type FactoryGraphGroupRegionInput,
   FactoryGraphGroupRegionLayer,
 } from "@you-agent-factory/factory-graph";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 
@@ -69,6 +69,45 @@ describe("FactoryGraphGroupRegionLayer", () => {
     expect(region).not.toContainElement(screen.queryByRole("button"));
     expect(screen.getByText("Review")).toBeVisible();
     expect(screen.getByRole("region", { name: "Review" })).toBeInTheDocument();
+  });
+
+  it("leaves an explicit foreground graph target able to receive a pointer", () => {
+    const onPointerDown = vi.fn();
+
+    render(
+      <ReactFlowProvider>
+        <div style={{ height: 480, position: "relative", width: 640 }}>
+          <ReactFlow
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            edges={[]}
+            nodes={[]}
+            proOptions={{ hideAttribution: true }}
+          >
+            <FactoryGraphGroupRegionLayer groups={[sampleGroup]} />
+            <button
+              data-testid="foreground-graph-target"
+              onPointerDown={onPointerDown}
+              style={{
+                left: 80,
+                position: "absolute",
+                top: 100,
+                zIndex: 2,
+              }}
+              type="button"
+            >
+              Node beneath region
+            </button>
+          </ReactFlow>
+        </div>
+      </ReactFlowProvider>,
+    );
+
+    fireEvent.pointerDown(screen.getByTestId("foreground-graph-target"));
+
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("region", { name: "Review" })).toHaveClass(
+      "pointer-events-none",
+    );
   });
 
   it("shows a safe neutral presentation for unsupported saved color values", () => {

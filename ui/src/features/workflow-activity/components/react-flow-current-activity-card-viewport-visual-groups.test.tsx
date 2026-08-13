@@ -26,6 +26,24 @@ vi.mock(
   }),
 );
 
+vi.mock("@you-agent-factory/factory-graph", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@you-agent-factory/factory-graph")>();
+
+  return {
+    ...actual,
+    FactoryGraphGroupRegionLayer: ({
+      groups,
+    }: {
+      groups: readonly { id: string }[];
+    }) => (
+      <div data-read-only="true" data-testid="factory-graph-group-region-layer">
+        {groups.map((group) => group.id).join(",")}
+      </div>
+    ),
+  };
+});
+
 vi.mock(
   "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls",
   () => ({
@@ -117,7 +135,7 @@ const DEFAULT_VIEWPORT_MEASUREMENT = {
 } as const;
 
 describe("CurrentActivityGraphViewport visual groups", () => {
-  it("renders visual group overlays while editing and hides them in observer mode", async () => {
+  it("uses the shared read-only region in observer mode and edit composition while editing", async () => {
     const { rerender } = renderVisualGroupViewport({
       editorMode: true,
       onCreateVisualGroup: vi.fn(),
@@ -134,6 +152,9 @@ describe("CurrentActivityGraphViewport visual groups", () => {
       screen.getByTestId("factory-visual-group-controls"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create group" })).toBeEnabled();
+    expect(
+      screen.queryByTestId("factory-graph-group-region-layer"),
+    ).not.toBeInTheDocument();
 
     rerender(
       <CurrentActivityGraphViewport
@@ -154,6 +175,12 @@ describe("CurrentActivityGraphViewport visual groups", () => {
     expect(
       screen.queryByTestId("factory-visual-group-controls"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("factory-graph-group-region-layer"),
+    ).toHaveAttribute("data-read-only", "true");
+    expect(
+      screen.getByTestId("factory-graph-group-region-layer"),
+    ).toHaveTextContent("group-1");
   });
 
   it("invokes create visual group from the editor toolbar", async () => {

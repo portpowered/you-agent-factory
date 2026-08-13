@@ -14,6 +14,7 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
+import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph";
 import {
   type ComponentProps,
   type KeyboardEvent,
@@ -771,6 +772,12 @@ export function CurrentActivityGraphViewport({
               proOptions={{ hideAttribution: true }}
             >
               <DashboardGraphBackground key="factory-graph-background" />
+              {!editorControls.isEditing && visualGroups.length > 0 ? (
+                <FactoryGraphGroupRegionLayer
+                  groups={visualGroups}
+                  key="factory-graph-group-regions"
+                />
+              ) : null}
               {editorControls.isEditing &&
               visualGroups.length > 0 &&
               onSelectVisualGroup &&
