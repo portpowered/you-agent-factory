@@ -320,6 +320,9 @@ func normalizeAttemptOutcome(
 		result.Outcome == workers.ExecutionOutcomeCanceled {
 		result.Correlation = request.Correlation
 		result.Outcome = workers.ExecutionOutcomeCanceled
+		result.Output = workers.ProposedOutput{}
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
 		if result.Failure == nil {
 			result.Failure = &workers.ExecutionFailure{
 				Type:    workers.WorkFailureTypeUnknown,
@@ -355,6 +358,8 @@ func canceledAttemptResult(
 	// terminal race. That output is not an eligible proposal and must not reach
 	// Work materialization or downstream Runtime routing.
 	result.Output = workers.ProposedOutput{}
+	result.StructuredResult = nil
+	result.StructuredResultPresent = false
 	result.Continuation = nil
 	if result.Failure == nil {
 		result.Failure = &workers.ExecutionFailure{

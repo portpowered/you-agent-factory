@@ -8,6 +8,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -527,6 +528,8 @@ func (adapter workstationExecuteAdapter) Execute(
 			Feedback:       result.Result.Feedback,
 			Classification: result.Result.SelectedClassificationLabel,
 		},
+		StructuredResult:        jsonvalue.Clone(result.Result.StructuredResult),
+		StructuredResultPresent: jsonvalue.Present(result.Result.StructuredResult, result.Result.StructuredResultPresent),
 	}, nil
 }
 
@@ -653,9 +656,14 @@ func executeResultFromWorkstationDispatch(
 		outcome = workers.ExecutionOutcomeCanceled
 	}
 	executeResult := workers.ExecuteResult{
-		Correlation:          request.Correlation,
-		Outcome:              outcome,
-		Output:               workers.ProposedOutputFromLegacyWorkResult(result.Result),
+		Correlation:      request.Correlation,
+		Outcome:          outcome,
+		Output:           workers.ProposedOutputFromLegacyWorkResult(result.Result),
+		StructuredResult: jsonvalue.Clone(result.Result.StructuredResult),
+		StructuredResultPresent: jsonvalue.Present(
+			result.Result.StructuredResult,
+			result.Result.StructuredResultPresent,
+		),
 		ArtifactVerification: result.Result.ArtifactVerification.Clone(),
 		Metrics: workers.ExecutionMetrics{
 			Duration:   result.Result.Metrics.Duration,

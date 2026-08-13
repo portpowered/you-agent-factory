@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -23,6 +24,8 @@ func workstationDispatchResultFromExecute(
 		TransitionID:                dispatch.TransitionID,
 		Outcome:                     workers.OutcomeAccepted,
 		Output:                      primaryOutputText(result.Output.Primary),
+		StructuredResult:            jsonvalue.Clone(result.StructuredResult),
+		StructuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
 		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		Feedback:                    result.Output.Feedback,
 		SelectedClassificationLabel: result.Output.Classification,

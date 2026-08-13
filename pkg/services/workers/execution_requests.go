@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -549,14 +550,16 @@ type ProviderContinuationRef struct {
 }
 
 type ExecuteResult struct {
-	Correlation          ExecutionCorrelation
-	Outcome              ExecutionOutcome
-	Output               ProposedOutput
-	ArtifactVerification *ExpectedArtifactVerification
-	Failure              *ExecutionFailure
-	Diagnostics          *SafeDiagnostics
-	Metrics              ExecutionMetrics
-	Continuation         *ProviderContinuationRef
+	Correlation             ExecutionCorrelation
+	Outcome                 ExecutionOutcome
+	Output                  ProposedOutput
+	StructuredResult        any
+	StructuredResultPresent bool
+	ArtifactVerification    *ExpectedArtifactVerification
+	Failure                 *ExecutionFailure
+	Diagnostics             *SafeDiagnostics
+	Metrics                 ExecutionMetrics
+	Continuation            *ProviderContinuationRef
 }
 
 type ExecutionFailure struct {
@@ -676,6 +679,8 @@ func (failure ExecutionFailure) Clone() ExecutionFailure {
 func (result ExecuteResult) Clone() ExecuteResult {
 	clone := result
 	clone.Output = result.Output.Clone()
+	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	if result.Failure != nil {
 		failure := result.Failure.Clone()
