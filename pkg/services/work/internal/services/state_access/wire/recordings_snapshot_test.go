@@ -141,6 +141,61 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 	}
 }
 
+func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *testing.T) {
+	t.Parallel()
+
+	description := interfaces.NameValueConfig{Value: "Review release"}
+	state := interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-with-description":    {ID: "work-with-description", WorkTypeID: "story", State: "review"},
+			"work-without-description": {ID: "work-without-description", WorkTypeID: "story", State: "review"},
+			"work-without-approval":    {ID: "work-without-approval", WorkTypeID: "story", State: "review"},
+		},
+		PendingHumanApprovalsByID: map[string]interfaces.FactoryWorldHumanApproval{
+			"approval-z": {
+				ApprovalID:      "approval-z",
+				SessionID:       "session-1",
+				DispatchID:      "dispatch-z",
+				WorkstationID:   "review",
+				WorkstationName: "Review release",
+				WorkItemIDs:     []string{"work-without-description"},
+				Decisions:       []interfaces.HumanApprovalDecision{interfaces.HumanApprovalDecisionApprove},
+				Status:          interfaces.HumanApprovalStatusPending,
+			},
+			"approval-a": {
+				ApprovalID:             "approval-a",
+				SessionID:              "session-1",
+				DispatchID:             "dispatch-a",
+				WorkstationID:          "review",
+				WorkstationName:        "Review release",
+				WorkstationDescription: &description,
+				WorkItemIDs:            []string{"work-with-description"},
+				Decisions:              []interfaces.HumanApprovalDecision{interfaces.HumanApprovalDecisionApprove, interfaces.HumanApprovalDecisionReject},
+				Status:                 interfaces.HumanApprovalStatusPending,
+			},
+		},
+	}
+	snapshot := readSnapshotFromFactoryWorldState(state)
+	byID := make(map[string]work.ReadModel, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		byID[item.WorkID] = item
+	}
+
+	withoutDescription := byID["work-without-description"].HumanApproval
+	if withoutDescription == nil || withoutDescription.ApprovalID != "approval-z" || withoutDescription.Description != "" {
+		t.Fatalf("approval without description = %#v, want approval-z without description", withoutDescription)
+	}
+	withDescription := byID["work-with-description"].HumanApproval
+	if withDescription == nil || withDescription.ApprovalID != "approval-a" || withDescription.Description != "Review release" ||
+		withDescription.Status != string(interfaces.HumanApprovalStatusPending) ||
+		len(withDescription.Decisions) != 2 || withDescription.Decisions[1] != string(interfaces.HumanApprovalDecisionReject) {
+		t.Fatalf("approval read model = %#v, want stable display and decision metadata", withDescription)
+	}
+	if byID["work-without-approval"].HumanApproval != nil {
+		t.Fatalf("unmatched work approval = %#v, want nil", byID["work-without-approval"].HumanApproval)
+	}
+}
+
 func TestReadSnapshotFromFactoryWorldStateProjectsArtifactVerificationWithoutScanning(t *testing.T) {
 	t.Parallel()
 
