@@ -51,7 +51,8 @@ func openRuntime(
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
-	factoryDefinitionsFactory FactoryDefinitionsFactory,
+	factoryDefinitions factorydefinitions.Service,
+	definitionRuntimeRouter factorysessions.DefinitionRuntimeRouter,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
@@ -326,18 +327,11 @@ func openRuntime(
 			return webhookSubscription(context.WithoutCancel(ctx))
 		})
 	}
-	if factoryDefinitionsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
+	if factoryDefinitions == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions service is required")
 	}
-	definitionHostHandoff := &definitionHostHandoff{}
-	definitionActivationHandoff := &definitionActivationHandoff{}
-	factoryDefinitionOwner := factoryDefinitionsFactory(
-		definitionHostHandoff,
-		definitionActivationHandoff,
-		factoryDefinitionValidator,
-	)
-	if factoryDefinitionOwner == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
+	if definitionRuntimeRouter == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
 	}
 	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := runtimeService.Complete(
 		root.FactoryRootDir,
@@ -350,7 +344,7 @@ func openRuntime(
 		runtimeLifecycle,
 		runtimeSidecars,
 		factorysessionexecutionService,
-		factoryDefinitionOwner,
+		factoryDefinitions,
 		configured.Definition.Directory,
 		configured.Definition.ExecutionBaseDir,
 		configured.Runtime.Mode,
@@ -374,8 +368,17 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	definitionHostHandoff.bind(definitionHost)
-	definitionActivationHandoff.bind(definitionActivationGateway)
+	if err := definitionRuntimeRouter.Bind(
+		factorysessions.DefaultSessionID,
+		definitionHost,
+		definitionActivationGateway,
+	); err != nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
+	}
+	cleanup.Add(func() error {
+		definitionRuntimeRouter.Unbind(factorysessions.DefaultSessionID)
+		return nil
+	})
 	if workFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory is required")
 	}
@@ -426,7 +429,7 @@ func openRuntime(
 	// publishing a second post-construction binding path.
 	bindWorkerInvoker(durableExecution.Service, rootRuntime)
 	opened := assembleRuntimeProducts(
-		factoryDefinitionOwner,
+		factoryDefinitions,
 		service4,
 		invocationDomain,
 		rootRuntime,

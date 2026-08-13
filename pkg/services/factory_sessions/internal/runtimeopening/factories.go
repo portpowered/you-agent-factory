@@ -70,12 +70,6 @@ type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (factory
 
 type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
 
-type FactoryDefinitionsFactory = func(
-	factorysessions.DefinitionHost,
-	factorydefinitions.DefinitionActivationGateway,
-	factorydefinitions.Validator,
-) factorydefinitions.Service
-
 type DurableExecution struct {
 	Service         durableexecution.Service
 	ACPIntegrations []operatorsettings.ACPIntegration

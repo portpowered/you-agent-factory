@@ -115,7 +115,6 @@ type (
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
 	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
 	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
 	DurableExecution                       = runtimeopening.DurableExecution
 	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory

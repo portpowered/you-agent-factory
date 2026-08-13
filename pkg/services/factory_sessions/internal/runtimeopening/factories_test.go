@@ -32,6 +32,10 @@ func (materializerStub) MaterializeContentURL(_ context.Context, rawURL string) 
 	return "/tmp/runtimeopening.png", func() {}, nil
 }
 
+type factoryDefinitionsConstructionStub struct {
+	factorydefinitions.Service
+}
+
 // runtimeOpeningFixture is test-only assembly syntax. Production callers use
 // the ten separate owner-port arguments exposed by NewFactory; keeping this
 // fixture aggregate local makes omission and identity cases concise without
@@ -277,7 +281,8 @@ func assertFactoryDefinitionsPortsRetained(t *testing.T, factory *Factory, depen
 	group := dependencies.FactoryDefinitions
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions validator", factory.factoryDefinitionValidator, group.Validator)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions paths", factory.namedPaths, group.NamedPaths)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions factory", factory.factoryDefinitionsFactory, group.Factory)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions service", factory.factoryDefinitions, group.Service)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions runtime router", factory.definitionRuntimeRouter, group.RuntimeRouter)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions initial snapshot", factory.initialFactorySnapshotFactory, group.InitialFactorySnapshotFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions loader", factory.loadFactory, group.LoadFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions source", factory.newLoadedFactory, group.NewLoadedFactory)
@@ -400,7 +405,8 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Runtime clock", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Clock = nil }},
 		{"Factory Definitions validator", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Validator = nil }},
 		{"Factory Definitions named path resolver", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NamedPaths = nil }},
-		{"Factory Definitions factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Factory = nil }},
+		{"Factory Definitions service", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Service = nil }},
+		{"Factory Definitions runtime router", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.RuntimeRouter = nil }},
 		{"Factory Definitions initial factory snapshot factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.InitialFactorySnapshotFactory = nil }},
 		{"Factory Definitions loaded factory loader", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.LoadFactory = nil }},
 		{"Factory Definitions loaded factory source factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NewLoadedFactory = nil }},
@@ -453,7 +459,8 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		FactoryDefinitions: &FactoryDefinitionsPorts{
 			Validator:                     validatorConstructionStub{},
 			NamedPaths:                    namedPathsConstructionStub{},
-			Factory:                       inertRuntimeOpeningFunction[FactoryDefinitionsFactory](calls),
+			Service:                       factoryDefinitionsConstructionStub{},
+			RuntimeRouter:                 factorysessions.NewDefinitionRuntimeRouter(),
 			InitialFactorySnapshotFactory: inertRuntimeOpeningFunction[factorydefinitions.InitialFactorySnapshotFactory](calls),
 			LoadFactory:                   inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
 			NewLoadedFactory:              inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),

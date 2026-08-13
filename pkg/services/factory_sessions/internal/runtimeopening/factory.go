@@ -91,7 +91,8 @@ type FactoryRuntimePorts struct {
 type FactoryDefinitionsPorts struct {
 	Validator                     factorydefinitions.Validator
 	NamedPaths                    factorydefinitions.NamedPathResolver
-	Factory                       FactoryDefinitionsFactory
+	Service                       factorydefinitions.Service
+	RuntimeRouter                 factorysessions.DefinitionRuntimeRouter
 	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
 	LoadFactory                   factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory              factorydefinitions.LoadedFactorySourceFactory
@@ -187,7 +188,8 @@ type Factory struct {
 	providerInvocationFactory        factoryruntime.ProviderInvocationExecutorFactory
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
 	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
-	factoryDefinitionsFactory        FactoryDefinitionsFactory
+	factoryDefinitions               factorydefinitions.Service
+	definitionRuntimeRouter          factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
 	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
@@ -273,7 +275,8 @@ func NewFactory(
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
 		workersLocalRuntimeHooksFactory:  workersPorts.LocalRuntimeHooksFactory,
-		factoryDefinitionsFactory:        factoryDefinitions.Factory,
+		factoryDefinitions:               factoryDefinitions.Service,
+		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
 		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
@@ -386,7 +389,8 @@ func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
 	return validateRuntimeOpeningRequirements("Factory Definitions",
 		runtimeOpeningRequirement{"validator", group.Validator},
 		runtimeOpeningRequirement{"named path resolver", group.NamedPaths},
-		runtimeOpeningRequirement{"factory", group.Factory},
+		runtimeOpeningRequirement{"service", group.Service},
+		runtimeOpeningRequirement{"runtime router", group.RuntimeRouter},
 		runtimeOpeningRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
 		runtimeOpeningRequirement{"loaded factory loader", group.LoadFactory},
 		runtimeOpeningRequirement{"loaded factory source factory", group.NewLoadedFactory},
@@ -542,7 +546,8 @@ func (f *Factory) openRuntime(
 		f.providerInvocationFactory,
 		f.workersMockCommandRunnerFactory,
 		f.workersLocalRuntimeHooksFactory,
-		f.factoryDefinitionsFactory,
+		f.factoryDefinitions,
+		f.definitionRuntimeRouter,
 		f.factoryScaffoldInitializer,
 		f.editableFactoryValidator,
 		f.initialFactorySnapshotFactory,
