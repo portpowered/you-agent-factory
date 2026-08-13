@@ -629,6 +629,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/internal",
+      "minimum": 80.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
       "exception": {
         "kind": "measurement",
