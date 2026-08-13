@@ -53,26 +53,71 @@ func TestLoadCoverageVarianceProfilesAndRenderReport(t *testing.T) {
 		"Profile labels:** `run-01`, `run-02`, `run-03`, `run-04`, `run-05`",
 		"3/5 | 4/5 | 2/5 | 5/5 | 4/5 | 40.0000% | 100.0000% | 60.0000 pp | 40.00% | 60.00% | -20.0000 pp",
 		"1/2 | 1/2 | 1/2 | 2/2 | 1/2 | 50.0000% | 100.0000% | 50.0000 pp | 50.00% | exception | n/a pp",
-		"Measured remedy classification",
-		"loadedsource",
-		"Lower only this entry to the safe two-decimal minimum 74.02%",
-		"dispatch_planning",
-		"proposalmaterialization",
-		"Supplied operator evidence (not part of the new sample set)",
-		"loadedsource as an epsilon-only pass",
-		"proposalmaterialization as a sampling-range case",
 	}
 	for _, want := range wantParts {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("variance report does not contain %q:\n%s", want, data)
 		}
 	}
+	for _, absent := range []string{
+		"Measured remedy classification",
+		"loadedsource",
+		"dispatch_planning",
+		"Supplied operator evidence (not part of the new sample set)",
+	} {
+		if strings.Contains(string(data), absent) {
+			t.Fatalf("generic variance report contains unrelated annotation %q:\n%s", absent, data)
+		}
+	}
+	genericSecond, err := renderCoverageVarianceReport(report)
+	if err != nil {
+		t.Fatalf("renderCoverageVarianceReport() generic second error = %v", err)
+	}
+	if !bytes.Equal(data, genericSecond) {
+		t.Fatalf("generic variance report is not byte-stable:\nfirst=%s\nsecond=%s", data, genericSecond)
+	}
+
+	annotationPath := filepath.Join(root, "annotations.json")
+	annotationData := fmt.Sprintf(`{
+  "summary": "The supplied annotation is limited to the measured sample set.",
+  "remedies": [
+    {"package": %q, "classification": "deterministic functional exercise", "observedEvidence": "3/5 in the sample set", "remedy": "Retain the existing floor."}
+  ],
+  "suppliedEvidence": [
+    {"packages": [%q], "text": "Supplied context for pkg/config remains separate from measured samples."}
+  ]
+}
+`, packages[0], packages[0])
+	if err := os.WriteFile(annotationPath, []byte(annotationData), 0o600); err != nil {
+		t.Fatalf("write annotation fixture: %v", err)
+	}
+	annotations, err := readCoverageVarianceAnnotations(annotationPath, report)
+	if err != nil {
+		t.Fatalf("readCoverageVarianceAnnotations() error = %v", err)
+	}
+	report.annotations = annotations
+	report.command += " -variance-annotations " + filepath.ToSlash(annotationPath)
+	annotated, err := renderCoverageVarianceReport(report)
+	if err != nil {
+		t.Fatalf("renderCoverageVarianceReport() with annotations error = %v", err)
+	}
+	for _, want := range []string{
+		"Annotation input:",
+		"Measured remedy classification",
+		"The supplied annotation is limited to the measured sample set.",
+		"Supplied operator evidence (not part of the new sample set)",
+		"Supplied context for pkg/config remains separate from measured samples.",
+	} {
+		if !strings.Contains(string(annotated), want) {
+			t.Fatalf("annotated variance report does not contain %q:\n%s", want, annotated)
+		}
+	}
 	second, err := renderCoverageVarianceReport(report)
 	if err != nil {
 		t.Fatalf("renderCoverageVarianceReport() second error = %v", err)
 	}
-	if !bytes.Equal(data, second) {
-		t.Fatalf("variance report is not byte-stable:\nfirst=%s\nsecond=%s", data, second)
+	if !bytes.Equal(annotated, second) {
+		t.Fatalf("annotated variance report is not byte-stable:\nfirst=%s\nsecond=%s", annotated, second)
 	}
 }
 
@@ -128,6 +173,29 @@ func TestLoadCoverageVarianceProfilesRejectsInvalidSampleSets(t *testing.T) {
 	inconsistent[4] = filepath.Join(root, "inconsistent.out")
 	if _, err := loadCoverageVarianceProfiles(inconsistent, root); err == nil || !strings.Contains(err.Error(), "inconsistent total statements") {
 		t.Fatalf("total validation error = %v, want inconsistent total statements", err)
+	}
+}
+
+func TestReadCoverageVarianceAnnotationsRejectsAbsentSamplePackage(t *testing.T) {
+	t.Parallel()
+
+	configPackage := modulePath + "/pkg/config"
+	servicePackage := modulePath + "/pkg/service"
+	report := coverageVarianceReport{
+		packages: []coverageVariancePackage{{importPath: configPackage}},
+	}
+	annotationPath := filepath.Join(t.TempDir(), "annotations.json")
+	annotationData := fmt.Sprintf(`{
+  "remedies": [
+    {"package": %q, "classification": "inherent concurrent variance", "observedEvidence": "not measured", "remedy": "Reject unrelated annotation input."}
+  ]
+}
+`, servicePackage)
+	if err := os.WriteFile(annotationPath, []byte(annotationData), 0o600); err != nil {
+		t.Fatalf("write annotation fixture: %v", err)
+	}
+	if _, err := readCoverageVarianceAnnotations(annotationPath, report); err == nil || !strings.Contains(err.Error(), "absent from the measured sample set") {
+		t.Fatalf("readCoverageVarianceAnnotations() error = %v, want absent-package validation", err)
 	}
 }
 

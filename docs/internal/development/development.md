@@ -298,6 +298,15 @@ before the manifest is written. Existing complete exceptions are retained
 unchanged, and repeating the command with the same samples leaves the manifest
 byte-for-byte unchanged.
 
+Aggregate an unchanged-commit variance report with
+`go run ./cmd/gocoveragecheck -suite functional -variance-profiles <profile-1>,<profile-2>,<profile-3>,<profile-4>,<profile-5> -variance-output <report> -variance-commit <full SHA> -variance-jobs <jobs>`.
+The generic report contains only facts derived from the compatible profiles and
+manifest. An audit may append package-specific remedy classifications and
+supplied context with `-variance-annotations <validated-json>`; every annotated
+package must be present in the measured sample universe, and annotations are
+sorted before rendering so replay remains byte-stable. Omitting that option
+keeps unrelated sample sets free of audit-specific claims.
+
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 
 When a required lane fails, GitHub Actions keeps the lane-owned failure evidence for 14 days and names it explicitly in the lane summary:

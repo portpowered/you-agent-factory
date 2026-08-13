@@ -41,6 +41,25 @@ type coverageVariancePackage struct {
 	headroom     string
 }
 
+type coverageVarianceRemedy struct {
+	Package          string `json:"package"`
+	Classification   string `json:"classification"`
+	ObservedEvidence string `json:"observedEvidence"`
+	Remedy           string `json:"remedy"`
+}
+
+type coverageVarianceSuppliedEvidence struct {
+	Packages []string `json:"packages"`
+	Text     string   `json:"text"`
+}
+
+type coverageVarianceAnnotations struct {
+	Summary          string                             `json:"summary"`
+	Remedies         []coverageVarianceRemedy           `json:"remedies"`
+	SuppliedEvidence []coverageVarianceSuppliedEvidence `json:"suppliedEvidence"`
+	source           string                             `json:"-"`
+}
+
 type coverageVarianceReport struct {
 	commit        string
 	suite         string
@@ -48,6 +67,7 @@ type coverageVarianceReport struct {
 	aggregation   string
 	profileLabels []string
 	packages      []coverageVariancePackage
+	annotations   *coverageVarianceAnnotations
 }
 
 func executeVarianceReport(cfg config) error {
@@ -67,6 +87,14 @@ func executeVarianceReport(cfg config) error {
 	report, err := buildCoverageVarianceReport(cfg.varianceCommit, cfg.suite, cfg.varianceJobs, samples, floors)
 	if err != nil {
 		return err
+	}
+	if annotationPath := strings.TrimSpace(cfg.varianceAnnotations); annotationPath != "" {
+		annotations, err := readCoverageVarianceAnnotations(annotationPath, report)
+		if err != nil {
+			return err
+		}
+		report.annotations = annotations
+		report.command += " -variance-annotations " + filepath.ToSlash(annotationPath)
 	}
 	data, err := renderCoverageVarianceReport(report)
 	if err != nil {
@@ -277,6 +305,117 @@ func readCoverageVarianceFloors(filename string, lane string) (map[string]covera
 	return floors, nil
 }
 
+func readCoverageVarianceAnnotations(filename string, report coverageVarianceReport) (*coverageVarianceAnnotations, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("read coverage variance annotations %q: %w", filename, err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var annotations coverageVarianceAnnotations
+	if err := decoder.Decode(&annotations); err != nil {
+		return nil, fmt.Errorf("parse coverage variance annotations %q: %w", filename, err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return nil, err
+	}
+	if err := validateCoverageVarianceAnnotations(annotations, report); err != nil {
+		return nil, fmt.Errorf("validate coverage variance annotations %q: %w", filename, err)
+	}
+	annotations.source = filepath.ToSlash(filename)
+	return &annotations, nil
+}
+
+func validateCoverageVarianceAnnotations(annotations coverageVarianceAnnotations, report coverageVarianceReport) error {
+	if strings.TrimSpace(annotations.Summary) != "" {
+		if err := validateCoverageVarianceAnnotationText("summary", annotations.Summary); err != nil {
+			return err
+		}
+	}
+	if len(annotations.Remedies) == 0 && len(annotations.SuppliedEvidence) == 0 {
+		return errors.New("at least one remedy or supplied-evidence entry is required")
+	}
+	measuredPackages := make(map[string]struct{}, len(report.packages))
+	for _, row := range report.packages {
+		measuredPackages[row.importPath] = struct{}{}
+	}
+	seenRemedies := make(map[string]struct{}, len(annotations.Remedies))
+	for index := range annotations.Remedies {
+		remedy := &annotations.Remedies[index]
+		remedy.Package = strings.TrimSpace(remedy.Package)
+		if remedy.Package == "" {
+			return fmt.Errorf("remedies[%d].package is required", index)
+		}
+		if _, ok := measuredPackages[remedy.Package]; !ok {
+			return fmt.Errorf("remedies[%d].package %q is absent from the measured sample set", index, remedy.Package)
+		}
+		if _, duplicate := seenRemedies[remedy.Package]; duplicate {
+			return fmt.Errorf("remedies[%d].package %q is duplicated", index, remedy.Package)
+		}
+		seenRemedies[remedy.Package] = struct{}{}
+		fields := []struct {
+			name  string
+			value string
+		}{
+			{name: "classification", value: remedy.Classification},
+			{name: "observedEvidence", value: remedy.ObservedEvidence},
+			{name: "remedy", value: remedy.Remedy},
+		}
+		for _, field := range fields {
+			if err := validateCoverageVarianceAnnotationText(fmt.Sprintf("remedies[%d].%s", index, field.name), field.value); err != nil {
+				return err
+			}
+		}
+	}
+	for index := range annotations.SuppliedEvidence {
+		evidence := &annotations.SuppliedEvidence[index]
+		if len(evidence.Packages) == 0 {
+			return fmt.Errorf("suppliedEvidence[%d].packages must name at least one measured package", index)
+		}
+		packages := make([]string, 0, len(evidence.Packages))
+		for packageIndex, importPath := range evidence.Packages {
+			importPath = strings.TrimSpace(importPath)
+			if importPath == "" {
+				return fmt.Errorf("suppliedEvidence[%d].packages[%d] is required", index, packageIndex)
+			}
+			if _, ok := measuredPackages[importPath]; !ok {
+				return fmt.Errorf("suppliedEvidence[%d].packages[%d] %q is absent from the measured sample set", index, packageIndex, importPath)
+			}
+			for _, existing := range packages {
+				if existing == importPath {
+					return fmt.Errorf("suppliedEvidence[%d].packages[%d] %q is duplicated", index, packageIndex, importPath)
+				}
+			}
+			packages = append(packages, importPath)
+		}
+		slices.Sort(packages)
+		evidence.Packages = packages
+		if err := validateCoverageVarianceAnnotationText(fmt.Sprintf("suppliedEvidence[%d].text", index), evidence.Text); err != nil {
+			return err
+		}
+	}
+	slices.SortFunc(annotations.Remedies, func(left, right coverageVarianceRemedy) int {
+		return strings.Compare(left.Package, right.Package)
+	})
+	slices.SortFunc(annotations.SuppliedEvidence, func(left, right coverageVarianceSuppliedEvidence) int {
+		if comparison := strings.Compare(left.Text, right.Text); comparison != 0 {
+			return comparison
+		}
+		return strings.Compare(strings.Join(left.Packages, "\x00"), strings.Join(right.Packages, "\x00"))
+	})
+	return nil
+}
+
+func validateCoverageVarianceAnnotationText(field string, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	if strings.ContainsAny(value, "\r\n|`") {
+		return fmt.Errorf("%s must be a single Markdown-safe line without pipes or backticks", field)
+	}
+	return nil
+}
+
 func buildCoverageVarianceReport(commit string, lane string, jobs int, samples []coverageVarianceSample, floors map[string]coverageVarianceCurrentFloor) (coverageVarianceReport, error) {
 	if len(samples) < minimumVarianceSamples {
 		return coverageVarianceReport{}, fmt.Errorf("build coverage variance report: requires at least %d profiles, received %d", minimumVarianceSamples, len(samples))
@@ -387,6 +526,9 @@ func renderCoverageVarianceReport(report coverageVarianceReport) ([]byte, error)
 	fmt.Fprintf(&output, "- **Run count:** %d complete profiles\n", len(report.profileLabels))
 	fmt.Fprintf(&output, "- **Command:** `%s`\n", report.command)
 	fmt.Fprintf(&output, "- **Aggregation:** %s\n\n", report.aggregation)
+	if report.annotations != nil {
+		fmt.Fprintf(&output, "- **Annotation input:** `%s`\n\n", report.annotations.source)
+	}
 	fmt.Fprintf(&output, "- **Profile labels:** `%s` (labels preserve the source artifact directory; omitted labels identify captures that were not accepted as complete samples)\n\n", strings.Join(report.profileLabels, "`, `"))
 	fmt.Fprintln(&output, "## New sample set")
 	fmt.Fprintln(&output)
@@ -409,33 +551,35 @@ func renderCoverageVarianceReport(report coverageVarianceReport) ([]byte, error)
 		}
 		fmt.Fprintf(&output, "| `%s` | %s | %s%% | %s%% | %s pp | %s | %s | %s pp |\n", row.importPath, strings.Join(values, " | "), row.minimum, row.maximum, row.swing, row.sampleFloor, row.currentFloor, row.headroom)
 	}
-	fmt.Fprintln(&output)
-	renderCoverageVarianceRemedies(&output)
-	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "## Supplied operator evidence (not part of the new sample set)")
-	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "The following context was supplied before this audit and is kept separate from the measurements above:")
-	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "- CI run `31699727541` measured dispatch-planning at 167/267 statements (62.5468%) against a 62.92% floor on one attempt and passed on a second attempt for the same main commit.")
-	fmt.Fprintln(&output, "- The operator comparison covered 348 numeric floors, identified 112 packages with at most 0.25 percentage points of headroom, and identified five latent-red package cases where observed swing exceeded headroom.")
-	fmt.Fprintln(&output, "- The five supplied latent-red cases are authoredmodel/workers, runtimebinding, platform/jsonvalue, processlifecycle, and dispatch-planning. Dispatch-planning remains owned by its separate lane and is reported here without editing its package or manifest entry.")
-	fmt.Fprintln(&output, "- The supplied comparison identifies loadedsource as an epsilon-only pass and proposalmaterialization as a sampling-range case; their independent counts in this new sample set are shown in the table when those packages are measurable.")
-	return []byte(output.String()), nil
+	if report.annotations != nil {
+		fmt.Fprintln(&output)
+		renderCoverageVarianceAnnotations(&output, *report.annotations)
+	}
+	return []byte(strings.TrimRight(output.String(), "\n") + "\n"), nil
 }
 
-func renderCoverageVarianceRemedies(output *strings.Builder) {
-	fmt.Fprintln(output, "## Measured remedy classification")
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Remedies are limited to package-specific evidence. The four in-scope latent-red packages repeat their existing functional exercise in all five samples, so their floors remain unchanged. The only functional manifest entry changed by this lane is loadedsource, whose exact sampled minimum is below its prior epsilon-tolerated floor.")
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "| Package | Classification | Observed evidence | Remedy |")
-	fmt.Fprintln(output, "| --- | --- | --- | --- |")
-	fmt.Fprintln(output, "| `.../validation/authoredmodel/workers` | deterministic functional exercise | 55/62 in every run; swing 0.0000 pp; floor 80.64%; headroom +8.0697 pp | Retain 80.64%; existing functional exercise is repeatable and preserves regression detection. |")
-	fmt.Fprintln(output, "| `.../factory_sessions/internal/runtimebinding` | deterministic functional exercise | 282/441 in every run; swing 0.0000 pp; floor 60.10%; headroom +3.8456 pp | Retain 60.10%; no source or floor change is justified by the sample. |")
-	fmt.Fprintln(output, "| `.../platform/jsonvalue` | deterministic functional exercise | 34/49 in every run; swing 0.0000 pp; floor 67.34%; headroom +2.0478 pp | Retain 67.34%; existing functional exercise is repeatable. |")
-	fmt.Fprintln(output, "| `.../factory_sessions/internal/processlifecycle` | deterministic functional exercise | 133/171 in every run; swing 0.0000 pp; floor 76.31%; headroom +1.4678 pp | Retain 76.31%; existing functional exercise is repeatable. |")
-	fmt.Fprintln(output, "| `.../factory_definitions/internal/services/compilation/loadedsource` | inherent concurrent variance, epsilon-only pass | 57/77 in every run; minimum 74.0260%; prior floor 74.13% exceeded the observation by 0.1040 pp | Lower only this entry to the safe two-decimal minimum 74.02%; keep the 0.25 pp epsilon and blocking gate unchanged. |")
-	fmt.Fprintln(output, "| `.../factory_runtime/internal/services/dispatch_planning/internal/service` | inherent concurrent variance, owner lane | New sample: 168/267, 167/267, 169/267, 167/267, 167/267; supplied owner-lane minimum 167/267 | Inherit main's 62.54% entry from the merged owner lane; this lane does not edit the package or manifest entry. |")
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "`proposalmaterialization` remains at its existing 0.00% numeric floor: the new sample observes 15/84 in every run, while the supplied sampling-range evidence does not justify a positive ratchet or an exception conversion.")
+func renderCoverageVarianceAnnotations(output *strings.Builder, annotations coverageVarianceAnnotations) {
+	if strings.TrimSpace(annotations.Summary) != "" {
+		fmt.Fprintln(output, "## Measured remedy classification")
+		fmt.Fprintln(output)
+		fmt.Fprintln(output, annotations.Summary)
+		fmt.Fprintln(output)
+	}
+	if len(annotations.Remedies) > 0 {
+		fmt.Fprintln(output, "| Package | Classification | Observed evidence | Remedy |")
+		fmt.Fprintln(output, "| --- | --- | --- | --- |")
+		for _, remedy := range annotations.Remedies {
+			fmt.Fprintf(output, "| `%s` | %s | %s | %s |\n", remedy.Package, remedy.Classification, remedy.ObservedEvidence, remedy.Remedy)
+		}
+		fmt.Fprintln(output)
+	}
+	if len(annotations.SuppliedEvidence) > 0 {
+		fmt.Fprintln(output, "## Supplied operator evidence (not part of the new sample set)")
+		fmt.Fprintln(output)
+		fmt.Fprintln(output, "The following context was supplied before this audit and is kept separate from the measurements above:")
+		fmt.Fprintln(output)
+		for _, evidence := range annotations.SuppliedEvidence {
+			fmt.Fprintf(output, "- %s\n", evidence.Text)
+		}
+	}
 }

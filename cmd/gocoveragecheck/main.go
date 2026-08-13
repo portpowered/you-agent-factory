@@ -80,6 +80,7 @@ type config struct {
 	varianceOutput      string
 	varianceCommit      string
 	varianceJobs        int
+	varianceAnnotations string
 	jsonOutput          string
 	timingOutput        string
 	min                 float64
@@ -192,6 +193,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.varianceOutput, "variance-output", "", "write a deterministic functional coverage variance report to this path")
 	flag.StringVar(&cfg.varianceCommit, "variance-commit", "", "full unchanged commit SHA named by a functional coverage variance report")
 	flag.IntVar(&cfg.varianceJobs, "variance-jobs", defaultCoverageJobs, "package-concurrency setting used to capture the profiles named by a variance report")
+	flag.StringVar(&cfg.varianceAnnotations, "variance-annotations", "", "optional validated JSON annotations to append to a variance report")
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
 	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
@@ -228,6 +230,9 @@ func validateConfig(cfg config) error {
 		return errors.New("configure go coverage manifest update: -update-profiles requires -update-manifest")
 	}
 	varianceRequested := strings.TrimSpace(cfg.varianceProfiles) != "" || strings.TrimSpace(cfg.varianceOutput) != ""
+	if strings.TrimSpace(cfg.varianceAnnotations) != "" && !varianceRequested {
+		return errors.New("configure coverage variance: -variance-annotations requires -variance-profiles and -variance-output")
+	}
 	if varianceRequested {
 		if strings.TrimSpace(cfg.varianceProfiles) == "" || strings.TrimSpace(cfg.varianceOutput) == "" {
 			return errors.New("configure coverage variance: -variance-profiles and -variance-output must be provided together")

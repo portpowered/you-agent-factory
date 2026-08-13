@@ -3,8 +3,10 @@
 - **Sampling commit:** `c74b3e27f9db69fdaa01cbb42b696bcb6e6ea475`
 - **Suite:** `functional`
 - **Run count:** 5 complete profiles
-- **Command:** `bash scripts/ci/run-functional-test-viz.sh (functional lane -jobs 8); then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs 8`
+- **Command:** `bash scripts/ci/run-functional-test-viz.sh (functional lane -jobs 8); then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs 8 -variance-annotations docs/internal/baselines/go-functional-coverage-variance-c74b3e27f.annotations.json`
 - **Aggregation:** Parse each count-mode Go coverage profile into canonical source blocks, sum statement counts by backend package, require identical package universes and total statement counts, then derive minimums from exact covered/total ratios.
+
+- **Annotation input:** `docs/internal/baselines/go-functional-coverage-variance-c74b3e27f.annotations.json`
 
 - **Profile labels:** `run-01`, `run-02`, `run-03`, `run-05`, `run-06` (labels preserve the source artifact directory; omitted labels identify captures that were not accepted as complete samples)
 
@@ -461,20 +463,18 @@ Remedies are limited to package-specific evidence. The four in-scope latent-red 
 
 | Package | Classification | Observed evidence | Remedy |
 | --- | --- | --- | --- |
-| `.../validation/authoredmodel/workers` | deterministic functional exercise | 55/62 in every run; swing 0.0000 pp; floor 80.64%; headroom +8.0697 pp | Retain 80.64%; existing functional exercise is repeatable and preserves regression detection. |
-| `.../factory_sessions/internal/runtimebinding` | deterministic functional exercise | 282/441 in every run; swing 0.0000 pp; floor 60.10%; headroom +3.8456 pp | Retain 60.10%; no source or floor change is justified by the sample. |
-| `.../platform/jsonvalue` | deterministic functional exercise | 34/49 in every run; swing 0.0000 pp; floor 67.34%; headroom +2.0478 pp | Retain 67.34%; existing functional exercise is repeatable. |
-| `.../factory_sessions/internal/processlifecycle` | deterministic functional exercise | 133/171 in every run; swing 0.0000 pp; floor 76.31%; headroom +1.4678 pp | Retain 76.31%; existing functional exercise is repeatable. |
-| `.../factory_definitions/internal/services/compilation/loadedsource` | inherent concurrent variance, epsilon-only pass | 57/77 in every run; minimum 74.0260%; prior floor 74.13% exceeded the observation by 0.1040 pp | Lower only this entry to the safe two-decimal minimum 74.02%; keep the 0.25 pp epsilon and blocking gate unchanged. |
-| `.../factory_runtime/internal/services/dispatch_planning/internal/service` | inherent concurrent variance, owner lane | New sample: 168/267, 167/267, 169/267, 167/267, 167/267; supplied owner-lane minimum 167/267 | Inherit main's 62.54% entry from the merged owner lane; this lane does not edit the package or manifest entry. |
-
-`proposalmaterialization` remains at its existing 0.00% numeric floor: the new sample observes 15/84 in every run, while the supplied sampling-range evidence does not justify a positive ratchet or an exception conversion.
+| `github.com/portpowered/infinite-you/pkg/platform/jsonvalue` | deterministic functional exercise | 34/49 in every run; swing 0.0000 pp; floor 67.34%; headroom +2.0478 pp | Retain 67.34%; existing functional exercise is repeatable. |
+| `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource` | inherent concurrent variance, epsilon-only pass | 57/77 in every run; minimum 74.0260%; prior floor 74.13% exceeded the observation by 0.1040 pp | Lower only this entry to the safe two-decimal minimum 74.02%; keep the 0.25 pp epsilon and blocking gate unchanged. |
+| `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers` | deterministic functional exercise | 55/62 in every run; swing 0.0000 pp; floor 80.64%; headroom +8.0697 pp | Retain 80.64%; existing functional exercise is repeatable and preserves regression detection. |
+| `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service` | inherent concurrent variance, owner lane | New sample: 168/267, 167/267, 169/267, 167/267, 167/267; supplied owner-lane minimum 167/267 | Inherit main's 62.54% entry from the merged owner lane; this lane does not edit the package or manifest entry. |
+| `github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle` | deterministic functional exercise | 133/171 in every run; swing 0.0000 pp; floor 76.31%; headroom +1.4678 pp | Retain 76.31%; existing functional exercise is repeatable. |
+| `github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding` | deterministic functional exercise | 282/441 in every run; swing 0.0000 pp; floor 60.10%; headroom +3.8456 pp | Retain 60.10%; no source or floor change is justified by the sample. |
 
 ## Supplied operator evidence (not part of the new sample set)
 
 The following context was supplied before this audit and is kept separate from the measurements above:
 
-- CI run `31699727541` measured dispatch-planning at 167/267 statements (62.5468%) against a 62.92% floor on one attempt and passed on a second attempt for the same main commit.
-- The operator comparison covered 348 numeric floors, identified 112 packages with at most 0.25 percentage points of headroom, and identified five latent-red package cases where observed swing exceeded headroom.
+- CI run 31699727541 measured dispatch-planning at 167/267 statements (62.5468%) against a 62.92% floor on one attempt and passed on a second attempt for the same main commit.
 - The five supplied latent-red cases are authoredmodel/workers, runtimebinding, platform/jsonvalue, processlifecycle, and dispatch-planning. Dispatch-planning remains owned by its separate lane and is reported here without editing its package or manifest entry.
+- The operator comparison covered 348 numeric floors, identified 112 packages with at most 0.25 percentage points of headroom, and identified five latent-red package cases where observed swing exceeded headroom.
 - The supplied comparison identifies loadedsource as an epsilon-only pass and proposalmaterialization as a sampling-range case; their independent counts in this new sample set are shown in the table when those packages are measurable.
