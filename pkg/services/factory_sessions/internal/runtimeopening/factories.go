@@ -66,6 +66,13 @@ type WorkersRuntimeFactory = func(
 
 type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 
+// RuntimeRootFactory constructs the inert process-scoped Factory Runtime root
+// with the opening operation supplied by this owner. The root constructor is
+// selected by the canonical process composition package, while the activation
+// callback remains owned by Factory Sessions because it assembles the session
+// product handoff.
+type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (factoryruntime.Root, error)
+
 type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
 
 type FactoryDefinitionsFactory = func(

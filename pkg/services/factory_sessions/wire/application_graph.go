@@ -125,6 +125,7 @@ type (
 	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
 	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
+	RuntimeRootFactory                     = runtimeopening.RuntimeRootFactory
 	RuntimeOpening                         = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder

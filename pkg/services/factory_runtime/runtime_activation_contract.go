@@ -26,6 +26,7 @@ type RuntimeActivationRequest struct {
 	FactorySessionID string
 	Snapshot         factorydefinitions.RuntimeSnapshot
 	Runtime          RuntimeOpeningRequest
+	Inputs           RuntimeActivationInputs
 }
 
 // RuntimeActivationResult reports the identity and state of a successful
@@ -253,6 +254,7 @@ func NormalizeRuntimeActivationRequest(request RuntimeActivationRequest) (Runtim
 	request.RuntimeID = runtimeID
 	request.FactorySessionID = sessionID
 	request.Runtime.RuntimeInstanceID = runtimeID
+	request.Inputs = CloneRuntimeActivationInputs(request.Inputs)
 	request.Snapshot = cloned
 	return request, nil
 }

@@ -76,6 +76,7 @@ type FactoryRuntimePorts struct {
 	ProviderInvocationFactory       factoryruntime.ProviderInvocationExecutorFactory
 	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
 	FactoryRuntimeAssembler         FactoryRuntimeAssembler
+	RuntimeRootFactory              RuntimeRootFactory
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 	Clock                           factoryruntime.Clock
@@ -213,6 +214,7 @@ type Factory struct {
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
 	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
+	runtimeRoot                      factoryruntime.Root
 	clock                            factoryruntime.Clock
 	providerOverride                 workers.Provider
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder
@@ -257,7 +259,7 @@ func NewFactory(
 		return nil, err
 	}
 
-	return &Factory{
+	factory := &Factory{
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerExecutionFactory:           workersPorts.ExecutionFactory,
 		modelService:                     modelsPorts.Service,
@@ -305,7 +307,15 @@ func NewFactory(
 		scriptCommandRunner:              workersPorts.ScriptCommandRunner,
 		submissionRecorder:               factoryRuntime.SubmissionRecorder,
 		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
-	}, nil
+	}
+	if factoryRuntime.RuntimeRootFactory != nil {
+		runtimeRoot, err := factoryRuntime.RuntimeRootFactory(factory.activateRuntime)
+		if err != nil {
+			return nil, fmt.Errorf("construct Factory Runtime root: %w", err)
+		}
+		factory.runtimeRoot = runtimeRoot
+	}
+	return factory, nil
 }
 
 // validateOwnerPorts checks the fixed owner contracts in declaration order.
@@ -570,8 +580,21 @@ func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger)
+	opened, err := f.openForRequest(ctx, request)
 	return opened.application, err
+}
+
+func (f *Factory) openForRequest(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (runtimeProducts, error) {
+	// Historical portable replay is an inspection-only product and must not
+	// acquire live Runtime state. Legacy replay artifacts still use the normal
+	// activation path and therefore retain the live replay behavior.
+	if request != nil && request.Recordings.ReplayPath != "" {
+		return f.openRuntime(ctx, request, f.baseLogger)
+	}
+	return f.openActivatedRuntime(ctx, request)
 }
 
 // ModelsRoot returns the process-scoped accepted Models root used by runtime
@@ -589,7 +612,7 @@ func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger)
+	opened, err := f.openForRequest(ctx, request)
 	return opened.invocation, err
 }
 
@@ -599,6 +622,6 @@ func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger)
+	opened, err := f.openForRequest(ctx, request)
 	return opened.execution, err
 }

@@ -230,6 +230,7 @@ var servicesSet = wire.NewSet(
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewAssembly,
+	provideFactoryRuntimeRootFactory,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsRuntimeOpeningPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimeOpeningPorts), "*"),

@@ -457,6 +457,11 @@ func openRuntime(
 		configured.Session.BackendScopeID,
 		cleanup.Close,
 	)
+	opened.startup = startupRuntime
+	opened.replacement = runtimebuildService
+	opened.buildSpec = startupSpec
+	opened.lifecycle = runtimeLifecycle
+	opened.sidecars = runtimeSidecars
 	opened.application.Resources.Clock = clock
 	return opened, nil
 }

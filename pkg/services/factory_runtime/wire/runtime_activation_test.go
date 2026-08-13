@@ -64,6 +64,34 @@ func TestRuntimeRootActivationPublishesOnlyDetachedSuccessfulState(t *testing.T)
 	}
 }
 
+func TestRuntimeRootActivationDetachesExplicitInputs(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{"TOKEN": "original"}
+	request := foldRuntimeActivationRequest()
+	request.Inputs = factoryruntime.RuntimeActivationInputs{
+		Workers: factoryruntime.RuntimeActivationWorkerInputs{
+			MockWorkers: &factoryruntime.RuntimeActivationMockWorkersConfig{
+				MockWorkers: []factoryruntime.RuntimeActivationMockWorker{{
+					ScriptConfig: &factoryruntime.RuntimeActivationMockScript{Env: env},
+				}},
+			},
+		},
+	}
+	var received factoryruntime.RuntimeActivationRequest
+	root := newRuntimeRoot(t, func(_ context.Context, got factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		received = got
+		return &factoryruntime.RuntimeActivation{Service: newFoldHostedRuntimeStub("RUNNING")}, nil
+	})
+	if _, err := root.Activate(context.Background(), request); err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	env["TOKEN"] = "caller-mutated"
+	if got := received.Inputs.Workers.MockWorkers.MockWorkers[0].ScriptConfig.Env["TOKEN"]; got != "original" {
+		t.Fatalf("activation operation received aliased inputs: %q", got)
+	}
+}
+
 func TestRuntimeRootActivationReturnsPublishedRuntimeHandoff(t *testing.T) {
 	t.Parallel()
 
