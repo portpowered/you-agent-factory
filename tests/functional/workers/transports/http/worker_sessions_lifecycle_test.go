@@ -173,6 +173,9 @@ func TestWorkerSessionHTTPControlRoutesReportUnavailableFromTopLevelServer(t *te
 	}
 }
 
+// WSR-FT-013: root.BuildProcess/Process.Execute hosts a customer-facing
+// Worker Session whose public history records request, outcome, and the
+// resulting terminal consequence in aggregate order.
 func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 	runner := newFunctionalWorkerGate(make(chan struct{}))
 	server := startDirectWorkerSessionServer(t, runner)
@@ -297,9 +300,32 @@ func assertOrderedWorkerSessionControlBracket(
 		controls[0].Event.SourceId != controls[1].Event.SourceId {
 		t.Fatalf("Worker Session control identities = %#v, want matching request sequence 1 before outcome sequence 2", controls)
 	}
+	requestPayload := workerSessionControlPayload(controls[0])
+	outcomePayload := workerSessionControlPayload(controls[1])
+	if requestPayload["recordType"] != "REQUEST" || requestPayload["action"] != "CANCEL" ||
+		requestPayload["workerSessionId"] != wantWorkerSessionID ||
+		requestPayload["dispatchId"] != "control-dispatch" ||
+		requestPayload["attemptId"] != "control-dispatch" {
+		t.Fatalf("Worker Session control request payload = %#v, want exact cancel correlation", requestPayload)
+	}
+	if outcomePayload["recordType"] != "OUTCOME" || outcomePayload["action"] != "CANCEL" ||
+		outcomePayload["outcome"] != "APPLIED" || outcomePayload["state"] != "CANCELED" ||
+		outcomePayload["correlationId"] != requestPayload["correlationId"] {
+		t.Fatalf("Worker Session control outcome payload = %#v, want applied correlated cancel", outcomePayload)
+	}
+	if requestPayload["correlationId"] == "" || requestPayload["requestId"] == "" {
+		t.Fatalf("Worker Session control request payload = %#v, want stable correlation and request IDs", requestPayload)
+	}
 	if terminal == nil || controls[1].Event.Position >= terminal.Event.Position {
 		t.Fatalf("Worker Session control positions = request %d outcome %d terminal %#v, want bracket before terminal", controls[0].Event.Position, controls[1].Event.Position, terminal)
 	}
+}
+
+func workerSessionControlPayload(frame factoryapi.WorkerSessionEvent) map[string]interface{} {
+	if payload, ok := frame.Event.Payload["payload"].(map[string]interface{}); ok {
+		return payload
+	}
+	return frame.Event.Payload
 }
 
 func startDirectWorkerSessionServer(t *testing.T, runner platformprocess.CommandRunner) *support.FunctionalAPIServer {
