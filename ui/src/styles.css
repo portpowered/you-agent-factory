@@ -143,6 +143,9 @@
   --shadow-af-info-chip: 0 0 0 2px rgb(from var(--color-af-info) r g b / 0.12);
   --shadow-af-accent-chip: 0 0 0 2px
     rgb(from var(--color-af-accent) r g b / 0.18);
+  /* Factory graph visual-state role tokens. */
+  --shadow-af-graph-danger: 0 0 0 2px
+    rgb(from var(--color-af-danger) r g b / 0.2);
 }
 
 @layer base {
@@ -390,6 +393,20 @@
 
   [data-legend-flow] {
     animation: agent-flow-legend 1.15s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-current-activity-flow] .agent-flow-node--active,
+    [data-legend-flow] {
+      animation: none;
+      transition-duration: 0.01ms;
+    }
+  }
+
+  [data-graph-reduced-motion="true"] .agent-flow-node--active,
+  [data-graph-reduced-motion="true"] [data-legend-flow] {
+    animation: none;
+    transition-duration: 0.01ms;
   }
 
   [data-bento-card-id] {

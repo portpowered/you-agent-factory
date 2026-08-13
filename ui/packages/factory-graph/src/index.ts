@@ -46,6 +46,9 @@ export {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeTitleClassName,
+  factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeVisualStateClassName,
+  factoryGraphNodeVisualStatusSurfaceClassName,
 } from "./semantic-node-style.js";
 export {
   FACTORY_GRAPH_NODE_TYPES,

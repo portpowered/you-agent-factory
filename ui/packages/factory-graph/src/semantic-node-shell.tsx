@@ -8,6 +8,11 @@ import {
   factoryGraphNodeFamilyForShellType,
   factoryGraphNodeFamilyRole,
 } from "./node-family.js";
+import { factoryGraphNodeVisualStateClassName } from "./semantic-node-style.js";
+import {
+  type FactoryGraphVisualStateInput,
+  resolveFactoryGraphVisualState,
+} from "./visual-state.js";
 
 export type FactoryGraphPlaceNodeType =
   | "constraint"
@@ -41,6 +46,7 @@ export interface FactoryGraphNodeShellProps {
   className?: string;
   handles: FactoryGraphNodeHandle[];
   nodeType: "workstation" | FactoryGraphPlaceNodeType;
+  visualState?: Omit<FactoryGraphVisualStateInput, "family">;
   zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
 }
 
@@ -50,6 +56,7 @@ export function FactoryGraphNodeShell({
   className = "",
   handles,
   nodeType,
+  visualState: visualStateInput,
   zAxisIncompleteHints = null,
 }: FactoryGraphNodeShellProps) {
   const packageHandles = handles.map((handle) => ({
@@ -60,14 +67,35 @@ export function FactoryGraphNodeShell({
   const familyRole = factoryGraphNodeFamilyRole(
     factoryGraphNodeFamilyForShellType(nodeType),
   );
+  const visualState = resolveFactoryGraphVisualState({
+    family: familyRole.family,
+    ...visualStateInput,
+  });
 
   return (
     <div className="relative h-full min-w-0 w-full">
       <GraphNodeShell
-        className={className}
+        aria-invalid={visualState.validation === "error" || undefined}
+        className={classNames(
+          className,
+          factoryGraphNodeVisualStateClassName(visualState),
+        )}
         data-current-activity-node-type={nodeType}
         data-graph-node-family={familyRole.family}
         data-graph-node-shape={familyRole.shape}
+        data-graph-visual-active-flow={visualState.activeFlow || undefined}
+        data-graph-visual-border={visualState.border}
+        data-graph-visual-emphasis={visualState.emphasis}
+        data-graph-visual-focus={visualState.focus}
+        data-graph-visual-glow={visualState.glow}
+        data-graph-visual-icon={visualState.icon}
+        data-graph-visual-lifecycle={visualState.lifecycle}
+        data-graph-visual-muted={visualState.muted || undefined}
+        data-graph-visual-selection={visualState.selection || undefined}
+        data-graph-visual-status={visualState.status}
+        data-graph-visual-surface={visualState.surface}
+        data-graph-visual-treatment={visualState.statusTreatment}
+        data-graph-visual-validation={visualState.validation}
         handles={packageHandles}
         nodeKind={nodeType}
         showStateIndicator={false}
@@ -87,6 +115,12 @@ export function FactoryGraphNodeShell({
         : null}
     </div>
   );
+}
+
+function classNames(
+  ...values: Array<string | false | null | undefined>
+): string {
+  return values.filter(Boolean).join(" ");
 }
 
 export function factoryGraphHandleToneFromId(

@@ -1,11 +1,9 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-
-import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
-  FactoryGraphNodeShell,
   type FactoryGraphNodeHandle,
+  FactoryGraphNodeShell,
   type FactoryGraphPlaceNodeType,
 } from "./semantic-node-shell.js";
 import {
@@ -13,13 +11,16 @@ import {
   factoryGraphNodeSurfaceClassName,
 } from "./semantic-node-style.js";
 import {
-  FactoryGraphNodeBadge,
-  type FactoryGraphPlaceRef,
-} from "./semantic-support-nodes.js";
+  FactoryGraphPlaceLabelText,
+  FactoryGraphPlaceSemanticIcon,
+  factoryGraphPlaceKindLabel,
+  factoryGraphPlaceLabel,
+} from "./semantic-place-content.js";
+import { FactoryGraphPlaceTokenCount } from "./semantic-place-token-count.js";
+import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
+import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import {
   type FactoryGraphWorkStateType,
-  workStatePhaseSemanticIconClassName,
-  workStatePhaseSemanticIconKind,
   workStatePhaseSurfaceClassName,
 } from "./work-state-presentation.js";
 
@@ -31,6 +32,7 @@ export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
   activeItemLabels: string[];
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
   kind?: string;
@@ -74,8 +76,12 @@ export function FactoryGraphConstraintNodeView(
   return <FactoryGraphPlaceNodeView {...props} />;
 }
 
-function FactoryGraphPlaceNodeView({ data }: NodeProps<FactoryGraphPlaceNode>) {
-  const placeLabel = formatPlaceLabel(data.place);
+function FactoryGraphPlaceNodeView({
+  data,
+  selected: reactFlowSelected,
+}: NodeProps<FactoryGraphPlaceNode>) {
+  const placeLabel = factoryGraphPlaceLabel(data.place);
+  const selected = data.selectedStateNode || reactFlowSelected;
   const selectable =
     data.place.kind === "work_state" && data.onSelectStateNode !== undefined;
   const stateNode = data.place.kind === "work_state";
@@ -89,31 +95,36 @@ function FactoryGraphPlaceNodeView({ data }: NodeProps<FactoryGraphPlaceNode>) {
     factoryGraphNodeHoverClassName({
       activeFlow: data.activeFlow,
       muted: data.muted,
-      selected: data.selectedStateNode,
+      selected,
       validationError: data.validationError,
     }),
-    data.activeFlow &&
-      !data.selectedStateNode &&
-      !data.validationError &&
-      "border-af-success-border shadow-af-success-chip",
-    data.selectedStateNode &&
-      !data.validationError &&
-      "border-primary shadow-af-accent-selected",
-    data.validationError &&
-      "ring-2 ring-af-danger-border motion-safe:animate-pulse",
-    data.muted && "opacity-[0.45]",
   );
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: stateNode
+      ? "work-state"
+      : data.place.kind === "resource"
+        ? "resource"
+        : "constraint",
+    focused: data.focused,
+    lifecycle: stateNode ? data.place.state_category : undefined,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
   const content = stateNode ? (
     <FactoryGraphStatePositionContent
       locale={data.locale}
       place={data.place}
       tokenCount={data.tokenCount}
+      visualState={visualState}
     />
   ) : (
     <FactoryGraphStaticPlaceContent
       locale={data.locale}
       place={data.place}
       tokenCount={data.tokenCount}
+      visualState={visualState}
     />
   );
   return (
@@ -121,6 +132,14 @@ function FactoryGraphPlaceNodeView({ data }: NodeProps<FactoryGraphPlaceNode>) {
       className={classNames("justify-center text-left", className)}
       handles={data.handles}
       nodeType={nodeType}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        lifecycle: stateNode ? data.place.state_category : undefined,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
@@ -128,9 +147,9 @@ function FactoryGraphPlaceNodeView({ data }: NodeProps<FactoryGraphPlaceNode>) {
           aria-label={
             data.validationMessage ?? selectStateLabel(placeLabel, data.locale)
           }
-          aria-pressed={data.selectedStateNode}
+          aria-pressed={selected}
           className={CONTENT_CLASS}
-          data-selected-state={data.selectedStateNode ? "true" : undefined}
+          data-selected-state={selected ? "true" : undefined}
           title={data.validationMessage}
           onClick={(event) => {
             event.stopPropagation();
@@ -150,19 +169,25 @@ function FactoryGraphStatePositionContent({
   locale,
   place,
   tokenCount,
+  visualState,
 }: {
   locale?: string;
   place: FactoryGraphSemanticPlaceRef;
   tokenCount: number;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
-  const label = formatPlaceLabel(place);
+  const label = factoryGraphPlaceLabel(place);
   return (
     <>
       <span
         className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
         data-state-label-zone
       >
-        <FactoryGraphPlaceSemanticIcon locale={locale} place={place} />
+        <FactoryGraphPlaceSemanticIcon
+          locale={locale}
+          place={place}
+          visualState={visualState}
+        />
         <FactoryGraphPlaceLabelText dataPrefix="state" place={place} />
       </span>
       <span
@@ -184,12 +209,14 @@ function FactoryGraphStaticPlaceContent({
   locale,
   place,
   tokenCount,
+  visualState,
 }: {
   locale?: string;
   place: FactoryGraphSemanticPlaceRef;
   tokenCount: number;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
-  const label = formatPlaceLabel(place);
+  const label = factoryGraphPlaceLabel(place);
   if (place.kind !== "resource")
     return (
       <div
@@ -201,7 +228,11 @@ function FactoryGraphStaticPlaceContent({
           data-place-label-zone
           title={label}
         >
-          <FactoryGraphPlaceSemanticIcon locale={locale} place={place} />
+          <FactoryGraphPlaceSemanticIcon
+            locale={locale}
+            place={place}
+            visualState={visualState}
+          />
           <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.86rem] font-bold leading-tight">
             {label}
           </strong>
@@ -211,7 +242,10 @@ function FactoryGraphStaticPlaceContent({
           data-place-marker-zone
           title={label}
         >
-          {tokenCountDisplay(place, tokenCount, locale)}
+          <FactoryGraphPlaceTokenCount
+            ariaLabel={tokenCountLabel(place, tokenCount, locale)}
+            count={tokenCount}
+          />
         </span>
       </div>
     );
@@ -226,7 +260,11 @@ function FactoryGraphStaticPlaceContent({
         data-place-label-zone
         role="img"
       >
-        <FactoryGraphPlaceSemanticIcon locale={locale} place={place} />
+        <FactoryGraphPlaceSemanticIcon
+          locale={locale}
+          place={place}
+          visualState={visualState}
+        />
         <FactoryGraphPlaceLabelText dataPrefix="place" place={place} />
       </span>
       <span
@@ -234,79 +272,12 @@ function FactoryGraphStaticPlaceContent({
         data-place-marker-zone
         title={label}
       >
-        {tokenCountDisplay(place, tokenCount, locale)}
+        <FactoryGraphPlaceTokenCount
+          ariaLabel={tokenCountLabel(place, tokenCount, locale)}
+          count={tokenCount}
+        />
       </span>
     </div>
-  );
-}
-
-function FactoryGraphPlaceSemanticIcon({
-  locale,
-  place,
-}: {
-  locale?: string;
-  place: FactoryGraphSemanticPlaceRef;
-}) {
-  const kind =
-    place.kind === "work_state"
-      ? workStatePhaseSemanticIconKind(place.state_category)
-      : place.kind === "resource"
-        ? "resource"
-        : place.kind === "limit"
-          ? "limit"
-          : "constraint";
-  const className =
-    place.kind === "work_state"
-      ? workStatePhaseSemanticIconClassName(place.state_category)
-      : place.kind === "resource"
-        ? "text-success"
-        : place.kind === "limit"
-          ? "text-error"
-          : "text-info";
-  const label = placeSemanticLabel(place, locale);
-  return (
-    <span
-      className="flex min-h-4 shrink-0 items-center"
-      data-place-semantic-icon
-      title={placeKindLabel(place, locale)}
-    >
-      <GraphSemanticIcon
-        className={classNames("h-3.5 w-3.5", className)}
-        kind={kind}
-        label={label}
-      />
-    </span>
-  );
-}
-
-function FactoryGraphPlaceLabelText({
-  dataPrefix,
-  place,
-}: {
-  dataPrefix: "place" | "state";
-  place: FactoryGraphSemanticPlaceRef;
-}) {
-  const label = formatPlaceLabel(place);
-  const parts = placeLabelParts(place);
-  return (
-    <span className="grid min-w-0 gap-px overflow-hidden" title={label}>
-      <span
-        className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-surface-subtle"
-        data-place-work-type={dataPrefix === "place" ? true : undefined}
-        data-state-work-type={dataPrefix === "state" ? true : undefined}
-        title={parts.workType}
-      >
-        {parts.workType}
-      </span>
-      <span
-        className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
-        data-place-state-value={dataPrefix === "place" ? true : undefined}
-        data-state-value={dataPrefix === "state" ? true : undefined}
-        title={parts.stateValue}
-      >
-        {parts.stateValue}
-      </span>
-    </span>
   );
 }
 
@@ -402,22 +373,6 @@ export function FactoryGraphWorkProgressMarker(
   );
 }
 
-function tokenCountDisplay(
-  place: FactoryGraphSemanticPlaceRef,
-  count: number,
-  locale?: string,
-) {
-  return (
-    <FactoryGraphNodeBadge
-      aria-label={tokenCountLabel(place, count, locale)}
-      className="w-fit"
-      data-place-token-count
-      role="status"
-    >
-      {count}
-    </FactoryGraphNodeBadge>
-  );
-}
 function placeNodeClassName(place: FactoryGraphSemanticPlaceRef): string {
   return place.kind === "work_state"
     ? workStatePhaseSurfaceClassName(place.state_category)
@@ -430,17 +385,6 @@ function placeNodeClassName(place: FactoryGraphSemanticPlaceRef): string {
           factoryGraphNodeSurfaceClassName("info"),
           "border-dashed text-on-surface",
         );
-}
-function formatPlaceLabel(place: FactoryGraphPlaceRef): string {
-  return place.type_id && place.state_value
-    ? `${place.type_id}:${place.state_value}`
-    : place.place_id;
-}
-function placeLabelParts(place: FactoryGraphPlaceRef) {
-  return {
-    stateValue: place.state_value ?? place.place_id,
-    workType: place.type_id ?? "work",
-  };
 }
 function classNames(
   ...values: Array<string | false | null | undefined>
@@ -455,49 +399,13 @@ function activeItemCountLabel(count: number, locale?: string): string {
 function selectStateLabel(label: string, locale?: string): string {
   return locale === "zh-CN" ? `选择 ${label} 状态` : `Select ${label} state`;
 }
-function placeKindLabel(
-  place: FactoryGraphSemanticPlaceRef,
-  locale?: string,
-): string {
-  const chinese = locale === "zh-CN";
-  if (place.kind === "work_state")
-    return place.state_category === "TERMINAL"
-      ? chinese
-        ? "终止状态"
-        : "Terminal"
-      : place.state_category === "FAILED"
-        ? chinese
-          ? "失败状态"
-          : "Failed"
-        : chinese
-          ? "队列"
-          : "Queue";
-  if (place.kind === "resource") return chinese ? "资源" : "Resource";
-  return place.kind === "limit"
-    ? chinese
-      ? "限制"
-      : "Limit"
-    : chinese
-      ? "约束"
-      : "Constraint";
-}
-function placeSemanticLabel(
-  place: FactoryGraphSemanticPlaceRef,
-  locale?: string,
-): string {
-  return place.kind === "work_state" && place.state_category === "PROCESSING"
-    ? locale === "zh-CN"
-      ? "处理中状态"
-      : "Processing state"
-    : placeKindLabel(place, locale);
-}
 function tokenCountLabel(
   place: FactoryGraphSemanticPlaceRef,
   count: number,
   locale?: string,
 ): string {
   if (locale === "zh-CN")
-    return `${count} 个${placeKindLabel(place, locale)}令牌`;
+    return `${count} 个${factoryGraphPlaceKindLabel(place, locale)}令牌`;
   const token = count === 1 ? "token" : "tokens";
-  return `${count} ${placeKindLabel(place, locale).toLowerCase()} ${token}`;
+  return `${count} ${factoryGraphPlaceKindLabel(place, locale).toLowerCase()} ${token}`;
 }

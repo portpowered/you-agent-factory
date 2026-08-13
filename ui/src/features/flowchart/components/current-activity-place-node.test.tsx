@@ -56,13 +56,13 @@ describe("CurrentActivity place node work-state phase styling", () => {
   });
 
   it.each([
-    ["INITIAL", "INITIAL"],
-    ["PROCESSING", "PROCESSING"],
-    ["TERMINAL", "TERMINAL"],
-    ["FAILED", "FAILED"],
+    ["INITIAL", "waiting", "border-info-border bg-info-container"],
+    ["PROCESSING", "active", "border-af-success-border bg-warning-container"],
+    ["TERMINAL", "success", "border-af-success-border bg-success-container"],
+    ["FAILED", "danger", "border-af-danger-border bg-error-container"],
   ] as const)(
     "applies lifecycle surface classes for work_state with state_category %s",
-    (stateCategory) => {
+    (stateCategory, status, surfaceClass) => {
       const place: DashboardPlaceRef = {
         kind: "work_state",
         place_id: `story:${stateCategory.toLowerCase()}`,
@@ -78,6 +78,11 @@ describe("CurrentActivity place node work-state phase styling", () => {
       expect(shell?.className).toContain(
         workStatePhaseSurfaceClassName(stateCategory),
       );
+      expect(shell?.getAttribute("data-graph-visual-status")).toBe(status);
+      expect(shell?.getAttribute("data-graph-visual-surface")).toBe(status);
+      for (const className of surfaceClass.split(" ")) {
+        expect(shell?.className).toContain(className);
+      }
     },
   );
 
@@ -160,6 +165,8 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     const shell = nodeShell(container);
 
     expect(shell?.className).toContain("border-primary");
+    expect(shell?.getAttribute("data-graph-visual-border")).toBe("selection");
+    expect(shell?.getAttribute("data-graph-visual-selection")).toBe("true");
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("INITIAL"),
     );
@@ -184,6 +191,8 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     const shell = nodeShell(container);
 
     expect(shell?.className).toContain("ring-af-danger-border");
+    expect(shell?.getAttribute("data-graph-visual-border")).toBe("validation");
+    expect(shell?.getAttribute("data-graph-visual-validation")).toBe("error");
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("FAILED"),
     );
@@ -206,6 +215,10 @@ describe("CurrentActivity place node work-state phase precedence", () => {
 
     expect(shell?.className).toContain("border-af-success-border");
     expect(shell?.className).toContain("shadow-af-success-chip");
+    expect(shell?.getAttribute("data-graph-visual-emphasis")).toBe("strong");
+    expect(shell?.getAttribute("data-graph-visual-treatment")).toBe(
+      "processing",
+    );
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("PROCESSING"),
     );

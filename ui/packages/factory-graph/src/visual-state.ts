@@ -81,10 +81,11 @@ export interface FactoryGraphVisualState {
 /**
  * Resolve one composable visual grammar for a semantic Factory node.
  *
- * Precedence is explicit: lifecycle status is always retained in `status`,
- * `surface`, `icon`, and `statusTreatment`; validation overlays selection and
- * active-flow emphasis; selection/focus overlays active-flow emphasis; and
- * muted is returned as an independent flag so it cannot erase any status.
+ * Precedence is explicit: lifecycle status is always retained in `status`;
+ * active flow may elevate a quiet node's `surface`, `icon`, and
+ * `statusTreatment`; validation overlays selection and active-flow emphasis;
+ * selection/focus overlays active-flow emphasis; and muted is returned as an
+ * independent flag so it cannot erase any status.
  */
 export function resolveFactoryGraphVisualState(
   input: FactoryGraphVisualStateInput,
@@ -97,6 +98,7 @@ export function resolveFactoryGraphVisualState(
   const activeFlow = input.activeFlow === true;
   const muted = input.muted === true;
   const hasSelectionOrFocus = selected || focused;
+  const activeFlowStatus = status === "quiet" && activeFlow ? "active" : status;
 
   let border: FactoryGraphVisualBorderRole = status;
   if (validation !== "none") {
@@ -131,13 +133,13 @@ export function resolveFactoryGraphVisualState(
     family: input.family,
     focus: focusRoleFor(selected, focused),
     glow,
-    icon: status,
+    icon: activeFlowStatus,
     lifecycle,
     muted,
     selection: selected,
     status,
-    statusTreatment: statusTreatmentFor(lifecycle),
-    surface: status,
+    statusTreatment: statusTreatmentFor(lifecycle, activeFlow),
+    surface: activeFlowStatus,
     validation,
   };
 }
@@ -217,6 +219,7 @@ function statusRoleForLifecycle(
 
 function statusTreatmentFor(
   lifecycle: FactoryGraphVisualLifecycleRole,
+  activeFlow: boolean,
 ): FactoryGraphVisualStatusTreatment {
   switch (lifecycle) {
     case "initial":
@@ -228,7 +231,7 @@ function statusTreatmentFor(
     case "failed":
       return "failed";
     case "unknown":
-      return "none";
+      return activeFlow ? "processing" : "none";
   }
 }
 

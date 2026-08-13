@@ -138,3 +138,29 @@ describe("resolveFactoryGraphVisualState", () => {
     },
   );
 });
+
+describe("resolveFactoryGraphVisualState active emphasis", () => {
+  it("elevates an active flow without inventing a lifecycle status", () => {
+    expect(visualState({ activeFlow: true })).toMatchObject({
+      activeFlow: true,
+      border: "active",
+      emphasis: "strong",
+      glow: "active",
+      icon: "active",
+      lifecycle: "unknown",
+      status: "quiet",
+      statusTreatment: "processing",
+      surface: "active",
+    });
+  });
+
+  it("keeps keyboard focus visible independently of selection", () => {
+    expect(visualState({ focused: true })).toMatchObject({
+      border: "selection",
+      emphasis: "selected",
+      focus: "keyboard",
+      glow: "selection",
+      selection: false,
+    });
+  });
+});
