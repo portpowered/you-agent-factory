@@ -56,6 +56,14 @@ func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.Wo
 	return b.err
 }
 
+type noAdmissionBoundary struct {
+	unusedExecution
+}
+
+func (noAdmissionBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
+	return nil
+}
+
 // cancellationResultBoundary supplies one deterministic boundary cancellation
 // result without starting or publishing any Workers attempt. It lets the
 // control tests exercise only the already-admitted control effect.
@@ -1666,6 +1674,58 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 		}
 	})
 
+	t.Run("resume refuses stale ownership before reserving a continuation", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			configure func(*supervision)
+			wantErr   error
+		}{
+			{
+				name: "attempt mismatch",
+				configure: func(supervision *supervision) {
+					supervision.dispatchID = "dispatch-foreign"
+				},
+				wantErr: workersessions.ErrProviderSessionAssociationAttemptMismatch,
+			},
+			{
+				name: "not admitted",
+				configure: func(supervision *supervision) {
+					supervision.accepted = false
+				},
+				wantErr: workersessions.ErrProviderSessionAssociationNotAvailable,
+			},
+			{
+				name: "active control",
+				configure: func(supervision *supervision) {
+					supervision.controlActive = true
+				},
+				wantErr: workersessions.ErrInvalidState,
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				r, supervision, _ := newPausedContinuationRegistry(t)
+				test.configure(supervision)
+				before := r.sessions["worker-1"]
+
+				result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+				if !errors.Is(err, test.wantErr) || result.Outcome != workersessions.ControlOutcomeFailed ||
+					result.Session.State != workersessions.StatePaused {
+					t.Fatalf("Resume() = %#v, %v, want failed PAUSED result with %v", result, err, test.wantErr)
+				}
+				if current := r.sessions["worker-1"]; !reflect.DeepEqual(current, before) {
+					t.Fatalf("Resume() mutated refused session: got %#v, want %#v", current, before)
+				}
+				supervision.mu.Lock()
+				continuing, publishing, attemptsMade := supervision.continuing, supervision.publishing, supervision.attemptsMade
+				supervision.mu.Unlock()
+				if continuing || publishing || attemptsMade != 0 {
+					t.Fatalf("refused Resume() reserved continuation state: continuing=%t publishing=%t attempts=%d", continuing, publishing, attemptsMade)
+				}
+			})
+		}
+	})
+
 	t.Run("preparation rejects stale state and competing continuation", func(t *testing.T) {
 		r, supervision, reference := newPausedContinuationRegistry(t)
 		if _, _, prepared := r.prepareContinuation("missing", supervision, reference); prepared {
@@ -1738,6 +1798,20 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 		}
 		if result.Session.State != workersessions.StatePaused || supervision.dispatchID != "dispatch-1" {
 			t.Fatalf("Resume() after publish failure = %#v with dispatch %q, want restored PAUSED dispatch-1", result, supervision.dispatchID)
+		}
+	})
+
+	t.Run("missing admission restores the exact paused continuation", func(t *testing.T) {
+		r, supervision, _ := newPausedContinuationRegistry(t)
+		r.boundary = noAdmissionBoundary{unusedExecution: unusedExecution{t: t}}
+
+		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if !errors.Is(err, workersessions.ErrStartAdmissionFailed) || result.Outcome != workersessions.ControlOutcomeFailed ||
+			result.Session.State != workersessions.StatePaused {
+			t.Fatalf("Resume() = %#v, %v, want failed PAUSED admission result", result, err)
+		}
+		if supervision.dispatchID != "dispatch-1" || supervision.continuing || supervision.publishing {
+			t.Fatalf("Resume() after missing admission left supervision = %#v, want restored paused attempt", supervision)
 		}
 	})
 

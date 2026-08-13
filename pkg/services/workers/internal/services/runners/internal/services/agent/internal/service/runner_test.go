@@ -278,6 +278,7 @@ func TestExecuteResumesThroughExactWorkerSessionReferenceWithoutLegacyReconstruc
 	wantReference := exact.Clone()
 	request := baseAgentRequest()
 	request.SessionID = "legacy-session-that-must-not-be-used"
+	request.RunnerID = string(providers.IDClaude)
 	request.ResumeSession = &exact
 	if _, err := runner.Execute(t.Context(), request); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -285,6 +286,9 @@ func TestExecuteResumesThroughExactWorkerSessionReferenceWithoutLegacyReconstruc
 
 	if fake.continuationReference == nil || *fake.continuationReference != wantReference {
 		t.Fatalf("Providers.Continue Reference = %#v, want exact %#v", fake.continuationReference, wantReference)
+	}
+	if fake.request.Provider != exact.Provider {
+		t.Fatalf("Providers.Continue Attempt.Provider = %q, want exact reference provider %q", fake.request.Provider, exact.Provider)
 	}
 	request.ResumeSession.ID = "caller-mutated"
 	if fake.continuationReference.ID != wantReference.ID {
