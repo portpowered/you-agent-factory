@@ -384,7 +384,13 @@ func CheckpointPath(
 			baseDir = runtimeCfg.FactoryDir()
 		}
 	}
-	return filepath.Join(baseDir, ".infinite-you", "poller-checkpoints", sanitizePathSegment(workstation.Name+"--"+workerDef.Name)+"--linear.json")
+	checkpointDir := filepath.Join(baseDir, ".infinite-you", "poller-checkpoints")
+	if runtimeID, ok := runtimeCfg.(interface{ RuntimeInstanceID() string }); ok {
+		if rawRuntimeID := strings.TrimSpace(runtimeID.RuntimeInstanceID()); rawRuntimeID != "" {
+			checkpointDir = filepath.Join(checkpointDir, sanitizePathSegment(rawRuntimeID))
+		}
+	}
+	return filepath.Join(checkpointDir, sanitizePathSegment(workstation.Name+"--"+workerDef.Name)+"--linear.json")
 }
 
 func (s fileCheckpointStore) Load(path string) (Checkpoint, error) {

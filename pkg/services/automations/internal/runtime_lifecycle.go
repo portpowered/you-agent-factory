@@ -37,6 +37,7 @@ type runtimeInstance struct {
 type runtimeSnapshotConfig struct {
 	factoryDir     string
 	runtimeBaseDir string
+	runtimeID      string
 	config         interfaces.FactoryConfig
 }
 
@@ -52,6 +53,16 @@ func (c *runtimeSnapshotConfig) RuntimeBaseDir() string {
 		return ""
 	}
 	return c.runtimeBaseDir
+}
+
+// RuntimeInstanceID is an optional private lookup used by durable source
+// effects that must keep checkpoints isolated even when two runtimes share a
+// Factory directory and source names.
+func (c *runtimeSnapshotConfig) RuntimeInstanceID() string {
+	if c == nil {
+		return ""
+	}
+	return c.runtimeID
 }
 
 func (c *runtimeSnapshotConfig) FactoryConfig() *interfaces.FactoryConfig {
@@ -216,9 +227,6 @@ func (s *Service) DeactivateRuntime(
 		)
 	}
 	instance := s.runtimes[runtimeID]
-	if instance != nil {
-		delete(s.runtimes, runtimeID)
-	}
 	s.runtimeMu.Unlock()
 	if instance == nil {
 		return automations.RuntimeDeactivationResult{
@@ -233,6 +241,11 @@ func (s *Service) DeactivateRuntime(
 			"DeactivateRuntime", automations.ErrorCodeFailed, err,
 		)
 	}
+	s.runtimeMu.Lock()
+	if s.runtimes[runtimeID] == instance {
+		delete(s.runtimes, runtimeID)
+	}
+	s.runtimeMu.Unlock()
 	return automations.RuntimeDeactivationResult{
 		RuntimeID: runtimeID,
 		State:     automations.RuntimeLifecycleStopped,
@@ -302,7 +315,7 @@ func (s *Service) buildRuntimeInstance(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	config, err := newRuntimeSnapshotConfig(request.Snapshot)
+	config, err := newRuntimeSnapshotConfig(request.RuntimeID, request.Snapshot)
 	if err != nil {
 		return nil, runtimeLifecycleError("ActivateRuntime", automations.ErrorCodeInvalid, err)
 	}
@@ -350,7 +363,7 @@ func (s *Service) buildRuntimeInstance(
 	return instance, nil
 }
 
-func newRuntimeSnapshotConfig(snapshot interfaces.RuntimeSnapshot) (*runtimeSnapshotConfig, error) {
+func newRuntimeSnapshotConfig(runtimeID string, snapshot interfaces.RuntimeSnapshot) (*runtimeSnapshotConfig, error) {
 	config, err := interfaces.CloneFactoryConfig(&snapshot.EffectiveFactory)
 	if err != nil {
 		return nil, err
@@ -358,9 +371,22 @@ func newRuntimeSnapshotConfig(snapshot interfaces.RuntimeSnapshot) (*runtimeSnap
 	if config == nil {
 		return nil, fmt.Errorf("Factory Definition configuration is required")
 	}
+	if len(snapshot.Workers) > 0 {
+		config.Workers = make([]interfaces.FactoryWorkerConfig, len(snapshot.Workers))
+		for index, worker := range snapshot.Workers {
+			config.Workers[index] = interfaces.CloneWorkerConfig(worker)
+		}
+	}
+	if len(snapshot.Workstations) > 0 {
+		config.Workstations = make([]interfaces.FactoryWorkstationConfig, len(snapshot.Workstations))
+		for index, workstation := range snapshot.Workstations {
+			config.Workstations[index] = interfaces.CloneWorkstationConfig(workstation)
+		}
+	}
 	return &runtimeSnapshotConfig{
 		factoryDir:     snapshot.FactoryDir,
 		runtimeBaseDir: snapshot.RuntimeBaseDir,
+		runtimeID:      runtimeID,
 		config:         *config,
 	}, nil
 }
