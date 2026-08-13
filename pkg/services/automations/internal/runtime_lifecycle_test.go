@@ -67,6 +67,30 @@ func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
 	}
 }
 
+func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *testing.T) {
+	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	base := runtimeActivationRequestForTest("runtime-input-conflict", "same")
+	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
+		t.Fatalf("ActivateRuntime(base) error = %v", err)
+	}
+
+	schedulerConflict := base
+	schedulerConflict.Inputs.StartSchedulers = true
+	if _, err := service.ActivateRuntime(context.Background(), schedulerConflict); !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("ActivateRuntime(scheduler conflict) error = %v, want conflict", err)
+	}
+
+	filesystemConflict := base
+	filesystemConflict.Inputs.Filesystem.KnownWorkTypes = []string{"different-work-type"}
+	if _, err := service.ActivateRuntime(context.Background(), filesystemConflict); !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("ActivateRuntime(filesystem conflict) error = %v, want conflict", err)
+	}
+
+	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
+		t.Fatalf("ActivateRuntime(unchanged duplicate) error = %v, want idempotent success", err)
+	}
+}
+
 func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
 	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
 	request := runtimeActivationRequestForTest("runtime-scheduler", "scheduler")

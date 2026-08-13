@@ -20,6 +20,7 @@ type runtimeInstance struct {
 	runtimeID        string
 	factorySessionID string
 	snapshot         interfaces.RuntimeSnapshot
+	activationInputs runtimeActivationInputIdentity
 	owner            *Service
 	runtimeConfig    *runtimeSnapshotConfig
 	watcher          automations.FilesystemWatcher
@@ -337,6 +338,7 @@ func (s *Service) buildRuntimeInstance(
 		runtimeID:        request.RuntimeID,
 		factorySessionID: request.FactorySessionID,
 		snapshot:         request.Snapshot,
+		activationInputs: newRuntimeActivationInputIdentity(request.Inputs),
 		owner:            owner,
 		runtimeConfig:    config,
 		submit:           request.Inputs.Submitter,
@@ -482,7 +484,107 @@ func runtimeActivationMatches(instance *runtimeInstance, request automations.Run
 	if instance == nil {
 		return false
 	}
-	return instance.factorySessionID == request.FactorySessionID && reflect.DeepEqual(instance.snapshot, request.Snapshot)
+	return instance.factorySessionID == request.FactorySessionID &&
+		reflect.DeepEqual(instance.snapshot, request.Snapshot) &&
+		instance.activationInputs.matches(request.Inputs)
+}
+
+// runtimeActivationInputIdentity is the value-level identity retained for one
+// activated runtime. Runtime inputs contain effect interfaces and callbacks,
+// so they cannot be compared with reflect.DeepEqual as a whole: non-nil
+// functions are never deeply equal, while an omitted callback is materially
+// different from an installed one. Keep deterministic identity for opaque
+// effects and deep-copy the plain filesystem policy values.
+type runtimeActivationInputIdentity struct {
+	startSchedulers bool
+	submitter       opaqueActivationIdentity
+	filesystem      runtimeFilesystemInputIdentity
+}
+
+type runtimeFilesystemInputIdentity struct {
+	files          opaqueActivationIdentity
+	walkDirectory  opaqueActivationIdentity
+	workRequestIDs opaqueActivationIdentity
+	knownWorkTypes []string
+	validStates    map[string]map[string]bool
+}
+
+type opaqueActivationIdentity struct {
+	present  bool
+	typeName string
+	pointer  uintptr
+	value    any
+}
+
+func newRuntimeActivationInputIdentity(inputs automations.RuntimeActivationInputs) runtimeActivationInputIdentity {
+	return runtimeActivationInputIdentity{
+		startSchedulers: inputs.StartSchedulers,
+		submitter:       newOpaqueActivationIdentity(inputs.Submitter),
+		filesystem: runtimeFilesystemInputIdentity{
+			files:          newOpaqueActivationIdentity(inputs.Filesystem.Files),
+			walkDirectory:  newOpaqueActivationIdentity(inputs.Filesystem.WalkDirectory),
+			workRequestIDs: newOpaqueActivationIdentity(inputs.Filesystem.WorkRequestIDs),
+			knownWorkTypes: append([]string(nil), inputs.Filesystem.KnownWorkTypes...),
+			validStates:    cloneValidStates(inputs.Filesystem.ValidStatesByType),
+		},
+	}
+}
+
+func newOpaqueActivationIdentity(value any) opaqueActivationIdentity {
+	if value == nil {
+		return opaqueActivationIdentity{}
+	}
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return opaqueActivationIdentity{}
+	}
+	identity := opaqueActivationIdentity{
+		present:  true,
+		typeName: reflected.Type().String(),
+	}
+	switch reflected.Kind() {
+	case reflect.Func:
+		if reflected.IsNil() {
+			return opaqueActivationIdentity{}
+		}
+		identity.pointer = reflected.Pointer()
+	case reflect.Pointer, reflect.Chan, reflect.UnsafePointer:
+		if reflected.IsNil() {
+			return opaqueActivationIdentity{}
+		}
+		identity.pointer = reflected.Pointer()
+	default:
+		identity.value = reflected.Interface()
+	}
+	return identity
+}
+
+func (identity opaqueActivationIdentity) matches(other opaqueActivationIdentity) bool {
+	if identity.present != other.present || identity.typeName != other.typeName {
+		return false
+	}
+	if !identity.present {
+		return true
+	}
+	if identity.pointer != 0 || other.pointer != 0 {
+		return identity.pointer == other.pointer
+	}
+	return reflect.DeepEqual(identity.value, other.value)
+}
+
+func (identity runtimeActivationInputIdentity) matches(inputs automations.RuntimeActivationInputs) bool {
+	other := newRuntimeActivationInputIdentity(inputs)
+	return identity.startSchedulers == other.startSchedulers &&
+		identity.submitter.matches(other.submitter) &&
+		identity.filesystem.matches(other.filesystem)
+}
+
+func (identity runtimeFilesystemInputIdentity) matches(other runtimeFilesystemInputIdentity) bool {
+	return identity.files.matches(other.files) &&
+		identity.walkDirectory.matches(other.walkDirectory) &&
+		identity.workRequestIDs.matches(other.workRequestIDs) &&
+		reflect.DeepEqual(identity.knownWorkTypes, other.knownWorkTypes) &&
+		reflect.DeepEqual(identity.validStates, other.validStates)
 }
 
 func runtimeLifecycleError(op string, code automations.ErrorCode, err error) *automations.Error {
