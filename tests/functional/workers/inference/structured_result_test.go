@@ -1,12 +1,14 @@
-package runtime_api
+package inference_test
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -56,7 +58,7 @@ func TestDetachedStructuredResultReachesDispatchResponse(t *testing.T) {
 				t.Fatalf("public dispatch response structured result = %#v, want %#v", publicPayload.StructuredResult, test.want)
 			}
 			if test.name == "explicit_null" {
-				raw := marshalFunctionalEventToRawObject(t, fixture.publicEvent)
+				raw := marshalStructuredResultEventToRawObject(t, fixture.publicEvent)
 				payload, ok := raw["payload"].(map[string]any)
 				if !ok {
 					t.Fatalf("public dispatch response payload = %#v, want object", raw["payload"])
@@ -106,13 +108,15 @@ func runDetachedStructuredResult(
 	testutil.WriteSeedRequest(t, factoryDir, workSubmitRequest())
 
 	recordPath := filepath.Join(t.TempDir(), "structured-result.replay.json")
-	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: output})
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout(output),
+	})
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--record", recordPath},
 		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
+			ProviderCommandRunner: runner,
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
@@ -145,8 +149,22 @@ func findDispatchResponseEvent(t *testing.T, events []factoryapi.FactoryEvent) f
 			return event
 		}
 	}
-	t.Fatalf("events = %v, want one DISPATCH_RESPONSE", functionalEventTypes(events))
+	t.Fatalf("events = %#v, want one DISPATCH_RESPONSE", events)
 	return factoryapi.FactoryEvent{}
+}
+
+func marshalStructuredResultEventToRawObject(t *testing.T, event factoryapi.FactoryEvent) map[string]any {
+	t.Helper()
+
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal event %s: %v", event.Id, err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("unmarshal event %s: %v", event.Id, err)
+	}
+	return raw
 }
 
 func workSubmitRequest() work.SubmitRequest {
