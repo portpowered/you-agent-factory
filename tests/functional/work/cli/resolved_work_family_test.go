@@ -24,7 +24,23 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 	var watched workcli.WatchConfig
 	var shown workcli.ShowConfig
 	var moved workcli.MoveConfig
+	var approvalListed workcli.ListHumanApprovalsConfig
+	var approvalShown workcli.ShowHumanApprovalConfig
 	handlers := commandregistry.ResolvedWorkHandlers{
+		ApprovalList: commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{
+			ListHumanApprovals: func(cfg workcli.ListHumanApprovalsConfig) error {
+				approvalListed = cfg
+				_, err := io.WriteString(cfg.Output, "approval-listed\n")
+				return err
+			},
+		}),
+		ApprovalShow: commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{
+			ShowHumanApproval: func(cfg workcli.ShowHumanApprovalConfig) error {
+				approvalShown = cfg
+				_, err := io.WriteString(cfg.Output, "approval-shown\n")
+				return err
+			},
+		}),
 		List: commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{
 			ListWork: func(cfg workcli.ListConfig) error {
 				listed = cfg
@@ -69,6 +85,14 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 	}
 
 	assertResolvedWorkExecution(t, handlers, []string{
+		"--server", "https://factory.example", "--json", "--debug", "work", "approval", "list",
+		"--session", "session-approval",
+	}, "approval-listed\n")
+	assertResolvedWorkExecution(t, handlers, []string{
+		"--server", "https://factory.example", "--verbose", "work", "approval", "show",
+		"approval-1", "--session", "session-approval",
+	}, "approval-shown\n")
+	assertResolvedWorkExecution(t, handlers, []string{
 		"--server", "https://factory.example", "--json", "--debug", "work", "list",
 		"--session", "session-a", "--state-name", "review", "--state-type", "PROCESSING",
 		"--name", "PRD", "--work-type-name", "story", "--trace-id", "trace-a",
@@ -94,6 +118,14 @@ func TestResolvedWorkFamilyExecutesEveryPublicOperationFromStableInputs(t *testi
 		"work", "visualize", "--format", "markdown-mermaid", "batch.json",
 	}, "visualized\n")
 
+	if approvalListed.Server != "https://factory.example" || approvalListed.SessionID != "session-approval" ||
+		!approvalListed.JSON || !approvalListed.Verbose || !approvalListed.Debug {
+		t.Fatalf("approval list config = %#v, want stable local and inherited inputs", approvalListed)
+	}
+	if approvalShown.Server != "https://factory.example" || approvalShown.SessionID != "session-approval" ||
+		approvalShown.ApprovalID != "approval-1" || !approvalShown.Verbose || approvalShown.Debug {
+		t.Fatalf("approval show config = %#v, want stable local and inherited inputs", approvalShown)
+	}
 	if listed.Server != "https://factory.example" || listed.SessionID != "session-a" ||
 		listed.StateName != "review" || listed.StateType != "PROCESSING" ||
 		listed.Name != "PRD" || listed.WorkTypeName != "story" || listed.TraceID != "trace-a" ||
@@ -157,7 +189,9 @@ func resolvedWorkFamilyRoot(
 	}
 	manifest.Commands[rootRecord.ID] = rootRecord
 	byCommandID := map[string]commandregistry.ResolvedWorkRunE{
-		"you.work.list": handlers.List, "you.work.watch": handlers.Watch,
+		"you.work.approval.list": handlers.ApprovalList,
+		"you.work.approval.show": handlers.ApprovalShow,
+		"you.work.list":          handlers.List, "you.work.watch": handlers.Watch,
 		"you.work.show": handlers.Show, "you.work.move": handlers.Move,
 		"you.work.visualize": handlers.Visualize,
 	}
