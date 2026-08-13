@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
@@ -14,6 +15,7 @@ import (
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Root retains process-scoped Factory Runtime dependencies. It is inert until
@@ -447,6 +449,35 @@ func (r *Root) AcceptDispatchResult(
 		return service.AcceptDispatchResult(ctx, req)
 	}
 	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
+}
+
+// SubmitWorkRequest preserves the migration-only Factory Sessions ingress
+// while routing the request through the activated Runtime delegate. The
+// process root remains the canonical Service authority; this narrow bridge is
+// retained for the legacy HTTP mapping until that representation migrates.
+func (r *Root) SubmitWorkRequest(
+	ctx context.Context,
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
+	service, ok := r.delegate().(factoryruntime.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
+	}
+	return service.SubmitWorkRequest(ctx, request)
+}
+
+// SubscribeFactoryEvents preserves the migration-only Factory Sessions event
+// stream through the activated Runtime delegate for the legacy HTTP mapping.
+func (r *Root) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	service, ok := r.delegate().(factoryruntime.APIFactory)
+	if !ok {
+		return nil, factoryruntime.ErrNotRunning
+	}
+	return service.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 // InvokeWorker delegates one orchestrator-resolved Worker invocation to the

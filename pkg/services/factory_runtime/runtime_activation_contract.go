@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -119,13 +120,17 @@ func (e *RuntimeActivationError) Error() string {
 	if e == nil {
 		return ""
 	}
-	if e.Message != "" {
-		return e.Message
+	message := e.Message
+	if message == "" && e.Kind != "" {
+		message = string(e.Kind)
 	}
-	if e.Kind != "" {
-		return string(e.Kind)
+	if message == "" {
+		message = ErrRuntimeActivationFailed.Error()
 	}
-	return ErrRuntimeActivationFailed.Error()
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %v", message, e.Cause)
+	}
+	return message
 }
 
 func (e *RuntimeActivationError) Unwrap() error {

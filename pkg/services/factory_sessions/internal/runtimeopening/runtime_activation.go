@@ -19,6 +19,7 @@ import (
 // activation result that published the service.
 type activatedRuntimeService struct {
 	factoryruntime.Service
+	factoryruntime.APIFactory
 	products runtimeProducts
 }
 
@@ -45,8 +46,12 @@ func (f *Factory) activateRuntime(
 	if service == nil {
 		return nil, fmt.Errorf("activate Factory Runtime: opened runtime service is required")
 	}
+	legacyObservation, ok := service.(factoryruntime.APIFactory)
+	if !ok {
+		return nil, fmt.Errorf("activate Factory Runtime: opened runtime legacy observation is required")
+	}
 	return &factoryruntime.RuntimeActivation{
-		Service:        &activatedRuntimeService{Service: service, products: products},
+		Service:        &activatedRuntimeService{Service: service, APIFactory: legacyObservation, products: products},
 		HostedInstance: products.startup,
 		Replacement:    products.replacement,
 		BuildSpec:      products.buildSpec,
