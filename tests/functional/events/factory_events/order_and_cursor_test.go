@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -272,8 +273,10 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 	dir := support.ScaffoldSingleStepFactory(t, "stream-order-close")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("factory event stream provider COMPLETE"),
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
@@ -312,8 +315,10 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 	dir := support.ScaffoldSingleStepFactory(t, "stream-reconnect-continuity")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("factory event reconnect provider COMPLETE"),
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
