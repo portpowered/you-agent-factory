@@ -38,8 +38,11 @@ func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 	for _, command := range []string{"script-a", "script-b"} {
 		_, err := fixture.service.Execute(context.Background(), workers.ExecuteRequest{
 			Correlation: workers.ExecutionCorrelation{
-				DispatchID: command,
-				AttemptID:  "attempt-" + command,
+				FactorySessionID: "session-stateless",
+				RuntimeID:        "runtime-stateless",
+				GenerationID:     "generation-stateless",
+				DispatchID:       command,
+				AttemptID:        "attempt-" + command,
 			},
 			Target: workers.ExecutionTarget{
 				WorkerName: "script-worker",
@@ -68,8 +71,11 @@ func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 	for _, model := range []string{"model-a", "model-b"} {
 		_, err := fixture.service.Execute(context.Background(), workers.ExecuteRequest{
 			Correlation: workers.ExecutionCorrelation{
-				DispatchID: model,
-				AttemptID:  "attempt-" + model,
+				FactorySessionID: "session-stateless",
+				RuntimeID:        "runtime-stateless",
+				GenerationID:     "generation-stateless",
+				DispatchID:       model,
+				AttemptID:        "attempt-" + model,
 			},
 			Target: workers.ExecutionTarget{
 				WorkerName: runners.InferenceIdentity,
@@ -98,8 +104,11 @@ func TestNewServiceExecuteNormalizesOutcomeAndOutputContractPolicy(t *testing.T)
 	fixture := newStatelessTestFixture(t)
 	base := workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "dispatch-outcome",
-			AttemptID:  "attempt-outcome",
+			FactorySessionID: "session-stateless",
+			RuntimeID:        "runtime-stateless",
+			GenerationID:     "generation-stateless",
+			DispatchID:       "dispatch-outcome",
+			AttemptID:        "attempt-outcome",
 		},
 		Target: workers.ExecutionTarget{
 			WorkerName: runners.AgentIdentity,
@@ -338,8 +347,11 @@ func statelessHappyPathCases() []statelessHappyPathCase {
 			name: "script",
 			request: workers.ExecuteRequest{
 				Correlation: workers.ExecutionCorrelation{
-					DispatchID: "dispatch-script",
-					AttemptID:  "attempt-script",
+					FactorySessionID: "session-stateless",
+					RuntimeID:        "runtime-stateless",
+					GenerationID:     "generation-stateless",
+					DispatchID:       "dispatch-script",
+					AttemptID:        "attempt-script",
 				},
 				Target: workers.ExecutionTarget{
 					WorkerName:      "script-worker",
@@ -353,8 +365,11 @@ func statelessHappyPathCases() []statelessHappyPathCase {
 			name: "inference",
 			request: workers.ExecuteRequest{
 				Correlation: workers.ExecutionCorrelation{
-					DispatchID: "dispatch-inference",
-					AttemptID:  "attempt-inference",
+					FactorySessionID: "session-stateless",
+					RuntimeID:        "runtime-stateless",
+					GenerationID:     "generation-stateless",
+					DispatchID:       "dispatch-inference",
+					AttemptID:        "attempt-inference",
 				},
 				Target: workers.ExecutionTarget{
 					WorkerName: runners.InferenceIdentity,
@@ -373,8 +388,11 @@ func statelessHappyPathCases() []statelessHappyPathCase {
 			name: "agent",
 			request: workers.ExecuteRequest{
 				Correlation: workers.ExecutionCorrelation{
-					DispatchID: "dispatch-agent",
-					AttemptID:  "attempt-agent",
+					FactorySessionID: "session-stateless",
+					RuntimeID:        "runtime-stateless",
+					GenerationID:     "generation-stateless",
+					DispatchID:       "dispatch-agent",
+					AttemptID:        "attempt-agent",
 				},
 				Target: workers.ExecutionTarget{
 					WorkerName: runners.AgentIdentity,

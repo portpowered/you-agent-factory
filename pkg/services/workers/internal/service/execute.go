@@ -32,10 +32,12 @@ func (s *Service) Execute(
 	if err := ctx.Err(); err != nil {
 		return workers.ExecuteResult{}, err
 	}
+	// Detach all caller-owned mutable data before validation or any downstream
+	// selection. The request snapshot is the only input the attempt may use.
+	request = request.Clone()
 	if err := request.Validate(); err != nil {
 		return workers.ExecuteResult{}, err
 	}
-	request = request.Clone()
 	correlation := request.Correlation
 
 	cleanup := newCleanupRegistry()
@@ -123,6 +125,7 @@ func (s *Service) executeStarted(
 		"workers execute started",
 		"factory_session_id", correlation.FactorySessionID,
 		"runtime_id", correlation.RuntimeID,
+		"generation_id", correlation.GenerationID,
 		"dispatch_id", correlation.DispatchID,
 		"attempt_id", correlation.AttemptID,
 		"runner_id", request.Target.RunnerID,
@@ -147,6 +150,7 @@ func (s *Service) executeStarted(
 		"workers execute finished",
 		"factory_session_id", correlation.FactorySessionID,
 		"runtime_id", correlation.RuntimeID,
+		"generation_id", correlation.GenerationID,
 		"dispatch_id", correlation.DispatchID,
 		"attempt_id", correlation.AttemptID,
 		"outcome", string(result.Outcome),

@@ -12,7 +12,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func (r *runner) outputObserver(dispatchID string) platformprocess.OutputChunkObserver {
+func (r *runner) outputObserver(
+	dispatchID string,
+	correlation workers.ExecutionCorrelation,
+) platformprocess.OutputChunkObserver {
 	var publishMu sync.Mutex
 	return func(stream string, chunk []byte) {
 		if len(chunk) == 0 {
@@ -21,11 +24,12 @@ func (r *runner) outputObserver(dispatchID string) platformprocess.OutputChunkOb
 		publishMu.Lock()
 		defer publishMu.Unlock()
 		r.publish(workers.ProgressFragment{
-			DispatchID: dispatchID,
-			Kind:       workers.ProgressFragmentKind,
-			Type:       stream,
-			Payload:    string(append([]byte(nil), chunk...)),
-			Metadata:   map[string]string{"stream": stream},
+			Correlation: correlation,
+			DispatchID:  dispatchID,
+			Kind:        workers.ProgressFragmentKind,
+			Type:        stream,
+			Payload:     string(append([]byte(nil), chunk...)),
+			Metadata:    map[string]string{"stream": stream},
 		})
 	}
 }

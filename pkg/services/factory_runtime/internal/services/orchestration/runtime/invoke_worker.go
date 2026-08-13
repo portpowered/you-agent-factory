@@ -191,14 +191,23 @@ func startStatelessAttemptWithRequestMode(
 	)
 }
 
-// runtimeRecordingRequest carries the process-owned recording identity into
-// the detached Runtime path. Callers may provide an explicit identity, while
-// ordinary Factory dispatches inherit the recording opened for this runtime.
+// runtimeRecordingRequest carries process-owned recording, runtime, and
+// generation identities into the detached Runtime path. Callers may provide
+// explicit identities, while ordinary Factory dispatches inherit the values
+// opened for this runtime.
 func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
-	if cfg == nil || strings.TrimSpace(request.Execution.RecordingID) != "" {
+	if cfg == nil {
 		return request
 	}
-	request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
+	if strings.TrimSpace(request.Execution.RecordingID) == "" {
+		request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
+	}
+	if strings.TrimSpace(request.Execution.RuntimeID) == "" {
+		request.Execution.RuntimeID = strings.TrimSpace(cfg.runtimeID)
+	}
+	if strings.TrimSpace(request.Execution.GenerationID) == "" && cfg.eventHistory != nil {
+		request.Execution.GenerationID = strings.TrimSpace(cfg.eventHistory.StreamGenerationID())
+	}
 	return request
 }
 
@@ -296,12 +305,14 @@ func executeRequestFromWorkstationRequest(
 			selection, workstationName, execution.ProcessEnvironment,
 		),
 		Input: workers.ExecutionInput{
-			Work:           inputs,
-			Dispatch:       work.CloneWorkDispatch(dispatch),
-			Invocation:     invocation,
-			ModelBindings:  workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
-			ModelOperation: execution.ModelOperation,
-			Resume:         continuationFromLegacySession(execution.ResumeSession),
+			Work:            inputs,
+			Dispatch:        work.CloneWorkDispatch(dispatch),
+			RecordingID:     execution.RecordingID,
+			Invocation:      invocation,
+			ModelBindings:   workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelOperation:  execution.ModelOperation,
+			Resume:          continuationFromLegacySession(execution.ResumeSession),
+			WorkflowContext: runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext),
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
@@ -313,18 +324,39 @@ func executionCorrelationFromDispatch(
 	dispatch work.WorkDispatch,
 ) (workers.ExecutionCorrelation, error) {
 	sessionID := strings.TrimSpace(execution.FactorySessionID)
-	if sessionID == "" && cfg != nil {
-		sessionID = sessionIDFromFactoryConfig(cfg)
+	runtimeID := strings.TrimSpace(execution.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = strings.TrimSpace(execution.RecordingID)
+	}
+	if runtimeID == "" && cfg != nil {
+		runtimeID = strings.TrimSpace(cfg.runtimeID)
+		if runtimeID == "" {
+			runtimeID = strings.TrimSpace(cfg.recordingID)
+		}
+	}
+	generationID := strings.TrimSpace(execution.GenerationID)
+	if generationID == "" && cfg != nil && cfg.eventHistory != nil {
+		generationID = strings.TrimSpace(cfg.eventHistory.StreamGenerationID())
 	}
 	correlation := workers.ExecutionCorrelation{
 		FactorySessionID: sessionID,
-		RuntimeID:        strings.TrimSpace(execution.RecordingID),
+		RuntimeID:        runtimeID,
+		GenerationID:     generationID,
 		DispatchID:       strings.TrimSpace(dispatch.DispatchID),
 		RequestID:        firstRuntimeValue(dispatch.Execution.RequestID, execution.ProjectID),
 		TraceID:          strings.TrimSpace(dispatch.Execution.TraceID),
 	}
 	if correlation.DispatchID == "" {
 		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: dispatch ID is required")
+	}
+	if correlation.FactorySessionID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Factory Session ID is required")
+	}
+	if correlation.RuntimeID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Runtime ID is required")
+	}
+	if correlation.GenerationID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: generation ID is required")
 	}
 	if cfg == nil || cfg.newID == nil {
 		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Attempt ID generator is required")
@@ -334,6 +366,24 @@ func executionCorrelationFromDispatch(
 		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Attempt ID generator returned an empty ID")
 	}
 	return correlation, nil
+}
+
+func runtimeWorkflowContext(cfg *runtimeConfig, sessionID string, supplied *workers.Context) *workers.Context {
+	if context := supplied.Clone(); context != nil {
+		if strings.TrimSpace(context.SessionID) == "" {
+			context.SessionID = strings.TrimSpace(sessionID)
+		}
+		return context
+	}
+	if cfg != nil {
+		if context := cfg.workflowContext.Clone(); context != nil {
+			if strings.TrimSpace(context.SessionID) == "" {
+				context.SessionID = strings.TrimSpace(sessionID)
+			}
+			return context
+		}
+	}
+	return &workers.Context{SessionID: strings.TrimSpace(sessionID)}
 }
 
 func executionTargetFromSelection(
@@ -726,9 +776,11 @@ func providerInvocationExecutionRequest(
 	req factory.InvokeWorkerRequest,
 	dispatchID string,
 ) workers.WorkstationDispatchRequest {
-	requestID := ""
+	requestID := sessionIDFromFactoryConfig(f.cfg)
 	if f.cfg != nil && f.cfg.workflowContext != nil {
-		requestID = strings.TrimSpace(f.cfg.workflowContext.SessionID)
+		if sessionID := strings.TrimSpace(f.cfg.workflowContext.SessionID); sessionID != "" {
+			requestID = sessionID
+		}
 	}
 	// The worker name is the Workers-facing worker type: it is what a
 	// mock-worker configuration matches on at the subprocess boundary, and an
@@ -747,6 +799,10 @@ func providerInvocationExecutionRequest(
 	if recordingID == "" && f.cfg != nil {
 		recordingID = strings.TrimSpace(f.cfg.recordingID)
 	}
+	runtimeID := ""
+	if f.cfg != nil {
+		runtimeID = strings.TrimSpace(f.cfg.runtimeID)
+	}
 	return workers.WorkstationDispatchRequest{
 		WorkstationName: workers.ProviderInvocationRoute,
 		Execution: workers.WorkstationExecutionRequest{
@@ -756,6 +812,7 @@ func providerInvocationExecutionRequest(
 			RunnerID:         strings.TrimSpace(req.RunnerID),
 			ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 			FactorySessionID: requestID,
+			RuntimeID:        runtimeID,
 			RecordingID:      recordingID,
 			Capabilities:     cloneSessionCapabilities(req.Capabilities),
 			SystemPrompt:     req.SystemPrompt,

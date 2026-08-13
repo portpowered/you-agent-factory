@@ -390,8 +390,11 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "dispatch-canonical",
-			AttemptID:  "attempt-canonical",
+			FactorySessionID: "session-canonical",
+			RuntimeID:        "runtime-canonical",
+			GenerationID:     "generation-canonical",
+			DispatchID:       "dispatch-canonical",
+			AttemptID:        "attempt-canonical",
 		},
 		Target: workers.ExecutionTarget{
 			WorkerName: "script-worker",
@@ -420,8 +423,11 @@ func TestBuildStatelessWorkersExecutesBeforeRuntimeOpening(t *testing.T) {
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "dispatch-built-canonical",
-			AttemptID:  "attempt-built-canonical",
+			FactorySessionID: "session-built-canonical",
+			RuntimeID:        "runtime-built-canonical",
+			GenerationID:     "generation-built-canonical",
+			DispatchID:       "dispatch-built-canonical",
+			AttemptID:        "attempt-built-canonical",
 		},
 		Target: workers.ExecutionTarget{
 			WorkerName: "script-worker",
@@ -550,8 +556,11 @@ func newProductionCleanupStatelessService(
 func statelessWorktreeRequest() workers.ExecuteRequest {
 	return workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "dispatch-worktree",
-			AttemptID:  "attempt-worktree",
+			FactorySessionID: "session-worktree",
+			RuntimeID:        "runtime-worktree",
+			GenerationID:     "generation-worktree",
+			DispatchID:       "dispatch-worktree",
+			AttemptID:        "attempt-worktree",
 		},
 		Target: workers.ExecutionTarget{
 			WorkerName: "script-worker",

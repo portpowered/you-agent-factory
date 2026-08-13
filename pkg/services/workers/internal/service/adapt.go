@@ -46,6 +46,26 @@ func adaptRunnerRequest(
 	if workingDirectory == "" {
 		workingDirectory = strings.TrimSpace(request.Target.Workspace.WorkingDirectory)
 	}
+	workflowContext := request.Input.WorkflowContext.Clone()
+	if workflowContext == nil {
+		workflowContext = &workers.Context{}
+	}
+	workingDirectory = firstNonEmpty(workingDirectory, workflowContext.WorkDirectory)
+	factoryDirectory := firstNonEmpty(
+		request.Target.FactoryDirectory,
+		request.Target.Workspace.FactoryDirectory,
+		workflowContext.FactoryDirectory,
+	)
+	projectID := firstNonEmpty(request.Input.Dispatch.ProjectID, workflowContext.ProjectID)
+	envVars := mergeStringMaps(workflowContext.EnvVars, request.Target.Environment.Vars)
+	workflowContext.FactoryDirectory = factoryDirectory
+	workflowContext.WorkDirectory = workingDirectory
+	workflowContext.ProjectID = projectID
+	workflowContext.EnvVars = cloneStringMap(envVars)
+	workflowContext.SessionID = firstNonEmpty(
+		workflowContext.SessionID,
+		request.Correlation.FactorySessionID,
+	)
 	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
 	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
 	sessionID := ""
@@ -79,6 +99,7 @@ func adaptRunnerRequest(
 
 	return workers.RunnerExecutionRequest{
 		Dispatch:                     dispatch,
+		Correlation:                  request.Correlation,
 		WorkerName:                   request.Target.WorkerName,
 		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
 		WorkstationType:              request.Target.WorkstationName,
@@ -92,7 +113,7 @@ func adaptRunnerRequest(
 		OutputSchema:                 request.Target.Prompt.OutputSchema,
 		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
 		RequiredOptionalCapabilities: append([]workers.RunnerOptionalCapability(nil), request.Target.Tools.RequiredOptionalCapabilities...),
-		EnvVars:                      cloneStringMap(request.Target.Environment.Vars),
+		EnvVars:                      envVars,
 		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
 		Worktree:                     worktree,
 		WorkingDirectory:             workingDirectory,
@@ -102,13 +123,15 @@ func adaptRunnerRequest(
 		ModelLocality:                request.Target.Model.Locality,
 		Command:                      request.Target.Command,
 		Args:                         append([]string(nil), request.Target.Args...),
-		FactoryDirectory:             firstNonEmpty(request.Target.FactoryDirectory, request.Target.Workspace.FactoryDirectory),
+		FactoryDirectory:             factoryDirectory,
 		OutputContract:               request.Target.Output.Contract,
 		OutputFormat:                 request.Target.Output.Format,
 		StopToken:                    request.Target.Output.StopToken,
 		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
 		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
 		SessionID:                    sessionID,
+		ProjectID:                    projectID,
+		WorkflowContext:              workflowContext,
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
 		TemporaryFiles:               temporaryFiles,
 	}
@@ -185,4 +208,18 @@ func cloneStringMap(values map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	merged := cloneStringMap(base)
+	if merged == nil {
+		merged = make(map[string]string, len(override))
+	}
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
 }

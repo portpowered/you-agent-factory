@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -190,6 +191,9 @@ func TestCanceledAttemptDoesNotMaterializeCompletedOutput(t *testing.T) {
 	})
 	cfg := &runtimeConfig{
 		executeService: execute,
+		recordingID:    "runtime-cancel-output",
+		eventHistory:   &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "generation-cancel-output"},
+		clock:          testRuntimeClock{},
 		newID:          func() string { return "attempt-cancel-output" },
 		attempts:       newAttemptLifecycle(execute, func() string { return "attempt-cancel-output" }, 1),
 		net:            buildSimpleNet(), workService: workService,

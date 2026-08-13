@@ -58,7 +58,13 @@ func assertAcceptedResult(
 	if result.Outcome != workers.ExecutionOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
 	}
-	if result.Correlation.DispatchID != dispatchID || result.Correlation.AttemptID != attemptID {
+	if result.Correlation.FactorySessionID != "session-1" ||
+		result.Correlation.RuntimeID != "runtime-1" ||
+		result.Correlation.GenerationID != "generation-1" ||
+		result.Correlation.DispatchID != dispatchID ||
+		result.Correlation.AttemptID != attemptID ||
+		result.Correlation.RequestID != "request-1" ||
+		result.Correlation.TraceID != "trace-1" {
 		t.Fatalf("correlation = %#v", result.Correlation)
 	}
 	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != content {
@@ -79,6 +85,15 @@ func assertSafeCompletedObservations(t *testing.T, observations []workers.Execut
 	}
 	if observations[1].Sequence != 2 {
 		t.Fatalf("terminal sequence = %d, want 2", observations[1].Sequence)
+	}
+	for _, observation := range observations {
+		if observation.Correlation.FactorySessionID != "session-1" ||
+			observation.Correlation.RuntimeID != "runtime-1" ||
+			observation.Correlation.GenerationID != "generation-1" ||
+			observation.Correlation.RequestID != "request-1" ||
+			observation.Correlation.TraceID != "trace-1" {
+			t.Fatalf("observation correlation = %#v", observation.Correlation)
+		}
 	}
 	for _, observation := range observations {
 		for _, value := range observation.Metadata {
@@ -132,6 +147,92 @@ func TestExecuteClonesRequestBeforeRunnerStarts(t *testing.T) {
 	}
 	if got.WorkerType != "writer" {
 		t.Fatalf("runner worker type = %q, want writer", got.WorkerType)
+	}
+}
+
+func TestExecuteIngressDetachesWorkflowContextBeforeRunnerStarts(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan workers.RunnerExecutionRequest, 1)
+	release := make(chan struct{})
+	runner := &stubRunner{
+		execute: func(
+			_ context.Context,
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			snapshot := workers.CloneProviderInferenceRequest(request)
+			request.WorkflowContext.EnvVars["TOKEN"] = "runner-mutated"
+			captured <- snapshot
+			<-release
+			return workers.RunnerExecutionResult{Content: "done"}, nil
+		},
+	}
+	service := mustExecuteService(t, runner, nil)
+	request := validExecuteRequest("dispatch-context", "attempt-context")
+	request.Input.WorkflowContext = &workers.Context{
+		FactoryDirectory: "factory-original",
+		WorkDirectory:    "work-original",
+		EnvVars:          map[string]string{"TOKEN": "original"},
+		ArtifactDir:      "artifacts-original",
+		ProjectID:        "project-original",
+		SessionID:        "session-1",
+	}
+
+	done := make(chan workers.ExecuteResult, 1)
+	go func() {
+		result, err := service.Execute(context.Background(), request)
+		if err != nil {
+			t.Errorf("Execute() error = %v", err)
+		}
+		done <- result
+	}()
+
+	got := <-captured
+	request.Input.WorkflowContext.EnvVars["TOKEN"] = "caller-mutated"
+	close(release)
+	<-done
+
+	if got.WorkflowContext == nil || got.WorkflowContext.EnvVars["TOKEN"] != "original" {
+		t.Fatalf("runner workflow context = %#v, want detached original", got.WorkflowContext)
+	}
+	if request.Input.WorkflowContext.EnvVars["TOKEN"] != "caller-mutated" {
+		t.Fatalf("caller workflow context = %#v, want caller mutation isolated", request.Input.WorkflowContext)
+	}
+}
+
+func TestExecuteRejectsConflictingDetachedIdentityBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	var runnerCalls atomic.Int32
+	var observationCalls atomic.Int32
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			return workers.RunnerExecutionResult{Content: "should-not-run"}, nil
+		},
+	}, func(context.Context, workers.ExecutionObservation) error {
+		observationCalls.Add(1)
+		return nil
+	})
+	request := validExecuteRequest("dispatch-identity", "attempt-identity")
+	request.Input.Dispatch.DispatchID = "different-dispatch"
+
+	_, err := service.Execute(context.Background(), request)
+	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("Execute() error = %v, want ErrInvalidExecuteRequest", err)
+	}
+	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
+		t.Fatalf("invalid request effects = runner %d observations %d, want zero", runnerCalls.Load(), observationCalls.Load())
+	}
+
+	request = validExecuteRequest("dispatch-missing-generation", "attempt-missing-generation")
+	request.Correlation.GenerationID = ""
+	_, err = service.Execute(context.Background(), request)
+	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("missing generation Execute() error = %v, want ErrInvalidExecuteRequest", err)
+	}
+	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
+		t.Fatalf("missing identity effects = runner %d observations %d, want zero", runnerCalls.Load(), observationCalls.Load())
 	}
 }
 
@@ -647,6 +748,7 @@ func validExecuteRequest(dispatchID, attemptID string) workers.ExecuteRequest {
 		Correlation: workers.ExecutionCorrelation{
 			FactorySessionID: "session-1",
 			RuntimeID:        "runtime-1",
+			GenerationID:     "generation-1",
 			DispatchID:       dispatchID,
 			AttemptID:        attemptID,
 			RequestID:        "request-1",

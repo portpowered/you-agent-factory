@@ -91,7 +91,8 @@ type runtimeConfig struct {
 	clock                     factory.Clock
 	workRequestIDs            work.RequestIDGenerator
 	eventHistory              recordings.RuntimeLedger
-	recordingID               string // runtime recording target propagated to Worker Sessions
+	recordingID               string // optional Worker recording target propagated to Worker Sessions
+	runtimeID                 string // stable runtime-instance identity used for attempt correlation
 	worldStateProjector       factory.WorldStateProjector
 	providerSessions          providersessions.Service
 	submissionRecorder        recordings.SubmissionRecorder
@@ -130,6 +131,7 @@ func New(
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
 	recordingID string,
+	runtimeID string,
 	worldStateProjector factory.WorldStateProjector,
 	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
@@ -177,7 +179,7 @@ func New(
 		attemptCapacity:           defaultRuntimeAttemptCapacity,
 		newID:                     newID,
 		runtimeConfig:             runtimeDefinitions,
-		workflowContext:           workflowContext,
+		workflowContext:           workflowContext.Clone(),
 		runtimeMode:               runtimeMode,
 		logger:                    logger,
 		clock:                     clock,
@@ -185,6 +187,7 @@ func New(
 		inlineDispatch:            inlineDispatch,
 		eventHistory:              eventHistory,
 		recordingID:               strings.TrimSpace(recordingID),
+		runtimeID:                 strings.TrimSpace(runtimeID),
 		worldStateProjector:       worldStateProjector,
 		providerSessions:          providerSessions,
 		submissionRecorder:        submissionRecorder,
@@ -949,5 +952,5 @@ func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {
 	if f == nil || f.cfg == nil {
 		return nil
 	}
-	return f.cfg.workflowContext
+	return f.cfg.workflowContext.Clone()
 }

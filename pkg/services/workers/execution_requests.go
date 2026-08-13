@@ -172,16 +172,21 @@ const (
 )
 
 type WorkstationExecutionRequest struct {
-	Dispatch                    work.WorkDispatch               `json:"dispatch"`
-	WorkerName                  string                          `json:"worker_name,omitempty"`
-	WorkerType                  string                          `json:"worker_type,omitempty"`
-	WorkstationType             string                          `json:"workstation_type,omitempty"`
-	RunnerID                    string                          `json:"runner_id,omitempty"`
-	RunnerSelectionSource       RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
-	ExecutorProvider            string                          `json:"executor_provider,omitempty"`
-	ProjectID                   string                          `json:"project_id,omitempty"`
-	FactorySessionID            string                          `json:"factory_session_id,omitempty"`
-	RecordingID                 string                          `json:"recording_id,omitempty"`
+	Dispatch              work.WorkDispatch     `json:"dispatch"`
+	WorkerName            string                `json:"worker_name,omitempty"`
+	WorkerType            string                `json:"worker_type,omitempty"`
+	WorkstationType       string                `json:"workstation_type,omitempty"`
+	RunnerID              string                `json:"runner_id,omitempty"`
+	RunnerSelectionSource RunnerSelectionSource `json:"runner_selection_source,omitempty"`
+	ExecutorProvider      string                `json:"executor_provider,omitempty"`
+	ProjectID             string                `json:"project_id,omitempty"`
+	FactorySessionID      string                `json:"factory_session_id,omitempty"`
+	RuntimeID             string                `json:"runtime_id,omitempty"`
+	RecordingID           string                `json:"recording_id,omitempty"`
+	GenerationID          string                `json:"generation_id,omitempty"`
+	// WorkflowContext carries the detached environment selected for this
+	// attempt when a compatibility workstation boundary forwards the request.
+	WorkflowContext             *Context                        `json:"-"`
 	Capabilities                *Capabilities                   `json:"capabilities,omitempty"`
 	InputTokens                 []any                           `json:"input_tokens,omitempty"`
 	ModelOperation              string                          `json:"model_operation,omitempty"`
@@ -221,6 +226,7 @@ type WorkstationExecutionRequest struct {
 
 type ProviderInferenceRequest struct {
 	Dispatch                     work.WorkDispatch               `json:"dispatch"`
+	Correlation                  ExecutionCorrelation            `json:"-"`
 	WorkerName                   string                          `json:"worker_name,omitempty"`
 	WorkerType                   string                          `json:"worker_type,omitempty"`
 	WorkstationType              string                          `json:"workstation_type,omitempty"`
@@ -253,6 +259,7 @@ type ProviderInferenceRequest struct {
 	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
+	WorkflowContext              *Context                        `json:"-"`
 	// ResumeSession carries an exact typed Providers reference for continuation
 	// attempts. When non-nil, the provider runner must call Providers.Continue
 	// with this value unchanged and must not select ordinary execution.
@@ -285,6 +292,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.WorkflowContext = request.WorkflowContext.Clone()
 	return clone
 }
 
@@ -299,6 +307,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.TemporaryFiles = request.TemporaryFiles
 	return clone
 }
@@ -420,6 +429,7 @@ type ExecuteRequest struct {
 type ExecutionCorrelation struct {
 	FactorySessionID string
 	RuntimeID        string
+	GenerationID     string
 	DispatchID       string
 	AttemptID        string
 	RequestID        string
@@ -501,12 +511,18 @@ type ExecutionInput struct {
 	Work []WorkInput
 	// Dispatch preserves detached routing and replay facts that the Runtime
 	// must carry through an execution attempt without exposing executor state.
-	Dispatch         work.WorkDispatch
+	Dispatch work.WorkDispatch
+	// RecordingID remains the optional Worker Sessions recording identity. It
+	// is distinct from Correlation.RuntimeID, which identifies the live Runtime.
+	RecordingID      string
 	Invocation       work.InvocationArguments
 	ModelBindings    []ResolvedModelOperationBinding
 	ModelOperation   string
 	PreviousAttempts []AttemptSummary
 	Resume           *ProviderContinuationRef
+	// WorkflowContext is the complete detached context selected for this
+	// attempt. Workers never recovers it from a Factory Session or Runtime.
+	WorkflowContext *Context
 }
 
 type WorkInput struct {
@@ -577,11 +593,27 @@ type ExecutionMetrics struct {
 }
 
 func (request ExecuteRequest) Validate() error {
-	if strings.TrimSpace(request.Correlation.DispatchID) == "" {
-		return fmt.Errorf("%w: dispatch id is required", ErrInvalidExecuteRequest)
+	if err := request.Correlation.Validate(); err != nil {
+		return err
 	}
-	if strings.TrimSpace(request.Correlation.AttemptID) == "" {
-		return fmt.Errorf("%w: attempt id is required", ErrInvalidExecuteRequest)
+	if dispatchID := strings.TrimSpace(request.Input.Dispatch.DispatchID); dispatchID != "" &&
+		dispatchID != strings.TrimSpace(request.Correlation.DispatchID) {
+		return fmt.Errorf("%w: dispatch identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
+	}
+	if request.Input.Dispatch.Execution.RequestID != "" &&
+		strings.TrimSpace(request.Correlation.RequestID) != "" &&
+		strings.TrimSpace(request.Input.Dispatch.Execution.RequestID) != strings.TrimSpace(request.Correlation.RequestID) {
+		return fmt.Errorf("%w: request identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
+	}
+	if request.Input.Dispatch.Execution.TraceID != "" &&
+		strings.TrimSpace(request.Correlation.TraceID) != "" &&
+		strings.TrimSpace(request.Input.Dispatch.Execution.TraceID) != strings.TrimSpace(request.Correlation.TraceID) {
+		return fmt.Errorf("%w: trace identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
+	}
+	if context := request.Input.WorkflowContext; context != nil &&
+		strings.TrimSpace(context.SessionID) != "" &&
+		strings.TrimSpace(context.SessionID) != strings.TrimSpace(request.Correlation.FactorySessionID) {
+		return fmt.Errorf("%w: workflow context session identity conflicts with correlation", ErrInvalidExecuteRequest)
 	}
 	if strings.TrimSpace(request.Target.RunnerID) == "" &&
 		strings.TrimSpace(request.Target.Provider.ID) == "" &&
@@ -597,6 +629,27 @@ func (request ExecuteRequest) Validate() error {
 		strings.TrimSpace(request.Input.Resume.ProviderSessionID) == "" &&
 		strings.TrimSpace(request.Input.Resume.ExternalRef) == "" {
 		return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
+	}
+	return nil
+}
+
+// Validate checks the complete identity required to attribute one detached
+// attempt to the Factory Session and Runtime that admitted it.
+func (correlation ExecutionCorrelation) Validate() error {
+	required := []struct {
+		name  string
+		value string
+	}{
+		{name: "factory session id", value: correlation.FactorySessionID},
+		{name: "runtime id", value: correlation.RuntimeID},
+		{name: "generation id", value: correlation.GenerationID},
+		{name: "dispatch id", value: correlation.DispatchID},
+		{name: "attempt id", value: correlation.AttemptID},
+	}
+	for _, item := range required {
+		if strings.TrimSpace(item.value) == "" {
+			return fmt.Errorf("%w: %s is required", ErrInvalidExecuteRequest, item.name)
+		}
 	}
 	return nil
 }
@@ -650,6 +703,7 @@ func (input ExecutionInput) Clone() ExecutionInput {
 		resume := *input.Resume
 		clone.Resume = &resume
 	}
+	clone.WorkflowContext = input.WorkflowContext.Clone()
 	return clone
 }
 

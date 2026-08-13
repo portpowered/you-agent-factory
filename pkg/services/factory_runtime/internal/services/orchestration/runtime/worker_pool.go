@@ -281,6 +281,9 @@ func normalizeAttemptCorrelation(
 	if result.Correlation.RuntimeID == "" {
 		result.Correlation.RuntimeID = request.Correlation.RuntimeID
 	}
+	if result.Correlation.GenerationID == "" {
+		result.Correlation.GenerationID = request.Correlation.GenerationID
+	}
 	if result.Correlation.RequestID == "" {
 		result.Correlation.RequestID = request.Correlation.RequestID
 	}
@@ -291,6 +294,7 @@ func normalizeAttemptCorrelation(
 		result.Correlation.AttemptID != request.Correlation.AttemptID ||
 		correlationValueConflicts(result.Correlation.FactorySessionID, request.Correlation.FactorySessionID) ||
 		correlationValueConflicts(result.Correlation.RuntimeID, request.Correlation.RuntimeID) ||
+		correlationValueConflicts(result.Correlation.GenerationID, request.Correlation.GenerationID) ||
 		correlationValueConflicts(result.Correlation.RequestID, request.Correlation.RequestID) ||
 		correlationValueConflicts(result.Correlation.TraceID, request.Correlation.TraceID)
 }
@@ -673,8 +677,10 @@ func (f *factoryImpl) PlanDispatch(
 			CorrelationID: req.CorrelationID,
 			Dispatch:      dispatch,
 			Execution: dispatchplanning.ExecutionFacts{
-				WorkerType:   req.WorkerType,
-				InputPayload: make([]any, 0),
+				WorkerType:       req.WorkerType,
+				InputPayload:     make([]any, 0),
+				FactorySessionID: sessionIDFromFactoryConfig(f.cfg),
+				RecordingID:      f.cfg.recordingID,
 			},
 		}},
 	})

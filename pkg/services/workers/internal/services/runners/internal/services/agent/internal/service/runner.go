@@ -19,6 +19,25 @@ type service struct {
 	publish   workers.ProgressPublisher
 }
 
+// progressIdentity keeps the detached correlation emitted by Execute separate
+// from the legacy dispatch fallback needed by direct RunnerExecutionRequest
+// callers that predate the correlation field.
+type progressIdentity struct {
+	correlation workers.ExecutionCorrelation
+	dispatchID  string
+}
+
+func progressIdentityForRequest(request workers.RunnerExecutionRequest) progressIdentity {
+	identity := progressIdentity{
+		correlation: request.Correlation,
+		dispatchID:  request.Correlation.DispatchID,
+	}
+	if strings.TrimSpace(identity.dispatchID) == "" {
+		identity.dispatchID = request.Dispatch.DispatchID
+	}
+	return identity
+}
+
 var _ agent.Service = (*service)(nil)
 
 // New validates and captures the singular Providers root and Workers-owned
@@ -49,12 +68,13 @@ func (s *service) Execute(
 	if err := validateRequest(request); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
+	identity := progressIdentityForRequest(request)
 	provider := providerIDForRequest(request).String()
-	result, err := s.executeProviderAttempt(ctx, request)
+	result, err := s.executeProviderAttempt(ctx, request, identity)
 	if err != nil {
 		if response, normalizedErr, handled := continuationFailureResult(ctx, request, err); handled {
 			s.publishTerminalFailure(
-				request.Dispatch.DispatchID,
+				identity,
 				normalizedErr,
 				response.ProviderSession,
 				request.ResumeSession,
@@ -67,13 +87,13 @@ func (s *service) Execute(
 			response := runnerFailureResult(failure, request)
 			normalizedErr := normalizeProviderFailure(ctx, failure, err, response, request.ResumeSession != nil)
 			s.publishFailureProgress(
-				request.Dispatch.DispatchID,
+				identity,
 				failure,
 				response.ProviderSession,
 				provider,
 			)
 			s.publishTerminalFailure(
-				request.Dispatch.DispatchID,
+				identity,
 				normalizedErr,
 				response.ProviderSession,
 				failure.SessionRef,
@@ -83,7 +103,7 @@ func (s *service) Execute(
 			return response, normalizedErr
 		}
 		normalizedErr := normalizeExecutionError(ctx, err)
-		s.publishTerminalFailure(request.Dispatch.DispatchID, normalizedErr, nil, nil, "", provider)
+		s.publishTerminalFailure(identity, normalizedErr, nil, nil, "", provider)
 		return workers.RunnerExecutionResult{}, normalizedErr
 	}
 	result = result.Clone()
@@ -107,10 +127,11 @@ func (s *service) Execute(
 	if err != nil {
 		return response, err
 	}
-	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession, provider)
+	s.publishProgress(identity, result, response.ProviderSession, provider)
 	if !hasTerminalRunProgress(result.Diagnostics) {
 		s.publish(workers.ProgressFragment{
-			DispatchID:               request.Dispatch.DispatchID,
+			Correlation:              identity.correlation,
+			DispatchID:               identity.dispatchID,
 			Kind:                     workers.CompletedFragmentKind,
 			Type:                     "COMPLETED",
 			Provider:                 provider,
@@ -217,7 +238,7 @@ func hasTerminalRunProgress(diagnostics *providers.ExecuteDiagnostics) bool {
 }
 
 func (s *service) publishTerminalFailure(
-	dispatchID string,
+	identity progressIdentity,
 	err error,
 	session *workers.ProviderSessionMetadata,
 	reference *providers.SessionRef,
@@ -248,7 +269,8 @@ func (s *service) publishTerminalFailure(
 		metadata = nil
 	}
 	s.publish(workers.ProgressFragment{
-		DispatchID:               dispatchID,
+		Correlation:              identity.correlation,
+		DispatchID:               identity.dispatchID,
 		Kind:                     workers.FailedFragmentKind,
 		Type:                     eventType,
 		Payload:                  boundedFailureMessage(message),
@@ -261,7 +283,7 @@ func (s *service) publishTerminalFailure(
 }
 
 func (s *service) publishFailureProgress(
-	dispatchID string,
+	identity progressIdentity,
 	failure providers.ExecuteFailure,
 	session *workers.ProviderSessionMetadata,
 	provider string,
@@ -269,14 +291,14 @@ func (s *service) publishFailureProgress(
 	if failure.Diagnostics == nil {
 		return
 	}
-	s.publishProgress(dispatchID, providers.ExecuteResult{
+	s.publishProgress(identity, providers.ExecuteResult{
 		SessionRef:  workers.CloneProviderSessionReference(failure.SessionRef),
 		Diagnostics: failure.Diagnostics,
 	}, session, provider)
 }
 
 func (s *service) publishProgress(
-	dispatchID string,
+	identity progressIdentity,
 	result providers.ExecuteResult,
 	session *workers.ProviderSessionMetadata,
 	provider string,
@@ -298,7 +320,7 @@ func (s *service) publishProgress(
 				terminalMessages = append(terminalMessages, progress)
 				continue
 			}
-			s.publishProviderProgress(dispatchID, progress, session, result.SessionRef, provider)
+			s.publishProviderProgress(identity, progress, session, result.SessionRef, provider)
 		}
 	}
 	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
@@ -310,19 +332,20 @@ func (s *service) publishProgress(
 	// Publish authoritative completed messages after provider run/turn lifecycle
 	// completion so all transports observe the same terminal ordering.
 	for _, progress := range terminalMessages {
-		s.publishProviderProgress(dispatchID, progress, session, result.SessionRef, provider)
+		s.publishProviderProgress(identity, progress, session, result.SessionRef, provider)
 	}
 }
 
 func (s *service) publishProviderProgress(
-	dispatchID string,
+	identity progressIdentity,
 	progress providers.ExecuteProgress,
 	session *workers.ProviderSessionMetadata,
 	reference *providers.SessionRef,
 	provider string,
 ) {
 	s.publish(workers.ProgressFragment{
-		DispatchID:               dispatchID,
+		Correlation:              identity.correlation,
+		DispatchID:               identity.dispatchID,
 		Kind:                     workers.ProgressFragmentKind,
 		Type:                     progress.Phase,
 		Payload:                  progress.Detail,
@@ -358,14 +381,15 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 func (s *service) executeProviderAttempt(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
+	identity progressIdentity,
 ) (providers.ExecuteResult, error) {
 	attempt := providerRequest(request)
 	// Both observers share one holder so live progress can be attributed to
 	// the same provider-authored session the association fragment committed.
 	live := &liveProviderSession{}
-	attempt.SessionObserver = s.observeProviderSession(request.Dispatch.DispatchID, live)
+	attempt.SessionObserver = s.observeProviderSession(identity, live)
 	attempt.ProgressObserver = s.observeProviderProgress(
-		request.Dispatch.DispatchID,
+		identity,
 		live,
 		providerIDForRequest(request).String(),
 	)
@@ -409,14 +433,15 @@ func (s *service) executeProviderAttempt(
 // The bridge owns association validation and commits it before allowing the
 // later response or terminal fragments for this dispatch to proceed.
 func (s *service) observeProviderSession(
-	dispatchID string,
+	identity progressIdentity,
 	live *liveProviderSession,
 ) providers.SessionObserver {
 	return func(reference providers.SessionRef) {
 		reference = reference.Clone()
 		live.set(reference)
 		s.publish(workers.ProgressFragment{
-			DispatchID:               dispatchID,
+			Correlation:              identity.correlation,
+			DispatchID:               identity.dispatchID,
 			Kind:                     workers.ProviderSessionObservedFragmentKind,
 			ProviderSessionReference: &reference,
 			ProviderSessionRef: &workers.ProviderSessionMetadata{
@@ -438,13 +463,13 @@ func (s *service) observeProviderSession(
 // as the buffered diagnostics it replaces. A fact reported before the provider
 // authored a session simply carries none.
 func (s *service) observeProviderProgress(
-	dispatchID string,
+	identity progressIdentity,
 	live *liveProviderSession,
 	provider string,
 ) providers.ProgressObserver {
 	return func(progress providers.ExecuteProgress) {
 		reference, session := live.snapshot()
-		s.publishProviderProgress(dispatchID, progress, session, reference, provider)
+		s.publishProviderProgress(identity, progress, session, reference, provider)
 	}
 }
 

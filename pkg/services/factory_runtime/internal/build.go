@@ -394,6 +394,7 @@ func assembleRuntimeBundle(
 		inlineDispatch,
 		eventHistory,
 		workerRecordingIdentity(runtimeInstanceID, recordPath),
+		runtimeInstanceID,
 		worldStateProjector,
 		providerSessions,
 		effectiveSubmissionRecorder,

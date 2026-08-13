@@ -123,7 +123,7 @@ func (r *runner) Execute(
 	started := r.now()
 	requestID := scriptRequestID(commandRequest.DispatchID)
 	r.record(scriptRequestEvent(commandRequest, requestID, started))
-	observer := r.outputObserver(commandRequest.DispatchID)
+	observer := r.outputObserver(commandRequest.DispatchID, request.Correlation)
 	result, err := r.commandRunner.RunStreaming(
 		ctx,
 		workers.CloneSubprocessExecutionRequest(commandRequest),
@@ -294,7 +294,11 @@ func (r *runner) resolveCommandRequest(
 	workDir := effectiveWorkDir(request)
 	command := r.command
 	argsTemplate := r.args
-	factoryDirectory := r.factoryDirectory
+	workflowContext := request.WorkflowContext.Clone()
+	if workflowContext == nil {
+		workflowContext = &workers.Context{}
+	}
+	factoryDirectory := firstNonEmpty(workflowContext.FactoryDirectory, r.factoryDirectory)
 	if strings.TrimSpace(request.Command) != "" {
 		command = request.Command
 		argsTemplate = request.Args
@@ -302,15 +306,28 @@ func (r *runner) resolveCommandRequest(
 	if strings.TrimSpace(request.FactoryDirectory) != "" {
 		factoryDirectory = request.FactoryDirectory
 	}
+	workDir = firstNonEmpty(workDir, workflowContext.WorkDirectory)
+	projectID := firstNonEmpty(request.ProjectID, workflowContext.ProjectID)
+	envVars := mergeStringMaps(workflowContext.EnvVars, request.EnvVars)
+	workflowContext.FactoryDirectory = factoryDirectory
+	workflowContext.WorkDirectory = workDir
+	workflowContext.ProjectID = projectID
+	workflowContext.EnvVars = cloneStringMap(envVars)
+	workflowContext.SessionID = firstNonEmpty(
+		workflowContext.SessionID,
+		request.Correlation.FactorySessionID,
+		request.SessionID,
+	)
 	if strings.TrimSpace(command) == "" {
 		return workers.CommandRequest{}, fmt.Errorf("script command is required")
 	}
 	templateContext := &workers.Context{
-		FactoryDirectory: factoryDirectory,
-		WorkDirectory:    workDir,
-		EnvVars:          cloneStringMap(request.EnvVars),
-		ProjectID:        request.ProjectID,
-		SessionID:        request.SessionID,
+		FactoryDirectory: workflowContext.FactoryDirectory,
+		WorkDirectory:    workflowContext.WorkDirectory,
+		EnvVars:          cloneStringMap(workflowContext.EnvVars),
+		ArtifactDir:      workflowContext.ArtifactDir,
+		ProjectID:        workflowContext.ProjectID,
+		SessionID:        workflowContext.SessionID,
 	}
 	data, err := prompting.BuildPromptDataWithFactoryDocs(
 		tokens,
@@ -329,13 +346,13 @@ func (r *runner) resolveCommandRequest(
 	return workers.CommandRequest{
 		Command:                  resolveFactoryScript(factoryDirectory, command),
 		Args:                     resolveFactoryScripts(factoryDirectory, args),
-		Env:                      mergedEnvironment(request.ProcessEnvironment, request.EnvVars),
+		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),
 		WorkDir:                  workDir,
 		DispatchID:               dispatch.DispatchID,
 		TransitionID:             dispatch.TransitionID,
 		WorkerType:               firstNonEmpty(request.WorkerType, dispatch.WorkerType),
 		WorkstationName:          firstNonEmpty(request.WorkstationType, dispatch.WorkstationName),
-		ProjectID:                firstNonEmpty(request.ProjectID, dispatch.ProjectID),
+		ProjectID:                firstNonEmpty(projectID, dispatch.ProjectID),
 		CurrentChainingTraceID:   dispatch.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), dispatch.PreviousChainingTraceIDs...),
 		Execution:                dispatch.Execution,
@@ -466,11 +483,13 @@ func resolveFactoryScript(factoryDirectory, value string) string {
 	return filepath.Join(factoryDirectory, "scripts", filepath.FromSlash(relative))
 }
 
-func firstNonEmpty(primary, fallback string) string {
-	if primary != "" {
-		return primary
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
 	}
-	return fallback
+	return ""
 }
 
 func cloneStringMap(values map[string]string) map[string]string {
@@ -482,6 +501,20 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	merged := cloneStringMap(base)
+	if merged == nil {
+		merged = make(map[string]string, len(override))
+	}
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
 }
 
 func cloneStringSliceMap(values map[string][]string) map[string][]string {

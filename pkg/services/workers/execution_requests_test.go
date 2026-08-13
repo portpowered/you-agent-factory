@@ -95,8 +95,11 @@ func TestExecuteRequestValidateRequiresCorrelationAndTarget(t *testing.T) {
 
 	valid := workerexecution.ExecuteRequest{
 		Correlation: workerexecution.ExecutionCorrelation{
-			DispatchID: "dispatch-1",
-			AttemptID:  "attempt-1",
+			FactorySessionID: "session-1",
+			RuntimeID:        "runtime-1",
+			GenerationID:     "generation-1",
+			DispatchID:       "dispatch-1",
+			AttemptID:        "attempt-1",
 		},
 		Target: workerexecution.ExecutionTarget{RunnerID: workerexecution.RunnerIDCodex},
 	}
@@ -110,8 +113,11 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 
 	original := workerexecution.ExecuteRequest{
 		Correlation: workerexecution.ExecutionCorrelation{
-			DispatchID: "dispatch-1",
-			AttemptID:  "attempt-1",
+			FactorySessionID: "session-1",
+			RuntimeID:        "runtime-1",
+			GenerationID:     "generation-1",
+			DispatchID:       "dispatch-1",
+			AttemptID:        "attempt-1",
 		},
 		Target: workerexecution.ExecutionTarget{
 			RunnerID: workerexecution.RunnerIDCodex,
@@ -138,6 +144,12 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 				Provider:          "codex",
 				ProviderSessionID: "session-1",
 			},
+			WorkflowContext: &workerexecution.Context{
+				FactoryDirectory: "factory",
+				WorkDirectory:    "work",
+				EnvVars:          map[string]string{"FROM_CONTEXT": "value"},
+				SessionID:        "session-1",
+			},
 		},
 	}
 
@@ -148,6 +160,7 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 	clone.Input.Work[0].Content[0].Text = "mutated"
 	clone.Input.Work[0].Tags["k"] = "mutated"
 	clone.Input.Resume.ProviderSessionID = "mutated"
+	clone.Input.WorkflowContext.EnvVars["FROM_CONTEXT"] = "mutated"
 
 	if original.Target.Environment.Vars["SECRET"] != "value" {
 		t.Fatalf("original env mutated: %#v", original.Target.Environment.Vars)
@@ -167,6 +180,9 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 	}
 	if original.Input.Resume.ProviderSessionID != "session-1" {
 		t.Fatalf("original resume mutated: %#v", original.Input.Resume)
+	}
+	if original.Input.WorkflowContext.EnvVars["FROM_CONTEXT"] != "value" {
+		t.Fatalf("original workflow context mutated: %#v", original.Input.WorkflowContext)
 	}
 }
 

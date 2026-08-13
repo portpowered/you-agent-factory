@@ -94,6 +94,61 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 	}
 }
 
+func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
+	commandEdge := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("completed")}}
+	contextFactoryDirectory := filepath.Join("factory-root", "detached")
+	scriptRunner, err := New(Config{
+		Command:          "scripts/run.sh",
+		FactoryDirectory: filepath.Join("factory-root", "configured"),
+		Args: []string{
+			`{{ .Context.Project }}`,
+			`{{ .Context.Env.RUNTIME }}`,
+			`{{ .Context.WorkDir }}`,
+			`{{ .Context.SessionID }}`,
+		},
+	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
+		if directory != contextFactoryDirectory {
+			t.Fatalf("Factory docs directory = %q, want detached context directory %q", directory, contextFactoryDirectory)
+		}
+		return nil, nil
+	}))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := validRequest()
+	request.FactoryDirectory = ""
+	request.WorkingDirectory = ""
+	request.Worktree = ""
+	request.ProjectID = ""
+	request.EnvVars = nil
+	request.SessionID = ""
+	request.Correlation = workers.ExecutionCorrelation{FactorySessionID: "session-correlation"}
+	request.WorkflowContext = &workers.Context{
+		FactoryDirectory: contextFactoryDirectory,
+		WorkDirectory:    "detached-work-dir",
+		EnvVars:          map[string]string{"RUNTIME": "detached-env"},
+		ProjectID:        "detached-project",
+		SessionID:        "detached-session",
+	}
+	if _, err := scriptRunner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	captured := commandEdge.Request()
+	wantArgs := []string{"detached-project", "detached-env", "detached-work-dir", "detached-session"}
+	if !reflect.DeepEqual(captured.Args, wantArgs) {
+		t.Fatalf("command args = %#v, want detached workflow context values %#v", captured.Args, wantArgs)
+	}
+	if captured.Command != filepath.Join(contextFactoryDirectory, "scripts", "run.sh") {
+		t.Fatalf("command = %q, want detached context factory script", captured.Command)
+	}
+	if captured.WorkDir != "detached-work-dir" || captured.ProjectID != "detached-project" {
+		t.Fatalf("command context = %#v, want detached workflow context", captured)
+	}
+	assertEnv(t, captured.Env, "RUNTIME", "detached-env")
+}
+
 func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 	observations := &observationLog{}
 	commandEdge := &streamingCommandEdge{

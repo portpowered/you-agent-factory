@@ -89,8 +89,11 @@ func TestNewRootExecuteDelegatesDetachedAttempt(t *testing.T) {
 	execute := &recordingExecuteCapability{
 		result: workers.ExecuteResult{
 			Correlation: workers.ExecutionCorrelation{
-				DispatchID: "dispatch-1",
-				AttemptID:  "attempt-1",
+				FactorySessionID: "session-root",
+				RuntimeID:        "runtime-root",
+				GenerationID:     "generation-root",
+				DispatchID:       "dispatch-1",
+				AttemptID:        "attempt-1",
 			},
 			Outcome: workers.ExecutionOutcomeAccepted,
 		},
@@ -106,8 +109,11 @@ func TestNewRootExecuteDelegatesDetachedAttempt(t *testing.T) {
 
 	got, err := root.Execute(t.Context(), workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "dispatch-1",
-			AttemptID:  "attempt-1",
+			FactorySessionID: "session-root",
+			RuntimeID:        "runtime-root",
+			GenerationID:     "generation-root",
+			DispatchID:       "dispatch-1",
+			AttemptID:        "attempt-1",
 		},
 		Target: workers.ExecutionTarget{RunnerID: workers.RunnerIDCodex},
 	})
