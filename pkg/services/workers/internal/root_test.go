@@ -129,6 +129,80 @@ func TestNewRootExecuteDelegatesDetachedAttempt(t *testing.T) {
 	}
 }
 
+func TestWorkersRootExposesDetachedPromptCapabilities(t *testing.T) {
+	t.Parallel()
+
+	execute := &promptExecuteCapability{}
+	service, err := workersinternal.NewRoot(
+		&recordingRuntimeAssembly{},
+		workstationswire.NewService(),
+		execute,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	root, ok := service.(*workersinternal.Root)
+	if !ok {
+		t.Fatalf("Workers service type = %T, want *internal.Root", service)
+	}
+
+	contract := root.BuildPromptTemplateContract(1, []string{"factory/docs/guide.md"})
+	if contract.InputCount != 1 || len(contract.AvailableVariables) == 0 {
+		t.Fatalf("prompt contract = %#v, want selected input variables", contract)
+	}
+	validation := root.ValidatePromptTemplate("{{ .Context.Project }}", 1, nil)
+	if !validation.Valid || len(validation.Diagnostics) != 0 {
+		t.Fatalf("prompt validation = %#v, want valid detached template", validation)
+	}
+
+	rendered, err := root.RenderPrompt("hello", nil, &workers.Context{ProjectID: "project-1"})
+	if err != nil {
+		t.Fatalf("RenderPrompt() error = %v", err)
+	}
+	if rendered != "rendered:hello" || execute.renderCalls != 1 {
+		t.Fatalf("RenderPrompt() = %q with %d calls, want rendered prompt once", rendered, execute.renderCalls)
+	}
+	fields, err := root.ResolveTemplateFields(
+		"{{.Context.WorkDir}}",
+		map[string]string{"TOKEN": "{{.Context.Project}}"},
+		nil,
+		&workers.Context{WorkDirectory: "/workspace", ProjectID: "project-1"},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("ResolveTemplateFields() error = %v", err)
+	}
+	if fields.WorkingDirectory != "/workspace" || fields.Env["TOKEN"] != "project-1" {
+		t.Fatalf("resolved fields = %#v, want detached context values", fields)
+	}
+	if !root.RuntimeOwnsModelEventRecording() {
+		t.Fatal("RuntimeOwnsModelEventRecording() = false, want true")
+	}
+}
+
+func TestWorkersRootPromptCapabilityErrorsRemainDetached(t *testing.T) {
+	t.Parallel()
+
+	service, err := workersinternal.NewRoot(
+		&recordingRuntimeAssembly{},
+		workstationswire.NewService(),
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	root := service.(*workersinternal.Root)
+	if _, err := root.RenderPrompt("hello", nil, nil); err == nil {
+		t.Fatal("RenderPrompt() error = nil, want unavailable renderer")
+	}
+	if _, err := root.ResolveTemplateFields("{{.Missing}}", nil, nil, nil, ""); err == nil {
+		t.Fatal("ResolveTemplateFields() error = nil, want unavailable execution service")
+	}
+	var nilRoot *workersinternal.Root
+	if _, err := nilRoot.RenderPrompt("hello", nil, nil); err == nil {
+		t.Fatal("nil Root RenderPrompt() error = nil, want unavailable service")
+	}
+}
+
 type recordingExecuteCapability struct {
 	result workers.ExecuteResult
 	calls  int
@@ -140,4 +214,17 @@ func (capability *recordingExecuteCapability) Execute(
 ) (workers.ExecuteResult, error) {
 	capability.calls++
 	return capability.result, nil
+}
+
+type promptExecuteCapability struct {
+	renderCalls int
+}
+
+func (capability *promptExecuteCapability) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{}, nil
+}
+
+func (capability *promptExecuteCapability) RenderPrompt(template string, _ []workers.Token, _ *workers.Context) (string, error) {
+	capability.renderCalls++
+	return "rendered:" + template, nil
 }

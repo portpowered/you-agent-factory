@@ -47,6 +47,40 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	assertSafeCompletedObservations(t, observations)
 }
 
+func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
+	t.Parallel()
+
+	service, err := executeservice.New(
+		&staticRunners{runner: &stubRunner{}},
+		nil,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(10, 0) },
+		nil,
+		nil,
+		nil,
+		func(string) (map[string]string, error) { return nil, nil },
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	rendered, err := service.RenderPrompt(
+		"{{ .Context.Project }} / {{ .Context.SessionID }}",
+		nil,
+		&workers.Context{ProjectID: "project-1", SessionID: "session-1"},
+	)
+	if err != nil {
+		t.Fatalf("RenderPrompt() error = %v", err)
+	}
+	if rendered != "project-1 / session-1" {
+		t.Fatalf("RenderPrompt() = %q, want detached context rendering", rendered)
+	}
+	var nilService *executeservice.Service
+	if _, err := nilService.RenderPrompt("hello", nil, nil); err == nil {
+		t.Fatal("nil Service RenderPrompt() error = nil, want unavailable service")
+	}
+}
+
 func assertAcceptedResult(
 	t *testing.T,
 	result workers.ExecuteResult,

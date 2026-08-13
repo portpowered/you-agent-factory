@@ -2,8 +2,11 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -90,4 +93,239 @@ func TestApplyRuntimeWorkerSelectionUsesWorkerBodyAsSystemPrompt(t *testing.T) {
 	if selection.systemPrompt != "worker system prompt" {
 		t.Fatalf("systemPrompt = %q, want worker body", selection.systemPrompt)
 	}
+}
+
+func TestRuntimeAuthoredPromptBodyHandlesFrontMatterAndPlainPrompts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "plain", body: "plain prompt", want: "plain prompt"},
+		{name: "front matter", body: "---\nrole: worker\n---\n\nbody", want: "body"},
+		{name: "windows front matter", body: "---\r\nrole: worker\r\n---\r\nbody", want: "body"},
+		{name: "front matter only", body: "---\nrole: worker\n---\n", want: ""},
+		{name: "unterminated front matter", body: "---\nrole: worker\nbody", want: "---\nrole: worker\nbody"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := runtimeAuthoredPromptBody(test.body); got != test.want {
+				t.Fatalf("runtimeAuthoredPromptBody() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestApplyRuntimeWorkstationSelectionUsesAuthoredLimitsAndRoutingPolicy(t *testing.T) {
+	t.Parallel()
+
+	selection := runtimeExecutionSelection{workerType: interfaces.WorkerTypeScript}
+	applyRuntimeWorkstationSelection(nil, &selection, nil, &interfaces.FactoryWorkstationConfig{
+		Name:             "classify",
+		Type:             interfaces.WorkstationTypeClassify,
+		Body:             "system",
+		PromptTemplate:   "prompt",
+		WorkingDirectory: "workspace",
+		OutcomeFormat:    interfaces.DecisionEnvelopeOutcomeFormat,
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
+			Label: "accepted",
+		}},
+		Limits:  interfaces.WorkstationLimits{MaxExecutionTime: "3s"},
+		Timeout: "1s",
+	})
+
+	if selection.systemPrompt != "system" || selection.promptTemplate != "prompt" {
+		t.Fatalf("selection prompts = %#v, want authored body/template", selection)
+	}
+	if selection.timeout != 3*time.Second {
+		t.Fatalf("selection timeout = %s, want 3s", selection.timeout)
+	}
+	if !selection.scriptClassifier || !selection.decisionEnvelope || !selection.goalRoutingDecisionEnvelope {
+		t.Fatalf("selection output policy = %#v, want classifier and decision envelopes", selection)
+	}
+	if !selection.workingDirectoryAuthored {
+		t.Fatal("workingDirectoryAuthored = false, want true")
+	}
+}
+
+func TestRenderRuntimePromptAndTemplateFieldsUsesDetachedCapabilities(t *testing.T) {
+	t.Parallel()
+
+	selection := &runtimeExecutionSelection{
+		promptTemplate:   "authored prompt",
+		workingDirectory: "{{.workdir}}",
+		environment:      map[string]string{"TOKEN": "{{.token}}"},
+		worktree:         "{{.worktree}}",
+	}
+	fieldResolver := runtimeTemplateFieldResolverFunc(func(
+		workingDirectory string,
+		environment map[string]string,
+		_ []workers.Token,
+		_ *workers.Context,
+		worktree string,
+	) (*workers.ResolvedTemplateFields, error) {
+		if workingDirectory == "" || environment["TOKEN"] == "" || worktree == "" {
+			return nil, errors.New("detached template inputs were lost")
+		}
+		return &workers.ResolvedTemplateFields{
+			WorkingDirectory: "resolved-workdir",
+			Worktree:         "resolved-worktree",
+			Env:              map[string]string{"TOKEN": "resolved"},
+		}, nil
+	})
+	cfg := &runtimeConfig{
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			_ []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			if prompt != "authored prompt" {
+				return "", errors.New("unexpected prompt")
+			}
+			return "rendered prompt", nil
+		}),
+		templateFieldResolver: fieldResolver,
+	}
+	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil); err != nil {
+		t.Fatalf("renderRuntimePrompt() error = %v", err)
+	}
+	if selection.userMessage != "rendered prompt" || selection.workingDirectory != "resolved-workdir" ||
+		selection.worktree != "resolved-worktree" || selection.environment["TOKEN"] != "resolved" {
+		t.Fatalf("rendered selection = %#v, want detached rendered fields", selection)
+	}
+
+	badRenderer := &runtimeConfig{
+		promptRenderer: runtimePromptRendererFunc(func(string, []workers.Token, *workers.Context) (string, error) {
+			return "", errors.New("prompt failed")
+		}),
+	}
+	if err := renderRuntimePrompt(badRenderer, &runtimeExecutionSelection{promptTemplate: "bad"}, nil, nil, nil); err == nil {
+		t.Fatal("renderRuntimePrompt() error = nil, want prompt rendering error")
+	}
+}
+
+func TestRuntimePromptSourceContentRefreshesAuthoredFiles(t *testing.T) {
+	t.Parallel()
+
+	lookup := runtimePromptSourceLookupFixture{
+		RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{},
+		worker:                         interfaces.PromptSource{Path: "worker.md"},
+		workstation:                    interfaces.PromptSource{Path: "workstation.md", IsTemplate: true},
+	}
+	cfg := &runtimeConfig{
+		runtimeConfig: lookup,
+		promptSourceReader: func(path string) ([]byte, error) {
+			switch path {
+			case "worker.md":
+				return []byte("---\nrole: worker\n---\nworker body"), nil
+			case "workstation.md":
+				return []byte("{{.Inputs}}"), nil
+			default:
+				return nil, errors.New("missing source")
+			}
+		},
+	}
+	if got, ok := runtimePromptSourceContent(cfg, "worker", true, true); !ok || got != "worker body" {
+		t.Fatalf("worker source = %q, %t, want exact authored body", got, ok)
+	}
+	if got, ok := runtimePromptSourceContent(cfg, "workstation", false, false); !ok || got != "{{.Inputs}}" {
+		t.Fatalf("workstation source = %q, %t, want exact template", got, ok)
+	}
+	if _, ok := runtimePromptSourceContent(cfg, "missing", true, true); ok {
+		t.Fatal("missing prompt source reported found")
+	}
+}
+
+func TestNormalizeScriptClassifierResultKeepsFinalLabelOnly(t *testing.T) {
+	t.Parallel()
+
+	result := workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "diagnostic line\naccepted",
+		}}},
+	}
+	normalized := normalizeScriptClassifierResult(
+		workers.ExecutionTarget{RunnerID: "script", Output: workers.OutputPolicy{ScriptClassifier: true}},
+		result,
+	)
+	if normalized.Output.Primary[0].Text != "accepted" || normalized.Output.Classification != "accepted" {
+		t.Fatalf("normalized classifier result = %#v, want final label", normalized)
+	}
+	unchanged := normalizeScriptClassifierResult(
+		workers.ExecutionTarget{RunnerID: workers.RunnerIDCodex, Output: workers.OutputPolicy{ScriptClassifier: true}},
+		result,
+	)
+	if unchanged.Output.Primary[0].Text != "diagnostic line\naccepted" {
+		t.Fatalf("non-script result changed = %#v", unchanged)
+	}
+}
+
+func TestIsLogicalWorkstationDispatchUsesRuntimeDefinitionLookup(t *testing.T) {
+	t.Parallel()
+
+	cfg := &runtimeConfig{runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"move":    {Type: interfaces.WorkstationTypeLogical},
+			"execute": {Type: interfaces.WorkstationTypeModel},
+		},
+	}}
+	logical := workers.WorkstationDispatchRequest{WorkstationName: "move"}
+	if !isLogicalWorkstationDispatch(cfg, logical) {
+		t.Fatal("logical workstation was not recognized")
+	}
+	if isLogicalWorkstationDispatch(cfg, workers.WorkstationDispatchRequest{WorkstationName: "execute"}) {
+		t.Fatal("execute workstation was recognized as logical")
+	}
+}
+
+type runtimePromptRendererFunc func(string, []workers.Token, *workers.Context) (string, error)
+
+func (renderer runtimePromptRendererFunc) RenderPrompt(
+	prompt string,
+	tokens []workers.Token,
+	context *workers.Context,
+) (string, error) {
+	return renderer(prompt, tokens, context)
+}
+
+type runtimeTemplateFieldResolverFunc func(
+	string,
+	map[string]string,
+	[]workers.Token,
+	*workers.Context,
+	string,
+) (*workers.ResolvedTemplateFields, error)
+
+func (resolver runtimeTemplateFieldResolverFunc) ResolveTemplateFields(
+	workingDirectory string,
+	environment map[string]string,
+	tokens []workers.Token,
+	context *workers.Context,
+	worktree string,
+) (*workers.ResolvedTemplateFields, error) {
+	return resolver(workingDirectory, environment, tokens, context, worktree)
+}
+
+type runtimePromptSourceLookupFixture struct {
+	runtimefixtures.RuntimeDefinitionLookupFixture
+	worker      interfaces.PromptSource
+	workstation interfaces.PromptSource
+}
+
+func (fixture runtimePromptSourceLookupFixture) WorkerPromptSource(name string) (interfaces.PromptSource, bool) {
+	if name != "worker" {
+		return interfaces.PromptSource{}, false
+	}
+	return fixture.worker, fixture.worker.Path != ""
+}
+
+func (fixture runtimePromptSourceLookupFixture) WorkstationPromptSource(name string) (interfaces.PromptSource, bool) {
+	if name != "workstation" {
+		return interfaces.PromptSource{}, false
+	}
+	return fixture.workstation, fixture.workstation.Path != ""
 }

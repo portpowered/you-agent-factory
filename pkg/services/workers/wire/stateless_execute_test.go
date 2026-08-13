@@ -174,6 +174,57 @@ func TestNewServiceExecuteNormalizesOutcomeAndOutputContractPolicy(t *testing.T)
 	}
 }
 
+func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	override := &statelessProviderOverride{}
+	service, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		override,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-override",
+			RuntimeID:        "runtime-override",
+			GenerationID:     "generation-override",
+			DispatchID:       "dispatch-override",
+			AttemptID:        "attempt-override",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: runners.AgentIdentity,
+			RunnerID:   runners.AgentIdentity,
+			Provider:   workers.ProviderReference{ID: string(providers.IDCodex)},
+			Output:     workers.OutputPolicy{StopToken: "<COMPLETE>"},
+			Prompt:     workers.PromptPolicy{UserMessage: "override prompt"},
+		},
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if override.calls.Load() != 1 || override.request.Correlation != request.Correlation {
+		t.Fatalf("provider override calls/request = %d/%#v, want one detached request", override.calls.Load(), override.request)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
+		result.Output.Primary[0].Text != "override output\n<COMPLETE>" {
+		t.Fatalf("override result = %#v, want accepted normalized output", result)
+	}
+}
+
 type statelessTestFixture struct {
 	service  workers.Service
 	provider *statelessTestProviders
@@ -505,6 +556,20 @@ type statelessTestProviders struct {
 	executeCalls atomic.Int32
 	mu           sync.Mutex
 	content      string
+}
+
+type statelessProviderOverride struct {
+	calls   atomic.Int32
+	request workers.ProviderInferenceRequest
+}
+
+func (provider *statelessProviderOverride) Infer(
+	_ context.Context,
+	request workers.ProviderInferenceRequest,
+) (workers.InferenceResponse, error) {
+	provider.calls.Add(1)
+	provider.request = request
+	return workers.InferenceResponse{Content: "override output\n<COMPLETE>"}, nil
 }
 
 func (provider *statelessTestProviders) SetContent(content string) {

@@ -333,3 +333,55 @@ func newTestFullRuntimeService(t *testing.T, logger *zap.Logger) *Service {
 	}
 	return service
 }
+
+func TestNewConfiguredRuntimeAcceptsDetachedStatelessService(t *testing.T) {
+	t.Parallel()
+
+	stateless := RootFrom(nil, nil)
+	runtime, err := NewConfiguredRuntime(
+		testModelsService{},
+		testProvidersService{},
+		models.RuntimeScopeRef{},
+		injectedProviderRunner{},
+		injectedProviderRunner{},
+		workers.ProgressPublisher(testProgressPublisher),
+		&workers.MockPTYAllocator{},
+		zap.NewNop(),
+		false,
+		"",
+		"",
+		"",
+		nil,
+		nil,
+		time.Now,
+		func() []string { return nil },
+		func() (string, error) { return "", nil },
+		nil,
+		nil,
+		nil,
+		testFactoryDocsLoader,
+		testResolveSymlinks,
+		nil,
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
+		"linux",
+		testFactoryWorktreePreparer{},
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+		platformfilesystem.Local{},
+		nil,
+		true,
+		true,
+		false,
+		nil,
+		nil,
+		&stateless,
+	)
+	if err != nil {
+		t.Fatalf("NewConfiguredRuntime() error = %v", err)
+	}
+	if runtime == nil {
+		t.Fatal("NewConfiguredRuntime() returned nil runtime")
+	}
+}

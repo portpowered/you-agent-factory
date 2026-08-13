@@ -414,6 +414,33 @@ func TestNewRetainsExactSuppliedDependencies(t *testing.T) {
 	}
 }
 
+func TestWorkerRuntimeRendersDetachedPromptWithoutSessionState(t *testing.T) {
+	t.Parallel()
+
+	service := newTestServiceWithDependencies(
+		t,
+		taggedCommandRunner{tag: "provider"},
+		taggedCommandRunner{tag: "script"},
+		func(workers.ProgressFragment) {},
+		zap.NewNop(),
+	)
+	rendered, err := service.RenderPrompt(
+		"{{ .Context.Project }} / {{ .Context.SessionID }}",
+		nil,
+		&workers.Context{ProjectID: "project-1", SessionID: "session-1"},
+	)
+	if err != nil {
+		t.Fatalf("RenderPrompt() error = %v", err)
+	}
+	if rendered != "project-1 / session-1" {
+		t.Fatalf("RenderPrompt() = %q, want detached context rendering", rendered)
+	}
+	var nilService *Service
+	if _, err := nilService.RenderPrompt("hello", nil, nil); err == nil {
+		t.Fatal("nil Service RenderPrompt() error = nil, want unavailable service")
+	}
+}
+
 // TestNewConstructsIndependentRuntimes proves two separately constructed
 // runtimes retain independent dependency identity: operating on one cannot
 // observe or affect the other's constructed dependencies.
