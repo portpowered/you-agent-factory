@@ -130,7 +130,7 @@ endef
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
-.PHONY: test-functional test-functional-fresh test-functional-long test-backend-functional functional-boundary-check functional-test-viz
+.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
@@ -450,6 +450,11 @@ test-release:
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# Compile every functionallong-tagged functional package without running tests
+# or starting any of the long-test runtime dependencies.
+test-functional-long-compile:
+	$(GO) vet -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES)
+
 test-root-process-acceptance:
 	$(GO) test $(ROOT_PROCESS_ACCEPTANCE_PACKAGES) -count=1 -timeout $(ROOT_PROCESS_ACCEPTANCE_TIMEOUT)
 
@@ -721,6 +726,7 @@ verify-api:
 
 verify-build-contracts:
 	$(MAKE) typecheck
+	$(MAKE) test-functional-long-compile
 	$(MAKE) verify-build
 	$(MAKE) verify-lint
 	$(MAKE) verify-api
@@ -760,6 +766,7 @@ ci-typecheck:
 	$(MAKE) typecheck
 
 ci-verify-build-contracts: ci-typecheck
+	$(MAKE) test-functional-long-compile
 	$(MAKE) verify-build
 	$(MAKE) verify-lint
 	$(MAKE) verify-api
