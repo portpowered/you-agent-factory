@@ -800,6 +800,7 @@ func provideWorkersRuntimeFactory(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	worktreeLifecycle workers.FactoryWorktreeLifecycle,
 	defaultAllocator workers.PTYAllocator,
 	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 	defaultScriptCommandRunner factorysessionwire.ScriptCommandRunner,
@@ -809,6 +810,9 @@ func provideWorkersRuntimeFactory(
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
 		return nil, workers.ErrPTYHostRequired
+	}
+	if worktreeLifecycle == nil {
+		return nil, errors.New("Workers worktree preparer is required")
 	}
 	factoryDocsFileSystem := provideWorkersFactoryDocsFileSystem(edges)
 	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
@@ -832,26 +836,6 @@ func provideWorkersRuntimeFactory(
 		executableFiles = platformfilesystem.Local{}
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
-	worktreeFileSystem := edges.WorkersWorktreeFileSystem
-	if worktreeFileSystem == nil {
-		worktreeFileSystem = platformfilesystem.Local{}
-	}
-	worktreeGit := edges.WorkersWorktreeGit
-	if worktreeGit == nil {
-		processRunner, err := providePlatformProcessCommandRunner(edges)
-		if err != nil {
-			return nil, err
-		}
-		adapter, err := workerswire.NewPlatformGitCommander(processRunner)
-		if err != nil {
-			return nil, err
-		}
-		worktreeGit = adapter
-	}
-	worktreePreparer, err := workerswire.NewWorktree(worktreeFileSystem, worktreeGit)
-	if err != nil {
-		return nil, err
-	}
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges)
 	agentRunHarness := workerswire.NewLibraryHarnessAdapter(agentToolFileSystem)
 	return func(
@@ -943,7 +927,7 @@ func provideWorkersRuntimeFactory(
 			executableInspector,
 			executableFiles,
 			operatingSystem,
-			worktreePreparer,
+			worktreeLifecycle,
 			agentRunHarness,
 			retryRandom,
 			workstationFiles,
@@ -957,6 +941,32 @@ func provideWorkersRuntimeFactory(
 			statelessExecute,
 		)
 	}, nil
+}
+
+func provideWorkersWorktree(
+	edges serviceedges.Edges,
+) (workers.FactoryWorktreeLifecycle, error) {
+	worktreeFileSystem := edges.WorkersWorktreeFileSystem
+	if worktreeFileSystem == nil {
+		worktreeFileSystem = platformfilesystem.Local{}
+	}
+	worktreeGit := edges.WorkersWorktreeGit
+	if worktreeGit == nil {
+		processRunner, err := providePlatformProcessCommandRunner(edges)
+		if err != nil {
+			return nil, err
+		}
+		adapter, err := workerswire.NewPlatformGitCommander(processRunner)
+		if err != nil {
+			return nil, err
+		}
+		worktreeGit = adapter
+	}
+	worktreePreparer, err := workerswire.NewWorktree(worktreeFileSystem, worktreeGit)
+	if err != nil {
+		return nil, err
+	}
+	return workers.FactoryWorktreeLifecycle(worktreePreparer), nil
 }
 
 func provideWorkersRetryRandomSource(edges serviceedges.Edges) platformrandom.Source {

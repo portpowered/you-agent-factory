@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"strings"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -100,6 +101,29 @@ type FactoryWorktreePreparation struct {
 type FactoryWorktreePreparer interface {
 	Prepare(context.Context, string, string) (FactoryWorktreePreparation, error)
 }
+
+// FactoryWorktreeReleaser releases a checkout created for one Worker attempt.
+// The caller must pass the detached preparation returned by Prepare so an
+// implementation can leave reused checkouts untouched.
+type FactoryWorktreeReleaser interface {
+	Release(context.Context, FactoryWorktreePreparation) error
+}
+
+// FactoryWorktreeLifecycle is the production worktree owner used when an
+// attempt may create and later release a checkout.
+type FactoryWorktreeLifecycle interface {
+	FactoryWorktreePreparer
+	FactoryWorktreeReleaser
+}
+
+// TemporaryFile is the exact writable handle returned by a Worker temporary
+// file system.
+type TemporaryFile = platformfilesystem.TemporaryFile
+
+// TemporaryFileSystem is the exact request-scoped temporary-file effect used
+// by a Worker runner. Execute wraps it per call so only paths created by that
+// attempt are released during cleanup.
+type TemporaryFileSystem = platformfilesystem.TemporaryFileSystem
 
 // InvocationInput is one canonical, single-attempt Worker invocation.
 // Retry policy belongs to the calling service.

@@ -207,6 +207,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		func() time.Time { return time.Unix(1, 0) },
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

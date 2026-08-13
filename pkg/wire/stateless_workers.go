@@ -26,6 +26,8 @@ func provideStatelessWorkersService(
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
 	logger *zap.Logger,
+	worktreeLifecycle workers.FactoryWorktreeLifecycle,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
 ) (workers.Service, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("construct stateless Workers: clock is required")
@@ -62,7 +64,8 @@ func provideStatelessWorkersService(
 		nil,
 		logging.NewZapLogger(logger, false),
 		clock.Now,
-		nil,
-		nil,
+		worktreeLifecycle,
+		worktreeLifecycle,
+		temporaryFiles,
 	)
 }

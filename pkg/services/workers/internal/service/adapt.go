@@ -26,6 +26,7 @@ func resolveRunnerIdentity(target workers.ExecutionTarget) string {
 func adaptRunnerRequest(
 	request workers.ExecuteRequest,
 	identity string,
+	temporaryFiles workers.TemporaryFileSystem,
 ) workers.RunnerExecutionRequest {
 	runnerID := workers.NormalizeRunnerID(request.Target.RunnerID)
 	switch identity {
@@ -95,6 +96,7 @@ func adaptRunnerRequest(
 		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
 		SessionID:                    sessionID,
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
+		TemporaryFiles:               temporaryFiles,
 	}
 }
 

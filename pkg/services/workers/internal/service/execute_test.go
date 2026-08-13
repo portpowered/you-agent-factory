@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -225,6 +226,7 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 		func() time.Time { return time.Unix(10, 0) },
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -359,19 +361,32 @@ func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *te
 			return nil
 		},
 	}
-	temporaryFiles := recordingTemporaryFiles{
-		cleanup: func(...string) error {
+	temporaryFiles := &recordingTemporaryFiles{
+		remove: func(string) error {
 			appendEvent("temporary-cleanup")
 			return cleanupError
 		},
 	}
 	service := mustExecuteServiceWithEdges(
 		t,
-		&stubRunner{content: "output"},
+		&stubRunner{
+			content: "output",
+			execute: func(ctx context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				file, err := request.TemporaryFiles.CreateTemp("", "attempt-*")
+				if err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				if err := file.Close(); err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				return workers.RunnerExecutionResult{Content: "output"}, nil
+			},
+		},
 		func(_ context.Context, observation workers.ExecutionObservation) error {
 			appendEvent("observation-" + string(observation.Kind))
 			return nil
 		},
+		worktree,
 		worktree,
 		temporaryFiles,
 	)
@@ -403,6 +418,52 @@ func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *te
 		"observation-FAILED",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("events = %#v, want %#v", got, want)
+	}
+}
+
+func TestExecuteTracksOnlyTemporaryFilesCreatedByTheAttempt(t *testing.T) {
+	t.Parallel()
+
+	temporaryFiles := &recordingTemporaryFiles{}
+	service := mustExecuteServiceWithEdges(
+		t,
+		&stubRunner{
+			execute: func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				first, err := request.TemporaryFiles.CreateTemp("", "first")
+				if err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				if err := first.Close(); err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				second, err := request.TemporaryFiles.CreateTemp("", "second")
+				if err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				if err := second.Close(); err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				if err := request.TemporaryFiles.Remove("attempt-temp-1"); err != nil {
+					return workers.RunnerExecutionResult{}, err
+				}
+				return workers.RunnerExecutionResult{Content: "output"}, nil
+			},
+		},
+		nil,
+		nil,
+		nil,
+		temporaryFiles,
+	)
+
+	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-temp", "attempt-temp"))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if got, want := temporaryFiles.Removed(), []string{"attempt-temp-1", "attempt-temp-2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("removed temporary paths = %#v, want %#v", got, want)
 	}
 }
 
@@ -441,7 +502,7 @@ func mustExecuteService(
 	runner workers.Runner,
 	observe workers.ObservationSink,
 ) *executeservice.Service {
-	return mustExecuteServiceWithEdges(t, runner, observe, nil, nil)
+	return mustExecuteServiceWithEdges(t, runner, observe, nil, nil, nil)
 }
 
 func mustExecuteServiceWithEdges(
@@ -449,7 +510,8 @@ func mustExecuteServiceWithEdges(
 	runner workers.Runner,
 	observe workers.ObservationSink,
 	worktree workers.FactoryWorktreePreparer,
-	temporaryFiles interface{ Cleanup(paths ...string) error },
+	worktreeRelease workers.FactoryWorktreeReleaser,
+	temporaryFiles workers.TemporaryFileSystem,
 ) *executeservice.Service {
 	t.Helper()
 	service, err := executeservice.New(
@@ -459,6 +521,7 @@ func mustExecuteServiceWithEdges(
 		nil,
 		func() time.Time { return time.Unix(10, 0) },
 		worktree,
+		worktreeRelease,
 		temporaryFiles,
 	)
 	if err != nil {
@@ -491,14 +554,49 @@ func (worktree *recordingWorktree) Release(
 }
 
 type recordingTemporaryFiles struct {
-	cleanup func(...string) error
+	mu      sync.Mutex
+	next    int
+	removed []string
+	remove  func(string) error
 }
 
-func (files recordingTemporaryFiles) Cleanup(paths ...string) error {
-	if files.cleanup == nil {
+func (files *recordingTemporaryFiles) CreateTemp(_, _ string) (workers.TemporaryFile, error) {
+	files.mu.Lock()
+	defer files.mu.Unlock()
+	files.next++
+	return &recordingTemporaryFile{name: "attempt-temp-" + strconv.Itoa(files.next)}, nil
+}
+
+func (files *recordingTemporaryFiles) Remove(path string) error {
+	files.mu.Lock()
+	files.removed = append(files.removed, path)
+	files.mu.Unlock()
+	if files.remove == nil {
 		return nil
 	}
-	return files.cleanup(paths...)
+	return files.remove(path)
+}
+
+func (files *recordingTemporaryFiles) Removed() []string {
+	files.mu.Lock()
+	defer files.mu.Unlock()
+	return append([]string(nil), files.removed...)
+}
+
+type recordingTemporaryFile struct {
+	name string
+}
+
+func (file *recordingTemporaryFile) Name() string {
+	return file.name
+}
+
+func (*recordingTemporaryFile) WriteString(value string) (int, error) {
+	return len(value), nil
+}
+
+func (*recordingTemporaryFile) Close() error {
+	return nil
 }
 
 type stubRunner struct {

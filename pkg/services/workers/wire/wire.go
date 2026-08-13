@@ -56,7 +56,8 @@ func NewService(
 	logger logging.Logger,
 	clock func() time.Time,
 	worktree workers.FactoryWorktreePreparer,
-	temporaryFiles interface{ Cleanup(paths ...string) error },
+	worktreeRelease workers.FactoryWorktreeReleaser,
+	temporaryFiles workers.TemporaryFileSystem,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
@@ -94,6 +95,7 @@ func NewService(
 		logger,
 		clock,
 		worktree,
+		worktreeRelease,
 		temporaryFiles,
 	)
 	if err != nil {

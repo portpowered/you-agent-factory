@@ -259,6 +259,9 @@ type ProviderInferenceRequest struct {
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
+	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
+	// It is intentionally excluded from serialized provider payloads.
+	TemporaryFiles TemporaryFileSystem `json:"-"`
 }
 
 type RunnerExecutionRequest = ProviderInferenceRequest
@@ -294,6 +297,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.TemporaryFiles = request.TemporaryFiles
 	return clone
 }
 

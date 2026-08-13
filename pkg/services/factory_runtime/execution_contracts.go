@@ -83,39 +83,51 @@ type ExecutionCatalogMapper struct{}
 func (ExecutionCatalogMapper) MapExecutionCatalogSelection(
 	selection ExecutionCatalogSelection,
 ) (workerexecution.ResolvedExecutionPolicy, error) {
+	if err := validateExecutionCatalogSelection(selection); err != nil {
+		return workerexecution.ResolvedExecutionPolicy{}, err
+	}
+	return mapExecutionCatalogSelection(selection), nil
+}
+
+func validateExecutionCatalogSelection(selection ExecutionCatalogSelection) error {
 	worker := selection.Worker
 	workstation := selection.Workstation
-	if strings.TrimSpace(workstation.Name) == "" {
-		return workerexecution.ResolvedExecutionPolicy{}, &ExecutionCatalogMappingError{
+	switch {
+	case strings.TrimSpace(workstation.Name) == "":
+		return &ExecutionCatalogMappingError{
 			Path:    "workstation.name",
 			Message: "workstation name is required",
 		}
-	}
-	if strings.TrimSpace(workstation.Runner) == "" {
-		return workerexecution.ResolvedExecutionPolicy{}, &ExecutionCatalogMappingError{
+	case strings.TrimSpace(workstation.Runner) == "":
+		return &ExecutionCatalogMappingError{
 			Path:    "workstation.runner",
 			Message: "runner selection is required",
 		}
-	}
-	if workstation.WorkerName != "" && worker.Name != workstation.WorkerName {
-		return workerexecution.ResolvedExecutionPolicy{}, &ExecutionCatalogMappingError{
+	case workstation.WorkerName != "" && worker.Name != workstation.WorkerName:
+		return &ExecutionCatalogMappingError{
 			Path:    "workstation.worker",
 			Message: "workstation worker does not match selected worker",
 		}
-	}
-	if workstation.WorkerName != "" && strings.TrimSpace(worker.Name) == "" {
-		return workerexecution.ResolvedExecutionPolicy{}, &ExecutionCatalogMappingError{
+	case workstation.WorkerName != "" && strings.TrimSpace(worker.Name) == "":
+		return &ExecutionCatalogMappingError{
 			Path:    "worker.name",
 			Message: "selected worker name is required",
 		}
-	}
-	if workstation.Timeout < 0 || worker.Timeout < 0 {
-		return workerexecution.ResolvedExecutionPolicy{}, &ExecutionCatalogMappingError{
+	case workstation.Timeout < 0 || worker.Timeout < 0:
+		return &ExecutionCatalogMappingError{
 			Path:    "timeout",
 			Message: "timeout cannot be negative",
 		}
+	default:
+		return nil
 	}
+}
 
+func mapExecutionCatalogSelection(
+	selection ExecutionCatalogSelection,
+) workerexecution.ResolvedExecutionPolicy {
+	worker := selection.Worker
+	workstation := selection.Workstation
 	policy := workerexecution.ResolvedExecutionPolicy{
 		WorkerName:                  worker.Name,
 		WorkerType:                  worker.Type,
@@ -164,7 +176,7 @@ func (ExecutionCatalogMapper) MapExecutionCatalogSelection(
 	if policy.Timeout == 0 {
 		policy.Timeout = worker.Timeout
 	}
-	return policy, nil
+	return policy
 }
 
 // MapExecutionCatalogEntry is the compact two-value form used by Runtime

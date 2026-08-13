@@ -39,17 +39,16 @@ func (s *Service) Execute(
 	correlation := request.Correlation
 
 	cleanup := newCleanupRegistry()
-	if s.temporaryFiles != nil {
-		cleanup.add(func() error {
-			return s.temporaryFiles.Cleanup()
-		})
+	temporaryFiles := newTrackedTemporaryFiles(s.temporaryFiles)
+	if temporaryFiles != nil {
+		cleanup.add(temporaryFiles.Cleanup)
 	}
 
 	identity, err := s.prepareAttempt(ctx, &request, cleanup)
 	if err != nil {
 		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, err)
 	}
-	return s.executeStarted(ctx, request, identity, correlation, cleanup)
+	return s.executeStarted(ctx, request, identity, correlation, cleanup, temporaryFiles)
 }
 
 func (s *Service) prepareAttempt(
@@ -107,6 +106,7 @@ func (s *Service) executeStarted(
 	identity string,
 	correlation workers.ExecutionCorrelation,
 	cleanup *cleanupRegistry,
+	temporaryFiles workers.TemporaryFileSystem,
 ) (workers.ExecuteResult, error) {
 	defer cleanup.run(s.logger)
 
@@ -131,7 +131,7 @@ func (s *Service) executeStarted(
 	execCtx, cancel := s.withTimeout(ctx, request.Target.Timeout)
 	defer cancel()
 
-	runnerResult, runErr := s.runRunner(execCtx, request, identity)
+	runnerResult, runErr := s.runRunner(execCtx, request, identity, temporaryFiles)
 
 	if contextErr := execCtx.Err(); contextErr != nil {
 		runErr = contextErr
@@ -159,6 +159,7 @@ func (s *Service) runRunner(
 	ctx context.Context,
 	request workers.ExecuteRequest,
 	identity string,
+	temporaryFiles workers.TemporaryFileSystem,
 ) (runnerResult workers.RunnerExecutionResult, runErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -168,7 +169,7 @@ func (s *Service) runRunner(
 	return s.runners.Execute(ctx, runners.ExecuteRequest{
 		Identity:             identity,
 		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
-		Attempt:              adaptRunnerRequest(request, identity),
+		Attempt:              adaptRunnerRequest(request, identity, temporaryFiles),
 	})
 }
 
@@ -191,9 +192,9 @@ func (s *Service) prepareWorkspace(
 	if !workspace.PrepareWorktree {
 		return nil
 	}
-	if s.worktree == nil {
+	if s.worktree == nil || s.worktreeRelease == nil {
 		return fmt.Errorf(
-			"%w: worktree preparer is required when worktree preparation is enabled",
+			"%w: worktree preparer and releaser are required when worktree preparation is enabled",
 			workers.ErrInvalidExecuteRequest,
 		)
 	}
@@ -218,10 +219,10 @@ func (s *Service) prepareWorkspace(
 			request.Target.Environment.WorkingDirectory = path
 			request.Target.Environment.WorkingDirectorySet = true
 		}
-		if releaser, ok := s.worktree.(factoryWorktreeReleaser); ok {
+		if !preparation.Reused {
 			preparation := preparation
 			cleanup.add(func() error {
-				return releaser.Release(context.WithoutCancel(ctx), preparation)
+				return s.worktreeRelease.Release(context.WithoutCancel(ctx), preparation)
 			})
 		}
 	}

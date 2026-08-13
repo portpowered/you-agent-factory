@@ -407,7 +407,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v68, readFileTree, clock, logger)
+	factoryWorktreeLifecycle, err := provideWorkersWorktree(edges2)
+	if err != nil {
+		return nil, err
+	}
+	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v68, readFileTree, clock, logger, factoryWorktreeLifecycle, temporaryFileSystem)
 	if err != nil {
 		return nil, err
 	}
@@ -415,8 +420,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v70 := provideWorkerCurrentWorkingDirectory()
 	source := provideWorkersRetryRandomSource(edges2)
 	readFileInspector := provideWorkersWorkstationFileSystem(edges2)
-	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v71, err := provideWorkersRuntimeFactory(service, workersService, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v69, v70, source, readFileInspector, temporaryFileSystem, ptyAllocator, v10, v68, edges2, providerRegistry, v9)
+	v71, err := provideWorkersRuntimeFactory(service, workersService, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v69, v70, source, readFileInspector, temporaryFileSystem, factoryWorktreeLifecycle, ptyAllocator, v10, v68, edges2, providerRegistry, v9)
 	if err != nil {
 		return nil, err
 	}
@@ -727,6 +731,41 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	return process, nil
 }
 
+// BuildStatelessWorkers composes the standalone Workers Execute root without
+// opening the application command graph, Factory Runtime, or Factory Session.
+// It is a narrow service-root construction boundary used by direct callers
+// that need one detached attempt.
+func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Service, error) {
+	service, err := provideProvidersService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	modelsService, err := provideModelsService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
+	if err != nil {
+		return nil, err
+	}
+	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
+	clock := provideFactoryRuntimeClock(edges2)
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	factoryWorktreeLifecycle, err := provideWorkersWorktree(edges2)
+	if err != nil {
+		return nil, err
+	}
+	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreeLifecycle, temporaryFileSystem)
+	if err != nil {
+		return nil, err
+	}
+	return workersService, nil
+}
+
 // wire.go:
 
 var platformSet = wire5.NewSet(logging.NewDefaultLogger)
@@ -932,12 +971,25 @@ var factoryDefinitionsServicesSet = wire5.NewSet(
 
 var workerServiceSet = wire5.NewSet(
 	provideStatelessWorkersService,
+	provideWorkersWorktree,
 	provideWorkersFactoryDocsFileSystem,
 	provideWorkerInvocationFactory,
 	provideProviderFromCommandRunnerFactory,
 	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
+)
+
+var statelessWorkersSet = wire5.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideStatelessWorkersService,
 )
 
 var cliCommandOperationsSet = wire5.NewSet(
