@@ -5,6 +5,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -103,6 +105,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		workwire.NewRuntimeService(nil, nil, nil, nil, nil),
 		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
 		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
+		platformfilesystem.Local{},
 	)
 	if err != nil {
 		return nil, err
@@ -1772,3 +1775,362 @@ func resumeFactory(t *testing.T, f factory.Factory) {
 		t.Fatalf("Resume: %v", err)
 	}
 }
+func TestRuntimeModelRecordingEnabledRequiresRuntimeOwnerAndRecorder(t *testing.T) {
+	t.Parallel()
+
+	ledger := &modelRecordingLedger{ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{}}
+	cases := []struct {
+		name string
+		cfg  *runtimeConfig
+		want bool
+	}{
+		{name: "nil config", cfg: nil, want: false},
+		{name: "missing ledger", cfg: &runtimeConfig{executeService: modelRecordingExecuteService{owns: true}}, want: false},
+		{name: "missing runtime owner", cfg: &runtimeConfig{eventHistory: ledger, executeService: modelRecordingExecuteService{}}, want: false},
+		{name: "runtime owner disabled", cfg: &runtimeConfig{eventHistory: ledger, executeService: modelRecordingExecuteService{}}, want: false},
+		{
+			name: "ledger does not expose worker recorder",
+			cfg: &runtimeConfig{
+				eventHistory:   runtimeLedgerWithoutWorkerRecorder{RuntimeLedger: ledger.ScriptedRuntimeLedger},
+				executeService: modelRecordingExecuteService{owns: true},
+			},
+			want: false,
+		},
+		{name: "runtime owner and recorder", cfg: &runtimeConfig{eventHistory: ledger, executeService: modelRecordingExecuteService{owns: true}}, want: true},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := runtimeModelRecordingEnabled(test.cfg); got != test.want {
+				t.Fatalf("runtimeModelRecordingEnabled() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestPrepareDetachedModelRecordingRecordsDetachedRequestAndResponse(t *testing.T) {
+	t.Parallel()
+
+	ledger := &modelRecordingLedger{ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{}}
+	previousCalled := false
+	previousTerminalCalled := false
+	cfg := &runtimeConfig{
+		executeService: modelRecordingExecuteService{owns: true},
+		eventHistory:   ledger,
+		clock:          testRuntimeClock{},
+	}
+	request := modelRecordingRequest()
+	prepared := prepareDetachedModelRecording(cfg, func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error) {
+		previousCalled = true
+		return func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {
+			previousTerminalCalled = true
+		}, nil
+	})
+	terminal, err := prepared(context.Background(), request)
+	if err != nil {
+		t.Fatalf("prepared() error = %v", err)
+	}
+	if !previousCalled {
+		t.Fatal("previous preparation was not called")
+	}
+	assertDetachedModelRequestEvent(t, ledger.events)
+	terminal(context.Background(), request, workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "model output",
+		}}},
+		Continuation: &workers.ProviderContinuationRef{Provider: "provider-1", ProviderSessionID: "session-1"},
+		Diagnostics:  &workers.SafeDiagnostics{Metadata: map[string]string{"source": "test"}},
+		Metrics:      workers.ExecutionMetrics{Duration: 1500 * time.Millisecond},
+	}, nil)
+	if !previousTerminalCalled {
+		t.Fatal("previous terminal hook was not called")
+	}
+	assertDetachedModelResponseEvent(t, ledger.events)
+	request.Input.ModelBindings[0].Content[0].Text = "mutated"
+	if (*ledger.events[1].Response.Bindings)[0].Content[0].Text != "binding" {
+		t.Fatal("recorded response bindings alias the Execute request")
+	}
+}
+
+func assertDetachedModelRequestEvent(t *testing.T, events []workers.ModelEvent) {
+	t.Helper()
+	if len(events) != 1 {
+		t.Fatalf("request events = %#v, want one model request", events)
+	}
+	recorded := events[0]
+	if recorded.Kind != workers.ModelEventKindRequest {
+		t.Fatalf("request event kind = %q, want request", recorded.Kind)
+	}
+	assertDetachedModelRequestIdentity(t, recorded)
+	assertDetachedModelRequestPayload(t, recorded.Request)
+}
+
+func assertDetachedModelRequestIdentity(t *testing.T, recorded workers.ModelEvent) {
+	t.Helper()
+	if recorded.ID != "factory-event/model-request/dispatch-1/model-request/1" || recorded.Tick != 7 {
+		t.Fatalf("recorded request identity = %#v, want detached correlation", recorded)
+	}
+	if recorded.RequestID != "request-1" || len(recorded.TraceIDs) != 1 || recorded.TraceIDs[0] != "trace-1" {
+		t.Fatalf("recorded request correlation = %#v, want detached correlation", recorded)
+	}
+}
+
+func assertDetachedModelRequestPayload(t *testing.T, request *workers.ModelRequestEventPayload) {
+	t.Helper()
+	if request == nil {
+		t.Fatal("recorded request payload is nil")
+	}
+	if request.Operation != "summarize" || request.Worker != "worker-1" || request.Model != "model-1" || request.ProviderLocality != "remote" {
+		t.Fatalf("recorded request payload = %#v, want resolved model fields", request)
+	}
+	if request.WorkingDirectory == nil || *request.WorkingDirectory != "/workspace" {
+		t.Fatalf("recorded request working directory = %#v, want /workspace", request.WorkingDirectory)
+	}
+	if request.Worktree == nil || *request.Worktree != "feature-1" {
+		t.Fatalf("recorded request worktree = %#v, want feature-1", request.Worktree)
+	}
+}
+
+func assertDetachedModelResponseEvent(t *testing.T, events []workers.ModelEvent) {
+	t.Helper()
+	if len(events) != 2 {
+		t.Fatalf("response events = %#v, want one model response", events)
+	}
+	if events[1].Kind != workers.ModelEventKindResponse {
+		t.Fatalf("response event kind = %q, want response", events[1].Kind)
+	}
+	response := events[1].Response
+	if response == nil {
+		t.Fatal("recorded response is nil")
+	}
+	assertDetachedModelResponseMetadata(t, response)
+	assertDetachedModelResponseContent(t, response)
+}
+
+func assertDetachedModelResponseMetadata(t *testing.T, response *workers.ModelResponseEventPayload) {
+	t.Helper()
+	if response.Outcome != workers.InferenceOutcomeSucceeded || response.ModelRequestID != "dispatch-1/model-request/1" || response.DurationMillis != 1500 {
+		t.Fatalf("recorded response = %#v, want successful detached model response", response)
+	}
+	if response.ProviderSession == nil || response.ProviderSession.ID != "session-1" {
+		t.Fatalf("recorded provider session = %#v, want session-1", response.ProviderSession)
+	}
+}
+
+func assertDetachedModelResponseContent(t *testing.T, response *workers.ModelResponseEventPayload) {
+	t.Helper()
+	if response.OutputContent == nil || len(*response.OutputContent) != 1 || (*response.OutputContent)[0].Text != "model output" {
+		t.Fatalf("recorded response output = %#v, want detached content", response.OutputContent)
+	}
+	if response.Bindings == nil || len(*response.Bindings) != 1 || (*response.Bindings)[0].Slot != "summary" {
+		t.Fatalf("recorded response bindings = %#v, want detached bindings", response.Bindings)
+	}
+	if len(response.Diagnostics) == 0 || !strings.Contains(string(response.Diagnostics), "source") {
+		t.Fatalf("recorded response diagnostics = %s, want safe diagnostics", response.Diagnostics)
+	}
+}
+
+func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks(t *testing.T) {
+	t.Parallel()
+
+	ledger := &modelRecordingLedger{ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{}}
+	cfg := &runtimeConfig{
+		executeService: modelRecordingExecuteService{owns: true},
+		eventHistory:   ledger,
+		clock:          testRuntimeClock{},
+	}
+	request := modelRecordingRequest()
+	request.Attempt.Number = 2
+	request.Target.WorkerName = ""
+	request.Target.WorkerType = "worker-type"
+	request.Correlation.TraceID = ""
+	request.Input.Dispatch.Execution.CurrentTick = 9
+
+	recordDetachedModelResponse(cfg, request, workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type: workers.WorkFailureTypeTimeout, Message: "timeout",
+			Detail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "safe timeout"},
+		},
+	}, nil)
+	recordDetachedModelResponse(cfg, request, workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeCanceled,
+		Failure: &workers.ExecutionFailure{Type: workers.WorkFailureTypeUnknown, Message: "cancelled"},
+	}, nil)
+	recordDetachedModelResponse(cfg, request, workers.ExecuteResult{}, errors.New("transport failed"))
+
+	if len(ledger.events) != 3 {
+		t.Fatalf("failure events = %#v, want three responses", ledger.events)
+	}
+	assertModelFailureEvents(t, ledger.events)
+	if got := providerSessionFromExecuteResult(workers.ExecuteResult{
+		Continuation: &workers.ProviderContinuationRef{Provider: "provider-2", ExternalRef: "external-2"},
+	}); got == nil || got.ID != "external-2" || got.Provider != "provider-2" {
+		t.Fatalf("external continuation session = %#v, want external reference", got)
+	}
+}
+
+func assertModelFailureEvents(t *testing.T, events []workers.ModelEvent) {
+	t.Helper()
+	if got := events[0].Response.FailureDetail; got == nil || got.Message != "safe timeout" {
+		t.Fatalf("detailed failure = %#v, want cloned safe detail", got)
+	}
+	if got := events[1].Response.FailureDetail; got == nil || got.Reason != workers.WorkFailureTypeUnknown || got.Message != "cancelled" {
+		t.Fatalf("fallback failure = %#v, want execution failure fields", got)
+	}
+	if got := events[2].Response.FailureDetail; got == nil || got.Reason != workers.WorkFailureTypeUnknown {
+		t.Fatalf("error failure = %#v, want unknown detail", got)
+	}
+	for _, event := range events {
+		if event.Response == nil || event.Response.Outcome != workers.InferenceOutcomeFailed || event.Tick != 9 {
+			t.Fatalf("failure response = %#v, want failed response at current tick", event.Response)
+		}
+	}
+}
+
+func TestRuntimeModelRecordingHelpersNormalizeOptionalAndExecutionValues(t *testing.T) {
+	t.Parallel()
+	assertModelExecutionClassification(t)
+	assertModelCorrelationHelpers(t)
+	assertModelOptionalHelpers(t)
+}
+
+func assertModelExecutionClassification(t *testing.T) {
+	t.Helper()
+	if isModelExecution(workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "script", Model: workers.ModelReference{Name: "model"}}}) {
+		t.Fatal("script execution was classified as model execution")
+	}
+	if isModelExecution(workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "inference", Model: workers.ModelReference{Name: "model"}}}) {
+		t.Fatal("inference execution was classified as model execution")
+	}
+	if isModelExecution(workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "codex"}}) {
+		t.Fatal("runner without model was classified as model execution")
+	}
+	if !isModelExecution(modelRecordingRequest()) {
+		t.Fatal("model execution was not recognized")
+	}
+}
+
+func assertModelCorrelationHelpers(t *testing.T) {
+	t.Helper()
+	if got := detachedModelRequestID(" dispatch ", 3); got != "dispatch/model-request/3" {
+		t.Fatalf("detachedModelRequestID() = %q", got)
+	}
+	if got := modelEventTick(modelRecordingRequest()); got != 7 {
+		t.Fatalf("modelEventTick() = %d, want dispatch-created tick", got)
+	}
+	request := modelRecordingRequest()
+	request.Input.Dispatch.Execution.CurrentTick = 8
+	if got := modelEventTick(request); got != 8 {
+		t.Fatalf("modelEventTick() = %d, want current tick", got)
+	}
+	if got := executionWorkerName(request); got != "worker-1" {
+		t.Fatalf("executionWorkerName() = %q, want worker name", got)
+	}
+	request.Target.WorkerName = ""
+	request.Target.WorkerType = "worker-type"
+	if got := executionWorkerName(request); got != "worker-type" {
+		t.Fatalf("executionWorkerName() fallback = %q, want worker type", got)
+	}
+}
+
+func assertModelOptionalHelpers(t *testing.T) {
+	t.Helper()
+	if optionalString(" ") != nil || nonEmptyStrings(" ") != nil {
+		t.Fatal("blank optional values were retained")
+	}
+	if got := optionalString(" value "); got == nil || *got != "value" {
+		t.Fatalf("optionalString() = %#v, want trimmed pointer", got)
+	}
+	if got := nonEmptyStrings(" trace "); len(got) != 1 || got[0] != " trace " {
+		t.Fatalf("nonEmptyStrings() = %#v, want original non-empty value", got)
+	}
+	if resolvedModelBindings(nil) != nil {
+		t.Fatal("empty model bindings returned non-nil pointer")
+	}
+	bindings := []workers.ResolvedModelOperationBinding{{Slot: "slot", Content: []work.WorkContentPart{{Text: "content"}}}}
+	cloned := resolvedModelBindings(bindings)
+	if cloned == nil || len(*cloned) != 1 || (*cloned)[0].Slot != "slot" {
+		t.Fatalf("resolvedModelBindings() = %#v, want cloned bindings", cloned)
+	}
+	if providerSessionFromExecuteResult(workers.ExecuteResult{}) != nil {
+		t.Fatal("empty continuation returned a provider session")
+	}
+	if providerSessionFromExecuteResult(workers.ExecuteResult{Continuation: &workers.ProviderContinuationRef{}}) != nil {
+		t.Fatal("empty provider continuation returned a provider session")
+	}
+}
+
+func TestPrepareDetachedModelRecordingPreservesDisabledAndPreviousErrors(t *testing.T) {
+	t.Parallel()
+
+	previousCalled := false
+	previous := func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error) {
+		previousCalled = true
+		return nil, nil
+	}
+	prepared := prepareDetachedModelRecording(nil, previous)
+	if _, err := prepared(context.Background(), modelRecordingRequest()); err != nil {
+		t.Fatalf("disabled preparation error = %v", err)
+	}
+	if !previousCalled {
+		t.Fatal("disabled preparation did not preserve previous preparation")
+	}
+
+	cfg := &runtimeConfig{
+		executeService: modelRecordingExecuteService{owns: true},
+		eventHistory:   &modelRecordingLedger{ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{}},
+		clock:          testRuntimeClock{},
+	}
+	wantErr := errors.New("previous preparation failed")
+	prepared = prepareDetachedModelRecording(cfg, func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error) {
+		return nil, wantErr
+	})
+	if _, err := prepared(context.Background(), modelRecordingRequest()); !errors.Is(err, wantErr) {
+		t.Fatalf("previous preparation error = %v, want %v", err, wantErr)
+	}
+}
+
+func modelRecordingRequest() workers.ExecuteRequest {
+	return workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-1", RequestID: "request-1", TraceID: "trace-1"},
+		Target: workers.ExecutionTarget{
+			WorkerName: "worker-1", WorkerType: "agent", RunnerID: "codex",
+			Model:       workers.ModelReference{Name: "model-1", Locality: "remote"},
+			Environment: workers.EnvironmentPolicy{WorkingDirectory: " /workspace "},
+			Workspace:   workers.WorkspacePolicy{Worktree: " feature-1 "},
+		},
+		Input: workers.ExecutionInput{
+			ModelOperation: " summarize ",
+			ModelBindings: []workers.ResolvedModelOperationBinding{{
+				Slot: "summary", Source: workers.ModelOperationBindingSourceInput,
+				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "binding"}},
+			}},
+			Dispatch: work.WorkDispatch{Execution: work.ExecutionMetadata{
+				DispatchCreatedTick: 7, RequestID: "request-1", TraceID: "trace-1", WorkIDs: []string{"work-1"},
+			}},
+		},
+	}
+}
+
+type modelRecordingExecuteService struct{ owns bool }
+
+func (service modelRecordingExecuteService) Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{}, nil
+}
+
+func (service modelRecordingExecuteService) RuntimeOwnsModelEventRecording() bool {
+	return service.owns
+}
+
+type modelRecordingLedger struct {
+	*recordingfixtures.ScriptedRuntimeLedger
+	events []workers.ModelEvent
+}
+
+func (ledger *modelRecordingLedger) RecordModelEvent(event workers.ModelEvent) {
+	ledger.events = append(ledger.events, event)
+}
+
+type runtimeLedgerWithoutWorkerRecorder struct{ recordings.RuntimeLedger }

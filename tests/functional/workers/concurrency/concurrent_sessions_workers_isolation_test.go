@@ -34,63 +34,21 @@ const concurrentSessionWorkersTimeout = 15 * time.Second
 func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, concurrentSessionWorkersFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-
-	provider := newConcurrentSessionWorkersProvider()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderOverride: provider},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	baseURL := server.URL()
-	defaultSession := support.GetDefaultSession(t, baseURL)
-	if defaultSession.Id == "" {
-		t.Fatalf("default Factory Session = %#v, want session identity", defaultSession)
-	}
-	openedSession := support.OpenFactorySessionAt(t, baseURL, dir)
-	if openedSession.Session == nil || openedSession.Session.Id == "" {
-		t.Fatalf("opened Factory Session = %#v, want session identity", openedSession)
-	}
-	openedSessionID := openedSession.Session.Id
-	var openedSessionClosed atomic.Bool
-	t.Cleanup(func() {
-		if !openedSessionClosed.Load() {
-			support.CloseFactorySessionAt(t, baseURL, openedSessionID)
-		}
-	})
+	fixture := newConcurrentSessionWorkersFixture(t)
+	provider := fixture.provider
+	baseURL := fixture.baseURL
+	cancelledSessionID := fixture.cancelledSessionID
+	survivingSessionID := fixture.survivingSessionID
 
 	const (
 		cancelledPrompt = "shared-workers-cancelled-prompt"
 		survivingPrompt = "shared-workers-surviving-prompt"
 		laterPrompt     = "shared-workers-later-prompt"
 	)
-	cancelledSessionID := openedSessionID
-	survivingSessionID := factorysessions.DefaultSessionID
 	provider.configure(cancelledSessionID)
-
-	cancelledDone := make(chan concurrentInvocationResult, 1)
-	go func() {
-		response, err := postConcurrentSessionInvocation(
-			t.Context(),
-			baseURL,
-			cancelledSessionID,
-			cancelledPrompt,
-		)
-		cancelledDone <- concurrentInvocationResult{response: response, err: err}
-	}()
-	survivingDone := make(chan concurrentInvocationResult, 1)
-	go func() {
-		response, err := postConcurrentSessionInvocation(
-			t.Context(),
-			baseURL,
-			survivingSessionID,
-			survivingPrompt,
-		)
-		survivingDone <- concurrentInvocationResult{response: response, err: err}
-	}()
+	cancelledDone, survivingDone := startConcurrentSessionInvocations(
+		t, baseURL, cancelledSessionID, survivingSessionID, cancelledPrompt, survivingPrompt,
+	)
 
 	requests := map[string]workers.ProviderInferenceRequest{}
 	for range []string{cancelledSessionID, survivingSessionID} {
@@ -118,7 +76,6 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 	if err := <-closeDone; err != nil {
 		t.Fatalf("close cancelled Factory Session: %v", err)
 	}
-	openedSessionClosed.Store(true)
 	provider.releaseSurvivingAttempt()
 
 	cancelledResult := awaitConcurrentInvocation(t, cancelledDone)
@@ -177,6 +134,64 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 type concurrentInvocationResult struct {
 	response factoryapi.InvocationResponse
 	err      error
+}
+
+type concurrentSessionWorkersFixture struct {
+	baseURL            string
+	provider           *concurrentSessionWorkersProvider
+	cancelledSessionID string
+	survivingSessionID string
+}
+
+func newConcurrentSessionWorkersFixture(t *testing.T) concurrentSessionWorkersFixture {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, concurrentSessionWorkersFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	provider := newConcurrentSessionWorkersProvider()
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ProviderOverride: provider},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	baseURL := server.URL()
+	defaultSession := support.GetDefaultSession(t, baseURL)
+	if defaultSession.Id == "" {
+		t.Fatalf("default Factory Session = %#v, want session identity", defaultSession)
+	}
+	openedSession := support.OpenFactorySessionAt(t, baseURL, dir)
+	if openedSession.Session == nil || openedSession.Session.Id == "" {
+		t.Fatalf("opened Factory Session = %#v, want session identity", openedSession)
+	}
+	openedSessionID := openedSession.Session.Id
+	openedSessionClosed := new(atomic.Bool)
+	t.Cleanup(func() {
+		if !openedSessionClosed.Load() {
+			support.CloseFactorySessionAt(t, baseURL, openedSessionID)
+		}
+	})
+	return concurrentSessionWorkersFixture{
+		baseURL: baseURL, provider: provider,
+		cancelledSessionID: openedSessionID,
+		survivingSessionID: factorysessions.DefaultSessionID,
+	}
+}
+
+func startConcurrentSessionInvocations(
+	t *testing.T,
+	baseURL, cancelledSessionID, survivingSessionID, cancelledPrompt, survivingPrompt string,
+) (chan concurrentInvocationResult, chan concurrentInvocationResult) {
+	t.Helper()
+	cancelledDone := make(chan concurrentInvocationResult, 1)
+	go func() {
+		response, err := postConcurrentSessionInvocation(t.Context(), baseURL, cancelledSessionID, cancelledPrompt)
+		cancelledDone <- concurrentInvocationResult{response: response, err: err}
+	}()
+	survivingDone := make(chan concurrentInvocationResult, 1)
+	go func() {
+		response, err := postConcurrentSessionInvocation(t.Context(), baseURL, survivingSessionID, survivingPrompt)
+		survivingDone <- concurrentInvocationResult{response: response, err: err}
+	}()
+	return cancelledDone, survivingDone
 }
 
 func closeConcurrentSession(baseURL string, sessionID string) error {

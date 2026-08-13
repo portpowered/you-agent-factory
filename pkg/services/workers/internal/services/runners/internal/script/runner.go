@@ -16,6 +16,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
@@ -106,7 +107,7 @@ func (r *runner) Execute(
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
 	effective := *r
-	effective.publish = workers.ProgressPublisherFromContext(ctx, r.publish)
+	effective.publish = workerexecution.ProgressPublisherFromContext(ctx, r.publish)
 	return effective.execute(ctx, request)
 }
 

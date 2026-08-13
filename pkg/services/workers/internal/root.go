@@ -18,6 +18,10 @@ type ExecuteCapability interface {
 	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
 }
 
+type promptRenderer interface {
+	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
+}
+
 // Root is the inert Workers root composed from parent-private runtime assembly
 // and workstation owners. It starts no lifecycle, runner execution, or
 // workstation pool admission.
@@ -221,7 +225,7 @@ func (r *Root) RenderPrompt(
 	if r == nil || r.execute == nil {
 		return "", fmt.Errorf("render Worker prompt: execution service is unavailable")
 	}
-	renderer, ok := r.execute.(workers.PromptRenderer)
+	renderer, ok := r.execute.(promptRenderer)
 	if !ok {
 		return "", fmt.Errorf("render Worker prompt: renderer is unavailable")
 	}

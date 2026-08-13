@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 // Execute validates and clones the request, runs one private runner attempt,
@@ -179,11 +180,11 @@ func (s *Service) runRunner(
 		}
 	}()
 	if request.Input.MockWorkers != nil {
-		ctx = workers.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
-		ctx = workers.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
+		ctx = workerexecution.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
+		ctx = workerexecution.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
 	}
 	if request.Input.ProgressPublisher != nil {
-		ctx = workers.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
+		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if s.providerOverride != nil && identity == runners.AgentIdentity {

@@ -420,6 +420,7 @@ func assembleRuntimeBundle(
 		workService,
 		workRequestIDs,
 		newID,
+		runtimeDirs,
 		decisionEnvelopes,
 	)
 	if err != nil {

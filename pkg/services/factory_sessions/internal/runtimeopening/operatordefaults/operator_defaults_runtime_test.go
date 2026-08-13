@@ -249,6 +249,21 @@ func TestApplyOperatorDefaultsToLoadedConfigPreservesExtensionProvider(t *testin
 	}
 }
 
+func TestApplyOperatorDefaultsToLoadedConfigRejectsUnsupportedDefaultProvider(t *testing.T) {
+	t.Parallel()
+
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(nil, operatorconfig.ResolvedDefaults{}); err != nil {
+		t.Fatalf("ApplyToLoadedConfig(nil) error = %v, want nil", err)
+	}
+	loaded := newOperatorDefaultsRuntimeFixture(t, map[string]any{})
+	err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "not supported",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported worker model provider") {
+		t.Fatalf("ApplyToLoadedConfig() error = %v, want unsupported-provider diagnostic", err)
+	}
+}
+
 type providerResolverStub struct {
 	canonical map[string]string
 	errors    map[string]error

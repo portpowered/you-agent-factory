@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
 
@@ -39,6 +40,41 @@ func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	var published workers.Service = root
 	if published == nil {
 		t.Fatal("constructed root is nil")
+	}
+}
+
+func TestDetachedValuesCloneAndFallback(t *testing.T) {
+	t.Parallel()
+
+	config := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		WorkerName: "worker",
+		RunType:    workers.MockWorkerRunTypeScript,
+		ScriptConfig: &workers.MockWorkerScriptConfig{
+			Args: []string{"original"}, Env: map[string]string{"KEY": "original"},
+		},
+	}}}
+	ctx := workerexecution.WithMockWorkersConfig(context.Background(), config)
+	loaded := workerexecution.MockWorkersConfigFromContext(ctx)
+	loaded.MockWorkers[0].ScriptConfig.Args[0] = "changed"
+	loaded.MockWorkers[0].ScriptConfig.Env["KEY"] = "changed"
+	if config.MockWorkers[0].ScriptConfig.Args[0] != "original" || config.MockWorkers[0].ScriptConfig.Env["KEY"] != "original" {
+		t.Fatal("mock configuration was not detached")
+	}
+
+	policy := workers.OutputPolicy{Format: "decision-envelope", DecisionEnvelope: true}
+	if got := workerexecution.MockWorkerOutputPolicyFromContext(workerexecution.WithMockWorkerOutputPolicy(ctx, policy)); got != policy {
+		t.Fatalf("output policy = %#v, want %#v", got, policy)
+	}
+	publisher := workers.ProgressPublisher(func(workers.ProgressFragment) {})
+	if got := workerexecution.ProgressPublisherFromContext(workerexecution.WithProgressPublisher(context.Background(), publisher), nil); got == nil {
+		t.Fatal("request publisher = nil")
+	}
+	fallback := workers.ProgressPublisher(func(workers.ProgressFragment) {})
+	if got := workerexecution.ProgressPublisherFromContext(context.Background(), fallback); got == nil {
+		t.Fatal("fallback publisher = nil")
+	}
+	if workerexecution.WithMockWorkersConfig(nil, config) != nil || workerexecution.WithProgressPublisher(nil, publisher) != nil {
+		t.Fatal("nil context should remain nil")
 	}
 }
 

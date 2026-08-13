@@ -16,62 +16,9 @@ const defaultMockWorkerAcceptedAgentOutput = defaultMockWorkerAcceptedOutput + "
 // provider command adapters preserve Workers dispatch correlation. Full mock
 // worker runtime policy remains private to Workers.
 type MockWorkerCommandRunner struct {
-	Config *MockWorkersConfig
-	Next   CommandRunner
-}
-
-// ContextualMockWorkerCommandRunner applies the request-scoped mock config
-// carried by Workers Execute without making a process command edge mutable.
-// With no config it preserves the wrapped command runner, including its
-// optional streaming capability.
-type ContextualMockWorkerCommandRunner struct {
-	Next CommandRunner
-}
-
-func NewContextualMockWorkerCommandRunner(next CommandRunner) CommandRunner {
-	return ContextualMockWorkerCommandRunner{Next: next}
-}
-
-func (runner ContextualMockWorkerCommandRunner) Run(
-	ctx context.Context,
-	request CommandRequest,
-) (CommandResult, error) {
-	config := MockWorkersConfigFromContext(ctx)
-	if config == nil {
-		return runner.runNext(ctx, request)
-	}
-	return (&MockWorkerCommandRunner{Config: config, Next: runner.Next}).Run(ctx, request)
-}
-
-func (runner ContextualMockWorkerCommandRunner) RunStreaming(
-	ctx context.Context,
-	request CommandRequest,
-	observer OutputChunkObserver,
-) (CommandResult, error) {
-	config := MockWorkersConfigFromContext(ctx)
-	if config == nil {
-		if streaming, ok := runner.Next.(interface {
-			RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
-		}); ok {
-			return streaming.RunStreaming(ctx, request, observer)
-		}
-		result, err := runner.runNext(ctx, request)
-		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
-		return result, err
-	}
-	result, err := (&MockWorkerCommandRunner{Config: config, Next: runner.Next}).Run(ctx, request)
-	publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
-	return result, err
-}
-
-func (runner ContextualMockWorkerCommandRunner) runNext(
-	ctx context.Context,
-	request CommandRequest,
-) (CommandResult, error) {
-	if runner.Next == nil {
-		return CommandResult{}, errors.New("contextual mock worker next command runner is required")
-	}
-	return runner.Next.Run(ctx, request)
+	Config       *MockWorkersConfig
+	Next         CommandRunner
+	OutputPolicy OutputPolicy
 }
 
 func (runner *MockWorkerCommandRunner) Run(
@@ -96,7 +43,7 @@ func (runner *MockWorkerCommandRunner) Run(
 		default:
 			return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(
 				request.Command,
-				MockWorkerOutputPolicyFromContext(ctx),
+				runner.OutputPolicy,
 			))}, nil
 		}
 	}
@@ -105,7 +52,7 @@ func (runner *MockWorkerCommandRunner) Run(
 	}
 	return CommandResult{Stdout: []byte(mockWorkerAcceptOutput(
 		request.Command,
-		MockWorkerOutputPolicyFromContext(ctx),
+		runner.OutputPolicy,
 	))}, nil
 }
 

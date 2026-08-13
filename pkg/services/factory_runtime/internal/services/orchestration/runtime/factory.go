@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
-
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -28,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -76,46 +75,49 @@ type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
 }
+type runtimePromptRenderer interface {
+	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
+}
 type runtimeConfig struct {
-	net                       *state.Net
-	scheduler                 scheduler.Scheduler
-	executeService            executeCapability
-	promptRenderer            workers.PromptRenderer
-	templateFieldResolver     runtimeTemplateFieldResolver
-	promptSourceReader        func(string) ([]byte, error)
-	attempts                  *attemptLifecycle
-	attemptCapacity           int
-	newID                     factory.IDGenerator
-	workerSessions            workersessions.Service
-	runtimeConfig             interfaces.RuntimeDefinitionLookup
-	workflowContext           *factory_context.FactoryContext
-	runtimeMode               interfaces.RuntimeMode
-	logger                    logging.Logger
-	clock                     factory.Clock
-	workRequestIDs            work.RequestIDGenerator
-	eventHistory              recordings.RuntimeLedger
-	recordingID               string // optional Worker recording target propagated to Worker Sessions
-	runtimeID                 string // stable runtime-instance identity used for attempt correlation
-	worldStateProjector       factory.WorldStateProjector
-	providerSessions          providersessions.Service
-	submissionRecorder        recordings.SubmissionRecorder
-	factoryEventRecorder      factory.FactoryEventRecorder
-	submissionHooks           []factory.SubmissionHook
-	dispatchRecorder          recordings.DispatchRecorder
-	completionRecorder        factory.CompletionRecorder
-	petriMutationRecorder     factory.PetriMutationRecorder
-	completionDeliveryPlanner factory.CompletionDeliveryPlanner
-	inlineDispatch            bool
-	quorumPolicy              interfaces.QuorumPolicyService
-	outputShaping             interfaces.InvocationOutputShapingService
-	workPropagation           interfaces.WorkPropagationPolicyService
-	workService               work.Service
-	decisionEnvelopes         interfaces.DecisionEnvelopeService
-	mockWorkersConfig         *workers.MockWorkersConfig
-	progressPublisher         workers.ProgressPublisher
+	net                        *state.Net
+	scheduler                  scheduler.Scheduler
+	executeService             executeCapability
+	promptRenderer             runtimePromptRenderer
+	templateFieldResolver      runtimeTemplateFieldResolver
+	promptSourceReader         func(string) ([]byte, error)
+	attempts                   *attemptLifecycle
+	attemptCapacity            int
+	newID                      factory.IDGenerator
+	workerSessions             workersessions.Service
+	runtimeConfig              interfaces.RuntimeDefinitionLookup
+	workflowContext            *factory_context.FactoryContext
+	runtimeMode                interfaces.RuntimeMode
+	logger                     logging.Logger
+	clock                      factory.Clock
+	workRequestIDs             work.RequestIDGenerator
+	eventHistory               recordings.RuntimeLedger
+	recordingID                string // optional Worker recording target propagated to Worker Sessions
+	runtimeID                  string // stable runtime-instance identity used for attempt correlation
+	worldStateProjector        factory.WorldStateProjector
+	providerSessions           providersessions.Service
+	submissionRecorder         recordings.SubmissionRecorder
+	factoryEventRecorder       factory.FactoryEventRecorder
+	submissionHooks            []factory.SubmissionHook
+	dispatchRecorder           recordings.DispatchRecorder
+	completionRecorder         factory.CompletionRecorder
+	petriMutationRecorder      factory.PetriMutationRecorder
+	completionDeliveryPlanner  factory.CompletionDeliveryPlanner
+	inlineDispatch             bool
+	quorumPolicy               interfaces.QuorumPolicyService
+	outputShaping              interfaces.InvocationOutputShapingService
+	workPropagation            interfaces.WorkPropagationPolicyService
+	workService                work.Service
+	decisionEnvelopes          interfaces.DecisionEnvelopeService
+	expectedArtifactFileSystem expectedArtifactFileSystem
+	mockWorkersConfig          *workers.MockWorkersConfig
+	progressPublisher          workers.ProgressPublisher
 }
 
-// Compile-time checks.
 var _ factory.Factory = (*factoryImpl)(nil)
 var _ factory.Service = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
@@ -152,6 +154,7 @@ func New(
 	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
+	expectedArtifactFileSystemValue any,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (factory.Factory, error) {
 	if net == nil {
@@ -176,41 +179,42 @@ func New(
 		return nil, fmt.Errorf("a Worker Sessions service is required")
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
-	promptRenderer, _ := statelessService.(workers.PromptRenderer)
+	promptRenderer, _ := statelessService.(runtimePromptRenderer)
 	templateFieldResolver, _ := statelessService.(runtimeTemplateFieldResolver)
 	cfg := &runtimeConfig{
-		net:                       net,
-		scheduler:                 runtimeScheduler,
-		executeService:            statelessService,
-		promptRenderer:            promptRenderer,
-		templateFieldResolver:     templateFieldResolver,
-		workerSessions:            workerSessionsService,
-		attemptCapacity:           defaultRuntimeAttemptCapacity,
-		newID:                     newID,
-		runtimeConfig:             runtimeDefinitions,
-		workflowContext:           workflowContext.Clone(),
-		runtimeMode:               runtimeMode,
-		logger:                    logger,
-		clock:                     clock,
-		workRequestIDs:            workRequestIDs,
-		inlineDispatch:            inlineDispatch,
-		eventHistory:              eventHistory,
-		recordingID:               strings.TrimSpace(recordingID),
-		runtimeID:                 strings.TrimSpace(runtimeID),
-		worldStateProjector:       worldStateProjector,
-		providerSessions:          providerSessions,
-		submissionRecorder:        submissionRecorder,
-		factoryEventRecorder:      factoryEventRecorder,
-		submissionHooks:           append([]factory.SubmissionHook(nil), submissionHooks...),
-		dispatchRecorder:          dispatchRecorder,
-		completionRecorder:        completionRecorder,
-		petriMutationRecorder:     petriMutationRecorder,
-		completionDeliveryPlanner: completionDeliveryPlanner,
-		quorumPolicy:              quorumPolicy,
-		outputShaping:             outputShaping,
-		workPropagation:           workPropagation,
-		workService:               workService,
-		decisionEnvelopes:         firstDecisionEnvelopeService(decisionEnvelopes),
+		net:                        net,
+		scheduler:                  runtimeScheduler,
+		executeService:             statelessService,
+		promptRenderer:             promptRenderer,
+		templateFieldResolver:      templateFieldResolver,
+		workerSessions:             workerSessionsService,
+		attemptCapacity:            defaultRuntimeAttemptCapacity,
+		newID:                      newID,
+		runtimeConfig:              runtimeDefinitions,
+		workflowContext:            workflowContext.Clone(),
+		runtimeMode:                runtimeMode,
+		logger:                     logger,
+		clock:                      clock,
+		workRequestIDs:             workRequestIDs,
+		inlineDispatch:             inlineDispatch,
+		eventHistory:               eventHistory,
+		recordingID:                strings.TrimSpace(recordingID),
+		runtimeID:                  strings.TrimSpace(runtimeID),
+		worldStateProjector:        worldStateProjector,
+		providerSessions:           providerSessions,
+		submissionRecorder:         submissionRecorder,
+		factoryEventRecorder:       factoryEventRecorder,
+		submissionHooks:            append([]factory.SubmissionHook(nil), submissionHooks...),
+		dispatchRecorder:           dispatchRecorder,
+		completionRecorder:         completionRecorder,
+		petriMutationRecorder:      petriMutationRecorder,
+		completionDeliveryPlanner:  completionDeliveryPlanner,
+		quorumPolicy:               quorumPolicy,
+		outputShaping:              outputShaping,
+		workPropagation:            workPropagation,
+		workService:                workService,
+		expectedArtifactFileSystem: expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
+		decisionEnvelopes:          firstDecisionEnvelopeService(decisionEnvelopes),
 	}
 	if cfg.executeService != nil {
 		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)

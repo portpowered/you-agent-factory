@@ -669,12 +669,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/wire/session_runtime_providers.go#provideWorkersRuntimeFactory",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/events/response_events/stream_test.go#TestAPIResponseEventCursorGapEmitsStreamGap",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -2504,12 +2498,6 @@
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/wire/session_runtime_providers.go#provideWorkersRuntimeFactory",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
       "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/services/chat_sessions/internal/service/turn_test.go",
       "owner": "backend-maintainers",
@@ -3132,12 +3120,6 @@
       "target": "pkg/wire/recordings_artifacts_export_composition_test.go#TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/wire/session_runtime_providers.go#provideWorkersRuntimeFactory",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     }
   ]
 }

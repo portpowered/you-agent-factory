@@ -131,12 +131,12 @@ func provideConfiguredProvidersService(
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
 	}
 	if workersRunner != nil {
-		contextualRunner := workers.NewContextualMockWorkerCommandRunner(workersRunner)
+		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(workersRunner)
 		options = append(options, providerswire.WithWorkersCommandRunner(contextualRunner))
 		return newConfiguredProvidersService(options, contextualRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
-		contextualRunner := workers.NewContextualMockWorkerCommandRunner(
+		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
 			workers.AdaptCommandRunner(edges.ProviderCommandRunner),
 		)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
@@ -147,7 +147,7 @@ func provideConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	contextualRunner := workers.NewContextualMockWorkerCommandRunner(
+	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
 		workers.AdaptCommandRunner(commandRunner),
 	)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
@@ -778,7 +778,7 @@ func provideStatelessWorkersService(
 		Logger: logging.NoopLogger{},
 		Clock:  workers.ClockFunc(clock.Now),
 	}
-	scriptRunnerWithMocks := workers.NewContextualMockWorkerCommandRunner(scriptRunner)
+	scriptRunnerWithMocks := workerswire.NewContextualMockWorkerCommandRunner(scriptRunner)
 	return workerswire.NewService(
 		workerswire.AgentDependencies{
 			Providers: providersService,

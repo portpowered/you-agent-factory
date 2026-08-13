@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 type service struct {
@@ -62,7 +63,7 @@ func (s *service) Execute(
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
 	effective := *s
-	effective.publish = workers.ProgressPublisherFromContext(ctx, s.publish)
+	effective.publish = workerexecution.ProgressPublisherFromContext(ctx, s.publish)
 	return effective.execute(ctx, request)
 }
 

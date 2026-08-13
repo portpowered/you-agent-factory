@@ -72,12 +72,16 @@ func TestAttemptLifecycleBoundsCapacityAndCleansActiveState(t *testing.T) {
 
 func TestAttemptLifecycleCancellationIsPerDispatch(t *testing.T) {
 	started := make(chan string, 2)
+	cancelObserved := make(chan struct{})
+	releaseFirst := make(chan struct{})
 	releaseSecond := make(chan struct{})
 	results := make(chan workers.ExecuteResult, 2)
 	service := attemptExecuteFunc(func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		started <- request.Correlation.DispatchID
 		if request.Correlation.DispatchID == "dispatch-1" {
 			<-ctx.Done()
+			close(cancelObserved)
+			<-releaseFirst
 			return workers.ExecuteResult{}, ctx.Err()
 		}
 		<-releaseSecond
@@ -101,7 +105,9 @@ func TestAttemptLifecycleCancellationIsPerDispatch(t *testing.T) {
 		t.Fatalf("started dispatches = %#v", startedDispatches)
 	}
 	requireCancelOutcome(t, lifecycle, "dispatch-1", workers.WorkstationDispatchCancelOutcomeCanceled, "cancel(first)")
+	<-cancelObserved
 	requireCancelOutcome(t, lifecycle, "dispatch-1", workers.WorkstationDispatchCancelOutcomeAlreadyCanceled, "repeat cancel(first)")
+	close(releaseFirst)
 	requireAttemptOutcome(t, <-results, workers.ExecutionOutcomeCanceled, "canceled result")
 	requireAttemptCount(t, lifecycle, 1, "after first cancellation")
 	close(releaseSecond)
