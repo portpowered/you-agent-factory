@@ -272,33 +272,38 @@ func run(cfg config) (coverageResult, error) {
 }
 
 func runForOS(cfg config, targetOS string) (result coverageResult, runErr error) {
-	profilePath := cfg.profile
-	cleanup := func() error { return nil }
-	if profilePath == "" {
-		file, err := os.CreateTemp("", "go-coverage-*.out")
-		if err != nil {
-			return coverageResult{}, fmt.Errorf("create temp coverage profile: %w", err)
-		}
-		profilePath = file.Name()
-		cleanup = func() error {
-			return os.Remove(profilePath)
-		}
-		defer func() {
-			if cleanupErr := cleanup(); cleanupErr != nil {
-				runErr = errors.Join(runErr, fmt.Errorf("remove temporary coverage profile: %w", cleanupErr))
-			}
-		}()
-		if err := file.Close(); err != nil {
-			return coverageResult{}, fmt.Errorf("close temp coverage profile: %w", err)
-		}
-	} else {
-		defer func() {
-			if cleanupErr := cleanup(); cleanupErr != nil {
-				runErr = errors.Join(runErr, fmt.Errorf("remove temporary coverage profile: %w", cleanupErr))
-			}
-		}()
+	profilePath, cleanup, err := prepareCoverageProfile(cfg.profile)
+	if err != nil {
+		return coverageResult{}, err
 	}
+	defer func() {
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("remove temporary coverage profile: %w", cleanupErr))
+		}
+	}()
+	return runCoverageProfile(cfg, targetOS, profilePath)
+}
 
+func prepareCoverageProfile(profilePath string) (string, func() error, error) {
+	if profilePath != "" {
+		return profilePath, func() error { return nil }, nil
+	}
+	file, err := os.CreateTemp("", "go-coverage-*.out")
+	if err != nil {
+		return "", nil, fmt.Errorf("create temp coverage profile: %w", err)
+	}
+	profilePath = file.Name()
+	cleanup := func() error { return os.Remove(profilePath) }
+	if err := file.Close(); err != nil {
+		return "", nil, errors.Join(
+			fmt.Errorf("close temp coverage profile: %w", err),
+			cleanup(),
+		)
+	}
+	return profilePath, cleanup, nil
+}
+
+func runCoverageProfile(cfg config, targetOS string, profilePath string) (coverageResult, error) {
 	coverPackages, testPackages, err := resolveCoverageLane(cfg)
 	if err != nil {
 		return coverageResult{}, err
@@ -392,92 +397,6 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 		baselinePath = filepath.Join(repoRoot, baselinePath)
 	}
 	return readPackageCoverageBaseline(baselinePath)
-}
-
-// runGoTestCoverageLane runs the coverage invocation once on short command
-// lines, or in deterministic test-package batches when Windows needs it. When
-// cfg.timingOutput is set, it combines every batch's -json stdout before
-// writing the timing summary, so a failed or crashed lane still leaves
-// trustworthy (possibly incomplete) diagnostics on disk.
-func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string) error {
-	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, timingEnabled, targetOS)
-	if err != nil {
-		return err
-	}
-
-	started := time.Now()
-	var stdout strings.Builder
-	var stderr strings.Builder
-	var laneErr error
-	for index, invocation := range plan.invocations {
-		batchStdout, batchStderr, commandErr := runCommand(invocation)
-		appendCoverageOutput(&stdout, batchStdout)
-		appendCoverageOutput(&stderr, batchStderr)
-		if commandErr == nil {
-			continue
-		}
-
-		detail := mergeGoTestFailureDetail(stderr.String(), stdout.String())
-		batchFailurePrefix := failurePrefix
-		if len(plan.invocations) > 1 {
-			batchFailurePrefix = fmt.Sprintf("%s (batch %d/%d)", failurePrefix, index+1, len(plan.invocations))
-		}
-		if detail != "" {
-			laneErr = fmt.Errorf("%s: %w\n%s", batchFailurePrefix, commandErr, detail)
-		} else {
-			laneErr = fmt.Errorf("%s: %w", batchFailurePrefix, commandErr)
-		}
-		break
-	}
-	wallSeconds := time.Since(started).Seconds()
-
-	var timingWriteErr error
-	if timingEnabled {
-		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
-		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
-	}
-
-	if laneErr == nil && len(plan.profilePaths) > 1 {
-		if mergeErr := mergeCoverageProfiles(plan.profilePaths, profilePath, repoRoot, coverPackages); mergeErr != nil {
-			laneErr = mergeErr
-		}
-	}
-
-	return errors.Join(laneErr, timingWriteErr, plan.cleanup())
-}
-
-func appendCoverageOutput(output *strings.Builder, chunk string) {
-	if chunk == "" {
-		return
-	}
-	if output.Len() > 0 {
-		output.WriteByte('\n')
-	}
-	output.WriteString(chunk)
-}
-
-func runCommand(invocation commandInvocation) (string, string, error) {
-	return commandRunner(invocation)
-}
-
-func mergeGoTestFailureDetail(stderr string, stdout string) string {
-	stderr = strings.TrimSpace(compactCoverageOutput(stderr))
-	stdout = strings.TrimSpace(compactCoverageOutput(stdout))
-	switch {
-	case stdout == "":
-		return stderr
-	case stderr == "":
-		return stdout
-	case strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
-		return stdout + "\n" + stderr
-	default:
-		return stderr + "\n" + stdout
-	}
-}
-
-func compactCoverageOutput(output string) string {
-	return coveragePackageListPattern.ReplaceAllString(output, "$1")
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {

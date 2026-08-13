@@ -381,7 +381,7 @@ func TestRunGoTestCoverageLanePropagatesBatchedFailureAndCleansProfiles(t *testi
 		"-covermode=count",
 		"-timeout=10m",
 	}
-	testPackages := makeOversizedTestPackages(500)
+	testPackages := makeOversizedTestPackages(1000)
 	profilePath := filepath.Join(t.TempDir(), "merged-coverage.out")
 	repoRoot, err := repoRootDir()
 	if err != nil {
@@ -421,8 +421,28 @@ func TestRunGoTestCoverageLanePropagatesBatchedFailureAndCleansProfiles(t *testi
 	if !strings.Contains(err.Error(), "run unit coverage (batch 2/") || !strings.Contains(err.Error(), "synthetic subprocess failure") {
 		t.Fatalf("runGoTestCoverageLane() error = %q, want batch context and subprocess detail", err)
 	}
-	if len(invocations) != 2 {
-		t.Fatalf("coverage invocations = %d, want stop after second batch failure", len(invocations))
+	if len(invocations) < 3 {
+		t.Fatalf("coverage invocations = %d, want later batches after second-batch failure", len(invocations))
+	}
+	seen := make(map[string]int, len(testPackages))
+	for _, invocation := range invocations {
+		for _, testPackage := range testPackages {
+			if slicesContains(invocation.args, testPackage) {
+				seen[testPackage]++
+			}
+		}
+	}
+	for _, testPackage := range testPackages {
+		if seen[testPackage] != 1 {
+			t.Fatalf("test package %q invoked %d times, want exactly once across failed lane", testPackage, seen[testPackage])
+		}
+	}
+	profileData, readErr := os.ReadFile(profilePath)
+	if readErr != nil {
+		t.Fatalf("merged failure profile read error = %v, want profiles from completed batches", readErr)
+	}
+	if got, want := string(profileData), "mode: count\n"+modulePath+"/pkg/config/config.go:1.1,2.1 3 1\n"; got != want {
+		t.Fatalf("merged failure profile = %q, want deterministic completed-batch profile %q", got, want)
 	}
 	if batchDir == "" {
 		t.Fatal("batch directory was not captured")
