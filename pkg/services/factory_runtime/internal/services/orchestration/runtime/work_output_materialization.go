@@ -31,6 +31,7 @@ func workstationDispatchResultFromExecute(
 			RetryCount: result.Metrics.RetryCount,
 		},
 		ProviderSession: providerSessionFromContinuation(result.Continuation),
+		Diagnostics:     workers.WorkDiagnosticsFromSafeDiagnostics(result.Diagnostics),
 	}
 	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
 	switch result.Outcome {

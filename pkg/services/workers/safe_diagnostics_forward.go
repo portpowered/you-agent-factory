@@ -20,6 +20,95 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeW
 	)
 }
 
+// SafeDiagnosticsFromWorkDiagnostics projects the full persistence-safe
+// execution diagnostics contract used by ExecuteResult. It is separate from
+// SafeWorkDiagnosticsFromWorkDiagnostics, whose narrower shape is the
+// canonical dashboard/event projection and omits command/panic fields.
+func SafeDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeDiagnostics {
+	if diagnostics == nil {
+		return nil
+	}
+	out := &SafeDiagnostics{Metadata: cloneDiagnosticsStringMap(diagnostics.Metadata)}
+	if diagnostics.RenderedPrompt != nil {
+		out.RenderedPrompt = &SafeRenderedPromptDiagnostic{
+			SystemPromptHash: diagnostics.RenderedPrompt.SystemPromptHash,
+			UserMessageHash:  diagnostics.RenderedPrompt.UserMessageHash,
+			Variables:        cloneDiagnosticsStringMap(diagnostics.RenderedPrompt.Variables),
+		}
+	}
+	if diagnostics.Provider != nil {
+		out.Provider = &SafeProviderDiagnostic{
+			Provider:         diagnostics.Provider.Provider,
+			Model:            diagnostics.Provider.Model,
+			RequestMetadata:  cloneDiagnosticsStringMap(diagnostics.Provider.RequestMetadata),
+			ResponseMetadata: cloneDiagnosticsStringMap(diagnostics.Provider.ResponseMetadata),
+		}
+	}
+	if diagnostics.Invocation != nil {
+		out.Invocation = cloneInvocationDiagnostic(diagnostics.Invocation)
+	}
+	if diagnostics.Command != nil {
+		out.Command = &SafeCommandDiagnostic{
+			Command:    diagnostics.Command.Command,
+			Args:       append([]string(nil), diagnostics.Command.Args...),
+			Stdout:     diagnostics.Command.Stdout,
+			Stderr:     diagnostics.Command.Stderr,
+			ExitCode:   diagnostics.Command.ExitCode,
+			TimedOut:   diagnostics.Command.TimedOut,
+			Duration:   diagnostics.Command.Duration,
+			WorkingDir: diagnostics.Command.WorkingDir,
+		}
+	}
+	if diagnostics.Panic != nil {
+		out.Panic = &PanicDiagnostic{Message: "worker runner panicked", Stack: diagnostics.Panic.Stack}
+	}
+	return out
+}
+
+// WorkDiagnosticsFromSafeDiagnostics rehydrates the worker-facing diagnostic
+// shape at the legacy WorkResult boundary. Safe diagnostics have already
+// removed request secrets, so the reverse mapping cannot restore stdin or
+// environment values.
+func WorkDiagnosticsFromSafeDiagnostics(diagnostics *SafeDiagnostics) *WorkDiagnostics {
+	if diagnostics == nil {
+		return nil
+	}
+	out := &WorkDiagnostics{Metadata: cloneDiagnosticsStringMap(diagnostics.Metadata)}
+	if diagnostics.RenderedPrompt != nil {
+		out.RenderedPrompt = &RenderedPromptDiagnostic{
+			SystemPromptHash: diagnostics.RenderedPrompt.SystemPromptHash,
+			UserMessageHash:  diagnostics.RenderedPrompt.UserMessageHash,
+			Variables:        cloneDiagnosticsStringMap(diagnostics.RenderedPrompt.Variables),
+		}
+	}
+	if diagnostics.Provider != nil {
+		out.Provider = &ProviderDiagnostic{
+			Provider:         diagnostics.Provider.Provider,
+			Model:            diagnostics.Provider.Model,
+			RequestMetadata:  cloneDiagnosticsStringMap(diagnostics.Provider.RequestMetadata),
+			ResponseMetadata: cloneDiagnosticsStringMap(diagnostics.Provider.ResponseMetadata),
+		}
+	}
+	if diagnostics.Invocation != nil {
+		out.Invocation = cloneInvocationDiagnostic(diagnostics.Invocation)
+	}
+	if diagnostics.Command != nil {
+		out.Command = &CommandDiagnostic{
+			Command:    diagnostics.Command.Command,
+			Args:       append([]string(nil), diagnostics.Command.Args...),
+			Stdout:     diagnostics.Command.Stdout,
+			Stderr:     diagnostics.Command.Stderr,
+			ExitCode:   diagnostics.Command.ExitCode,
+			TimedOut:   diagnostics.Command.TimedOut,
+			WorkingDir: diagnostics.Command.WorkingDir,
+		}
+	}
+	if diagnostics.Panic != nil {
+		out.Panic = &PanicDiagnostic{Message: diagnostics.Panic.Message, Stack: diagnostics.Panic.Stack}
+	}
+	return out
+}
+
 // WorkDiagnosticsFromSafeEventPayload decodes the public camel-case event shape into worker diagnostics.
 func WorkDiagnosticsFromSafeEventPayload(payload json.RawMessage) (*WorkDiagnostics, error) {
 	safe, err := SafeWorkDiagnosticsFromEventPayload(payload)

@@ -33,6 +33,12 @@ func startThroughStatelessWorkers(
 	if err != nil {
 		return err
 	}
+	// Petri dispatches are single-attempt at this boundary. Keep their
+	// physical workstation identity equal to the logical dispatch identity so
+	// model request/response events remain joined to the canonical dispatch.
+	// InvokeWorker assigns distinct AttemptIDs itself when it explicitly
+	// retries a detached execution.
+	executeRequest.Correlation.AttemptID = executeRequest.Correlation.DispatchID
 	// Worker Session association does not own admission, cancellation,
 	// execution, or terminal authority -- the attempt lifecycle below remains
 	// the only execution owner -- but the association Factory Event is part of
@@ -53,15 +59,15 @@ func startThroughStatelessWorkers(
 		); reserveErr != nil {
 			return reserveErr
 		}
-		if cfg.eventHistory != nil {
-			cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
-				request.Execution.Dispatch.Execution.DispatchCreatedTick,
-				request.Execution.Dispatch.DispatchID,
-				sessionID,
-				request.Execution.Dispatch.Execution.RequestID,
-				cfg.clock.Now(),
-			)
-		}
+	}
+	if cfg.eventHistory != nil {
+		cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
+			request.Execution.Dispatch.Execution.DispatchCreatedTick,
+			request.Execution.Dispatch.DispatchID,
+			sessionID,
+			request.Execution.Dispatch.Execution.RequestID,
+			cfg.clock.Now(),
+		)
 	}
 	return startStatelessAttemptWithRequest(
 		ctx, cfg, request, executeRequest,
@@ -679,7 +685,6 @@ func (f *factoryImpl) invokeStatelessWorker(
 		}
 		executeRequest.Attempt.Number = attemptNumber
 		var dispatchResult workers.WorkstationDispatchResult
-		var dispatchErr error
 		start := startStatelessAttemptWithRequest
 		if resumed || attemptNumber > 1 {
 			start = startStatelessAttemptWithRequestRetry
@@ -690,15 +695,11 @@ func (f *factoryImpl) invokeStatelessWorker(
 			execution,
 			executeRequest,
 			false,
-			func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, err error) {
+			func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, _ error) {
 				dispatchResult = result
-				dispatchErr = err
 			},
 		); err != nil {
 			return factory.InvokeWorkerResult{}, err
-		}
-		if dispatchErr != nil {
-			return factory.InvokeWorkerResult{}, dispatchErr
 		}
 		invoked := invokeWorkerResultFromDispatch(
 			dispatchID,

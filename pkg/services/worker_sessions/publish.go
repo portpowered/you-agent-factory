@@ -24,6 +24,11 @@ type ProviderSessionObservationPublisher struct {
 	mu       sync.RWMutex
 	observer Service
 	next     workers.ProgressPublisher
+	// forwardUnassociated lets Runtime-owned attempts preserve the public
+	// Factory response stream while Worker Sessions has no supervision record
+	// for the attempt. Exact references are still validated before this
+	// fallback, and the internal association hand-off is never forwarded.
+	forwardUnassociated bool
 
 	// records serializes Worker record publication per Worker Session. Every
 	// observation a Worker emits is committed to that Worker's own topic, and
@@ -42,6 +47,22 @@ type ProviderSessionObservationPublisher struct {
 // and a successful Worker Sessions association before they are forwarded.
 func NewProviderSessionObservationPublisher(next workers.ProgressPublisher) *ProviderSessionObservationPublisher {
 	return &ProviderSessionObservationPublisher{next: next}
+}
+
+// WithUnassociatedProgressFallback keeps provider-authored progress visible
+// when the caller owns attempt supervision and Worker Sessions is present only
+// as a historical association/read model. The exact Provider Session hand-off
+// remains internal; only the downstream response publisher receives the
+// provider's subsequent progress when Worker Sessions cannot associate it to a
+// supervised attempt.
+func (p *ProviderSessionObservationPublisher) WithUnassociatedProgressFallback() *ProviderSessionObservationPublisher {
+	if p == nil {
+		return p
+	}
+	p.mu.Lock()
+	p.forwardUnassociated = true
+	p.mu.Unlock()
+	return p
 }
 
 // Bind attaches the one Worker Sessions service that owns the runtime's
@@ -68,14 +89,24 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if p == nil {
 		return
 	}
-	observer, next := p.dependencies()
-	if !providerFragmentAgrees(fragment) || !p.associateProviderSession(observer, fragment) {
+	observer, next, forwardUnassociated := p.dependencies()
+	if !providerFragmentAgrees(fragment) {
+		return
+	}
+	if err := p.associateProviderSession(observer, fragment); err != nil {
+		if forwardUnassociated && errors.Is(err, ErrProviderSessionAssociationAttemptMismatch) &&
+			fragment.Kind != workers.ProviderSessionObservedFragmentKind && next != nil {
+			next(fragment)
+		}
 		return
 	}
 	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
 		return
 	}
 	if !p.publishWorkerObservation(observer, fragment) {
+		if forwardUnassociated && next != nil {
+			next(fragment)
+		}
 		return
 	}
 	if next != nil {
@@ -83,10 +114,10 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	}
 }
 
-func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.ProgressPublisher) {
+func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.ProgressPublisher, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.observer, p.next
+	return p.observer, p.next, p.forwardUnassociated
 }
 
 func providerFragmentAgrees(fragment workers.ProgressFragment) bool {
@@ -116,19 +147,19 @@ func sameProviderIdentity(left, right string) bool {
 func (p *ProviderSessionObservationPublisher) associateProviderSession(
 	observer Service,
 	fragment workers.ProgressFragment,
-) bool {
+) error {
 	reference := workers.CloneProviderSessionReference(fragment.ProviderSessionReference)
 	if reference == nil {
-		return true
+		return nil
 	}
 	if observer == nil {
-		return false
+		return ErrProviderSessionAssociationAttemptMismatch
 	}
 	_, err := observer.ObserveProviderSession(context.Background(), ProviderSessionObservationRequest{
 		DispatchID: fragment.DispatchID,
 		Reference:  reference.Clone(),
 	})
-	return err == nil
+	return err
 }
 
 func (p *ProviderSessionObservationPublisher) publishWorkerObservation(

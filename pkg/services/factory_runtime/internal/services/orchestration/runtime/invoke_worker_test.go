@@ -295,7 +295,7 @@ func assertDetachedDispatchResult(t *testing.T, got workers.WorkstationDispatchR
 
 func assertDetachedCorrelation(t *testing.T, observed workers.ExecuteRequest) {
 	t.Helper()
-	if observed.Correlation.DispatchID != "dispatch-1" || observed.Correlation.AttemptID != "attempt-1" {
+	if observed.Correlation.DispatchID != "dispatch-1" || observed.Correlation.AttemptID != "dispatch-1" {
 		t.Fatalf("correlation = %#v", observed.Correlation)
 	}
 	if observed.Correlation.FactorySessionID != "session-1" ||

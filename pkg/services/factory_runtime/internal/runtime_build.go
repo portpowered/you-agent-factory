@@ -133,7 +133,7 @@ func NewRuntimeBuild(
 			// pool. This bridge is bound exactly once when the Factory Runtime
 			// creates Worker Sessions, ensuring reference-bearing progress cannot
 			// reach the response stream before its Worker Session association.
-			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher)
+			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher).WithUnassociatedProgressFallback()
 			runtimeWorkers, err := sessionBuildFactory(
 				spec.ProviderCommandRunner,
 				spec.CommandRunnerOverride,
@@ -475,7 +475,7 @@ func (adapter workstationExecuteAdapter) Execute(
 		return workers.ExecuteResult{}, fmt.Errorf("Workers Execute service is unavailable")
 	}
 	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
-	dispatch.DispatchID = request.Correlation.DispatchID
+	dispatch.DispatchID = request.Correlation.AttemptID
 	dispatch.WorkerType = firstBuildValue(request.Target.WorkerName, request.Target.WorkerType)
 	dispatch.WorkstationName = request.Target.WorkstationName
 	dispatch.Execution.RequestID = request.Correlation.RequestID
@@ -556,7 +556,7 @@ func (adapter workstationExecuteAdapter) executeThroughBoundary(
 	case <-ctx.Done():
 		_, cancelErr := adapter.boundary.Cancel(
 			context.WithoutCancel(ctx),
-			workers.WorkstationDispatchCancelRequest{DispatchID: request.Correlation.DispatchID},
+			workers.WorkstationDispatchCancelRequest{DispatchID: legacyRequest.Execution.Dispatch.DispatchID},
 		)
 		if cancelErr != nil {
 			return workers.ExecuteResult{}, cancelErr
@@ -576,7 +576,12 @@ func workstationDispatchRequestFromExecute(
 	request workers.ExecuteRequest,
 ) workers.WorkstationDispatchRequest {
 	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
-	dispatch.DispatchID = request.Correlation.DispatchID
+	// The logical dispatch remains in Correlation.DispatchID, while the
+	// workstation pool needs a unique physical dispatch identity for every
+	// Runtime retry. The first attempt uses the same value; later attempts use
+	// their distinct AttemptID and therefore cannot collide with the terminal
+	// pool record left by an earlier attempt.
+	dispatch.DispatchID = request.Correlation.AttemptID
 	if dispatch.TransitionID == "" {
 		dispatch.TransitionID = request.Target.WorkstationName
 	}
@@ -656,6 +661,7 @@ func executeResultFromWorkstationDispatch(
 			RetryCount: result.Result.Metrics.RetryCount,
 		},
 		Continuation: continuationFromWorkstationSession(result.Result.ProviderSession),
+		Diagnostics:  workers.SafeDiagnosticsFromWorkDiagnostics(result.Result.Diagnostics),
 	}
 	if result.Result.FailureMetadata != nil || strings.TrimSpace(result.Result.Error) != "" {
 		executeResult.Failure = executionFailureFromWorkstationResult(result.Result, dispatchErr)
@@ -679,6 +685,12 @@ func executionFailureFromWorkstationResult(
 		failure.Family = result.FailureMetadata.Family
 		failure.Type = result.FailureMetadata.Type
 		failure.RetryHint = workers.FailureDecisionFromMetadata(result.FailureMetadata).Retryable
+	}
+	if failure.Message != "" && result.FailureMetadata != nil {
+		failure.Detail = &workers.FailureDetail{
+			Reason:  result.FailureMetadata.Type,
+			Message: failure.Message,
+		}
 	}
 	if failure.Message == "" && dispatchErr != nil {
 		failure.Message = dispatchErr.Error()
