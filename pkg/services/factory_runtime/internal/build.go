@@ -206,10 +206,10 @@ func (f *RuntimeFactory) Build(
 	var runtimeScopeRecorder recordings.RuntimeRecorder
 	defer func() {
 		if !bundleBuilt {
-			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
 			if runtimeScopeOwned && runtimeScopeRecorder != nil {
 				_ = runtimeScopeRecorder.Finalize(clock.Now().UTC())
 			}
+			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
 		}
 	}()
 	net, err := f.compileOrchestrationNet(ctx, dir, loadedFactoryCfg.FactoryConfig(), logger)

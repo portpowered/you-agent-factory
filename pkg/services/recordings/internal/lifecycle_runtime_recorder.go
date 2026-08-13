@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"sync"
-	"time"
-
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"sort"
+	"strings"
+	"sync"
+	"time"
 )
 
 // lifecycleRuntimeRecorder adapts Factory Runtime's focused recording port to
@@ -326,3 +329,619 @@ func lifecycleEventFromCanonical(event recordings.CanonicalEvent) recordings.Lif
 		SourceContext: event.SourceContext,
 	}
 }
+
+// NewRuntimeRoot constructs the one process-scoped Recordings root. Runtime
+// ledgers and lifecycle bindings are acquired through OpenRuntime; no caller
+// receives a constructor for those private resources.
+func NewRuntimeRoot(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication interface {
+		Publish(context.Context, string, []byte) error
+		Read(context.Context, string) ([]byte, error)
+	},
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Root {
+	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
+	projection := NewProjectionService()
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = NewReplayRecordingSnapshotWriter(writeFile)
+		tickers = NewRecordingFlushTickerFactory()
+	}
+	service := NewServiceWithLifecycleEffectsAndLogger(
+		router,
+		projection,
+		targets,
+		writer,
+		tickers,
+		publication,
+		logger,
+		clocks...,
+	)
+	root, ok := service.(*combinedService)
+	if !ok || root == nil {
+		return nil
+	}
+	root.runtimeRouter = router
+	root.runtimeSnapshotCapture = captureSnapshot
+	root.replaySnapshotDecoder = decodeSnapshot
+	root.replayConfigDecoder = decodeRuntimeConfig
+	root.replayInputs = replayInputs
+	return root
+}
+
+var _ recordings.Root = (*combinedService)(nil)
+
+func (service *combinedService) Projection() recordings.ProjectionService {
+	if service == nil {
+		return nil
+	}
+	return service.ProjectionService
+}
+
+func (service *combinedService) ReplayClock(
+	artifact *recordings.ReplayArtifact,
+) recordings.Clock {
+	return NewReplayClock(artifact)
+}
+
+func (service *combinedService) ReplayExecution(
+	artifact *recordings.ReplayArtifact,
+) (
+	workers.Provider,
+	workers.CommandRunner,
+	[]recordings.ReplayHook,
+	recordings.CompletionDeliveryPlanner,
+	error,
+) {
+	if service == nil {
+		return nil, nil, nil, nil, fmt.Errorf("Recordings runtime opening is unavailable")
+	}
+	return NewReplayExecution(
+		artifact,
+		service.replaySnapshotDecoder,
+		service.replayConfigDecoder,
+	)
+}
+
+// LoadReplayInput keeps path-based replay classification on the Recordings
+// root while retaining the narrow pre-ledger capability used by loading.
+func (service *combinedService) LoadReplayInput(
+	request recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	if service == nil || service.replayInputs == nil {
+		return recordings.LoadReplayInputResult{}, recordings.ErrMissingReplayArtifact
+	}
+	return service.replayInputs.LoadReplayInput(request)
+}
+
+// OpenRuntime acquires the runtime-owned ledger and, when recording is
+// enabled, binds its recorder to this root's shared lifecycle owner.
+func (service *combinedService) OpenRuntime(
+	ctx context.Context,
+	request recordings.RuntimeScopeRequest,
+) (recordings.RuntimeScopeResult, error) {
+	if err := validateRuntimeOpening(service, ctx, request); err != nil {
+		return recordings.RuntimeScopeResult{}, err
+	}
+	streamGenerationID := runtimeStreamGenerationID(request)
+	ledger, routeKey, err := service.openRuntimeLedger(request, streamGenerationID)
+	if err != nil {
+		return recordings.RuntimeScopeResult{}, err
+	}
+	cleanupRoute := true
+	defer func() {
+		if cleanupRoute {
+			service.runtimeRouter.unregister(routeKey, ledger)
+		}
+	}()
+
+	if strings.TrimSpace(request.RecordPath) == "" {
+		cleanupRoute = false
+		return recordings.RuntimeScopeResult{
+			Ledger:   ledger,
+			Recorder: &runtimeScopeRecorder{owner: service, routeKey: routeKey, ledger: ledger},
+		}, nil
+	}
+	recorder, ref, err := service.openRuntimeRecordingScope(request, streamGenerationID, routeKey, ledger)
+	if err != nil {
+		return recordings.RuntimeScopeResult{}, err
+	}
+	cleanupRoute = false
+	return recordings.RuntimeScopeResult{
+		Ledger:   ledger,
+		Recorder: recorder,
+		Scope:    ref,
+	}, nil
+}
+
+func validateRuntimeOpening(
+	service *combinedService,
+	ctx context.Context,
+	request recordings.RuntimeScopeRequest,
+) error {
+	if service == nil || service.runtimeRouter == nil {
+		return fmt.Errorf("Recordings runtime opening is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if request.Topology == nil {
+		return fmt.Errorf("Recordings runtime topology is required")
+	}
+	if request.Now == nil {
+		return fmt.Errorf("Recordings runtime clock is required")
+	}
+	return nil
+}
+
+func (service *combinedService) openRuntimeLedger(
+	request recordings.RuntimeScopeRequest,
+	streamGenerationID string,
+) (recordings.RuntimeEventLedger, string, error) {
+	ledger := NewRuntimeLedger(
+		request.Topology,
+		request.Now,
+		streamGenerationID,
+		request.Definitions,
+	)
+	if ledger == nil {
+		return nil, "", fmt.Errorf("Recordings runtime ledger is unavailable")
+	}
+	routeKey := strings.TrimSpace(request.FactorySessionID)
+	if routeKey == "" {
+		routeKey = ledger.StreamGenerationID()
+	}
+	if err := service.runtimeRouter.register(routeKey, ledger); err != nil {
+		return nil, "", err
+	}
+	return ledger, routeKey, nil
+}
+
+func (service *combinedService) openRuntimeRecordingScope(
+	request recordings.RuntimeScopeRequest,
+	streamGenerationID string,
+	routeKey string,
+	ledger recordings.RuntimeEventLedger,
+) (recordings.RuntimeRecorder, recordings.RecordingScopeRef, error) {
+	if service.runtimeSnapshotCapture == nil {
+		return nil, recordings.RecordingScopeRef{}, fmt.Errorf("Recordings runtime snapshot capture is required")
+	}
+	recorder, err := service.newLifecycleRuntimeRecorder(request, streamGenerationID)
+	if err != nil {
+		return nil, recordings.RecordingScopeRef{}, err
+	}
+	if err := service.bindRuntimeRecorder(recorder, request); err != nil {
+		return nil, recordings.RecordingScopeRef{}, err
+	}
+	ref := service.newRecordingScope()
+	service.scopeMu.Lock()
+	service.scopeByRef[ref] = &recordingScopeBinding{
+		recordingID: recordings.RecordingID(recorder.recordingID),
+		eventScope:  recorder.scope,
+		replayPlans: make(map[recordings.ReplayPlanHandle]struct{}),
+	}
+	service.scopeMu.Unlock()
+	return &runtimeScopeRecorder{
+		inner: recorder, owner: service, scope: ref, routeKey: routeKey, ledger: ledger,
+	}, ref, nil
+}
+
+func (service *combinedService) newLifecycleRuntimeRecorder(
+	request recordings.RuntimeScopeRequest,
+	streamGenerationID string,
+) (*lifecycleRuntimeRecorder, error) {
+	recorder, err := NewLifecycleRuntimeRecorder(
+		request.FlushInterval,
+		request.LoadedFactory,
+		request.Now,
+		request.RecordingID,
+		request.RecordPath,
+		service.runtimeSnapshotCapture,
+		streamGenerationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if recorder == nil {
+		return nil, fmt.Errorf("Recordings runtime recorder is unavailable")
+	}
+	lifecycleRecorder, ok := recorder.(*lifecycleRuntimeRecorder)
+	if !ok || lifecycleRecorder == nil {
+		return nil, fmt.Errorf("Recordings runtime recorder has unsupported implementation")
+	}
+	return lifecycleRecorder, nil
+}
+
+func (service *combinedService) bindRuntimeRecorder(
+	recorder *lifecycleRuntimeRecorder,
+	request recordings.RuntimeScopeRequest,
+) error {
+	binder, ok := any(recorder).(recordings.RuntimeRecordingBinder)
+	if !ok {
+		return fmt.Errorf("Recordings runtime recorder cannot bind")
+	}
+	if err := binder.BindRecordingLifecycle(
+		recordings.RecordingLifecycle(service),
+		requestScope(request),
+	); err != nil {
+		if recorder.recordingID != "" {
+			_, _ = service.FinishRecording(recordings.FinishRecordingRequest{
+				RecordingID: recordings.RecordingID(recorder.recordingID),
+				FinishedAt:  request.Now().UTC(),
+			})
+		}
+		return fmt.Errorf("bind Recordings runtime scope: %w", err)
+	}
+	return nil
+}
+
+func requestScope(request recordings.RuntimeScopeRequest) recordings.CanonicalEventScope {
+	return recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(request.FactorySessionID)}
+}
+
+func runtimeStreamGenerationID(request recordings.RuntimeScopeRequest) string {
+	recordingID := strings.TrimSpace(request.RecordingID)
+	if recordingID == "" {
+		recordingID = "recordings-runtime"
+	}
+	return recordingID + "-" + strings.TrimSpace(request.FactorySessionID)
+}
+
+// closeRuntimeRecordingScope records the terminal state already produced by
+// the runtime recorder and closes its opaque scope without calling Finish a
+// second time. The runtime recorder owns terminal-event emission and lifecycle
+// finalization; this method only closes the root-owned scope bookkeeping.
+func (service *combinedService) closeRuntimeRecordingScope(
+	ctx context.Context,
+	ref recordings.RecordingScopeRef,
+	finalizeErr error,
+) error {
+	if service == nil || ref.IsZero() {
+		return finalizeErr
+	}
+	binding, err := service.recordingScope(ref)
+	if err != nil {
+		return errors.Join(finalizeErr, err)
+	}
+	binding.mu.Lock()
+	defer binding.mu.Unlock()
+	if binding.closed {
+		return errors.Join(finalizeErr, binding.finalizeErr)
+	}
+	if err := recordingScopeContext(ctx).Err(); err != nil {
+		return errors.Join(finalizeErr, err)
+	}
+	if !binding.finalized {
+		binding.finalized = true
+		binding.finalizeErr = finalizeErr
+		status, statusErr := service.scopeStatus(ref, binding)
+		binding.finalizeErr = errors.Join(binding.finalizeErr, statusErr)
+		if statusErr == nil {
+			binding.terminal = status
+		}
+	}
+	binding.closed = true
+	return errors.Join(finalizeErr, binding.finalizeErr)
+}
+
+type runtimeScopeRecorder struct {
+	mu          sync.Mutex
+	inner       recordings.RuntimeRecorder
+	owner       *combinedService
+	scope       recordings.RecordingScopeRef
+	routeKey    string
+	ledger      recordings.RuntimeEventLedger
+	finalized   bool
+	finalizeErr error
+}
+
+func (recorder *runtimeScopeRecorder) Start(ctx context.Context) {
+	if recorder != nil && recorder.inner != nil {
+		recorder.inner.Start(ctx)
+	}
+}
+
+func (recorder *runtimeScopeRecorder) Stop() {
+	if recorder != nil && recorder.inner != nil {
+		recorder.inner.Stop()
+	}
+}
+
+func (recorder *runtimeScopeRecorder) RecordEvent(event recordings.FactoryEvent) {
+	if recorder != nil && recorder.inner != nil {
+		recorder.inner.RecordEvent(event)
+	}
+}
+
+func (recorder *runtimeScopeRecorder) RecordError(err error) {
+	if recorder != nil && recorder.inner != nil {
+		recorder.inner.RecordError(err)
+	}
+}
+
+func (recorder *runtimeScopeRecorder) Flush() error {
+	if recorder == nil || recorder.inner == nil {
+		return nil
+	}
+	return recorder.inner.Flush()
+}
+
+func (recorder *runtimeScopeRecorder) Err() error {
+	if recorder == nil {
+		return nil
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	var recorderErr error
+	if recorder.inner != nil {
+		recorderErr = recorder.inner.Err()
+	}
+	return errors.Join(recorder.finalizeErr, recorderErr)
+}
+
+func (recorder *runtimeScopeRecorder) Finish(finishedAt time.Time) {
+	_ = recorder.Finalize(finishedAt)
+}
+
+func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
+	if recorder == nil {
+		return nil
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if recorder.finalized {
+		err := recorder.finalizeErr
+		return err
+	}
+	recorder.finalized = true
+
+	var finalizeErr error
+	if recorder.inner != nil {
+		finalizeErr = recorder.inner.Finalize(finishedAt)
+	}
+	var closeErr error
+	if !recorder.scope.IsZero() && recorder.owner != nil {
+		closeErr = recorder.owner.closeRuntimeRecordingScope(
+			context.Background(), recorder.scope, finalizeErr,
+		)
+	}
+	if recorder.owner != nil && recorder.owner.runtimeRouter != nil {
+		recorder.owner.runtimeRouter.unregister(recorder.routeKey, recorder.ledger)
+	}
+	recorder.finalizeErr = errors.Join(finalizeErr, closeErr)
+	return errors.Join(finalizeErr, closeErr)
+}
+
+var _ recordings.RuntimeRecorder = (*runtimeScopeRecorder)(nil)
+
+// runtimeLedgerRouter keeps the public Recordings root stable while routing
+// session-scoped event operations to the private runtime ledgers it owns.
+// The fallback ledger preserves the root contract for callers that append
+// factory-wide events before a runtime scope has been opened.
+type runtimeLedgerRouter struct {
+	mu            sync.RWMutex
+	fallback      recordings.Ledger
+	routes        map[string]recordings.RuntimeEventLedger
+	recorders     []func(factorydefinitions.FactoryEvent)
+	typeRecorders []func(factorydefinitions.FactoryEventType)
+}
+
+func newRuntimeLedgerRouter(now func() time.Time) *runtimeLedgerRouter {
+	fallback := recordingevents.NewRuntimeLedger(nil, now, "recordings-root", nil)
+	return &runtimeLedgerRouter{
+		fallback: fallback,
+		routes:   make(map[string]recordings.RuntimeEventLedger),
+	}
+}
+
+func (router *runtimeLedgerRouter) register(
+	scope string,
+	ledger recordings.RuntimeEventLedger,
+) error {
+	if router == nil || ledger == nil {
+		return recordings.ErrInvalidRecordingScope
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = ledger.StreamGenerationID()
+	}
+	router.mu.Lock()
+	router.routes[scope] = ledger
+	recorders := append([]func(factorydefinitions.FactoryEvent){}, router.recorders...)
+	typeRecorders := append([]func(factorydefinitions.FactoryEventType){}, router.typeRecorders...)
+	router.mu.Unlock()
+	for _, recorder := range recorders {
+		ledger.AddEventRecorder(recorder)
+	}
+	for _, recorder := range typeRecorders {
+		ledger.AddEventTypeRecorder(recorder)
+	}
+	return nil
+}
+
+func (router *runtimeLedgerRouter) unregister(
+	scope string,
+	ledger recordings.RuntimeEventLedger,
+) {
+	if router == nil || ledger == nil {
+		return
+	}
+	scope = strings.TrimSpace(scope)
+	router.mu.Lock()
+	current, ok := router.routes[scope]
+	if ok && current != nil && current.StreamGenerationID() == ledger.StreamGenerationID() {
+		delete(router.routes, scope)
+	}
+	router.mu.Unlock()
+}
+
+func (router *runtimeLedgerRouter) route(scope string) recordings.Ledger {
+	if router == nil {
+		return nil
+	}
+	scope = strings.TrimSpace(scope)
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	if scope != "" {
+		return router.routes[scope]
+	}
+	if len(router.routes) == 1 {
+		for _, ledger := range router.routes {
+			return ledger
+		}
+	}
+	return router.fallback
+}
+
+func (router *runtimeLedgerRouter) CanonicalEvents() []factorydefinitions.FactoryEvent {
+	if router == nil {
+		return nil
+	}
+	router.mu.RLock()
+	ledgers := make([]recordings.RuntimeEventLedger, 0, len(router.routes))
+	for _, ledger := range router.routes {
+		ledgers = append(ledgers, ledger)
+	}
+	fallback := router.fallback
+	router.mu.RUnlock()
+	if len(ledgers) == 0 {
+		if fallback == nil {
+			return nil
+		}
+		return fallback.CanonicalEvents()
+	}
+	events := make([]factorydefinitions.FactoryEvent, 0)
+	for _, ledger := range ledgers {
+		events = append(events, ledger.CanonicalEvents()...)
+	}
+	sort.SliceStable(events, func(left, right int) bool {
+		return events[left].Context.EventTime.Before(events[right].Context.EventTime)
+	})
+	return events
+}
+
+func (router *runtimeLedgerRouter) Subscribe(
+	ctx context.Context,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	scope factorydefinitions.FactoryEventReconnectScope,
+) (factorydefinitions.FactoryEventStream, error) {
+	ledger := router.route(scope.SessionID)
+	if ledger == nil {
+		return factorydefinitions.FactoryEventStream{}, recordings.ErrReconnectCursorUnavailable
+	}
+	return ledger.Subscribe(ctx, reconnect, scope)
+}
+
+func (router *runtimeLedgerRouter) StreamGenerationID() string {
+	if router == nil {
+		return ""
+	}
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	if len(router.routes) == 1 {
+		for _, ledger := range router.routes {
+			return ledger.StreamGenerationID()
+		}
+	}
+	if router.fallback == nil {
+		return ""
+	}
+	return router.fallback.StreamGenerationID()
+}
+
+func (router *runtimeLedgerRouter) AddEventRecorder(
+	recorder func(factorydefinitions.FactoryEvent),
+) {
+	if router == nil || recorder == nil {
+		return
+	}
+	router.mu.Lock()
+	router.recorders = append(router.recorders, recorder)
+	ledgers := make([]recordings.RuntimeEventLedger, 0, len(router.routes))
+	for _, ledger := range router.routes {
+		ledgers = append(ledgers, ledger)
+	}
+	fallback := router.fallback
+	router.mu.Unlock()
+	if fallback != nil {
+		fallback.AddEventRecorder(recorder)
+	}
+	for _, ledger := range ledgers {
+		ledger.AddEventRecorder(recorder)
+	}
+}
+
+func (router *runtimeLedgerRouter) AddEventTypeRecorder(
+	recorder func(factorydefinitions.FactoryEventType),
+) {
+	if router == nil || recorder == nil {
+		return
+	}
+	router.mu.Lock()
+	router.typeRecorders = append(router.typeRecorders, recorder)
+	ledgers := make([]recordings.RuntimeEventLedger, 0, len(router.routes))
+	for _, ledger := range router.routes {
+		ledgers = append(ledgers, ledger)
+	}
+	fallback := router.fallback
+	router.mu.Unlock()
+	if fallback != nil {
+		fallback.AddEventTypeRecorder(recorder)
+	}
+	for _, ledger := range ledgers {
+		ledger.AddEventTypeRecorder(recorder)
+	}
+}
+
+func (router *runtimeLedgerRouter) AppendRecordedEvent(
+	event factorydefinitions.FactoryEvent,
+) {
+	if router == nil {
+		return
+	}
+	scope := ""
+	if event.Context.SessionID != nil {
+		scope = strings.TrimSpace(*event.Context.SessionID)
+	}
+	ledger := router.route(scope)
+	if ledger != nil {
+		ledger.AppendRecordedEvent(event)
+	}
+}
+
+func (router *runtimeLedgerRouter) AppendRecordedEventWithValidation(
+	event factorydefinitions.FactoryEvent,
+	validate func(factorydefinitions.FactoryEvent) error,
+) (factorydefinitions.FactoryEvent, error) {
+	if router == nil {
+		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings ledger router is unavailable")
+	}
+	scope := ""
+	if event.Context.SessionID != nil {
+		scope = strings.TrimSpace(*event.Context.SessionID)
+	}
+	ledger := router.route(scope)
+	appender, ok := ledger.(interface {
+		AppendRecordedEventWithValidation(
+			factorydefinitions.FactoryEvent,
+			func(factorydefinitions.FactoryEvent) error,
+		) (factorydefinitions.FactoryEvent, error)
+	})
+	if !ok {
+		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings ledger does not support atomic append")
+	}
+	return appender.AppendRecordedEventWithValidation(event, validate)
+}
+
+var _ recordings.Ledger = (*runtimeLedgerRouter)(nil)
