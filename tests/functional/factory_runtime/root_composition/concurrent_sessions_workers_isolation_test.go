@@ -467,6 +467,11 @@ func (p *concurrentSessionWorkersProvider) successResponse(
 	sessionID := request.Correlation.FactorySessionID
 	return workers.InferenceResponse{
 		Content: sessionID,
+		// Provider overrides own the normalized outcome when they bypass the
+		// native runner. Mark this controlled response as accepted so the
+		// test exercises concurrent session isolation rather than stop-token
+		// classification.
+		Outcome: workers.OutcomeAccepted,
 		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
 			"test_factory_session_id": sessionID,
 		}},
