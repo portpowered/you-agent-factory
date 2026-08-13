@@ -348,7 +348,11 @@ func (l *Loader) LoadSourceFromCanonicalJSON(
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
 		"",
 		factoryConfig,
-		hasInlineRuntimeDefinitions(factoryConfig),
+		// Canonical JSON is already a self-contained source. Runtime fields
+		// may be present because the source was captured from an effective
+		// loaded Factory, but that must not turn replay/import resolution into
+		// a split-layout requirement for sibling AGENTS.md files.
+		false,
 		workstationLoader,
 	)
 	if err != nil {

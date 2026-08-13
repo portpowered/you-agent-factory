@@ -4,11 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -24,46 +21,33 @@ func (automationFactoryCommandRunner) Run(
 	return workers.CommandResult{}, nil
 }
 
-func TestProvideAutomationFactoryConstructsThroughAutomationsWire(t *testing.T) {
+func TestProvideAutomationsRootConstructsThroughAutomationsWire(t *testing.T) {
 	t.Parallel()
-
-	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
-	if err != nil {
-		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
-	}
-	hostedSources, err := provideAutomationHostedSourcesFactory(serviceedges.Edges{
-		HostedLinearCheckpointStore: store,
-	})
-	if err != nil {
-		t.Fatalf("provideAutomationHostedSourcesFactory() error = %v", err)
-	}
-	hostedPollers := hostedSources(
-		zap.NewNop(),
-		clockwork.NewFakeClock(),
-		nil,
-		nil,
-		"",
-	)
 
 	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
 	if err != nil {
 		t.Fatalf("InvocationPolicyPortsFromNestedOwner() error = %v", err)
 	}
 
-	factory := provideAutomationFactory(serviceedges.Edges{}, ports.WorkstationExecution)
-	service := factory(
+	hostedSourceInputs, err := provideAutomationHostedSourceInputs(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideAutomationHostedSourceInputs() error = %v", err)
+	}
+	root, err := provideAutomationsRoot(
+		hostedSourceInputs,
 		zap.NewNop(),
 		platformclock.Real{},
 		automationFactoryCommandRunner{},
-		"wire-automation-factory",
-		t.TempDir(),
-		hostedPollers,
+		ports.WorkstationExecution,
 	)
-	if service == nil {
-		t.Fatal("provideAutomationFactory() returned nil service")
+	if err != nil {
+		t.Fatalf("provideAutomationsRoot() error = %v", err)
 	}
-	var published automations.Service = service
+	var published automations.Service = root
 	if published == nil {
-		t.Fatal("constructed service is not assignable to automations.Service")
+		t.Fatal("constructed root is not assignable to automations.Service")
+	}
+	if root.Runtime == nil {
+		t.Fatal("constructed root has no runtime capability")
 	}
 }

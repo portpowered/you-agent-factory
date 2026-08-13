@@ -80,8 +80,8 @@ composition, and BTRC-P1 for the follow-on characterization packet.
 | D-26 | FactorySessions.ProviderIdentities | Provider identity resolver | build-time dependency | Providers | Resolver belongs to provider identity policy | FSE-07 |
 | D-27 | Work.Factory | Work service constructor from runtime resolver | delete | delete: runtime-opening WorkFactory seam | Removed; canonical Wire owns the Work root | WSE-04 |
 | D-28 | Work.ContentMaterializer | Work content materialization capability | build-time dependency | Work | Materialized content cleanup belongs to Work | WSE-04 |
-| D-29 | Automations.Factory | Automation service constructor | build-time dependency | Automations | Automation service closes with runtime scope | WSE-08 |
-| D-30 | Automations.HostedSourcesFactory | Hosted-source constructor | build-time dependency | Automations | Hosted pollers close with Automations | WSE-08 |
+| D-29 | Automations.Factory | Deferred Automation service constructor | delete | delete: the process-scoped Automations root owns Runtime-ID activation | Runtime source state is activated and deactivated by Runtime ID | BTRC-P2C |
+| D-30 | Automations.HostedSourcesFactory | Deferred hosted-source constructor | delete | delete: hosted-source mechanics are composed inside Automations Wire | Hosted pollers are owned by each activated Runtime source scope | BTRC-P2C |
 | D-31 | Models.Service | Models service root used for runtime scope binding | build-time dependency | Models | Model runtime scope cleanup is reverse-unwound by opener | WSE-03 |
 | D-32 | Recordings.ProjectionFactory | Recording projection constructor | delete | delete: per-opening Recordings projection factory | Shared stateless projection is owned by the canonical root | FSE-06 |
 | D-33 | Recordings.LifecycleFactory | Recording lifecycle constructor | delete | delete: per-opening Recordings lifecycle factory | Opaque recording scopes own lifecycle state in Recordings | FSE-06 |
@@ -136,7 +136,7 @@ questions and are both reconciled explicitly.
 | F-04 | WorkersMockCommandRunnerFactory | Builds mock command runners | build-time dependency | Factory Runtime | Mock runner lifecycle follows durable execution | WSE-07 |
 | F-05 | ResolveClock | Resolves live or replay clock | build-time dependency | Factory Runtime | Selected clock belongs to opened scope | FSE-05 |
 | F-06 | NewSessionLogger | Builds the per-session logger | build-time dependency | Factory Runtime | Logger follows session/process lifecycle | PSS-I01 |
-| F-07 | FactoryDefinitionsFactory | Builds the Factory Definitions service after runtime completion | build-time dependency | Factory Definitions | Definitions service owns its close boundary | FSE-02 |
+| F-07 | FactoryDefinitionsFactory | Builds the Factory Definitions service after runtime completion | delete | delete: the singular Definitions root resolves the detached Runtime snapshot before opening | No late Definitions attachment or service construction | BTRC-P2C |
 | F-08 | InitialFactorySnapshotFactory | Builds initial definition snapshot | build-time dependency | Factory Definitions | Snapshot artifact follows definition lifecycle | FSE-02 |
 | F-09 | LoadFactory | Loads a factory source | build-time dependency | Factory Definitions | Loaded source closes with opening scope | FSE-02 |
 | F-10 | NewLoadedFactory | Builds a loaded factory source | build-time dependency | Factory Definitions | Loaded source lifecycle follows runtime | FSE-02 |
@@ -152,8 +152,8 @@ questions and are both reconciled explicitly.
 | F-20 | ProviderIdentities | Resolves provider identities | build-time dependency | Providers | Provider identity policy owns capability | FSE-07 |
 | F-21 | WorkFactory | Builds Work from a runtime resolver | delete | delete: runtime-opening WorkFactory seam | Canonical Wire supplies one Work root | WSE-04 |
 | F-22 | ContentMaterializer | Materializes Work content | build-time dependency | Work | Work owns materialized-content cleanup | WSE-04 |
-| F-23 | AutomationFactory | Builds Automations service | build-time dependency | Automations | Automation service closes with runtime | WSE-08 |
-| F-24 | HostedSourcesFactory | Builds hosted automation pollers | build-time dependency | Automations | Pollers close with Automations | WSE-08 |
+| F-23 | AutomationFactory | Builds Automations service per runtime | delete | delete: canonical Wire publishes one Automations root and Runtime-ID activation owns source state | Root remains process-scoped; each Runtime owns its source cleanup | BTRC-P2C |
+| F-24 | HostedSourcesFactory | Builds hosted automation pollers | delete | delete: hosted-source construction stays behind Automations Wire | Pollers unwind with their owning Runtime activation | BTRC-P2C |
 | F-25 | ProjectionFactory | Builds Recordings projections | delete | delete: per-opening Recordings projection factory | Canonical root owns the shared projection capability | FSE-06 |
 | F-26 | LifecycleFactory | Builds recording lifecycle | delete | delete: per-opening Recordings lifecycle factory | Opaque scope owner owns lifecycle state | FSE-06 |
 | F-27 | RuntimeLedgerFactory | Builds runtime ledger | delete | delete: per-opening Recordings runtime-ledger factory | Canonical root opens private ledgers | FSE-06 |
@@ -189,6 +189,18 @@ cross ownership boundaries after several services have been assembled.
 | L-11 | RuntimeHTTPServicesBound | Signals HTTP service-table binding after assembly | delete | delete: application binding callback | Wire owns HTTP service-table composition | PSS-I01 |
 | L-12 | HistoricalReplayBound | Signals replay-only service-table binding | operation value | Recordings | Replay view is immutable and has no live cleanup | FSE-06 |
 | L-13 | gateCompletionOnRuntimeHost | Gates application completion on runtime-host readiness callback | delete | delete: application opening callback gate | initializer owns readiness and completion ordering | PSS-I01 |
+
+## BTRC-P2C closure evidence
+
+Rows D-29, D-30, F-07, F-23, and F-24 are closed by the P2C root cutover.
+Canonical Wire publishes one Definitions root, one Runtime root, and one
+Automations root; the Automations root retains isolated Runtime-ID lifecycle
+state and composes hosted pollers behind its own Wire provider. Behavioral
+evidence is covered by the Automations runtime lifecycle tests, Automations
+Wire fold-preservation tests, the root composition tests, and the functional
+Automations reconciliation tests. The prior FSE-02 Definitions snapshot and
+Runtime activation tests provide the prerequisite proof for the same opening
+path.
 
 ## Ownership invariants for the next packet
 

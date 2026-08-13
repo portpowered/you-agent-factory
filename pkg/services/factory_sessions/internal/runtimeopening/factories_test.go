@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -29,6 +30,10 @@ type materializerStub struct{}
 
 func (materializerStub) MaterializeContentURL(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
 	return "/tmp/runtimeopening.png", func() {}, nil
+}
+
+type factoryDefinitionsConstructionStub struct {
+	factorydefinitions.Service
 }
 
 // runtimeOpeningFixture is test-only assembly syntax. Production callers use
@@ -276,7 +281,8 @@ func assertFactoryDefinitionsPortsRetained(t *testing.T, factory *Factory, depen
 	group := dependencies.FactoryDefinitions
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions validator", factory.factoryDefinitionValidator, group.Validator)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions paths", factory.namedPaths, group.NamedPaths)
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions factory", factory.factoryDefinitionsFactory, group.Factory)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions service", factory.factoryDefinitions, group.Service)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions runtime router", factory.definitionRuntimeRouter, group.RuntimeRouter)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions initial snapshot", factory.initialFactorySnapshotFactory, group.InitialFactorySnapshotFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions loader", factory.loadFactory, group.LoadFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Definitions source", factory.newLoadedFactory, group.NewLoadedFactory)
@@ -320,8 +326,7 @@ func assertWorkPortsRetained(
 func assertAutomationsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Automations
-	assertRuntimeOpeningDependencyIdentity(t, "Automations factory", factory.automationFactory, group.Factory)
-	assertRuntimeOpeningDependencyIdentity(t, "Automations hosted sources", factory.automationHostedSourcesFactory, group.HostedSourcesFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Automations service", factory.automationService, group.Service)
 }
 
 func assertModelsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
@@ -400,7 +405,8 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Runtime clock", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Clock = nil }},
 		{"Factory Definitions validator", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Validator = nil }},
 		{"Factory Definitions named path resolver", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NamedPaths = nil }},
-		{"Factory Definitions factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Factory = nil }},
+		{"Factory Definitions service", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Service = nil }},
+		{"Factory Definitions runtime router", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.RuntimeRouter = nil }},
 		{"Factory Definitions initial factory snapshot factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.InitialFactorySnapshotFactory = nil }},
 		{"Factory Definitions loaded factory loader", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.LoadFactory = nil }},
 		{"Factory Definitions loaded factory source factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NewLoadedFactory = nil }},
@@ -417,8 +423,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
 		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
 		{"Work service", func(d *runtimeOpeningFixture) { d.Work.Service = nil }},
-		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
-		{"Automations hosted sources factory", func(d *runtimeOpeningFixture) { d.Automations.HostedSourcesFactory = nil }},
+		{"Automations service", func(d *runtimeOpeningFixture) { d.Automations.Service = nil }},
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
 		{"Recordings root", func(d *runtimeOpeningFixture) { d.Recordings.Root = nil }},
 		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
@@ -454,7 +459,8 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		FactoryDefinitions: &FactoryDefinitionsPorts{
 			Validator:                     validatorConstructionStub{},
 			NamedPaths:                    namedPathsConstructionStub{},
-			Factory:                       inertRuntimeOpeningFunction[FactoryDefinitionsFactory](calls),
+			Service:                       factoryDefinitionsConstructionStub{},
+			RuntimeRouter:                 &factorysessions.DefinitionRuntimeRouter{},
 			InitialFactorySnapshotFactory: inertRuntimeOpeningFunction[factorydefinitions.InitialFactorySnapshotFactory](calls),
 			LoadFactory:                   inertRuntimeOpeningFunction[factorydefinitions.LoadedFactoryLoader](calls),
 			NewLoadedFactory:              inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySourceFactory](calls),
@@ -477,8 +483,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			Service: work.MaterializationService(constructionMaterializer{calls: calls}),
 		},
 		Automations: &AutomationsPorts{
-			Factory:              inertRuntimeOpeningFunction[AutomationFactory](calls),
-			HostedSourcesFactory: inertRuntimeOpeningFunction[AutomationHostedSourcesFactory](calls),
+			Service: automations.Root{},
 		},
 		Models:     &ModelsPorts{Service: &modelsConstructionStub{}},
 		Recordings: &RecordingsPorts{Root: &recordingsRootConstructionStub{}},

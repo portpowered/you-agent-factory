@@ -140,6 +140,21 @@ func (UnimplementedService) ResolveExecutionCatalog(
 	return ResolveExecutionCatalogResult{}, fmt.Errorf("execution catalog resolver is required")
 }
 
+// ResolveRuntimeSnapshot returns a typed collaborator-required failure until
+// the owner-composed snapshot resolver is attached.
+func (UnimplementedService) ResolveRuntimeSnapshot(
+	context.Context,
+	ResolveRuntimeSnapshotRequest,
+) (ResolveRuntimeSnapshotResult, error) {
+	return ResolveRuntimeSnapshotResult{}, &RuntimeSnapshotResolutionError{
+		Diagnostic: RuntimeSnapshotDiagnostic{
+			Code:    RuntimeSnapshotDiagnosticUnavailable,
+			Message: "runtime snapshot resolver is not attached",
+		},
+		Cause: ErrRuntimeSnapshotResolverUnavailable,
+	}
+}
+
 // ValidateStructuralFactoryDefinition returns ErrInvalidFactoryDefinitionPayload
 // until nested validator wiring lands.
 func (UnimplementedService) ValidateStructuralFactoryDefinition(

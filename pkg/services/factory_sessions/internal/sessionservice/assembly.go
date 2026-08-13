@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -169,6 +170,8 @@ func (a *Assembly) Complete(
 	runtimeLifecycle factoryruntime.Lifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
 	durableExecution durableexecution.Service,
+	factoryDefinitions factorydefinitions.Service,
+	factorySessionID string,
 	dir string,
 	executionBaseDir string,
 	runtimeMode factorydefinitions.RuntimeMode,
@@ -187,37 +190,47 @@ func (a *Assembly) Complete(
 	factorysessions.Service,
 	roles.SessionInvoker,
 	factorysessions.DefinitionHost,
+	factorydefinitions.DefinitionActivationGateway,
 	error,
 ) {
 	if a == nil || a.state == nil || a.registry == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
+		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
 	}
 	if startupRuntime == nil {
-		return nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+	}
+	sessionID := strings.TrimSpace(factorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	isDefault := sessionID == factorysessions.DefaultSessionID
+	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
+	if isDefault {
+		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
 	}
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
-		return nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
+		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
 	session := livesession.New(
-		factorysessions.DefaultSessionID,
+		sessionID,
 		startupRuntime.Directory(),
 		startupRuntime.FolderDirectory(),
 		startupRuntime.LoadedRuntimeConfig().RuntimeBaseDir(),
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		target,
 		&runtimebinding.SessionState{Instance: startupRuntime, Spec: &startupSpec},
-		true,
+		isDefault,
 		filepath.Base(startupRuntime.FolderDirectory()),
 		clock,
 		a.sessionIDs,
 		a.eventIDs,
 	)
 	if session == nil {
-		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
+		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
 	}
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
@@ -247,6 +260,7 @@ func (a *Assembly) Complete(
 		runtimeLifecycle,
 		runtimeSidecars,
 		durableExecution,
+		factoryDefinitions,
 		dir,
 		executionBaseDir,
 		runtimeMode,
@@ -271,7 +285,7 @@ func (a *Assembly) Complete(
 		a.identity,
 	)
 	if runtime == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
+		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
 	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
@@ -286,13 +300,13 @@ func (a *Assembly) Complete(
 	gateway = runtime.AttachSessionGateway(gateway)
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
 	// The per-runtime gateway is returned to the operation caller. The
 	// process-scoped root keeps its original stable service slot so concurrent
 	// session completions cannot replace or race the shared root.
-	return runtime, gateway, invoker, definitionHost{runtime: runtime}, nil
+	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
 }
 
 type definitionHost struct {

@@ -3,7 +3,11 @@ package internal
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
@@ -11,18 +15,38 @@ import (
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// Root retains process-scoped Factory Runtime dependencies. It is inert until a
-// hosted runtime binds an active factory.Service delegate.
+// Root retains process-scoped Factory Runtime dependencies. It is inert until
+// an injected activation operation has initialized and published a complete
+// Runtime delegate.
 type Root struct {
 	orchestration orchestration.Service
 	instanceHost  instancehost.Service
 	dispatchPlan  dispatchplanning.Service
-	active        factoryruntime.Service
+	activation    factoryruntime.RuntimeActivationOperation
+
+	mu           sync.RWMutex
+	active       *runtimeActivationState
+	failed       *runtimeActivationCleanupState
+	activating   bool
+	deactivating bool
 }
 
 var _ factoryruntime.Service = (*Root)(nil)
+
+type runtimeActivationState struct {
+	request factoryruntime.RuntimeActivationRequest
+	service factoryruntime.Service
+	view    factoryruntime.RuntimeActivationView
+	close   func(context.Context) error
+}
+
+type runtimeActivationCleanupState struct {
+	runtimeID string
+	close     func(context.Context) error
+}
 
 // NewRoot constructs the inert Factory Runtime root from construction ports. It
 // composes accepted parent-private owners and starts no lifecycle, sidecars,
@@ -34,6 +58,7 @@ func NewRoot(
 	clock factoryruntime.Clock,
 	workersPublisher dispatchplanning.WorkersPublisher,
 	workersCanceler dispatchplanning.WorkersCanceler,
+	activation ...factoryruntime.RuntimeActivationOperation,
 ) (*Root, error) {
 	if newID == nil {
 		return nil, fmt.Errorf("construct Factory Runtime: ID generator is required")
@@ -48,11 +73,315 @@ func NewRoot(
 	if err != nil {
 		return nil, err
 	}
+	var activationOperation factoryruntime.RuntimeActivationOperation
+	if len(activation) > 1 {
+		return nil, fmt.Errorf("construct Factory Runtime: at most one activation operation is supported")
+	}
+	if len(activation) == 1 {
+		activationOperation = activation[0]
+	}
 	return &Root{
 		orchestration: orchestrationwire.New(newID, workflows, workflowRuntime),
 		instanceHost:  instanceHost,
 		dispatchPlan:  dispatchplanningwire.New(workersPublisher, workersCanceler),
+		activation:    activationOperation,
 	}, nil
+}
+
+// Activate validates and atomically publishes one initialized Runtime. The
+// activation operation is the only construction-time route to a live
+// delegate; failed operations never become observable through this root. If
+// failed-start cleanup also fails, the cleanup remains explicitly retryable
+// through Deactivate for the same Runtime ID.
+func (r *Root) Activate(
+	ctx context.Context,
+	request factoryruntime.RuntimeActivationRequest,
+) (factoryruntime.RuntimeActivationResult, error) {
+	if err := validateActivationContext(ctx); err != nil {
+		return factoryruntime.RuntimeActivationResult{}, err
+	}
+	normalized, err := request.Normalize()
+	if err != nil {
+		return factoryruntime.RuntimeActivationResult{}, err
+	}
+	if r == nil {
+		return factoryruntime.RuntimeActivationResult{}, fmt.Errorf("activate Factory Runtime: root is required")
+	}
+	operation, err := r.beginActivation(normalized)
+	if err != nil {
+		return factoryruntime.RuntimeActivationResult{}, err
+	}
+	activation, operationErr := operation(ctx, normalized)
+	if err := r.finishActivation(ctx, normalized, activation, operationErr); err != nil {
+		return factoryruntime.RuntimeActivationResult{}, err
+	}
+	r.mu.RLock()
+	active := r.active
+	if active == nil {
+		r.mu.RUnlock()
+		return factoryruntime.RuntimeActivationResult{}, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorFailed,
+			RuntimeID: normalized.RuntimeID,
+			Message:   "activate Factory Runtime: published state is unavailable",
+		}
+	}
+	view := active.view
+	r.mu.RUnlock()
+	return factoryruntime.RuntimeActivationResult{
+		RuntimeID: normalized.RuntimeID,
+		State:     factoryruntime.RuntimeLifecycleStateActive,
+		Runtime:   view,
+	}, nil
+}
+
+func validateActivationContext(ctx context.Context) error {
+	if ctx == nil {
+		return &factoryruntime.RuntimeActivationError{
+			Kind:    factoryruntime.RuntimeActivationErrorMissingParameters,
+			Message: "activate Factory Runtime: context is required",
+		}
+	}
+	return ctx.Err()
+}
+
+func (r *Root) beginActivation(
+	request factoryruntime.RuntimeActivationRequest,
+) (factoryruntime.RuntimeActivationOperation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active != nil {
+		kind := factoryruntime.RuntimeActivationErrorConflict
+		message := "activate Factory Runtime: another Runtime is already active"
+		if reflect.DeepEqual(r.active.request, request) {
+			kind = factoryruntime.RuntimeActivationErrorAlreadyActive
+			message = "activate Factory Runtime: Runtime is already active"
+		}
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      kind,
+			RuntimeID: request.RuntimeID,
+			Message:   message,
+		}
+	}
+	if r.failed != nil {
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorConflict,
+			RuntimeID: request.RuntimeID,
+			Message:   "activate Factory Runtime: failed activation cleanup is pending",
+		}
+	}
+	if r.activating || r.deactivating {
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorConflict,
+			RuntimeID: request.RuntimeID,
+			Message:   "activate Factory Runtime: lifecycle transition is already in progress",
+		}
+	}
+	if r.activation == nil {
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorUnavailable,
+			RuntimeID: request.RuntimeID,
+			Message:   "activate Factory Runtime: activation operation is unavailable",
+		}
+	}
+	r.activating = true
+	return r.activation, nil
+}
+
+func (r *Root) finishActivation(
+	ctx context.Context,
+	request factoryruntime.RuntimeActivationRequest,
+	activation *factoryruntime.RuntimeActivation,
+	operationErr error,
+) error {
+	if operationErr != nil {
+		cleanupErr := closeActivation(activation, ctx)
+		if cleanupErr != nil {
+			r.retainFailedCleanup(request.RuntimeID, activation)
+			operationErr = fmt.Errorf("%w; unwind activation: %v", operationErr, cleanupErr)
+		}
+		r.clearActivating()
+		return &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorFailed,
+			RuntimeID: request.RuntimeID,
+			Message:   "activate Factory Runtime: initialization failed",
+			Cause:     operationErr,
+		}
+	}
+	if activation == nil || activation.Service == nil {
+		cleanupErr := closeActivation(activation, ctx)
+		if cleanupErr != nil {
+			r.retainFailedCleanup(request.RuntimeID, activation)
+			operationErr = fmt.Errorf("activation returned no Runtime service; unwind activation: %w", cleanupErr)
+		} else {
+			operationErr = fmt.Errorf("activation returned no Runtime service")
+		}
+		r.clearActivating()
+		return &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorFailed,
+			RuntimeID: request.RuntimeID,
+			Message:   "activate Factory Runtime: initialization returned no Runtime service",
+			Cause:     operationErr,
+		}
+	}
+	r.mu.Lock()
+	r.activating = false
+	view := factoryruntime.RuntimeActivationView{
+		RuntimeID:        request.RuntimeID,
+		FactorySessionID: request.FactorySessionID,
+		Service:          activation.Service,
+		HostedInstance:   activation.HostedInstance,
+		Replacement:      activation.Replacement,
+		BuildSpec:        activation.BuildSpec,
+		Lifecycle:        activation.Lifecycle,
+		Sidecars:         activation.Sidecars,
+	}
+	r.active = &runtimeActivationState{
+		request: request,
+		service: activation.Service,
+		view:    view,
+		close:   activation.Close,
+	}
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *Root) retainFailedCleanup(
+	runtimeID string,
+	activation *factoryruntime.RuntimeActivation,
+) {
+	if r == nil || activation == nil || activation.Close == nil {
+		return
+	}
+	r.mu.Lock()
+	r.failed = &runtimeActivationCleanupState{
+		runtimeID: runtimeID,
+		close:     activation.Close,
+	}
+	r.mu.Unlock()
+}
+
+func (r *Root) clearActivating() {
+	r.mu.Lock()
+	r.activating = false
+	r.mu.Unlock()
+}
+
+// Deactivate closes the active Runtime's owned resources before removing its
+// delegate. A failed cleanup leaves the Runtime published so callers can retry
+// cleanup without losing the only reference to the active state. It also
+// retries cleanup retained from a failed activation that never became active.
+func (r *Root) Deactivate(
+	ctx context.Context,
+	request factoryruntime.RuntimeDeactivationRequest,
+) (factoryruntime.RuntimeDeactivationResult, error) {
+	runtimeID := strings.TrimSpace(request.RuntimeID)
+	if runtimeID == "" {
+		return factoryruntime.RuntimeDeactivationResult{}, &factoryruntime.RuntimeActivationError{
+			Kind:    factoryruntime.RuntimeActivationErrorMissingParameters,
+			Message: "deactivate Factory Runtime: Runtime ID is required",
+		}
+	}
+	if err := validateDeactivationContext(ctx, runtimeID); err != nil {
+		return factoryruntime.RuntimeDeactivationResult{}, err
+	}
+	if r == nil {
+		return factoryruntime.RuntimeDeactivationResult{}, fmt.Errorf("deactivate Factory Runtime: root is required")
+	}
+
+	closeOwnedResources, err := r.beginDeactivation(runtimeID)
+	if err != nil {
+		return factoryruntime.RuntimeDeactivationResult{}, err
+	}
+	if closeOwnedResources != nil {
+		if err := closeOwnedResources(ctx); err != nil {
+			r.abortDeactivation()
+			return factoryruntime.RuntimeDeactivationResult{}, &factoryruntime.RuntimeActivationError{
+				Kind:      factoryruntime.RuntimeActivationErrorDeactivationFailed,
+				RuntimeID: runtimeID,
+				Message:   "deactivate Factory Runtime: owned cleanup failed",
+				Cause:     err,
+			}
+		}
+	}
+	r.completeDeactivation()
+	return factoryruntime.RuntimeDeactivationResult{
+		RuntimeID: runtimeID,
+		State:     factoryruntime.RuntimeLifecycleStateStopped,
+	}, nil
+}
+
+func validateDeactivationContext(ctx context.Context, runtimeID string) error {
+	if ctx == nil {
+		return &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorMissingParameters,
+			RuntimeID: runtimeID,
+			Message:   "deactivate Factory Runtime: context is required",
+		}
+	}
+	return ctx.Err()
+}
+
+func (r *Root) beginDeactivation(runtimeID string) (func(context.Context) error, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active == nil {
+		if r.failed != nil {
+			if r.failed.runtimeID != runtimeID {
+				return nil, &factoryruntime.RuntimeActivationError{
+					Kind:      factoryruntime.RuntimeActivationErrorConflict,
+					RuntimeID: runtimeID,
+					Message:   "deactivate Factory Runtime: Runtime ID does not match pending activation cleanup",
+				}
+			}
+			if r.activating || r.deactivating {
+				return nil, &factoryruntime.RuntimeActivationError{
+					Kind:      factoryruntime.RuntimeActivationErrorConflict,
+					RuntimeID: runtimeID,
+					Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
+				}
+			}
+			r.deactivating = true
+			return r.failed.close, nil
+		}
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorNotActive,
+			RuntimeID: runtimeID,
+			Message:   "deactivate Factory Runtime: Runtime is not active",
+		}
+	}
+	if r.activating || r.deactivating {
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorConflict,
+			RuntimeID: runtimeID,
+			Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
+		}
+	}
+	if r.active.request.RuntimeID != runtimeID {
+		return nil, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorConflict,
+			RuntimeID: runtimeID,
+			Message:   "deactivate Factory Runtime: Runtime ID does not match the active Runtime",
+		}
+	}
+	r.deactivating = true
+	return r.active.close, nil
+}
+
+func (r *Root) abortDeactivation() {
+	r.mu.Lock()
+	r.deactivating = false
+	r.mu.Unlock()
+}
+
+func (r *Root) completeDeactivation() {
+	r.mu.Lock()
+	r.deactivating = false
+	if r.active != nil {
+		r.active = nil
+	} else {
+		r.failed = nil
+	}
+	r.mu.Unlock()
 }
 
 func (r *Root) ControlPause(ctx context.Context, req factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
@@ -122,6 +451,35 @@ func (r *Root) AcceptDispatchResult(
 	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
 }
 
+// SubmitWorkRequest preserves the migration-only Factory Sessions ingress
+// while routing the request through the activated Runtime delegate. The
+// process root remains the canonical Service authority; this narrow bridge is
+// retained for the legacy HTTP mapping until that representation migrates.
+func (r *Root) SubmitWorkRequest(
+	ctx context.Context,
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
+	service, ok := r.delegate().(factoryruntime.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
+	}
+	return service.SubmitWorkRequest(ctx, request)
+}
+
+// SubscribeFactoryEvents preserves the migration-only Factory Sessions event
+// stream through the activated Runtime delegate for the legacy HTTP mapping.
+func (r *Root) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	service, ok := r.delegate().(factoryruntime.APIFactory)
+	if !ok {
+		return nil, factoryruntime.ErrNotRunning
+	}
+	return service.SubscribeFactoryEvents(ctx, reconnect, scope)
+}
+
 // InvokeWorker delegates one orchestrator-resolved Worker invocation to the
 // hosted runtime, which owns the Worker Sessions service and the canonical
 // event ledger the invocation's association must land on.
@@ -138,21 +496,24 @@ func (r *Root) InvokeWorker(
 	return factoryruntime.InvokeWorkerResult{}, factoryruntime.ErrNotRunning
 }
 
-// BindActiveService attaches the hosted runtime delegate that serves published
-// control, observation, and dispatch-plan operations on the wire-constructed
-// root.
-func (r *Root) BindActiveService(service factoryruntime.Service) {
-	if r == nil {
-		return
-	}
-	r.active = service
-}
-
 func (r *Root) delegate() factoryruntime.Service {
 	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
 		return nil
 	}
-	return r.active
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.active == nil {
+		return nil
+	}
+	return r.active.service
+}
+
+func closeActivation(activation *factoryruntime.RuntimeActivation, ctx context.Context) error {
+	if activation == nil || activation.Close == nil {
+		return nil
+	}
+	cleanupContext := context.WithoutCancel(ctx)
+	return activation.Close(cleanupContext)
 }
 
 func validObservationScope(scope factoryruntime.ObservationScope) bool {

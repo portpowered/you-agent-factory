@@ -8,9 +8,23 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+const (
+	ProgressFragmentKind  = workers.ProgressFragmentKind
+	ResponseFragmentKind  = workers.ResponseFragmentKind
+	CompletedFragmentKind = workers.CompletedFragmentKind
+	FailedFragmentKind    = workers.FailedFragmentKind
+)
+
+type ProgressFragment = workers.ProgressFragment
+
+type ProgressPublisher = workers.ProgressPublisher
+
 // SessionRuntimeOpeningRequest contains Factory Session identity,
 // persistence, startup, and hosting values for one runtime.
 type SessionRuntimeOpeningRequest struct {
+	// FactorySessionID correlates the opened runtime with its owning Factory
+	// Session. Empty values use the process's primary session alias.
+	FactorySessionID  string
 	PersistencePolicy PersistencePolicy
 	BackendScopeID    string
 	SystemConfigHome  string

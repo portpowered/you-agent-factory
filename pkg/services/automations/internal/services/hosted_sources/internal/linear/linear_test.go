@@ -36,6 +36,31 @@ type renameFailCheckpointFileSystem struct {
 
 func (f renameFailCheckpointFileSystem) Rename(string, string) error { return f.err }
 
+type runtimeConfigWithID struct {
+	interfaces.RuntimeConfigLookup
+	id string
+}
+
+func (c runtimeConfigWithID) RuntimeInstanceID() string { return c.id }
+
+func TestCheckpointPath_IsolatedByRuntimeInstanceID(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig, err := factorydefinitioncomposition.NewLoadedSource(
+		t.TempDir(), &interfaces.FactoryConfig{}, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewLoadedSource() error = %v", err)
+	}
+	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-source"}
+	worker := &interfaces.FactoryWorkerConfig{Name: "linear-worker"}
+	first := CheckpointPath(runtimeConfigWithID{RuntimeConfigLookup: runtimeConfig, id: "runtime-alpha"}, workstation, worker)
+	second := CheckpointPath(runtimeConfigWithID{RuntimeConfigLookup: runtimeConfig, id: "runtime-beta"}, workstation, worker)
+	if first == second || !strings.Contains(first, "runtime-alpha") || !strings.Contains(second, "runtime-beta") {
+		t.Fatalf("checkpoint paths = %q and %q, want runtime-scoped paths", first, second)
+	}
+}
+
 func TestCheckpointStore_RestartCorruptionNotFoundAndAtomicFailure(t *testing.T) {
 	if _, err := NewCheckpointStore(nil); err == nil {
 		t.Fatal("NewCheckpointStore(nil) error = nil")

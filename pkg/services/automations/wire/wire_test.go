@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -24,8 +25,7 @@ type constructionPorts struct {
 	logger           *zap.Logger
 	clock            clockwork.Clock
 	commandRunner    workers.CommandRunner
-	hostedSources    automations.HostedSourcesFactory
-	hostedClock      automations.HostedLinearClock
+	hostedPollers    automations.HostedPollers
 	resolveTemplates workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 }
@@ -55,8 +55,9 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		logger:        zap.NewNop(),
 		clock:         clockwork.NewFakeClock(),
 		commandRunner: stubCommandRunner{},
-		hostedSources: automationswire.NewHostedSourcesFactory(store),
-		hostedClock:   clockwork.NewFakeClock(),
+		hostedPollers: hostedsourceswire.NewHostedPollers(
+			zap.NewNop(), clockwork.NewFakeClock(), nil, nil, "", store,
+		),
 		resolveTemplates: func(
 			string,
 			map[string]string,
@@ -83,12 +84,7 @@ func (ports constructionPorts) newService(t *testing.T) runtimeAutomationService
 		ports.commandRunner,
 		"automations-wire",
 		"",
-		ports.hostedSources,
-		nil,
-		ports.hostedClock,
-		nil,
-		nil,
-		"",
+		ports.hostedPollers,
 		ports.resolveTemplates,
 		ports.executionPolicy,
 	)
@@ -156,6 +152,22 @@ type stubFilesystemInputReader struct{}
 func (stubFilesystemInputReader) ReadDir(string) ([]fs.DirEntry, error) { return nil, nil }
 func (stubFilesystemInputReader) ReadFile(string) ([]byte, error)       { return nil, nil }
 func (stubFilesystemInputReader) Stat(string) (fs.FileInfo, error)      { return nil, nil }
+
+type secretRuntimePathsStub struct{}
+
+func (secretRuntimePathsStub) FactoryDir() string     { return "/factory" }
+func (secretRuntimePathsStub) RuntimeBaseDir() string { return "/runtime" }
+
+func TestHostedLinearSecretResolverWrapperDelegatesToInjectedEffects(t *testing.T) {
+	resolver := automationswire.NewHostedLinearSecretResolver(
+		func(string) string { return "env-secret" },
+		func(string) ([]byte, error) { return nil, nil },
+	)
+	got, err := resolver(context.Background(), secretRuntimePathsStub{}, "secrets/api-key")
+	if err != nil || got != "env-secret" {
+		t.Fatalf("NewHostedLinearSecretResolver() = %q, %v; want env-secret, nil", got, err)
+	}
+}
 
 // Peer-behavior coverage pairs Service and Root success/failure paths in one test.
 func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
@@ -268,14 +280,9 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			want:   "construct Automations: command runner is required",
 		},
 		{
-			name:   "hosted-sources factory",
-			mutate: func(ports *constructionPorts) { ports.hostedSources = nil },
-			want:   "construct Automations: hosted-sources factory is required",
-		},
-		{
-			name:   "hosted poller clock",
-			mutate: func(ports *constructionPorts) { ports.hostedClock = nil },
-			want:   "construct Automations: hosted poller clock is required",
+			name:   "hosted pollers",
+			mutate: func(ports *constructionPorts) { ports.hostedPollers = nil },
+			want:   "construct Automations: hosted pollers are required",
 		},
 		{
 			name:   "template field resolver",
@@ -299,12 +306,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.commandRunner,
 				"automations-wire",
 				"",
-				ports.hostedSources,
-				nil,
-				ports.hostedClock,
-				nil,
-				nil,
-				"",
+				ports.hostedPollers,
 				ports.resolveTemplates,
 				ports.executionPolicy,
 			)
@@ -332,6 +334,37 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewRootComposesHostedEffectsAndPublishesRuntimeCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
+	}
+	root, err := automationswire.NewRoot(
+		ports.logger,
+		ports.clock,
+		ports.commandRunner,
+		"automations-root",
+		"",
+		automationswire.HostedSourceInputs{
+			Clock:           ports.clock,
+			SecretResolver:  func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
+			LinearEndpoint:  "",
+			CheckpointStore: store,
+		},
+		ports.resolveTemplates,
+		ports.executionPolicy,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	if root.Operations == nil || root.Lifecycle == nil || root.Runtime == nil {
+		t.Fatalf("NewRoot() = %#v, want operations, lifecycle, and runtime capabilities", root)
+	}
+}
+
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
@@ -344,7 +377,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	service, err := automationswire.NewService(
 		ports.logger, ports.clock, ports.commandRunner, "automations-wire-inert", "",
-		ports.hostedSources, nil, ports.hostedClock, nil, nil, "",
+		ports.hostedPollers,
 		ports.resolveTemplates, ports.executionPolicy,
 	)
 	if err != nil {
@@ -372,7 +405,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 type inertConstructionCalls struct {
 	commandRunner        int
 	templateResolver     int
-	hostedFactory        int
 	startLinearPoller    int
 	validateLinearPoller int
 }
@@ -382,18 +414,9 @@ func inertConstructionPorts(t *testing.T, calls *inertConstructionCalls) constru
 
 	ports := validConstructionPorts(t)
 	ports.commandRunner = recordingCommandRunner{calls: &calls.commandRunner}
-	ports.hostedSources = func(
-		*zap.Logger,
-		automations.HostedLinearClock,
-		automations.HostedLinearHTTPDoer,
-		automations.HostedLinearSecretResolver,
-		string,
-	) automations.HostedPollers {
-		calls.hostedFactory++
-		return recordingHostedPollers{
-			startCalls:    &calls.startLinearPoller,
-			validateCalls: &calls.validateLinearPoller,
-		}
+	ports.hostedPollers = recordingHostedPollers{
+		startCalls:    &calls.startLinearPoller,
+		validateCalls: &calls.validateLinearPoller,
 	}
 	ports.resolveTemplates = func(
 		string,
@@ -422,9 +445,6 @@ func assertInertConstructionCalls(t *testing.T, calls *inertConstructionCalls) {
 			"construction invoked hosted poller lifecycle (start=%d validate=%d), want inert construction",
 			calls.startLinearPoller, calls.validateLinearPoller,
 		)
-	}
-	if calls.hostedFactory != 1 {
-		t.Fatalf("hosted-sources factory calls = %d, want exactly one composition call", calls.hostedFactory)
 	}
 }
 

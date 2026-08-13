@@ -1,3 +1,10 @@
+// Package internal composes Automations runtime sidecars for script pollers,
+// hosted pollers, filesystem watchers, and cron Work generation. Script
+// command/source polling is owned by internal/services/script_pollers and
+// reached only through this Automations root. Wire supplies explicit
+// submitters, clocks, loggers, cancellation, and configuration. Use
+// StartSchedulerSidecarsForRuntime as the unified runtime entrypoint for poller
+// and cron supervision.
 package internal
 
 import (
@@ -7,11 +14,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -21,25 +28,31 @@ import (
 
 var _ automations.Service = (*Service)(nil)
 
+// WorkRequestSubmitter submits parsed poller or cron work requests into the runtime.
+type WorkRequestSubmitter = automations.WorkRequestSubmitter
+
 // Clock is the automation time source needed for scheduling and supervision.
 type Clock = automations.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
-	loggerValue       *zap.Logger
-	clock             Clock
-	commandRunnerEdge workers.CommandRunner
-	workflowID        string
-	defaultFactoryDir string
-	hostedPollers     automations.HostedPollers
-	resolveTemplates  workers.TemplateFieldResolver
-	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
-	reconciler        reconciliation.Service
-	scriptPollers     scriptpollers.Service
-	cron              cron.Service
+	loggerValue        *zap.Logger
+	clock              Clock
+	commandRunnerEdge  workers.CommandRunner
+	workflowID         string
+	defaultFactoryDir  string
+	hostedPollers      automations.HostedPollers
+	resolveTemplates   workers.TemplateFieldResolver
+	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
+	reconciler         reconciliation.Service
+	scriptPollers      scriptpollers.Service
+	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
-	schedulerMu       sync.Mutex
-	schedulerSources  map[automations.SourceIdentity]*schedulerSource
+	schedulerMu        sync.Mutex
+	schedulerSources   map[automations.SourceIdentity]*schedulerSource
+	runtimeMu          sync.Mutex
+	runtimes           map[string]*runtimeInstance
+	runtimeActivating  map[string]struct{}
 }
 
 // New constructs the automation service from explicit worker-sidecar
@@ -64,6 +77,8 @@ func New(
 		resolveTemplates:  resolveTemplates,
 		executionPolicy:   executionPolicy,
 		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
+		runtimes:          make(map[string]*runtimeInstance),
+		runtimeActivating: make(map[string]struct{}),
 	}
 	service.reconciler = service.newSchedulerReconciler()
 	service.scriptPollers = service.newScriptPollers()
@@ -112,7 +127,7 @@ func (s *Service) Root() automations.Root {
 	if s == nil || s.reconciler == nil {
 		return automations.Root{}
 	}
-	return automations.Root{Operations: s}
+	return automations.Root{Operations: s, Lifecycle: s, Runtime: s}
 }
 
 func (s *Service) Reconcile(

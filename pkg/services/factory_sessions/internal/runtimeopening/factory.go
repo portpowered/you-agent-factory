@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -76,6 +77,7 @@ type FactoryRuntimePorts struct {
 	ProviderInvocationFactory       factoryruntime.ProviderInvocationExecutorFactory
 	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
 	FactoryRuntimeAssembler         FactoryRuntimeAssembler
+	RuntimeRootFactory              RuntimeRootFactory
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 	Clock                           factoryruntime.Clock
@@ -89,7 +91,8 @@ type FactoryRuntimePorts struct {
 type FactoryDefinitionsPorts struct {
 	Validator                     factorydefinitions.Validator
 	NamedPaths                    factorydefinitions.NamedPathResolver
-	Factory                       FactoryDefinitionsFactory
+	Service                       factorydefinitions.Service
+	RuntimeRouter                 *factorysessions.DefinitionRuntimeRouter
 	InitialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory
 	LoadFactory                   factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory              factorydefinitions.LoadedFactorySourceFactory
@@ -119,8 +122,7 @@ type WorkPorts struct {
 
 // AutomationsPorts contains Automations-owned opening collaborators.
 type AutomationsPorts struct {
-	Factory              AutomationFactory
-	HostedSourcesFactory AutomationHostedSourcesFactory
+	Service automations.Service
 }
 
 // WebhooksPorts contains the Webhooks root used to attach hosted delivery to
@@ -176,18 +178,19 @@ type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
 	modelService                     models.Service
-	automationFactory                AutomationFactory
+	automationService                automations.Service
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsRoot                   recordings.Root
+	replayInputs                     recordings.ReplayInputLoader
 	webhooksService                  webhooks.Service
 	workersRuntimeFactory            WorkersRuntimeFactory
 	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
 	providerInvocationFactory        factoryruntime.ProviderInvocationExecutorFactory
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	automationHostedSourcesFactory   AutomationHostedSourcesFactory
 	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
-	factoryDefinitionsFactory        FactoryDefinitionsFactory
+	factoryDefinitions               factorydefinitions.Service
+	definitionRuntimeRouter          *factorysessions.DefinitionRuntimeRouter
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
 	editableFactoryValidator         factorysessions.EditableFactoryValidator
 	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
@@ -213,6 +216,7 @@ type Factory struct {
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
 	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
+	runtimeRoot                      FactoryRuntimeRoot
 	clock                            factoryruntime.Clock
 	providerOverride                 workers.Provider
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder
@@ -234,7 +238,7 @@ func NewFactory(
 	factoryDefinitions *FactoryDefinitionsPorts,
 	factorySessions *FactorySessionsPorts,
 	workPorts *WorkPorts,
-	automations *AutomationsPorts,
+	automationsPorts *AutomationsPorts,
 	modelsPorts *ModelsPorts,
 	recordingsPorts *RecordingsPorts,
 	webhooksPorts *WebhooksPorts,
@@ -247,7 +251,7 @@ func NewFactory(
 		factoryDefinitions,
 		factorySessions,
 		workPorts,
-		automations,
+		automationsPorts,
 		modelsPorts,
 		recordingsPorts,
 		webhooksPorts,
@@ -257,23 +261,24 @@ func NewFactory(
 		return nil, err
 	}
 
-	return &Factory{
+	factory := &Factory{
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerExecutionFactory:           workersPorts.ExecutionFactory,
 		modelService:                     modelsPorts.Service,
-		automationFactory:                automations.Factory,
+		automationService:                automationsPorts.Service,
 		factorySessionsService:           factorySessions.Service,
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
 		recordingsRoot:                   recordingsPorts.Root,
+		replayInputs:                     recordingsPorts.Root,
 		webhooksService:                  webhooksPorts.Service,
 		workersRuntimeFactory:            workersPorts.RuntimeFactory,
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
-		automationHostedSourcesFactory:   automations.HostedSourcesFactory,
 		workersLocalRuntimeHooksFactory:  workersPorts.LocalRuntimeHooksFactory,
-		factoryDefinitionsFactory:        factoryDefinitions.Factory,
+		factoryDefinitions:               factoryDefinitions.Service,
+		definitionRuntimeRouter:          factoryDefinitions.RuntimeRouter,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
 		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
@@ -305,7 +310,15 @@ func NewFactory(
 		scriptCommandRunner:              workersPorts.ScriptCommandRunner,
 		submissionRecorder:               factoryRuntime.SubmissionRecorder,
 		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
-	}, nil
+	}
+	if factoryRuntime.RuntimeRootFactory != nil {
+		runtimeRoot, err := factoryRuntime.RuntimeRootFactory(factory.activateRuntime)
+		if err != nil {
+			return nil, fmt.Errorf("construct Factory Runtime root: %w", err)
+		}
+		factory.runtimeRoot = runtimeRoot
+	}
+	return factory, nil
 }
 
 // validateOwnerPorts checks the fixed owner contracts in declaration order.
@@ -378,7 +391,8 @@ func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
 	return validateRuntimeOpeningRequirements("Factory Definitions",
 		runtimeOpeningRequirement{"validator", group.Validator},
 		runtimeOpeningRequirement{"named path resolver", group.NamedPaths},
-		runtimeOpeningRequirement{"factory", group.Factory},
+		runtimeOpeningRequirement{"service", group.Service},
+		runtimeOpeningRequirement{"runtime router", group.RuntimeRouter},
 		runtimeOpeningRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
 		runtimeOpeningRequirement{"loaded factory loader", group.LoadFactory},
 		runtimeOpeningRequirement{"loaded factory source factory", group.NewLoadedFactory},
@@ -419,8 +433,7 @@ func validateAutomations(group *AutomationsPorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Automations",
-		runtimeOpeningRequirement{"factory", group.Factory},
-		runtimeOpeningRequirement{"hosted sources factory", group.HostedSourcesFactory},
+		runtimeOpeningRequirement{"service", group.Service},
 	)
 }
 
@@ -514,6 +527,34 @@ func (f *Factory) openRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	logger *zap.Logger,
 ) (runtimeProducts, error) {
+	return f.openRuntimeWithOptions(ctx, request, logger, nil, nil)
+}
+
+func (f *Factory) openRuntimeWithSnapshot(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	logger *zap.Logger,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+) (runtimeProducts, error) {
+	return f.openRuntimeWithOptions(ctx, request, logger, definitionSnapshot, nil)
+}
+
+func (f *Factory) openRuntimeWithReplayInput(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	logger *zap.Logger,
+	replayInput *recordings.LoadReplayInputResult,
+) (runtimeProducts, error) {
+	return f.openRuntimeWithOptions(ctx, request, logger, nil, replayInput)
+}
+
+func (f *Factory) openRuntimeWithOptions(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	logger *zap.Logger,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
+) (runtimeProducts, error) {
 	return openRuntime(
 		ctx, request, logger,
 		f.clock,
@@ -526,7 +567,7 @@ func (f *Factory) openRuntime(
 		f.durableExecutionFactory,
 		f.workerExecutionFactory,
 		f.modelService,
-		f.automationFactory,
+		f.automationService,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsRoot,
@@ -534,9 +575,9 @@ func (f *Factory) openRuntime(
 		f.workersRuntimeExecutorsFactory,
 		f.providerInvocationFactory,
 		f.workersMockCommandRunnerFactory,
-		f.automationHostedSourcesFactory,
 		f.workersLocalRuntimeHooksFactory,
-		f.factoryDefinitionsFactory,
+		f.factoryDefinitions,
+		f.definitionRuntimeRouter,
 		f.factoryScaffoldInitializer,
 		f.editableFactoryValidator,
 		f.initialFactorySnapshotFactory,
@@ -561,6 +602,8 @@ func (f *Factory) openRuntime(
 		f.generateRuntimeInstanceID,
 		f.resolveHome,
 		f.providerIdentities,
+		definitionSnapshot,
+		replayInput,
 	)
 }
 
@@ -570,8 +613,41 @@ func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger)
+	opened, err := f.openForRequest(ctx, request)
 	return opened.application, err
+}
+
+func (f *Factory) openForRequest(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (runtimeProducts, error) {
+	// Historical portable replay is an inspection-only product and must not
+	// acquire live Runtime state. Legacy replay artifacts still use the normal
+	// activation path and therefore retain the live replay behavior.
+	if request != nil && request.Recordings.ReplayPath != "" {
+		// A compatibility Factory without a Runtime root still needs the direct
+		// historical/replay opener used by narrow tests and migration callers.
+		// Canonical Wire always supplies the root, so classify the input there
+		// before deciding whether activation is required.
+		if f.runtimeRoot == nil || f.replayInputs == nil {
+			return f.openRuntime(ctx, request, f.baseLogger)
+		}
+		input, err := f.replayInputs.LoadReplayInput(
+			recordings.LoadReplayInputRequest{Path: request.Recordings.ReplayPath},
+		)
+		if err != nil || input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
+			if err != nil {
+				// The loader has already classified and safely detached the
+				// replay input. Propagating that result preserves the one-read
+				// runtime-opening contract; routing the error through openRuntime
+				// would ask the same loader to read the artifact again.
+				return runtimeProducts{}, err
+			}
+			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
+		}
+		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
+	}
+	return f.openActivatedRuntime(ctx, request)
 }
 
 // ModelsRoot returns the process-scoped accepted Models root used by runtime
@@ -589,7 +665,7 @@ func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger)
+	opened, err := f.openForRequest(ctx, request)
 	return opened.invocation, err
 }
 
@@ -599,6 +675,6 @@ func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger)
+	opened, err := f.openForRequest(ctx, request)
 	return opened.execution, err
 }

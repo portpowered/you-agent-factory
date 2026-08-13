@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -24,6 +23,7 @@ import (
 
 type preparedRuntime struct {
 	Definition          factorydefinitions.RuntimeOpeningRequest
+	DefinitionSnapshot  *factorydefinitions.RuntimeSnapshot
 	Runtime             factoryruntime.RuntimeOpeningRequest
 	Session             factorysessions.SessionRuntimeOpeningRequest
 	Workers             workers.RuntimeOpeningRequest
@@ -53,7 +53,6 @@ func PrepareRuntime(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
 	replayClock func(*factorydefinitions.ReplayArtifact) recordings.Clock,
-	hostedPollersFactory AutomationHostedSourcesFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
@@ -63,36 +62,37 @@ func PrepareRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
 ) (
 	prepared preparedRuntime,
 	root RuntimeRoot,
 	load RuntimeLoad,
 	clock factoryruntime.Clock,
 	logger *zap.Logger,
-	hostedPollers automations.HostedPollers,
 	err error,
 ) {
 	if err := factoryruntime.ValidateRecordReplayPaths(recordingRequest.RecordPath, recordingRequest.ReplayPath); err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	if factoryScaffoldInitializer == nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"Factory Definitions scaffold initializer is required",
 		)
 	}
 	if editableFactoryValidator == nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"Factory Definitions editable validator is required",
 		)
 	}
 	prepared = preparedRuntime{
 		Definition: definitionRequest, Runtime: runtimeRequest, Session: sessionRequest,
 		Workers: workerRequest, Recordings: recordingRequest, ModelCacheDirectory: modelCacheDirectory,
-		OperatorDefaults: operatorDefaults,
+		OperatorDefaults: operatorDefaults, DefinitionSnapshot: definitionSnapshot,
 	}
 	root, err = ResolveRuntimeRoot(prepared.Definition.Directory, baseLogger, prepared.Runtime.RuntimeInstanceID, generateRuntimeInstanceID, resolveHome)
 	if err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	prepared.Definition.Directory = root.FactoryRootDir
 	prepared.Runtime.RuntimeInstanceID = root.RuntimeInstanceID
@@ -107,9 +107,9 @@ func PrepareRuntime(
 		resolveHome,
 	)
 	if err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
-	load, err = LoadRuntime(
+	load, err = loadRuntime(
 		selectedDefinitionPath,
 		prepared.Definition.ExecutionBaseDir,
 		prepared.Recordings.ReplayPath,
@@ -122,59 +122,50 @@ func PrepareRuntime(
 		replayInputs,
 		captureLoadedFactorySnapshot,
 		newSessionLogger,
+		prepared.DefinitionSnapshot,
+		replayInput,
+		prepared.Session.FactorySessionID,
 	)
 	if err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	if load.HistoricalReplay != nil {
-		return prepared, root, load, nil, load.SessionLogger, nil, nil
+		return prepared, root, load, nil, load.SessionLogger, nil
 	}
 	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, root.BaseLogger); err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
 	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
 		load.LoadedFactoryCfg,
 		providerIdentities,
 	); err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"validate Factory provider selections: %w",
 			err,
 		)
 	}
 	if factoryDefinitionValidator == nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, fmt.Errorf(
 			"Factory Definition validator is required",
 		)
 	}
 	if load.LoadedFactoryCfg != nil {
 		result := factoryDefinitionValidator.ValidateBlockingLoad(ctx, load.LoadedFactoryCfg.FactoryConfig())
 		if err := factorydefinitions.NewBlockingFactoryLoadError(result); err != nil {
-			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
+			return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 		}
-	}
-	if hostedPollersFactory == nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, fmt.Errorf(
-			"Automations hosted sources factory is required",
-		)
 	}
 	selectedClock, clockErr := clockForReplay(
 		clockEdge, load.ReplayArtifact, replayClock, resolveClock,
 	)
 	if clockErr != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, clockErr
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, clockErr
 	}
 	return prepared,
 		root,
 		load,
 		selectedClock,
 		root.BaseLogger,
-		hostedPollersFactory(
-			root.BaseLogger,
-			nil,
-			nil,
-			nil,
-			"",
-		),
 		nil
 }
 

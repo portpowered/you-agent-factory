@@ -7,7 +7,7 @@ import (
 )
 
 // AutomationsRootFromEdges constructs the published Automations Root through the
-// same AutomationFactory wiring used by BuildProcess / InjectBundle.
+// the same process-owned Automations wiring used by BuildProcess / InjectBundle.
 func AutomationsRootFromEdges(
 	edges serviceedges.Edges,
 	workflowID string,

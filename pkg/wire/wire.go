@@ -9,6 +9,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -155,7 +156,9 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
-	provideAutomationFactory,
+	provideAutomationHostedSourceInputs,
+	provideAutomationsRoot,
+	wire.Bind(new(automations.Service), new(automations.Root)),
 	provideFactorySessionsService,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
@@ -221,15 +224,16 @@ var servicesSet = wire.NewSet(
 	provideWorkersRuntimeExecutorsFactory,
 	provideProviderInvocationExecutorFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
-	provideFactoryDefinitionsFactory,
+	provideFactoryDefinitionsRuntimeRouter,
+	provideFactoryDefinitionsRoot,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewAssembly,
+	provideFactoryRuntimeRootFactory,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
 	wire.Struct(new(factorysessionwire.ProviderSessionsRuntimeOpeningPorts), "*"),
 	wire.Struct(new(factorysessionwire.FactoryRuntimeOpeningPorts), "*"),

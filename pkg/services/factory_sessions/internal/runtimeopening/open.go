@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -41,7 +42,7 @@ func openRuntime(
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
-	automationFactory AutomationFactory,
+	automationService automations.Service,
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsRoot recordings.Root,
@@ -49,9 +50,9 @@ func openRuntime(
 	workersRuntimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	automationHostedSourcesFactory AutomationHostedSourcesFactory,
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
-	factoryDefinitionsFactory FactoryDefinitionsFactory,
+	factoryDefinitions factorydefinitions.Service,
+	definitionRuntimeRouter *factorysessions.DefinitionRuntimeRouter,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
@@ -76,6 +77,8 @@ func openRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
+	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayInput *recordings.LoadReplayInputResult,
 ) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
@@ -86,11 +89,16 @@ func openRuntime(
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
 	sessionRequest := request.FactorySession
+	sessionID := strings.TrimSpace(sessionRequest.FactorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	sessionRequest.FactorySessionID = sessionID
 	workerRequest := request.Workers
 	recordingRequest := request.Recordings
 	modelCacheDirectory := request.ModelCacheDirectory
 	operatorDefaults := request.OperatorDefaults
-	configured, root, load, clock, logger, hostedPollers, err := PrepareRuntime(
+	configured, root, load, clock, logger, err := PrepareRuntime(
 		ctx,
 		definitionRequest,
 		runtimeRequest,
@@ -108,7 +116,6 @@ func openRuntime(
 		decodeReplayConfig,
 		recordingsRoot,
 		recordingsRoot.ReplayClock,
-		automationHostedSourcesFactory,
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
 		captureLoadedFactorySnapshot,
@@ -118,6 +125,8 @@ func openRuntime(
 		generateRuntimeInstanceID,
 		resolveHome,
 		providerIdentities,
+		definitionSnapshot,
+		replayInput,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -197,7 +206,7 @@ func openRuntime(
 	}
 	var initialProgressPublisher workers.ProgressPublisher
 	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
-		initialProgressPublisher = inferenceProgressPublisherFactory(factorysessions.DefaultSessionID)
+		initialProgressPublisher = inferenceProgressPublisherFactory(sessionID)
 	}
 	sessionBuildRuntimes := &sessionBuildRuntimeSink{}
 	cleanup.Add(func() error {
@@ -225,20 +234,10 @@ func openRuntime(
 	cleanup.Add(func() error {
 		return serviceService.Close(context.WithoutCancel(ctx))
 	})
-	if automationFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations factory is required")
+	if automationService == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations service is required")
 	}
-	service2 := automationFactory(
-		logger,
-		clock,
-		scriptCommandRunner,
-		configured.Recordings.WorkflowID,
-		configured.Definition.Directory,
-		hostedPollers,
-	)
-	if service2 == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations factory returned nil service")
-	}
+	service2 := automationService
 	mutationOwner, ok := factorysessionexecutionService.(interface {
 		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
 	})
@@ -258,7 +257,7 @@ func openRuntime(
 			configured.Recordings.ReplayPath == "",
 			configured.Recordings.RecordPath,
 			configured.Recordings.WorkflowID,
-			factorysessions.DefaultSessionID,
+			sessionID,
 			nil,
 			loadFactory,
 			providerOverride,
@@ -328,6 +327,7 @@ func openRuntime(
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
+		sessionID,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -337,7 +337,13 @@ func openRuntime(
 			return webhookSubscription(context.WithoutCancel(ctx))
 		})
 	}
-	sessionRuntime, service4, invocationDomain, definitionHost, err := runtimeService.Complete(
+	if factoryDefinitions == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions service is required")
+	}
+	if definitionRuntimeRouter == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions runtime router is required")
+	}
+	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := runtimeService.Complete(
 		root.FactoryRootDir,
 		clock,
 		logger,
@@ -348,6 +354,8 @@ func openRuntime(
 		runtimeLifecycle,
 		runtimeSidecars,
 		factorysessionexecutionService,
+		factoryDefinitions,
+		sessionID,
 		configured.Definition.Directory,
 		configured.Definition.ExecutionBaseDir,
 		configured.Runtime.Mode,
@@ -371,26 +379,17 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	if factoryDefinitionsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
-	}
-	activationGatewayProvider, ok := sessionRuntime.(interface {
-		DefinitionActivationGateway() factorydefinitions.DefinitionActivationGateway
-	})
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Session runtime must expose DefinitionActivationGateway")
-	}
-	factoryDefinitionOwner := factoryDefinitionsFactory(
+	if err := definitionRuntimeRouter.Bind(
+		sessionID,
 		definitionHost,
-		activationGatewayProvider.DefinitionActivationGateway(),
-		factoryDefinitionValidator,
-	)
-	if factoryDefinitionOwner == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
+		definitionActivationGateway,
+	); err != nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
 	}
-	if err := attachFactoryDefinitionServiceToRuntime(sessionRuntime, factoryDefinitionOwner); err != nil {
-		return runtimeProducts{}, err
-	}
+	cleanup.Add(func() error {
+		definitionRuntimeRouter.Unbind(sessionID)
+		return nil
+	})
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}
@@ -415,12 +414,12 @@ func openRuntime(
 	// A JavaScript workflow's children are Workers, and Workers are supervised
 	// by the runtime that owns this session's Worker Sessions service and
 	// canonical ledger. That runtime only exists here, after the execution
-	// service it must be handed to was already constructed, so the binding is
-	// late by necessity rather than by preference -- the same ordering
-	// Root.BindActiveService resolves the same way.
+	// service it must be handed to was already constructed. The eventual root
+	// activation operation must preserve this dependency ordering without
+	// publishing a second post-construction binding path.
 	bindWorkerInvoker(durableExecution.Service, rootRuntime)
 	opened := assembleRuntimeProducts(
-		factoryDefinitionOwner,
+		factoryDefinitions,
 		service4,
 		invocationDomain,
 		rootRuntime,
@@ -440,6 +439,11 @@ func openRuntime(
 		configured.Session.BackendScopeID,
 		cleanup.Close,
 	)
+	opened.startup = startupRuntime
+	opened.replacement = runtimebuildService
+	opened.buildSpec = startupSpec
+	opened.lifecycle = runtimeLifecycle
+	opened.sidecars = runtimeSidecars
 	opened.application.Resources.Clock = clock
 	return opened, nil
 }
@@ -451,6 +455,7 @@ func startFactoryWebhookSubscription(
 	ledger recordings.Ledger,
 	loaded factorydefinitions.MutableLoadedFactorySource,
 	active bool,
+	sessionID string,
 ) (webhooks.Subscription, error) {
 	if !active || loaded == nil || !hasEnabledWebhooks(loaded.FactoryConfig()) {
 		return nil, nil
@@ -461,7 +466,10 @@ func startFactoryWebhookSubscription(
 	if recordingsService == nil {
 		return nil, fmt.Errorf("construct runtime scope: Recordings service is required for Webhooks")
 	}
-	scope := recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID}
+	if strings.TrimSpace(sessionID) == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
 	return webhooksService.Start(ctx, webhooks.StartRequest{
 		Definitions:      loaded.FactoryConfig().Webhooks,
 		Events:           recordingsService,

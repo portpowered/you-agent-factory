@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jonboulle/clockwork"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -487,51 +486,23 @@ func provideInitialFactorySnapshotFactory(
 	}
 }
 
-func provideAutomationFactory(
-	edges serviceedges.Edges,
+func provideAutomationsRoot(
+	hostedSourceInputs automationswire.HostedSourceInputs,
+	logger *zap.Logger,
+	clock factoryruntime.Clock,
+	commandRunner factorysessionwire.ScriptCommandRunner,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
-) factorysessionwire.AutomationFactory {
-	hostedClock := edges.HostedClock
-	if hostedClock == nil {
-		hostedClock = clockwork.NewRealClock()
-	}
-	return func(
-		logger *zap.Logger,
-		clock factoryruntime.Clock,
-		commandRunner workers.CommandRunner,
-		workflowID string,
-		defaultFactoryDir string,
-		hostedPollers automations.HostedPollers,
-	) automations.Service {
-		hostedSources := func(
-			*zap.Logger,
-			automations.HostedLinearClock,
-			automations.HostedLinearHTTPDoer,
-			automations.HostedLinearSecretResolver,
-			string,
-		) automations.HostedPollers {
-			return hostedPollers
-		}
-		service, err := automationswire.NewService(
-			logger,
-			clock,
-			commandRunner,
-			workflowID,
-			defaultFactoryDir,
-			hostedSources,
-			nil,
-			hostedClock,
-			nil,
-			nil,
-			"",
-			workerswire.ResolveTemplateFields,
-			workstationExecution,
-		)
-		if err != nil {
-			return nil
-		}
-		return service
-	}
+) (automations.Root, error) {
+	return automationswire.NewRoot(
+		logger,
+		clock,
+		commandRunner,
+		"",
+		"",
+		hostedSourceInputs,
+		workerswire.ResolveTemplateFields,
+		workstationExecution,
+	)
 }
 
 func provideFactorySessionResponseEventRetentionLimits(

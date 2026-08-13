@@ -479,18 +479,6 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 	factory := newOpeningCoordinatorFactory(t, modelRoot)
 	factory.workerExecutionFactory = worker.openWorkerExecution
 	factory.factoryRuntimeAssembler = assembler
-	factory.automationFactory = func(
-		*zap.Logger,
-		factoryruntime.Clock,
-		workers.CommandRunner,
-		string,
-		string,
-		automations.HostedPollers,
-	) automations.Service {
-		events = append(events, "automations-open-failed")
-		return nil
-	}
-
 	_, err := factory.openRuntime(
 		context.Background(),
 		&factorysessions.RuntimeOpeningRequest{
@@ -500,7 +488,7 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 		},
 		zap.NewNop(),
 	)
-	if err == nil || !strings.Contains(err.Error(), "Automations factory returned nil service") {
+	if err == nil || !strings.Contains(err.Error(), "Automations service is required") {
 		t.Fatalf("openRuntime() error = %v, want original Automations opening failure", err)
 	}
 	if !errors.Is(err, workerCloseErr) {
@@ -509,7 +497,6 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 	if !slices.Equal(events, []string{
 		"models-open",
 		"worker-open",
-		"automations-open-failed",
 		"worker-close",
 		"models-close",
 	}) {
@@ -537,7 +524,6 @@ func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Fa
 		factorySessionsService:         sessionsRoot,
 		factorySessionsRuntimeAssembly: sessionsRoot,
 		recordingsRoot:                 &recordingsRootConstructionStub{},
-		automationHostedSourcesFactory: openingCoordinatorHostedPollers,
 		factoryScaffoldInitializer:     openingCoordinatorInitializeScaffold,
 		editableFactoryValidator:       openingCoordinatorValidateEditable,
 		workService:                    work.MaterializationService(openingCoordinatorContentMaterializer{}),
@@ -719,15 +705,6 @@ func openingCoordinatorDurableExecution(
 	return DurableExecution{}, nil
 }
 
-func openingCoordinatorHostedPollers(
-	*zap.Logger,
-	automations.HostedLinearClock,
-	automations.HostedLinearHTTPDoer,
-	automations.HostedLinearSecretResolver,
-	string,
-) automations.HostedPollers {
-	return nil
-}
 
 func openingCoordinatorInitializeScaffold(string) error {
 	return nil

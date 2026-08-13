@@ -18,6 +18,11 @@ type runtimeProducts struct {
 	application roles.OpenedApplicationRuntime
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
+	startup     factoryruntime.HostedInstance
+	replacement factoryruntime.ReplacementBuilder
+	buildSpec   factoryruntime.SessionBuildSpec
+	lifecycle   factoryruntime.Lifecycle
+	sidecars    factoryruntime.Sidecars
 }
 
 type workerSessionsObservationProvider interface {

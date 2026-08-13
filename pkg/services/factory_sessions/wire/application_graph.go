@@ -110,13 +110,11 @@ type (
 	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
 	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
 	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
-	AutomationFactory                      = runtimeopening.AutomationFactory
+	WorkFactory                            = runtimeopening.WorkFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
 	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
 	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
 	DurableExecution                       = runtimeopening.DurableExecution
 	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
@@ -125,6 +123,8 @@ type (
 	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
 	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
+	FactoryRuntimeRoot                     = runtimeopening.FactoryRuntimeRoot
+	RuntimeRootFactory                     = runtimeopening.RuntimeRootFactory
 	RuntimeOpening                         = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
@@ -138,6 +138,12 @@ type (
 	StdioOpeningService                 = executionopening.StdioOpeningService
 	RuntimeVisualizationSinkOwner       = factoryvisualization.RuntimeSinkOwner
 )
+
+// NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
+// routing capability used by the canonical process graph.
+func NewDefinitionRuntimeRouter() *factorysessions.DefinitionRuntimeRouter {
+	return &factorysessions.DefinitionRuntimeRouter{}
+}
 
 // RuntimeAssemblyFromService narrows the one Wire-constructed Factory
 // Sessions root to its owner-private runtime capability. The assertion is

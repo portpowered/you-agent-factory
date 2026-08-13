@@ -12,6 +12,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -244,6 +245,90 @@ func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 		loaded.ReplayArtifact.WallClock == nil ||
 		!loaded.ReplayArtifact.WallClock.StartedAt.Equal(artifact.WallClock.StartedAt) {
 		t.Fatalf("legacy replay facts = %#v, want events and replay-clock metadata", loaded.ReplayArtifact)
+	}
+}
+
+func TestLoadRuntimeUsesDetachedSnapshotWithoutReloadingAuthoredSource(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	snapshot := factorydefinitions.RuntimeSnapshot{
+		FactoryDir:        factoryDir,
+		RuntimeBaseDir:    filepath.Join(factoryDir, "runtime"),
+		DefinitionVersion: &factorydefinitions.FactoryVersion{Logical: 4},
+		EffectiveFactory: factorydefinitions.FactoryConfig{
+			Name:    "snapshot-factory",
+			Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "worker"}},
+			Workstations: []factorydefinitions.FactoryWorkstationConfig{{
+				Name: "station", WorkerTypeName: "worker",
+			}},
+		},
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "worker"}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
+			Name: "station", WorkerTypeName: "worker",
+		}},
+		PromptSources: []factorydefinitions.RuntimePromptSource{
+			{Role: "worker", Name: "worker", Path: "workers/worker.md"},
+			{Role: "workstation", Name: "station", Path: "workstations/station.md", IsTemplate: true},
+		},
+	}
+	loadCalls := 0
+	loggerSessionID := ""
+	var passedConfig *factorydefinitions.FactoryConfig
+	newLoadedFactory := func(
+		dir string,
+		config *factorydefinitions.FactoryConfig,
+		lookup factorydefinitions.RuntimeDefinitionLookup,
+		replacements []factorydefinitions.PortableBundledFileReplacement,
+	) (factorydefinitions.MutableLoadedFactorySource, error) {
+		passedConfig, _ = factorydefinitions.CloneFactoryConfig(config)
+		return factorydefinitionfixtures.NewLoadedSource(dir, config, lookup, replacements)
+	}
+	loaded, err := loadRuntime(
+		factoryDir,
+		"",
+		"",
+		operatorconfig.ResolvedDefaults{},
+		nil,
+		RuntimeRoot{FactoryRootDir: factoryDir, BaseLogger: zap.NewNop()},
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			loadCalls++
+			return nil, errors.New("authored loader must not run")
+		},
+		newLoadedFactory,
+		nil,
+		nil,
+		nil,
+		func(base *zap.Logger, sessionID, _, _ string) *zap.Logger {
+			loggerSessionID = sessionID
+			return base
+		},
+		&snapshot,
+		nil,
+		"session-1",
+	)
+	if err != nil {
+		t.Fatalf("loadRuntime(snapshot) error = %v", err)
+	}
+	if loadCalls != 0 {
+		t.Fatalf("authored source loader calls = %d, want zero", loadCalls)
+	}
+	if loggerSessionID != "session-1" {
+		t.Fatalf("snapshot runtime logger session ID = %q, want session-1", loggerSessionID)
+	}
+	if loaded.LoadedFactoryCfg == nil {
+		t.Fatal("loaded Factory source = nil")
+	}
+	if got := loaded.LoadedFactoryCfg.FactoryDir(); got != factoryDir {
+		t.Fatalf("loaded Factory directory = %q, want %q", got, factoryDir)
+	}
+	if got := loaded.LoadedFactoryCfg.RuntimeBaseDir(); got != snapshot.RuntimeBaseDir {
+		t.Fatalf("loaded runtime base directory = %q, want %q", got, snapshot.RuntimeBaseDir)
+	}
+	if passedConfig == nil || passedConfig.Workers[0].PromptSourcePath != "workers/worker.md" ||
+		passedConfig.Workstations[0].PromptSourcePath != "workstations/station.md" ||
+		!passedConfig.Workstations[0].PromptSourceIsTemplate {
+		t.Fatalf("snapshot prompt metadata passed to source factory = %#v", passedConfig)
 	}
 }
 

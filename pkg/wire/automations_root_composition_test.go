@@ -23,6 +23,9 @@ func TestAutomationsRootFromEdgesComposesPublishedRoot(t *testing.T) {
 	if root.Operations == nil {
 		t.Fatal("AutomationsRootFromEdges() returned root without operations")
 	}
+	if root.Runtime == nil {
+		t.Fatal("AutomationsRootFromEdges() returned root without runtime capability")
+	}
 
 	result, err := root.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{{
