@@ -96,9 +96,6 @@ func PrepareRuntime(
 	}
 	prepared.Definition.Directory = root.FactoryRootDir
 	prepared.Runtime.RuntimeInstanceID = root.RuntimeInstanceID
-	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, prepared.Recordings.ReplayPath, root.BaseLogger); err != nil {
-		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
-	}
 	var resolveCurrentDir func(string) (string, error)
 	if namedPaths != nil {
 		resolveCurrentDir = namedPaths.ResolveCurrentDir
@@ -131,6 +128,9 @@ func PrepareRuntime(
 	}
 	if load.HistoricalReplay != nil {
 		return prepared, root, load, nil, load.SessionLogger, nil, nil
+	}
+	if err := ensureBackendScope(ensureOperatorBackendScope, &prepared.Session, root.BaseLogger); err != nil {
+		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, err
 	}
 	if err := operatordefaultsruntime.ResolveConcreteProviderSelections(
 		load.LoadedFactoryCfg,
@@ -466,11 +466,11 @@ func operatorConfigPath(request factorysessions.SessionRuntimeOpeningRequest) (s
 	return operatorconfig.DefaultConfigPath(homeDir), nil
 }
 
-func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *factorysessions.SessionRuntimeOpeningRequest, replayPath string, logger *zap.Logger) error {
+func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *factorysessions.SessionRuntimeOpeningRequest, logger *zap.Logger) error {
 	if request == nil {
 		return fmt.Errorf("Factory Session request is required to resolve backend scope")
 	}
-	if strings.TrimSpace(replayPath) != "" || strings.TrimSpace(request.BackendScopeID) != "" {
+	if strings.TrimSpace(request.BackendScopeID) != "" {
 		return nil
 	}
 	if ensure == nil {
