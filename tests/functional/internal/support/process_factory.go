@@ -160,6 +160,32 @@ func RunFactoryToCompletionWithEdgesAndObservationsStable(
 	return session, work, events
 }
 
+// RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose observes
+// terminal Work and invokes beforeClose immediately before shutting down the
+// process. The hook is for process-boundary fixtures that must remain alive
+// until the public terminal observation has drained the provider response.
+func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	beforeClose func(),
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	t.Helper()
+	session, work, events, _ := runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		nil,
+		terminalObservationStableWindow,
+		nil,
+		beforeClose,
+	)
+	return session, work, events
+}
+
 // RunFactoryToCompletionWithConfiguredHome exposes the invocation-local
 // operator home before process start so functional tests can author settings
 // through the same filesystem contract consumed by the CLI.
@@ -178,6 +204,7 @@ func RunFactoryToCompletionWithConfiguredHome(
 		false,
 		configure,
 		terminalObservationCorrelated,
+		nil,
 		nil,
 	)
 	return session, work, events
@@ -244,6 +271,7 @@ func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
 				}
 			}
 		},
+		nil,
 	)
 	return session, work, events, responseEvents, workerEvents
 }
@@ -292,6 +320,7 @@ func runFactoryToCompletionWithMode(
 		nil,
 		observationMode,
 		nil,
+		nil,
 	)
 }
 
@@ -305,6 +334,7 @@ func runFactoryToCompletionWithHome(
 	configure func(string),
 	observationMode terminalObservationMode,
 	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
+	beforeClose func(),
 ) (
 	factoryapi.FactorySession,
 	factoryapi.ListWorkResponse,
@@ -398,6 +428,9 @@ func runFactoryToCompletionWithHome(
 		// sleep. The caller's deadline is a failure guard for a delayed response
 		// stream, not permission to return a partial event snapshot.
 		responseStreamComplete = waitForTerminalResponseEvent(responseActivity, timeout)
+	}
+	if beforeClose != nil {
+		beforeClose()
 	}
 	// Stop the root process before canceling the capture request. Process
 	// shutdown closes the session-owned response stream, which is the

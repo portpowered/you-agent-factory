@@ -122,6 +122,26 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
+			if p.mode == "package-conformance" {
+				// Keep the stdio peer alive until the test has observed the
+				// completed Work. The ACP client must drain the prompt's preceding
+				// session/update notifications after receiving the response;
+				// exiting here races that drain and turns a successful prompt into
+				// peer-disconnected.
+				release := os.Getenv(acpPackageConformanceReleaseEnvironment)
+				if release == "" {
+					return fmt.Errorf("package-conformance mode requires %s", acpPackageConformanceReleaseEnvironment)
+				}
+				for {
+					if _, err := os.Stat(release); err == nil {
+						break
+					} else if !os.IsNotExist(err) {
+						return fmt.Errorf("inspect package-conformance release: %w", err)
+					}
+					runtime.Gosched()
+				}
+				return nil
+			}
 			if p.mode == "disconnect-once" && p.sessions == 1 {
 				marker := os.Getenv(acpDisconnectMarkerEnvironment)
 				ready := os.Getenv(acpDisconnectReadyEnvironment)

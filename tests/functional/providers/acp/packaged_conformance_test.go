@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -64,12 +65,18 @@ func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 			testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "packaged ACP conformance", WorkTypeID: "task"})
 			writeACPWorker(t, dir, entry.Name)
 			t.Setenv(acpHelperEnvironment, "package-conformance")
+			release := filepath.Join(t.TempDir(), "acp-peer-release")
+			t.Setenv(acpPackageConformanceReleaseEnvironment, release)
 
 			var starts atomic.Int32
-			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStable(t, dir, serviceedges.Edges{
+			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(t, dir, serviceedges.Edges{
 				PlatformProcessCommandFactory: packagedACPCommandFactory(catalog.ACP, &starts),
 				ProvidersExecutableLocator:    availableExecutableLocator{},
-			}, 20*time.Second)
+			}, 20*time.Second, func() {
+				if err := os.WriteFile(release, []byte("completed Work observed"), 0o600); err != nil {
+					t.Fatalf("release packaged ACP peer: %v", err)
+				}
+			})
 			if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 				t.Fatalf("completed work = %d, want 1; %s", got, packagedACPConformanceDiagnostics(t, events, entry.Name))
 			}
