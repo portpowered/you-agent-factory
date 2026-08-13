@@ -11,6 +11,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
 
 func TestRecordingScopesBeginAppendFlushFinalizeAndClose(t *testing.T) {
@@ -254,6 +255,91 @@ func TestRecordingScopesRejectMalformedForeignStaleAndFinalizedReferences(t *tes
 	}
 }
 
+func TestRecordingScopeAppendDoesNotPublishWhenLifecycleRejects(t *testing.T) {
+	t.Parallel()
+
+	ledger := &stubLedger{}
+	root := NewService(ledger, NewProjectionService()).(*combinedService)
+	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
+		Enabled: true,
+		Scope:   recordings.CanonicalEventScope{FactorySessionID: "atomic-rejection"},
+		Target:  recordings.RecordingTargetRequest{Artifact: "recording://atomic-rejection"},
+	})
+	if err != nil {
+		t.Fatalf("BeginRecordingScope: %v", err)
+	}
+	original := root.Service
+	root.Service = rejectingRecordingEventLifecycle{Service: original}
+	_, err = root.AppendRecordingScopeEvent(context.Background(), recordings.AppendRecordingScopeEventRequest{
+		Scope: started.Scope,
+		Event: scopedScopeEvent("rejected-event", 0, started.Status.EventScope),
+	})
+	if !errors.Is(err, recordings.ErrRecordingWriteRejected) {
+		t.Fatalf("rejected scoped append error = %v, want ErrRecordingWriteRejected", err)
+	}
+	if len(ledger.events) != 0 {
+		t.Fatalf("rejected scoped append published canonical events: %#v", ledger.events)
+	}
+	binding, ok := root.scopeByRef[started.Scope]
+	if !ok {
+		t.Fatal("scope binding disappeared after rejected append")
+	}
+	status, err := original.QueryRecordingStatus(recordings.RecordingStatusRequest{
+		RecordingID: binding.recordingID,
+	})
+	if err != nil {
+		t.Fatalf("QueryRecordingStatus: %v", err)
+	}
+	if status.Status.AcceptedEvents != 0 {
+		t.Fatalf("rejected scoped append changed lifecycle events: %#v", status.Status)
+	}
+}
+
+func TestRecordingScopeCancellationAfterTargetPlanningRemovesBinding(t *testing.T) {
+	t.Parallel()
+
+	planner := &blockingRecordingTargetPlanner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	root := NewServiceWithLifecycleEffects(
+		&stubLedger{},
+		NewProjectionService(),
+		planner,
+		nil,
+		nil,
+		nil,
+		staticRecordingClock{at: time.Unix(1_700_000_300, 0).UTC()},
+	).(*combinedService)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, beginErr := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
+			Enabled: true,
+			Scope:   recordings.CanonicalEventScope{FactorySessionID: "cancel-after-start"},
+			Target:  recordings.RecordingTargetRequest{HomeDir: "home"},
+		})
+		result <- beginErr
+	}()
+	select {
+	case <-planner.started:
+	case <-time.After(time.Second):
+		t.Fatal("recording target planning did not start")
+	}
+	cancel()
+	close(planner.release)
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("post-start canceled BeginRecordingScope error = %v, want context.Canceled", err)
+	}
+	root.scopeMu.RLock()
+	remaining := len(root.scopeByRef)
+	root.scopeMu.RUnlock()
+	if remaining != 0 {
+		t.Fatalf("post-start cancellation left %d scope bindings", remaining)
+	}
+}
+
 func TestRecordingScopesKeepConcurrentSessionsIsolated(t *testing.T) {
 	t.Parallel()
 
@@ -347,3 +433,35 @@ func scopedScopeEvent(
 		Payload:    `{"type":"FACTORY_REQUEST_BATCH","works":[]}`,
 	}
 }
+
+type rejectingRecordingEventLifecycle struct {
+	recordinglifecycle.Service
+}
+
+func (rejectingRecordingEventLifecycle) RecordRecordingEvent(
+	recordings.RecordRecordingEventRequest,
+) (recordings.RecordRecordingEventResult, error) {
+	return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
+}
+
+type blockingRecordingTargetPlanner struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (planner *blockingRecordingTargetPlanner) PlanLiveRecordingTarget(
+	recordings.LiveRecordingTargetRequest,
+) (recordings.LiveRecordingTarget, error) {
+	close(planner.started)
+	<-planner.release
+	return recordings.LiveRecordingTarget{
+		ServicePath:  "recording-target",
+		ReportedPath: "recording-target",
+	}, nil
+}
+
+type staticRecordingClock struct {
+	at time.Time
+}
+
+func (clock staticRecordingClock) Now() time.Time { return clock.at }

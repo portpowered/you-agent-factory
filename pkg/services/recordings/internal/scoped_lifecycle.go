@@ -106,17 +106,30 @@ func (service *combinedService) BeginRecordingScope(
 	service.scopeByRef[ref] = binding
 	service.scopeMu.Unlock()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
-		_, finishErr := service.FinishRecording(recordings.FinishRecordingRequest{
-			RecordingID: binding.recordingID,
-			FinishedAt:  time.Now().UTC(),
-		})
-		return recordings.BeginRecordingScopeResult{}, errors.Join(err, finishErr)
+		return recordings.BeginRecordingScopeResult{}, service.abandonRecordingScope(ref, binding, err)
 	}
 	status, err := service.scopeStatus(ref, binding)
 	if err != nil {
-		return recordings.BeginRecordingScopeResult{}, err
+		return recordings.BeginRecordingScopeResult{}, service.abandonRecordingScope(ref, binding, err)
 	}
 	return recordings.BeginRecordingScopeResult{Scope: ref, Status: status}, nil
+}
+
+func (service *combinedService) abandonRecordingScope(
+	ref recordings.RecordingScopeRef,
+	binding *recordingScopeBinding,
+	cause error,
+) error {
+	service.scopeMu.Lock()
+	if current, ok := service.scopeByRef[ref]; ok && current == binding {
+		delete(service.scopeByRef, ref)
+	}
+	service.scopeMu.Unlock()
+	_, finishErr := service.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: binding.recordingID,
+		FinishedAt:  service.recordingFinishedAt(),
+	})
+	return errors.Join(cause, finishErr)
 }
 
 func scopeRecordingID(
@@ -140,6 +153,8 @@ func (service *combinedService) AppendRecordingScopeEvent(
 	}
 	binding.mu.Lock()
 	defer binding.mu.Unlock()
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
 	if err := recordingScopeContext(ctx).Err(); err != nil {
 		return recordings.AppendRecordingScopeEventResult{}, err
 	}
@@ -152,7 +167,7 @@ func (service *combinedService) AppendRecordingScopeEvent(
 			recordings.ErrRecordingWriteRejected,
 		)
 	}
-	current, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{
+	current, err := service.Service.QueryRecordingStatus(recordings.RecordingStatusRequest{
 		RecordingID: binding.recordingID,
 	})
 	if err != nil {
@@ -161,28 +176,54 @@ func (service *combinedService) AppendRecordingScopeEvent(
 	if !validRecordingScopeEvent(current.Status, binding.eventScope, request.Event) {
 		return recordings.AppendRecordingScopeEventResult{}, recordings.ErrInvalidRecordingEvent
 	}
-	accepted, err := service.canonicalLedger.Append(recordings.AppendRecordedEventRequest{
-		Event: request.Event,
-	})
+	var lifecycleResult recordings.RecordRecordingEventResult
+	accepted, err := service.canonicalLedger.AppendWithValidation(
+		recordings.AppendRecordedEventRequest{Event: request.Event},
+		func(event recordings.CanonicalEvent) error {
+			if event.ID == "" {
+				return recordings.ErrInvalidAppendEvent
+			}
+			if !validRecordingScopeEvent(current.Status, binding.eventScope, event) {
+				return recordings.ErrInvalidRecordingEvent
+			}
+			var recordErr error
+			lifecycleResult, recordErr = service.Service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+				RecordingID: binding.recordingID,
+				Event:       event,
+			})
+			return recordErr
+		},
+	)
 	if err != nil {
 		return recordings.AppendRecordingScopeEventResult{}, err
 	}
 	event := accepted.Event
-	if event.ID == "" {
-		return recordings.AppendRecordingScopeEventResult{}, recordings.ErrInvalidAppendEvent
-	}
-	if !validRecordingScopeEvent(current.Status, binding.eventScope, event) {
-		return recordings.AppendRecordingScopeEventResult{}, recordings.ErrInvalidRecordingEvent
-	}
-	result, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: binding.recordingID,
-		Event:       event,
-	})
-	if err != nil {
-		return recordings.AppendRecordingScopeEventResult{}, err
-	}
-	status := scopeStatusFrom(request.Scope, result.Status)
+	status := scopeStatusFrom(request.Scope, lifecycleResult.Status)
 	return recordings.AppendRecordingScopeEventResult{Event: event, Status: status}, nil
+}
+
+func (service *combinedService) StartRecording(
+	request recordings.StartRecordingRequest,
+) (recordings.StartRecordingResult, error) {
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
+	return service.Service.StartRecording(request)
+}
+
+func (service *combinedService) RecordRecordingEvent(
+	request recordings.RecordRecordingEventRequest,
+) (recordings.RecordRecordingEventResult, error) {
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
+	return service.Service.RecordRecordingEvent(request)
+}
+
+func (service *combinedService) FinishRecording(
+	request recordings.FinishRecordingRequest,
+) (recordings.FinishRecordingResult, error) {
+	service.recordingMu.Lock()
+	defer service.recordingMu.Unlock()
+	return service.Service.FinishRecording(request)
 }
 
 func validRecordingScopeEvent(

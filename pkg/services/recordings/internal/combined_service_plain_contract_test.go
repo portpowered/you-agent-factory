@@ -51,6 +51,20 @@ func (ledger *stubLedger) AppendRecordedEvent(event factorydefinitions.FactoryEv
 	ledger.events = append(ledger.events, event)
 }
 
+func (ledger *stubLedger) AppendRecordedEventWithValidation(
+	event factorydefinitions.FactoryEvent,
+	validate func(factorydefinitions.FactoryEvent) error,
+) (factorydefinitions.FactoryEvent, error) {
+	event.Context.Sequence = len(ledger.events)
+	if validate != nil {
+		if err := validate(event); err != nil {
+			return factorydefinitions.FactoryEvent{}, err
+		}
+	}
+	ledger.events = append(ledger.events, event)
+	return event, nil
+}
+
 func TestNewServiceRejectsNilDependencies(t *testing.T) {
 	t.Parallel()
 	if got := NewService(nil, NewProjectionService()); got != nil {
