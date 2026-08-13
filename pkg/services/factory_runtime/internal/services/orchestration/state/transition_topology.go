@@ -24,7 +24,7 @@ func NormalizeTransitionTopology(net *Net, workstationKinds map[string]interface
 }
 
 func ensureDefaultRejectionArcs(net *Net, transition *petri.Transition, workstationKinds map[string]interfaces.WorkstationKind) {
-	if transition == nil || len(transition.RejectionArcs) > 0 {
+	if transition == nil || transition.Type == petri.TransitionHumanApproval || len(transition.RejectionArcs) > 0 {
 		return
 	}
 
@@ -92,7 +92,7 @@ func cloneArcs(arcs []petri.Arc, transitionID string, suffix string) []petri.Arc
 }
 
 func ensureDefaultFailureArcs(net *Net, transition *petri.Transition) {
-	if transition == nil || len(transition.FailureArcs) > 0 {
+	if transition == nil || transition.Type == petri.TransitionHumanApproval || len(transition.FailureArcs) > 0 {
 		return
 	}
 

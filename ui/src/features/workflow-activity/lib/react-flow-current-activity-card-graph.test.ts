@@ -1082,7 +1082,7 @@ describe("current activity graph editor handles", () => {
         }),
       ]),
     );
-    expect(workstationNode?.data.handles).toHaveLength(7);
+    expect(workstationNode?.data.handles).toHaveLength(8);
     expect(workstationNode?.data.handles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

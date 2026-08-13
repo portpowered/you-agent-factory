@@ -329,6 +329,7 @@ const WORKSTATION_TYPE_VALUES = new Set<
   WorkstationType.LOGICAL_MOVE,
   WorkstationType.MODEL_INVOKE,
   WorkstationType.MODEL_WORKSTATION,
+  WorkstationType.HUMAN_APPROVAL,
 ]);
 const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
   "INFERENCE_THROTTLE_GUARD",
@@ -1306,7 +1307,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const workstation: FactoryWorkstation = {
     inputs: readRequiredArray(record, "inputs", path, decodeWorkstationIO),
     name: readRequiredString(record, "name", path),
-    worker: readRequiredString(record, "worker", path),
   };
   const id = readOptionalString(record, "id", path);
   const description = readOptionalObject(
@@ -1391,6 +1391,7 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
     path,
     decodeWorkstationOperationBinding,
   );
+  const worker = readOptionalString(record, "worker", path);
 
   if (id !== undefined) {
     workstation.id = id;
@@ -1463,6 +1464,9 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (operationBindings !== undefined) {
     workstation.operationBindings = operationBindings;
+  }
+  if (worker !== undefined) {
+    workstation.worker = worker;
   }
 
   return workstation;

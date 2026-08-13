@@ -35,9 +35,16 @@ func submittedDefinitionTaxonomyFromAPI(factory factoryapi.Factory) interfaces.S
 			}
 			taxonomy.Workstations = append(taxonomy.Workstations, interfaces.SubmittedWorkstationTaxonomy{
 				Name: workstation.Name, Type: workstationType, Behavior: behavior,
-				Worker: workstation.Worker, Index: index,
+				Worker: optionalString(workstation.Worker), Index: index,
 			})
 		}
 	}
 	return taxonomy
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

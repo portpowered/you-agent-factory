@@ -52,10 +52,15 @@ type PrimaryResultSelection struct {
 // InvocationFailureContext carries sanitized session and work identifiers that
 // help operators recover from non-success invocation outcomes.
 type InvocationFailureContext struct {
-	SessionID string
-	WorkID    string
-	WorkName  string
-	WorkState string
+	SessionID       string
+	WorkID          string
+	WorkName        string
+	WorkState       string
+	ApprovalID      string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
 }
 
 // PrimaryResultError describes a stable primary-result selection failure.
@@ -283,29 +288,6 @@ func ClassifyInvocationControlState(
 	}
 	if interrupted := classifyInterruptedInvocation(sessionID, input); interrupted != nil {
 		return interrupted, true
-	}
-	return nil, false
-}
-
-// ClassifyMissingPrimaryResult inspects the selected-tick world state for
-// authored non-success work states that explain why no primary result exists.
-func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryResultError, bool) {
-	requestID := strings.TrimSpace(input.RequestID)
-	if requestID == "" {
-		return nil, false
-	}
-	request, ok := invocationWorldState(input).WorkRequestsByID[requestID]
-	if !ok || len(request.WorkItems) == 0 {
-		return nil, false
-	}
-
-	scope := invocationScopeWorkIDs(invocationWorldState(input).PayloadLineage, request.WorkItems)
-	for _, stateName := range []string{"blocked", "needs-human"} {
-		item, found := scopedWorkItemInState(invocationWorldState(input).WorkItemsByID, scope, stateName)
-		if !found {
-			continue
-		}
-		return classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(input.InvocationReturn), item), true
 	}
 	return nil, false
 }

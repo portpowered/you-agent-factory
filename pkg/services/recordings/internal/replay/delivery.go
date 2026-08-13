@@ -497,6 +497,28 @@ func (p *CompletionDeliveryPlan) WorkerSessionIDForDispatch(dispatch work.WorkDi
 	return workerSessionID, ok && strings.TrimSpace(workerSessionID) != ""
 }
 
+// DispatchIDForDispatch returns the canonical dispatch identity recorded for
+// an equivalent replay dispatch. Reusing this identity is important for
+// durable operator-input claims, whose approval ID is derived from dispatch
+// identity and must not fork during replay.
+func (p *CompletionDeliveryPlan) DispatchIDForDispatch(dispatch work.WorkDispatch) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, record := range p.records {
+		if strings.TrimSpace(record.dispatch.dispatchID) == "" || record.used {
+			continue
+		}
+		if !recordedDispatchMatches(record.dispatch, dispatch) {
+			continue
+		}
+		return record.dispatch.dispatchID, true
+	}
+	return "", false
+}
+
 func cloneReplayWorkerSessionIDs(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil

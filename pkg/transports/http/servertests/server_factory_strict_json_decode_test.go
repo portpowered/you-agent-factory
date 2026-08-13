@@ -244,7 +244,7 @@ func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 				Name: "beta",
 				Workstations: &[]factoryapi.Workstation{{
 					Name:    "Review",
-					Worker:  "reviewer",
+					Worker:  strPtr("reviewer"),
 					Inputs:  []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
 					Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}},
 				}},

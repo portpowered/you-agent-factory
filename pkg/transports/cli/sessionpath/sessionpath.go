@@ -16,6 +16,18 @@ func WorkCollectionPath(sessionID string) string {
 	return fmt.Sprintf("/factory-sessions/%s/work", escapedSessionID(sessionID))
 }
 
+// HumanApprovalsCollectionPath returns the read-only pending approval
+// collection route for one factory session.
+func HumanApprovalsCollectionPath(sessionID string) string {
+	return fmt.Sprintf("/factory-sessions/%s/approvals", escapedSessionID(sessionID))
+}
+
+// HumanApprovalItemPath returns one pending approval route for one factory
+// session.
+func HumanApprovalItemPath(sessionID, approvalID string) string {
+	return fmt.Sprintf("%s/%s", HumanApprovalsCollectionPath(sessionID), url.PathEscape(approvalID))
+}
+
 // FactoryEventsPath returns the canonical Factory Event stream route for one
 // factory session.
 func FactoryEventsPath(sessionID string) string {

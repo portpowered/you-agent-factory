@@ -587,7 +587,7 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 			Workstations: &[]factoryapi.Workstation{
 				{
 					Name:     "alpha",
-					Worker:   "stale-worker",
+					Worker:   generatedStringPtr("stale-worker"),
 					Behavior: workstationKindPtr(factoryapi.WorkstationKindCron),
 					Cron: &factoryapi.WorkstationCron{
 						Schedule: generatedStringPtr("0 * * * *"),
@@ -597,7 +597,7 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 				},
 				{
 					Name:    "zeta",
-					Worker:  "keep-worker",
+					Worker:  generatedStringPtr("keep-worker"),
 					Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "ready"}},
 					Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
 				},
@@ -645,7 +645,7 @@ func assertMergedGeneratedWorkstations(t *testing.T, factory *factoryapi.Factory
 	if len(got) != 4 {
 		t.Fatalf("merged workstations count = %d, want 4", len(got))
 	}
-	if got[0].Name != "alpha" || got[0].Worker != "fresh-worker" {
+	if got[0].Name != "alpha" || got[0].Worker == nil || *got[0].Worker != "fresh-worker" {
 		t.Fatalf("merged alpha workstation = %#v, want replaced runtime definition", got[0])
 	}
 	if got[0].Behavior == nil || *got[0].Behavior != factoryapi.WorkstationKindCron {
@@ -669,16 +669,16 @@ func assertMergedGeneratedWorkstations(t *testing.T, factory *factoryapi.Factory
 	if got[0].Resources == nil || !reflect.DeepEqual(*got[0].Resources, []factoryapi.ResourceRequirement{{Name: "agent-slot", Capacity: 2}}) {
 		t.Fatalf("merged alpha resources = %#v, want runtime resources", got[0].Resources)
 	}
-	if got[1].Name != "zeta" || got[1].Worker != "keep-worker" {
+	if got[1].Name != "zeta" || got[1].Worker == nil || *got[1].Worker != "keep-worker" {
 		t.Fatalf("merged zeta workstation = %#v, want untouched existing generated entry", got[1])
 	}
-	if got[2].Name != "bravo" || got[2].Worker != "bravo-worker" {
+	if got[2].Name != "bravo" || got[2].Worker == nil || *got[2].Worker != "bravo-worker" {
 		t.Fatalf("merged bravo workstation = %#v, want first sorted runtime-only append", got[2])
 	}
 	if got[2].Resources == nil || !reflect.DeepEqual(*got[2].Resources, []factoryapi.ResourceRequirement{{Name: "gpu", Capacity: 1}}) {
 		t.Fatalf("merged bravo resources = %#v, want appended runtime resources", got[2].Resources)
 	}
-	if got[3].Name != "charlie" || got[3].Worker != "charlie-worker" {
+	if got[3].Name != "charlie" || got[3].Worker == nil || *got[3].Worker != "charlie-worker" {
 		t.Fatalf("merged charlie workstation = %#v, want second sorted runtime-only append", got[3])
 	}
 	if got[3].Behavior == nil || *got[3].Behavior != factoryapi.WorkstationKindStandard {

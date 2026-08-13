@@ -56,7 +56,22 @@ type ReadModel struct {
 	Tags                    map[string]string
 	Relations               []ReadRelation
 	StopSummary             *StopSummary
+	HumanApproval           *HumanApprovalReadModel
 	ExpectedArtifacts       []ExpectedArtifactReadModel
+}
+
+// HumanApprovalReadModel links a Work read to the durable pending operator
+// input that currently owns it. It contains stable identity and safe display
+// metadata only; approval resolution is intentionally out of scope here.
+type HumanApprovalReadModel struct {
+	ApprovalID      string
+	SessionID       string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Description     string
+	Decisions       []string
+	Status          string
 }
 
 // ExpectedArtifactDeclaration is the detached, compiled form of one authored

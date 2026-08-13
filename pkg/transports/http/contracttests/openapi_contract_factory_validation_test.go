@@ -4,6 +4,80 @@ import (
 	"testing"
 )
 
+func assertHumanApprovalSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+	listOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/approvals", "get")
+	if got := listOperation["operationId"]; got != "listHumanApprovalsBySessionId" {
+		t.Fatalf("human approval list operationId = %v, want listHumanApprovalsBySessionId", got)
+	}
+	listParameters, ok := listOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("human approval list parameters are missing")
+	}
+	assertParameterRef(t, listParameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, listParameters, "#/components/parameters/HumanApprovalStatus")
+	assertResponseSchemaRef(t, listOperation, "200", "#/components/schemas/ListHumanApprovalsResponse")
+	assertResponseRef(t, listOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, listOperation, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, listOperation, "500", "#/components/responses/InternalError")
+
+	showOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/approvals/{approval_id}", "get")
+	if got := showOperation["operationId"]; got != "getHumanApprovalBySessionId" {
+		t.Fatalf("human approval show operationId = %v, want getHumanApprovalBySessionId", got)
+	}
+	showParameters, ok := showOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("human approval show parameters are missing")
+	}
+	assertParameterRef(t, showParameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, showParameters, "#/components/parameters/HumanApprovalID")
+	assertResponseSchemaRef(t, showOperation, "200", "#/components/schemas/HumanApproval")
+	assertResponseRef(t, showOperation, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, showOperation, "500", "#/components/responses/InternalError")
+
+	approval := schemaObject(t, schemas, "HumanApproval")
+	assertRequiredFields(t, approval, "approvalId", "sessionId", "dispatchId", "workstationId", "workstationName", "decisions", "status", "workIds")
+	approvalProperties := schemaProperties(t, approval, "HumanApproval")
+	assertStringArrayProperty(t, approvalProperties, "workIds")
+	decisions, ok := approvalProperties["decisions"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApproval.properties.decisions is missing")
+	}
+	decisionItems, ok := decisions["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApproval.properties.decisions.items is missing")
+	}
+	assertEnumValues(t, decisionItems, "HumanApproval.decisions", []string{"APPROVE", "REJECT"})
+	status, ok := approvalProperties["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApproval.properties.status is missing")
+	}
+	assertEnumValues(t, status, "HumanApproval.status", []string{"PENDING"})
+
+	eventPayload := schemaObject(t, schemas, "HumanApprovalRequestedEventPayload")
+	assertRequiredFields(t, eventPayload, "approvalId", "workstationId", "decisions", "status")
+	eventPayloadProperties := schemaProperties(t, eventPayload, "HumanApprovalRequestedEventPayload")
+	eventDecisions, ok := eventPayloadProperties["decisions"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApprovalRequestedEventPayload.properties.decisions is missing")
+	}
+	eventDecisionItems, ok := eventDecisions["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApprovalRequestedEventPayload.properties.decisions.items is missing")
+	}
+	assertEnumValues(t, eventDecisionItems, "HumanApprovalRequestedEventPayload.decisions", []string{"APPROVE", "REJECT"})
+	eventStatus, ok := eventPayloadProperties["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApprovalRequestedEventPayload.properties.status is missing")
+	}
+	assertEnumValues(t, eventStatus, "HumanApprovalRequestedEventPayload.status", []string{"PENDING"})
+
+	runtimeProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionRuntime"), "FactorySessionRuntime")
+	assertArrayItemRef(t, runtimeProperties, "pendingHumanApprovals", "#/components/schemas/HumanApproval")
+	workProperties := schemaProperties(t, schemaObject(t, schemas, "Work"), "Work")
+	assertPropertyRef(t, workProperties, "humanApproval", "#/components/schemas/HumanApproval")
+}
+
 func TestOpenAPIContract_DefinesFactoryValidationEndpoint(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	paths, ok := doc["paths"].(map[string]any)

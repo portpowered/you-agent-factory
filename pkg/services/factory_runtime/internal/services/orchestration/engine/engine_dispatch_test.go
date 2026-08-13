@@ -81,6 +81,80 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 	}
 }
 
+func TestHumanApprovalDispatchIsReservedWithoutWorkerForwarding(t *testing.T) {
+	n := buildTestNet()
+	n.Transitions["approval"] = &petri.Transition{
+		ID:   "approval",
+		Name: "Approval",
+		Type: petri.TransitionHumanApproval,
+	}
+	marking := petri.NewMarking("test-wf")
+
+	alreadyDispatched := false
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if alreadyDispatched {
+				return nil, nil
+			}
+			alreadyDispatched = true
+			return &interfaces.TickResult{
+				Dispatches: []interfaces.DispatchRecord{{
+					Dispatch: work.WorkDispatch{
+						DispatchID:      "approval-dispatch",
+						TransitionID:    "approval",
+						WorkerType:      "",
+						WorkstationName: "Approval",
+						Execution: work.ExecutionMetadata{
+							WorkIDs: []string{"work-1"},
+						},
+					},
+					Mutations: []interfaces.MarkingMutation{{
+						Type:      interfaces.MutationConsume,
+						TokenID:   "tok-1",
+						FromPlace: "task:init",
+						Reason:    "consumed by human approval",
+					}},
+				}},
+			}, nil
+		},
+	}
+
+	hook := newTestDispatchResultHook()
+	var handlerCalls int
+	var records []interfaces.FactoryDispatchRecord
+	engine := newTestFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
+		WithDispatchResultHook(hook),
+		WithDispatchHandler(func(work.WorkDispatch) { handlerCalls++ }),
+		WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
+			records = append(records, record)
+		}),
+	)
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	if handlerCalls != 0 {
+		t.Fatalf("human approval dispatch reached worker handler %d times", handlerCalls)
+	}
+	if len(hook.submits) != 0 {
+		t.Fatalf("human approval dispatch reached result hook: %#v", hook.submits)
+	}
+	if len(records) != 1 || !records[0].HumanApproval {
+		t.Fatalf("dispatch records = %#v, want one human-approval record", records)
+	}
+	if len(engine.RunningDispatches()) != 1 {
+		t.Fatalf("running dispatches = %d, want reserved approval dispatch", len(engine.RunningDispatches()))
+	}
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("second Tick() error: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("human approval dispatch was retried or duplicated: %#v", records)
+	}
+}
+
 func TestWorkResultForCompletedDispatchPreservesResolvedClassificationLabel(t *testing.T) {
 	result := workerexecution.WorkResult{
 		Outcome: workerexecution.OutcomeAccepted,

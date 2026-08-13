@@ -147,7 +147,7 @@ func javascriptRecordingFactory() factoryapi.Factory {
 		WorkTypes: &[]factoryapi.WorkType{{Name: "task"}},
 		Workers:   &[]factoryapi.Worker{{Name: "worker-a"}},
 		Workstations: &[]factoryapi.Workstation{{
-			Name: "process", Worker: "worker-a", Inputs: []factoryapi.WorkstationIO{}, Outputs: &[]factoryapi.WorkstationIO{},
+			Name: "process", Worker: replayStringPtr("worker-a"), Inputs: []factoryapi.WorkstationIO{}, Outputs: &[]factoryapi.WorkstationIO{},
 		}},
 		Orchestrator: &factoryapi.FactoryOrchestrator{
 			Kind: kind,

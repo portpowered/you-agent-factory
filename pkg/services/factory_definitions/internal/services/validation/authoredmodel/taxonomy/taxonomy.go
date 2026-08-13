@@ -12,14 +12,15 @@ const (
 	WorkerTypeModel     = "MODEL_WORKER"
 	WorkerTypeHosted    = "HOSTED_WORKER"
 
-	WorkstationTypeInference = "INFERENCE_RUN"
-	WorkstationTypeAgent     = "AGENT_RUN"
-	WorkstationTypeScript    = "SCRIPT_RUN"
-	WorkstationTypePoller    = "POLLER_RUN"
-	WorkstationTypeModel     = "MODEL_WORKSTATION"
-	WorkstationTypeInvoke    = "MODEL_INVOKE"
-	WorkstationTypeLogical   = "LOGICAL_MOVE"
-	WorkstationTypeClassify  = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeInference     = "INFERENCE_RUN"
+	WorkstationTypeAgent         = "AGENT_RUN"
+	WorkstationTypeScript        = "SCRIPT_RUN"
+	WorkstationTypePoller        = "POLLER_RUN"
+	WorkstationTypeModel         = "MODEL_WORKSTATION"
+	WorkstationTypeInvoke        = "MODEL_INVOKE"
+	WorkstationTypeLogical       = "LOGICAL_MOVE"
+	WorkstationTypeClassify      = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeHumanApproval = "HUMAN_APPROVAL"
 
 	HostedWorkerProviderLinear = "LINEAR"
 	ModelProviderDefault       = "DEFAULT"
@@ -45,6 +46,7 @@ var workstationAliases = map[string]string{
 	WorkstationTypeScript: WorkstationTypeScript, WorkstationTypePoller: WorkstationTypePoller,
 	WorkstationTypeInvoke: WorkstationTypeInference, WorkstationTypeModel: WorkstationTypeAgent,
 	WorkstationTypeClassify: WorkstationTypeClassify, WorkstationTypeLogical: WorkstationTypeLogical,
+	WorkstationTypeHumanApproval: WorkstationTypeHumanApproval,
 }
 
 func normalize(value string, aliases map[string]string, preserveUnknown bool) string {
@@ -91,7 +93,7 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 			return WorkstationTypeScript
 		}
 		return WorkstationTypeAgent
-	case WorkstationTypeLogical, WorkstationTypeClassify:
+	case WorkstationTypeLogical, WorkstationTypeClassify, WorkstationTypeHumanApproval:
 		return strings.TrimSpace(workstationType)
 	case "":
 		if kind == WorkstationKindPoller {
@@ -115,6 +117,10 @@ func ProjectWorkerBehaviorClass(value string) string { return StrictWorkerType(v
 
 func IsInferenceRunWorkstationType(value string) bool {
 	return StrictWorkstationType(value) == WorkstationTypeInference
+}
+
+func IsHumanApprovalWorkstationType(value string) bool {
+	return StrictWorkstationType(value) == WorkstationTypeHumanApproval
 }
 func IsAgentRunWorkstationType(value string) bool {
 	return StrictWorkstationType(value) == WorkstationTypeAgent

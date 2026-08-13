@@ -107,7 +107,7 @@ func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t
 			Workstations: &[]factoryapi.Workstation{{
 				Id:         stringPtrForProjectionTest("review"),
 				Name:       "Review",
-				Worker:     "reviewer",
+				Worker:     stringPtrForProjectionTest("reviewer"),
 				Behavior:   &workstationKind,
 				Body:       &promptBody,
 				Inputs:     []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
@@ -125,7 +125,7 @@ func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t
 				Name:    interfaces.SystemTimeExpiryTransitionID,
 				Inputs:  []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: "pending"}},
 				Outputs: &[]factoryapi.WorkstationIO{},
-				Worker:  "",
+				Worker:  stringPtrForProjectionTest(""),
 			}},
 		},
 	}

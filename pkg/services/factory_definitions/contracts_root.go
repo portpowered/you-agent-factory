@@ -224,6 +224,7 @@ var CanonicalizeOperatorWorkerModelProviderInput = contracts.CanonicalizeOperato
 var IsSymbolicWorkerModelProviderDefault = contracts.IsSymbolicWorkerModelProviderDefault
 var UsesModelhostLease = contracts.UsesModelhostLease
 var IsAgentRunWorkstationType = contracts.IsAgentRunWorkstationType
+var IsHumanApprovalWorkstationType = contracts.IsHumanApprovalWorkstationType
 var IsAgentWorkerType = contracts.IsAgentWorkerType
 var IsInferenceRunWorkstationType = contracts.IsInferenceRunWorkstationType
 var IsInferenceWorkerType = contracts.IsInferenceWorkerType
@@ -415,6 +416,7 @@ const (
 	WorkstationKindRepeater                       = contracts.WorkstationKindRepeater
 	WorkstationKindStandard                       = contracts.WorkstationKindStandard
 	WorkstationTypeClassify                       = contracts.WorkstationTypeClassify
+	WorkstationTypeHumanApproval                  = contracts.WorkstationTypeHumanApproval
 	WorkstationOutcomeFormatDecisionEnvelope      = contracts.WorkstationOutcomeFormatDecisionEnvelope
 	BundledFileEncodingUTF8                       = contracts.BundledFileEncodingUTF8
 	BundledFileTypeDoc                            = contracts.BundledFileTypeDoc

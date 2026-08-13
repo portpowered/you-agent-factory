@@ -39,6 +39,16 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 			defer response.Body.Close()
 
 			if response.StatusCode == http.StatusNotFound {
+				if operation.OperationID == "getHumanApprovalBySessionId" {
+					body, readErr := io.ReadAll(response.Body)
+					if readErr != nil {
+						t.Fatalf("read expected human-approval not-found response: %v", readErr)
+					}
+					if !strings.Contains(string(body), "human approval not found") {
+						t.Fatalf("%s %s (%s) returned an unrelated 404 response: %s", operation.Method, request.URL.String(), operation.OperationID, strings.TrimSpace(string(body)))
+					}
+					return
+				}
 				t.Fatalf(
 					"%s %s (%s) status = %d, want any non-404 handler response",
 					operation.Method,

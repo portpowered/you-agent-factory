@@ -142,11 +142,17 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 }
 
 func (cm *Mapper) newTransition(ws interfaces.FactoryWorkstationConfig) *petri.Transition {
+	transitionType := petri.TransitionNormal
+	workerType := ws.WorkerTypeName
+	if ws.Type == interfaces.WorkstationTypeHumanApproval {
+		transitionType = petri.TransitionHumanApproval
+		workerType = ""
+	}
 	return &petri.Transition{
 		ID:                ws.Name,
 		Name:              ws.Name,
-		Type:              petri.TransitionNormal,
-		WorkerType:        ws.WorkerTypeName,
+		Type:              transitionType,
+		WorkerType:        workerType,
 		ExpectedArtifacts: expectedArtifactDeclarations(ws.ExpectedArtifacts),
 	}
 }
@@ -689,7 +695,7 @@ func (cm *Mapper) addDependencyGuards(cfg *interfaces.FactoryConfig, transitions
 	}
 
 	for _, t := range transitions {
-		if t.Type != petri.TransitionNormal {
+		if t.Type != petri.TransitionNormal && t.Type != petri.TransitionHumanApproval {
 			continue
 		}
 		for i := range t.InputArcs {

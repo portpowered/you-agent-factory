@@ -22,6 +22,7 @@ export type FactoryGraphWorkstationRuntimeType =
 export type FactoryGraphWorkstationRuntimeRole =
   | "AGENT"
   | "CLASSIFIER"
+  | "HUMAN_APPROVAL"
   | "INFERENCE"
   | "LOGICAL_MOVE"
   | "POLLER"
@@ -34,6 +35,7 @@ export type FactoryGraphWorkstationSchedulingBehavior =
 
 export type FactoryGraphWorkstationControlRole =
   | "CLASSIFIER"
+  | "HUMAN_APPROVAL"
   | "LOGICAL_ROUTER"
   | "LOOP_BREAKER"
   | "NONE"
@@ -100,6 +102,8 @@ export function factoryGraphWorkstationRuntimeRole(
       return "AGENT";
     case WorkstationType.CLASSIFIER_WORKSTATION:
       return "CLASSIFIER";
+    case WorkstationType.HUMAN_APPROVAL:
+      return "HUMAN_APPROVAL";
     case WorkstationType.INFERENCE_RUN:
     case WorkstationType.MODEL_INVOKE:
       return "INFERENCE";
@@ -222,6 +226,7 @@ function workstationControlRole(
 ): FactoryGraphWorkstationControlRole {
   if (runtimeRole === "UNKNOWN") return "UNKNOWN";
   if (runtimeRole === "CLASSIFIER") return "CLASSIFIER";
+  if (runtimeRole === "HUMAN_APPROVAL") return "HUMAN_APPROVAL";
   if (runtimeRole !== "LOGICAL_MOVE") return "NONE";
   return guardedControl ? "LOOP_BREAKER" : "LOGICAL_ROUTER";
 }

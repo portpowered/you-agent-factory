@@ -260,7 +260,7 @@ func TestWireLifecycleBehavior_SaveRejectsStaleVersion(t *testing.T) {
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: wireLifecycleStringPointer("planner"),
 			Type:   wireLifecycleWorkstationTypeModel(),
 			Body:   wireLifecycleStringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},

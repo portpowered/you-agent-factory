@@ -159,7 +159,7 @@ function inspectWorkstation(
     (factory.workers ?? []).map((worker) => worker.name),
   );
   if (type === "LOGICAL_MOVE") {
-    if (workstation.worker !== "") {
+    if ((workstation.worker ?? "") !== "") {
       addIssue(
         diagnostics,
         "invalid_logical_move",
@@ -208,7 +208,10 @@ function inspectWorkstation(
       }
     }
   } else if (type === "AGENT_RUN") {
-    if (workstation.worker === "" || !workerNames.has(workstation.worker)) {
+    if (
+      (workstation.worker ?? "") === "" ||
+      !workerNames.has(workstation.worker ?? "")
+    ) {
       addIssue(
         diagnostics,
         "invalid_worker_reference",

@@ -1224,6 +1224,7 @@
           "FACTORY_CHANGE_FAILED": "#/$defs/FactoryChangeFailedEventPayload",
           "FACTORY_CHANGE_REQUEST": "#/$defs/FactoryChangeRequestEventPayload",
           "FACTORY_STATE_RESPONSE": "#/$defs/FactoryStateResponseEventPayload",
+          "HUMAN_APPROVAL_REQUESTED": "#/$defs/HumanApprovalRequestedEventPayload",
           "INFERENCE_REQUEST": "#/$defs/InferenceRequestEventPayload",
           "INFERENCE_RESPONSE": "#/$defs/InferenceResponseEventPayload",
           "INITIAL_STRUCTURE_REQUEST": "#/$defs/InitialStructureRequestEventPayload",
@@ -1391,6 +1392,21 @@
             },
             "type": {
               "const": "DISPATCH_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/HumanApprovalRequestedEventPayload"
+            },
+            "type": {
+              "const": "HUMAN_APPROVAL_REQUESTED"
             }
           },
           "required": [
@@ -1932,6 +1948,7 @@
         "WORK_REQUEST",
         "RELATIONSHIP_CHANGE_REQUEST",
         "DISPATCH_REQUEST",
+        "HUMAN_APPROVAL_REQUESTED",
         "DISPATCH_WORKER_SESSION_ASSOCIATION",
         "MODEL_REQUEST",
         "MODEL_RESPONSE",
@@ -3479,6 +3496,120 @@
       ],
       "type": "string"
     },
+    "HumanApproval": {
+      "additionalProperties": false,
+      "description": "Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology.",
+      "properties": {
+        "approvalId": {
+          "description": "Stable approval identity derived from the canonical dispatch.",
+          "type": "string"
+        },
+        "decisions": {
+          "items": {
+            "enum": [
+              "APPROVE",
+              "REJECT"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "description": {
+          "description": "Localized safe description resolved from the effective factory.",
+          "type": "string"
+        },
+        "dispatchId": {
+          "description": "Dispatch reserved for the pending approval.",
+          "type": "string"
+        },
+        "eventId": {
+          "description": "Stable canonical HUMAN_APPROVAL_REQUESTED event identifier.",
+          "type": "string"
+        },
+        "requestedAt": {
+          "description": "Canonical event time for the pending approval request.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "sessionId": {
+          "description": "Factory Session that owns the pending approval.",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "PENDING"
+          ],
+          "type": "string"
+        },
+        "workIds": {
+          "description": "Work identities consumed by the reserved dispatch.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workstationId": {
+          "description": "Stable authored HUMAN_APPROVAL workstation identity.",
+          "type": "string"
+        },
+        "workstationName": {
+          "description": "Customer-authored workstation name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approvalId",
+        "sessionId",
+        "dispatchId",
+        "workstationId",
+        "workstationName",
+        "decisions",
+        "status",
+        "workIds"
+      ],
+      "type": "object"
+    },
+    "HumanApprovalRequestedEventPayload": {
+      "additionalProperties": false,
+      "description": "Canonical request for operator input at a HUMAN_APPROVAL workstation. FactoryEvent.context carries session, dispatch, request, trace, and Work lineage; this payload intentionally contains no mutable Work content or display text.",
+      "properties": {
+        "approvalId": {
+          "description": "Stable approval identity derived from the reserved dispatch.",
+          "type": "string"
+        },
+        "decisions": {
+          "items": {
+            "enum": [
+              "APPROVE",
+              "REJECT"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "status": {
+          "enum": [
+            "PENDING"
+          ],
+          "type": "string"
+        },
+        "workstationId": {
+          "description": "Authored HUMAN_APPROVAL workstation identity.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approvalId",
+        "workstationId",
+        "decisions",
+        "status"
+      ],
+      "type": "object"
+    },
     "HybridLogicalTimestamp": {
       "additionalProperties": false,
       "properties": {
@@ -5002,6 +5133,9 @@
           },
           "type": "array"
         },
+        "humanApproval": {
+          "$ref": "#/$defs/HumanApproval"
+        },
         "name": {
           "description": "A human readable name for the work, not unique",
           "type": "string"
@@ -5971,7 +6105,7 @@
           "description": "Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload."
         },
         "worker": {
-          "description": "Name of a worker declared in the workers list.",
+          "description": "Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.",
           "type": "string"
         },
         "workingDirectory": {
@@ -5985,7 +6119,6 @@
       },
       "required": [
         "name",
-        "worker",
         "inputs"
       ],
       "type": "object"
@@ -6225,7 +6358,8 @@
         "MODEL_WORKSTATION",
         "MODEL_INVOKE",
         "LOGICAL_MOVE",
-        "CLASSIFIER_WORKSTATION"
+        "CLASSIFIER_WORKSTATION",
+        "HUMAN_APPROVAL"
       ],
       "type": "string"
     }

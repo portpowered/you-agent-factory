@@ -86,17 +86,6 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 	}
 }
 
-func dispatchInputWorkIDs(payload interfaces.DispatchRequestEventPayload, contextWorkIDs *[]string) []string {
-	ordered := make([]string, 0, len(payload.Inputs)+len(sliceValue(contextWorkIDs)))
-	for _, ref := range payload.Inputs {
-		ordered = appendUnique(ordered, ref.WorkID)
-	}
-	for _, workID := range sliceValue(contextWorkIDs) {
-		ordered = appendUnique(ordered, workID)
-	}
-	return ordered
-}
-
 func (r *factoryWorldReducer) applyWorkerExecutionEvent(event interfaces.FactoryEvent) error {
 	switch event.Type {
 	case interfaces.FactoryEventTypeInferenceRequest:

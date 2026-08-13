@@ -134,3 +134,7 @@ func validateLayoutForDefinitionTest(targetDir string) error {
 	_, err := factorydefinitioncomposition.LoadDirectory(targetDir, nil)
 	return err
 }
+
+func definitionStringPtr(value string) *string {
+	return &value
+}

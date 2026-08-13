@@ -1,13 +1,17 @@
 import { WorkstationKind } from "../../../../api/generated/openapi";
 import { Checkbox } from "../../../../components/ui/checkbox";
+import {
+  FACTORY_GRAPH_ADD_WORKSTATION_TYPES,
+  isHumanApprovalWorkstationType,
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
+  DEFAULT_WORKSTATION_BEHAVIOR,
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import type { EditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
-import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type {
@@ -90,7 +94,10 @@ export function FactoryGraphEditorAddWorkstationFields({
             ),
           );
         }}
-        options={editableWorkstationBehaviorOptions().map((behavior) => ({
+        options={(isHumanApprovalWorkstationType(draft.workstationType)
+          ? [DEFAULT_WORKSTATION_BEHAVIOR]
+          : editableWorkstationBehaviorOptions()
+        ).map((behavior) => ({
           label: workstationMessages.localizeWorkstationBehavior(behavior),
           value: behavior,
         }))}

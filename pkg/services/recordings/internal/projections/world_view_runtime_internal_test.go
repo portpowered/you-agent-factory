@@ -63,6 +63,97 @@ func TestReconstructCanonicalFactoryWorldStateOrdersOwnerEvents(t *testing.T) {
 	}
 }
 
+func TestReconstructCanonicalFactoryWorldStateProjectsPendingHumanApprovalFromReplay(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 8, 0, 0, 0, time.UTC)
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name": "approval-factory",
+		"workstations": []any{map[string]any{
+			"id":   "approval-workstation",
+			"name": "Release Approval",
+			"description": map[string]any{
+				"type":    interfaces.NameValueTypeLocalizableAsset,
+				"value":   "release-approval-description",
+				"locales": []any{"en-US", "fr-FR"},
+				"values":  map[string]any{"en-US": "Approve the release", "fr-FR": "Approuver la version"},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	structure := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInitialStructureRequest,
+		interfaces.FactoryEventContext{Sequence: 0, Tick: 0, EventTime: eventTime},
+		interfaces.InitialStructureRequestEventPayload{Factory: snapshot})
+	dispatchID, sessionID, requestID := "dispatch-approval-1", "session-approval-1", "request-approval-1"
+	workIDs := []string{"work-2", "work-1"}
+	traceIDs := []string{"trace-1"}
+	dispatch := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchRequest,
+		interfaces.FactoryEventContext{
+			Sequence: 1, Tick: 1, EventTime: eventTime.Add(time.Second), SessionID: &sessionID,
+			RequestID: &requestID, DispatchID: &dispatchID, WorkIDs: &workIDs, TraceIDs: &traceIDs,
+		}, interfaces.DispatchRequestEventPayload{
+			TransitionID: "approval-workstation",
+			Inputs: []interfaces.DispatchConsumedWorkRef{
+				{WorkID: "work-2"},
+				{WorkID: "work-1"},
+			},
+		})
+	approval := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeHumanApprovalRequested,
+		interfaces.FactoryEventContext{
+			Sequence: 2, Tick: 1, EventTime: eventTime.Add(2 * time.Second), SessionID: &sessionID,
+			RequestID: &requestID, DispatchID: &dispatchID, WorkIDs: &workIDs, TraceIDs: &traceIDs,
+		}, interfaces.HumanApprovalRequestedEventPayload{
+			ApprovalID:    "approval-dispatch-approval-1",
+			WorkstationID: "approval-workstation",
+			Decisions: []interfaces.HumanApprovalDecision{
+				interfaces.HumanApprovalDecisionApprove,
+				interfaces.HumanApprovalDecisionReject,
+			},
+			Status: interfaces.HumanApprovalStatusPending,
+		})
+
+	state, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{approval, dispatch, structure}, 1)
+	if err != nil {
+		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
+	}
+	assertPendingHumanApprovalProjection(t, state, sessionID, requestID, dispatchID, workIDs, traceIDs)
+
+	replayed, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{structure, dispatch, approval}, 1)
+	if err != nil {
+		t.Fatalf("replay after reconnect: %v", err)
+	}
+	if !reflect.DeepEqual(state.PendingHumanApprovalsByID, replayed.PendingHumanApprovalsByID) {
+		t.Fatalf("replayed pending approvals = %#v, want stable projection %#v", replayed.PendingHumanApprovalsByID, state.PendingHumanApprovalsByID)
+	}
+}
+
+func assertPendingHumanApprovalProjection(t *testing.T, state interfaces.FactoryWorldState, sessionID, requestID, dispatchID string, workIDs, traceIDs []string) {
+	t.Helper()
+	if len(state.PendingHumanApprovalsByID) != 1 {
+		t.Fatalf("pending approvals = %#v, want one replayed approval", state.PendingHumanApprovalsByID)
+	}
+	pending := state.PendingHumanApprovalsByID["approval-dispatch-approval-1"]
+	if pending.SessionID != sessionID || pending.RequestID != requestID || pending.DispatchID != dispatchID ||
+		pending.WorkstationID != "approval-workstation" || pending.WorkstationName != "Release Approval" ||
+		pending.Status != interfaces.HumanApprovalStatusPending || !reflect.DeepEqual(pending.WorkItemIDs, workIDs) ||
+		!reflect.DeepEqual(pending.TraceIDs, traceIDs) {
+		t.Fatalf("pending approval = %#v, want canonical correlation and topology identity", pending)
+	}
+	if pending.WorkstationDescription == nil || interfaces.ResolveNameValue(*pending.WorkstationDescription, "fr-FR") != "Approuver la version" {
+		t.Fatalf("pending workstation description = %#v, want localized effective-factory description", pending.WorkstationDescription)
+	}
+	if !reflect.DeepEqual(pending.Decisions, []interfaces.HumanApprovalDecision{
+		interfaces.HumanApprovalDecisionApprove,
+		interfaces.HumanApprovalDecisionReject,
+	}) {
+		t.Fatalf("pending decisions = %#v, want APPROVE and REJECT only", pending.Decisions)
+	}
+	if _, ok := state.ActiveDispatches[dispatchID]; !ok {
+		t.Fatalf("active dispatches = %#v, want claimed dispatch retained while approval is pending", state.ActiveDispatches)
+	}
+}
+
 func TestFactoryWorldReducerAppliesCanonicalJavaScriptAndArtifactEvents(t *testing.T) {
 	t.Parallel()
 	eventTime := time.Date(2026, time.July, 16, 6, 0, 0, 0, time.FixedZone("UTC+2", 2*60*60))

@@ -833,3 +833,7 @@ func TestGetProviderSessionDetails_PrefersExactCodexSessionFileWhenSupportedLayo
 		t.Fatalf("relative path = %q, want exact rollout basename", resp.Source.RelativePath)
 	}
 }
+
+func httpStringPtr(value string) *string {
+	return &value
+}

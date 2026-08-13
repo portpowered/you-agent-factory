@@ -6,7 +6,6 @@ type: object
 additionalProperties: false
 required:
   - name
-  - worker
   - inputs
 properties:
   id:
@@ -38,7 +37,7 @@ properties:
       $ref: './WorkstationOperationBinding.yaml'
   worker:
     type: string
-    description: Name of a worker declared in the workers list.
+    description: Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.
   runner:
     allOf:
       - $ref: './RunnerID.yaml'

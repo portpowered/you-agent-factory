@@ -31,7 +31,7 @@
       "path": "generated/cli/command-manifest.schema.json"
     },
     "generated.cli.commands": {
-      "artifactHash": "617d97f87f1acba3307a20f7c4944065bba8e3722cc08fed60c8749fe0c0cf23",
+      "artifactHash": "530e0984c347b3b42e9291523977aad80142ca267fb80f7cc270fa0cb37b3440",
       "documentation": {
         "documentation": {
           "description": {
@@ -48,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "617d97f87f1acba3307a20f7c4944065bba8e3722cc08fed60c8749fe0c0cf23",
+        "sourceHash": "530e0984c347b3b42e9291523977aad80142ca267fb80f7cc270fa0cb37b3440",
         "visibility": "public"
       },
       "family": "cli",
@@ -211,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "db95123e3b29a837684c7e0d3dae2c4cdeaf79dfbf0b0e49b61075228d85fa75",
+      "artifactHash": "4bae2f264f722d81d59d28f3a4c379770da8f3540607570dcfe465ba19b7ebe9",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "db95123e3b29a837684c7e0d3dae2c4cdeaf79dfbf0b0e49b61075228d85fa75",
+        "sourceHash": "4bae2f264f722d81d59d28f3a4c379770da8f3540607570dcfe465ba19b7ebe9",
         "visibility": "public"
       },
       "family": "openapi",
@@ -241,7 +241,7 @@
       "path": "generated/openapi/openapi.yaml"
     },
     "generated.schemas.factory": {
-      "artifactHash": "f432d2be2edd65a8ca349fc6c257b1fd041f0f5fd87af1799c945b1e63d18753",
+      "artifactHash": "92881a2df7395a8f7f6fc77f07ba5de03ffc1ecc430d4ad46cbd9dd629271860",
       "documentation": {
         "documentation": {
           "description": {
@@ -258,7 +258,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory",
-        "sourceHash": "f432d2be2edd65a8ca349fc6c257b1fd041f0f5fd87af1799c945b1e63d18753",
+        "sourceHash": "92881a2df7395a8f7f6fc77f07ba5de03ffc1ecc430d4ad46cbd9dd629271860",
         "visibility": "public"
       },
       "family": "config",
@@ -271,7 +271,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.factory-event": {
-      "artifactHash": "0810efac91ec03568894c2faad0d9345c040eb4aa15a0e81437226fe72bfe301",
+      "artifactHash": "69f8b721b0898ab04c2e20492795b5f9cb1b1e0bdcc47fe3c4113dd1c3307eb7",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-event",
-        "sourceHash": "0810efac91ec03568894c2faad0d9345c040eb4aa15a0e81437226fe72bfe301",
+        "sourceHash": "69f8b721b0898ab04c2e20492795b5f9cb1b1e0bdcc47fe3c4113dd1c3307eb7",
         "visibility": "public"
       },
       "family": "config",
@@ -301,7 +301,7 @@
       "path": "generated/schemas/factory-event.schema.json"
     },
     "generated.schemas.factory-recording": {
-      "artifactHash": "ecb40d9a69ccb5e8a1805bec441efd207a4c50eb0c5b357ff5b9ae5c8ee160fe",
+      "artifactHash": "b0f7e0b8f003760c7cc0ccbac6aacbf5df4da6cb6232c59f4f252bcd1dadc420",
       "documentation": {
         "documentation": {
           "description": {
@@ -318,7 +318,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-recording",
-        "sourceHash": "ecb40d9a69ccb5e8a1805bec441efd207a4c50eb0c5b357ff5b9ae5c8ee160fe",
+        "sourceHash": "b0f7e0b8f003760c7cc0ccbac6aacbf5df4da6cb6232c59f4f252bcd1dadc420",
         "visibility": "public"
       },
       "family": "config",

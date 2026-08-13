@@ -58,8 +58,8 @@ func TestFactoryRuntimeTaxonomySummary_PreservesAuthoredAndLegacyValues(t *testi
 			{Name: "legacy", Type: &legacyWorker},
 		},
 		Workstations: &[]factoryapi.Workstation{
-			{Name: "infer-run", Type: &inferenceRun, Worker: "infer"},
-			{Name: "legacy-run", Type: &legacyRun, Worker: "legacy"},
+			{Name: "infer-run", Type: &inferenceRun, Worker: apiStringPtr("infer")},
+			{Name: "legacy-run", Type: &legacyRun, Worker: apiStringPtr("legacy")},
 		},
 	}
 
@@ -81,7 +81,7 @@ func TestFactoryRuntimeTaxonomySummary_LegacyPollerBehaviorWithoutType(t *testin
 		Workstations: &[]factoryapi.Workstation{{
 			Name:     "poll-tasks",
 			Behavior: &pollerBehavior,
-			Worker:   "script-poller",
+			Worker:   apiStringPtr("script-poller"),
 		}},
 	}
 
@@ -100,7 +100,7 @@ func TestRenderFactoryValidationHuman_LegacyPollerBehaviorWithoutType(t *testing
 		Workstations: &[]factoryapi.Workstation{{
 			Name:     "poll-tasks",
 			Behavior: &pollerBehavior,
-			Worker:   "script-poller",
+			Worker:   apiStringPtr("script-poller"),
 		}},
 	}
 
@@ -120,7 +120,7 @@ func TestRenderFactoryValidationHuman_IncludesTaxonomyAndBlockingTargets(t *test
 	inferenceRun := factoryapi.WorkstationTypeInferenceRun
 	factory := factoryapi.Factory{
 		Workers:      &[]factoryapi.Worker{{Name: "infer", Type: &inference}},
-		Workstations: &[]factoryapi.Workstation{{Name: "infer-run", Type: &inferenceRun, Worker: "infer"}},
+		Workstations: &[]factoryapi.Workstation{{Name: "infer-run", Type: &inferenceRun, Worker: apiStringPtr("infer")}},
 	}
 	result := factoryapi.FactoryValidationResult{
 		Targets: []factoryapi.FactoryValidationTarget{{

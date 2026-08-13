@@ -37,11 +37,18 @@ func FactoryRuntimeTaxonomySummary(factory factoryapi.Factory) []FactoryRuntimeT
 				Kind:   "workstation",
 				Name:   strings.TrimSpace(workstation.Name),
 				Type:   displayWorkstationRuntimeType(workstation),
-				Worker: strings.TrimSpace(workstation.Worker),
+				Worker: strings.TrimSpace(optionalString(workstation.Worker)),
 			})
 		}
 	}
 	return entries
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // RenderFactoryValidationHuman writes validate-only factory output with runtime

@@ -1701,7 +1701,7 @@ $defs:
                     - $ref: '#/$defs/WorkPropagation'
                 description: Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
             worker:
-                description: Name of a worker declared in the workers list.
+                description: Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.
                 type: string
             workingDirectory:
                 description: Go template resolved from token tags at dispatch time.
@@ -1711,7 +1711,6 @@ $defs:
                 type: string
         required:
             - name
-            - worker
             - inputs
         type: object
     WorkstationCron:
@@ -1881,6 +1880,7 @@ $defs:
             - MODEL_INVOKE
             - LOGICAL_MOVE
             - CLASSIFIER_WORKSTATION
+            - HUMAN_APPROVAL
         type: string
 $id: https://schemas.portpowered.com/you/config/factory.schema.json
 $schema: https://json-schema.org/draft/2020-12/schema

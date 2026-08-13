@@ -17,7 +17,7 @@ import "github.com/portpowered/infinite-you/pkg/services/work"
 type Transition struct {
 	ID                string                             `json:"id"`
 	Name              string                             `json:"name"`
-	Type              TransitionType                     `json:"type"` // NORMAL or EXHAUSTION
+	Type              TransitionType                     `json:"type"` // NORMAL, HUMAN_APPROVAL, or EXHAUSTION
 	InputArcs         []Arc                              `json:"input_arcs"`
 	OutputArcs        []Arc                              `json:"output_arcs"`    // used when WorkResult.Outcome == ACCEPTED
 	ContinueArcs      []Arc                              `json:"continue_arcs"`  // used when WorkResult.Outcome == CONTINUE
@@ -27,13 +27,18 @@ type Transition struct {
 	ExpectedArtifacts []work.ExpectedArtifactDeclaration `json:"expected_artifacts,omitempty"`
 }
 
-// TransitionType distinguishes normal work transitions from exhaustion transitions.
+// TransitionType distinguishes worker-backed work, human approval, and
+// exhaustion transitions.
 type TransitionType string
 
 const (
 	// TransitionNormal is a regular work transition — fires when inputs are satisfied,
 	// dispatches to a worker, produces output tokens.
 	TransitionNormal TransitionType = "NORMAL"
+
+	// TransitionHumanApproval is a workerless graph transition whose claimed
+	// work remains pending until the human-approval runtime records a decision.
+	TransitionHumanApproval TransitionType = "HUMAN_APPROVAL"
 
 	// TransitionExhaustion is a circuit-breaking transition — fires when a token's
 	// visit history exceeds a threshold. No worker is invoked.

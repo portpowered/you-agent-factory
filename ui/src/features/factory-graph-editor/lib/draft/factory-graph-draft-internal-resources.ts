@@ -67,7 +67,7 @@ export function isInternalResourceAvailabilityWorkstation(
     ...workstationIOEntries(workstation.onRejection),
   ];
   return (
-    workstation.worker.trim().length === 0 &&
+    (workstation.worker?.trim() ?? "").length === 0 &&
     routes.every((route) =>
       isInternalResourceAvailabilityIO(route, resourceNames),
     )

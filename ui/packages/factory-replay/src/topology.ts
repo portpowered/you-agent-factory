@@ -315,14 +315,15 @@ function appendWorkstationConnections(
       "workstation",
       factoryTopologyEntityId(workstation.id, workstation.name),
     );
-    const workerEntityId = context.workersByName.get(workstation.worker);
-    if (workstation.worker.trim()) {
+    const workerName = workstation.worker?.trim() ?? "";
+    const workerEntityId = context.workersByName.get(workerName);
+    if (workerName) {
       addConnection(
         context,
         "worker-assignment",
         workerEntityId && factoryTopologyNodeId("worker", workerEntityId),
         workstationNodeId,
-        workstation.worker,
+        workerName,
         workstation.name,
       );
     }

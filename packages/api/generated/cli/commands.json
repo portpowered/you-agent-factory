@@ -7520,6 +7520,432 @@
         ]
       }
     },
+    "you.work.approval": {
+      "id": "you.work.approval",
+      "name": "approval",
+      "path": "you work approval",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.approval",
+        "documentation": {
+          "title": {
+            "id": "you.work.approval.title",
+            "canonicalEnglish": "Inspect pending human approvals"
+          },
+          "description": {
+            "id": "you.work.approval.description",
+            "canonicalEnglish": "Inspect durable pending HUMAN_APPROVAL requests for a running factory."
+          }
+        },
+        "examples": [
+          "you work approval list",
+          "you work approval show approval-dispatch-1"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.approval",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {
+        "line": "approval",
+        "example": "  you work approval list"
+      }
+    },
+    "you.work.approval.list": {
+      "id": "you.work.approval.list",
+      "name": "list",
+      "path": "you work approval list",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.approval.list",
+        "documentation": {
+          "title": {
+            "id": "you.work.approval.list.title",
+            "canonicalEnglish": "List pending human approvals"
+          },
+          "description": {
+            "id": "you.work.approval.list.description",
+            "canonicalEnglish": "List durable pending HUMAN_APPROVAL requests from the selected factory session."
+          }
+        },
+        "examples": [
+          "you work approval list",
+          "you work approval list --session session-beta --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.approval.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "remote-only",
+      "usage": {
+        "line": "list",
+        "example": "  you work approval list"
+      },
+      "flags": {
+        "you.work.approval.list.flag.session": {
+          "id": "you.work.approval.list.flag.session",
+          "long": "session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.list.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "usage": "target one live factory session; omit to use the default compatibility session"
+        },
+        "you.work.approval.list.flag.json": {
+          "id": "you.work.approval.list.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.list.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.approval.list.flag.server": {
+          "id": "you.work.approval.list.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.list.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.approval.list.flag.verbose": {
+          "id": "you.work.approval.list.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.list.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.approval.list.flag.debug": {
+          "id": "you.work.approval.list.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.list.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.work.approval.list.handler",
+        "operationId": "listHumanApprovalsBySessionId"
+      },
+      "precedence": {
+        "order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"],
+        "withinTier": {"scalar": "last", "repeated": "append"},
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {"input": ["cli", "env", "config", "stdin"], "output": ["stdout", "stderr"]},
+      "outputs": {
+        "you.work.approval.list.output.human": {"id": "you.work.approval.list.output.human", "channel": "stdout", "format": "text"},
+        "you.work.approval.list.output.json": {"id": "you.work.approval.list.output.json", "channel": "stdout", "format": "json"}
+      },
+      "exits": {
+        "you.work.approval.list.exit.success": {"id": "you.work.approval.list.exit.success", "code": 0, "kind": "success"},
+        "you.work.approval.list.exit.failure": {"id": "you.work.approval.list.exit.failure", "code": 1, "kind": "failure"},
+        "you.work.approval.list.exit.usage": {"id": "you.work.approval.list.exit.usage", "code": 1, "kind": "usage"}
+      },
+      "sideEffects": {
+        "you.work.approval.list.side-effect.network": {"id": "you.work.approval.list.side-effect.network", "kind": "network"}
+      },
+      "constraints": {"runtime": ["local"], "platforms": ["linux", "darwin", "windows"]}
+    },
+    "you.work.approval.show": {
+      "id": "you.work.approval.show",
+      "name": "show",
+      "path": "you work approval show",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.approval.show",
+        "documentation": {
+          "title": {
+            "id": "you.work.approval.show.title",
+            "canonicalEnglish": "Show one pending human approval"
+          },
+          "description": {
+            "id": "you.work.approval.show.description",
+            "canonicalEnglish": "Show one durable pending HUMAN_APPROVAL request by stable approval identity."
+          }
+        },
+        "examples": [
+          "you work approval show approval-dispatch-1",
+          "you work approval show approval-dispatch-1 --session session-beta --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.work.approval.show",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "remote-only",
+      "usage": {
+        "line": "show <approval-id>",
+        "example": "  you work approval show approval-dispatch-1"
+      },
+      "arguments": {
+        "you.work.approval.show.arg.0": {
+          "id": "you.work.approval.show.arg.0",
+          "name": "approval-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+      "required": true,
+      "minCardinality": 1,
+      "maxCardinality": 1,
+      "variadic": false,
+      "enum": [],
+      "pattern": "",
+      "completion": "none",
+      "channels": ["cli"],
+      "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.work.approval.show.flag.session": {
+          "id": "you.work.approval.show.flag.session",
+          "long": "session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.show.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "usage": "target one live factory session; omit to use the default compatibility session"
+        },
+        "you.work.approval.show.flag.json": {
+          "id": "you.work.approval.show.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.show.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.approval.show.flag.server": {
+          "id": "you.work.approval.show.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.show.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.approval.show.flag.verbose": {
+          "id": "you.work.approval.show.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.show.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.work.approval.show.flag.debug": {
+          "id": "you.work.approval.show.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.approval.show.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.work.approval.show.handler",
+        "operationId": "getHumanApprovalBySessionId"
+      },
+      "precedence": {
+        "order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"],
+        "withinTier": {"scalar": "last", "repeated": "append"},
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {"input": ["cli", "env", "config", "stdin"], "output": ["stdout", "stderr"]},
+      "outputs": {
+        "you.work.approval.show.output.human": {"id": "you.work.approval.show.output.human", "channel": "stdout", "format": "text"},
+        "you.work.approval.show.output.json": {"id": "you.work.approval.show.output.json", "channel": "stdout", "format": "json"}
+      },
+      "exits": {
+        "you.work.approval.show.exit.success": {"id": "you.work.approval.show.exit.success", "code": 0, "kind": "success"},
+        "you.work.approval.show.exit.failure": {"id": "you.work.approval.show.exit.failure", "code": 1, "kind": "failure"},
+        "you.work.approval.show.exit.usage": {"id": "you.work.approval.show.exit.usage", "code": 1, "kind": "usage"}
+      },
+      "sideEffects": {
+        "you.work.approval.show.side-effect.network": {"id": "you.work.approval.show.side-effect.network", "kind": "network"}
+      },
+      "constraints": {"runtime": ["local"], "platforms": ["linux", "darwin", "windows"]}
+    },
     "you.work.watch": {
       "id": "you.work.watch",
       "name": "watch",

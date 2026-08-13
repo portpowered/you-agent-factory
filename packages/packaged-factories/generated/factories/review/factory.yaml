@@ -168,4 +168,3 @@ workstations:
         - state: failed
           workType: reviewable-work
       type: LOGICAL_MOVE
-      worker: ""

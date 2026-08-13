@@ -709,24 +709,26 @@ func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 func newWorkFamilyBindings() climanifestcobra.WorkFamilyBindings {
 	format := scalarTarget("mermaid")
 	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
-		"you.work.list.flag.state-name":     scalarTarget(""),
-		"you.work.list.flag.state-type":     scalarTarget(""),
-		"you.work.list.flag.name":           scalarTarget(""),
-		"you.work.list.flag.work-type-name": scalarTarget(""),
-		"you.work.list.flag.trace-id":       scalarTarget(""),
-		"you.work.list.flag.terminal":       scalarTarget(false),
-		"you.work.list.flag.non-terminal":   scalarTarget(false),
-		"you.work.list.flag.sort-by":        scalarTarget(""),
-		"you.work.list.flag.max-results":    scalarTarget(0),
-		"you.work.list.flag.next-token":     scalarTarget(""),
-		"you.work.list.flag.counts":         scalarTarget(false),
-		"you.work.list.flag.session":        scalarTarget(""),
-		"you.work.watch.flag.follow":        scalarTarget(false),
-		"you.work.watch.flag.session":       scalarTarget(""),
-		"you.work.show.flag.session":        scalarTarget(""),
-		"you.work.move.flag.session":        scalarTarget(""),
-		"you.work.move.flag.request-id":     scalarTarget(""),
-		"you.work.visualize.flag.format":    format,
+		"you.work.list.flag.state-name":       scalarTarget(""),
+		"you.work.list.flag.state-type":       scalarTarget(""),
+		"you.work.list.flag.name":             scalarTarget(""),
+		"you.work.list.flag.work-type-name":   scalarTarget(""),
+		"you.work.list.flag.trace-id":         scalarTarget(""),
+		"you.work.list.flag.terminal":         scalarTarget(false),
+		"you.work.list.flag.non-terminal":     scalarTarget(false),
+		"you.work.list.flag.sort-by":          scalarTarget(""),
+		"you.work.list.flag.max-results":      scalarTarget(0),
+		"you.work.list.flag.next-token":       scalarTarget(""),
+		"you.work.list.flag.counts":           scalarTarget(false),
+		"you.work.list.flag.session":          scalarTarget(""),
+		"you.work.approval.list.flag.session": scalarTarget(""),
+		"you.work.approval.show.flag.session": scalarTarget(""),
+		"you.work.watch.flag.follow":          scalarTarget(false),
+		"you.work.watch.flag.session":         scalarTarget(""),
+		"you.work.show.flag.session":          scalarTarget(""),
+		"you.work.move.flag.session":          scalarTarget(""),
+		"you.work.move.flag.request-id":       scalarTarget(""),
+		"you.work.visualize.flag.format":      format,
 	}}
 }
 
@@ -737,6 +739,12 @@ func newWorkHandlerRegistry(
 ) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
 	bindings := newWorkFamilyBindings()
 	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
+		ApprovalListRunE: func(cmd *cobra.Command, _ []string) error {
+			return executeGeneratedHumanApprovalList(cmd, globals, diagnostics, dependencies.ListHumanApprovals)
+		},
+		ApprovalShowRunE: func(cmd *cobra.Command, args []string) error {
+			return executeGeneratedHumanApprovalShow(cmd, args, globals, diagnostics, dependencies.ShowHumanApproval)
+		},
 		ListRunE: func(cmd *cobra.Command, _ []string) error {
 			return executeGeneratedWorkList(cmd, globals, diagnostics, dependencies.ListWork)
 		},

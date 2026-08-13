@@ -556,7 +556,6 @@ workstations:
         - state: init
           workType: project
       type: LOGICAL_MOVE
-      worker: ""
     - inputs:
         - guards:
             - matchInput: cycle-control
@@ -570,7 +569,6 @@ workstations:
         - state: complete
           workType: project
       type: LOGICAL_MOVE
-      worker: ""
     - inputs:
         - state: waiting
           workType: project
@@ -585,7 +583,6 @@ workstations:
         - state: failed
           workType: project
       type: LOGICAL_MOVE
-      worker: ""
     - guards:
         - maxVisits: 20
           type: VISIT_COUNT
@@ -598,7 +595,6 @@ workstations:
         - state: failed
           workType: delivery-task
       type: LOGICAL_MOVE
-      worker: ""
     - guards:
         - maxVisits: 8
           type: VISIT_COUNT
@@ -611,7 +607,6 @@ workstations:
         - state: failed
           workType: delivery-task
       type: LOGICAL_MOVE
-      worker: ""
     - guards:
         - maxVisits: 8
           maxVisitsArgument: maxCycles
@@ -625,4 +620,3 @@ workstations:
         - state: failed
           workType: project
       type: LOGICAL_MOVE
-      worker: ""

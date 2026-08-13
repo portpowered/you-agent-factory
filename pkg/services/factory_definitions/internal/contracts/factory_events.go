@@ -3,8 +3,6 @@ package factorycontracts
 import (
 	"encoding/json"
 	"fmt"
-	"math"
-	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -31,6 +29,7 @@ const (
 	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeDispatchWorkerSessionAssoc    FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
+	FactoryEventTypeHumanApprovalRequested        FactoryEventType = "HUMAN_APPROVAL_REQUESTED"
 	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
 	FactoryEventTypeFactoryChangeRequest          FactoryEventType = "FACTORY_CHANGE_REQUEST"
 	FactoryEventTypeFactoryChangeFailed           FactoryEventType = "FACTORY_CHANGE_FAILED"
@@ -714,6 +713,33 @@ type DispatchRequestEventPayload struct {
 	TransitionID             string                                `json:"transitionId"`
 }
 
+// HumanApprovalDecision is one of the fixed operator decisions exposed by a
+// pending HUMAN_APPROVAL workstation. The requested event deliberately
+// records the decision vocabulary, not mutable prompt or Work content.
+type HumanApprovalDecision string
+
+const (
+	HumanApprovalDecisionApprove HumanApprovalDecision = "APPROVE"
+	HumanApprovalDecisionReject  HumanApprovalDecision = "REJECT"
+)
+
+// HumanApprovalStatus is the durable lifecycle state of an approval request.
+// Resolution is intentionally owned by a later workflow; this lane records
+// only the pending state.
+type HumanApprovalStatus string
+
+const HumanApprovalStatusPending HumanApprovalStatus = "PENDING"
+
+// HumanApprovalRequestedEventPayload contains only stable approval identity
+// and fixed decision vocabulary. Session, dispatch, Work, trace, and ordering
+// identity remain authoritative on FactoryEventContext.
+type HumanApprovalRequestedEventPayload struct {
+	ApprovalID    string                  `json:"approvalId"`
+	WorkstationID string                  `json:"workstationId"`
+	Decisions     []HumanApprovalDecision `json:"decisions"`
+	Status        HumanApprovalStatus     `json:"status"`
+}
+
 // DispatchWorkerSessionAssociationEventPayload records the canonical,
 // stable dispatch-to-Worker-Session identity association. Runtime commits
 // this record before invoking worker_sessions.Service.Start for the
@@ -828,6 +854,7 @@ type FactoryStateDefinition struct {
 type FactoryWorkstation struct {
 	ID                string                             `json:"id"`
 	Name              string                             `json:"name"`
+	Description       *NameValueConfig                   `json:"description,omitempty"`
 	WorkerID          string                             `json:"worker_id,omitempty"`
 	Kind              string                             `json:"kind,omitempty"`
 	Config            map[string]string                  `json:"config,omitempty"`
@@ -885,111 +912,4 @@ type FactoryTraceData struct {
 type FactoryTerminalWork struct {
 	WorkItem work.FactoryWorkItem `json:"work_item"`
 	Status   string               `json:"status"`
-}
-
-const (
-	FactoryWebhookEventTypeWorkStateChange     = "WORK_STATE_CHANGE"
-	FactoryWebhookEventTypeDispatchResponse    = "DISPATCH_RESPONSE"
-	FactoryWebhookEventTypeDispatchReconciled  = "DISPATCH_RECONCILED"
-	FactoryWebhookEventTypeDispatchInterrupted = "DISPATCH_INTERRUPTED"
-
-	FactoryWebhookDispatchStatusFailed      = "FAILED"
-	FactoryWebhookDispatchStatusInterrupted = "INTERRUPTED"
-
-	DefaultFactoryWebhookRequestTimeout    = 10 * time.Second
-	DefaultFactoryWebhookMaxAttempts       = 5
-	DefaultFactoryWebhookInitialBackoff    = time.Second
-	DefaultFactoryWebhookBackoffMultiplier = 2.0
-	DefaultFactoryWebhookMaxBackoff        = 30 * time.Second
-)
-
-// FactoryWebhookConfig declares one outbound subscription without carrying
-// resolved secret material. Delivery policy is resolved only at runtime.
-type FactoryWebhookConfig struct {
-	Name             string                              `json:"name" yaml:"name"`
-	Enabled          bool                                `json:"enabled" yaml:"enabled"`
-	URL              string                              `json:"url" yaml:"url"`
-	SigningSecretRef string                              `json:"signingSecretRef" yaml:"signingSecretRef"`
-	Filter           FactoryWebhookFilterConfig          `json:"filter" yaml:"filter"`
-	DeliveryPolicy   *FactoryWebhookDeliveryPolicyConfig `json:"deliveryPolicy,omitempty" yaml:"deliveryPolicy,omitempty"`
-}
-
-// FactoryWebhookFilterConfig selects canonical Factory Event types and, for
-// dispatch event types, optional canonical dispatch statuses.
-type FactoryWebhookFilterConfig struct {
-	EventTypes       []string `json:"eventTypes" yaml:"eventTypes"`
-	DispatchStatuses []string `json:"dispatchStatuses,omitempty" yaml:"dispatchStatuses,omitempty"`
-}
-
-// FactoryWebhookDeliveryPolicyConfig keeps optional authored values distinct
-// from their effective defaults so explicit invalid zero values are rejected.
-type FactoryWebhookDeliveryPolicyConfig struct {
-	RequestTimeout    *string  `json:"requestTimeout,omitempty" yaml:"requestTimeout,omitempty"`
-	MaxAttempts       *int     `json:"maxAttempts,omitempty" yaml:"maxAttempts,omitempty"`
-	InitialBackoff    *string  `json:"initialBackoff,omitempty" yaml:"initialBackoff,omitempty"`
-	BackoffMultiplier *float64 `json:"backoffMultiplier,omitempty" yaml:"backoffMultiplier,omitempty"`
-	MaxBackoff        *string  `json:"maxBackoff,omitempty" yaml:"maxBackoff,omitempty"`
-}
-
-// FactoryWebhookEffectiveDeliveryPolicy contains parsed, bounded values used
-// by the delivery runtime.
-type FactoryWebhookEffectiveDeliveryPolicy struct {
-	RequestTimeout    time.Duration
-	MaxAttempts       int
-	InitialBackoff    time.Duration
-	BackoffMultiplier float64
-	MaxBackoff        time.Duration
-}
-
-// ResolveFactoryWebhookDeliveryPolicy applies the documented defaults and
-// parses authored Go duration values for a webhook delivery policy.
-func ResolveFactoryWebhookDeliveryPolicy(config *FactoryWebhookDeliveryPolicyConfig) (FactoryWebhookEffectiveDeliveryPolicy, error) {
-	effective := FactoryWebhookEffectiveDeliveryPolicy{
-		RequestTimeout:    DefaultFactoryWebhookRequestTimeout,
-		MaxAttempts:       DefaultFactoryWebhookMaxAttempts,
-		InitialBackoff:    DefaultFactoryWebhookInitialBackoff,
-		BackoffMultiplier: DefaultFactoryWebhookBackoffMultiplier,
-		MaxBackoff:        DefaultFactoryWebhookMaxBackoff,
-	}
-	if config == nil {
-		return effective, nil
-	}
-
-	var err error
-	if effective.RequestTimeout, err = resolveFactoryWebhookDuration("requestTimeout", config.RequestTimeout, effective.RequestTimeout); err != nil {
-		return FactoryWebhookEffectiveDeliveryPolicy{}, err
-	}
-	if config.MaxAttempts != nil {
-		if *config.MaxAttempts <= 0 {
-			return FactoryWebhookEffectiveDeliveryPolicy{}, fmt.Errorf("maxAttempts must be positive")
-		}
-		effective.MaxAttempts = *config.MaxAttempts
-	}
-	if effective.InitialBackoff, err = resolveFactoryWebhookDuration("initialBackoff", config.InitialBackoff, effective.InitialBackoff); err != nil {
-		return FactoryWebhookEffectiveDeliveryPolicy{}, err
-	}
-	if config.BackoffMultiplier != nil {
-		if math.IsNaN(*config.BackoffMultiplier) || math.IsInf(*config.BackoffMultiplier, 0) || *config.BackoffMultiplier < 1 {
-			return FactoryWebhookEffectiveDeliveryPolicy{}, fmt.Errorf("backoffMultiplier must be at least 1")
-		}
-		effective.BackoffMultiplier = *config.BackoffMultiplier
-	}
-	if effective.MaxBackoff, err = resolveFactoryWebhookDuration("maxBackoff", config.MaxBackoff, effective.MaxBackoff); err != nil {
-		return FactoryWebhookEffectiveDeliveryPolicy{}, err
-	}
-	if effective.MaxBackoff < effective.InitialBackoff {
-		return FactoryWebhookEffectiveDeliveryPolicy{}, fmt.Errorf("maxBackoff must not be less than initialBackoff")
-	}
-	return effective, nil
-}
-
-func resolveFactoryWebhookDuration(field string, value *string, fallback time.Duration) (time.Duration, error) {
-	if value == nil {
-		return fallback, nil
-	}
-	duration, err := time.ParseDuration(strings.TrimSpace(*value))
-	if err != nil || duration <= 0 {
-		return 0, fmt.Errorf("%s must be a positive Go duration", field)
-	}
-	return duration, nil
 }

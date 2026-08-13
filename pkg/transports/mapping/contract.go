@@ -163,6 +163,25 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 	if workState := strings.TrimSpace(result.WorkState); workState != "" {
 		response.WorkState = &workState
 	}
+	if approvalID := strings.TrimSpace(result.ApprovalID); approvalID != "" {
+		response.ApprovalId = &approvalID
+	}
+	if dispatchID := strings.TrimSpace(result.DispatchID); dispatchID != "" {
+		response.DispatchId = &dispatchID
+	}
+	if workstationID := strings.TrimSpace(result.WorkstationID); workstationID != "" {
+		response.WorkstationId = &workstationID
+	}
+	if workstationName := strings.TrimSpace(result.WorkstationName); workstationName != "" {
+		response.WorkstationName = &workstationName
+	}
+	if len(result.Decisions) > 0 {
+		decisions := make([]factoryapi.InvocationResponseDecisions, 0, len(result.Decisions))
+		for _, decision := range result.Decisions {
+			decisions = append(decisions, factoryapi.InvocationResponseDecisions(decision))
+		}
+		response.Decisions = &decisions
+	}
 	return response
 }
 

@@ -58,3 +58,6 @@ properties:
   stopSummary:
     $ref: '../api/FactoryStopSummary.yaml'
     description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
+  humanApproval:
+    $ref: '../api/HumanApproval.yaml'
+    description: Pending HUMAN_APPROVAL request currently owning this Work item, when present.

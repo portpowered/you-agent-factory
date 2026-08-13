@@ -416,7 +416,7 @@ async function verifyJSONArtifactSemantics({
 }
 
 function requireFactoryEventSchema(document, specifier) {
-	const factoryEventVariantCount = 34;
+	const factoryEventVariantCount = 35;
 	const schema = requireObject(
 		document,
 		`[api-package-consumer] export is not a Factory Event schema object: ${specifier}`,

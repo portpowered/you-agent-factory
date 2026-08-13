@@ -493,6 +493,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	deleteFactoryOperation := provideDeleteFactoryOperation(v)
 	listRequestPreparation := work.NewListRequestPreparation()
 	listWorkOperation := provideListWorkOperation(wireStandardCLIHTTPProtocol, listRequestPreparation)
+	listHumanApprovalsOperation := provideListHumanApprovalsOperation(wireStandardCLIHTTPProtocol)
+	showHumanApprovalOperation := provideShowHumanApprovalOperation(wireStandardCLIHTTPProtocol)
 	wireWatchCLIHTTPProtocol, err := provideWatchCLIHTTPProtocol()
 	if err != nil {
 		return nil, err
@@ -652,6 +654,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		UpdateFactoryFromFile:             updateFactoryFromFileOperation,
 		DeleteFactory:                     deleteFactoryOperation,
 		ListWork:                          listWorkOperation,
+		ListHumanApprovals:                listHumanApprovalsOperation,
+		ShowHumanApproval:                 showHumanApprovalOperation,
 		WatchWork:                         watchWorkOperation,
 		ShowWork:                          showWorkOperation,
 		MoveWork:                          moveWorkOperation,
@@ -1037,6 +1041,8 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideUpdateFactoryFromFileOperation,
 	provideDeleteFactoryOperation,
 	provideListWorkOperation,
+	provideListHumanApprovalsOperation,
+	provideShowHumanApprovalOperation,
 	provideWatchWorkOperation,
 	provideShowWorkOperation,
 	provideMoveWorkOperation,

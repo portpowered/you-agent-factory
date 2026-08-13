@@ -9,3 +9,7 @@ import (
 func testReplayStorage() platformreplay.Storage {
 	return platformreplay.NewLocal(runtime.GOOS)
 }
+
+func replayStringPtr(value string) *string {
+	return &value
+}

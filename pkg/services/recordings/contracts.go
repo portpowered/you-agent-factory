@@ -26,6 +26,7 @@ type (
 	CompletedDispatch                                          = recordingcontracts.CompletedDispatch
 	CompletionDeliveryPlanner                                  = recordingcontracts.CompletionDeliveryPlanner
 	ReplayWorkerSessionIDResolver                              = recordingcontracts.ReplayWorkerSessionIDResolver
+	ReplayDispatchIDResolver                                   = recordingcontracts.ReplayDispatchIDResolver
 	CreateReplayPlanRequest                                    = recordingcontracts.CreateReplayPlanRequest
 	CreateReplayPlanResult                                     = recordingcontracts.CreateReplayPlanResult
 	DecodePortableArtifactRequest                              = recordingcontracts.DecodePortableArtifactRequest
@@ -62,6 +63,9 @@ type (
 	FactoryEventReconnectScope                                 = recordingcontracts.FactoryEventReconnectScope
 	FactoryEventStream                                         = recordingcontracts.FactoryEventStream
 	FactoryEventType                                           = recordingcontracts.FactoryEventType
+	HumanApprovalDecision                                      = recordingcontracts.HumanApprovalDecision
+	HumanApprovalRequestedEventPayload                         = recordingcontracts.HumanApprovalRequestedEventPayload
+	HumanApprovalStatus                                        = recordingcontracts.HumanApprovalStatus
 	FactoryPlace                                               = recordingcontracts.FactoryPlace
 	FactoryPlaceOccupancy                                      = recordingcontracts.FactoryPlaceOccupancy
 	FactorySessionChildDispatchCounts                          = recordingcontracts.FactorySessionChildDispatchCounts
@@ -92,6 +96,7 @@ type (
 	FactoryWorldAgentRunResponse                               = recordingcontracts.FactoryWorldAgentRunResponse
 	FactoryWorldDispatch                                       = recordingcontracts.FactoryWorldDispatch
 	FactoryWorldDispatchCompletion                             = recordingcontracts.FactoryWorldDispatchCompletion
+	FactoryWorldHumanApproval                                  = recordingcontracts.FactoryWorldHumanApproval
 	FactoryWorldFailureDetail                                  = recordingcontracts.FactoryWorldFailureDetail
 	FactoryWorldInferenceAttempt                               = recordingcontracts.FactoryWorldInferenceAttempt
 	FactoryWorldJavaScriptChildDispatchCounts                  = recordingcontracts.FactoryWorldJavaScriptChildDispatchCounts
@@ -253,6 +258,7 @@ type (
 	RunResponseEventPayload                                    = recordingcontracts.RunResponseEventPayload
 	RuntimeEventLedger                                         = recordingcontracts.RuntimeEventLedger
 	RuntimeLedger                                              = recordingcontracts.RuntimeLedger
+	HumanApprovalRequestRecorder                               = recordingcontracts.HumanApprovalRequestRecorder
 	RuntimeOpeningRequest                                      = recordingcontracts.RuntimeOpeningRequest
 	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
 	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
@@ -349,6 +355,10 @@ const (
 	FactoryEventTypeDispatchRequest               = recordingcontracts.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = recordingcontracts.FactoryEventTypeDispatchResponse
 	FactoryEventTypeDispatchWorkerSessionAssoc    = recordingcontracts.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested        = recordingcontracts.FactoryEventTypeHumanApprovalRequested
+	HumanApprovalDecisionApprove                  = recordingcontracts.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                   = recordingcontracts.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                    = recordingcontracts.HumanApprovalStatusPending
 	FactoryEventTypeFactoryChange                 = recordingcontracts.FactoryEventTypeFactoryChange
 	FactoryEventTypeFactoryChangeRequest          = recordingcontracts.FactoryEventTypeFactoryChangeRequest
 	FactoryEventTypeFactoryChangeFailed           = recordingcontracts.FactoryEventTypeFactoryChangeFailed

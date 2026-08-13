@@ -688,7 +688,10 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 }
 
 func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfaces.DispatchRecord, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (bool, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	if len(records) == 0 || (e.dispatchHandler == nil && e.dispatchHook == nil) {
+	if len(records) == 0 {
+		return false, snapshot, nil
+	}
+	if e.dispatchHandler == nil && e.dispatchHook == nil && !containsHumanApprovalDispatch(e.state, records) {
 		return false, snapshot, nil
 	}
 	for _, rec := range records {
@@ -702,6 +705,7 @@ func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfa
 
 func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interfaces.DispatchRecord) error {
 	now := e.clock.Now()
+	humanApproval := isHumanApprovalDispatch(e.state, rec.Dispatch)
 	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
 	rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
 	e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
@@ -721,7 +725,14 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 			Dispatch:       rec.Dispatch,
 			HeldMutations:  rec.Mutations,
 			ConsumedTokens: consumedTokenIDs(workers.WorkDispatchInputTokens(rec.Dispatch)),
+			HumanApproval:  humanApproval,
 		})
+	}
+	// A HUMAN_APPROVAL dispatch remains reserved in the in-flight table until a
+	// later resolution lane supplies an explicit result. It never enters the
+	// worker/provider/model/script or capacity execution boundary.
+	if humanApproval {
+		return nil
 	}
 	if e.dispatchHook != nil {
 		if err := e.dispatchHook.SubmitDispatch(ctx, rec.Dispatch); err != nil {
@@ -732,6 +743,23 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 		e.dispatchHandler(rec.Dispatch)
 	}
 	return nil
+}
+
+func isHumanApprovalDispatch(net *state.Net, dispatch work.WorkDispatch) bool {
+	if net == nil {
+		return false
+	}
+	transition := net.Transitions[dispatch.TransitionID]
+	return transition != nil && transition.Type == petri.TransitionHumanApproval
+}
+
+func containsHumanApprovalDispatch(net *state.Net, records []interfaces.DispatchRecord) bool {
+	for _, record := range records {
+		if isHumanApprovalDispatch(net, record.Dispatch) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
@@ -839,123 +867,6 @@ func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.Marking
 		}
 	}
 	return applyMutations(e.runtimeState.Marking, e.state.Places, mutations, e.clock.Now())
-}
-
-func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []work.GeneratedSubmissionBatch, defaultSource string) (int, error) {
-	total := 0
-	for i := range batches {
-		batch := batches[i]
-		source := generatedSubmissionSource(batch, defaultSource)
-		normalized, requestID, err := e.normalizeGeneratedSubmissionBatch(batch)
-		if err != nil {
-			return total, err
-		}
-		if e.skipGeneratedSubmissionRequest(requestID, source) {
-			continue
-		}
-		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
-		if err != nil {
-			return total, err
-		}
-		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
-		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
-		if source == externalSubmissionHookName {
-			e.signalObservableProjection(requestID)
-		}
-		total += len(tokens)
-	}
-	return total, nil
-}
-
-func generatedSubmissionSource(batch work.GeneratedSubmissionBatch, defaultSource string) string {
-	if batch.Metadata.Source != "" {
-		return batch.Metadata.Source
-	}
-	if defaultSource != "" {
-		return defaultSource
-	}
-	return "generated-batch"
-}
-
-func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch work.GeneratedSubmissionBatch) ([]workdomain.SubmitRequest, string, error) {
-	normalized, err := workdomain.NormalizeGeneratedSubmissionBatch(batch, workdomain.WorkRequestNormalizeOptions{
-		ValidWorkTypes:    e.validWorkTypes(),
-		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
-		IDGenerator:       e.workRequestIDs,
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	requestID := ""
-	if len(normalized) > 0 {
-		requestID = normalized[0].RequestID
-	}
-	return normalized, requestID, nil
-}
-
-func (e *FactoryEngine) skipGeneratedSubmissionRequest(requestID string, source string) bool {
-	if requestID == "" || source == externalSubmissionHookName {
-		return false
-	}
-	_, exists := e.workRequests[requestID]
-	return exists
-}
-
-func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.SubmitRequest) ([]*factorytoken.Token, error) {
-	now := e.clock.Now()
-	tokens := make([]*factorytoken.Token, 0, len(normalized))
-	for _, req := range normalized {
-		token, err := e.transformer.InitialTokenFromSubmit(req, now)
-		if err != nil {
-			return nil, err
-		}
-		tokens = append(tokens, token)
-	}
-	return tokens, nil
-}
-
-func (e *FactoryEngine) recordGeneratedSubmissionRequest(
-	requestID string,
-	source string,
-	batch work.GeneratedSubmissionBatch,
-	normalized []workdomain.SubmitRequest,
-) {
-	e.workRequests[requestID] = workdomain.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
-	if e.recordWorkRequest == nil {
-		return
-	}
-	record := workdomain.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
-	record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
-	e.recordWorkRequest(e.runtimeState.TickCount, record)
-}
-
-func (e *FactoryEngine) recordGeneratedSubmissionTokens(
-	source string,
-	normalized []workdomain.SubmitRequest,
-	tokens []*factorytoken.Token,
-) {
-	parentIDs := make(map[string]struct{})
-	for index, token := range tokens {
-		e.runtimeState.Marking.RecordParentChildRegistration(token)
-		if token.Color.ParentID != "" {
-			parentIDs[token.Color.ParentID] = struct{}{}
-		}
-		if e.recordSubmission != nil {
-			e.recordSubmission(work.FactorySubmissionRecord{
-				SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index),
-				ObservedTick: e.runtimeState.TickCount,
-				Request:      normalized[index],
-				Source:       source,
-			})
-		}
-		e.runtimeState.Marking.AddToken(token)
-		if e.recordWorkInput != nil {
-			e.recordWorkInput(e.runtimeState.TickCount, normalized[index], *token)
-		}
-	}
-	for parentID := range parentIDs {
-		e.runtimeState.Marking.CompleteParentChildRegistration(parentID)
-	}
 }
 
 // injectTokens creates tokens from submit requests and places them in INITIAL places.

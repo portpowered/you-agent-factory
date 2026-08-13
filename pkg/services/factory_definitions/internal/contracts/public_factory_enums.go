@@ -172,14 +172,15 @@ var publicFactoryResourceTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
-	WorkstationTypeInference: WorkstationTypeInference,
-	WorkstationTypeAgent:     WorkstationTypeAgent,
-	WorkstationTypeScript:    WorkstationTypeScript,
-	WorkstationTypePoller:    WorkstationTypePoller,
-	WorkstationTypeInvoke:    WorkstationTypeInference,
-	WorkstationTypeModel:     WorkstationTypeAgent,
-	WorkstationTypeClassify:  WorkstationTypeClassify,
-	WorkstationTypeLogical:   WorkstationTypeLogical,
+	WorkstationTypeInference:     WorkstationTypeInference,
+	WorkstationTypeAgent:         WorkstationTypeAgent,
+	WorkstationTypeScript:        WorkstationTypeScript,
+	WorkstationTypePoller:        WorkstationTypePoller,
+	WorkstationTypeInvoke:        WorkstationTypeInference,
+	WorkstationTypeModel:         WorkstationTypeAgent,
+	WorkstationTypeClassify:      WorkstationTypeClassify,
+	WorkstationTypeLogical:       WorkstationTypeLogical,
+	WorkstationTypeHumanApproval: WorkstationTypeHumanApproval,
 }
 
 // IsInferenceRunWorkstationType reports whether workstationType is an accepted
@@ -191,6 +192,12 @@ func IsInferenceRunWorkstationType(workstationType string) bool {
 	default:
 		return false
 	}
+}
+
+// IsHumanApprovalWorkstationType reports whether workstationType is the
+// workerless graph-only approval taxonomy value.
+func IsHumanApprovalWorkstationType(workstationType string) bool {
+	return StrictPublicFactoryWorkstationType(workstationType) == WorkstationTypeHumanApproval
 }
 
 // IsAgentRunWorkstationType reports whether workstationType is an accepted agent-run
@@ -530,7 +537,7 @@ func InternalRuntimeWorkstationTypeFromPublic(value string) string {
 		return WorkstationTypeModel
 	case WorkstationTypePoller:
 		return ""
-	case WorkstationTypeLogical, WorkstationTypeClassify:
+	case WorkstationTypeLogical, WorkstationTypeClassify, WorkstationTypeHumanApproval:
 		return PermissivePublicFactoryWorkstationType(value)
 	default:
 		return PermissivePublicFactoryWorkstationType(value)
@@ -548,7 +555,7 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 			return WorkstationTypeScript
 		}
 		return WorkstationTypeAgent
-	case WorkstationTypeLogical, WorkstationTypeClassify:
+	case WorkstationTypeLogical, WorkstationTypeClassify, WorkstationTypeHumanApproval:
 		return strings.TrimSpace(workstationType)
 	case "":
 		if kind == WorkstationKindPoller {

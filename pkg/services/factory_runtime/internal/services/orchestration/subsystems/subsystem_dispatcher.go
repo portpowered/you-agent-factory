@@ -30,6 +30,7 @@ type DispatcherSubsystem struct {
 	runtimeConfig interfaces.RuntimeDefinitionLookup
 	now           func() time.Time
 	newID         factoryruntime.IDGenerator
+	replayIDs     factoryruntime.ReplayDispatchIDResolver
 }
 
 // NewDispatcher creates a new DispatcherSubsystem.
@@ -41,6 +42,7 @@ func NewDispatcher(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
 	now func() time.Time,
 	newID factoryruntime.IDGenerator,
+	replayIDs ...factoryruntime.ReplayDispatchIDResolver,
 ) *DispatcherSubsystem {
 	l := logging.EnsureLogger(logger)
 	if now == nil {
@@ -57,6 +59,9 @@ func NewDispatcher(
 		runtimeConfig: runtimeConfig,
 		now:           now,
 		newID:         newID,
+	}
+	if len(replayIDs) > 0 {
+		dispatcher.replayIDs = replayIDs[0]
 	}
 	dispatcher.evaluator = scheduler.NewEnablementEvaluator(
 		l,
@@ -228,6 +233,11 @@ func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineState
 		InputTokens:              workers.InputTokens(inputTokens...),
 		InputBindings:            cloneDispatchInputBindings(decision.InputBindings),
 		WorkstationName:          tr.Name,
+	}
+	if d.replayIDs != nil {
+		if dispatchID, ok := d.replayIDs.DispatchIDForDispatch(dispatch); ok {
+			dispatch.DispatchID = dispatchID
+		}
 	}
 	if d.wfCtx != nil {
 		dispatch.ProjectID = d.wfCtx.ProjectID

@@ -21,11 +21,12 @@ func ProjectRuntimeContract(ctx ProjectionContext) RuntimeProjection {
 	now := ctx.Now
 	kind := interfaces.EffectiveOrchestratorKind(ctx.FactoryCfg)
 	runtime := RuntimeProjection{
-		OrchestratorKind: kind,
-		Status:           projectedSessionStatus(ctx),
-		Progress:         projectedSessionProgress(ctx),
-		Usage:            projectedSessionUsage(ctx),
-		Lifecycle:        projectedSessionLifecycle(ctx, now),
+		OrchestratorKind:      kind,
+		Status:                projectedSessionStatus(ctx),
+		Progress:              projectedSessionProgress(ctx),
+		Usage:                 projectedSessionUsage(ctx),
+		Lifecycle:             projectedSessionLifecycle(ctx, now),
+		PendingHumanApprovals: append([]interfaces.FactoryWorldHumanApproval(nil), ctx.PendingHumanApprovals...),
 	}
 	if streamIdentity := projectedSessionStreamIdentity(ctx, runtime.Lifecycle); streamIdentity != nil {
 		runtime.StreamIdentity = streamIdentity

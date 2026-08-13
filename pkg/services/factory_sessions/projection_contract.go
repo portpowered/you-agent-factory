@@ -21,6 +21,7 @@ type ProjectionContext struct {
 	NormalizedTarget       *RuntimeLogicalTarget
 	RuntimeStartedAt       time.Time
 	Enabled                []interfaces.EnabledTransition
+	PendingHumanApprovals  []interfaces.FactoryWorldHumanApproval
 	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
 	JavaScriptSession      *interfaces.FactoryWorldSessionBracketState
 	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord

@@ -620,6 +620,18 @@ func provideListWorkOperation(
 	return workcli.NewList(transport.Protocol, prepare)
 }
 
+func provideListHumanApprovalsOperation(
+	transport standardCLIHTTPProtocol,
+) cli.ListHumanApprovalsOperation {
+	return workcli.NewListHumanApprovals(transport.Protocol)
+}
+
+func provideShowHumanApprovalOperation(
+	transport standardCLIHTTPProtocol,
+) cli.ShowHumanApprovalOperation {
+	return workcli.NewShowHumanApproval(transport.Protocol)
+}
+
 func provideWatchCLIHTTPProtocol() (watchCLIHTTPProtocol, error) {
 	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
 	if err != nil {

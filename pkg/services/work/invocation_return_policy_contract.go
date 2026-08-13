@@ -160,10 +160,15 @@ type PrimaryResultSelection struct {
 }
 
 type InvocationFailureContext struct {
-	SessionID string
-	WorkID    string
-	WorkName  string
-	WorkState string
+	SessionID       string
+	WorkID          string
+	WorkName        string
+	WorkState       string
+	ApprovalID      string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
 }
 
 type PrimaryResultError struct {

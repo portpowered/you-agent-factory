@@ -48,3 +48,23 @@ properties:
   workState:
     type: string
     description: Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
+  approvalId:
+    type: string
+    description: Pending human-approval identity when errorCode is INVOCATION_NEEDS_HUMAN.
+  dispatchId:
+    type: string
+    description: Reserved dispatch identity that is waiting for operator input.
+  workstationId:
+    type: string
+    description: Authored HUMAN_APPROVAL workstation identity.
+  workstationName:
+    type: string
+    description: Customer-authored HUMAN_APPROVAL workstation name.
+  decisions:
+    type: array
+    description: Fixed decision vocabulary available to the operator.
+    items:
+      type: string
+      enum:
+        - APPROVE
+        - REJECT

@@ -794,7 +794,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	cfg := interfaces.FactoryWorkstationConfig{
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
-		WorkerTypeName:        workstation.Worker,
+		WorkerTypeName:        stringValue(workstation.Worker),
 		Operation:             stringValue(workstation.Operation),
 		OperationBindings:     workstationOperationBindingsInternalFromAPI(workstation.OperationBindings),
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),

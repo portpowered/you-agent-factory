@@ -217,6 +217,10 @@ func ruleWorkstationKind(cfg *factorydefinitions.FactoryConfig) []Finding {
 	return findings
 }
 
+func ruleHumanApprovalWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
+	return FactoryDefinitionFindings(humanApprovalWorkstationTargets(cfg))
+}
+
 func ruleClassifierWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 	var findings []Finding
 
@@ -497,7 +501,9 @@ func validateCronTrigger(cron *factorydefinitions.CronConfig, basePath string) [
 }
 
 func cronWorkstationRequiresWorker(ws factorydefinitions.FactoryWorkstationConfig) bool {
-	return strings.TrimSpace(ws.Type) != factorydefinitions.WorkstationTypeLogical
+	typeName := strings.TrimSpace(ws.Type)
+	return typeName != factorydefinitions.WorkstationTypeLogical &&
+		typeName != factorydefinitions.WorkstationTypeHumanApproval
 }
 
 // --- Rule: worker reference validation ---

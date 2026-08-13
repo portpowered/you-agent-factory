@@ -12,6 +12,7 @@ x-enum-varnames:
   - FactoryEventTypeWorkRequest
   - FactoryEventTypeRelationshipChangeRequest
   - FactoryEventTypeDispatchRequest
+  - FactoryEventTypeHumanApprovalRequested
   - FactoryEventTypeDispatchWorkerSessionAssociation
   - FactoryEventTypeModelRequest
   - FactoryEventTypeModelResponse
@@ -47,6 +48,7 @@ enum:
   - WORK_REQUEST
   - RELATIONSHIP_CHANGE_REQUEST
   - DISPATCH_REQUEST
+  - HUMAN_APPROVAL_REQUESTED
   - DISPATCH_WORKER_SESSION_ASSOCIATION
   - MODEL_REQUEST
   - MODEL_RESPONSE
@@ -82,6 +84,7 @@ x-enum-descriptions:
   - Work entered the factory as a normalized request.
   - A relationship-change request between work items was recorded.
   - A workstation request began processing a set of input work.
+  - A HUMAN_APPROVAL workstation reserved its input Work and is waiting for operator input.
   - A dispatch was associated with the Worker Session allocated to execute it.
   - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
   - A model-backed worker invocation returned with resource, load, output, and failure evidence.

@@ -552,6 +552,12 @@ function describeEnglishConnectionAnchor(anchorId: string) {
         description: "Route successful output from this workstation.",
         label: "Success",
       };
+    case "workstation-approval-source":
+      return {
+        description:
+          "Route the approved output from this human approval workstation.",
+        label: "Approve",
+      };
     case "workstation-on-continue-source":
       return {
         description: "Route a continue transition from this workstation.",
@@ -1093,6 +1099,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "接收此工作站的资源需求。";
           case "workstation-output-source":
             return "从此工作站路由成功输出。";
+          case "workstation-approval-source":
+            return "从此人工审批工作站路由批准输出。";
           case "workstation-on-continue-source":
             return "从此工作站路由继续转换。";
           case "workstation-on-failure-source":
@@ -1120,6 +1128,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "输入";
           case "workstation-output-source":
             return "成功";
+          case "workstation-approval-source":
+            return "批准";
           case "workstation-on-continue-source":
             return "继续";
           case "workstation-on-failure-source":

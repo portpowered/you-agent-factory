@@ -42,6 +42,7 @@ type DispatchResultHookWakeSignaler interface {
 
 type CompletionDeliveryPlanner = recordings.CompletionDeliveryPlanner
 type ReplayWorkerSessionIDResolver = recordings.ReplayWorkerSessionIDResolver
+type ReplayDispatchIDResolver = recordings.ReplayDispatchIDResolver
 
 // ExecutionCatalogSelection is the Runtime-owned pair selected from a
 // Definitions catalog. It contains detached values only; mapping it does not

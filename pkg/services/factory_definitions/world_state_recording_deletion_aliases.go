@@ -22,6 +22,7 @@ type (
 	FactoryWorldAgentRunResponse              = contracts.FactoryWorldAgentRunResponse
 	FactoryWorldDispatch                      = contracts.FactoryWorldDispatch
 	FactoryWorldDispatchCompletion            = contracts.FactoryWorldDispatchCompletion
+	FactoryWorldHumanApproval                 = contracts.FactoryWorldHumanApproval
 	FactoryWorldFailureDetail                 = contracts.FactoryWorldFailureDetail
 	FactoryWorldInferenceAttempt              = contracts.FactoryWorldInferenceAttempt
 	FactoryWorldJavaScriptChildDispatchCounts = contracts.FactoryWorldJavaScriptChildDispatchCounts

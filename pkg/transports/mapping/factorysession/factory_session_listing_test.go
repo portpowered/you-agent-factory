@@ -4,12 +4,47 @@ import (
 	"errors"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
+
+func TestRuntimeProjectionToAPIMapsPendingHumanApprovalWithResolvedDescription(t *testing.T) {
+	t.Parallel()
+	description := interfaces.NameValueConfig{
+		Type:    interfaces.NameValueTypeLocalizableAsset,
+		Value:   "Approve the release",
+		Locales: []string{"en-US", "fr-FR"},
+		Values:  map[string]string{"en-US": "Approve the release", "fr-FR": "Approuver la version"},
+	}
+	approval := interfaces.FactoryWorldHumanApproval{
+		ApprovalID: "approval-1", SessionID: "session-1", DispatchID: "dispatch-1",
+		WorkstationID: "approval-workstation", WorkstationName: "Release Approval",
+		WorkstationDescription: &description,
+		Decisions: []interfaces.HumanApprovalDecision{
+			interfaces.HumanApprovalDecisionApprove,
+			interfaces.HumanApprovalDecisionReject,
+		},
+		Status:      interfaces.HumanApprovalStatusPending,
+		WorkItemIDs: []string{"work-1"}, EventID: "event-approval-1",
+	}
+	mapped := factorysession.RuntimeProjectionToAPI(factorysessions.RuntimeProjection{
+		Status:                "RUNNING",
+		PendingHumanApprovals: []interfaces.FactoryWorldHumanApproval{approval},
+	}, nil)
+	if mapped.PendingHumanApprovals == nil || len(*mapped.PendingHumanApprovals) != 1 {
+		t.Fatalf("pending approvals = %#v, want one mapped approval", mapped.PendingHumanApprovals)
+	}
+	got := (*mapped.PendingHumanApprovals)[0]
+	if got.ApprovalId != approval.ApprovalID || got.SessionId != approval.SessionID || got.DispatchId != approval.DispatchID ||
+		got.WorkstationId != approval.WorkstationID || got.WorkstationName != approval.WorkstationName || got.Description == nil || *got.Description != "Approve the release" ||
+		len(got.WorkIds) != 1 || got.WorkIds[0] != "work-1" || got.EventId == nil || *got.EventId != approval.EventID {
+		t.Fatalf("mapped approval = %#v, want safe session/workstation/work projection", got)
+	}
+}
 
 func TestScopedSessionListResponseToAPIMapsDetachedOwnerProjectionOnly(t *testing.T) {
 	t.Parallel()

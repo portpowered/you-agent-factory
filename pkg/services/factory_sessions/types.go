@@ -130,6 +130,7 @@ type RuntimeProjection struct {
 	Lifecycle              RuntimeLifecycle
 	LifecycleControlStatus *string
 	OrchestratorKind       string
+	PendingHumanApprovals  []interfaces.FactoryWorldHumanApproval
 	Petri                  *PetriRuntimeProjection
 	PolicyHash             *string
 	Progress               RuntimeProgress

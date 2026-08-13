@@ -28,6 +28,7 @@ const (
 	routingReachabilityResourceID      = "reviewers"
 	routingReachabilityWorkstation     = "process"
 	routingReachabilityWorkerSessionID = "%20"
+	routingReachabilityApprovalID      = "routing-reachability-approval"
 )
 
 const routingLiveJavaScriptWorkflowSource = `phase("plan");
@@ -201,6 +202,7 @@ func (ctx *routingReachabilityContext) resolveOperationPath(operation contractin
 		"{id}":                ctx.workID,
 		"{dispatch_id}":       ctx.durable.dispatchID,
 		"{artifact_id}":       ctx.durable.artifactID,
+		"{approval_id}":       routingReachabilityApprovalID,
 	}
 	path := operation.Path
 	for placeholder, value := range replacements {

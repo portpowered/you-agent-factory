@@ -150,8 +150,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 		t.Fatalf("generated workstations = %#v, want three workstations", generated.Workstations)
 	}
 	cron := runtimeConfigAlignmentRequireGeneratedWorkstation(t, *generated.Workstations, runtimeConfigAlignmentCronWorkstation)
-	if cron.Worker != "cron-worker" {
-		t.Fatalf("%s worker = %q, want cron-worker", runtimeConfigAlignmentCronWorkstation, cron.Worker)
+	if stringValueFromFunctionalPtr(cron.Worker) != "cron-worker" {
+		t.Fatalf("%s worker = %q, want cron-worker", runtimeConfigAlignmentCronWorkstation, stringValueFromFunctionalPtr(cron.Worker))
 	}
 	if cron.Behavior == nil || string(*cron.Behavior) != interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindCron) {
 		t.Fatalf("%s kind = %#v, want CRON", runtimeConfigAlignmentCronWorkstation, cron.Behavior)
@@ -169,8 +169,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 		t.Fatalf("%s cron = %#v, want expiryWindow 1h", runtimeConfigAlignmentCronWorkstation, cron.Cron)
 	}
 	review := runtimeConfigAlignmentRequireGeneratedWorkstation(t, *generated.Workstations, runtimeConfigAlignmentReviewWorkstation)
-	if review.Worker != "reviewer" {
-		t.Fatalf("%s worker = %q, want reviewer", runtimeConfigAlignmentReviewWorkstation, review.Worker)
+	if stringValueFromFunctionalPtr(review.Worker) != "reviewer" {
+		t.Fatalf("%s worker = %q, want reviewer", runtimeConfigAlignmentReviewWorkstation, stringValueFromFunctionalPtr(review.Worker))
 	}
 	if stringValueFromFunctionalPtr(review.Type) != interfaces.WorkstationTypeModel {
 		t.Fatalf("%s type = %q, want %q", runtimeConfigAlignmentReviewWorkstation, stringValueFromFunctionalPtr(review.Type), interfaces.WorkstationTypeModel)
@@ -185,8 +185,8 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 		t.Fatalf("%s resources = %#v, want agent-slot capacity 1", runtimeConfigAlignmentReviewWorkstation, review.Resources)
 	}
 	execute := runtimeConfigAlignmentRequireGeneratedWorkstation(t, *generated.Workstations, runtimeConfigAlignmentExecuteWorkstation)
-	if execute.Worker != "executor" {
-		t.Fatalf("%s worker = %q, want executor", runtimeConfigAlignmentExecuteWorkstation, execute.Worker)
+	if stringValueFromFunctionalPtr(execute.Worker) != "executor" {
+		t.Fatalf("%s worker = %q, want executor", runtimeConfigAlignmentExecuteWorkstation, stringValueFromFunctionalPtr(execute.Worker))
 	}
 	if execute.Limits == nil || stringValueFromFunctionalPtr(execute.Limits.MaxExecutionTime) != runtimeConfigAlignmentExecuteTimeout.String() {
 		t.Fatalf("%s limits = %#v, want maxExecutionTime %s", runtimeConfigAlignmentExecuteWorkstation, execute.Limits, runtimeConfigAlignmentExecuteTimeout)

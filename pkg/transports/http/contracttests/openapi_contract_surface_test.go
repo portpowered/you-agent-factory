@@ -34,6 +34,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkerSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
+	assertHumanApprovalSurfaceSchemas(t, schemas, paths)
 	assertErrorSurfaceSchemas(t, schemas)
 }
 
@@ -158,6 +159,8 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
 		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
+		"/factory-sessions/{session_id}/approvals":                  {"get"},
+		"/factory-sessions/{session_id}/approvals/{approval_id}":    {"get"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
 		"/factory-sessions/{session_id}/sync-preflight":             {"get"},
 		"/factory-sessions/{session_id}/status":                     {"get"},
@@ -741,7 +744,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	}
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON", "POLLER"})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"INFERENCE_RUN", "AGENT_RUN", "SCRIPT_RUN", "POLLER_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"INFERENCE_RUN", "AGENT_RUN", "SCRIPT_RUN", "POLLER_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION", "HUMAN_APPROVAL"})
 
 	classificationRouteSchema := schemaObject(t, schemas, "ClassificationRoute")
 	assertRequiredFields(t, classificationRouteSchema, "label", "outputs")
@@ -917,6 +920,8 @@ func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) 
 		"/factory-sessions/{session_id}/dispatches/{dispatch_id}": {"get"},
 		"/factory-sessions/{session_id}/artifacts":                {"get"},
 		"/factory-sessions/{session_id}/artifacts/{artifact_id}":  {"get"},
+		"/factory-sessions/{session_id}/approvals":                {"get"},
+		"/factory-sessions/{session_id}/approvals/{approval_id}":  {"get"},
 		"/factory-sessions/{session_id}/approve":                  {"post"},
 		"/factory-sessions/{session_id}/pause":                    {"post"},
 		"/factory-sessions/{session_id}/resume":                   {"post"},
@@ -960,6 +965,8 @@ func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[strin
 		"/factory-sessions/{session_id}/dispatches/{dispatch_id}": {},
 		"/factory-sessions/{session_id}/artifacts":                {},
 		"/factory-sessions/{session_id}/artifacts/{artifact_id}":  {},
+		"/factory-sessions/{session_id}/approvals":                {},
+		"/factory-sessions/{session_id}/approvals/{approval_id}":  {},
 		"/factory-sessions/{session_id}/approve":                  {},
 		"/factory-sessions/{session_id}/pause":                    {},
 		"/factory-sessions/{session_id}/resume":                   {},

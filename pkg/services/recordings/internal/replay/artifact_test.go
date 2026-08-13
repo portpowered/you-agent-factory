@@ -671,7 +671,7 @@ func artifactTestFactory() factoryapi.Factory {
 		Workstations: &[]factoryapi.Workstation{{
 			Id:      stringPtrIfNotEmpty("ws-1"),
 			Name:    "execute",
-			Worker:  "executor",
+			Worker:  generatedStringPtr("executor"),
 			Type:    stringPtrIfNotEmpty(factoryapi.WorkstationTypeLogicalMove),
 			Inputs:  []factoryapi.WorkstationIO{},
 			Outputs: &[]factoryapi.WorkstationIO{},

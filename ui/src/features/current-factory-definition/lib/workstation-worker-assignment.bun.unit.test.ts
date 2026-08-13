@@ -10,6 +10,14 @@ describe("workstationRequiresWorkerAssignment", () => {
     ).toBe(false);
   });
 
+  it("returns false for HUMAN_APPROVAL workstations", () => {
+    expect(
+      workstationRequiresWorkerAssignment({
+        type: "HUMAN_APPROVAL",
+      }),
+    ).toBe(false);
+  });
+
   it("returns true for MODEL_WORKSTATION fixtures used in graph-editor tests", () => {
     expect(
       workstationRequiresWorkerAssignment({

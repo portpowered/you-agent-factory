@@ -84,6 +84,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 			AgentRunResponsesByDispatchID: make(map[string]map[string]interfaces.FactoryWorldAgentRunResponse),
 			PlaceOccupancyByID:            make(map[string]interfaces.FactoryPlaceOccupancy),
 			ActiveDispatches:              make(map[string]interfaces.FactoryWorldDispatch),
+			PendingHumanApprovalsByID:     make(map[string]interfaces.FactoryWorldHumanApproval),
 			TracesByID:                    make(map[string]interfaces.FactoryWorldTrace),
 			WorkStateChangesByWorkID:      make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 		},
@@ -111,6 +112,8 @@ func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 		return r.applyRelationshipChangeEvent(event)
 	case interfaces.FactoryEventTypeDispatchRequest:
 		return r.applyDispatchRequestEvent(event)
+	case interfaces.FactoryEventTypeHumanApprovalRequested:
+		return r.applyHumanApprovalRequestedEvent(event)
 	case interfaces.FactoryEventTypeDispatchResponse:
 		return r.applyDispatchResponseEvent(event)
 	case interfaces.FactoryEventTypeFactoryStateResponse:
@@ -976,6 +979,21 @@ func (r *factoryWorldReducer) topologyWorkstation(transitionID string) (interfac
 		}
 	}
 	return interfaces.FactoryWorkstation{}, false
+}
+
+func cloneNameValue(value *interfaces.NameValueConfig) *interfaces.NameValueConfig {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	clone.Locales = append([]string(nil), value.Locales...)
+	if value.Values != nil {
+		clone.Values = make(map[string]string, len(value.Values))
+		for locale, text := range value.Values {
+			clone.Values[locale] = text
+		}
+	}
+	return &clone
 }
 
 func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryPlace, bool) {
