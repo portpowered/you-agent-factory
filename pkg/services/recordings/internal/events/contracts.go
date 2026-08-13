@@ -11,14 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// RuntimeLedgerFactory constructs session-scoped canonical ledgers.
-type RuntimeLedgerFactory func(
-	recordings.InitialStructureSource,
-	func() time.Time,
-	string,
-	interfaces.RuntimeDefinitionLookup,
-) recordings.RuntimeEventLedger
-
 // NewRuntimeLedger exposes the concrete event ledger through its public port.
 func NewRuntimeLedger(
 	topology recordings.InitialStructureSource,
