@@ -22,6 +22,7 @@ async function readEditorProjection(page, editorKind) {
     const editor = shell?.querySelector(".monaco-editor");
     const vertical = editor?.querySelector(".scrollbar.vertical");
     const slider = vertical?.querySelector(".slider");
+    const viewLines = editor?.querySelector(".view-lines");
     const overflowingDescendant = Array.from(
       editor?.querySelectorAll("*") ?? [],
     ).find(
@@ -54,6 +55,7 @@ async function readEditorProjection(page, editorKind) {
             width: sliderBox?.width ?? 0,
           }
         : null,
+      viewLinesTop: viewLines?.getBoundingClientRect().top ?? null,
       verticalScrollbar: verticalBox
         ? { height: verticalBox.height, width: verticalBox.width }
         : null,
@@ -116,6 +118,9 @@ async function assertEditorOverflow(page, editorKind) {
     );
   }
 
+  const vertical = editorLocator(page, editorKind)
+    .locator(".monaco-editor .scrollbar.vertical")
+    .first();
   const slider = editorLocator(page, editorKind)
     .locator(".monaco-editor .scrollbar.vertical .slider")
     .first();
@@ -135,6 +140,51 @@ async function assertEditorOverflow(page, editorKind) {
     throw new Error(
       `The ${editorKind} active slider role diverged from hover.`,
     );
+  }
+
+  const pointerBefore = await readEditorProjection(page, editorKind);
+  const verticalBox = await vertical.boundingBox();
+  if (!verticalBox) {
+    throw new Error(`The ${editorKind} vertical scrollbar is not measurable.`);
+  }
+  const targetY = Math.max(
+    sliderBox.y,
+    verticalBox.y + verticalBox.height - sliderBox.height - 1,
+  );
+  await page.mouse.move(
+    sliderBox.x + sliderBox.width / 2,
+    sliderBox.y + sliderBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    sliderBox.x + sliderBox.width / 2,
+    targetY + sliderBox.height / 2,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  if (pointerBefore.viewLinesTop == null) {
+    throw new Error(
+      `The ${editorKind} editor content position is not measurable.`,
+    );
+  }
+  await page.waitForFunction(
+    ({ kind, previousTop }) => {
+      const viewLines = document.querySelector(
+        `[data-monaco-editor="${kind}"] .monaco-editor .view-lines`,
+      );
+      return (
+        viewLines instanceof HTMLElement &&
+        viewLines.getBoundingClientRect().top < previousTop
+      );
+    },
+    { kind: editorKind, previousTop: pointerBefore.viewLinesTop },
+  );
+  const afterPointer = await readEditorProjection(page, editorKind);
+  if (
+    afterPointer.viewLinesTop == null ||
+    afterPointer.viewLinesTop >= pointerBefore.viewLinesTop
+  ) {
+    throw new Error(`The ${editorKind} slider drag did not scroll the editor.`);
   }
 
   await editorLocator(page, editorKind).locator(".native-edit-context").focus();
