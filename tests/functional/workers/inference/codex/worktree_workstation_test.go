@@ -120,6 +120,12 @@ Process the input task.
 	}
 }
 
+// backend-review construction-path exception: general-backend-standards.md §7
+// prefers root.BuildProcess + Process.Execute for functional application
+// tests. Process.Execute does not expose the detached Workers Service.Execute
+// operation, so this cell directly uses the public root.BuildStatelessWorkers
+// boundary to prove request-scoped worktree cleanup and does not open a
+// Factory Runtime or Factory Session.
 func TestCodexWorktreeReleaseRemovesCreatedCheckout(t *testing.T) {
 	repoRoot := initGitRepositoryForCodexWorktreeFunctionalTest(t)
 	runner := testutil.NewProviderCommandRunner(

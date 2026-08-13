@@ -222,7 +222,7 @@ func (s *Service) prepareWorkspace(
 		if !preparation.Reused {
 			preparation := preparation
 			cleanup.add(func() error {
-				return s.worktreeRelease.Release(context.WithoutCancel(ctx), preparation)
+				return s.worktreeRelease(context.WithoutCancel(ctx), preparation)
 			})
 		}
 	}

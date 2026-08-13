@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -20,7 +21,7 @@ type Service struct {
 	logger          logging.Logger
 	clock           func() time.Time
 	worktree        workers.FactoryWorktreePreparer
-	worktreeRelease workers.FactoryWorktreeReleaser
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error
 	temporaryFiles  workers.TemporaryFileSystem
 }
 
@@ -33,7 +34,7 @@ func New(
 	logger logging.Logger,
 	clock func() time.Time,
 	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease workers.FactoryWorktreeReleaser,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 ) (*Service, error) {
 	if runnerService == nil {

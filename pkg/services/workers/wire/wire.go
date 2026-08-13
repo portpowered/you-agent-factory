@@ -56,7 +56,7 @@ func NewService(
 	logger logging.Logger,
 	clock func() time.Time,
 	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease workers.FactoryWorktreeReleaser,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(

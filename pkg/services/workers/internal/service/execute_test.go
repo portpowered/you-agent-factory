@@ -387,7 +387,7 @@ func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *te
 			return nil
 		},
 		worktree,
-		worktree,
+		worktree.Release,
 		temporaryFiles,
 	)
 	request := validExecuteRequest("dispatch-cleanup", "attempt-cleanup")
@@ -510,7 +510,7 @@ func mustExecuteServiceWithEdges(
 	runner workers.Runner,
 	observe workers.ObservationSink,
 	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease workers.FactoryWorktreeReleaser,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 ) *executeservice.Service {
 	t.Helper()

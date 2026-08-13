@@ -18,6 +18,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -800,7 +801,7 @@ func provideWorkersRuntimeFactory(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	worktreeLifecycle workers.FactoryWorktreeLifecycle,
+	worktreePreparer workers.FactoryWorktreePreparer,
 	defaultAllocator workers.PTYAllocator,
 	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 	defaultScriptCommandRunner factorysessionwire.ScriptCommandRunner,
@@ -811,7 +812,7 @@ func provideWorkersRuntimeFactory(
 	if defaultAllocator == nil {
 		return nil, workers.ErrPTYHostRequired
 	}
-	if worktreeLifecycle == nil {
+	if worktreePreparer == nil {
 		return nil, errors.New("Workers worktree preparer is required")
 	}
 	factoryDocsFileSystem := provideWorkersFactoryDocsFileSystem(edges)
@@ -927,7 +928,7 @@ func provideWorkersRuntimeFactory(
 			executableInspector,
 			executableFiles,
 			operatingSystem,
-			worktreeLifecycle,
+			worktreePreparer,
 			agentRunHarness,
 			retryRandom,
 			workstationFiles,
@@ -945,7 +946,7 @@ func provideWorkersRuntimeFactory(
 
 func provideWorkersWorktree(
 	edges serviceedges.Edges,
-) (workers.FactoryWorktreeLifecycle, error) {
+) (workers.FactoryWorktreePreparer, error) {
 	worktreeFileSystem := edges.WorkersWorktreeFileSystem
 	if worktreeFileSystem == nil {
 		worktreeFileSystem = platformfilesystem.Local{}
@@ -966,7 +967,77 @@ func provideWorkersWorktree(
 	if err != nil {
 		return nil, err
 	}
-	return workers.FactoryWorktreeLifecycle(worktreePreparer), nil
+	return worktreePreparer, nil
+}
+
+type factoryWorktreeReleaser interface {
+	Release(context.Context, workers.FactoryWorktreePreparation) error
+}
+
+func provideWorkersWorktreeRelease(
+	worktreePreparer workers.FactoryWorktreePreparer,
+) func(context.Context, workers.FactoryWorktreePreparation) error {
+	releaser, ok := worktreePreparer.(factoryWorktreeReleaser)
+	if !ok {
+		return nil
+	}
+	return releaser.Release
+}
+
+// provideStatelessWorkersService composes the process-scoped Execute owner.
+// It is deliberately independent of Factory Runtime and Factory Session
+// opening: a caller can execute one detached target before either lifecycle is
+// opened, while the legacy runtime root receives this same owner below.
+func provideStatelessWorkersService(
+	providersService providers.Service,
+	modelsService models.Service,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	factoryDocsFileSystem platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock,
+	logger *zap.Logger,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
+) (workers.Service, error) {
+	if clock == nil {
+		return nil, fmt.Errorf("construct stateless Workers: clock is required")
+	}
+	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
+	if err != nil {
+		return nil, fmt.Errorf("construct stateless Workers: %w", err)
+	}
+	scriptRunner := workers.LoggingCommandRunner{
+		Runner: scriptCommandRunner,
+		Logger: logging.NoopLogger{},
+		Clock:  workers.ClockFunc(clock.Now),
+	}
+	return workerswire.NewService(
+		workerswire.AgentDependencies{
+			Providers: providersService,
+			Publish:   func(workers.ProgressFragment) {},
+		},
+		workerswire.ScriptConfig{RequestSelected: true},
+		workerswire.ScriptDependencies{
+			CommandRunner: scriptRunner,
+			FactoryDocs:   factoryDocs,
+			Now:           clock.Now,
+			Publish:       func(workers.ProgressFragment) {},
+			Record:        func(workers.ScriptEvent) {},
+		},
+		workerswire.InferenceConfig{
+			Worker: models.LocalWorker{
+				Name: "request-selected-inference",
+				Type: factorydefinitions.WorkerTypeInference,
+			},
+		},
+		workerswire.InferenceDependencies{Models: modelsService},
+		nil,
+		logging.NewZapLogger(logger, false),
+		clock.Now,
+		worktreePreparer,
+		worktreeRelease,
+		temporaryFiles,
+	)
 }
 
 func provideWorkersRetryRandomSource(edges serviceedges.Edges) platformrandom.Source {

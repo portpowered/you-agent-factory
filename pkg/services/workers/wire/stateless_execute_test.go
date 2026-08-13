@@ -222,6 +222,110 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 	return statelessTestFixture{service: service, provider: provider, command: command, local: local}
 }
 
+func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*statelessConstructionInputs)
+	}{
+		{name: "agent providers", mutate: func(input *statelessConstructionInputs) { input.agentDependencies.Providers = nil }},
+		{name: "agent publisher", mutate: func(input *statelessConstructionInputs) { input.agentDependencies.Publish = nil }},
+		{name: "script command", mutate: func(input *statelessConstructionInputs) {
+			input.scriptConfig.Command = ""
+			input.scriptConfig.RequestSelected = false
+		}},
+		{name: "script command runner", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.CommandRunner = nil }},
+		{name: "script factory docs", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.FactoryDocs = nil }},
+		{name: "script clock", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Now = nil }},
+		{name: "script publisher", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Publish = nil }},
+		{name: "script recorder", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Record = nil }},
+		{name: "inference worker", mutate: func(input *statelessConstructionInputs) { input.inferenceConfig.Worker.Name = "" }},
+		{name: "inference models", mutate: func(input *statelessConstructionInputs) { input.inferenceDependencies.Models = nil }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			input := newStatelessConstructionInputs()
+			test.mutate(&input)
+			if _, err := NewService(
+				input.agentDependencies,
+				input.scriptConfig,
+				input.scriptDependencies,
+				input.inferenceConfig,
+				input.inferenceDependencies,
+				nil,
+				nil,
+				func() time.Time { return time.Unix(1, 0) },
+				nil,
+				nil,
+				nil,
+			); err == nil {
+				t.Fatal("NewService() error = nil, want construction validation error")
+			}
+		})
+	}
+}
+
+func TestNewServiceRejectsMissingExecuteClock(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	if _, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	); err == nil {
+		t.Fatal("NewService() error = nil, want missing Execute clock error")
+	}
+}
+
+type statelessConstructionInputs struct {
+	agentDependencies     runners.AgentDependencies
+	scriptConfig          runners.ScriptConfig
+	scriptDependencies    runners.ScriptDependencies
+	inferenceConfig       runners.InferenceConfig
+	inferenceDependencies runners.InferenceDependencies
+}
+
+func newStatelessConstructionInputs() statelessConstructionInputs {
+	return statelessConstructionInputs{
+		agentDependencies: runners.AgentDependencies{
+			Providers: &statelessTestProviders{},
+			Publish:   func(workers.ProgressFragment) {},
+		},
+		scriptConfig: runners.ScriptConfig{
+			Command:          "fixture-script",
+			FactoryDirectory: "factory-root",
+		},
+		scriptDependencies: runners.ScriptDependencies{
+			CommandRunner: &statelessTestCommandRunner{},
+			FactoryDocs:   func(string) (map[string]string, error) { return nil, nil },
+			Now:           func() time.Time { return time.Unix(1, 0) },
+			Publish:       func(workers.ProgressFragment) {},
+			Record:        func(workers.ScriptEvent) {},
+		},
+		inferenceConfig: runners.InferenceConfig{
+			Worker: models.LocalWorker{
+				Name:  "local-inference",
+				Type:  factorydefinitions.WorkerTypeInference,
+				Model: "local-model",
+			},
+		},
+		inferenceDependencies: runners.InferenceDependencies{
+			Models: &statelessTestLocalInvoker{},
+		},
+	}
+}
+
 type statelessHappyPathCase struct {
 	name    string
 	request workers.ExecuteRequest
