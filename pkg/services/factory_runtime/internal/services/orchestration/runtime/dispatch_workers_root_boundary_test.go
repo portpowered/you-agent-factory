@@ -33,21 +33,9 @@ func (executor *recordingRootBoundaryExecutor) Execute(
 	}, nil
 }
 
-func requireWorkersRootPoolBoundary(t *testing.T, impl *factoryImpl) workers.WorkstationPoolBoundary {
-	t.Helper()
-	if impl.workers == nil {
-		t.Fatal("production runtime workers boundary is nil; pool execution regressed into Runtime")
-	}
-	boundary, ok := impl.workers.(workers.WorkstationPoolBoundary)
-	if !ok {
-		t.Fatalf("workers = %T, want workers.WorkstationPoolBoundary", impl.workers)
-	}
-	return boundary
-}
-
-// TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary proves a
-// Runtime-root PlanDispatch publication is executed through the Workers root
-// WorkstationPoolBoundary without Runtime invoking Workers executors directly.
+// TestFactoryImpl_PlanDispatchExecutesThroughStatelessWorkers proves a
+// Runtime-root PlanDispatch publication reaches the detached Workers Execute
+// boundary without Runtime invoking a WorkerExecutor directly.
 func TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary(t *testing.T) {
 	executor := &recordingRootBoundaryExecutor{}
 	runtime, err := newTestFactory(
@@ -62,8 +50,6 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary(t *testing.T
 	if !ok {
 		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
 	}
-	requireWorkersRootPoolBoundary(t, impl)
-
 	impl.state = interfaces.FactoryStateRunning
 	ctx := context.Background()
 	plan := factory.PlanDispatchRequest{
@@ -125,7 +111,6 @@ func TestFactoryImpl_PlannedDispatchAcceptsWorkersResultThroughRuntimeRoot(t *te
 	if !ok {
 		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
 	}
-	requireWorkersRootPoolBoundary(t, impl)
 	impl.state = interfaces.FactoryStateRunning
 
 	plan := factory.PlanDispatchRequest{
@@ -198,8 +183,8 @@ func TestWorkersRootPoolBoundaryAdmitsRuntimePlannedDispatchRequest(t *testing.T
 	request := workers.WorkstationDispatchRequest{
 		WorkstationName: "Process",
 		Execution: workers.WorkstationExecutionRequest{
-			WorkerType: "mock",
-			Dispatch:   dispatch,
+			WorkerType:       "mock",
+			Dispatch:         dispatch,
 			FactorySessionID: "~default",
 		},
 	}

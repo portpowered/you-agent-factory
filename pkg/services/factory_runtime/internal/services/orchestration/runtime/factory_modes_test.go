@@ -72,13 +72,12 @@ func TestFactoryRuntimeShutdownStopsWorkerSessionsBeforeWorkers(t *testing.T) {
 				order:   &order,
 			},
 		},
-		workers: &orderedRuntimeBoundary{order: &order},
 	}
 
 	if err := f.stopDispatchRuntimeLocked(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
 		t.Fatalf("stopDispatchRuntimeLocked() error = %v, want nil", err)
 	}
-	if got, want := strings.Join(order, ","), "worker-sessions,workers"; got != want {
+	if got, want := strings.Join(order, ","), "worker-sessions"; got != want {
 		t.Fatalf("shutdown order = %q, want %q", got, want)
 	}
 }

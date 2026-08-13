@@ -185,10 +185,10 @@ func (s *countingWorkerSessionsService) totalStartCalls() int {
 	return total
 }
 
-// TestFactoryImpl_DuplicatePlanDispatchReusesAssociationAndDoesNotRestartWorkerSessions
-// proves story 003's core idempotency requirement: repeating an identical
-// planned dispatch reuses the original Worker Session association and starts
-// worker_sessions.Service.Start exactly once, never twice.
+// TestFactoryImpl_DuplicatePlanDispatchReusesAssociationAndDoesNotRestartWorkers
+// proves Runtime's idempotency requirement: repeating an identical planned
+// dispatch reuses the original association and does not start a legacy Worker
+// Session execution path.
 func TestFactoryImpl_DuplicatePlanDispatchReusesAssociationAndDoesNotRestartWorkerSessions(t *testing.T) {
 	boundary := &testWorkstationBoundary{}
 	counting := newCountingWorkerSessionsService(&fakeWorkerSessionsService{execution: boundary})
@@ -232,11 +232,11 @@ func TestFactoryImpl_DuplicatePlanDispatchReusesAssociationAndDoesNotRestartWork
 	if associations[0].DispatchID != plan.DispatchID || associations[0].WorkerSessionID != plan.DispatchID {
 		t.Fatalf("association = %#v, want dispatch/session identity %q", associations[0], plan.DispatchID)
 	}
-	if got := counting.startCallCount(plan.DispatchID); got != 1 {
-		t.Fatalf("worker_sessions.Service.Start calls for %q = %d, want exactly 1", plan.DispatchID, got)
+	if got := counting.startCallCount(plan.DispatchID); got != 0 {
+		t.Fatalf("legacy worker_sessions.Service.Start calls for %q = %d, want 0", plan.DispatchID, got)
 	}
-	if got := counting.totalStartCalls(); got != 1 {
-		t.Fatalf("total worker_sessions.Service.Start calls = %d, want exactly 1", got)
+	if got := counting.totalStartCalls(); got != 0 {
+		t.Fatalf("legacy worker_sessions.Service.Start calls = %d, want 0", got)
 	}
 }
 

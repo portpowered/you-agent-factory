@@ -35,6 +35,45 @@ func (f *factoryImpl) InvokeWorker(
 	if err := req.Validate(); err != nil {
 		return factory.InvokeWorkerResult{}, err
 	}
+	if f != nil && f.cfg != nil && f.cfg.attempts != nil {
+		dispatchID := strings.TrimSpace(req.DispatchID)
+		execution := providerInvocationExecutionRequest(f, req, dispatchID)
+		executeRequest, err := executeRequestFromWorkstationRequest(f.cfg, execution)
+		if err != nil {
+			return factory.InvokeWorkerResult{}, err
+		}
+		allowRetry := false
+		if _, terminal := f.cfg.attempts.terminalAttemptID(dispatchID); terminal {
+			allowRetry = true
+		} else {
+			// Preserve the caller-facing identity for the first invocation while
+			// keeping resumed invocations distinct through a new Attempt ID.
+			executeRequest.Correlation.AttemptID = dispatchID
+		}
+		var dispatchResult workers.WorkstationDispatchResult
+		var dispatchErr error
+		start := startStatelessAttemptWithRequest
+		if allowRetry {
+			start = startStatelessAttemptWithRequestRetry
+		}
+		if err := start(
+			ctx,
+			f.cfg,
+			execution,
+			executeRequest,
+			false,
+			func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, err error) {
+				dispatchResult = result
+				dispatchErr = err
+			},
+		); err != nil {
+			return factory.InvokeWorkerResult{}, err
+		}
+		if dispatchErr != nil {
+			return factory.InvokeWorkerResult{}, dispatchErr
+		}
+		return invokeWorkerResultFromDispatch(dispatchID, executeRequest.Correlation.AttemptID, dispatchResult), nil
+	}
 	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
 		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
 	}
@@ -81,6 +120,46 @@ func (f *factoryImpl) InvokeWorker(
 		return factory.InvokeWorkerResult{}, err
 	}
 	return invokeWorkerResultFrom(dispatchID, sessionID, result), nil
+}
+
+func invokeWorkerResultFromDispatch(
+	dispatchID string,
+	attemptID string,
+	result workers.WorkstationDispatchResult,
+) factory.InvokeWorkerResult {
+	outcome := factory.InvokeWorkerOutcomeCompleted
+	switch result.TerminalOutcome {
+	case workers.WorkstationDispatchTerminalOutcomeCanceled:
+		outcome = factory.InvokeWorkerOutcomeCanceled
+	case workers.WorkstationDispatchTerminalOutcomeFailed:
+		outcome = factory.InvokeWorkerOutcomeFailed
+	}
+	invoked := factory.InvokeWorkerResult{
+		DispatchID:      dispatchID,
+		WorkerSessionID: attemptID,
+		Outcome:         outcome,
+		Output:          result.Result.Output,
+		Attempts:        1,
+	}
+	if session := result.Result.ProviderSession; session != nil {
+		invoked.Provider = workers.CanonicalProviderSessionProvider(session.Provider)
+		if invoked.Provider == "" {
+			invoked.Provider = strings.TrimSpace(session.Provider)
+		}
+		invoked.ProviderSessionRef = strings.TrimSpace(session.ID)
+	}
+	if outcome != factory.InvokeWorkerOutcomeCompleted {
+		invoked.Diagnostic = strings.TrimSpace(result.Result.Error)
+		if metadata := result.Result.FailureMetadata; metadata != nil {
+			invoked.FailureReason = string(metadata.Type)
+			decision := workers.FailureDecisionFromMetadata(metadata)
+			invoked.Retryable = &decision.Retryable
+		}
+		if invoked.Diagnostic == "" {
+			invoked.Diagnostic = "Provider execution failed."
+		}
+	}
+	return invoked
 }
 
 // reserveWorkerSession claims the Worker Session identity for one dispatch.

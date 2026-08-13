@@ -446,13 +446,10 @@ func (s *preHandoffFailedWorkerSessionsService) Terminate(context.Context, worke
 	return workersessions.ControlResult{}, nil
 }
 
-// TestFactoryImpl_DirectDispatchPreHandoffWorkerSessionFailureDoesNotFabricateSuccess
-// proves that when Worker Sessions terminalizes FAILED before ever reaching
-// Workers (FailureCauseEventPublicationFailure -- the one FAILED cause with no
-// real Dispatch payload), Runtime returns an explicit FAILURE terminal
-// outcome instead of synthesizing a successful result or invoking the Workers
-// executor at all.
-func TestFactoryImpl_DirectDispatchPreHandoffWorkerSessionFailureDoesNotFabricateSuccess(t *testing.T) {
+// TestFactoryImpl_DirectDispatchDoesNotDependOnWorkerSessionPreHandoffFailure
+// proves the stateless Runtime path reaches Workers independently of a legacy
+// Worker Sessions service supplied only for historical observations.
+func TestFactoryImpl_DirectDispatchDoesNotDependOnWorkerSessionPreHandoffFailure(t *testing.T) {
 	executor := &recordingRootBoundaryExecutor{}
 	sessions := &preHandoffFailedWorkerSessionsService{}
 	runtime, err := newTestFactory(
@@ -480,15 +477,15 @@ func TestFactoryImpl_DirectDispatchPreHandoffWorkerSessionFailureDoesNotFabricat
 	if _, err := impl.PlanDispatch(t.Context(), plan); err != nil {
 		t.Fatalf("PlanDispatch: %v", err)
 	}
-	if executor.calls.Load() != 0 {
+	if executor.calls.Load() != 1 {
 		t.Fatalf(
-			"Workers executor calls = %d, want 0 (pre-handoff Worker Session failure must never reach Workers)",
+			"Workers executor calls = %d, want 1 (Runtime owns the stateless attempt)",
 			executor.calls.Load(),
 		)
 	}
 	outcome := recordedTerminalOutcome(t, impl, plan.DispatchID)
-	if outcome != dispatchplanning.TerminalResultOutcomeFailure {
-		t.Fatalf("terminal outcome = %q, want FAILURE (not fabricated success)", outcome)
+	if outcome != dispatchplanning.TerminalResultOutcomeSuccess {
+		t.Fatalf("terminal outcome = %q, want SUCCESS from the stateless attempt", outcome)
 	}
 }
 

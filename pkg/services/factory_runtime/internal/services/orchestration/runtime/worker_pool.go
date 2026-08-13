@@ -144,8 +144,8 @@ func (f *factoryImpl) stopDispatchRuntimeLocked(
 	if f.dispatchPlan != nil {
 		stopErr = errors.Join(stopErr, f.dispatchPlan.Stop(stopCtx, reason))
 	}
-	if f.workers != nil {
-		stopErr = errors.Join(stopErr, f.workers.Stop(stopCtx))
+	if f.cfg != nil && f.cfg.attempts != nil {
+		stopErr = errors.Join(stopErr, f.cfg.attempts.stop(stopCtx))
 	}
 	return stopErr
 }

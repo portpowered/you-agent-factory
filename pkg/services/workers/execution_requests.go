@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -199,6 +200,7 @@ type WorkstationExecutionRequest struct {
 	UserMessage                 string                          `json:"user_message,omitempty"`
 	OutputSchema                string                          `json:"output_schema,omitempty"`
 	OutputContract              string                          `json:"output_contract,omitempty"`
+	Timeout                     time.Duration                   `json:"timeout,omitempty"`
 	EnvVars                     map[string]string               `json:"env_vars,omitempty"`
 	ProcessEnvironment          []string                        `json:"-"`
 	Worktree                    string                          `json:"worktree,omitempty"`
@@ -415,6 +417,14 @@ type ExecuteRequest struct {
 	Attempt     AttemptContext
 }
 
+// ExecuteService is the narrow stateless execution port consumed by Factory
+// Runtime. The aggregate Service keeps transitional construction operations
+// available to older composition paths, while this port carries only detached
+// request/result values across the Runtime boundary.
+type ExecuteService interface {
+	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
+}
+
 type ExecutionCorrelation struct {
 	FactorySessionID string
 	RuntimeID        string
@@ -429,6 +439,7 @@ type ExecutionTarget struct {
 	WorkerType       string
 	WorkstationName  string
 	RunnerID         string
+	Capabilities     *Capabilities
 	Command          string
 	Args             []string
 	FactoryDirectory string
@@ -495,7 +506,10 @@ type PermissionPolicy struct {
 }
 
 type ExecutionInput struct {
-	Work             []WorkInput
+	Work []WorkInput
+	// Dispatch preserves detached routing and replay facts that the Runtime
+	// must carry through an execution attempt without exposing executor state.
+	Dispatch         work.WorkDispatch
 	Invocation       work.InvocationArguments
 	ModelBindings    []ResolvedModelOperationBinding
 	ModelOperation   string
@@ -601,6 +615,10 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 
 func (target ExecutionTarget) Clone() ExecutionTarget {
 	clone := target
+	if target.Capabilities != nil {
+		capabilities := *target.Capabilities
+		clone.Capabilities = &capabilities
+	}
 	clone.Args = append([]string(nil), target.Args...)
 	clone.Tools.RequiredOptionalCapabilities = append(
 		[]RunnerOptionalCapability(nil),
@@ -616,6 +634,7 @@ func (target ExecutionTarget) Clone() ExecutionTarget {
 
 func (input ExecutionInput) Clone() ExecutionInput {
 	clone := input
+	clone.Dispatch = work.CloneWorkDispatch(input.Dispatch)
 	if args := work.CloneInvocationArguments(&input.Invocation); args != nil {
 		clone.Invocation = *args
 	}

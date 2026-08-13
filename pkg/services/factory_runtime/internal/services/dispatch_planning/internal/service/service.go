@@ -380,6 +380,7 @@ func executionRequest(decision dispatchplanning.RunnableDecision) workers.Workst
 		SystemPrompt:             facts.SystemPrompt,
 		UserMessage:              facts.UserMessage,
 		OutputSchema:             facts.OutputSchema,
+		Timeout:                  facts.Timeout,
 		EnvVars:                  facts.EnvVars,
 		ProcessEnvironment:       facts.ProcessEnvironment,
 		Worktree:                 facts.Worktree,
