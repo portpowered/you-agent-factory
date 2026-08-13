@@ -110,11 +110,10 @@ type (
 	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
 	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
 	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
-	AutomationFactory                      = runtimeopening.AutomationFactory
+	WorkFactory                            = runtimeopening.WorkFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
 	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
 	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
 	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory

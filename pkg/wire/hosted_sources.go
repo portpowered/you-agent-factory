@@ -18,7 +18,10 @@ import (
 	"go.uber.org/zap"
 )
 
-func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automations.HostedSourcesFactory, error) {
+func provideAutomationHostedPollers(
+	edges serviceedges.Edges,
+	logger *zap.Logger,
+) (automations.HostedPollers, error) {
 	checkpointStore := edges.HostedLinearCheckpointStore
 	if checkpointStore == nil {
 		var err error
@@ -27,7 +30,6 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 			return nil, err
 		}
 	}
-	factory := automationswire.NewHostedSourcesFactory(checkpointStore)
 	clock := edges.HostedClock
 	if clock == nil {
 		clock = clockwork.NewRealClock()
@@ -40,16 +42,14 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 	if secretResolver == nil {
 		secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
 	}
-	linearEndpoint := edges.HostedLinearEndpoint
-	return func(
-		logger *zap.Logger,
-		_ automations.HostedLinearClock,
-		_ automations.HostedLinearHTTPDoer,
-		_ automations.HostedLinearSecretResolver,
-		_ string,
-	) automations.HostedPollers {
-		return factory(logger, clock, httpClient, secretResolver, linearEndpoint)
-	}, nil
+	return automationswire.NewHostedPollers(
+		logger,
+		clock,
+		httpClient,
+		secretResolver,
+		edges.HostedLinearEndpoint,
+		checkpointStore,
+	), nil
 }
 
 func provideFactoryWebhooksService(

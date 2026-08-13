@@ -181,15 +181,7 @@ func TestWireFoldPreservesHostedPollerSupervisionFailure(t *testing.T) {
 	}
 
 	ports := validConstructionPorts(t)
-	ports.hostedSources = func(
-		*zap.Logger,
-		automations.HostedLinearClock,
-		automations.HostedLinearHTTPDoer,
-		automations.HostedLinearSecretResolver,
-		string,
-	) automations.HostedPollers {
-		return hostedPollers
-	}
+	ports.hostedPollers = hostedPollers
 	service := ports.newService(t)
 	submitted := &foldRecordingSubmitter{}
 
@@ -266,37 +258,24 @@ func TestWireFoldPreservesFilesystemWatcherFactoryAndPreseed(t *testing.T) {
 	}
 }
 
-func TestWireFoldPreservesHostedSourcesFactoryComposition(t *testing.T) {
+func TestWireFoldPreservesHostedPollerComposition(t *testing.T) {
 	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() = %v", err)
 	}
 
-	var factoryCalls int
 	ports := validConstructionPorts(t)
-	ports.hostedSources = func(
-		logger *zap.Logger,
-		clock automations.HostedLinearClock,
-		httpClient automations.HostedLinearHTTPDoer,
-		secrets automations.HostedLinearSecretResolver,
-		endpoint string,
-	) automations.HostedPollers {
-		factoryCalls++
-		return automationswire.NewHostedSourcesFactory(store)(logger, clock, httpClient, secrets, endpoint)
-	}
+	ports.hostedPollers = automationswire.NewHostedPollers(
+		ports.logger, clockwork.NewFakeClock(), nil, nil, "", store,
+	)
 
 	service, err := automationswire.NewService(
 		ports.logger,
 		ports.clock,
 		ports.commandRunner,
-		"fold-hosted-factory",
+		"fold-hosted-pollers",
 		"",
-		ports.hostedSources,
-		nil,
-		ports.hostedClock,
-		nil,
-		nil,
-		"",
+		ports.hostedPollers,
 		ports.resolveTemplates,
 		ports.executionPolicy,
 	)
@@ -305,9 +284,6 @@ func TestWireFoldPreservesHostedSourcesFactoryComposition(t *testing.T) {
 	}
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
-	}
-	if factoryCalls != 1 {
-		t.Fatalf("hosted-sources factory calls = %d, want exactly one wire composition call", factoryCalls)
 	}
 	var published automations.Service = service
 	if published == nil {

@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -320,8 +321,7 @@ func assertWorkPortsRetained(
 func assertAutomationsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Automations
-	assertRuntimeOpeningDependencyIdentity(t, "Automations factory", factory.automationFactory, group.Factory)
-	assertRuntimeOpeningDependencyIdentity(t, "Automations hosted sources", factory.automationHostedSourcesFactory, group.HostedSourcesFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Automations service", factory.automationService, group.Service)
 }
 
 func assertModelsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
@@ -417,8 +417,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
 		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
 		{"Work service", func(d *runtimeOpeningFixture) { d.Work.Service = nil }},
-		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
-		{"Automations hosted sources factory", func(d *runtimeOpeningFixture) { d.Automations.HostedSourcesFactory = nil }},
+		{"Automations service", func(d *runtimeOpeningFixture) { d.Automations.Service = nil }},
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
 		{"Recordings root", func(d *runtimeOpeningFixture) { d.Recordings.Root = nil }},
 		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
@@ -477,8 +476,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			Service: work.MaterializationService(constructionMaterializer{calls: calls}),
 		},
 		Automations: &AutomationsPorts{
-			Factory:              inertRuntimeOpeningFunction[AutomationFactory](calls),
-			HostedSourcesFactory: inertRuntimeOpeningFunction[AutomationHostedSourcesFactory](calls),
+			Service: automations.Root{},
 		},
 		Models:     &ModelsPorts{Service: &modelsConstructionStub{}},
 		Recordings: &RecordingsPorts{Root: &recordingsRootConstructionStub{}},

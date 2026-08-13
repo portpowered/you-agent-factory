@@ -31,6 +31,7 @@ type workerSessionsObservationProvider interface {
 type invocationScheduleFactory struct {
 	factory.Factory
 	schedules     invocationScheduleService
+	runtimeID     string
 	factoryDir    string
 	factoryConfig *interfaces.FactoryConfig
 	runtimeConfig interfaces.RuntimeConfigLookup
@@ -48,6 +49,7 @@ func attachInvocationScheduleFactory(ctx context.Context, automation automations
 	}
 	bundle.Factory = &invocationScheduleFactory{
 		Factory: bundle.Factory, schedules: schedules,
+		runtimeID:  bundle.RuntimeInstanceID,
 		factoryDir: bundle.RuntimeCfg.FactoryDir(), factoryConfig: bundle.RuntimeCfg.FactoryConfig(),
 		runtimeConfig: bundle.RuntimeCfg, ctx: ctx,
 	}
@@ -203,6 +205,7 @@ func (wrapped *invocationScheduleFactory) SubmitWorkRequest(
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
 	prepared, err := wrapped.schedules.PrepareInvocationSchedules(wrapped.scheduleContext(), automations.InvocationScheduleRequest{
+		RuntimeID:  wrapped.runtimeID,
 		FactoryDir: wrapped.factoryDir, FactoryConfig: wrapped.factoryConfig,
 		RuntimeConfig: wrapped.runtimeConfig, WorkRequest: request,
 		Submitter:      wrapped.submitScheduledWork,
@@ -313,6 +316,7 @@ func (wrapped *invocationScheduleFactory) recoverInvocationSchedules(ctx context
 			}},
 		}
 		prepared, prepareErr := wrapped.schedules.PrepareInvocationSchedules(ctx, automations.InvocationScheduleRequest{
+			RuntimeID:  wrapped.runtimeID,
 			FactoryDir: wrapped.factoryDir, FactoryConfig: wrapped.factoryConfig,
 			RuntimeConfig: wrapped.runtimeConfig, WorkRequest: request,
 			ResumeSequence: maxSequences[traceID], SuppressTriggerAtStart: true,

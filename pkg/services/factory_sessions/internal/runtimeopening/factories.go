@@ -3,7 +3,6 @@ package runtimeopening
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -17,14 +16,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type AutomationFactory = func(
-	*zap.Logger,
-	factoryruntime.Clock,
-	workers.CommandRunner,
-	string,
-	string,
-	automations.HostedPollers,
-) automations.Service
+// The factory roles below are consumed only while opening a Factory Session
+// runtime. Keeping them here makes the dependency direction explicit: Wire
+// supplies implementations, while this package owns the operation signature it
+// needs. They are aliases to function signatures so the remaining legacy Wire
+// providers can be cut over without an intermediate adapter graph.
+type WorkFactory = func(work.RuntimeResolver) work.Service
 
 type FactorySessionExecutionFactory = func(
 	string,
@@ -63,8 +60,6 @@ type WorkersRuntimeFactory = func(
 	work.ContentMaterializer,
 	[]operatorsettings.ACPIntegration,
 ) (workers.RuntimeService, error)
-
-type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 
 // RuntimeRootFactory constructs the inert process-scoped Factory Runtime root
 // with the opening operation supplied by this owner. The root constructor is

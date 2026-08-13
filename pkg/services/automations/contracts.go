@@ -41,6 +41,9 @@ const (
 // InvocationScheduleRequest carries the authored CRON graph, the pending
 // invocation Work, and runtime-owned effects needed by scheduled executions.
 type InvocationScheduleRequest struct {
+	// RuntimeID routes schedule preparation to the isolated Automations owner
+	// for this Factory Runtime. Empty keeps direct owner-local callers working.
+	RuntimeID     string
 	FactoryDir    string
 	FactoryConfig *factorydefinitions.FactoryConfig
 	RuntimeConfig factorydefinitions.RuntimeConfigLookup
@@ -108,9 +111,10 @@ func (prepared PreparedInvocationSchedules) Abort() {
 // composing a peer and invoke explicit methods on Root.
 type Root struct {
 	Operations Service
+	Lifecycle  RuntimeLifecycle
 }
 
-func rootOperationsAvailable(operations Service) bool {
+func rootOperationsAvailable(operations any) bool {
 	if operations == nil {
 		return false
 	}
@@ -192,6 +196,28 @@ func (r Root) GetCursor(
 		return GetCursorResult{}, unavailableRootError("GetCursor")
 	}
 	return r.Operations.GetCursor(ctx, request)
+}
+
+// ActivateRuntime allocates one detached runtime-scoped Automations owner.
+func (r Root) ActivateRuntime(
+	ctx context.Context,
+	request RuntimeActivationRequest,
+) (RuntimeActivationResult, error) {
+	if !rootOperationsAvailable(r.Lifecycle) {
+		return RuntimeActivationResult{}, unavailableRootError("ActivateRuntime")
+	}
+	return r.Lifecycle.ActivateRuntime(ctx, request)
+}
+
+// DeactivateRuntime releases one runtime-scoped Automations owner.
+func (r Root) DeactivateRuntime(
+	ctx context.Context,
+	request RuntimeDeactivationRequest,
+) (RuntimeDeactivationResult, error) {
+	if !rootOperationsAvailable(r.Lifecycle) {
+		return RuntimeDeactivationResult{}, unavailableRootError("DeactivateRuntime")
+	}
+	return r.Lifecycle.DeactivateRuntime(ctx, request)
 }
 
 // ReconcileRequest carries desired automation specs and observed instance facts

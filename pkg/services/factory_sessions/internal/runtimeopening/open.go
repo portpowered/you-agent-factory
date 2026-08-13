@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -41,7 +42,7 @@ func openRuntime(
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
-	automationFactory AutomationFactory,
+	automationService automations.Service,
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsRoot recordings.Root,
@@ -49,7 +50,6 @@ func openRuntime(
 	workersRuntimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	automationHostedSourcesFactory AutomationHostedSourcesFactory,
 	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
 	factoryDefinitionsFactory FactoryDefinitionsFactory,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -90,7 +90,7 @@ func openRuntime(
 	recordingRequest := request.Recordings
 	modelCacheDirectory := request.ModelCacheDirectory
 	operatorDefaults := request.OperatorDefaults
-	configured, root, load, clock, logger, hostedPollers, err := PrepareRuntime(
+	configured, root, load, clock, logger, err := PrepareRuntime(
 		ctx,
 		definitionRequest,
 		runtimeRequest,
@@ -108,7 +108,6 @@ func openRuntime(
 		decodeReplayConfig,
 		recordingsRoot,
 		recordingsRoot.ReplayClock,
-		automationHostedSourcesFactory,
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
 		captureLoadedFactorySnapshot,
@@ -225,20 +224,10 @@ func openRuntime(
 	cleanup.Add(func() error {
 		return serviceService.Close(context.WithoutCancel(ctx))
 	})
-	if automationFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations factory is required")
+	if automationService == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations service is required")
 	}
-	service2 := automationFactory(
-		logger,
-		clock,
-		scriptCommandRunner,
-		configured.Recordings.WorkflowID,
-		configured.Definition.Directory,
-		hostedPollers,
-	)
-	if service2 == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations factory returned nil service")
-	}
+	service2 := automationService
 	mutationOwner, ok := factorysessionexecutionService.(interface {
 		RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error
 	})

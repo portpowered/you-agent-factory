@@ -37,26 +37,23 @@ func (h hostedPollersRootAdapter) ValidateLinearPoller(
 	return h.inner.ValidateLinearPoller(runtimeConfig, workstation, worker, hostedsources.WorkSubmitter(submitter))
 }
 
-// NewHostedSourcesFactory returns the runtime-opening factory that composes
-// hosted Linear polling through the Automations-owned hosted_sources package.
-func NewHostedSourcesFactory(checkpointStore automations.HostedLinearCheckpointStore) automations.HostedSourcesFactory {
-	store := checkpointStore
-	return func(
-		logger *zap.Logger,
-		clock automations.HostedLinearClock,
-		httpClient automations.HostedLinearHTTPDoer,
-		secretResolver automations.HostedLinearSecretResolver,
-		linearEndpoint string,
-	) automations.HostedPollers {
-		return hostedPollersRootAdapter{inner: hostedsourceswire.NewHostedPollers(
-			logger,
-			clock,
-			httpClient,
-			adaptSecretResolver(secretResolver),
-			linearEndpoint,
-			store,
-		)}
-	}
+// NewHostedPollers composes hosted Linear polling inside the Automations owner.
+func NewHostedPollers(
+	logger *zap.Logger,
+	clock automations.HostedLinearClock,
+	httpClient automations.HostedLinearHTTPDoer,
+	secretResolver automations.HostedLinearSecretResolver,
+	linearEndpoint string,
+	checkpointStore automations.HostedLinearCheckpointStore,
+) automations.HostedPollers {
+	return hostedPollersRootAdapter{inner: hostedsourceswire.NewHostedPollers(
+		logger,
+		clock,
+		httpClient,
+		adaptSecretResolver(secretResolver),
+		linearEndpoint,
+		checkpointStore,
+	)}
 }
 
 func adaptSecretResolver(resolver automations.HostedLinearSecretResolver) hostedsources.SecretResolver {

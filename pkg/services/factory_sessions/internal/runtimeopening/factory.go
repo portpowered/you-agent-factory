@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -120,8 +121,7 @@ type WorkPorts struct {
 
 // AutomationsPorts contains Automations-owned opening collaborators.
 type AutomationsPorts struct {
-	Factory              AutomationFactory
-	HostedSourcesFactory AutomationHostedSourcesFactory
+	Service automations.Service
 }
 
 // WebhooksPorts contains the Webhooks root used to attach hosted delivery to
@@ -177,7 +177,7 @@ type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
 	modelService                     models.Service
-	automationFactory                AutomationFactory
+	automationService                automations.Service
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsRoot                   recordings.Root
@@ -186,7 +186,6 @@ type Factory struct {
 	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
 	providerInvocationFactory        factoryruntime.ProviderInvocationExecutorFactory
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	automationHostedSourcesFactory   AutomationHostedSourcesFactory
 	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
 	factoryDefinitionsFactory        FactoryDefinitionsFactory
 	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
@@ -236,7 +235,7 @@ func NewFactory(
 	factoryDefinitions *FactoryDefinitionsPorts,
 	factorySessions *FactorySessionsPorts,
 	workPorts *WorkPorts,
-	automations *AutomationsPorts,
+	automationsPorts *AutomationsPorts,
 	modelsPorts *ModelsPorts,
 	recordingsPorts *RecordingsPorts,
 	webhooksPorts *WebhooksPorts,
@@ -249,7 +248,7 @@ func NewFactory(
 		factoryDefinitions,
 		factorySessions,
 		workPorts,
-		automations,
+		automationsPorts,
 		modelsPorts,
 		recordingsPorts,
 		webhooksPorts,
@@ -263,7 +262,7 @@ func NewFactory(
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerExecutionFactory:           workersPorts.ExecutionFactory,
 		modelService:                     modelsPorts.Service,
-		automationFactory:                automations.Factory,
+		automationService:                automationsPorts.Service,
 		factorySessionsService:           factorySessions.Service,
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
@@ -273,7 +272,6 @@ func NewFactory(
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
-		automationHostedSourcesFactory:   automations.HostedSourcesFactory,
 		workersLocalRuntimeHooksFactory:  workersPorts.LocalRuntimeHooksFactory,
 		factoryDefinitionsFactory:        factoryDefinitions.Factory,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
@@ -429,8 +427,7 @@ func validateAutomations(group *AutomationsPorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Automations",
-		runtimeOpeningRequirement{"factory", group.Factory},
-		runtimeOpeningRequirement{"hosted sources factory", group.HostedSourcesFactory},
+		runtimeOpeningRequirement{"service", group.Service},
 	)
 }
 
@@ -536,7 +533,7 @@ func (f *Factory) openRuntime(
 		f.durableExecutionFactory,
 		f.workerExecutionFactory,
 		f.modelService,
-		f.automationFactory,
+		f.automationService,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsRoot,
@@ -544,7 +541,6 @@ func (f *Factory) openRuntime(
 		f.workersRuntimeExecutorsFactory,
 		f.providerInvocationFactory,
 		f.workersMockCommandRunnerFactory,
-		f.automationHostedSourcesFactory,
 		f.workersLocalRuntimeHooksFactory,
 		f.factoryDefinitionsFactory,
 		f.factoryScaffoldInitializer,

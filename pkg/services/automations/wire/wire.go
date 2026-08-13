@@ -18,10 +18,9 @@ import (
 )
 
 // NewService constructs an inert Automations root from construction and
-// process-edge ports. It composes the accepted root through parent-private
-// reconciliation/cron/script-pollers/filesystem-watchers owner assembly and
-// the accepted hosted-sources construction port without publishing owner types
-// on the returned peer surface. Missing required construction ports fail with a
+// process-edge ports. Hosted pollers are already composed inside this owner;
+// runtime opening receives the resulting service once and never receives a
+// hosted-source constructor. Missing required construction ports fail with a
 // deterministic construction error and a nil service.
 func NewService(
 	logger *zap.Logger,
@@ -29,40 +28,19 @@ func NewService(
 	commandRunner workers.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
-	hostedSources automations.HostedSourcesFactory,
-	hostedSourcesLogger *zap.Logger,
-	hostedClock automations.HostedLinearClock,
-	hostedHTTP automations.HostedLinearHTTPDoer,
-	hostedSecrets automations.HostedLinearSecretResolver,
-	linearEndpoint string,
+	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) (automations.Service, error) {
-	if err := validateDependencies(
+	if err := validateDirectDependencies(
 		logger,
 		clock,
 		commandRunner,
-		hostedSources,
-		hostedClock,
+		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
 	); err != nil {
 		return nil, err
-	}
-
-	hostedLogger := hostedSourcesLogger
-	if hostedLogger == nil {
-		hostedLogger = logger
-	}
-	hostedPollers := hostedSources(
-		hostedLogger,
-		hostedClock,
-		hostedHTTP,
-		hostedSecrets,
-		linearEndpoint,
-	)
-	if hostedPollers == nil {
-		return nil, fmt.Errorf("construct Automations: hosted-sources factory returned nil HostedPollers")
 	}
 
 	service := automationinternal.NewService(
@@ -81,12 +59,11 @@ func NewService(
 	return service, nil
 }
 
-func validateDependencies(
+func validateDirectDependencies(
 	logger *zap.Logger,
 	clock automations.Clock,
 	commandRunner workers.CommandRunner,
-	hostedSources automations.HostedSourcesFactory,
-	hostedClock automations.HostedLinearClock,
+	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) error {
@@ -99,11 +76,8 @@ func validateDependencies(
 	if commandRunner == nil {
 		return fmt.Errorf("construct Automations: command runner is required")
 	}
-	if hostedSources == nil {
-		return fmt.Errorf("construct Automations: hosted-sources factory is required")
-	}
-	if hostedClock == nil {
-		return fmt.Errorf("construct Automations: hosted poller clock is required")
+	if hostedPollers == nil {
+		return fmt.Errorf("construct Automations: hosted pollers are required")
 	}
 	if resolveTemplates == nil {
 		return fmt.Errorf("construct Automations: template field resolver is required")

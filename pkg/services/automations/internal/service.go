@@ -7,11 +7,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -26,20 +26,23 @@ type Clock = automations.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
-	loggerValue       *zap.Logger
-	clock             Clock
-	commandRunnerEdge workers.CommandRunner
-	workflowID        string
-	defaultFactoryDir string
-	hostedPollers     automations.HostedPollers
-	resolveTemplates  workers.TemplateFieldResolver
-	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
-	reconciler        reconciliation.Service
-	scriptPollers     scriptpollers.Service
-	cron              cron.Service
+	loggerValue        *zap.Logger
+	clock              Clock
+	commandRunnerEdge  workers.CommandRunner
+	workflowID         string
+	defaultFactoryDir  string
+	hostedPollers      automations.HostedPollers
+	resolveTemplates   workers.TemplateFieldResolver
+	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
+	reconciler         reconciliation.Service
+	scriptPollers      scriptpollers.Service
+	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
-	schedulerMu       sync.Mutex
-	schedulerSources  map[automations.SourceIdentity]*schedulerSource
+	schedulerMu        sync.Mutex
+	schedulerSources   map[automations.SourceIdentity]*schedulerSource
+	runtimeMu          sync.Mutex
+	runtimes           map[string]*runtimeInstance
+	runtimeActivating  map[string]struct{}
 }
 
 // New constructs the automation service from explicit worker-sidecar
@@ -64,6 +67,8 @@ func New(
 		resolveTemplates:  resolveTemplates,
 		executionPolicy:   executionPolicy,
 		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
+		runtimes:          make(map[string]*runtimeInstance),
+		runtimeActivating: make(map[string]struct{}),
 	}
 	service.reconciler = service.newSchedulerReconciler()
 	service.scriptPollers = service.newScriptPollers()
@@ -112,7 +117,7 @@ func (s *Service) Root() automations.Root {
 	if s == nil || s.reconciler == nil {
 		return automations.Root{}
 	}
-	return automations.Root{Operations: s}
+	return automations.Root{Operations: s, Lifecycle: s}
 }
 
 func (s *Service) Reconcile(

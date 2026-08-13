@@ -24,8 +24,7 @@ type constructionPorts struct {
 	logger           *zap.Logger
 	clock            clockwork.Clock
 	commandRunner    workers.CommandRunner
-	hostedSources    automations.HostedSourcesFactory
-	hostedClock      automations.HostedLinearClock
+	hostedPollers    automations.HostedPollers
 	resolveTemplates workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 }
@@ -55,8 +54,9 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		logger:        zap.NewNop(),
 		clock:         clockwork.NewFakeClock(),
 		commandRunner: stubCommandRunner{},
-		hostedSources: automationswire.NewHostedSourcesFactory(store),
-		hostedClock:   clockwork.NewFakeClock(),
+		hostedPollers: automationswire.NewHostedPollers(
+			zap.NewNop(), clockwork.NewFakeClock(), nil, nil, "", store,
+		),
 		resolveTemplates: func(
 			string,
 			map[string]string,
@@ -83,12 +83,7 @@ func (ports constructionPorts) newService(t *testing.T) runtimeAutomationService
 		ports.commandRunner,
 		"automations-wire",
 		"",
-		ports.hostedSources,
-		nil,
-		ports.hostedClock,
-		nil,
-		nil,
-		"",
+		ports.hostedPollers,
 		ports.resolveTemplates,
 		ports.executionPolicy,
 	)
@@ -268,14 +263,9 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			want:   "construct Automations: command runner is required",
 		},
 		{
-			name:   "hosted-sources factory",
-			mutate: func(ports *constructionPorts) { ports.hostedSources = nil },
-			want:   "construct Automations: hosted-sources factory is required",
-		},
-		{
-			name:   "hosted poller clock",
-			mutate: func(ports *constructionPorts) { ports.hostedClock = nil },
-			want:   "construct Automations: hosted poller clock is required",
+			name:   "hosted pollers",
+			mutate: func(ports *constructionPorts) { ports.hostedPollers = nil },
+			want:   "construct Automations: hosted pollers are required",
 		},
 		{
 			name:   "template field resolver",
@@ -299,12 +289,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.commandRunner,
 				"automations-wire",
 				"",
-				ports.hostedSources,
-				nil,
-				ports.hostedClock,
-				nil,
-				nil,
-				"",
+				ports.hostedPollers,
 				ports.resolveTemplates,
 				ports.executionPolicy,
 			)
@@ -344,7 +329,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	service, err := automationswire.NewService(
 		ports.logger, ports.clock, ports.commandRunner, "automations-wire-inert", "",
-		ports.hostedSources, nil, ports.hostedClock, nil, nil, "",
+		ports.hostedPollers,
 		ports.resolveTemplates, ports.executionPolicy,
 	)
 	if err != nil {
@@ -372,7 +357,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 type inertConstructionCalls struct {
 	commandRunner        int
 	templateResolver     int
-	hostedFactory        int
 	startLinearPoller    int
 	validateLinearPoller int
 }
@@ -382,18 +366,9 @@ func inertConstructionPorts(t *testing.T, calls *inertConstructionCalls) constru
 
 	ports := validConstructionPorts(t)
 	ports.commandRunner = recordingCommandRunner{calls: &calls.commandRunner}
-	ports.hostedSources = func(
-		*zap.Logger,
-		automations.HostedLinearClock,
-		automations.HostedLinearHTTPDoer,
-		automations.HostedLinearSecretResolver,
-		string,
-	) automations.HostedPollers {
-		calls.hostedFactory++
-		return recordingHostedPollers{
-			startCalls:    &calls.startLinearPoller,
-			validateCalls: &calls.validateLinearPoller,
-		}
+	ports.hostedPollers = recordingHostedPollers{
+		startCalls:    &calls.startLinearPoller,
+		validateCalls: &calls.validateLinearPoller,
 	}
 	ports.resolveTemplates = func(
 		string,
@@ -422,9 +397,6 @@ func assertInertConstructionCalls(t *testing.T, calls *inertConstructionCalls) {
 			"construction invoked hosted poller lifecycle (start=%d validate=%d), want inert construction",
 			calls.startLinearPoller, calls.validateLinearPoller,
 		)
-	}
-	if calls.hostedFactory != 1 {
-		t.Fatalf("hosted-sources factory calls = %d, want exactly one composition call", calls.hostedFactory)
 	}
 }
 
