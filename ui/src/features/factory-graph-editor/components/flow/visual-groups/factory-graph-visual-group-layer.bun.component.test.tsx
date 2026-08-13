@@ -101,7 +101,7 @@ describe("FactoryGraphVisualGroupLayer", () => {
       selectedGroupId: "group-1",
     });
 
-    expect(screen.getByText("Review")).toBeInTheDocument();
+    expect(screen.getByTitle("Review")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute(
       "aria-pressed",
       "true",

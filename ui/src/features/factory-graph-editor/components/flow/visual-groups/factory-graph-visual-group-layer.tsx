@@ -1,5 +1,5 @@
 import { useStore } from "@xyflow/react";
-import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph";
+import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph/group-regions";
 import { useCallback } from "react";
 import { cn } from "../../../../../lib/cn";
 import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";

@@ -14,7 +14,7 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
-import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph";
+import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph/group-regions";
 import {
   type ComponentProps,
   type KeyboardEvent,

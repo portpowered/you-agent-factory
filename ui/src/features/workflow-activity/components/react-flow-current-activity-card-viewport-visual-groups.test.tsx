@@ -26,23 +26,31 @@ vi.mock(
   }),
 );
 
-vi.mock("@you-agent-factory/factory-graph", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@you-agent-factory/factory-graph")>();
+vi.mock(
+  "@you-agent-factory/factory-graph/group-regions",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@you-agent-factory/factory-graph/group-regions")
+      >();
 
-  return {
-    ...actual,
-    FactoryGraphGroupRegionLayer: ({
-      groups,
-    }: {
-      groups: readonly { id: string }[];
-    }) => (
-      <div data-read-only="true" data-testid="factory-graph-group-region-layer">
-        {groups.map((group) => group.id).join(",")}
-      </div>
-    ),
-  };
-});
+    return {
+      ...actual,
+      FactoryGraphGroupRegionLayer: ({
+        groups,
+      }: {
+        groups: readonly { id: string }[];
+      }) => (
+        <div
+          data-read-only="true"
+          data-testid="factory-graph-group-region-layer"
+        >
+          {groups.map((group) => group.id).join(",")}
+        </div>
+      ),
+    };
+  },
+);
 
 vi.mock(
   "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls",
