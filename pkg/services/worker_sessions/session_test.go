@@ -251,6 +251,62 @@ func TestControlRequest_Validate(t *testing.T) {
 	}
 }
 
+func TestControlRecordPayload_ValidateCoversRequestAndOutcomeContract(t *testing.T) {
+	validRequest := workersessions.ControlRecordPayload{
+		RecordType:      workersessions.ControlRecordTypeRequest,
+		Action:          workersessions.ControlActionResume,
+		RequestID:       "request-1",
+		CorrelationID:   "worker-1/request-1",
+		WorkerSessionID: "worker-1",
+	}
+	validOutcome := validRequest
+	validOutcome.RecordType = workersessions.ControlRecordTypeOutcome
+	validOutcome.Outcome = workersessions.ControlOutcomeApplied
+
+	for name, payload := range map[string]workersessions.ControlRecordPayload{
+		"valid request": validRequest,
+		"valid outcome": validOutcome,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := payload.Validate(); err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+
+	for name, payload := range map[string]workersessions.ControlRecordPayload{
+		"invalid record type": {
+			RecordType: workersessions.ControlRecordType("other"), Action: workersessions.ControlActionPause,
+			RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"invalid action": {
+			RecordType: workersessions.ControlRecordTypeRequest, Action: workersessions.ControlAction("other"),
+			RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"missing identity": {
+			RecordType: workersessions.ControlRecordTypeRequest, Action: workersessions.ControlActionPause,
+		},
+		"request with outcome": {
+			RecordType: workersessions.ControlRecordTypeRequest, Action: workersessions.ControlActionPause,
+			Outcome: workersessions.ControlOutcomeApplied, RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"outcome without stable outcome": {
+			RecordType: workersessions.ControlRecordTypeOutcome, Action: workersessions.ControlActionPause,
+			RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"outcome with unknown outcome": {
+			RecordType: workersessions.ControlRecordTypeOutcome, Action: workersessions.ControlActionPause,
+			Outcome: workersessions.ControlOutcome("other"), RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := payload.Validate(); err == nil {
+				t.Fatal("Validate() = nil, want validation error")
+			}
+		})
+	}
+}
+
 func TestContinueRequest_ValidateAndNormalize(t *testing.T) {
 	valid := workersessions.ContinueRequest{
 		RequestID:                " request-1 ",

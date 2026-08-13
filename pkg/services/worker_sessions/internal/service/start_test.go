@@ -2185,6 +2185,51 @@ func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T
 	assertRetryAttemptHistory(t, eventsSvc, request.ID)
 }
 
+func TestInvokeSession_RetryLineagePublicationFailureTerminalizesWithoutSecondHandoff(t *testing.T) {
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+					FailureMetadata: &workers.WorkFailureMetadata{
+						Family: workers.WorkFailureFamilyRetryable,
+						Type:   workers.WorkFailureTypeTimeout,
+					},
+				},
+			}, nil
+		},
+	}
+	eventsSvc := newEventsAppender()
+	appender := &failOnNthAppendEventsAppender{Service: eventsSvc, n: 2}
+	registry, err := newService(executionBoundary{execution: execution}, appender, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+
+	request := validStartRequest("worker-retry-lineage-failure", "dispatch-1")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want terminal result", err)
+	}
+	if result.Session.State != workersessions.StateFailed || result.DispatchErr == nil {
+		t.Fatalf("InvokeSession() = %#v, want failed result with lineage publication error", result)
+	}
+	if got := execution.callCount(); got != 1 {
+		t.Fatalf("Workers handoff count = %d, want one initial attempt", got)
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(request.ID),
+		From:  events.Cursor{Topic: workersessions.Topic(request.ID)},
+		Limit: 10,
+	})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("retry lineage failure history = %+v, %v, want opening and terminal records", read, err)
+	}
+}
+
 func assertRetryAttemptHistory(t *testing.T, eventsSvc events.Service, sessionID string) {
 	t.Helper()
 	topic := workersessions.Topic(sessionID)
