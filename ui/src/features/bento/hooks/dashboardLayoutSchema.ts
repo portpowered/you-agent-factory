@@ -16,6 +16,7 @@ export const DASHBOARD_WIDGET_IDS = {
   submitWork: "submit-work",
   terminalWork: "terminal-work",
   trace: "trace",
+  workerSessionTimeline: "worker-session-timeline",
   workGraph: "work-graph",
   workOutcomeChart: "work-outcome-chart",
   workTotals: "work-totals",
@@ -59,6 +60,10 @@ export const DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS = {
   ),
   trace: createDashboardWidgetInstanceID(
     DASHBOARD_WIDGET_IDS.trace,
+    PRIMARY_WIDGET_INSTANCE_SLOT,
+  ),
+  workerSessionTimeline: createDashboardWidgetInstanceID(
+    DASHBOARD_WIDGET_IDS.workerSessionTimeline,
     PRIMARY_WIDGET_INSTANCE_SLOT,
   ),
   workGraph: createDashboardWidgetInstanceID(
@@ -173,6 +178,16 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     y: 17,
   }),
   dashboardLayoutItem({
+    h: 9,
+    id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workerSessionTimeline,
+    minH: 5,
+    minW: 4,
+    w: 12,
+    widgetType: DASHBOARD_WIDGET_IDS.workerSessionTimeline,
+    x: 0,
+    y: 28,
+  }),
+  dashboardLayoutItem({
     h: 4,
     hidden: true,
     id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession,
@@ -181,7 +196,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.factorySession,
     x: 8,
-    y: 27,
+    y: 37,
   }),
   dashboardLayoutItem({
     h: 4,
@@ -191,7 +206,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.addWidget,
     x: 8,
-    y: 27,
+    y: 37,
   }),
 ] as const satisfies readonly AgentBentoLayoutItem[];
 
@@ -253,6 +268,8 @@ export function getPrimaryInstanceIDForWidgetType(widgetType: string): string {
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork;
     case DASHBOARD_WIDGET_IDS.trace:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace;
+    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
+      return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workerSessionTimeline;
     case DASHBOARD_WIDGET_IDS.workGraph:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph;
     case DASHBOARD_WIDGET_IDS.workOutcomeChart:

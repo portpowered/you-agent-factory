@@ -15,6 +15,7 @@ export const mockedBackendBrowserIntegrationFiles = [
   "integration/factory-import-second-session.integration.test.mjs",
   "integration/maintainer-phantom-worker-graph.integration.test.mjs",
   "integration/packaged-factories-hosted-route.integration.test.mjs",
+  "integration/worker-session-timeline.integration.test.mjs",
 ];
 
 export const mockedBackendBrowserIntegrationPhaseName =

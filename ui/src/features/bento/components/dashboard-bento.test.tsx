@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: dashboard widget integration cases share one mock harness.
 import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
@@ -230,6 +231,25 @@ vi.mock("../../work-totals/components/work-totals-widget", () => ({
   ),
 }));
 
+vi.mock(
+  "../../worker-session-timeline/components/worker-session-timeline-widget",
+  () => ({
+    WorkerSessionTimelineWidget: ({
+      headerAction,
+      workID,
+    }: {
+      headerAction?: React.ReactNode;
+      workID?: string | null;
+    }) => (
+      <section>
+        {headerAction}
+        Worker Session timeline card
+        {workID ? `:${workID}` : ""}
+      </section>
+    ),
+  }),
+);
+
 vi.mock("../../workflow-activity/components/workflow-activity-widget", () => ({
   WorkflowActivityWidget: ({
     headerAction,
@@ -296,6 +316,7 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     submitWork: "submit-work",
     terminalWork: "terminal-work",
     trace: "trace",
+    workerSessionTimeline: "worker-session-timeline",
     workGraph: "work-graph",
     workOutcomeChart: "work-outcome-chart",
     workTotals: "work-totals",
@@ -405,6 +426,9 @@ describe("DashboardBento", () => {
     );
     expect(screen.getByTestId("session-controls").textContent).toContain(
       "Session controls card",
+    );
+    expect(screen.getByTestId("worker-session-timeline").textContent).toContain(
+      "Worker Session timeline card",
     );
   });
 
