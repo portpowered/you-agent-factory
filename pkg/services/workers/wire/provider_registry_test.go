@@ -88,7 +88,7 @@ func TestNewProviderRegistryRejectsCanceledContext(t *testing.T) {
 	}
 }
 
-func TestProviderRegistryProjectsCustomCapabilitiesAndAllSelectionSources(t *testing.T) {
+func TestProviderRegistryProjectsCustomCapabilities(t *testing.T) {
 	t.Parallel()
 
 	registry, err := NewProviderRegistry(context.Background(), &customRegistryProvidersFake{})
@@ -110,6 +110,15 @@ func TestProviderRegistryProjectsCustomCapabilitiesAndAllSelectionSources(t *tes
 		if capability.Status != workers.RunnerOptionalCapabilityStatusSupported {
 			t.Fatalf("custom capability = %#v, want supported", capability)
 		}
+	}
+}
+
+func TestProviderRegistryResolvesAllSelectionSources(t *testing.T) {
+	t.Parallel()
+
+	registry, err := NewProviderRegistry(context.Background(), &customRegistryProvidersFake{})
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() = %v", err)
 	}
 
 	for _, source := range []providers.SelectionSource{

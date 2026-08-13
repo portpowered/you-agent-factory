@@ -36,9 +36,8 @@ func TestProvideRuntimeProviderBindingsRebindsInjectedRunner(t *testing.T) {
 	}
 }
 
-func TestProviderCompositionAdaptersHonorRunnerOwnership(t *testing.T) {
+func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
-	adaptedRunner := workers.AdaptCommandRunner(runner)
 
 	injected, err := provideWorkersProviderCommandRunner(serviceedges.Edges{ProviderCommandRunner: runner})
 	if err != nil {
@@ -54,6 +53,11 @@ func TestProviderCompositionAdaptersHonorRunnerOwnership(t *testing.T) {
 	if defaultRunner == nil {
 		t.Fatal("provideWorkersProviderCommandRunner(default) = nil")
 	}
+}
+
+func TestProviderRegistryRebinderUsesTheSessionRunner(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner()
+	adaptedRunner := workers.AdaptCommandRunner(runner)
 
 	providersService, err := provideProvidersService(serviceedges.Edges{})
 	if err != nil {
@@ -68,6 +72,15 @@ func TestProviderCompositionAdaptersHonorRunnerOwnership(t *testing.T) {
 	}
 	if registry, rebound, err := rebinder(adaptedRunner); err != nil || registry == nil || rebound == nil {
 		t.Fatalf("provider registry rebinder(valid) = registry %T, service %T, error %v", registry, rebound, err)
+	}
+}
+
+func TestProviderInvocationEdgeSelectsTheSessionRunner(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner()
+	adaptedRunner := workers.AdaptCommandRunner(runner)
+	providersService, err := provideProvidersService(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 
 	if _, gotRunner, err := providerInvocationProviderEdge(nil, nil, adaptedRunner); err != nil || gotRunner != adaptedRunner {
