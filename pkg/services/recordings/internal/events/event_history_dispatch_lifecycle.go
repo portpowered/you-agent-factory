@@ -69,17 +69,13 @@ func cloneFactoryEventsForStream(
 		}
 		filtered = append(filtered, event.Clone())
 	}
-	if dispatchID == "" && scope.Limit <= 0 {
+	if scope.HistoryLimit <= 0 {
 		return filtered
 	}
-	limit := scope.Limit
-	if limit <= 0 {
-		limit = eventHistoryStreamBufferSize
-	}
-	if len(filtered) <= limit {
+	if len(filtered) <= scope.HistoryLimit {
 		return filtered
 	}
-	return filtered[len(filtered)-limit:]
+	return filtered[len(filtered)-scope.HistoryLimit:]
 }
 
 func factoryEventBelongsToDispatch(event interfaces.FactoryEvent, dispatchID string) bool {

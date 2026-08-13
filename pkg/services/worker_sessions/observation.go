@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // ObservationService is retained as the public name for the Worker Sessions
@@ -153,6 +154,10 @@ type StreamObservationsRequest struct {
 	// opened and then returns one completeness summary without registering a
 	// live follower.
 	ReplayOnly bool
+	// Cursor resumes strictly after the last acknowledged Worker Session event.
+	// The cursor is scoped by the selected Provider Session and, when present,
+	// the durable Factory event-stream generation.
+	Cursor *ObservationCursor
 }
 
 const DefaultObservationStreamLimit = 64
@@ -166,6 +171,11 @@ func (r StreamObservationsRequest) Validate() error {
 	if r.Limit < 0 {
 		return ErrInvalidObservationStreamLimit
 	}
+	if r.Cursor != nil {
+		if err := r.Cursor.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -175,6 +185,8 @@ type StreamObservationsByWorkerSessionIDRequest struct {
 	WorkerSessionID string
 	Limit           int
 	ReplayOnly      bool
+	// Cursor resumes strictly after the last acknowledged Worker Session event.
+	Cursor *ObservationCursor
 }
 
 // Validate reports whether the request carries a complete Worker Session
@@ -186,8 +198,43 @@ func (r StreamObservationsByWorkerSessionIDRequest) Validate() error {
 	if r.Limit < 0 {
 		return ErrInvalidObservationStreamLimit
 	}
+	if r.Cursor != nil {
+		if err := r.Cursor.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
+
+// ObservationCursor identifies one acknowledged Worker Session event. The
+// position is the aggregate position exposed in ObservationEvent.Position;
+// WorkerSessionID makes a cursor portable without allowing it to be replayed
+// against another Worker Session; StreamGenerationID is populated for durable
+// Factory history and is empty for the process-local Events fallback.
+type ObservationCursor struct {
+	WorkerSessionID    string
+	StreamGenerationID string
+	Position           uint64
+}
+
+// Validate rejects a cursor that cannot identify an acknowledged record.
+// Position zero remains the unqualified start-of-stream cursor used only by
+// the internal Events service, never by this reconnect contract.
+func (c ObservationCursor) Validate() error {
+	if c.Position == 0 {
+		return ErrInvalidObservationCursor
+	}
+	if strings.TrimSpace(c.WorkerSessionID) != c.WorkerSessionID {
+		return ErrInvalidObservationCursor
+	}
+	if strings.TrimSpace(c.StreamGenerationID) != c.StreamGenerationID {
+		return ErrInvalidObservationCursor
+	}
+	return nil
+}
+
+// Clone returns a detached cursor value.
+func (c ObservationCursor) Clone() ObservationCursor { return c }
 
 // Observation is the detached authoritative projection shared by list and
 // show. Optional values stay nil when the owning source cannot provide them;
@@ -197,20 +244,29 @@ type Observation struct {
 	PredecessorWorkerSessionID string
 	SuccessorWorkerSessionID   string
 	Direct                     bool
-	ProviderSession            providers.SessionRef
-	ProviderSessionAvailable   bool
-	WorkIDs                    []string
-	TurnID                     string
-	AttemptID                  string
-	State                      State
-	StartedAt                  *time.Time
-	EndedAt                    *time.Time
-	Duration                   *time.Duration
-	DurationBasis              DurationBasis
-	TokenUsage                 *TokenUsage
-	Transcript                 TranscriptAvailability
-	Failure                    *FailureCause
-	Parse                      ParseDiagnostics
+	// FactorySessionID is the explicit Factory Session scope selected by the
+	// transport. Worker Sessions does not derive or authorize this value; the
+	// runtime-bound projection supplies it at the public boundary.
+	FactorySessionID         string
+	ProviderSession          providers.SessionRef
+	ProviderSessionAvailable bool
+	WorkIDs                  []string
+	TurnID                   string
+	AttemptID                string
+	State                    State
+	StartedAt                *time.Time
+	EndedAt                  *time.Time
+	Duration                 *time.Duration
+	DurationBasis            DurationBasis
+	TokenUsage               *TokenUsage
+	Transcript               TranscriptAvailability
+	// RecordingHealth is optional when the runtime has no durable Worker
+	// recording configured. When present it is the Recordings-owned health
+	// projection and never describes Worker execution outcome.
+	RecordingHealth       recordings.WorkerRecordingStatus
+	RecordingHealthReason string
+	Failure               *FailureCause
+	Parse                 ParseDiagnostics
 }
 
 // Validate reports whether an observation has a coherent detached identity,
@@ -220,6 +276,9 @@ func (o Observation) Validate() error {
 		return err
 	}
 	if err := o.validateLifecycleBasis(); err != nil {
+		return err
+	}
+	if err := o.validateRecordingHealth(); err != nil {
 		return err
 	}
 	if err := o.validateDuration(); err != nil {
@@ -267,6 +326,23 @@ func (o Observation) validateLifecycleBasis() error {
 		return ErrInvalidObservationDuration
 	}
 	return nil
+}
+
+func (o Observation) validateRecordingHealth() error {
+	if o.RecordingHealth == "" {
+		if strings.TrimSpace(o.RecordingHealthReason) != "" {
+			return ErrInvalidObservationRecordingHealth
+		}
+		return nil
+	}
+	switch o.RecordingHealth {
+	case recordings.WorkerRecordingStatusComplete,
+		recordings.WorkerRecordingStatusDegraded,
+		recordings.WorkerRecordingStatusIncomplete:
+		return nil
+	default:
+		return ErrInvalidObservationRecordingHealth
+	}
 }
 
 // validateDuration checks that Duration is present only when its basis
@@ -414,6 +490,7 @@ type ParseDiagnostic struct {
 // exposing the Events store or its implementation.
 type ObservationEvent struct {
 	Position       uint64
+	Cursor         ObservationCursor
 	SourceType     string
 	SourceID       string
 	SourceSequence uint64
@@ -424,6 +501,7 @@ type ObservationEvent struct {
 
 func (e ObservationEvent) Clone() ObservationEvent {
 	clone := e
+	clone.Cursor = e.Cursor.Clone()
 	clone.Payload = append(json.RawMessage(nil), e.Payload...)
 	return clone
 }
@@ -453,7 +531,8 @@ type ReplaySummary struct {
 
 // ObservationDelivery is one subscription outcome. Event is present for
 // RECORD, TERMINAL, and TERMINAL_REPLAY; Summary is present for
-// REPLAY_SUMMARY; Err is present only for CANCELED or SOURCE_FAILURE.
+// REPLAY_SUMMARY and may accompany a terminal durable event; Err is present
+// only for CANCELED or SOURCE_FAILURE.
 type ObservationDelivery struct {
 	Kind    ObservationDeliveryKind
 	Event   ObservationEvent
@@ -484,40 +563,66 @@ func (s ObservationSubscription) Close() {
 }
 
 var (
-	ErrInvalidObservationWorkID         = errors.New("worker session observation: invalid work id")
-	ErrInvalidObservationIdentity       = errors.New("worker session observation: invalid provider session identity")
-	ErrInvalidObservationScope          = errors.New("worker session observation: invalid scope")
-	ErrInvalidObservationPagination     = errors.New("worker session observation: invalid pagination")
-	ErrInvalidObservationAttempt        = errors.New("worker session observation: invalid attempt")
-	ErrInvalidObservationDuration       = errors.New("worker session observation: invalid duration projection")
-	ErrInvalidObservationFailure        = errors.New("worker session observation: invalid failure projection")
-	ErrInvalidObservationStreamLimit    = errors.New("worker session observation: stream limit must not be negative")
-	ErrObservationWorkNotFound          = errors.New("worker session observation: work not found")
-	ErrObservationSessionNotFound       = errors.New("worker session observation: provider session not found")
-	ErrObservationNotDirect             = errors.New("worker session observation: session is not direct")
-	ErrObservationProjectionUnavailable = errors.New("worker session observation: projection unavailable")
-	ErrObservationSourceUnavailable     = errors.New("worker session observation: event source unavailable")
-	ErrObservationSourceGap             = errors.New("worker session observation: retained event gap")
-	ErrObservationSourceClosed          = errors.New("worker session observation: event source closed before terminal")
-	ErrObservationCanceled              = fmt.Errorf("worker session observation: canceled: %w", context.Canceled)
+	ErrInvalidObservationWorkID          = errors.New("worker session observation: invalid work id")
+	ErrInvalidObservationIdentity        = errors.New("worker session observation: invalid provider session identity")
+	ErrInvalidObservationScope           = errors.New("worker session observation: invalid scope")
+	ErrInvalidObservationPagination      = errors.New("worker session observation: invalid pagination")
+	ErrInvalidObservationAttempt         = errors.New("worker session observation: invalid attempt")
+	ErrInvalidObservationDuration        = errors.New("worker session observation: invalid duration projection")
+	ErrInvalidObservationFailure         = errors.New("worker session observation: invalid failure projection")
+	ErrInvalidObservationRecordingHealth = errors.New("worker session observation: invalid recording health")
+	ErrInvalidObservationStreamLimit     = errors.New("worker session observation: stream limit must not be negative")
+	ErrInvalidObservationCursor          = errors.New("worker session observation: invalid cursor")
+	ErrObservationCursorForeign          = errors.New("worker session observation: cursor belongs to another Worker Session")
+	ErrObservationCursorFuture           = errors.New("worker session observation: cursor is ahead of the available history")
+	ErrObservationCursorStale            = errors.New("worker session observation: cursor is no longer retained")
+	ErrObservationCursorUnavailable      = errors.New("worker session observation: cursor stream generation is unavailable")
+	ErrObservationWorkNotFound           = errors.New("worker session observation: work not found")
+	ErrObservationSessionNotFound        = errors.New("worker session observation: provider session not found")
+	ErrObservationNotDirect              = errors.New("worker session observation: session is not direct")
+	ErrObservationProjectionUnavailable  = errors.New("worker session observation: projection unavailable")
+	ErrObservationRecordingCorrupt       = errors.New("worker session observation: recording history is corrupt")
+	ErrObservationRecordingUnavailable   = errors.New("worker session observation: recording history unavailable")
+	ErrObservationSourceUnavailable      = errors.New("worker session observation: event source unavailable")
+	ErrObservationSourceGap              = errors.New("worker session observation: retained event gap")
+	ErrObservationSourceClosed           = errors.New("worker session observation: event source closed before terminal")
+	ErrObservationCanceled               = fmt.Errorf("worker session observation: canceled: %w", context.Canceled)
 )
 
-// ReadTranscriptRequest identifies one exact Provider Session whose normalized
-// transcript should be returned.
+// ReadTranscriptRequest identifies one Worker Session whose normalized
+// transcript should be returned. ProviderSession is retained as the legacy
+// compatibility identity; new callers should use WorkerSessionID so the read
+// remains provider-neutral and can resolve durable Factory Session history.
 type ReadTranscriptRequest struct {
+	WorkerSessionID string
 	ProviderSession providers.SessionRef
 }
 
-// Validate reports whether the request carries a complete typed identity.
+// Validate reports whether the request carries exactly one complete typed
+// identity. Accepting both identities would make a disagreement ambiguous and
+// could let a legacy provider reference escape its Worker Session scope.
 func (r ReadTranscriptRequest) Validate() error {
-	if err := r.ProviderSession.Validate(); err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+	workerSessionID := strings.TrimSpace(r.WorkerSessionID)
+	providerIdentityPresent := strings.TrimSpace(string(r.ProviderSession.Provider)) != "" ||
+		strings.TrimSpace(r.ProviderSession.Kind) != "" || strings.TrimSpace(r.ProviderSession.ID) != ""
+	switch {
+	case workerSessionID != "" && providerIdentityPresent:
+		return fmt.Errorf("%w: Worker Session ID and Provider Session identity are mutually exclusive", ErrInvalidObservationIdentity)
+	case workerSessionID != "":
+		return nil
+	default:
+		if err := r.ProviderSession.Validate(); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+		}
+		return nil
 	}
-	return nil
 }
 
 // ReadTranscriptResult is the detached Worker Session envelope and ordered
-// normalized transcript returned for a finished Provider Session.
+// normalized transcript returned for a finished Worker Session with readable
+// provider-native transcript detail. A Worker without that detail receives
+// ErrObservationTranscriptUnavailable while canonical history remains
+// available through the Worker-ID event read.
 type ReadTranscriptResult struct {
 	WorkerSessionID string
 	ProviderSession providers.SessionRef
@@ -541,7 +646,7 @@ func (r ReadTranscriptResult) Clone() ReadTranscriptResult {
 }
 
 // Validate reports whether the transcript envelope has a coherent identity,
-// terminal lifecycle state, and ordered entries.
+// provider transcript identity, terminal lifecycle state, and ordered entries.
 func (r ReadTranscriptResult) Validate() error {
 	if strings.TrimSpace(r.WorkerSessionID) == "" {
 		return ErrInvalidObservationIdentity

@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -162,6 +161,28 @@ func New(
 		registry.retainedReader = reader
 	}
 	return registry, nil
+}
+
+// LoadWorkerRecording forwards the optional Recordings-owned durable reader
+// through the same per-Factory-Session Worker Sessions instance used for
+// observation. It is intentionally not part of the broad Worker Sessions
+// service contract; runtime projections discover this read capability only
+// when the composed capture service provides it.
+func (r *registry) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil || r.recording == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reader, ok := r.recording.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
 func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.InvokeSessionRequest) (recordings.WorkerSessionRecording, error) {
@@ -533,6 +554,7 @@ func (r *registry) associateProviderSessionLocked(
 type replayObservationSubscription struct {
 	reader             EventsRetainedReader
 	topic              events.Topic
+	workerSessionID    string
 	limit              int
 	snapshotHead       events.AggregateSequence
 	next               events.Cursor
@@ -544,6 +566,7 @@ type replayObservationSubscription struct {
 	eventsEmitted      int
 	summarySent        bool
 	closed             bool
+	cursorProvided     bool
 	mu                 sync.Mutex
 }
 
@@ -553,6 +576,7 @@ func newReplayObservationSubscription(
 	topic events.Topic,
 	state workersessions.State,
 	limit int,
+	cursorArgs ...*workersessions.ObservationCursor,
 ) (*replayObservationSubscription, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -566,17 +590,33 @@ func newReplayObservationSubscription(
 	if limit <= 0 {
 		limit = workersessions.DefaultObservationStreamLimit
 	}
+	from := events.Cursor{Topic: topic}
+	var cursor *workersessions.ObservationCursor
+	if len(cursorArgs) > 0 {
+		cursor = cursorArgs[0]
+	}
+	if cursor != nil {
+		from.Position = events.AggregateSequence(cursor.Position)
+		if cursor.StreamGenerationID != "" {
+			return nil, workersessions.ErrObservationCursorUnavailable
+		}
+	}
 	replay := &replayObservationSubscription{
-		reader:         reader,
-		topic:          topic,
-		limit:          limit,
-		next:           events.Cursor{Topic: topic},
-		sessionState:   state,
-		terminalReplay: state.Terminal(),
-		reason:         replayReason(state),
+		reader:          reader,
+		topic:           topic,
+		workerSessionID: observationWorkerSessionIDFromTopic(topic),
+		limit:           limit,
+		next:            from,
+		sessionState:    state,
+		terminalReplay:  state.Terminal(),
+		reason:          replayReason(state),
+		cursorProvided:  cursor != nil,
 	}
 	result, err := reader.Read(ctx, events.ReadRequest{Topic: topic, From: replay.next, Limit: limit})
 	if err != nil {
+		if cursor != nil && errors.Is(err, events.ErrUnresolvableCursor) {
+			return nil, workersessions.ErrObservationCursorFuture
+		}
 		return nil, replayReadError(err)
 	}
 	if err := replay.acceptInitial(result); err != nil {
@@ -590,7 +630,13 @@ func (s *replayObservationSubscription) acceptInitial(result events.ReadResult) 
 		return replayReadError(err)
 	}
 	if result.Outcome == events.ReadOutcomeGap {
+		if s.cursorProvided {
+			return workersessions.ErrObservationCursorStale
+		}
 		return workersessions.ErrObservationSourceGap
+	}
+	if result.Outcome == events.ReadOutcomeInvalidCursor {
+		return workersessions.ErrObservationCursorFuture
 	}
 	if result.Next.Topic != s.topic || result.Retained.Topic != s.topic {
 		return workersessions.ErrObservationSourceUnavailable
@@ -632,7 +678,7 @@ func (s *replayObservationSubscription) Next(ctx context.Context) workersessions
 			s.eventsEmitted++
 			terminalReplay := s.terminalReplay
 			s.mu.Unlock()
-			return observationRecordDelivery(record, terminalReplay)
+			return observationRecordDelivery(record, terminalReplay, s.workerSessionID)
 		}
 		if s.next.Position >= s.snapshotHead {
 			if !s.summarySent {
@@ -762,8 +808,8 @@ func cloneEventRecords(records []events.Record) []events.Record {
 	return clone
 }
 
-func observationRecordDelivery(record events.Record, terminalReplay bool) workersessions.ObservationDelivery {
-	event := projectObservationEvent(record)
+func observationRecordDelivery(record events.Record, terminalReplay bool, workerSessionIDArgs ...string) workersessions.ObservationDelivery {
+	event := projectObservationEvent(record, workerSessionIDArgs...)
 	if isTerminalLifecycleRecord(record) {
 		kind := workersessions.ObservationDeliveryTerminal
 		if terminalReplay {
@@ -780,6 +826,8 @@ func replayReadError(err error) error {
 		return workersessions.ErrObservationCanceled
 	case errors.Is(err, workersessions.ErrObservationSourceGap):
 		return workersessions.ErrObservationSourceGap
+	case errors.Is(err, events.ErrUnresolvableCursor):
+		return workersessions.ErrObservationCursorFuture
 	default:
 		return workersessions.ErrObservationSourceUnavailable
 	}
@@ -790,48 +838,6 @@ func replayReason(state workersessions.State) string {
 		return "session-active"
 	}
 	return "session-" + strings.ToLower(string(state))
-}
-
-// ReadTranscript returns the final normalized Provider Sessions transcript for
-// one exact Worker Session association. The lifecycle check happens before the
-// provider projection so an active session has a stable active outcome even
-// when its provider source is not yet readable.
-func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
-	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session transcript read rejected", "outcome", "invalid")
-		return workersessions.ReadTranscriptResult{}, err
-	}
-	if err := observationContextError(ctx); err != nil {
-		return workersessions.ReadTranscriptResult{}, err
-	}
-
-	session, metadata, err := r.transcriptSession(req.ProviderSession)
-	if err != nil {
-		r.logger.Info("worker session transcript read", "outcome", "not_found")
-		return workersessions.ReadTranscriptResult{}, err
-	}
-	return r.projectTranscript(ctx, session, metadata, req.ProviderSession)
-}
-
-func (r *registry) transcriptSession(ref providers.SessionRef) (workersessions.Session, *observation, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	ids := make([]string, 0, 1)
-	for id, session := range r.sessions {
-		if session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == ref {
-			ids = append(ids, id)
-		}
-	}
-	if len(ids) == 0 {
-		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
-	}
-	sortStrings(ids)
-	session := cloneSession(r.sessions[ids[0]])
-	metadata := cloneObservation(r.observations[ids[0]])
-	if metadata == nil {
-		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
-	}
-	return session, metadata, nil
 }
 
 func transcriptSourceUnavailable(err error) bool {

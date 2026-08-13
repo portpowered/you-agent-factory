@@ -392,7 +392,7 @@ func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *tes
 	}
 }
 
-func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndLimit(t *testing.T) {
+func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndPreservesHistory(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-recorded-race"
 	dispatchID := "dispatch-recorded-race"
@@ -450,8 +450,11 @@ func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndLimit(t *tes
 		t.Fatalf("StreamObservations() error = %v", err)
 	}
 	defer subscription.Close()
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.SourceID != "race-request" {
+		t.Fatalf("durable request delivery = %#v, want the oldest retained record", delivery)
+	}
 	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.SourceID != "race-association" {
-		t.Fatalf("bounded retained delivery = %#v, want association after dropping the oldest retained record", delivery)
+		t.Fatalf("durable association delivery = %#v, want association after the request", delivery)
 	}
 	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminalReplay || delivery.Event.SourceID != "race-response" {
 		t.Fatalf("atomic terminal delivery = %#v, want TERMINAL_REPLAY from the subscription snapshot", delivery)
@@ -461,99 +464,72 @@ func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndLimit(t *tes
 	}
 }
 
-func TestRecordedWorkerSessionObservation_UsesCanonicalFactsForExactQueries(t *testing.T) {
-	fixture := newRecordedExactObservationFixture(t)
-	requireRecordedExactObservationList(t, fixture)
-	show := requireRecordedExactObservationShow(t, fixture)
-	requireRecordedExactObservationTranscript(t, fixture, show)
-	requireRecordedExactObservationStream(t, fixture)
-}
-
-type recordedExactObservationFixture struct {
-	service        workersessions.Service
-	ref            providers.SessionRef
-	workID         string
-	inputTokens    int
-	transcriptText string
-}
-
-func newRecordedExactObservationFixture(t *testing.T) recordedExactObservationFixture {
-	t.Helper()
+func TestRecordedWorkerSessionObservation_WorkerIDReadsNoProviderHistory(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
-	workID := "work-recorded-exact"
-	dispatchID := "dispatch-recorded-exact"
-	providerMetadata := &workers.ProviderSessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-exact"}
-	ref := providerSessionRef(*providerMetadata)
+	workID := "work-no-provider"
+	dispatchID := "dispatch-no-provider"
+	workerSessionID := "worker-no-provider"
 	events := []interfaces.FactoryEvent{
-		{Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base, DispatchID: stringPointerForRecordedTest(dispatchID), WorkIDs: stringSliceForRecordedTest([]string{workID})}, Id: "exact-request", Type: interfaces.FactoryEventTypeDispatchRequest, Payload: mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{TransitionID: "review"})},
-		{Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 2, EventTime: base.Add(time.Second), DispatchID: stringPointerForRecordedTest(dispatchID), RequestID: stringPointerForRecordedTest("turn-recorded-exact")}, Id: "exact-association", Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-recorded-exact"})},
-		{Context: interfaces.FactoryEventContext{Tick: 2, Sequence: 3, EventTime: base.Add(3 * time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)}, Id: "exact-response", Type: interfaces.FactoryEventTypeDispatchResponse},
-	}
-	inputTokens, outputTokens := 7, 5
-	transcriptText := "historical transcript"
-	providerProjection := &historicalProviderSessions{result: providersessions.ProjectResult{
-		Session: ref,
-		Detail: providersessions.Detail{
-			ProviderSession: providersessions.Ref{Provider: providersessions.ProviderCodex, Kind: providers.SessionIDKind, ID: ref.ID},
-			Parse:           providersessions.ParseSummary{EventCount: 3, TokenUsage: &providersessions.TokenUsage{InputTokens: &inputTokens, OutputTokens: &outputTokens}},
-			Transcript:      []providersessions.TranscriptEntry{{Order: 0, Type: providersessions.TranscriptAssistantMessage, Text: &transcriptText}},
+		{
+			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base, DispatchID: stringPointerForRecordedTest(dispatchID), WorkIDs: stringSliceForRecordedTest([]string{workID})},
+			Id:      "no-provider-request",
+			Type:    interfaces.FactoryEventTypeDispatchRequest,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{TransitionID: "review"}),
 		},
-	}}
-	service := newRecordedWorkerSessionObservation(nil, &recordingfixtures.ScriptedRuntimeLedger{Events: events}, func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
-		return interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(3 * time.Second), WorkItemIDs: []string{workID},
-			Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)}, ProviderSession: providerMetadata,
-		}}}, nil
-	}, platformclock.NewDeterministic(base.Add(10*time.Second), time.Second), providerProjection)
-	return recordedExactObservationFixture{service: service, ref: ref, workID: workID, inputTokens: inputTokens, transcriptText: transcriptText}
-}
-
-func requireRecordedExactObservationList(t *testing.T, fixture recordedExactObservationFixture) {
-	t.Helper()
-	listed, err := fixture.service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
-	if err != nil || len(listed.Observations) != 1 {
-		t.Fatalf("ListObservations() = %#v, %v; want one recorded observation", listed, err)
+		{
+			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 2, EventTime: base.Add(time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)},
+			Id:      "no-provider-association",
+			Type:    interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: workerSessionID}),
+		},
+		{
+			Context: interfaces.FactoryEventContext{Tick: 2, Sequence: 3, EventTime: base.Add(2 * time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)},
+			Id:      "no-provider-response",
+			Type:    interfaces.FactoryEventTypeDispatchResponse,
+		},
 	}
-}
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	service := newRecordedWorkerSessionObservation(
+		nil,
+		ledger,
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+				DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{workID},
+				Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
+			}}}, nil
+		},
+		platformclock.Real{},
+		nil,
+	)
 
-func requireRecordedExactObservationShow(t *testing.T, fixture recordedExactObservationFixture) workersessions.Observation {
-	t.Helper()
-	show, err := fixture.service.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: fixture.ref})
+	show, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
 	if err != nil {
-		t.Fatalf("GetObservation() error = %v", err)
+		t.Fatalf("GetObservationByWorkerSessionID() error = %v", err)
 	}
-	if show.WorkerSessionID != "worker-recorded-exact" || show.WorkIDs[0] != fixture.workID || show.State != workersessions.StateCompleted || show.Duration == nil || *show.Duration != 3*time.Second {
-		t.Fatalf("GetObservation() = %#v, want canonical completed correlation and duration", show)
+	if show.WorkerSessionID != workerSessionID || show.ProviderSessionAvailable || show.ProviderSession != (providers.SessionRef{}) || show.State != workersessions.StateCompleted {
+		t.Fatalf("no-provider observation = %#v, want canonical provider-neutral completion", show)
 	}
-	if show.TokenUsage == nil || show.TokenUsage.InputTokens == nil || *show.TokenUsage.InputTokens != fixture.inputTokens || show.Transcript != workersessions.TranscriptAvailabilityAvailable || show.Parse.EventCount != 3 {
-		t.Fatalf("GetObservation() detail = %#v, want Provider Sessions enrichment", show)
-	}
-	return show
-}
 
-func requireRecordedExactObservationTranscript(t *testing.T, fixture recordedExactObservationFixture, show workersessions.Observation) {
-	t.Helper()
-	transcript, err := fixture.service.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: fixture.ref})
-	if err != nil {
-		t.Fatalf("ReadTranscript() error = %v", err)
+	if _, err := service.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: workerSessionID}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+		t.Fatalf("ReadTranscript(no provider) error = %v, want explicit unavailable result", err)
 	}
-	if transcript.WorkerSessionID != show.WorkerSessionID || transcript.WorkIDs[0] != fixture.workID || transcript.State != workersessions.StateCompleted || len(transcript.Entries) != 1 || transcript.Entries[0].Text == nil || *transcript.Entries[0].Text != fixture.transcriptText {
-		t.Fatalf("ReadTranscript() = %#v, want canonical identity and normalized entry", transcript)
-	}
-}
 
-func requireRecordedExactObservationStream(t *testing.T, fixture recordedExactObservationFixture) {
-	t.Helper()
-	subscription, err := fixture.service.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
+	subscription, err := service.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: workerSessionID, ReplayOnly: true})
 	if err != nil {
-		t.Fatalf("StreamObservations() error = %v", err)
+		t.Fatalf("StreamObservationsByWorkerSessionID(no provider) error = %v", err)
 	}
 	defer subscription.Close()
-	for index, want := range []workersessions.ObservationDeliveryKind{workersessions.ObservationDeliveryRecord, workersessions.ObservationDeliveryRecord, workersessions.ObservationDeliveryTerminalReplay} {
-		delivery := subscription.Next(context.Background())
-		if delivery.Kind != want || delivery.Event.SourceID == "" || delivery.Event.SourceSequence != uint64(index+1) {
-			t.Fatalf("historical delivery %d = %#v, want %s", index, delivery, want)
-		}
+	if first := subscription.Next(context.Background()); first.Kind != workersessions.ObservationDeliveryRecord || first.Event.SourceID != "no-provider-request" {
+		t.Fatalf("first no-provider delivery = %#v, want request record", first)
+	}
+	if second := subscription.Next(context.Background()); second.Kind != workersessions.ObservationDeliveryRecord || second.Event.SourceID != "no-provider-association" {
+		t.Fatalf("second no-provider delivery = %#v, want association record", second)
+	}
+	if third := subscription.Next(context.Background()); third.Kind != workersessions.ObservationDeliveryTerminalReplay || third.Event.SourceID != "no-provider-response" {
+		t.Fatalf("third no-provider delivery = %#v, want terminal response record", third)
+	}
+	if closed := subscription.Next(context.Background()); closed.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("no-provider terminal delivery = %#v, want closed stream", closed)
 	}
 }
 

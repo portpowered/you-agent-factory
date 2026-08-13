@@ -14,6 +14,7 @@ import (
 type (
 	WorkerSessionRecordingService         = recordingcontracts.WorkerSessionRecordingService
 	WorkerSessionRecording                = recordingcontracts.WorkerSessionRecording
+	WorkerSessionRecordingFinalizer       = recordingcontracts.WorkerSessionRecordingFinalizer
 	WorkerSessionRecordingRequest         = workerrecording.WorkerSessionRecordingRequest
 	WorkerRecordingRecord                 = workerrecording.WorkerRecordingRecord
 	WorkerRecordingReader                 = recordingcontracts.WorkerRecordingReader
@@ -44,6 +45,13 @@ type (
 )
 
 const (
+	WorkerRecordingStatusComplete             = workerrecording.WorkerRecordingStatusComplete
+	WorkerRecordingStatusDegraded             = workerrecording.WorkerRecordingStatusDegraded
+	WorkerRecordingStatusIncomplete           = workerrecording.WorkerRecordingStatusIncomplete
+	WorkerRecordingInterruptionProcessStopped = workerrecording.WorkerRecordingInterruptionProcessStopped
+	// Legacy capture-state values are retained for explicit sidecar
+	// compatibility. New recordings expose only the three health statuses
+	// above.
 	WorkerRecordingStatusActive            = workerrecording.WorkerRecordingStatusActive
 	WorkerRecordingStatusCompleted         = workerrecording.WorkerRecordingStatusCompleted
 	WorkerRecordingStatusFailed            = workerrecording.WorkerRecordingStatusFailed
@@ -92,6 +100,7 @@ var (
 	ErrWorkerRecordingDuplicate             = workerrecording.ErrWorkerRecordingDuplicate
 	ErrWorkerRecordingTerminal              = workerrecording.ErrWorkerRecordingTerminal
 	ErrWorkerRecordingIncomplete            = workerrecording.ErrWorkerRecordingIncomplete
+	ErrWorkerRecordingCompatibility         = workerrecording.ErrWorkerRecordingCompatibility
 	ErrWorkerRecordingReplay                = workerrecording.ErrWorkerRecordingReplay
 	ErrMissingWorkerRecordingReader         = errors.New("recordings: Worker recording reader is required")
 	ErrWorkerPortableRecording              = workerrecording.ErrWorkerPortableRecording

@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
@@ -18,6 +19,7 @@ type replayEventLog struct {
 	RuntimeConfig    interfaces.ReplayRuntimeConfig
 	Submissions      []replaySubmission
 	Dispatches       []replayDispatch
+	WorkerSessionIDs map[string]string
 	Completions      []replayCompletion
 	WorkStateChanges []replayWorkStateChange
 	Diagnostics      interfaces.ReplayDiagnostics
@@ -73,7 +75,7 @@ func reduceReplayEvents(
 	if decodeFactorySnapshot == nil {
 		return nil, fmt.Errorf("Factory snapshot decoder is required")
 	}
-	reduced := &replayEventLog{}
+	reduced := &replayEventLog{WorkerSessionIDs: make(map[string]string)}
 	inferenceAttemptsByDispatchID := make(map[string]replayInferenceAttempt)
 	workByID := make(map[string]work.Work)
 	for _, event := range artifact.Events {
@@ -112,6 +114,8 @@ func reduceReplayEvent(
 		)
 	case interfaces.FactoryEventTypeDispatchRequest:
 		return applyReplayDispatchRequest(reduced, event, workByID)
+	case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
+		return applyReplayWorkerSessionAssociation(reduced, event)
 	case interfaces.FactoryEventTypeWorkStateChange:
 		return applyReplayWorkStateChange(reduced, event)
 	case interfaces.FactoryEventTypeWorkRequest:
@@ -128,6 +132,29 @@ func reduceReplayEvent(
 	default:
 		return nil
 	}
+}
+
+func applyReplayWorkerSessionAssociation(reduced *replayEventLog, event interfaces.FactoryEvent) error {
+	if reduced == nil {
+		return fmt.Errorf("replay event log is required")
+	}
+	dispatchID := stringValue(event.Context.DispatchID)
+	if dispatchID == "" {
+		return nil
+	}
+	var payload interfaces.DispatchWorkerSessionAssociationEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		return fmt.Errorf("decode Worker Session association event %q: %w", event.Id, err)
+	}
+	workerSessionID := strings.TrimSpace(payload.WorkerSessionID)
+	if workerSessionID == "" {
+		return nil
+	}
+	if previous := strings.TrimSpace(reduced.WorkerSessionIDs[dispatchID]); previous != "" && previous != workerSessionID {
+		return fmt.Errorf("replay Worker Session association for dispatch %q changes from %q to %q", dispatchID, previous, workerSessionID)
+	}
+	reduced.WorkerSessionIDs[dispatchID] = workerSessionID
+	return nil
 }
 
 func applyReplayWorkStateChange(reduced *replayEventLog, event interfaces.FactoryEvent) error {

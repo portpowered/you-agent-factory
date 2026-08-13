@@ -25,6 +25,8 @@ type Service struct {
 }
 
 var _ recordings.WorkerSessionRecordingService = (*Service)(nil)
+var _ recordings.WorkerRecordingReader = (*Service)(nil)
+var _ recordings.WorkerSessionRecordingFinalizer = (*capture)(nil)
 
 // New constructs the Worker capture capability. Construction is inert; the
 // topic subscription is opened only for a concrete recording request.
@@ -50,6 +52,27 @@ func New(
 		logger: logging.EnsureLogger(logger),
 		limit:  limit,
 	}, nil
+}
+
+// LoadWorkerRecording exposes the durable reader already owned by the
+// composed Worker capture service. The capture service remains the lifecycle
+// owner; this optional capability lets a Factory Session observation project
+// Recordings health without constructing a second storage path.
+func (service *Service) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if service == nil || service.writer == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reader, ok := service.writer.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
 // StartWorkerSessionRecording subscribes from aggregate position zero before
@@ -90,6 +113,13 @@ func (service *Service) StartWorkerSessionRecording(
 		failure:      make(chan struct{}),
 		done:         make(chan struct{}),
 		identities:   make(map[events.AppendIdentity]events.Record),
+		projection: recordings.WorkerRecordingProjection{
+			RecordingID:     request.RecordingID,
+			WorkerSessionID: request.WorkerSessionID,
+			Topic:           request.Topic,
+			Status:          recordings.WorkerRecordingStatusIncomplete,
+			Records:         []events.Record{},
+		},
 	}
 	go capture.consume()
 	return capture, nil
@@ -104,22 +134,26 @@ type capture struct {
 	runCtx       context.Context
 	stop         context.CancelFunc
 	stopOnce     sync.Once
-	failureOnce  sync.Once
 
 	opening chan struct{}
 	failure chan struct{}
 	done    chan struct{}
 
-	mu           sync.Mutex
-	opened       bool
-	terminal     bool
-	closed       bool
-	closing      bool
-	failed       error
-	lastPosition events.AggregateSequence
-	identities   map[events.AppendIdentity]events.Record
-	history      []events.Record
-	projection   recordings.WorkerRecordingProjection
+	mu                     sync.Mutex
+	failureMarkerMu        sync.Mutex
+	opened                 bool
+	terminal               bool
+	closed                 bool
+	closing                bool
+	failed                 error
+	lastPosition           events.AggregateSequence
+	identities             map[events.AppendIdentity]events.Record
+	history                []events.Record
+	projection             recordings.WorkerRecordingProjection
+	executionTerminal      *recordings.WorkerRecordingTerminal
+	failureMarkerAttempted bool
+	failureMarkerCode      string
+	failureMarkerTerminal  *recordings.WorkerRecordingTerminal
 }
 
 func (capture *capture) consume() {
@@ -258,21 +292,78 @@ func (capture *capture) fail(err error) {
 	capture.failed = err
 	close(capture.failure)
 	capture.stopOnce.Do(capture.stop)
-	capture.mu.Unlock()
 	code := workerRecordingFailureCode(err)
-	if failureWriter, ok := capture.writer.(recordings.WorkerRecordingFailureWriter); ok {
-		capture.failureOnce.Do(func() {
-			if persistErr := failureWriter.PersistWorkerRecordingFailure(context.Background(), recordings.WorkerRecordingFailure{
-				RecordingID:     capture.request.RecordingID,
-				WorkerSessionID: capture.request.WorkerSessionID,
-				Topic:           capture.request.Topic,
-				Code:            code,
-			}); persistErr != nil {
-				capture.logger.Info("Worker recording failure persistence failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
-			}
-		})
+	if projection, projectionErr := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:       capture.request.RecordingID,
+		WorkerSessionID:   capture.request.WorkerSessionID,
+		Topic:             capture.request.Topic,
+		Failure:           code,
+		ExecutionTerminal: capture.executionTerminal,
+		Records:           capture.history,
+	}); projectionErr == nil {
+		capture.projection = projection
 	}
+	capture.mu.Unlock()
+	capture.persistFailureMarker()
 	capture.logger.Info("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
+}
+
+// persistFailureMarker writes the safe capture-loss fact at most once for a
+// given failure code and authoritative terminal. A later terminal fact is a
+// deliberate second write: it upgrades an already-readable prefix from
+// INCOMPLETE to DEGRADED without fabricating a missing terminal record.
+func (capture *capture) persistFailureMarker() {
+	failureWriter, ok := capture.writer.(recordings.WorkerRecordingFailureWriter)
+	if !ok {
+		return
+	}
+	capture.failureMarkerMu.Lock()
+	defer capture.failureMarkerMu.Unlock()
+
+	capture.mu.Lock()
+	if capture.failed == nil {
+		capture.mu.Unlock()
+		return
+	}
+	code := workerRecordingFailureCode(capture.failed)
+	terminal := cloneWorkerRecordingTerminal(capture.executionTerminal)
+	if capture.failureMarkerAttempted && capture.failureMarkerCode == code && sameWorkerRecordingTerminal(capture.failureMarkerTerminal, terminal) {
+		capture.mu.Unlock()
+		return
+	}
+	capture.failureMarkerAttempted = true
+	capture.failureMarkerCode = code
+	capture.failureMarkerTerminal = cloneWorkerRecordingTerminal(terminal)
+	failure := recordings.WorkerRecordingFailure{
+		RecordingID:       capture.request.RecordingID,
+		WorkerSessionID:   capture.request.WorkerSessionID,
+		Topic:             capture.request.Topic,
+		Code:              code,
+		ExecutionTerminal: terminal,
+	}
+	capture.mu.Unlock()
+
+	if err := failureWriter.PersistWorkerRecordingFailure(context.Background(), failure); err != nil {
+		fields := []any{
+			"workerSessionID", capture.request.WorkerSessionID,
+			"topic", capture.request.Topic,
+			"outcome", "failed",
+			"stage", "degradation_marker",
+			"code", code,
+		}
+		if terminal != nil {
+			fields = append(fields, "executionOutcome", terminal.Status)
+		}
+		capture.logger.Info("Worker recording failure persistence failed", fields...)
+	}
+}
+
+func sameWorkerRecordingTerminal(left, right *recordings.WorkerRecordingTerminal) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Phase == right.Phase && left.Status == right.Status &&
+		(left.Position == 0 || right.Position == 0 || left.Position == right.Position)
 }
 
 func workerRecordingFailureCode(err error) string {
@@ -342,6 +433,10 @@ func cloneWorkerProjection(projection recordings.WorkerRecordingProjection) reco
 		terminal := *projection.Terminal
 		clone.Terminal = &terminal
 	}
+	if projection.ExecutionTerminal != nil {
+		terminal := *projection.ExecutionTerminal
+		clone.ExecutionTerminal = &terminal
+	}
 	return clone
 }
 
@@ -392,6 +487,26 @@ func (capture *capture) failureError() error {
 	return capture.failed
 }
 
+func (capture *capture) setExecutionTerminal(terminal recordings.WorkerRecordingTerminal) {
+	capture.mu.Lock()
+	capture.executionTerminal = cloneWorkerRecordingTerminal(&terminal)
+	failure := ""
+	if capture.failed != nil {
+		failure = workerRecordingFailureCode(capture.failed)
+	}
+	if projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:       capture.request.RecordingID,
+		WorkerSessionID:   capture.request.WorkerSessionID,
+		Topic:             capture.request.Topic,
+		Failure:           failure,
+		ExecutionTerminal: capture.executionTerminal,
+		Records:           capture.history,
+	}); err == nil {
+		capture.projection = projection
+	}
+	capture.mu.Unlock()
+}
+
 // WorkerRecordingProjection returns a detached live reduction. It is an
 // observation seam for Recordings tests and replay callers; provider handoff
 // still depends only on AwaitOpening.
@@ -399,12 +514,33 @@ func (capture *capture) WorkerRecordingProjection() (recordings.WorkerRecordingP
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	if capture.failed != nil {
-		return recordings.WorkerRecordingProjection{}, capture.failed
+		return cloneWorkerProjection(capture.projection), nil
 	}
 	return cloneWorkerProjection(capture.projection), nil
 }
 
 func (capture *capture) Close(ctx context.Context) error {
+	return capture.close(ctx, nil)
+}
+
+// CloseWithTerminal is the terminal-aware finalization path used by Worker
+// Sessions after its authoritative execution outcome commits. The value is a
+// detached safe fact, not provider output, and may have position zero when the
+// terminal Events append itself failed.
+func (capture *capture) CloseWithTerminal(ctx context.Context, terminal recordings.WorkerRecordingTerminal) error {
+	return capture.close(ctx, &terminal)
+}
+
+func (capture *capture) close(ctx context.Context, terminal *recordings.WorkerRecordingTerminal) error {
+	if terminal != nil {
+		capture.setExecutionTerminal(*terminal)
+	}
+	capture.markClosing(ctx)
+	capture.classifyClosingState(ctx)
+	return capture.awaitClose(ctx)
+}
+
+func (capture *capture) markClosing(ctx context.Context) {
 	if err := ctx.Err(); err != nil {
 		// Classify an already-canceled close before marking the capture as
 		// closing; otherwise the consumer can win the race and report an
@@ -420,27 +556,44 @@ func (capture *capture) Close(ctx context.Context) error {
 		}
 	}
 	capture.mu.Unlock()
-	if !capture.isTerminal() && capture.failureError() == nil && ctx.Err() != nil {
-		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
-	} else if !capture.isTerminal() && capture.failureError() == nil {
-		pending, err := capture.hasPendingRecords(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
-			} else {
-				capture.fail(fmt.Errorf("%w: inspect closing Worker topic: %v", recordings.ErrWorkerRecordingDelivery, err))
-			}
-		} else if !pending {
-			capture.fail(fmt.Errorf("%w: source closed before a durable terminal record", recordings.ErrWorkerRecordingIncomplete))
-		}
-	}
+}
 
+func (capture *capture) classifyClosingState(ctx context.Context) {
+	if capture.isTerminal() || capture.failureError() != nil {
+		return
+	}
+	if ctx.Err() != nil {
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
+		return
+	}
+	pending, err := capture.hasPendingRecords(ctx)
+	if err != nil {
+		capture.classifyPendingRecordsError(ctx, err)
+		return
+	}
+	if !pending {
+		capture.fail(fmt.Errorf("%w: source closed before a durable terminal record", recordings.ErrWorkerRecordingIncomplete))
+	}
+}
+
+func (capture *capture) classifyPendingRecordsError(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
+		return
+	}
+	capture.fail(fmt.Errorf("%w: inspect closing Worker topic: %v", recordings.ErrWorkerRecordingDelivery, err))
+}
+
+func (capture *capture) awaitClose(ctx context.Context) error {
+	capture.persistFailureMarker()
 	select {
 	case <-capture.done:
+		capture.persistFailureMarker()
 		return capture.failureError()
 	case <-ctx.Done():
 		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
 		capture.stopOnce.Do(capture.stop)
+		capture.persistFailureMarker()
 		return capture.failureError()
 	}
 }

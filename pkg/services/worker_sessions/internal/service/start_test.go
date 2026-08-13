@@ -2748,6 +2748,132 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 	}
 }
 
+func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecutionOutcome(t *testing.T) {
+	postHandoffError := errors.New("injected recording finalization failure")
+	tests := []struct {
+		name        string
+		execution   *fakeExecution
+		wantState   workersessions.State
+		wantOutcome workersessions.TerminalOutcome
+	}{
+		{
+			name:        "successful execution",
+			execution:   succeedingExecution(),
+			wantState:   workersessions.StateCompleted,
+			wantOutcome: workersessions.TerminalOutcomeCompleted,
+		},
+		{
+			name: "failed execution",
+			execution: &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+				return workers.WorkstationDispatchResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Result: workers.WorkResult{
+						DispatchID: req.Execution.Dispatch.DispatchID,
+						Outcome:    workers.OutcomeFailed,
+					},
+				}, nil
+			}},
+			wantState:   workersessions.StateFailed,
+			wantOutcome: workersessions.TerminalOutcomeFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recording := &terminalAwareRecording{closeErr: postHandoffError}
+			registry, err := service.New(
+				executionBoundary{execution: test.execution},
+				newEventsAppender(),
+				logging.NoopLogger{},
+				platformclock.Real{},
+				unavailableProviderSessionsForCapture{},
+				terminalAwareRecordingService{recording: recording},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			request := validStartRequest("worker-recording-finalization", "dispatch-recording-finalization")
+			request.Execution.Execution.RecordingID = "recording-finalization"
+			result, err := registry.InvokeSession(context.Background(), request)
+			if err != nil {
+				t.Fatalf("InvokeSession() error = %v, want nil despite recording failure", err)
+			}
+			if result.Session.State != test.wantState {
+				t.Fatalf("InvokeSession() state = %q, want %q", result.Session.State, test.wantState)
+			}
+			if result.Session.Result == nil || result.Session.Result.Outcome != test.wantOutcome {
+				t.Fatalf("InvokeSession() result = %#v, want authoritative %q outcome", result.Session.Result, test.wantOutcome)
+			}
+			if recording.terminal == nil || recording.terminal.Status != string(test.wantState) {
+				t.Fatalf("recording terminal = %#v, want %q terminal fact", recording.terminal, test.wantState)
+			}
+		})
+	}
+}
+
+func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRecording(t *testing.T) {
+	recording := &terminalAwareRecording{}
+	appender := &failOnNthAppendEventsAppender{Service: newEventsAppender(), n: 2}
+	registry, err := service.New(
+		executionBoundary{execution: succeedingExecution()},
+		appender,
+		logging.NoopLogger{},
+		platformclock.Real{},
+		unavailableProviderSessionsForCapture{},
+		terminalAwareRecordingService{recording: recording},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validStartRequest("worker-terminal-write-failure", "dispatch-terminal-write-failure")
+	request.Execution.Execution.RecordingID = "recording-terminal-write-failure"
+
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil despite terminal publication failure", err)
+	}
+	if result.Session.State != workersessions.StateCompleted || result.Session.Result == nil || result.Session.Result.Outcome != workersessions.TerminalOutcomeCompleted {
+		t.Fatalf("InvokeSession() result = %#v, want committed COMPLETED execution outcome", result.Session)
+	}
+	if recording.terminal == nil || recording.terminal.Status != "COMPLETED" || recording.terminal.Position != 0 {
+		t.Fatalf("recording terminal = %#v, want completed truth with unknown durable position", recording.terminal)
+	}
+}
+
+type terminalAwareRecordingService struct {
+	recording recordings.WorkerSessionRecording
+}
+
+func (service terminalAwareRecordingService) StartWorkerSessionRecording(
+	context.Context,
+	recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	return service.recording, nil
+}
+
+type terminalAwareRecording struct {
+	closeErr error
+	terminal *recordings.WorkerRecordingTerminal
+}
+
+func (*terminalAwareRecording) AwaitOpening(context.Context) error { return nil }
+
+func (*terminalAwareRecording) Abort(context.Context, error) error { return nil }
+
+func (recording *terminalAwareRecording) Close(context.Context) error {
+	return recording.closeErr
+}
+
+func (recording *terminalAwareRecording) CloseWithTerminal(
+	_ context.Context,
+	terminal recordings.WorkerRecordingTerminal,
+) error {
+	copy := terminal
+	recording.terminal = &copy
+	return recording.closeErr
+}
+
 func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification(t *testing.T) {
 	execution := succeedingExecution()
 	eventService := newEventsAppender()

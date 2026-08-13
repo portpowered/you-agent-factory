@@ -18,4 +18,7 @@ output-options:
     - getCurrentFactory
     - saveEditableCurrentFactoryDefinition
     - getFactoryResponseEventsBySessionId
+    - getWorkerSessionObservationByWorkerSessionId
+    - readWorkerSessionTranscriptByWorkerSessionId
+    - streamWorkerSessionEventsByWorkerSessionId
   response-type-suffix: ClientResponse

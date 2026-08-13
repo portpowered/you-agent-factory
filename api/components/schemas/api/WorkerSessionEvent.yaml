@@ -14,6 +14,9 @@ properties:
   workerSessionId:
     type: string
     description: Stable Worker Session identity for this stream.
+  factorySessionId:
+    type: string
+    description: Explicit Factory Session scope used for this event stream.
   providerSession:
     $ref: './WorkerSessionProviderSessionRef.yaml'
   workIds:
@@ -37,3 +40,17 @@ properties:
     $ref: './WorkerSessionReplaySummary.yaml'
     nullable: true
     description: Completeness marker when delivery is REPLAY_SUMMARY.
+  recordingHealth:
+    type: string
+    enum:
+      - COMPLETE
+      - DEGRADED
+      - INCOMPLETE
+    x-enum-varnames:
+      - WorkerSessionEventRecordingHealthComplete
+      - WorkerSessionEventRecordingHealthDegraded
+      - WorkerSessionEventRecordingHealthIncomplete
+    description: Recordings-owned capture health, independent of Worker execution outcome.
+  recordingHealthReason:
+    type: string
+    description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.

@@ -472,7 +472,7 @@ func TestFactoryEventHistory_ScopedSubscriptionBoundsHistoryAndLiveBuffer(t *tes
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{DispatchID: "dispatch-target", Limit: 2})
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{DispatchID: "dispatch-target", Limit: 2, HistoryLimit: 2})
 	if err != nil {
 		t.Fatalf("Subscribe() error = %v", err)
 	}

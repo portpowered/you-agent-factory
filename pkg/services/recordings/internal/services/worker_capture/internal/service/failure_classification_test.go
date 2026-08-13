@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -71,4 +73,69 @@ func TestWorkerRecordingFailurePersistsStableClassification(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkerRecordingFailureMarkerErrorUsesSafeStructuredDiagnostics(t *testing.T) {
+	logger := &captureDiagnosticLogger{}
+	capture := &capture{
+		request: recordings.WorkerSessionRecordingRequest{
+			RecordingID:     "recording-marker-failure",
+			WorkerSessionID: "worker-marker-failure",
+			Topic:           "worker-session/worker-marker-failure/events",
+		},
+		writer:  failingWorkerRecordingFailureWriter{},
+		logger:  logger,
+		failure: make(chan struct{}),
+		stop:    func() {},
+	}
+
+	capture.fail(fmt.Errorf("%w: secret payload must not be logged", recordings.ErrWorkerRecordingPersistence))
+
+	markerIndex := -1
+	for index, message := range logger.messages {
+		if message == "Worker recording failure persistence failed" {
+			markerIndex = index
+			break
+		}
+	}
+	if markerIndex < 0 {
+		t.Fatalf("diagnostic messages = %#v, want marker persistence message", logger.messages)
+	}
+	fields := logger.fields[markerIndex]
+	if !containsDiagnosticPair(fields, "stage", "degradation_marker") || !containsDiagnosticPair(fields, "code", "PERSISTENCE_FAILED") {
+		t.Fatalf("diagnostic fields = %#v, want safe stage and code", fields)
+	}
+	if strings.Contains(fmt.Sprint(fields), "secret payload") {
+		t.Fatalf("diagnostic fields leaked raw failure detail: %#v", fields)
+	}
+}
+
+type failingWorkerRecordingFailureWriter struct{}
+
+func (failingWorkerRecordingFailureWriter) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (failingWorkerRecordingFailureWriter) PersistWorkerRecordingFailure(context.Context, recordings.WorkerRecordingFailure) error {
+	return errors.New("secret marker-store detail")
+}
+
+type captureDiagnosticLogger struct {
+	logging.NoopLogger
+	messages []string
+	fields   [][]any
+}
+
+func (logger *captureDiagnosticLogger) Info(message string, fields ...any) {
+	logger.messages = append(logger.messages, message)
+	logger.fields = append(logger.fields, append([]any(nil), fields...))
+}
+
+func containsDiagnosticPair(fields []any, key, want string) bool {
+	for index := 0; index+1 < len(fields); index += 2 {
+		if fields[index] == key && fields[index+1] == want {
+			return true
+		}
+	}
+	return false
 }

@@ -2,6 +2,7 @@ type: object
 additionalProperties: false
 required:
   - position
+  - cursor
   - sourceType
   - sourceId
   - sourceSequence
@@ -9,6 +10,9 @@ required:
   - schemaId
   - payload
 properties:
+  cursor:
+    $ref: './WorkerSessionEventCursor.yaml'
+    description: Typed reconnect cursor for this canonical event record.
   position:
     type: integer
     format: int64

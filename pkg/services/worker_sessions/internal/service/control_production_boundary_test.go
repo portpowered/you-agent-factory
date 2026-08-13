@@ -543,6 +543,13 @@ func TestReadTranscript_ReturnsFinishedNormalizedEntriesAndCorrelation(t *testin
 
 	result := mustReadTranscript(t, registry, ref)
 	assertTranscriptProjection(t, result, projection, ref, toolName, arguments)
+	byWorker, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: "worker-transcript"})
+	if err != nil {
+		t.Fatalf("ReadTranscript(WorkerSessionID) error = %v", err)
+	}
+	if byWorker.WorkerSessionID != result.WorkerSessionID || byWorker.ProviderSession != ref || len(byWorker.Entries) != len(result.Entries) || byWorker.Entries[4].Text == nil || *byWorker.Entries[4].Text != text {
+		t.Fatalf("ReadTranscript(WorkerSessionID) = %#v, want same normalized terminal transcript", byWorker)
+	}
 	result.Entries[0].Text = stringPtr("mutated")
 	again := mustReadTranscript(t, registry, ref)
 	if again.Entries[0].Text == nil || *again.Entries[0].Text != "operator request" {

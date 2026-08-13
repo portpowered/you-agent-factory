@@ -38,7 +38,144 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	}
 }
 
-func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
+func TestWorkerRecordingRecoveryAfterRestartPreservesDurablePrefix(t *testing.T) {
+	const (
+		recordingID = "recording-interrupted-recovery"
+		sessionID   = "worker-interrupted-recovery"
+	)
+	root := t.TempDir()
+	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := events.Topic("worker-session/" + sessionID + "/events")
+	opening := mustRecord(t, openingAppend(topic, sessionID), 1)
+	output := mustRecord(t, workerOutputAppend(topic, sessionID, 1, "message-before-stop"), 2)
+	persistWorkerRecoveryPrefix(t, writer, recordingID, sessionID, opening, output)
+
+	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := reopened.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("reopened FileWriter does not expose the durable reader")
+	}
+	first, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(first recovery): %v", err)
+	}
+	second, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(repeated recovery): %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated recovery changed the snapshot\nfirst: %#v\nsecond: %#v", first, second)
+	}
+	recoveredSession := requireRecoveredWorkerPrefix(t, first)
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+		Snapshot:        first,
+		WorkerSessionID: sessionID,
+	})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(recovered prefix): %v", err)
+	}
+	assertRecoveredWorkerReplay(t, replayed, recoveredSession)
+}
+
+func persistWorkerRecoveryPrefix(t *testing.T, writer recordings.WorkerRecordingWriter, recordingID, sessionID string, records ...events.Record) {
+	t.Helper()
+	for _, record := range records {
+		if err := writer.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{
+			RecordingID: recordingID, WorkerSessionID: sessionID, Record: record,
+		}); err != nil {
+			t.Fatalf("PersistWorkerRecord(%d): %v", record.ID.Position, err)
+		}
+	}
+}
+
+func requireRecoveredWorkerPrefix(t *testing.T, snapshot recordings.WorkerRecordingSnapshot) recordings.WorkerSessionRecordingSnapshot {
+	t.Helper()
+	if len(snapshot.Sessions) != 1 {
+		t.Fatalf("recovered snapshot = %#v, want one Worker Session", snapshot)
+	}
+	session := snapshot.Sessions[0]
+	if session.Status != recordings.WorkerRecordingStatusIncomplete || session.LastPosition != 2 ||
+		session.InterruptionReason != recordings.WorkerRecordingInterruptionProcessStopped {
+		t.Fatalf("recovered session = %#v, want INCOMPLETE at position 2 with process interruption reason", session)
+	}
+	if len(session.Records) != 2 || session.Records[0].ID.Position != 1 || session.Records[1].ID.Position != 2 {
+		t.Fatalf("recovered records = %#v, want the exact positions 1 and 2", session.Records)
+	}
+	return session
+}
+
+func assertRecoveredWorkerReplay(t *testing.T, replayed recordings.WorkerRecordingReplayResult, session recordings.WorkerSessionRecordingSnapshot) {
+	t.Helper()
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusIncomplete ||
+		replayed.Projection.InterruptionReason != recordings.WorkerRecordingInterruptionProcessStopped ||
+		replayed.Projection.LastPosition != session.LastPosition {
+		t.Fatalf("replayed projection = %#v, want readable INCOMPLETE prefix with stable interruption reason", replayed.Projection)
+	}
+}
+
+func TestWorkerRecordingRecoveryDerivesCompleteWithoutStoredCompletionMetadata(t *testing.T) {
+	const (
+		recordingID = "recording-terminal-recovery"
+		sessionID   = "worker-terminal-recovery"
+	)
+	root := t.TempDir()
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	writer, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileWriter, ok := writer.(*FileWriter)
+	if !ok {
+		t.Fatal("NewFileWriter() did not return FileWriter")
+	}
+	topic := events.Topic("worker-session/" + sessionID + "/events")
+	snapshot := recordings.WorkerRecordingSnapshot{
+		RecordingID: recordingID,
+		Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+			WorkerSessionID: sessionID,
+			Topic:           topic,
+			Records: []events.Record{
+				mustRecord(t, openingAppend(topic, sessionID), 1),
+				mustRecord(t, terminalAppend(topic, sessionID), 2),
+			},
+		}},
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteFile(fileWriter.path(recordingID), payload); err != nil {
+		t.Fatalf("seed durable terminal snapshot: %v", err)
+	}
+
+	reopened, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := reopened.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("reopened FileWriter does not expose the durable reader")
+	}
+	recovered, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(terminal recovery): %v", err)
+	}
+	if len(recovered.Sessions) != 1 {
+		t.Fatalf("recovered snapshot = %#v, want one Worker Session", recovered)
+	}
+	session := recovered.Sessions[0]
+	if session.Status != recordings.WorkerRecordingStatusComplete || session.LastPosition != 2 || session.InterruptionReason != "" {
+		t.Fatalf("recovered terminal session = %#v, want COMPLETE at position 2 without interruption reason", session)
+	}
+}
+
+func TestWorkerCaptureAbortPersistsIncompleteSnapshot(t *testing.T) {
 	eventService := newRecordingEventsService()
 	recordingRoot := t.TempDir()
 	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
@@ -69,8 +206,8 @@ func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
-		t.Fatalf("aborted snapshot = %#v, want one FAILED Worker Session", snapshot)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("aborted snapshot = %#v, want one INCOMPLETE Worker Session", snapshot)
 	}
 }
 
@@ -166,11 +303,15 @@ func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
-		t.Fatalf("failed snapshot = %#v, want one FAILED Worker Session", snapshot)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("failed snapshot = %#v, want one INCOMPLETE Worker Session", snapshot)
 	}
-	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
-		t.Fatalf("ReplayWorkerRecording(failed) error = %v, want ErrWorkerRecordingIncomplete", err)
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("ReplayWorkerRecording(incomplete) status = %q, want INCOMPLETE", replayed.Projection.Status)
 	}
 }
 
@@ -206,8 +347,167 @@ func TestWorkerCaptureCloseCancellationIsNotCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
-		t.Fatalf("canceled snapshot = %#v, want one FAILED Worker Session", snapshot)
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusIncomplete {
+		t.Fatalf("canceled snapshot = %#v, want one INCOMPLETE Worker Session", snapshot)
+	}
+}
+
+func TestWorkerRecordingDurableLossWithAuthoritativeTerminalReopensAsDegraded(t *testing.T) {
+	const (
+		recordingID = "recording-degraded"
+		sessionID   = "worker-degraded"
+	)
+	topic := events.Topic("worker-session/worker-degraded/events")
+	recordingRoot := t.TempDir()
+	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opening := mustRecord(t, openingAppend(topic, sessionID), 1)
+	if err := writer.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{
+		RecordingID: recordingID, WorkerSessionID: sessionID, Record: opening,
+	}); err != nil {
+		t.Fatalf("PersistWorkerRecord(opening) error = %v", err)
+	}
+	if failureWriter, ok := writer.(recordings.WorkerRecordingFailureWriter); ok {
+		if err := failureWriter.PersistWorkerRecordingFailure(context.Background(), recordings.WorkerRecordingFailure{
+			RecordingID: recordingID, WorkerSessionID: sessionID, Topic: topic, Code: "PERSISTENCE_FAILED",
+			ExecutionTerminal: &recordings.WorkerRecordingTerminal{Phase: workers.PhaseCompleted, Status: "COMPLETED"},
+		}); err != nil {
+			t.Fatalf("PersistWorkerRecordingFailure() error = %v", err)
+		}
+	} else {
+		t.Fatal("FileWriter does not expose the failure writer contract")
+	}
+
+	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, ok := reopened.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("FileWriter does not expose the durable reader")
+	}
+	snapshot, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording() error = %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusDegraded {
+		t.Fatalf("durable degraded snapshot = %#v, want DEGRADED", snapshot)
+	}
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording() error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusDegraded || replayed.Projection.Terminal != nil || replayed.Projection.ExecutionTerminal == nil {
+		t.Fatalf("replayed degraded projection = %#v, want authoritative terminal without fabricated record", replayed.Projection)
+	}
+}
+
+func TestWorkerCapturePostOpeningPersistenceFailureRetainsTerminalTruth(t *testing.T) {
+	eventService := newRecordingEventsService()
+	recordingRoot := t.TempDir()
+	service := newPostOpeningFailureService(t, eventService, recordingRoot)
+	request := recordings.WorkerSessionRecordingRequest{
+		RecordingID:     "recording-post-opening-loss",
+		WorkerSessionID: "worker-post-opening-loss",
+		Topic:           events.Topic("worker-session/worker-post-opening-loss/events"),
+	}
+	handle := startPostOpeningFailureRecording(t, service, eventService, request)
+	finalizer := requireWorkerRecordingFinalizer(t, handle)
+	closeErr := finalizer.CloseWithTerminal(context.Background(), completedWorkerTerminal())
+	if !errors.Is(closeErr, recordings.ErrWorkerRecordingPersistence) {
+		t.Fatalf("CloseWithTerminal() error = %v, want persistence failure", closeErr)
+	}
+
+	snapshot := loadWorkerRecording(t, recordingRoot, request.RecordingID)
+	assertPostOpeningFailureSnapshot(t, snapshot)
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+		Snapshot:        snapshot,
+		WorkerSessionID: request.WorkerSessionID,
+	})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording() error = %v", err)
+	}
+	assertPostOpeningFailureReplay(t, replayed)
+}
+
+func newPostOpeningFailureService(t *testing.T, eventService events.Service, root string) recordings.WorkerSessionRecordingService {
+	t.Helper()
+	baseWriter, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failureWriter, ok := baseWriter.(recordings.WorkerRecordingFailureWriter)
+	if !ok {
+		t.Fatal("FileWriter does not expose the failure writer contract")
+	}
+	service, err := New(eventService, &postOpeningFailureWriter{
+		delegate: baseWriter, failureWriter: failureWriter, failPosition: 2,
+	}, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
+
+func startPostOpeningFailureRecording(
+	t *testing.T,
+	service recordings.WorkerSessionRecordingService,
+	eventService events.Service,
+	request recordings.WorkerSessionRecordingRequest,
+) recordings.WorkerSessionRecording {
+	t.Helper()
+	handle, err := service.StartWorkerSessionRecording(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eventService.Append(context.Background(), openingAppend(request.Topic, request.WorkerSessionID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := handle.AwaitOpening(context.Background()); err != nil {
+		t.Fatalf("AwaitOpening() error = %v", err)
+	}
+	if _, err := eventService.Append(context.Background(), terminalAppend(request.Topic, request.WorkerSessionID)); err != nil {
+		t.Fatal(err)
+	}
+	return handle
+}
+
+func requireWorkerRecordingFinalizer(t *testing.T, handle recordings.WorkerSessionRecording) recordings.WorkerSessionRecordingFinalizer {
+	t.Helper()
+	finalizer, ok := handle.(recordings.WorkerSessionRecordingFinalizer)
+	if !ok {
+		t.Fatal("capture does not expose terminal-aware finalization")
+	}
+	return finalizer
+}
+
+func completedWorkerTerminal() recordings.WorkerRecordingTerminal {
+	return recordings.WorkerRecordingTerminal{Position: 2, Phase: workers.PhaseCompleted, Status: "COMPLETED"}
+}
+
+func assertPostOpeningFailureSnapshot(t *testing.T, snapshot recordings.WorkerRecordingSnapshot) {
+	t.Helper()
+	if len(snapshot.Sessions) != 1 {
+		t.Fatalf("durable snapshot = %#v, want one Worker Session", snapshot)
+	}
+	session := snapshot.Sessions[0]
+	if session.Status != recordings.WorkerRecordingStatusDegraded || session.Failure != "PERSISTENCE_FAILED" {
+		t.Fatalf("durable session = %#v, want DEGRADED/PERSISTENCE_FAILED", session)
+	}
+	if session.ExecutionTerminal == nil || session.ExecutionTerminal.Phase != workers.PhaseCompleted || session.ExecutionTerminal.Status != "COMPLETED" {
+		t.Fatalf("durable execution terminal = %#v, want completed authoritative truth", session.ExecutionTerminal)
+	}
+	if len(session.Records) != 1 || session.Records[0].ID.Position != 1 {
+		t.Fatalf("durable prefix = %#v, want only the opening record", session.Records)
+	}
+}
+
+func assertPostOpeningFailureReplay(t *testing.T, replayed recordings.WorkerRecordingReplayResult) {
+	t.Helper()
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusDegraded || replayed.Projection.Terminal != nil {
+		t.Fatalf("replayed projection = %#v, want degraded prefix without fabricated terminal record", replayed.Projection)
 	}
 }
 
@@ -242,6 +542,23 @@ func TestWorkerCaptureRejectsRecordAfterTerminal(t *testing.T) {
 	if err := handle.Close(context.Background()); !errors.Is(err, recordings.ErrWorkerRecordingTerminal) {
 		t.Fatalf("Close() error = %v, want ErrWorkerRecordingTerminal", err)
 	}
+}
+
+type postOpeningFailureWriter struct {
+	delegate      recordings.WorkerRecordingWriter
+	failureWriter recordings.WorkerRecordingFailureWriter
+	failPosition  events.AggregateSequence
+}
+
+func (writer *postOpeningFailureWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if record.Record.ID.Position == writer.failPosition {
+		return errors.New("injected post-opening persistence failure")
+	}
+	return writer.delegate.PersistWorkerRecord(ctx, record)
+}
+
+func (writer *postOpeningFailureWriter) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
+	return writer.failureWriter.PersistWorkerRecordingFailure(ctx, failure)
 }
 
 func TestWorkerCaptureDuplicateDeliveryIsIdempotentOnlyWhenIdentical(t *testing.T) {
@@ -279,7 +596,7 @@ func TestWorkerCaptureDuplicateDeliveryIsIdempotentOnlyWhenIdentical(t *testing.
 	}
 }
 
-func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
+func TestReplayWorkerRecordingReturnsIncompleteAndRejectsSkippedHistory(t *testing.T) {
 	topic := events.Topic("worker-session/worker-replay-invalid/events")
 	opening := mustRecord(t, openingAppend(topic, "worker-replay-invalid"), 1)
 	terminal := mustRecord(t, terminalAppend(topic, "worker-replay-invalid"), 2)
@@ -300,8 +617,12 @@ func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
 		Topic:           topic,
 		Records:         []events.Record{opening},
 	}}
-	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: incomplete}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
-		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v, want ErrWorkerRecordingIncomplete", err)
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: incomplete})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusIncomplete || replayed.Projection.Complete {
+		t.Fatalf("ReplayWorkerRecording(incomplete) projection = %#v, want INCOMPLETE and not complete", replayed.Projection)
 	}
 	skipped := snapshot
 	skipped.Sessions = []recordings.WorkerSessionRecordingSnapshot{{
@@ -315,6 +636,17 @@ func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
 	}}
 	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: skipped}); !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
 		t.Fatalf("ReplayWorkerRecording(skipped) error = %v, want ErrWorkerRecordingOrder", err)
+	}
+	duplicateSessions := snapshot
+	duplicateSessions.Sessions = append(append([]recordings.WorkerSessionRecordingSnapshot(nil), snapshot.Sessions...), snapshot.Sessions[0])
+	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: duplicateSessions}); !errors.Is(err, recordings.ErrWorkerRecordingDuplicate) {
+		t.Fatalf("ReplayWorkerRecording(duplicate session identity) error = %v, want ErrWorkerRecordingDuplicate", err)
+	}
+	badLastPosition := snapshot
+	badLastPosition.Sessions = append([]recordings.WorkerSessionRecordingSnapshot(nil), snapshot.Sessions...)
+	badLastPosition.Sessions[0].LastPosition = 9
+	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: badLastPosition}); !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
+		t.Fatalf("ReplayWorkerRecording(bad last position) error = %v, want ErrWorkerRecordingOrder", err)
 	}
 }
 

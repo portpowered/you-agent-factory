@@ -22,6 +22,16 @@ type WorkerSessionRecording interface {
 	Close(context.Context) error
 }
 
+// WorkerSessionRecordingFinalizer is the optional terminal-aware extension
+// implemented by the Recordings-owned capture. Worker Sessions supplies the
+// authoritative terminal fact after it commits its own outcome so a capture
+// that already lost durable fidelity can still be classified as DEGRADED.
+// Older recording implementations may expose only WorkerSessionRecording;
+// callers must retain the Close fallback for that compatibility boundary.
+type WorkerSessionRecordingFinalizer interface {
+	CloseWithTerminal(context.Context, workerrecording.WorkerRecordingTerminal) error
+}
+
 // WorkerRecordingReader is the durable read side of a Worker recording store.
 type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (workerrecording.WorkerRecordingSnapshot, error)

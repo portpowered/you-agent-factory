@@ -196,6 +196,29 @@ func TestStreamReplayOnlyWritesTerminalReplayBeforeCompleteSummary(t *testing.T)
 	}
 }
 
+func TestStreamReplayOnlyAcceptsSummaryAttachedToTerminal(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w,
+			"data: {\"delivery\":\"TERMINAL_REPLAY\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":2,\"sourceType\":\"factory_event\",\"sourceId\":\"terminal\",\"sourceSequence\":2,\"sourceEventId\":\"terminal\",\"schemaId\":\"DISPATCH_RESPONSE\",\"payload\":{}},\"errorCode\":null,\"errorMessage\":null,\"replaySummary\":{\"kind\":\"replay-summary\",\"complete\":true,\"reason\":\"recording-complete\",\"eventsEmitted\":1}}\n\n",
+		)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, SessionID: "session-1",
+		Provider: "codex", Kind: "session_id", ID: "provider-session-1", OutputFormat: "json", ReplayOnly: true, Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v, want successful embedded-summary replay", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 1 || !strings.Contains(lines[0], `"replaySummary"`) {
+		t.Fatalf("embedded-summary replay output = %q, want one terminal frame with summary", output.String())
+	}
+}
+
 func TestStreamHumanRendersExplicitSourceFailureAndReturnsStableError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

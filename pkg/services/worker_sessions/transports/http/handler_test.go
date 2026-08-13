@@ -574,29 +574,7 @@ func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *
 	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
 		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
 	})
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
-	}
-	if got := recorder.Header().Get("Content-Type"); got != "text/event-stream" {
-		t.Fatalf("content type = %q, want text/event-stream", got)
-	}
-	frames := decodeSSEFrames(t, recorder.Body.String())
-	if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[1].Delivery != "TERMINAL" {
-		t.Fatalf("frames = %#v, want RECORD then TERMINAL", frames)
-	}
-	if frames[0].WorkerSessionID != "worker-session-1" || frames[0].ProviderSession == nil || frames[0].ProviderSession.Id != "provider-session-1" {
-		t.Fatalf("frame identity = %#v, want exact worker/provider identity", frames[0])
-	}
-	if frames[0].Event == nil || frames[0].Event.Position != 1 || string(frames[0].Event.Payload) != `{"state":"RUNNING"}` {
-		t.Fatalf("first event = %#v, want canonical event payload", frames[0].Event)
-	}
-	if service.streamSubscription == nil || !service.streamSubscription.closed {
-		t.Fatal("stream subscription was not closed after terminal delivery")
-	}
-	if service.streamRequest.Limit != workersessions.DefaultObservationStreamLimit {
-		t.Fatalf("stream limit = %d, want stable default %d", service.streamRequest.Limit, workersessions.DefaultObservationStreamLimit)
-	}
+	assertRetainedTerminalFrames(t, recorder, service)
 }
 
 func TestStreamWorkerSessionEventsBySessionIDReplayOnlyWritesSummaryAndPreservesMode(t *testing.T) {
@@ -803,6 +781,7 @@ type fakeObservationService struct {
 	readResult                 workersessions.ReadTranscriptResult
 	readErr                    error
 	readCalled                 bool
+	readWorkerSessionID        string
 	readProviderSession        providers.SessionRef
 	readByWorkerResult         workersessions.ReadTranscriptResult
 	readByWorkerErr            error
@@ -853,6 +832,7 @@ func (f *fakeObservationService) GetObservationByWorkerSessionID(_ context.Conte
 
 func (f *fakeObservationService) ReadTranscript(_ context.Context, request workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
 	f.readCalled = true
+	f.readWorkerSessionID = request.WorkerSessionID
 	f.readProviderSession = request.ProviderSession
 	return f.readResult, f.readErr
 }
@@ -929,13 +909,16 @@ func (s *fakeObservationSubscription) Close() {
 }
 
 type sseTestFrame struct {
-	Delivery        string                                      `json:"delivery"`
-	WorkerSessionID string                                      `json:"workerSessionId"`
-	ProviderSession *factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
-	Event           *sseTestEvent                               `json:"event"`
-	ErrorCode       *string                                     `json:"errorCode"`
-	ErrorMessage    *string                                     `json:"errorMessage"`
-	ReplaySummary   *sseTestReplaySummary                       `json:"replaySummary"`
+	Delivery              string                                      `json:"delivery"`
+	WorkerSessionID       string                                      `json:"workerSessionId"`
+	FactorySessionID      *string                                     `json:"factorySessionId"`
+	ProviderSession       *factoryapi.WorkerSessionProviderSessionRef `json:"providerSession"`
+	Event                 *sseTestEvent                               `json:"event"`
+	ErrorCode             *string                                     `json:"errorCode"`
+	ErrorMessage          *string                                     `json:"errorMessage"`
+	ReplaySummary         *sseTestReplaySummary                       `json:"replaySummary"`
+	RecordingHealth       *string                                     `json:"recordingHealth"`
+	RecordingHealthReason *string                                     `json:"recordingHealthReason"`
 }
 
 type sseTestReplaySummary struct {
@@ -946,8 +929,9 @@ type sseTestReplaySummary struct {
 }
 
 type sseTestEvent struct {
-	Position uint64          `json:"position"`
-	Payload  json.RawMessage `json:"payload"`
+	Cursor   *factoryapi.WorkerSessionEventCursor `json:"cursor"`
+	Position uint64                               `json:"position"`
+	Payload  json.RawMessage                      `json:"payload"`
 }
 
 func decodeSSEFrames(t *testing.T, body string) []sseTestFrame {

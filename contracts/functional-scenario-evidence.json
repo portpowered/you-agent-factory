@@ -103,6 +103,31 @@
       ]
     },
     {
+      "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart",
+      "stableIds": [
+        "rest/streamWorkerSessionEventsByWorkerSessionId",
+        "sse/streamWorkerSessionEventsByWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+      "stableIds": [
+        "rest/getWorkerSessionObservationBySessionId",
+        "rest/readWorkerSessionTranscriptBySessionId",
+        "rest/streamWorkerSessionEventsBySessionId",
+        "sse/streamWorkerSessionEventsBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+      "stableIds": [
+        "rest/getWorkerSessionObservationByFactorySessionAndWorkerSessionId",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId",
+        "rest/readWorkerSessionTranscriptByWorkerSessionId"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
       "stableIds": [
         "cli/you.worker-sessions.continue",

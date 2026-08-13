@@ -204,6 +204,9 @@ func assertACPWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	records := make([]factoryapi.WorkerSessionEvent, 0, len(events))
 	var summary *factoryapi.WorkerSessionReplaySummary
 	for _, event := range events {
+		if event.ReplaySummary != nil {
+			summary = event.ReplaySummary
+		}
 		if string(event.Delivery) == "REPLAY_SUMMARY" {
 			summary = event.ReplaySummary
 			continue
@@ -216,7 +219,10 @@ func assertACPWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	if len(records) == 0 || summary == nil || !summary.Complete || summary.EventsEmitted != int64(len(records)) {
 		t.Fatalf("ACP Worker Session replay = records=%d summary=%#v, want complete history", len(records), summary)
 	}
-
+	if records[0].Event.SourceType == "factory_event" {
+		assertCanonicalACPWorkerSessionHistory(t, records)
+		return
+	}
 	opening := records[0]
 	if opening.Event.Position != 1 || opening.Event.SourceType != "worker_session_lifecycle" ||
 		acpWorkerString(opening, "kind") != "SESSION" || acpWorkerString(opening, "phase") != "STARTED" {
@@ -291,6 +297,40 @@ func assertACPWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	}
 	if terminalIndex != len(records)-1 {
 		t.Fatalf("ACP Worker Session terminal index = %d, want last record %d", terminalIndex, len(records)-1)
+	}
+}
+
+func assertCanonicalACPWorkerSessionHistory(t *testing.T, records []factoryapi.WorkerSessionEvent) {
+	t.Helper()
+	if len(records) < 2 {
+		t.Fatalf("canonical ACP Worker Session history = %#v, want opening and terminal", records)
+	}
+	opening := records[0]
+	if opening.Event.SchemaId != "DISPATCH_REQUEST" || opening.WorkerSessionId == "" || len(opening.WorkIds) == 0 {
+		t.Fatalf("canonical ACP opening = %#v, want correlated DISPATCH_REQUEST", opening)
+	}
+	providerResponse := false
+	for index, event := range records {
+		if event.Event.SourceType != "factory_event" {
+			t.Fatalf("canonical ACP frame[%d] source type = %q, want factory_event", index, event.Event.SourceType)
+		}
+		if event.WorkerSessionId != opening.WorkerSessionId || !sameACPWorkIDs(event.WorkIds, opening.WorkIds) {
+			t.Fatalf("canonical ACP frame[%d] correlation = %#v, want Worker Session %q and Work IDs %#v", index, event, opening.WorkerSessionId, opening.WorkIds)
+		}
+		if index > 0 && event.Event.Position <= records[index-1].Event.Position {
+			t.Fatalf("canonical ACP positions are not increasing: frame[%d]=%d previous=%d", index, event.Event.Position, records[index-1].Event.Position)
+		}
+		if event.ProviderSession.Provider != "cursor-acp" || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
+			t.Fatalf("canonical ACP frame[%d] provider reference = %#v, want cursor-acp session identity", index, event.ProviderSession)
+		}
+		providerResponse = providerResponse || event.Event.SchemaId == "MODEL_RESPONSE"
+	}
+	if !providerResponse {
+		t.Fatalf("canonical ACP history omitted MODEL_RESPONSE: %#v", records)
+	}
+	terminal := records[len(records)-1]
+	if terminal.Event.SchemaId != "DISPATCH_RESPONSE" || terminal.Delivery != "TERMINAL_REPLAY" {
+		t.Fatalf("canonical ACP terminal = %#v, want DISPATCH_RESPONSE TERMINAL_REPLAY", terminal)
 	}
 }
 

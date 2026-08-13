@@ -21,6 +21,49 @@ const MaxHTTPStartAttempts = 16
 
 var errInvalidStartRetry = errors.New("invalid Worker Session start retry policy")
 
+// WorkerSessionObservationCursorFromAPI decodes the canonical Worker Session
+// reconnect fields. after_sequence remains accepted as a compatibility alias
+// for after_position; conflicting aliases are rejected before the service is
+// invoked.
+func WorkerSessionObservationCursorFromAPI(
+	afterPosition *factoryapi.WorkerSessionAfterPosition,
+	afterSequence *factoryapi.AfterSequence,
+	streamGenerationID *factoryapi.WorkerSessionStreamGenerationID,
+) (*workersessions.ObservationCursor, error) {
+	if afterPosition == nil && afterSequence == nil {
+		if streamGenerationID != nil && strings.TrimSpace(string(*streamGenerationID)) != "" {
+			return nil, workersessions.ErrInvalidObservationCursor
+		}
+		return nil, nil
+	}
+	position := int64(0)
+	if afterPosition != nil {
+		position = int64(*afterPosition)
+	}
+	if afterSequence != nil {
+		sequence := int64(*afterSequence)
+		if afterPosition != nil && sequence != position {
+			return nil, workersessions.ErrInvalidObservationCursor
+		}
+		position = sequence
+	}
+	if position <= 0 {
+		return nil, workersessions.ErrInvalidObservationCursor
+	}
+	generation := ""
+	if streamGenerationID != nil {
+		generation = strings.TrimSpace(string(*streamGenerationID))
+		if generation == "" {
+			return nil, workersessions.ErrInvalidObservationCursor
+		}
+	}
+	cursor := &workersessions.ObservationCursor{Position: uint64(position), StreamGenerationID: generation}
+	if err := cursor.Validate(); err != nil {
+		return nil, err
+	}
+	return cursor, nil
+}
+
 // WorkerSessionStartRequestFromAPI maps one generated HTTP request into the
 // detached Worker Sessions contract and validates the transport-owned retry
 // bound before any service-side reservation can occur.
@@ -568,6 +611,16 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		DurationBasis:            factoryapi.WorkerSessionObservationDurationBasis(observation.DurationBasis),
 		Transcript:               factoryapi.WorkerSessionObservationTranscript(observation.Transcript),
 		Parse:                    workerSessionParseDiagnosticsToAPI(observation.Parse),
+	}
+	if observation.FactorySessionID != "" {
+		result.FactorySessionId = stringPtr(observation.FactorySessionID)
+	}
+	if observation.RecordingHealth != "" {
+		health := factoryapi.WorkerSessionObservationRecordingHealth(observation.RecordingHealth)
+		result.RecordingHealth = &health
+	}
+	if observation.RecordingHealthReason != "" {
+		result.RecordingHealthReason = stringPtr(observation.RecordingHealthReason)
 	}
 	if observation.TurnID != "" {
 		result.TurnId = stringPtr(observation.TurnID)

@@ -12,7 +12,6 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -462,6 +461,7 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 		r.logger.Info("worker session observation get by Worker Session rejected", "outcome", "invalid")
 		return workersessions.Observation{}, err
 	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
@@ -747,12 +747,15 @@ func safeDiagnosticMessage(message string) string {
 // Worker Sessions outcome vocabulary and closes itself immediately after the
 // lifecycle terminal record.
 type observationSubscription struct {
-	source events.Subscription
-	replay *replayObservationSubscription
+	source          events.Subscription
+	replay          *replayObservationSubscription
+	workerSessionID string
 
 	mu             sync.Mutex
 	closed         bool
 	terminalReplay bool
+	cursorProvided bool
+	delivered      bool
 	activeCancel   context.CancelFunc
 }
 
@@ -781,10 +784,16 @@ func (s *observationSubscription) Next(ctx context.Context) workersessions.Obser
 	if closed && delivery.Kind != events.DeliveryCanceled {
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
 	}
+	return s.projectSourceDelivery(delivery)
+}
 
+func (s *observationSubscription) projectSourceDelivery(delivery events.Delivery) workersessions.ObservationDelivery {
 	switch delivery.Kind {
 	case events.DeliveryRecord:
-		event := projectObservationEvent(delivery.Record)
+		event := projectObservationEvent(delivery.Record, s.workerSessionID)
+		s.mu.Lock()
+		s.delivered = true
+		s.mu.Unlock()
 		if isTerminalLifecycleRecord(delivery.Record) {
 			s.closeSource()
 			s.mu.Lock()
@@ -802,6 +811,12 @@ func (s *observationSubscription) Next(ctx context.Context) workersessions.Obser
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
 	case events.DeliveryGap:
 		s.closeSource()
+		s.mu.Lock()
+		cursorProvided, delivered := s.cursorProvided, s.delivered
+		s.mu.Unlock()
+		if cursorProvided && !delivered {
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationCursorStale}
+		}
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap}
 	case events.DeliveryBackpressure:
 		s.closeSource()
@@ -846,9 +861,17 @@ func (s *observationSubscription) closeSource() {
 	}
 }
 
-func projectObservationEvent(record events.Record) workersessions.ObservationEvent {
+func projectObservationEvent(record events.Record, workerSessionIDArgs ...string) workersessions.ObservationEvent {
+	workerSessionID := observationWorkerSessionIDFromTopic(record.ID.Topic)
+	if len(workerSessionIDArgs) > 0 && strings.TrimSpace(workerSessionIDArgs[0]) != "" {
+		workerSessionID = strings.TrimSpace(workerSessionIDArgs[0])
+	}
 	return workersessions.ObservationEvent{
-		Position:       uint64(record.ID.Position),
+		Position: uint64(record.ID.Position),
+		Cursor: workersessions.ObservationCursor{
+			WorkerSessionID: workerSessionID,
+			Position:        uint64(record.ID.Position),
+		},
 		SourceType:     string(record.SourceType),
 		SourceID:       string(record.SourceID),
 		SourceSequence: uint64(record.SourceSequence),
@@ -858,125 +881,9 @@ func projectObservationEvent(record events.Record) workersessions.ObservationEve
 	}
 }
 
-func (r *registry) StreamObservations(ctx context.Context, req workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
-	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session observation stream rejected", "outcome", "invalid")
-		return workersessions.ObservationSubscription{}, err
-	}
-	if err := observationContextError(ctx); err != nil {
-		return workersessions.ObservationSubscription{}, err
-	}
-	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession)
-	if err != nil {
-		return workersessions.ObservationSubscription{}, err
-	}
-	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
-}
-
-func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
-	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session observation stream by Worker Session rejected", "outcome", "invalid")
-		return workersessions.ObservationSubscription{}, err
-	}
-	if err := observationContextError(ctx); err != nil {
-		return workersessions.ObservationSubscription{}, err
-	}
-	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID)
-	if err != nil {
-		return workersessions.ObservationSubscription{}, err
-	}
-	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
-}
-
-func (r *registry) streamObservationTopic(
-	ctx context.Context,
-	workerSessionID string,
-	workerSessionState workersessions.State,
-	alreadyTerminal bool,
-	limit int,
-	replayOnly bool,
-) (workersessions.ObservationSubscription, error) {
-	if !replayOnly && r.eventReader == nil {
-		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
-		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
-	}
-	if limit == 0 {
-		limit = workersessions.DefaultObservationStreamLimit
-	}
-	topic := workersessions.Topic(workerSessionID)
-	if replayOnly {
-		return r.replayObservationStream(ctx, topic, workerSessionState, limit)
-	}
-	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal)
-}
-
-func (r *registry) observationStreamSession(ref providers.SessionRef) (string, bool, workersessions.State, error) {
-	r.mu.RLock()
-	workerSessionID := ""
-	alreadyTerminal := false
-	workerSessionState := workersessions.StateReserved
-	for id, session := range r.sessions {
-		if session.ProviderSessionAssociation != nil &&
-			session.ProviderSessionAssociation.Reference == ref {
-			workerSessionID = id
-			alreadyTerminal = session.Terminal()
-			workerSessionState = session.State
-			break
-		}
-	}
-	r.mu.RUnlock()
-	if workerSessionID == "" {
-		r.logger.Info("worker session observation stream", "outcome", "not_found")
-		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
-	}
-	return workerSessionID, alreadyTerminal, workerSessionState, nil
-}
-
-func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
-	r.mu.RLock()
-	session, exists := r.sessions[id]
-	r.mu.RUnlock()
-	if !exists {
-		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
-		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
-	}
-	return id, session.Terminal(), session.State, nil
-}
-
-func (r *registry) replayObservationStream(
-	ctx context.Context,
-	topic events.Topic,
-	state workersessions.State,
-	limit int,
-) (workersessions.ObservationSubscription, error) {
-	replay, err := newReplayObservationSubscription(ctx, r.retainedReader, topic, state, limit)
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, workersessions.ErrObservationCanceled) {
-			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCanceled
-		}
-		return workersessions.ObservationSubscription{}, err
-	}
-	wrapped := &observationSubscription{replay: replay}
-	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
-}
-
-func (r *registry) liveObservationStream(
-	ctx context.Context,
-	topic events.Topic,
-	limit int,
-	terminalReplay bool,
-) (workersessions.ObservationSubscription, error) {
-	subscription, err := r.eventReader.Subscribe(ctx, events.SubscribeRequest{
-		Topic: topic,
-		From:  events.Cursor{Topic: topic},
-		Limit: limit,
-	})
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCanceled
-		}
-		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
-	}
-	wrapped := &observationSubscription{source: subscription, terminalReplay: terminalReplay}
-	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
+func observationWorkerSessionIDFromTopic(topic events.Topic) string {
+	value := strings.TrimSpace(string(topic))
+	value = strings.TrimPrefix(value, "worker-session/")
+	value = strings.TrimSuffix(value, "/events")
+	return value
 }

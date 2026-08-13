@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -173,4 +174,133 @@ func decodeWorkerSessionInterruptRequest(body io.Reader) (factoryapi.WorkerSessi
 		return factoryapi.WorkerSessionInterruptRequest{}, err
 	}
 	return request, nil
+}
+
+func (h *Handler) writeMappedInterruptError(
+	w http.ResponseWriter,
+	err error,
+	sourceWorkerSessionID string,
+	request factoryapi.WorkerSessionInterruptRequest,
+) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	result := workersessions.InterruptResult{
+		RequestID:                strings.TrimSpace(request.RequestId),
+		SourceWorkerSessionID:    strings.TrimSpace(sourceWorkerSessionID),
+		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
+		Phase:                    workersessions.InterruptPhaseValidation,
+	}
+	var typed *workersessions.InterruptError
+	if errors.As(err, &typed) && typed != nil {
+		result = typed.Result.Clone()
+		result.Phase = typed.Phase
+	} else {
+		switch {
+		case errors.Is(err, workersessions.ErrInterruptSourceCancellation),
+			errors.Is(err, workersessions.ErrInterruptSourceCancellationFailed):
+			result.Phase = workersessions.InterruptPhaseSourceCancellation
+		case errors.Is(err, workersessions.ErrInterruptSuccessorAdmission),
+			errors.Is(err, workersessions.ErrInterruptSuccessorAdmissionFailed):
+			result.Phase = workersessions.InterruptPhaseSuccessorAdmission
+		}
+	}
+	switch {
+	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
+		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
+		errors.Is(err, workersessions.ErrInvalidInterruptMessage),
+		errors.Is(err, workersessions.ErrInterruptValidation):
+		writeInterruptError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid Worker Session interrupt request", result.Phase, result)
+	case errors.Is(err, workersessions.ErrInterruptSourceNotFound):
+		writeInterruptError(w, http.StatusNotFound, "NOT_FOUND", "Worker Session interrupt source not found", result.Phase, result)
+	case errors.Is(err, workersessions.ErrInterruptRequestIDConflict):
+		writeInterruptError(w, http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTREQUESTIDCONFLICT), "Worker Session interrupt requestId was reused with different inputs", result.Phase, result)
+	case errors.Is(err, workersessions.ErrInterruptSourceNotActive),
+		errors.Is(err, workersessions.ErrInterruptSourceConflict),
+		errors.Is(err, workersessions.ErrInterruptProviderSessionMissing),
+		errors.Is(err, workersessions.ErrInterruptProviderSessionInvalid):
+		writeInterruptError(w, http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT), "Worker Session interrupt conflicts with existing state", result.Phase, result)
+	case errors.Is(err, workersessions.ErrInterruptSourceCancellation),
+		errors.Is(err, workersessions.ErrInterruptSourceCancellationFailed):
+		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSOURCECANCELLATIONFAILED), "Workers could not cancel the Worker Session interrupt source", result.Phase, result)
+	case errors.Is(err, workersessions.ErrInterruptSuccessorAdmission),
+		errors.Is(err, workersessions.ErrInterruptSuccessorAdmissionFailed):
+		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSUCCESSORADMISSIONFAILED), "Workers could not admit the Worker Session interrupt successor", result.Phase, result)
+	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),
+		errors.Is(err, workersessions.ErrInterruptServerStopping):
+		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED), "Workers could not admit the Worker Session interrupt", result.Phase, result)
+	default:
+		writeInterruptError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to interrupt Worker Session", result.Phase, result)
+	}
+}
+
+func (h *Handler) writeMappedControlError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return
+	case errors.Is(err, workersessions.ErrInvalidSessionID):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session control request", "WORKER_SESSION_CONTROL_INVALID")
+	case errors.Is(err, workersessions.ErrSessionNotFound):
+		writeError(w, http.StatusNotFound, "Worker Session not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrInvalidState),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationNotAvailable),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationMissing),
+		errors.Is(err, workersessions.ErrProviderSessionAssociationConflict),
+		errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation):
+		writeError(w, http.StatusConflict, "Worker Session control conflicts with current state", "WORKER_SESSION_CONTROL_CONFLICT")
+	default:
+		writeError(w, http.StatusServiceUnavailable, "Workers could not apply the Worker Session control", "WORKER_SESSION_CONTROL_FAILED")
+	}
+}
+
+type workerSessionInterruptErrorResponse struct {
+	Message                  string                                     `json:"message"`
+	Family                   factoryapi.ErrorFamily                     `json:"family"`
+	Code                     string                                     `json:"code"`
+	Phase                    string                                     `json:"phase"`
+	RequestID                *string                                    `json:"requestId,omitempty"`
+	SourceWorkerSessionID    *string                                    `json:"sourceWorkerSessionId,omitempty"`
+	SuccessorWorkerSessionID *string                                    `json:"successorWorkerSessionId,omitempty"`
+	Source                   *factoryapi.WorkerSessionInterruptSnapshot `json:"source,omitempty"`
+	Successor                *factoryapi.WorkerSessionInterruptSnapshot `json:"successor,omitempty"`
+}
+
+func writeInterruptError(
+	w http.ResponseWriter,
+	status int,
+	code string,
+	message string,
+	phase workersessions.InterruptPhase,
+	result workersessions.InterruptResult,
+) {
+	payload := workerSessionInterruptErrorResponse{
+		Message: message,
+		Family:  errorFamilyForStatus(status),
+		Code:    code,
+		Phase:   string(phase),
+	}
+	if result.RequestID != "" {
+		value := result.RequestID
+		payload.RequestID = &value
+	}
+	if result.SourceWorkerSessionID != "" {
+		value := result.SourceWorkerSessionID
+		payload.SourceWorkerSessionID = &value
+	}
+	if result.SuccessorWorkerSessionID != "" {
+		value := result.SuccessorWorkerSessionID
+		payload.SuccessorWorkerSessionID = &value
+	}
+	if result.Source.ID != "" {
+		snapshot := workerSessionInterruptSnapshotToAPI(result.Source)
+		payload.Source = &snapshot
+	}
+	if result.Successor.ID != "" {
+		snapshot := workerSessionInterruptSnapshotToAPI(result.Successor)
+		payload.Successor = &snapshot
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
 }

@@ -1258,6 +1258,13 @@ type CompletionDeliveryPlanner interface {
 	DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error)
 }
 
+// ReplayWorkerSessionIDResolver preserves the canonical Worker Session
+// identity recorded for a dispatch when legacy replay re-executes that
+// dispatch through the live Factory Runtime.
+type ReplayWorkerSessionIDResolver interface {
+	WorkerSessionIDForDispatch(work.WorkDispatch) (string, bool)
+}
+
 // WorkerEventRecorder is the provider-neutral recording capability exposed to
 // the Workers service during runtime construction.
 type WorkerEventRecorder interface {

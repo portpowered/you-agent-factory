@@ -61,8 +61,9 @@ type WorkerRecordingRecord struct {
 // capture cannot reach a legal terminal. It intentionally carries no raw
 // provider payload or implementation error text.
 type WorkerRecordingFailure struct {
-	RecordingID     string
-	WorkerSessionID string
-	Topic           events.Topic
-	Code            string
+	RecordingID       string
+	WorkerSessionID   string
+	Topic             events.Topic
+	Code              string
+	ExecutionTerminal *WorkerRecordingTerminal
 }

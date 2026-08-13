@@ -393,9 +393,11 @@ func replayWorkStateChangeMutation(
 // CompletionDeliveryPlan maps observed replay dispatches to recorded
 // completion delivery ticks.
 type CompletionDeliveryPlan struct {
-	mu             sync.Mutex
-	records        []completionDeliveryRecord
-	plannedResults map[string]workerexecution.WorkResult
+	mu                          sync.Mutex
+	records                     []completionDeliveryRecord
+	plannedResults              map[string]workerexecution.WorkResult
+	workerSessionIDs            map[string]string
+	workerSessionIDsByReplayKey map[string]string
 }
 
 type completionDeliveryRecord struct {
@@ -463,10 +465,47 @@ func NewCompletionDeliveryPlan(
 			hasCompletion: record.hasCompletion,
 		})
 	}
+	workerSessionIDs := cloneReplayWorkerSessionIDs(eventLog.WorkerSessionIDs)
+	workerSessionIDsByReplayKey := make(map[string]string)
+	for _, record := range records {
+		workerSessionID := workerSessionIDs[record.dispatch.dispatchID]
+		if strings.TrimSpace(workerSessionID) == "" || strings.TrimSpace(record.dispatch.dispatch.Execution.ReplayKey) == "" {
+			continue
+		}
+		workerSessionIDsByReplayKey[record.dispatch.dispatch.Execution.ReplayKey] = workerSessionID
+	}
 	return &CompletionDeliveryPlan{
-		records:        records,
-		plannedResults: make(map[string]workerexecution.WorkResult),
+		records:                     records,
+		plannedResults:              make(map[string]workerexecution.WorkResult),
+		workerSessionIDs:            workerSessionIDs,
+		workerSessionIDsByReplayKey: workerSessionIDsByReplayKey,
 	}, nil
+}
+
+// WorkerSessionIDForDispatch returns the identity recorded alongside one
+// dispatch, allowing replay to preserve the stable Worker Session address.
+func (p *CompletionDeliveryPlan) WorkerSessionIDForDispatch(dispatch work.WorkDispatch) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	workerSessionID, ok := p.workerSessionIDs[strings.TrimSpace(dispatch.DispatchID)]
+	if !ok {
+		workerSessionID, ok = p.workerSessionIDsByReplayKey[strings.TrimSpace(dispatch.Execution.ReplayKey)]
+	}
+	return workerSessionID, ok && strings.TrimSpace(workerSessionID) != ""
+}
+
+func cloneReplayWorkerSessionIDs(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string]string, len(values))
+	for dispatchID, workerSessionID := range values {
+		clone[dispatchID] = workerSessionID
+	}
+	return clone
 }
 
 func (p *CompletionDeliveryPlan) DeliveryTickForDispatch(dispatch work.WorkDispatch) (int, bool, error) {

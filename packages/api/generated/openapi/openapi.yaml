@@ -440,13 +440,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/events:
     get:
       tags:
         - Worker Sessions
       operationId: streamWorkerSessionEventsBySessionId
       summary: Stream retained and live Worker Session events
-      description: Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+      description: Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; cursors are scoped to the Worker Session and never fall back to another history. The retained snapshot and live registration share one handoff, so records committed after the captured high-water mark are delivered exactly once. A terminal durable recording carries a COMPLETE, DEGRADED, or INCOMPLETE replay summary and does not wait for an unavailable live source.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - name: provider
@@ -475,6 +477,9 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/WorkerSessionAfterPosition'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/WorkerSessionStreamGenerationID'
       responses:
         '200':
           description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
@@ -490,13 +495,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
     get:
       tags:
         - Worker Sessions
       operationId: streamWorkerSessionEventsByWorkerSessionId
       summary: Stream retained and live Worker Session events by Worker Session identity
-      description: Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+      description: Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; a cursor from another Worker Session, a future position, stale retained history, or an unavailable generation is rejected with a typed error. In follow mode the durable-to-live handoff is atomic and duplicate overlap is suppressed.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkerSessionID'
@@ -507,6 +514,9 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/WorkerSessionAfterPosition'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/WorkerSessionStreamGenerationID'
       responses:
         '200':
           description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
@@ -522,6 +532,64 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationByFactorySessionAndWorkerSessionId
+      summary: Show one Worker Session observation by Worker Session ID
+      description: Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: One detached Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId
+      summary: Read one Worker Session transcript by Worker Session ID
+      description: Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -563,6 +631,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/worker-sessions/transcript:
     get:
       tags:
@@ -610,6 +680,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionRecordingUnavailable'
   /factory-sessions/{session_id}/invocations:
     post:
       tags:
@@ -2023,6 +2095,23 @@ components:
       schema:
         type: integer
         minimum: 0
+    WorkerSessionAfterPosition:
+      name: after_position
+      in: query
+      required: false
+      description: Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    WorkerSessionStreamGenerationID:
+      name: stream_generation_id
+      in: query
+      required: false
+      description: Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history.
+      schema:
+        type: string
+        minLength: 1
     ResponseEventAfterSequence:
       name: after_sequence
       in: query
@@ -2324,6 +2413,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     WorkerSessionControlInternalError:
       description: The server failed while applying the Worker Session lifecycle control.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionRecordingUnavailable:
+      description: The durable Worker Session recording could not be read.
       content:
         application/json:
           schema:
@@ -3320,6 +3415,9 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity.
+        factorySessionId:
+          type: string
+          description: Explicit Factory Session scope used for this transcript read.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
         workIds:
@@ -3366,6 +3464,9 @@ components:
         direct:
           type: boolean
           description: Whether this observation was admitted through the direct top-level Worker Session surface.
+        factorySessionId:
+          type: string
+          description: Explicit Factory Session scope used for this observation.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
           nullable: true
@@ -3435,6 +3536,20 @@ components:
         failure:
           $ref: '#/components/schemas/WorkerSessionFailure'
           nullable: true
+        recordingHealth:
+          type: string
+          enum:
+            - COMPLETE
+            - DEGRADED
+            - INCOMPLETE
+          x-enum-varnames:
+            - WorkerSessionObservationRecordingHealthComplete
+            - WorkerSessionObservationRecordingHealthDegraded
+            - WorkerSessionObservationRecordingHealthIncomplete
+          description: Recordings-owned capture health, independent of Worker execution outcome.
+        recordingHealthReason:
+          type: string
+          description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
         parse:
           $ref: '#/components/schemas/WorkerSessionParseDiagnostics'
     WorkerSessionEvent:
@@ -3454,6 +3569,9 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity for this stream.
+        factorySessionId:
+          type: string
+          description: Explicit Factory Session scope used for this event stream.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
         workIds:
@@ -3477,6 +3595,20 @@ components:
           $ref: '#/components/schemas/WorkerSessionReplaySummary'
           nullable: true
           description: Completeness marker when delivery is REPLAY_SUMMARY.
+        recordingHealth:
+          type: string
+          enum:
+            - COMPLETE
+            - DEGRADED
+            - INCOMPLETE
+          x-enum-varnames:
+            - WorkerSessionEventRecordingHealthComplete
+            - WorkerSessionEventRecordingHealthDegraded
+            - WorkerSessionEventRecordingHealthIncomplete
+          description: Recordings-owned capture health, independent of Worker execution outcome.
+        recordingHealthReason:
+          type: string
+          description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
     WorkerSessionReplaySummary:
       type: object
       additionalProperties: false
@@ -3522,6 +3654,7 @@ components:
       additionalProperties: false
       required:
         - position
+        - cursor
         - sourceType
         - sourceId
         - sourceSequence
@@ -3529,6 +3662,9 @@ components:
         - schemaId
         - payload
       properties:
+        cursor:
+          $ref: '#/components/schemas/WorkerSessionEventCursor'
+          description: Typed reconnect cursor for this canonical event record.
         position:
           type: integer
           format: int64
@@ -3555,6 +3691,23 @@ components:
           type: object
           additionalProperties: true
           description: Source-native canonical event payload.
+    WorkerSessionEventCursor:
+      type: object
+      additionalProperties: false
+      required:
+        - position
+      properties:
+        workerSessionId:
+          type: string
+          description: Worker Session identity that owns the acknowledged position.
+        position:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Exclusive Worker Session event position acknowledged by the client.
+        streamGenerationId:
+          type: string
+          description: Durable Factory event-stream generation that issued the position.
     WorkerSessionProviderSessionRef:
       type: object
       additionalProperties: false
@@ -4269,6 +4422,11 @@ components:
             - WORKER_SESSION_NOT_STARTABLE
             - WORKER_SESSION_START_OPENING_FAILED
             - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
+            - WORKER_SESSION_EVENT_CURSOR_INVALID
+            - WORKER_SESSION_EVENT_CURSOR_FOREIGN
+            - WORKER_SESSION_EVENT_CURSOR_FUTURE
+            - WORKER_SESSION_EVENT_CURSOR_STALE
+            - WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE
             - WORKER_SESSION_ADMISSION_FAILED
             - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
             - WORKER_SESSION_CONTINUATION_CONFLICT
@@ -4294,6 +4452,8 @@ components:
             - PROVIDER_UNSUPPORTED
             - SESSION_KIND_UNSUPPORTED
             - PROJECTION_UNAVAILABLE
+            - WORKER_SESSION_RECORDING_CORRUPT
+            - WORKER_SESSION_RECORDING_UNAVAILABLE
             - WORKER_SESSION_STREAM_UNAVAILABLE
             - WORKER_SESSION_TRANSCRIPT_ACTIVE
             - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
@@ -4316,6 +4476,11 @@ components:
             - The requested Worker Session identity is already reserved or terminal.
             - The Worker Session opening record could not be published.
             - The Worker Session event topic did not reach the required readiness barrier.
+            - The Worker Session event cursor is malformed.
+            - The Worker Session event cursor belongs to another Worker Session.
+            - The Worker Session event cursor is ahead of the available history.
+            - The Worker Session event cursor no longer names retained history.
+            - The Worker Session event cursor's durable stream generation is unavailable.
             - Workers could not admit the Worker Session execution.
             - Worker Session continuation requestId was reused with different inputs.
             - The Worker Session continuation conflicts with source lifecycle or successor lineage.
@@ -4338,6 +4503,8 @@ components:
             - The requested Provider Session provider is not loadable by this API.
             - The requested Provider Session identifier kind is not loadable by this API.
             - The correlated Worker Session projection is temporarily unavailable.
+            - The durable Worker Session recording contains corrupt history.
+            - The durable Worker Session recording could not be read.
             - The canonical Worker Session event stream is temporarily unavailable.
             - The requested Worker Session has not reached a terminal state.
             - The finished Worker Session has no normalized transcript available.

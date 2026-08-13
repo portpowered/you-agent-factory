@@ -380,6 +380,28 @@ func TestHandleStartFailureUnregistersFailedBatchSession(t *testing.T) {
 	}
 }
 
+func TestHandleStartFailureIgnoresAlreadyStoppedCleanupAfterCancellation(t *testing.T) {
+	sessions := newRuntimeBindingState()
+	session := registerTestSession(sessions, factorysessions.DefaultSessionID)
+	var runtimeState runtimebinding.State
+	runtimeState.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := runtimebinding.HandleStartFailure(
+		ctx, sessions, &runtimeState, factorysessions.DefaultSessionID,
+		runtimebinding.HandleFromSession(session),
+		func(factory.HostedHandle) error { return factory.ErrAlreadyStopped },
+		context.Canceled, interfaces.RuntimeModeBatch,
+	)
+	if err != nil {
+		t.Fatalf("HandleStartFailure: %v, want canceled startup cleanup to be idempotent", err)
+	}
+	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
+		t.Fatal("canceled startup session remains active")
+	}
+}
+
 func registerTestSession(state *sessionruntime.Service, sessionID string) *livesession.LiveSession {
 	instance := &hostedInstanceFake{}
 	handle := newHostedHandleFake(instance)

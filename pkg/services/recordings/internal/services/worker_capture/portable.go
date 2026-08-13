@@ -205,23 +205,21 @@ func (codec WorkerRecordingCodec) BuildWorkerPortableRecording(snapshot WorkerRe
 	if err != nil {
 		return WorkerPortableRecording{}, err
 	}
-	if session.Status == WorkerRecordingStatusFailed {
-		return WorkerPortableRecording{}, portableDiagnostic(
-			WorkerPortableCodeInvalidLifecycle, "lifecycle.status", "failed capture is not portable replay", ErrWorkerPortableRecordingLifecycle,
-		)
-	}
-	projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
-		RecordingID:     snapshot.RecordingID,
+	replayed, err := codec.ReplayWorkerRecording(WorkerRecordingReplayRequest{
+		Snapshot:        snapshot,
 		WorkerSessionID: session.WorkerSessionID,
-		Topic:           session.Topic,
-		Records:         session.Records,
 	})
 	if err != nil {
-		return WorkerPortableRecording{}, portableReducerDiagnostic(err)
+		return WorkerPortableRecording{}, err
 	}
+	projection := replayed.Projection
 	if !projection.Complete {
+		message := "only a terminal-complete capture can be exported"
+		if projection.Status == WorkerRecordingStatusDegraded {
+			message = "degraded capture cannot be exported as lossless portable replay"
+		}
 		return WorkerPortableRecording{}, portableDiagnostic(
-			WorkerPortableCodeInvalidLifecycle, "lifecycle.status", "only a terminal-complete capture can be exported", ErrWorkerPortableRecordingLifecycle,
+			WorkerPortableCodeInvalidLifecycle, "lifecycle.status", message, ErrWorkerPortableRecordingLifecycle,
 		)
 	}
 
@@ -263,7 +261,7 @@ func (codec WorkerRecordingCodec) BuildWorkerPortableRecording(snapshot WorkerRe
 			Topic:           projection.Topic,
 		},
 		Lifecycle: WorkerPortableRecordingLifecycle{
-			Status:           WorkerRecordingStatusCompleted,
+			Status:           WorkerRecordingStatusComplete,
 			OpeningTimestamp: cloneTime(openingPayload.StartedAt),
 			Terminal: &WorkerPortableTerminal{
 				Position: terminal.Position,
@@ -402,7 +400,7 @@ func (codec WorkerRecordingCodec) ReplayWorkerPortableRecording(recording Worker
 			Sessions: []WorkerSessionRecordingSnapshot{{
 				WorkerSessionID: recording.Identity.WorkerSessionID,
 				Topic:           recording.Identity.Topic,
-				Status:          WorkerRecordingStatusCompleted,
+				Status:          WorkerRecordingStatusComplete,
 				LastPosition:    records[len(records)-1].ID.Position,
 				Records:         records,
 			}},
@@ -442,13 +440,20 @@ func validatePortableHeader(recording WorkerPortableRecording) error {
 	if err := validatePortableIdentity(recording.Identity); err != nil {
 		return err
 	}
-	if recording.Lifecycle.Status != WorkerRecordingStatusCompleted || recording.Lifecycle.Terminal == nil {
+	if !portableRecordingLifecycleIsComplete(recording.Lifecycle.Status) || recording.Lifecycle.Terminal == nil {
 		return portableDiagnostic(WorkerPortableCodeInvalidLifecycle, "lifecycle", "portable Worker recording must be completed and contain a terminal", ErrWorkerPortableRecordingLifecycle)
 	}
 	if len(recording.Records) == 0 {
 		return portableDiagnostic(WorkerPortableCodeInvalidOrder, "records", "at least one opening record is required", ErrWorkerPortableRecordingOrder)
 	}
 	return nil
+}
+
+func portableRecordingLifecycleIsComplete(status WorkerRecordingStatus) bool {
+	// Schema v1 was emitted with the legacy capture-state spelling
+	// COMPLETED. Keep that pinned portable vocabulary readable while all new
+	// exports use the recording-health spelling COMPLETE.
+	return status == WorkerRecordingStatusComplete || status == WorkerRecordingStatusCompleted
 }
 
 func reducePortableHistory(recording WorkerPortableRecording) ([]workers.Draft, WorkerRecordingProjection, error) {

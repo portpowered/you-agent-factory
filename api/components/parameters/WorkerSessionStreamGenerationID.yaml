@@ -1,0 +1,9 @@
+name: stream_generation_id
+in: query
+required: false
+description: >-
+  Optional durable Worker Session event-stream generation that qualifies
+  after_position. A generation mismatch never falls back to another history.
+schema:
+  type: string
+  minLength: 1

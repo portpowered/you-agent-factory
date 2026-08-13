@@ -148,8 +148,10 @@ func assertAgyWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	records := make([]factoryapi.WorkerSessionEvent, 0, len(events))
 	var summary *factoryapi.WorkerSessionReplaySummary
 	for _, event := range events {
-		if string(event.Delivery) == "REPLAY_SUMMARY" {
+		if event.ReplaySummary != nil {
 			summary = event.ReplaySummary
+		}
+		if string(event.Delivery) == "REPLAY_SUMMARY" {
 			continue
 		}
 		if event.Event.Position == 0 {
@@ -162,6 +164,10 @@ func assertAgyWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	}
 	if summary == nil || !summary.Complete || summary.EventsEmitted != int64(len(records)) {
 		t.Fatalf("Antigravity Worker Session replay summary = %#v, want complete summary for %d records", summary, len(records))
+	}
+	if records[0].Event.SourceType == "factory_event" {
+		assertCanonicalFactoryWorkerSessionHistory(t, records, "antigravity", false)
+		return
 	}
 
 	opening := records[0]
@@ -342,8 +348,10 @@ func assertProviderWorkerSessionHistory(t *testing.T, events []factoryapi.Worker
 	records := make([]factoryapi.WorkerSessionEvent, 0, len(events))
 	var summary *factoryapi.WorkerSessionReplaySummary
 	for _, event := range events {
-		if string(event.Delivery) == "REPLAY_SUMMARY" {
+		if event.ReplaySummary != nil {
 			summary = event.ReplaySummary
+		}
+		if string(event.Delivery) == "REPLAY_SUMMARY" {
 			continue
 		}
 		if event.Event.Position == 0 {
@@ -354,6 +362,11 @@ func assertProviderWorkerSessionHistory(t *testing.T, events []factoryapi.Worker
 	if len(records) == 0 || summary == nil || !summary.Complete || summary.EventsEmitted != int64(len(records)) {
 		t.Fatalf("%s Worker Session replay = records=%d summary=%#v, want complete opening-to-terminal history", provider, len(records), summary)
 	}
+	if records[0].Event.SourceType == "factory_event" {
+		assertCanonicalFactoryWorkerSessionHistory(t, records, provider, providerSessionExpected)
+		return
+	}
+
 	opening := records[0]
 	if opening.Event.Position != 1 || opening.Event.SourceType != "worker_session_lifecycle" ||
 		workerEventString(opening, "kind") != "SESSION" || workerEventString(opening, "phase") != "STARTED" {
@@ -428,5 +441,56 @@ func assertProviderWorkerSessionHistory(t *testing.T, events []factoryapi.Worker
 	}
 	if providerSessionExpected != providerReferenceSeen {
 		t.Fatalf("%s Worker Session provider reference seen = %t, want %t", provider, providerReferenceSeen, providerSessionExpected)
+	}
+}
+
+func assertCanonicalFactoryWorkerSessionHistory(
+	t *testing.T,
+	records []factoryapi.WorkerSessionEvent,
+	provider string,
+	providerSessionExpected bool,
+) {
+	t.Helper()
+	if len(records) < 2 {
+		t.Fatalf("%s canonical Worker Session history = %#v, want opening and terminal Factory events", provider, records)
+	}
+	opening := records[0]
+	if opening.Event.SchemaId != "DISPATCH_REQUEST" {
+		t.Fatalf("%s canonical Worker Session opening schema = %q, want DISPATCH_REQUEST", provider, opening.Event.SchemaId)
+	}
+	if opening.WorkerSessionId == "" || len(opening.WorkIds) == 0 || opening.WorkIds[0] == "" {
+		t.Fatalf("%s canonical Worker Session opening correlation = %#v, want Worker Session and Work identities", provider, opening)
+	}
+
+	seenSourceEvents := make(map[string]struct{}, len(records))
+	lastPosition := int64(0)
+	for index, event := range records {
+		if event.WorkerSessionId != opening.WorkerSessionId || !sameWorkIDs(event.WorkIds, opening.WorkIds) {
+			t.Fatalf("%s canonical Worker Session frame[%d] correlation = %#v, want Worker Session %q and Work IDs %#v", provider, index, event, opening.WorkerSessionId, opening.WorkIds)
+		}
+		if event.Event.Position <= lastPosition {
+			t.Fatalf("%s canonical Worker Session positions are not increasing: frame[%d]=%d previous=%d", provider, index, event.Event.Position, lastPosition)
+		}
+		lastPosition = event.Event.Position
+		key := fmt.Sprintf("%s|%s|%d|%s", event.Event.SourceType, event.Event.SourceId, event.Event.SourceSequence, event.Event.SourceEventId)
+		if _, exists := seenSourceEvents[key]; exists {
+			t.Fatalf("%s canonical Worker Session duplicated source event key %q", provider, key)
+		}
+		seenSourceEvents[key] = struct{}{}
+		if event.Event.SourceType != "factory_event" {
+			t.Fatalf("%s canonical Worker Session source type = %q, want factory_event", provider, event.Event.SourceType)
+		}
+		if providerSessionExpected {
+			if event.ProviderSession.Provider != provider || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
+				t.Fatalf("%s canonical Worker Session provider reference = %#v, want exact provider session", provider, event.ProviderSession)
+			}
+		} else if hasProviderSession(event) {
+			t.Fatalf("%s canonical Worker Session fabricated Provider Session reference: %#v", provider, event)
+		}
+	}
+
+	terminal := records[len(records)-1]
+	if terminal.Event.SchemaId != "DISPATCH_RESPONSE" || string(terminal.Delivery) != "TERMINAL_REPLAY" {
+		t.Fatalf("%s canonical Worker Session terminal = %#v, want DISPATCH_RESPONSE TERMINAL_REPLAY", provider, terminal)
 	}
 }
