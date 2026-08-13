@@ -609,6 +609,7 @@ func assertS8ForeignFrame(t *testing.T, index int, encoded []byte, frame s8Strea
 		for _, token := range correlation.tokens() {
 			if token == "" || own.owns(token) ||
 				(expectedSuccessorLineage && token == own.successorWorkerSessionID && token == correlation.workerSessionID) ||
+				(token == correlation.workerSessionID && correlation.successorWorkerSessionID == own.workerSessionID) ||
 				(token == correlation.dispatchID && strings.HasPrefix(own.dispatchID, token+"/continue/")) {
 				continue
 			}
@@ -628,15 +629,28 @@ func s8HasExpectedSuccessorLineage(frame s8StreamFrame, own s8Correlation) bool 
 }
 
 func s8SuccessorLineage(payload json.RawMessage) (string, bool) {
-	var decoded struct {
-		Lineage *struct {
-			SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
-		} `json:"lineage"`
+	type lineage struct {
+		SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
 	}
-	if err := json.Unmarshal(payload, &decoded); err != nil || decoded.Lineage == nil || decoded.Lineage.SuccessorWorkerSessionID == "" {
+
+	var decoded struct {
+		Lineage *lineage        `json:"lineage"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
 		return "", false
 	}
-	return decoded.Lineage.SuccessorWorkerSessionID, true
+	if decoded.Lineage != nil && decoded.Lineage.SuccessorWorkerSessionID != "" {
+		return decoded.Lineage.SuccessorWorkerSessionID, true
+	}
+
+	var nested struct {
+		Lineage *lineage `json:"lineage"`
+	}
+	if len(decoded.Payload) == 0 || json.Unmarshal(decoded.Payload, &nested) != nil || nested.Lineage == nil || nested.Lineage.SuccessorWorkerSessionID == "" {
+		return "", false
+	}
+	return nested.Lineage.SuccessorWorkerSessionID, true
 }
 
 func inspectS8StreamEvent(
