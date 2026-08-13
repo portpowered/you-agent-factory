@@ -163,6 +163,39 @@ func writeInvocationSuccess(
 	return err
 }
 
+func writeFactoryInvocationOutcome(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer visualizationcli.FactoryEventRenderer,
+) error {
+	if result.Status != interfaces.InvocationTerminalStatusCompleted {
+		return writeInvocationFailure(cfg, result, streamRenderer)
+	}
+	return writeInvocationSuccess(cfg, result, streamRenderer)
+}
+
+func finishFactoryInvocation(
+	runErr error,
+	writeErr error,
+	outputWriter *responseStreamCancelOnWriteError,
+) error {
+	if outputWriter != nil {
+		if recordedErr := outputWriter.Err(); recordedErr != nil {
+			// The writer failure caused cancellation; preserve that established
+			// root cause instead of allowing the derived cancellation or a later
+			// cleanup error to win classification.
+			return recordedErr
+		}
+	}
+	if runErr != nil {
+		if writeErr != nil {
+			return errors.Join(MapInvocationFailure(runErr), writeErr)
+		}
+		return MapInvocationFailure(runErr)
+	}
+	return writeErr
+}
+
 func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
 	output := cfg.Output
 	if output == nil {

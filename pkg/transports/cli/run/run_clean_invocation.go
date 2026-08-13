@@ -123,6 +123,10 @@ func newInvocationErrorForRunFailure(
 	runErr error,
 	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 ) error {
+	var recorded *InvocationError
+	if errors.As(runErr, &recorded) {
+		return recorded
+	}
 	switch {
 	case errors.Is(runErr, context.DeadlineExceeded):
 		return &InvocationError{

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -389,11 +389,13 @@ func runFactoryInvocation(
 
 	invocationCfg := cfg
 	invokeCtx := ctx
+	var outputWriter *responseStreamCancelOnWriteError
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && cfg.Output != nil {
 		var cancel context.CancelFunc
 		invokeCtx, cancel = context.WithCancel(ctx)
 		defer cancel()
-		invocationCfg.Output = responseStreamOutputCancelOnWriteError(cfg.Output, cancel)
+		outputWriter = newResponseStreamCancelOnWriteError(cfg.Output, cancel)
+		invocationCfg.Output = outputWriter
 	}
 
 	streamRenderer, err := invocationFactoryEventRenderer(invocationCfg, presentation)
@@ -423,15 +425,7 @@ func runFactoryInvocation(
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest)
 	result := outcome.Result
 	if result.Status == "" {
-		if err == nil {
-			// InvokeFactory returned neither a determined terminal result nor
-			// an error: without this explicit invariant failure, a nil err
-			// maps to a nil CLI error (MapInvocationFailure(nil) == nil),
-			// which would silently report success and omit the public
-			// terminal record contract this invocation type owes its caller.
-			err = fmt.Errorf("run factory invocation: invocation ended without a determined terminal result")
-		}
-		return MapInvocationFailure(err)
+		return runFactoryInvocationWithoutTerminalResult(err, outputWriter, streamRenderer)
 	}
 	// A terminal result was determined even though err is non-nil: err is a
 	// post-result failure (for example runtime teardown or resource cleanup)
@@ -439,31 +433,51 @@ func runFactoryInvocation(
 	// must still be written for the outcome the invocation actually reached;
 	// err is preserved below so the CLI still reports failure and exit-code
 	// semantics for the cleanup error are not lost.
-	var writeErr error
-	if result.Status != interfaces.InvocationTerminalStatusCompleted {
-		writeErr = writeInvocationFailure(invocationCfg, result, streamRenderer)
-	} else {
-		writeErr = writeInvocationSuccess(invocationCfg, result, streamRenderer)
-	}
-	if err != nil {
-		if writeErr != nil {
-			return errors.Join(MapInvocationFailure(err), writeErr)
+	writeErr := writeFactoryInvocationOutcome(invocationCfg, result, streamRenderer)
+	return finishFactoryInvocation(err, writeErr, outputWriter)
+}
+
+func runFactoryInvocationWithoutTerminalResult(
+	err error,
+	outputWriter *responseStreamCancelOnWriteError,
+	streamRenderer interface{ StopProgressRendering() },
+) error {
+	// A lossless response stream writes Factory Events on its own drain
+	// goroutine. A writer failure cancels invokeCtx immediately, so the
+	// invocation can return before that goroutine has recorded the failure.
+	// Drain the stream before classifying an undetermined outcome so the
+	// caller receives the writer failure instead of a generic cancellation.
+	if outputWriter != nil && streamRenderer != nil {
+		streamRenderer.StopProgressRendering()
+		if writeErr := outputWriter.Err(); writeErr != nil {
+			return MapInvocationFailure(writeErr)
 		}
-		return MapInvocationFailure(err)
 	}
-	return writeErr
+	if err == nil {
+		// InvokeFactory returned neither a determined terminal result nor
+		// an error: without this explicit invariant failure, a nil err
+		// maps to a nil CLI error (MapInvocationFailure(nil) == nil),
+		// which would silently report success and omit the public
+		// terminal record contract this invocation type owes its caller.
+		err = fmt.Errorf("run factory invocation: invocation ended without a determined terminal result")
+	}
+	return MapInvocationFailure(err)
 }
 
 type responseStreamCancelOnWriteError struct {
-	writer  io.Writer
-	onError func()
-	once    sync.Once
+	writer   io.Writer
+	onError  func()
+	writeErr atomic.Pointer[InvocationError]
 }
 
 func responseStreamOutputCancelOnWriteError(writer io.Writer, onError context.CancelFunc) io.Writer {
 	if writer == nil || onError == nil {
 		return writer
 	}
+	return newResponseStreamCancelOnWriteError(writer, onError)
+}
+
+func newResponseStreamCancelOnWriteError(writer io.Writer, onError context.CancelFunc) *responseStreamCancelOnWriteError {
 	return &responseStreamCancelOnWriteError{
 		writer: writer,
 		onError: func() {
@@ -475,9 +489,27 @@ func responseStreamOutputCancelOnWriteError(writer io.Writer, onError context.Ca
 func (writer *responseStreamCancelOnWriteError) Write(payload []byte) (int, error) {
 	written, err := writer.writer.Write(payload)
 	if err != nil {
-		writer.once.Do(writer.onError)
+		writeErr := &InvocationError{
+			Code:    InvocationErrorCodeFailed,
+			Message: err.Error(),
+			Cause:   err,
+		}
+		if writer.writeErr.CompareAndSwap(nil, writeErr) {
+			writer.onError()
+		}
 	}
 	return written, err
+}
+
+func (writer *responseStreamCancelOnWriteError) Err() error {
+	if writer == nil {
+		return nil
+	}
+	recorded := writer.writeErr.Load()
+	if recorded == nil {
+		return nil
+	}
+	return recorded
 }
 
 func invocationTarget(

@@ -63,9 +63,9 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 
 	t.Run("terminal failure emits failed InvocationResponse and one stderr ErrorResponse", func(t *testing.T) {
 		stdout, stderr, err := runSingleJSONInvocation(t, []string{
-			"you", "--json", "run", "--named", jsonGoalFactoryName, "--no-record",
+			"you", "--json", "run", "--factory", jsonTerminalFailureFactoryPath(t), "--no-record",
 			"deterministic terminal failure",
-		}, jsonGoalFactoryName, rejectingGoalMockWorkers())
+		}, "", nil)
 		if err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
 		}
@@ -76,12 +76,41 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 		if response.ErrorCode == nil || response.Message == nil {
 			t.Fatalf("failed InvocationResponse lacks error detail: %#v", response)
 		}
+		if string(*response.ErrorCode) != "INVOCATION_RUNTIME_FAILURE" ||
+			!strings.HasPrefix(*response.Message, `invocation failed: work "work-1" reached failed state "goal:failed"`) {
+			t.Fatalf("InvocationResponse = %#v, want the pinned terminal failure", response)
+		}
 		errorResponse := decodeSingleJSONErrorResponse(t, stderr)
 		if errorResponse.Code != factoryapi.ErrorResponseCode(*response.ErrorCode) ||
 			errorResponse.Family != factoryapi.ErrorFamilyInternalServerError ||
 			!strings.HasPrefix(errorResponse.Message, *response.Message) {
 			t.Fatalf("ErrorResponse = %#v, want code %s and message prefix %q", errorResponse, *response.ErrorCode, *response.Message)
 		}
+	})
+}
+
+func jsonTerminalFailureFactoryPath(t *testing.T) string {
+	t.Helper()
+
+	// Keep this failure in the logical runtime so worker teardown cannot replace
+	// the terminal failure that the stdout/stderr contract is checking.
+	return support.ScaffoldFactory(t, map[string]any{
+		"name": "json-terminal-failure",
+		"workTypes": []any{map[string]any{
+			"name":             "goal",
+			"handlingBehavior": []string{"DEFAULT"},
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workstations": []map[string]any{{
+			"name":    "fail-goal",
+			"type":    "LOGICAL_MOVE",
+			"inputs":  []any{map[string]any{"workType": "goal", "state": "init"}},
+			"outputs": []any{map[string]any{"workType": "goal", "state": "failed"}},
+		}},
 	})
 }
 
