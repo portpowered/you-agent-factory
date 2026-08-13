@@ -36,8 +36,9 @@ type s8InterruptScenario struct {
 // TestDWROS8ManagerInterruptsOnlyOneRemoteWorker proves the second S8 story
 // through the public manager boundary. A's source, A's resumed successor, and
 // B each have an explicit provider-edge barrier. The only readiness signals
-// used below are those edge barriers and public stream/list observations; the
-// deadline is a bounded deadlock watchdog for a broken lifecycle.
+// used below are those edge barriers and complete public stream/list
+// observations; the deadline is a bounded deadlock watchdog for a broken
+// lifecycle.
 func TestDWROS8ManagerInterruptsOnlyOneRemoteWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -90,9 +91,9 @@ func TestDWROS8ManagerInterruptsOnlyOneRemoteWorker(t *testing.T) {
 	runner.waitStarted(t, repositoryB.path, s8InterruptCallBInitial)
 
 	streamA := startS8LiveStream(t, ctx, manager, env, repositoryA.path, server.URL(), s8WorkerAID)
-	streamA.writer.waitFirstWrite(t, s8WorkerAID)
+	streamA.writer.waitWorkerSessionFrame(t, s8WorkerAID)
 	streamB := startS8LiveStream(t, ctx, manager, env, repositoryB.path, server.URL(), s8WorkerBID)
-	streamB.writer.waitFirstWrite(t, s8WorkerBID)
+	streamB.writer.waitWorkerSessionFrame(t, s8WorkerBID)
 
 	active := listS8RemoteWorkers(t, ctx, manager, env, factoryDir, server.URL())
 	if len(active) != 2 {
@@ -119,7 +120,7 @@ func assertS8InterruptOverlap(
 	scenario.runner.assertOrder(t, "start:"+s8InterruptCallAInitial, "cancel:"+s8InterruptCallAInitial, "start:"+s8InterruptCallASuccessor)
 
 	streamSuccessor := startS8LiveStream(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerASuccessorID)
-	streamSuccessor.writer.waitFirstWrite(t, s8WorkerASuccessorID)
+	streamSuccessor.writer.waitWorkerSessionFrame(t, s8WorkerASuccessorID)
 	overlap := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
 	if len(overlap) != 3 {
 		t.Fatalf("overlap direct Worker Sessions = %d, want source, successor, and B: %#v", len(overlap), overlap)
@@ -159,6 +160,7 @@ func finishS8InterruptScenario(
 	sourceCorrelation := s8Correlation{
 		repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: s8DispatchAID,
 		workerSessionID: s8WorkerAID, providerSessionID: s8ProviderSessionA, message: s8MessageA, output: s8OutputA,
+		successorWorkerSessionID: s8WorkerASuccessorID,
 	}
 	successorCorrelation := s8Correlation{
 		repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: successor.AttemptID,
