@@ -167,6 +167,16 @@ func (r *Bundle) RecordingLedger() recordings.Ledger {
 	return r.EventHistory
 }
 
+// FinalizeRecording closes the runtime-owned Recordings scope during partial
+// Factory Session unwind. Normal runtime shutdown reaches the same idempotent
+// recorder through host.FinalizeArtifacts.
+func (r *Bundle) FinalizeRecording(finishedAt time.Time) error {
+	if r == nil || r.Recording == nil {
+		return nil
+	}
+	return r.Recording.Finalize(finishedAt)
+}
+
 func (r *Bundle) CloseArtifacts() error {
 	if r == nil {
 		return nil

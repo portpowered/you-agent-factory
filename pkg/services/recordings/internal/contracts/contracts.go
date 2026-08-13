@@ -1676,6 +1676,16 @@ type RuntimeRecorder interface {
 	Finalize(time.Time) error
 }
 
+// RuntimeRecorderFactory is retained for the compatibility opening seam until
+// Factory Sessions consumes RuntimeOpening directly.
+type RuntimeRecorderFactory func(
+	time.Duration,
+	interfaces.LoadedFactorySource,
+	func() time.Time,
+	string,
+	string,
+) (RuntimeRecorder, error)
+
 // ReplayExecutionFactory constructs the replay-specific provider, command
 // runner, hooks, and completion policy consumed by existing Factory Runtime
 // callers. It is not the peer-facing replay seam; peers use neutral plans and

@@ -34,15 +34,12 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "runtime-recordings-root"}
 	var capturedSource recordings.InitialStructureSource
-	ledgerFactory := factory.RuntimeLedgerFactory(func(
-		source recordings.InitialStructureSource,
-		_ func() time.Time,
-		_ interfaces.RuntimeDefinitionLookup,
-	) recordings.RuntimeEventLedger {
-		capturedSource = source
-		return ledger
-	})
 	recorder := &runtimeRecordingsRecorderStub{}
+	runtimeOpening := &testRuntimeOpeningStub{
+		ledger:         ledger,
+		recorder:       recorder,
+		capturedSource: &capturedSource,
+	}
 
 	bundle, err := testRuntimeFactory().Build(
 		context.Background(), dir, dir, "~default",
@@ -51,8 +48,8 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-recordings-root", "", clockwork.NewFakeClock(),
-		"/recordings/session.json", recorder, nil, nil, nil, nil, nil,
-		ledgerFactory,
+		"/recordings/session.json", nil, nil, nil, nil, nil,
+		runtimeOpening,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
@@ -92,9 +89,9 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
-		newTestRuntimeLedger,
+		testRuntimeOpening(newTestRuntimeLedger),
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
@@ -135,9 +132,9 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
-		newTestRuntimeLedger,
+		testRuntimeOpening(newTestRuntimeLedger),
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
@@ -178,9 +175,9 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled,
 		metricsDir, factory.RuntimeMetricsStorageConfig{},
-		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil,
 		nil,
-		newTestRuntimeLedger,
+		testRuntimeOpening(newTestRuntimeLedger),
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
 			return nil, nil
 		},
@@ -485,6 +482,53 @@ func newTestRuntimeLedger(
 ) recordings.RuntimeEventLedger {
 	return &recordingfixtures.ScriptedRuntimeLedger{}
 }
+
+func testRuntimeOpening(
+	ledgerFactory func(
+		recordings.InitialStructureSource,
+		func() time.Time,
+		interfaces.RuntimeDefinitionLookup,
+	) recordings.RuntimeEventLedger,
+) recordings.RuntimeOpening {
+	return &testRuntimeOpeningStub{ledgerFactory: ledgerFactory}
+}
+
+type testRuntimeOpeningStub struct {
+	ledger         recordings.RuntimeEventLedger
+	ledgerFactory  func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
+	recorder       recordings.RuntimeRecorder
+	capturedSource *recordings.InitialStructureSource
+}
+
+func (opening *testRuntimeOpeningStub) OpenRuntime(
+	_ context.Context,
+	request recordings.RuntimeScopeRequest,
+) (recordings.RuntimeScopeResult, error) {
+	if opening.capturedSource != nil {
+		*opening.capturedSource = request.Topology
+	}
+	ledger := opening.ledger
+	if opening.ledgerFactory != nil {
+		ledger = opening.ledgerFactory(request.Topology, request.Now, request.Definitions)
+	}
+	return recordings.RuntimeScopeResult{Ledger: ledger, Recorder: opening.recorder}, nil
+}
+
+func (*testRuntimeOpeningStub) Projection() recordings.ProjectionService { return nil }
+
+func (*testRuntimeOpeningStub) ReplayClock(*recordings.ReplayArtifact) recordings.Clock { return nil }
+
+func (*testRuntimeOpeningStub) ReplayExecution(
+	*recordings.ReplayArtifact,
+) (workers.Provider, workers.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error) {
+	return nil, nil, nil, nil, nil
+}
+
+func (*testRuntimeOpeningStub) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	return recordings.LoadReplayInputResult{}, nil
+}
+
+var _ recordings.RuntimeOpening = (*testRuntimeOpeningStub)(nil)
 
 func testRuntimeLoggerFactory(*zap.Logger, bool) factory.Logger { return factory.NoopLogger{} }
 
