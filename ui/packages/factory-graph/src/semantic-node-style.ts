@@ -1,4 +1,7 @@
-import type { FactoryGraphVisualState } from "./visual-state.js";
+import type {
+  FactoryGraphVisualState,
+  FactoryGraphVisualStatusRole,
+} from "./visual-state.js";
 
 export type FactoryGraphNodeSurfaceTone =
   | "danger"
@@ -44,10 +47,21 @@ const VISUAL_STATUS_IMPORTANT_SURFACE_CLASS_NAME: Record<
   string
 > = {
   quiet: "",
-  waiting: "!border-info-border !bg-info-container",
-  active: "!border-af-success-border !bg-warning-container",
-  success: "!border-af-success-border !bg-success-container",
-  danger: "!border-af-danger-border !bg-error-container",
+  waiting: "!bg-info-container",
+  active: "!bg-warning-container",
+  success: "!bg-success-container",
+  danger: "!bg-error-container",
+};
+
+const VISUAL_STATUS_BORDER_CLASS_NAME: Record<
+  FactoryGraphVisualStatusRole,
+  string
+> = {
+  quiet: "",
+  waiting: "border-info-border",
+  active: "border-af-success-border",
+  success: "border-af-success-border",
+  danger: "border-af-danger-border",
 };
 
 const VISUAL_STATUS_ICON_CLASS_NAME: Record<
@@ -91,17 +105,23 @@ export function factoryGraphNodeTitleClassName(className?: string): string {
 export function factoryGraphNodeVisualStateClassName(
   state: FactoryGraphVisualState,
 ): string {
-  const validationClassName =
+  const validationBorderClassName =
     state.validation === "warning"
-      ? "border-af-warning-border ring-2 ring-af-warning-border motion-safe:animate-pulse"
+      ? "!border-warning"
       : state.validation === "error"
-        ? "border-af-danger-border ring-2 ring-af-danger-border motion-safe:animate-pulse"
+        ? "!border-error"
         : undefined;
   const borderClassName =
     state.border === "selection"
-      ? "border-primary shadow-af-accent-selected"
+      ? "!border-primary shadow-af-accent-selected"
       : state.border === "validation"
-        ? validationClassName
+        ? validationBorderClassName
+        : VISUAL_STATUS_BORDER_CLASS_NAME[state.border];
+  const validationGlowClassName =
+    state.validation === "warning"
+      ? "shadow-af-graph-validation-warning motion-safe:animate-pulse"
+      : state.validation === "error"
+        ? "shadow-af-graph-validation-danger motion-safe:animate-pulse"
         : undefined;
   const glowClassName =
     state.glow === "active"
@@ -111,11 +131,11 @@ export function factoryGraphNodeVisualStateClassName(
         : state.glow === "selection"
           ? "shadow-af-accent-selected"
           : state.glow === "validation"
-            ? validationClassName
+            ? validationGlowClassName
             : undefined;
   const focusClassName =
     state.focus === "keyboard" || state.focus === "selection-and-keyboard"
-      ? "ring-2 ring-af-focus-ring"
+      ? "ring-2 ring-af-graph-focus-indicator"
       : undefined;
 
   return [
@@ -127,7 +147,7 @@ export function factoryGraphNodeVisualStateClassName(
       state.glow === "active" &&
       "agent-flow-node--active ring-2 ring-af-success-border",
     state.selection && "shadow-af-accent-selected",
-    state.muted && "opacity-[0.45]",
+    state.muted && "agent-flow-node--muted",
   ]
     .filter(Boolean)
     .join(" ");

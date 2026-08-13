@@ -190,7 +190,8 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("ring-af-danger-border");
+    expect(shell?.className).toContain("shadow-af-graph-validation-danger");
+    expect(shell?.className).toContain("!border-error");
     expect(shell?.getAttribute("data-graph-visual-border")).toBe("validation");
     expect(shell?.getAttribute("data-graph-visual-validation")).toBe("error");
     expect(shell?.className).toContain(
@@ -242,6 +243,7 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("TERMINAL"),
     );
-    expect(shell?.className).toContain("opacity-[0.45]");
+    expect(shell?.className).toContain("agent-flow-node--muted");
+    expect(shell?.className).not.toContain("opacity-[0.45]");
   });
 });

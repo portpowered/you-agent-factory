@@ -28,6 +28,54 @@ import {
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../flow/factory-graph-editor-flow";
 
+type RgbColor = readonly [red: number, green: number, blue: number];
+
+function parseCssColor(value: string): RgbColor {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.slice(1);
+    if (hex.length !== 6) throw new Error(`Expected a 6-digit color: ${value}`);
+    const number = Number.parseInt(hex, 16);
+    return [(number >> 16) & 0xff, (number >> 8) & 0xff, number & 0xff];
+  }
+
+  const match = trimmed.match(
+    /rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/,
+  );
+  if (!match) throw new Error(`Expected an RGB color: ${value}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function relativeLuminance([red, green, blue]: RgbColor): number {
+  const channels = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(foreground: RgbColor, background: RgbColor): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function shadowContainsColor(shadow: string, color: RgbColor): boolean {
+  const colors = shadow.matchAll(
+    /rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/g,
+  );
+  return Array.from(colors).some(
+    (match) =>
+      Number(match[1]) === color[0] &&
+      Number(match[2]) === color[1] &&
+      Number(match[3]) === color[2],
+  );
+}
+
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [
     {
@@ -793,6 +841,7 @@ function RuntimeEmphasisStatesStory() {
             activeFlow: true,
             focused: true,
             lifecycle: "PROCESSING",
+            muted: true,
             selected: true,
           }}
         />
@@ -801,7 +850,7 @@ function RuntimeEmphasisStatesStory() {
           iconKind="failed"
           label="Failed validation"
           nodeType="statePosition"
-          visualState={{ lifecycle: "FAILED", validation: true }}
+          visualState={{ focused: true, lifecycle: "FAILED", validation: true }}
         />
       </div>
     </div>
@@ -949,10 +998,15 @@ export const RuntimeEmphasisStates = {
       "active",
     );
     await expect(activeNode).toHaveAttribute(
+      "data-graph-visual-border",
+      "selection",
+    );
+    await expect(activeNode).toHaveAttribute("data-graph-visual-muted", "true");
+    await expect(activeNode).toHaveAttribute(
       "data-graph-visual-focus",
       "selection-and-keyboard",
     );
-    await expect(activeNode).toHaveClass("ring-af-focus-ring");
+    await expect(activeNode).toHaveClass("ring-af-graph-focus-indicator");
     await expect(failedNode).toHaveAttribute(
       "data-graph-visual-status",
       "danger",
@@ -961,7 +1015,64 @@ export const RuntimeEmphasisStates = {
       "data-graph-visual-validation",
       "error",
     );
+    await expect(failedNode).toHaveAttribute(
+      "data-graph-visual-border",
+      "validation",
+    );
+    await expect(failedNode).toHaveAttribute(
+      "data-graph-visual-focus",
+      "keyboard",
+    );
     await expect(failedNode).toHaveAttribute("aria-invalid", "true");
+
+    if (
+      !(idleNode instanceof HTMLElement) ||
+      !(activeNode instanceof HTMLElement) ||
+      !(failedNode instanceof HTMLElement)
+    ) {
+      throw new Error("Expected runtime emphasis nodes to render as articles.");
+    }
+
+    for (const paletteId of COLOR_PALETTE_IDS) {
+      applyDocumentColorPalette(paletteId);
+      const rootStyles = window.getComputedStyle(document.documentElement);
+      const focusIndicator = parseCssColor(
+        rootStyles.getPropertyValue("--color-af-foundation-ink"),
+      );
+      const surface = parseCssColor(
+        rootStyles.getPropertyValue("--color-af-foundation-surface"),
+      );
+      const textColor = parseCssColor(window.getComputedStyle(idleNode).color);
+      const primary = parseCssColor(
+        rootStyles.getPropertyValue("--color-primary"),
+      );
+      const error = parseCssColor(rootStyles.getPropertyValue("--color-error"));
+      const activeStyles = window.getComputedStyle(activeNode);
+      const failedStyles = window.getComputedStyle(failedNode);
+
+      await expect(activeStyles.opacity).toBe("1");
+      await expect(failedStyles.opacity).toBe("1");
+      await expect(window.getComputedStyle(idleNode).opacity).toBe("1");
+      await expect(parseCssColor(activeStyles.borderTopColor)).toEqual(primary);
+      await expect(parseCssColor(failedStyles.borderTopColor)).toEqual(error);
+      await expect(
+        shadowContainsColor(activeStyles.boxShadow, focusIndicator),
+      ).toBe(true);
+      await expect(
+        shadowContainsColor(failedStyles.boxShadow, focusIndicator),
+      ).toBe(true);
+      await expect(shadowContainsColor(failedStyles.boxShadow, error)).toBe(
+        true,
+      );
+      await expect(
+        contrastRatio(focusIndicator, surface),
+      ).toBeGreaterThanOrEqual(3);
+      await expect(contrastRatio(textColor, surface)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+
+    applyDocumentColorPalette("factory-dark");
   },
 };
 
