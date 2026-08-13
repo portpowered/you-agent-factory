@@ -10,6 +10,37 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// RuntimeAttemptRequest asks Worker Sessions to open the durable observation
+// window for an attempt whose admission and execution remain owned by
+// Factory Runtime. ID is the Worker Session identity; AttemptID is the
+// physical attempt identity written into lifecycle records. An empty
+// AttemptID uses the request dispatch ID.
+type RuntimeAttemptRequest struct {
+	ID        string
+	AttemptID string
+	Execution workers.WorkstationDispatchRequest
+}
+
+// RuntimeAttempt is the durable lifecycle handle returned after the opening
+// Worker Session record has committed. The function-valued handle keeps the
+// optional Runtime capability structural, so narrow Worker Sessions test
+// doubles do not need to implement it. Complete is idempotent and records the
+// terminal observation; Runtime remains authoritative for admission,
+// cancellation, and the detached execution itself.
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
+
+// Complete commits the terminal observation through the RuntimeAttempt handle.
+func (a RuntimeAttempt) Complete(
+	ctx context.Context,
+	result workers.WorkstationDispatchResult,
+	dispatchErr error,
+) error {
+	if a == nil {
+		return errors.New("worker sessions: runtime attempt is unavailable")
+	}
+	return a(ctx, result, dispatchErr)
+}
+
 // Service is the W1+W2+W3 Worker Session identity, registry, supervision,
 // and Events publication foundation: stable identity reservation, immutable
 // deterministic inspection, supervised Start with exactly-once terminal

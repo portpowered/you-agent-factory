@@ -179,6 +179,14 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 			AttemptID:  "attempt-1",
 		},
 		Outcome: workerexecution.ExecutionOutcomeAccepted,
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name:    "summary",
+				Pattern: "reports/summary.md",
+				Reason:  workerexecution.ExpectedArtifactVerificationReasonMissing,
+			}},
+		},
 		Output: workerexecution.ProposedOutput{
 			Primary: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText,
@@ -189,6 +197,10 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 				Tags:       map[string]string{"kind": "next"},
 			}},
 		},
+		StructuredResult: map[string]any{
+			"nested": []any{"original"},
+		},
+		StructuredResultPresent: true,
 		Diagnostics: &workerexecution.SafeDiagnostics{
 			Command: &workerexecution.SafeCommandDiagnostic{
 				Command: "runner",
@@ -205,15 +217,21 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 	clone := original.Clone()
 	clone.Output.Primary[0].Text = "mutated"
 	clone.Output.ProposedWork[0].Tags["kind"] = "mutated"
+	clone.StructuredResult.(map[string]any)["nested"].([]any)[0] = "mutated"
 	clone.Diagnostics.Command.Args[0] = "--mutated"
 	clone.Diagnostics.Metadata["duration_ms"] = "99"
 	clone.Continuation.ProviderSessionID = "mutated"
+	clone.ArtifactVerification.Entries[0].Name = "mutated"
 
 	if original.Output.Primary[0].Text != "output" {
 		t.Fatalf("original output mutated: %#v", original.Output.Primary)
 	}
 	if original.Output.ProposedWork[0].Tags["kind"] != "next" {
 		t.Fatalf("original proposed work mutated: %#v", original.Output.ProposedWork)
+	}
+	if original.StructuredResult.(map[string]any)["nested"].([]any)[0] != "original" ||
+		!original.StructuredResultPresent {
+		t.Fatalf("original structured result mutated: %#v (present=%t)", original.StructuredResult, original.StructuredResultPresent)
 	}
 	if original.Diagnostics.Command.Args[0] != "--safe" {
 		t.Fatalf("original diagnostics args mutated: %#v", original.Diagnostics.Command.Args)
@@ -223,5 +241,14 @@ func TestExecuteResultCloneDetachesOutputAndDiagnostics(t *testing.T) {
 	}
 	if original.Continuation.ProviderSessionID != "session-1" {
 		t.Fatalf("original continuation mutated: %#v", original.Continuation)
+	}
+	if original.ArtifactVerification.Entries[0].Name != "summary" {
+		t.Fatalf("original artifact verification mutated: %#v", original.ArtifactVerification)
+	}
+	nullClone := (workerexecution.ExecuteResult{
+		StructuredResultPresent: true,
+	}).Clone()
+	if !nullClone.StructuredResultPresent || nullClone.StructuredResult != nil {
+		t.Fatalf("explicit null structured result = %#v (present=%t), want nil/present", nullClone.StructuredResult, nullClone.StructuredResultPresent)
 	}
 }

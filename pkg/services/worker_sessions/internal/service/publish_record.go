@@ -189,6 +189,7 @@ type invocationPreparationOptions struct {
 	serverOwned      bool
 	direct           bool
 	continuation     bool
+	runtimeOwned     bool
 	requestID        string
 	verifyTopicReady bool
 	lineage          *workers.SessionLineage
@@ -301,6 +302,9 @@ func (r *registry) prepareInvocation(
 			terminal: true,
 			failure:  workersessions.ErrStartServerStopping,
 		}, nil
+	}
+	if options.runtimeOwned {
+		return invocationPreparation{}, nil
 	}
 
 	return r.registerInvocationSupervision(ctx, req, options)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -199,6 +200,7 @@ type WorkstationExecutionRequest struct {
 	UserMessage                 string                          `json:"user_message,omitempty"`
 	OutputSchema                string                          `json:"output_schema,omitempty"`
 	OutputContract              string                          `json:"output_contract,omitempty"`
+	Timeout                     time.Duration                   `json:"timeout,omitempty"`
 	EnvVars                     map[string]string               `json:"env_vars,omitempty"`
 	ProcessEnvironment          []string                        `json:"-"`
 	Worktree                    string                          `json:"worktree,omitempty"`
@@ -429,6 +431,7 @@ type ExecutionTarget struct {
 	WorkerType       string
 	WorkstationName  string
 	RunnerID         string
+	Capabilities     *Capabilities
 	Command          string
 	Args             []string
 	FactoryDirectory string
@@ -495,7 +498,10 @@ type PermissionPolicy struct {
 }
 
 type ExecutionInput struct {
-	Work             []WorkInput
+	Work []WorkInput
+	// Dispatch preserves detached routing and replay facts that the Runtime
+	// must carry through an execution attempt without exposing executor state.
+	Dispatch         work.WorkDispatch
 	Invocation       work.InvocationArguments
 	ModelBindings    []ResolvedModelOperationBinding
 	ModelOperation   string
@@ -544,13 +550,16 @@ type ProviderContinuationRef struct {
 }
 
 type ExecuteResult struct {
-	Correlation  ExecutionCorrelation
-	Outcome      ExecutionOutcome
-	Output       ProposedOutput
-	Failure      *ExecutionFailure
-	Diagnostics  *SafeDiagnostics
-	Metrics      ExecutionMetrics
-	Continuation *ProviderContinuationRef
+	Correlation             ExecutionCorrelation
+	Outcome                 ExecutionOutcome
+	Output                  ProposedOutput
+	StructuredResult        any
+	StructuredResultPresent bool
+	ArtifactVerification    *ExpectedArtifactVerification
+	Failure                 *ExecutionFailure
+	Diagnostics             *SafeDiagnostics
+	Metrics                 ExecutionMetrics
+	Continuation            *ProviderContinuationRef
 }
 
 type ExecutionFailure struct {
@@ -601,6 +610,10 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 
 func (target ExecutionTarget) Clone() ExecutionTarget {
 	clone := target
+	if target.Capabilities != nil {
+		capabilities := *target.Capabilities
+		clone.Capabilities = &capabilities
+	}
 	clone.Args = append([]string(nil), target.Args...)
 	clone.Tools.RequiredOptionalCapabilities = append(
 		[]RunnerOptionalCapability(nil),
@@ -616,6 +629,7 @@ func (target ExecutionTarget) Clone() ExecutionTarget {
 
 func (input ExecutionInput) Clone() ExecutionInput {
 	clone := input
+	clone.Dispatch = work.CloneWorkDispatch(input.Dispatch)
 	if args := work.CloneInvocationArguments(&input.Invocation); args != nil {
 		clone.Invocation = *args
 	}
@@ -665,6 +679,9 @@ func (failure ExecutionFailure) Clone() ExecutionFailure {
 func (result ExecuteResult) Clone() ExecuteResult {
 	clone := result
 	clone.Output = result.Output.Clone()
+	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
+	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	if result.Failure != nil {
 		failure := result.Failure.Clone()
 		clone.Failure = &failure

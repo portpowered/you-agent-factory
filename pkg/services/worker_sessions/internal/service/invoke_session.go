@@ -18,6 +18,72 @@ import (
 
 // InvokeSession and its attempt loop live beside the controls they race with.
 
+var _ interface {
+	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+} = (*registry)(nil)
+
+// BeginRuntimeAttempt opens the Worker Session observation and recording
+// window, then returns control to Factory Runtime. It intentionally stops
+// before registerInvocationSupervision or any Workers boundary call: Runtime
+// has already admitted the detached attempt and remains responsible for its
+// execution, cancellation, and terminal race.
+func (r *registry) BeginRuntimeAttempt(
+	ctx context.Context,
+	req workersessions.RuntimeAttemptRequest,
+) (workersessions.RuntimeAttempt, error) {
+	if r == nil {
+		return nil, workersessions.ErrStartAdmissionFailed
+	}
+	if err := (workersessions.InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+	}).Validate(); err != nil {
+		return nil, err
+	}
+	ctx = runtimeAttemptContext(ctx)
+	logicalDispatchID, attemptID := runtimeAttemptIDs(req)
+	if r.runtimeAttemptOwnedByOther(logicalDispatchID, req.ID, attemptID) {
+		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+
+	execution := req.Execution
+	execution.Execution = workers.CloneWorkstationExecutionRequest(req.Execution.Execution)
+	execution.Execution.Dispatch.DispatchID = attemptID
+	prepared, err := r.prepareInvocation(
+		context.WithoutCancel(ctx),
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
+		invocationPreparationOptions{runtimeOwned: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if preparationErr := runtimeAttemptPreparationError(prepared); preparationErr != nil {
+		return nil, preparationErr
+	}
+	if !r.transitionToRunning(req.ID) {
+		return nil, workersessions.ErrStartAdmissionFailed
+	}
+	if !r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID) {
+		r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
+		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
+	}
+
+	handle := &runtimeAttempt{
+		registry:   r,
+		workerID:   req.ID,
+		dispatchID: logicalDispatchID,
+		attemptID:  attemptID,
+	}
+	return workersessions.RuntimeAttempt(handle.Complete), nil
+}
+
+func runtimeAttemptPreparationError(prepared invocationPreparation) error {
+	if !prepared.terminal {
+		return nil
+	}
+	return prepared.failure
+}
+
 // InvokeSession supervises one resolved execution through the same preparation
 // and attempt driver used by asynchronous Start. The boundary is the sole
 // mechanism that starts, cancels, and reports an attempt; the result callback

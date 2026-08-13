@@ -8,13 +8,451 @@ import (
 	"sync"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// InvokeWorker runs one orchestrator-resolved Worker through the same Worker
-// Sessions supervision a Petri dispatch gets.
+// startThroughStatelessWorkers is the Runtime-owned WSE-B dispatch edge. The
+// legacy workstation request is used only as an internal compatibility input
+// while Runtime projects it into the detached Execute contract. No executor,
+// runner, pool, or binding is passed to Workers.
+func startThroughStatelessWorkers(
+	ctx context.Context,
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	if cfg == nil || cfg.attempts == nil {
+		return ErrAttemptLifecycleUnavailable
+	}
+	request = runtimeRecordingRequest(cfg, request)
+	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
+	if err != nil {
+		return err
+	}
+	// Petri dispatches are single-attempt at this boundary. Keep their
+	// physical workstation identity equal to the logical dispatch identity so
+	// model request/response events remain joined to the canonical dispatch.
+	// InvokeWorker assigns distinct AttemptIDs itself when it explicitly
+	// retries a detached execution.
+	executeRequest.Correlation.AttemptID = executeRequest.Correlation.DispatchID
+	// Worker Session association does not own admission, cancellation,
+	// execution, or terminal authority -- the attempt lifecycle below remains
+	// the only execution owner -- but the association Factory Event is part of
+	// the canonical dispatch event order and must be recorded on every
+	// dispatch, not only when a Worker Sessions dependency happens to be wired.
+	sessionID := executeRequest.Correlation.DispatchID
+	// Replay must reuse the originally recorded Worker Session ID so live and
+	// replay correlation stay stable across resume.
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
+		if recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch); found {
+			sessionID = recordedSessionID
+		}
+	}
+	if cfg.eventHistory != nil {
+		cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
+			request.Execution.Dispatch.Execution.DispatchCreatedTick,
+			request.Execution.Dispatch.DispatchID,
+			sessionID,
+			request.Execution.Dispatch.Execution.RequestID,
+			cfg.clock.Now(),
+		)
+	}
+	startErr := startStatelessAttemptWithRequest(
+		ctx, cfg, request, executeRequest,
+		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil, accept,
+	)
+	if startErr != nil && errors.Is(startErr, workersessions.ErrStartOpeningPublication) {
+		result, dispatchErr := failedWorkstationDispatchResult(request, startErr)
+		if accept != nil {
+			accept(context.Background(), request, result, dispatchErr)
+		}
+		return nil
+	}
+	return startErr
+}
+
+func failedWorkstationDispatchResult(
+	request workers.WorkstationDispatchRequest,
+	dispatchErr error,
+) (workers.WorkstationDispatchResult, error) {
+	dispatchID := request.Execution.Dispatch.DispatchID
+	transitionID := request.Execution.Dispatch.TransitionID
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID:   dispatchID,
+			TransitionID: transitionID,
+			Outcome:      workers.OutcomeFailed,
+			Error:        dispatchErr.Error(),
+		},
+	}, dispatchErr
+}
+
+func startStatelessAttempt(
+	ctx context.Context,
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	async bool,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	if cfg == nil || cfg.attempts == nil {
+		return ErrAttemptLifecycleUnavailable
+	}
+	request = runtimeRecordingRequest(cfg, request)
+	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
+	if err != nil {
+		return err
+	}
+	return startStatelessAttemptWithRequest(ctx, cfg, request, executeRequest, async, accept)
+}
+
+func startStatelessAttemptWithRequest(
+	ctx context.Context,
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	async bool,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	return startStatelessAttemptWithRequestMode(
+		ctx, cfg, request, executeRequest, async, accept, false,
+	)
+}
+
+func startStatelessAttemptWithRequestRetry(
+	ctx context.Context,
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	async bool,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	return startStatelessAttemptWithRequestMode(
+		ctx, cfg, request, executeRequest, async, accept, true,
+	)
+}
+
+func startStatelessAttemptWithRequestMode(
+	ctx context.Context,
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	async bool,
+	accept workers.WorkstationDispatchAcceptFunc,
+	allowRetry bool,
+) error {
+	request = runtimeRecordingRequest(cfg, request)
+	if strings.TrimSpace(executeRequest.Correlation.RuntimeID) == "" {
+		executeRequest.Correlation.RuntimeID = strings.TrimSpace(request.Execution.RecordingID)
+	}
+	start := cfg.attempts.start
+	if allowRetry {
+		start = cfg.attempts.startRetry
+	}
+	prepare := runtimeAttemptPreparation(cfg, request, executeRequest, allowRetry)
+	if prepare == nil {
+		return start(
+			ctx,
+			executeRequest,
+			async,
+			func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+				dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
+					request,
+					result,
+					executeErr,
+				)
+				if accept != nil {
+					accept(callbackCtx, request, dispatchResult, dispatchErr)
+				}
+			},
+		)
+	}
+	return cfg.attempts.startWithPreparation(
+		ctx,
+		executeRequest,
+		async,
+		func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
+				request,
+				result,
+				executeErr,
+			)
+			if accept != nil {
+				accept(callbackCtx, request, dispatchResult, dispatchErr)
+			}
+		},
+		allowRetry,
+		prepare,
+	)
+}
+
+// runtimeRecordingRequest carries the process-owned recording identity into
+// the detached Runtime path. Callers may provide an explicit identity, while
+// ordinary Factory dispatches inherit the recording opened for this runtime.
+func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
+	if cfg == nil || strings.TrimSpace(request.Execution.RecordingID) != "" {
+		return request
+	}
+	request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
+	return request
+}
+
+func runtimeAttemptPreparation(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	allowRetry bool,
+) attemptPreparation {
+	if cfg == nil || cfg.workerSessions == nil {
+		return nil
+	}
+	recorder, ok := cfg.workerSessions.(interface {
+		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+	})
+	if !ok || recorder == nil {
+		return nil
+	}
+	return func(ctx context.Context, _ workers.ExecuteRequest) (attemptTerminalFunc, error) {
+		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
+		attempt, err := recorder.BeginRuntimeAttempt(
+			context.WithoutCancel(ctx),
+			workersessions.RuntimeAttemptRequest{
+				ID:        sessionID,
+				AttemptID: executeRequest.Correlation.AttemptID,
+				Execution: request,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
+				request,
+				result,
+				executeErr,
+			)
+			_ = attempt.Complete(callbackCtx, dispatchResult, dispatchErr)
+		}, nil
+	}
+}
+
+func runtimeWorkerSessionID(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	allowRetry bool,
+) string {
+	if allowRetry && strings.TrimSpace(executeRequest.Correlation.AttemptID) != "" {
+		return strings.TrimSpace(executeRequest.Correlation.AttemptID)
+	}
+	sessionID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
+		if recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch); found {
+			sessionID = recordedSessionID
+		}
+	}
+	return sessionID
+}
+
+func cancelStatelessAttempt(
+	ctx context.Context,
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if cfg == nil || cfg.attempts == nil {
+		return workers.WorkstationDispatchCancelResult{}, ErrAttemptLifecycleUnavailable
+	}
+	outcome, err := cfg.attempts.cancel(ctx, request.DispatchID)
+	if err != nil {
+		return workers.WorkstationDispatchCancelResult{}, err
+	}
+	return workers.WorkstationDispatchCancelResult{
+		DispatchID: request.DispatchID,
+		Outcome:    outcome,
+	}, nil
+}
+
+func executeRequestFromWorkstationRequest(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+) (workers.ExecuteRequest, error) {
+	execution := request.Execution
+	dispatch := execution.Dispatch
+	workstationName := firstRuntimeValue(request.WorkstationName, dispatch.WorkstationName)
+	inputs, invocation, attemptNumber := workInputsFromDispatch(dispatch)
+	correlation, err := executionCorrelationFromDispatch(cfg, execution, dispatch)
+	if err != nil {
+		return workers.ExecuteRequest{}, err
+	}
+	selection := resolveRuntimeExecutionSelection(cfg, request, inputs)
+	return workers.ExecuteRequest{
+		Correlation: correlation,
+		Target: executionTargetFromSelection(
+			selection, workstationName, execution.ProcessEnvironment,
+		),
+		Input: workers.ExecutionInput{
+			Work:           inputs,
+			Dispatch:       work.CloneWorkDispatch(dispatch),
+			Invocation:     invocation,
+			ModelBindings:  workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelOperation: execution.ModelOperation,
+			Resume:         continuationFromLegacySession(execution.ResumeSession),
+		},
+		Attempt: workers.AttemptContext{Number: attemptNumber},
+	}, nil
+}
+
+func executionCorrelationFromDispatch(
+	cfg *runtimeConfig,
+	execution workers.WorkstationExecutionRequest,
+	dispatch work.WorkDispatch,
+) (workers.ExecutionCorrelation, error) {
+	sessionID := strings.TrimSpace(execution.FactorySessionID)
+	if sessionID == "" && cfg != nil {
+		sessionID = sessionIDFromFactoryConfig(cfg)
+	}
+	correlation := workers.ExecutionCorrelation{
+		FactorySessionID: sessionID,
+		RuntimeID:        strings.TrimSpace(execution.RecordingID),
+		DispatchID:       strings.TrimSpace(dispatch.DispatchID),
+		RequestID:        firstRuntimeValue(dispatch.Execution.RequestID, execution.ProjectID),
+		TraceID:          strings.TrimSpace(dispatch.Execution.TraceID),
+	}
+	if correlation.DispatchID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: dispatch ID is required")
+	}
+	if cfg == nil || cfg.newID == nil {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Attempt ID generator is required")
+	}
+	correlation.AttemptID = strings.TrimSpace(cfg.newID())
+	if correlation.AttemptID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Attempt ID generator returned an empty ID")
+	}
+	return correlation, nil
+}
+
+func executionTargetFromSelection(
+	selection runtimeExecutionSelection,
+	workstationName string,
+	processEnvironment []string,
+) workers.ExecutionTarget {
+	return workers.ExecutionTarget{
+		WorkerName:       selection.workerName,
+		WorkerType:       selection.workerType,
+		WorkstationName:  workstationName,
+		RunnerID:         selection.runnerID,
+		Capabilities:     cloneRuntimeCapabilities(selection.capabilities),
+		Command:          selection.command,
+		Args:             append([]string(nil), selection.args...),
+		FactoryDirectory: selection.factoryDirectory,
+		Provider: workers.ProviderReference{
+			ID:    selection.providerID,
+			Alias: selection.modelProvider,
+		},
+		Model: workers.ModelReference{
+			Name:            selection.model,
+			Provider:        selection.modelProvider,
+			ReasoningEffort: selection.reasoningEffort,
+			Locality:        selection.modelLocality,
+		},
+		Prompt: workers.PromptPolicy{
+			SystemPrompt: selection.systemPrompt,
+			UserMessage:  selection.userMessage,
+			OutputSchema: selection.outputSchema,
+		},
+		Tools: workers.ToolPolicy{ExecutionMode: selection.toolExecutionMode},
+		Output: workers.OutputPolicy{
+			Format:                      selection.outputFormat,
+			StopToken:                   selection.stopToken,
+			Contract:                    selection.outputContract,
+			DecisionEnvelope:            selection.decisionEnvelope,
+			GoalRoutingDecisionEnvelope: selection.goalRoutingDecisionEnvelope,
+		},
+		Timeout: selection.timeout,
+		Environment: workers.EnvironmentPolicy{
+			Vars:                selection.environment,
+			ProcessEnvironment:  append([]string(nil), processEnvironment...),
+			WorkingDirectory:    selection.workingDirectory,
+			WorkingDirectorySet: selection.workingDirectoryAuthored,
+		},
+		Workspace: workers.WorkspacePolicy{
+			Worktree:         selection.worktree,
+			WorkingDirectory: selection.workingDirectory,
+			FactoryDirectory: selection.factoryDirectory,
+		},
+		Permissions: workers.PermissionPolicy{SkipPermissions: selection.skipPermissions},
+	}
+}
+
+func workInputsFromDispatch(dispatch work.WorkDispatch) ([]workers.WorkInput, work.InvocationArguments, int) {
+	tokens := workers.WorkDispatchInputTokens(dispatch)
+	inputs := make([]workers.WorkInput, 0, len(tokens))
+	invocation := work.InvocationArguments{}
+	attemptNumber := 1
+	for _, token := range tokens {
+		if token.Color.DataType == workers.DataTypeResource {
+			continue
+		}
+		if token.Color.InvocationArguments != nil && len(invocation.Arguments) == 0 {
+			if cloned := work.CloneInvocationArguments(token.Color.InvocationArguments); cloned != nil {
+				invocation = *cloned
+			}
+		}
+		candidateAttempt := token.History.TotalVisits[dispatch.TransitionID] + 1
+		if candidateAttempt > attemptNumber {
+			attemptNumber = candidateAttempt
+		}
+		lastFailure := ""
+		if len(token.History.FailureLog) > 0 {
+			lastFailure = token.History.FailureLog[len(token.History.FailureLog)-1].Error
+		}
+		inputs = append(inputs, workers.WorkInput{
+			WorkID:     token.Color.WorkID,
+			WorkTypeID: token.Color.WorkTypeID,
+			RequestID:  token.Color.RequestID,
+			Content:    work.CloneWorkContentParts(token.Color.Content),
+			Tags:       cloneRuntimeStringMap(token.Color.Tags),
+			Relations:  append([]work.Relation(nil), token.Color.Relations...),
+			Lineage: workers.WorkLineage{
+				ParentWorkID: token.Color.ParentID,
+				TraceID:      token.Color.TraceID,
+				OriginRef:    token.Color.Name,
+			},
+			AttemptFacts: workers.AttemptFacts{
+				AttemptNumber: candidateAttempt,
+				LastFailure:   lastFailure,
+			},
+		})
+	}
+	return inputs, invocation, attemptNumber
+}
+
+func continuationFromLegacySession(session *providers.SessionRef) *workers.ProviderContinuationRef {
+	if session == nil {
+		return nil
+	}
+	provider := strings.TrimSpace(string(session.Provider))
+	id := strings.TrimSpace(session.ID)
+	if provider == "" && id == "" {
+		return nil
+	}
+	return &workers.ProviderContinuationRef{
+		Provider:          provider,
+		ProviderSessionID: id,
+		ExternalRef:       id,
+	}
+}
+
+// InvokeWorker runs one orchestrator-resolved Worker through the same
+// Runtime-owned attempt lifecycle a Petri dispatch gets. When the composed
+// Worker Sessions service exposes the optional runtime-attempt bridge, the
+// invocation also receives the durable opening/observation window without
+// transferring execution or cancellation ownership away from Runtime.
 //
 // The body is deliberately the same three steps as startThroughWorkerSessions:
 // reserve the Worker Session, commit the dispatch/Worker Session association to
@@ -34,6 +472,9 @@ func (f *factoryImpl) InvokeWorker(
 ) (factory.InvokeWorkerResult, error) {
 	if err := req.Validate(); err != nil {
 		return factory.InvokeWorkerResult{}, err
+	}
+	if f != nil && f.cfg != nil && f.cfg.attempts != nil {
+		return f.invokeStatelessWorker(ctx, req)
 	}
 	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
 		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
@@ -81,6 +522,129 @@ func (f *factoryImpl) InvokeWorker(
 		return factory.InvokeWorkerResult{}, err
 	}
 	return invokeWorkerResultFrom(dispatchID, sessionID, result), nil
+}
+
+func (f *factoryImpl) invokeStatelessWorker(
+	ctx context.Context,
+	req factory.InvokeWorkerRequest,
+) (factory.InvokeWorkerResult, error) {
+	dispatchID := strings.TrimSpace(req.DispatchID)
+	execution := providerInvocationExecutionRequest(f, req, dispatchID)
+	executeRequest, err := executeRequestFromWorkstationRequest(f.cfg, execution)
+	if err != nil {
+		return factory.InvokeWorkerResult{}, err
+	}
+	if f.cfg.eventHistory != nil {
+		sessionID := runtimeWorkerSessionID(f.cfg, execution, executeRequest, false)
+		f.cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
+			f.currentTick(),
+			dispatchID,
+			sessionID,
+			executeRequest.Input.Dispatch.Execution.RequestID,
+			f.cfg.clock.Now(),
+		)
+	}
+	_, resumed := f.cfg.attempts.terminalAttemptID(dispatchID)
+	if !resumed {
+		// Preserve the caller-facing identity for the common first invocation.
+		executeRequest.Correlation.AttemptID = dispatchID
+	}
+	budget := effectiveInvokeWorkerAttempts(req.MaxAttempts)
+	for attemptNumber := 1; attemptNumber <= budget; attemptNumber++ {
+		if attemptNumber > 1 {
+			executeRequest.Correlation.AttemptID = fmt.Sprintf("%s/attempt/%d", dispatchID, attemptNumber)
+		}
+		executeRequest.Attempt.Number = attemptNumber
+		var dispatchResult workers.WorkstationDispatchResult
+		start := startStatelessAttemptWithRequest
+		if resumed || attemptNumber > 1 {
+			start = startStatelessAttemptWithRequestRetry
+		}
+		if err := start(
+			ctx,
+			f.cfg,
+			execution,
+			executeRequest,
+			false,
+			func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, _ error) {
+				dispatchResult = result
+			},
+		); err != nil {
+			return factory.InvokeWorkerResult{}, err
+		}
+		invoked := invokeWorkerResultFromDispatch(
+			dispatchID,
+			executeRequest.Correlation.AttemptID,
+			dispatchResult,
+			attemptNumber,
+		)
+		if !invokeWorkerShouldRetry(ctx, invoked, attemptNumber, budget) {
+			return invoked, nil
+		}
+	}
+	return factory.InvokeWorkerResult{}, fmt.Errorf("InvokeWorker exhausted without a terminal result")
+}
+
+func effectiveInvokeWorkerAttempts(maxAttempts int) int {
+	if maxAttempts < 1 {
+		return 1
+	}
+	return maxAttempts
+}
+
+func invokeWorkerShouldRetry(
+	ctx context.Context,
+	result factory.InvokeWorkerResult,
+	attemptNumber int,
+	budget int,
+) bool {
+	if result.Outcome != factory.InvokeWorkerOutcomeFailed ||
+		result.Retryable == nil || !*result.Retryable ||
+		attemptNumber >= budget || ctx == nil {
+		return false
+	}
+	return ctx.Err() == nil
+}
+
+func invokeWorkerResultFromDispatch(
+	dispatchID string,
+	attemptID string,
+	result workers.WorkstationDispatchResult,
+	attempts int,
+) factory.InvokeWorkerResult {
+	outcome := factory.InvokeWorkerOutcomeCompleted
+	switch result.TerminalOutcome {
+	case workers.WorkstationDispatchTerminalOutcomeCanceled:
+		outcome = factory.InvokeWorkerOutcomeCanceled
+	case workers.WorkstationDispatchTerminalOutcomeFailed:
+		outcome = factory.InvokeWorkerOutcomeFailed
+	}
+	invoked := factory.InvokeWorkerResult{
+		DispatchID:      dispatchID,
+		WorkerSessionID: attemptID,
+		Outcome:         outcome,
+		Output:          result.Result.Output,
+		Attempts:        attempts,
+	}
+	if session := result.Result.ProviderSession; session != nil {
+		invoked.Provider = workers.CanonicalProviderSessionProvider(session.Provider)
+		if invoked.Provider == "" {
+			invoked.Provider = strings.TrimSpace(session.Provider)
+		}
+		invoked.ProviderSessionRef = strings.TrimSpace(session.ID)
+	}
+	if outcome != factory.InvokeWorkerOutcomeCompleted {
+		invoked.Diagnostic = strings.TrimSpace(result.Result.Error)
+		if metadata := result.Result.FailureMetadata; metadata != nil {
+			invoked.FailureReason = string(metadata.Type)
+			decision := workers.FailureDecisionFromMetadata(metadata)
+			invoked.Retryable = &decision.Retryable
+		}
+		if invoked.Diagnostic == "" {
+			invoked.Diagnostic = "Provider execution failed."
+		}
+	}
+	return invoked
 }
 
 // reserveWorkerSession claims the Worker Session identity for one dispatch.

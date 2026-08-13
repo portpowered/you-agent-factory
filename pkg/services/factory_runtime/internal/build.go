@@ -27,9 +27,13 @@ import (
 
 const defaultSessionID = "~default"
 
+// RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type runtimeWorkstationService = workers.WorkstationExecutionService
 
-// RuntimeFactory constructs hosted runtime bundles. It is stateless.
+type runtimeExecuteService interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
 type RuntimeFactory struct {
 	quorumPolicy              interfaces.QuorumPolicyService
 	outputShaping             interfaces.InvocationOutputShapingService
@@ -358,6 +362,21 @@ func assembleRuntimeBundle(
 			workerExecutors[workerType] = workerExecutorDecorator(workerType, executor)
 		}
 	}
+	workstationBoundary := buildRuntimeWorkstationBoundary(
+		workerPoolBoundaryFactory,
+		workerService,
+		workerExecutors,
+		net,
+		providerInvocation,
+	)
+	workerSessions, err := workerSessionsFactory(workstationBoundary, clock)
+	if err != nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
+	}
+	if workerSessions == nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
+	}
+	statelessService := executeServiceFromWorkstation(workerService, workstationBoundary)
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
 		effectiveSubmissionRecorder = submissionRecorder
@@ -365,11 +384,8 @@ func assembleRuntimeBundle(
 	activeFactory, err := runtime.New(
 		net,
 		runtimeScheduler,
-		workerExecutors,
-		workerService,
-		providerInvocation,
-		workerSessionsFactory,
-		workerPoolBoundaryFactory,
+		statelessService,
+		workerSessions,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,

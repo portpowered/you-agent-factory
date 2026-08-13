@@ -54,7 +54,6 @@ type factoryImpl struct {
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	dispatchFlow *dispatchPlanningResultHook
 	dispatchPlan dispatchplanning.Service
-	workers      workers.WorkstationPoolBoundary
 	eventHistory recordings.RuntimeLedger
 	state        interfaces.FactoryState
 	startedAt    time.Time
@@ -80,11 +79,10 @@ type appliedOperatorMove struct {
 type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
-	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workers.WorkstationExecutionService
-	providerInvocation        workers.WorkstationRequestExecutor
-	workerSessionsFactory     factory.WorkerSessionsFactory
-	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory
+	executeService            executeCapability
+	attempts                  *attemptLifecycle
+	attemptCapacity           int
+	newID                     factory.IDGenerator
 	workerSessions            workersessions.Service
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
@@ -122,11 +120,8 @@ var _ TickableFactory = (*factoryImpl)(nil)
 func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutors map[string]workers.WorkerExecutor,
-	workerService workers.WorkstationExecutionService,
-	providerInvocation workers.WorkstationRequestExecutor,
-	workerSessionsFactory factory.WorkerSessionsFactory,
-	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
+	statelessService executeCapability,
+	workerSessionsService workersessions.Service,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -167,24 +162,20 @@ func New(
 	if newID == nil {
 		return nil, fmt.Errorf("a Factory Runtime ID generator is required")
 	}
-	if workerService == nil {
-		return nil, fmt.Errorf("a canonical Workers workstation service is required")
+	if statelessService == nil {
+		return nil, fmt.Errorf("a stateless Workers service is required")
 	}
-	if workerSessionsFactory == nil {
-		return nil, fmt.Errorf("a canonical Worker Sessions factory is required")
-	}
-	if workerPoolBoundaryFactory == nil {
-		return nil, fmt.Errorf("a canonical Workers pool-boundary factory is required")
+	if workerSessionsService == nil {
+		return nil, fmt.Errorf("a Worker Sessions service is required")
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
 	cfg := &runtimeConfig{
 		net:                       net,
 		scheduler:                 runtimeScheduler,
-		workerExecutors:           workerExecutors,
-		workerService:             workerService,
-		providerInvocation:        providerInvocation,
-		workerSessionsFactory:     workerSessionsFactory,
-		workerPoolBoundaryFactory: workerPoolBoundaryFactory,
+		executeService:            statelessService,
+		workerSessions:            workerSessionsService,
+		attemptCapacity:           defaultRuntimeAttemptCapacity,
+		newID:                     newID,
 		runtimeConfig:             runtimeDefinitions,
 		workflowContext:           workflowContext,
 		runtimeMode:               runtimeMode,
@@ -209,6 +200,9 @@ func New(
 		workService:               workService,
 		decisionEnvelopes:         firstDecisionEnvelopeService(decisionEnvelopes),
 	}
+	if cfg.executeService != nil {
+		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)
+	}
 
 	sched := buildRuntimeScheduler(cfg)
 	effectiveLogger := logging.EnsureLogger(cfg.logger)
@@ -216,7 +210,7 @@ func New(
 	marking := buildRuntimeMarking(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
-	dispatchResultHook, dispatchPlan, workersBoundary, err := configureRuntimeDispatch(
+	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
 	if err != nil {
@@ -224,7 +218,7 @@ func New(
 	}
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
-		dispatchResultHook, dispatchPlan, workersBoundary, effectiveEventHistory,
+		dispatchResultHook, dispatchPlan, effectiveEventHistory,
 	)
 	var recordPetriMutations func([]interfaces.TokenMutationRecord) error
 	if cfg.petriMutationRecorder != nil {
@@ -461,29 +455,18 @@ func configureRuntimeDispatch(
 ) (
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
-	workers.WorkstationPoolBoundary,
 	error,
 ) {
-	workersBoundary := cfg.workerPoolBoundaryFactory(workers.WorkstationPoolBoundaryConfig{
-		Service:            cfg.workerService,
-		Executors:          cfg.workerExecutors,
-		RouteNames:         runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
-		ProviderInvocation: cfg.providerInvocation,
-		Async:              !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
-	})
-	workerSessions, err := cfg.workerSessionsFactory(workersBoundary, cfg.clock)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker Sessions service: %w", err)
-	}
-	cfg.workerSessions = workerSessions
 	var resultHook *dispatchPlanningResultHook
+	publisher := func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
+		return startThroughStatelessWorkers(ctx, cfg, request, resultHook.acceptWorkersResult)
+	}
+	canceler := func(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		return cancelStatelessAttempt(ctx, cfg, request)
+	}
 	planner := dispatchplanningwire.New(
-		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
-			return startThroughWorkerSessions(
-				ctx, cfg, eventHistory, workersBoundary, request, resultHook.acceptWorkersResult,
-			)
-		},
-		workersBoundary.Cancel,
+		publisher,
+		canceler,
 	)
 	resultHook = newCanonicalDispatchPlanningResultHook(
 		planner,
@@ -494,7 +477,7 @@ func configureRuntimeDispatch(
 		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)
-	return resultHook, planner, workersBoundary, nil
+	return resultHook, planner, nil
 }
 
 func newFactoryImpl(
@@ -504,7 +487,6 @@ func newFactoryImpl(
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
-	workersBoundary workers.WorkstationPoolBoundary,
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
 	return &factoryImpl{
@@ -515,7 +497,6 @@ func newFactoryImpl(
 		resultBuffer:                resultBuffer,
 		dispatchFlow:                dispatchFlow,
 		dispatchPlan:                dispatchPlan,
-		workers:                     workersBoundary,
 		eventHistory:                eventHistory,
 		state:                       interfaces.FactoryStateIdle,
 		clock:                       cfg.clock,

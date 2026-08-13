@@ -47,6 +47,7 @@ func adaptRunnerRequest(
 		workingDirectory = strings.TrimSpace(request.Target.Workspace.WorkingDirectory)
 	}
 	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
+	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
 	sessionID := ""
 	if request.Input.Resume != nil {
 		sessionID = strings.TrimSpace(request.Input.Resume.ProviderSessionID)
@@ -55,8 +56,9 @@ func adaptRunnerRequest(
 		}
 	}
 
-	return workers.RunnerExecutionRequest{
-		Dispatch: work.WorkDispatch{
+	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
+	if dispatch.DispatchID == "" {
+		dispatch = work.WorkDispatch{
 			DispatchID:      request.Correlation.DispatchID,
 			WorkstationName: request.Target.WorkstationName,
 			WorkerType:      firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
@@ -65,7 +67,18 @@ func adaptRunnerRequest(
 				TraceID:   request.Correlation.TraceID,
 				WorkIDs:   workIDs(request.Input.Work),
 			},
-		},
+		}
+	}
+	dispatch.DispatchID = request.Correlation.DispatchID
+	dispatch.WorkstationName = request.Target.WorkstationName
+	dispatch.WorkerType = firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName)
+	dispatch.InputTokens = workers.InputTokens(inputTokens...)
+	dispatch.Execution.RequestID = request.Correlation.RequestID
+	dispatch.Execution.TraceID = request.Correlation.TraceID
+	dispatch.Execution.WorkIDs = workIDs(request.Input.Work)
+
+	return workers.RunnerExecutionRequest{
+		Dispatch:                     dispatch,
 		WorkerName:                   request.Target.WorkerName,
 		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
 		WorkstationType:              request.Target.WorkstationName,
@@ -73,6 +86,7 @@ func adaptRunnerRequest(
 		ExecutorProvider:             providerIdentity(request.Target.Provider),
 		ModelOperation:               request.Input.ModelOperation,
 		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+		InputTokens:                  workers.InputTokens(inputTokens...),
 		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
 		UserMessage:                  request.Target.Prompt.UserMessage,
 		OutputSchema:                 request.Target.Prompt.OutputSchema,
@@ -98,6 +112,29 @@ func adaptRunnerRequest(
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
 		TemporaryFiles:               temporaryFiles,
 	}
+}
+
+func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
+	if len(inputs) == 0 {
+		return nil
+	}
+	tokens := make([]workers.Token, 0, len(inputs))
+	for _, input := range inputs {
+		color := workers.Color{
+			Name:       input.WorkID,
+			RequestID:  input.RequestID,
+			WorkID:     input.WorkID,
+			WorkTypeID: input.WorkTypeID,
+			DataType:   workers.DataTypeWork,
+			TraceID:    input.Lineage.TraceID,
+			ParentID:   input.Lineage.ParentWorkID,
+			Tags:       cloneStringMap(input.Tags),
+			Relations:  append([]work.Relation(nil), input.Relations...),
+			Content:    work.CloneWorkContentParts(input.Content),
+		}
+		tokens = append(tokens, workers.Token{Color: color})
+	}
+	return tokens
 }
 
 func providerRunnerID(provider workers.ProviderReference) string {

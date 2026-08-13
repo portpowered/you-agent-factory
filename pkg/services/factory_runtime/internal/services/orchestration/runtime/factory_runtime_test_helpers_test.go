@@ -27,7 +27,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -81,11 +83,11 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	if workerSessionsService == nil {
 		workerSessionsService = &fakeWorkerSessionsService{execution: workerService}
 	}
-	workerSessionsFactory := func(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error) {
-		return workerSessionsService, nil
-	}
-	return New(
-		cfg.net, cfg.scheduler, cfg.workerExecutors, workerService, cfg.providerInvocation, workerSessionsFactory, testWorkstationPoolBoundaryFactory, cfg.runtimeConfig,
+	runtime, err := New(
+		cfg.net, cfg.scheduler, &testStatelessExecutionService{
+			service:   workerService,
+			executors: cfg.workerExecutors,
+		}, workerSessionsService, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, "", nil, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
@@ -98,10 +100,221 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
 		}),
-		nil,
+		workwire.NewRuntimeService(nil, nil, nil, nil, nil),
 		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
 		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
 	)
+	if err != nil {
+		return nil, err
+	}
+	return runtime, nil
+}
+
+// testStatelessExecutionService keeps legacy test effects behind the detached
+// Execute seam. Production Runtime never constructs this adapter.
+type testStatelessExecutionService struct {
+	service   workers.WorkstationExecutionService
+	executors map[string]workers.WorkerExecutor
+	startOnce sync.Once
+	startErr  error
+}
+
+func (service *testStatelessExecutionService) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	service.start(ctx, request)
+	if service.startErr != nil {
+		return workers.ExecuteResult{}, service.startErr
+	}
+	if service.service == nil {
+		return workers.ExecuteResult{}, fmt.Errorf("test stateless execution service is not configured")
+	}
+	legacy := testLegacyRequestFromExecute(request)
+	result, err := service.service.DispatchWorkstation(ctx, legacy)
+	if ctx.Err() != nil {
+		_, _ = service.service.CancelWorkstationDispatch(
+			context.WithoutCancel(ctx),
+			workers.WorkstationDispatchCancelRequest{
+				DispatchID: legacy.Execution.Dispatch.DispatchID,
+			},
+		)
+	}
+	if err != nil {
+		return workers.ExecuteResult{}, err
+	}
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     executeOutcomeFromWorkstationResult(result),
+		Failure:     executeFailureFromWorkResult(result.Result),
+		Output:      workers.ProposedOutputFromLegacyWorkResult(result.Result),
+	}, nil
+}
+
+func (service *testStatelessExecutionService) start(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) {
+	service.startOnce.Do(func() {
+		requestExecutor := testWorkstationRequestExecutor{executors: service.executors}
+		bindings := make([]workers.AssembledRuntimeBinding, 0, len(service.executors)+1)
+		for workerType := range service.executors {
+			bindings = append(bindings, workers.AssembledRuntimeBinding{
+				RoleName: workerType, RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+				Executor: requestExecutor,
+			})
+		}
+		bindings = append(bindings, workers.AssembledRuntimeBinding{
+			RoleName: request.Target.WorkstationName,
+			RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+			Executor: requestExecutor,
+		})
+		if service.service != nil {
+			_, service.startErr = service.service.StartWorkstationPool(
+				ctx, workers.WorkstationPoolStartRequest{Bindings: bindings},
+			)
+		}
+	})
+}
+
+func testLegacyRequestFromExecute(
+	request workers.ExecuteRequest,
+) workers.WorkstationDispatchRequest {
+	dispatchID := request.Correlation.DispatchID
+	if request.Target.WorkstationName == workers.ProviderInvocationRoute {
+		dispatchID = request.Correlation.AttemptID
+	}
+	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
+	if dispatch.DispatchID == "" {
+		dispatch.TransitionID = request.Target.WorkstationName
+	}
+	dispatch.WorkstationName = firstRuntimeValue(
+		dispatch.WorkstationName, request.Target.WorkstationName,
+	)
+	dispatch.WorkerType = firstRuntimeValue(
+		dispatch.WorkerType, request.Target.WorkerType,
+	)
+	dispatch.DispatchID = dispatchID
+	dispatch.Execution.RequestID = request.Correlation.RequestID
+	dispatch.Execution.TraceID = request.Correlation.TraceID
+	dispatch.Execution.WorkIDs = workInputIDs(request.Input.Work)
+	dispatch.InputTokens = workers.InputTokens(workTokens(request.Input.Work)...)
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: request.Target.WorkstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch:                    dispatch,
+			WorkerName:                  request.Target.WorkerName,
+			WorkerType:                  request.Target.WorkerType,
+			WorkstationType:             request.Target.WorkstationName,
+			RunnerID:                    request.Target.RunnerID,
+			ExecutorProvider:            request.Target.Provider.ID,
+			ProjectID:                   request.Correlation.RuntimeID,
+			FactorySessionID:            request.Correlation.FactorySessionID,
+			RecordingID:                 request.Correlation.RuntimeID,
+			Capabilities:                cloneRuntimeCapabilities(request.Target.Capabilities),
+			InputTokens:                 workers.InputTokens(workTokens(request.Input.Work)...),
+			ModelOperation:              request.Input.ModelOperation,
+			ModelBindings:               workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+			Model:                       request.Target.Model.Name,
+			ModelProvider:               request.Target.Model.Provider,
+			ReasoningEffort:             request.Target.Model.ReasoningEffort,
+			Command:                     request.Target.Command,
+			Args:                        append([]string(nil), request.Target.Args...),
+			FactoryDirectory:            request.Target.FactoryDirectory,
+			OutputFormat:                request.Target.Output.Format,
+			StopToken:                   request.Target.Output.StopToken,
+			DecisionEnvelope:            request.Target.Output.DecisionEnvelope,
+			GoalRoutingDecisionEnvelope: request.Target.Output.GoalRoutingDecisionEnvelope,
+			SystemPrompt:                request.Target.Prompt.SystemPrompt,
+			UserMessage:                 request.Target.Prompt.UserMessage,
+			OutputSchema:                request.Target.Prompt.OutputSchema,
+			OutputContract:              request.Target.Output.Contract,
+			Timeout:                     request.Target.Timeout,
+			EnvVars:                     cloneRuntimeStringMap(request.Target.Environment.Vars),
+			ProcessEnvironment:          append([]string(nil), request.Target.Environment.ProcessEnvironment...),
+			Worktree:                    request.Target.Workspace.Worktree,
+			WorkingDirectory:            request.Target.Environment.WorkingDirectory,
+			WorkingDirectoryAuthored:    request.Target.Environment.WorkingDirectorySet,
+			SkipPermissions:             request.Target.Permissions.SkipPermissions,
+			ResumeSession:               providerSessionRefFromContinuation(request.Input.Resume),
+		},
+	}
+}
+
+func executeFailureFromWorkResult(result workers.WorkResult) *workers.ExecutionFailure {
+	if result.FailureMetadata == nil && strings.TrimSpace(result.Error) == "" {
+		return nil
+	}
+	failure := &workers.ExecutionFailure{Message: result.Error}
+	if result.FailureMetadata != nil {
+		failure.Family = result.FailureMetadata.Family
+		failure.Type = result.FailureMetadata.Type
+		failure.RetryHint = workers.FailureDecisionFromMetadata(result.FailureMetadata).Retryable
+	}
+	return failure
+}
+
+func executeOutcomeFromWorkstationResult(result workers.WorkstationDispatchResult) workers.ExecutionOutcome {
+	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		return workers.ExecutionOutcomeCanceled
+	}
+	return executeOutcomeFromWorkResult(result.Result)
+}
+
+func executeOutcomeFromWorkResult(result workers.WorkResult) workers.ExecutionOutcome {
+	switch result.Outcome {
+	case workers.OutcomeContinue:
+		return workers.ExecutionOutcomeContinue
+	case workers.OutcomeRejected:
+		return workers.ExecutionOutcomeRejected
+	case workers.OutcomeFailed:
+		return workers.ExecutionOutcomeFailed
+	default:
+		return workers.ExecutionOutcomeAccepted
+	}
+}
+
+func providerSessionRefFromContinuation(
+	continuation *workers.ProviderContinuationRef,
+) *providers.SessionRef {
+	if continuation == nil {
+		return nil
+	}
+	id := strings.TrimSpace(continuation.ProviderSessionID)
+	if id == "" {
+		id = strings.TrimSpace(continuation.ExternalRef)
+	}
+	if id == "" {
+		return nil
+	}
+	return &providers.SessionRef{
+		Provider: providers.ID(strings.TrimSpace(continuation.Provider)),
+		Kind:     providers.SessionIDKind,
+		ID:       id,
+	}
+}
+
+func workInputIDs(inputs []workers.WorkInput) []string {
+	ids := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		if input.WorkID != "" {
+			ids = append(ids, input.WorkID)
+		}
+	}
+	return ids
+}
+
+func workTokens(inputs []workers.WorkInput) []workers.Token {
+	tokens := make([]workers.Token, 0, len(inputs))
+	for _, input := range inputs {
+		tokens = append(tokens, workers.Token{Color: workers.Color{
+			WorkID: input.WorkID, WorkTypeID: input.WorkTypeID, RequestID: input.RequestID,
+			DataType: workers.DataTypeWork, TraceID: input.Lineage.TraceID, ParentID: input.Lineage.ParentWorkID,
+			Content: work.CloneWorkContentParts(input.Content), Tags: cloneRuntimeStringMap(input.Tags),
+			Relations: append([]work.Relation(nil), input.Relations...),
+		}})
+	}
+	return tokens
 }
 
 func newTestFactoryWithScriptedLedger(

@@ -7,6 +7,7 @@ package dispatch_planning
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -52,6 +53,7 @@ type ExecutionFacts struct {
 	SystemPrompt             string
 	UserMessage              string
 	OutputSchema             string
+	Timeout                  time.Duration
 	EnvVars                  map[string]string
 	ProcessEnvironment       []string
 	Worktree                 string
