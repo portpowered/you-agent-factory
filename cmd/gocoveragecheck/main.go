@@ -75,6 +75,9 @@ type config struct {
 	generateManifest    string
 	updateManifest      string
 	packageManifest     string
+	varianceProfiles    string
+	varianceOutput      string
+	varianceCommit      string
 	jsonOutput          string
 	timingOutput        string
 	min                 float64
@@ -128,6 +131,9 @@ func main() {
 func execute(cfg config) error {
 	if err := validateConfig(cfg); err != nil {
 		return err
+	}
+	if cfg.varianceProfiles != "" || cfg.varianceOutput != "" {
+		return executeVarianceReport(cfg)
 	}
 	result, err := run(cfg)
 	if err != nil {
@@ -185,6 +191,9 @@ func parseConfig() config {
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
+	flag.StringVar(&cfg.varianceProfiles, "variance-profiles", "", "comma-separated functional coverage profiles to aggregate into a variance report")
+	flag.StringVar(&cfg.varianceOutput, "variance-output", "", "write a deterministic functional coverage variance report to this path")
+	flag.StringVar(&cfg.varianceCommit, "variance-commit", "", "full unchanged commit SHA named by a functional coverage variance report")
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
 	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
@@ -213,6 +222,21 @@ func validateConfig(cfg config) error {
 	}
 	if cfg.packageFloorEpsilon < 0 || math.IsNaN(cfg.packageFloorEpsilon) || math.IsInf(cfg.packageFloorEpsilon, 0) {
 		return fmt.Errorf("configure go coverage: -package-floor-epsilon must be a finite non-negative percentage-point value (got %v); set it to 0 or greater", cfg.packageFloorEpsilon)
+	}
+	varianceRequested := strings.TrimSpace(cfg.varianceProfiles) != "" || strings.TrimSpace(cfg.varianceOutput) != ""
+	if varianceRequested {
+		if strings.TrimSpace(cfg.varianceProfiles) == "" || strings.TrimSpace(cfg.varianceOutput) == "" {
+			return errors.New("configure coverage variance: -variance-profiles and -variance-output must be provided together")
+		}
+		if cfg.suite != "functional" {
+			return fmt.Errorf("configure coverage variance: -suite must be functional (got %q)", cfg.suite)
+		}
+		if strings.TrimSpace(cfg.generateManifest) != "" || strings.TrimSpace(cfg.updateManifest) != "" {
+			return errors.New("configure coverage variance: do not combine variance reporting with manifest generation or update")
+		}
+		if strings.TrimSpace(cfg.varianceCommit) == "" {
+			return errors.New("configure coverage variance: -variance-commit must name the unchanged commit used for every profile")
+		}
 	}
 	return nil
 }
