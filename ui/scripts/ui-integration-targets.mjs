@@ -2,6 +2,7 @@
 
 export const mockedBackendBrowserIntegrationFiles = [
   "integration/browser-test-harness.artifacts.integration.test.mjs",
+  "integration/native-scrollbar.integration.test.mjs",
   "integration/dashboard-session-recovery-manual-scenarios-switching.integration.test.mjs",
   "integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs",
   "integration/dashboard-session-recovery.integration.test.mjs",

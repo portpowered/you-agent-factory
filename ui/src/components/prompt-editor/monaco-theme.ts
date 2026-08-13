@@ -10,7 +10,9 @@ const FALLBACK_THEME_TOKENS = {
   infoBright: "#7DD3FC",
   infoInk: "#B5EDF4",
   ink: "#F7F2E8",
+  onSurfaceVariant: "#F7F2E8C7",
   overlay: "#FFFFFF",
+  outlineVariant: "#FFFFFF2E",
   successText: "#A7F0C4",
   surface: "#181f2b",
 } as const;
@@ -30,7 +32,9 @@ type MonacoThemeTokens = {
   infoBright: string;
   infoInk: string;
   ink: string;
+  onSurfaceVariant: string;
   overlay: string;
+  outlineVariant: string;
   successText: string;
   surface: string;
 };
@@ -121,6 +125,9 @@ function buildSharedEditorColors(
     "editorSuggestWidget.highlightForeground": tokens.accent,
     "editorHoverWidget.background": tokens.surface,
     "editorHoverWidget.border": withAlpha(tokens.overlay, 0.12),
+    "scrollbarSlider.background": tokens.outlineVariant,
+    "scrollbarSlider.hoverBackground": tokens.onSurfaceVariant,
+    "scrollbarSlider.activeBackground": tokens.onSurfaceVariant,
   };
 }
 
@@ -133,6 +140,42 @@ function readMonacoThemeTokens(root: Element | null): MonacoThemeTokens {
   const styles = window.getComputedStyle(root);
   const stylesheetTokens = readMonacoThemeStylesheetTokens(root);
   const probeTokens = readMonacoThemeProbeTokens(root);
+  const ink = readCssColor(
+    styles,
+    ["--color-on-surface", "--color-af-text", "--color-af-foundation-ink"],
+    pickUsableThemeColor(
+      stylesheetTokens.ink,
+      probeTokens.ink,
+      FALLBACK_THEME_TOKENS.ink,
+    ),
+  );
+  const overlay = readCssColor(
+    styles,
+    ["--color-af-foundation-overlay"],
+    pickUsableThemeColor(
+      stylesheetTokens.overlay,
+      probeTokens.overlay,
+      FALLBACK_THEME_TOKENS.overlay,
+    ),
+  );
+  const onSurfaceVariant = readCssColor(
+    styles,
+    ["--color-on-surface-variant", "--color-af-text-muted"],
+    pickUsableThemeColor(
+      probeTokens.onSurfaceVariant,
+      withAlpha(ink, 0.78),
+      FALLBACK_THEME_TOKENS.onSurfaceVariant,
+    ),
+  );
+  const outlineVariant = readCssColor(
+    styles,
+    ["--color-outline-variant", "--color-af-border-strong"],
+    pickUsableThemeColor(
+      probeTokens.outlineVariant,
+      withAlpha(overlay, 0.18),
+      FALLBACK_THEME_TOKENS.outlineVariant,
+    ),
+  );
 
   return {
     accent: readCssColor(
@@ -210,24 +253,10 @@ function readMonacoThemeTokens(root: Element | null): MonacoThemeTokens {
         FALLBACK_THEME_TOKENS.infoInk,
       ),
     ),
-    ink: readCssColor(
-      styles,
-      ["--color-on-surface", "--color-af-text", "--color-af-foundation-ink"],
-      pickUsableThemeColor(
-        stylesheetTokens.ink,
-        probeTokens.ink,
-        FALLBACK_THEME_TOKENS.ink,
-      ),
-    ),
-    overlay: readCssColor(
-      styles,
-      ["--color-af-foundation-overlay"],
-      pickUsableThemeColor(
-        stylesheetTokens.overlay,
-        probeTokens.overlay,
-        FALLBACK_THEME_TOKENS.overlay,
-      ),
-    ),
+    ink,
+    onSurfaceVariant,
+    overlay,
+    outlineVariant,
     successText: readCssColor(
       styles,
       [
@@ -351,6 +380,8 @@ function readMonacoThemeProbeTokens(root: Element): Partial<MonacoThemeTokens> {
     <div data-monaco-probe="success" class="bg-success-container text-on-success-container"></div>
     <div data-monaco-probe="danger" class="bg-error-container text-on-error-container"></div>
     <div data-monaco-probe="code" class="text-code"></div>
+    <div data-monaco-probe="scrollbar-rest" class="border border-outline-variant"></div>
+    <div data-monaco-probe="scrollbar-hover" class="text-on-surface-variant"></div>
   `;
   container.appendChild(probe);
 
@@ -362,6 +393,8 @@ function readMonacoThemeProbeTokens(root: Element): Partial<MonacoThemeTokens> {
   const successElement = read("success");
   const dangerElement = read("danger");
   const codeElement = read("code");
+  const scrollbarRestElement = read("scrollbar-rest");
+  const scrollbarHoverElement = read("scrollbar-hover");
   const surface = surfaceElement
     ? window.getComputedStyle(surfaceElement).backgroundColor
     : undefined;
@@ -386,6 +419,12 @@ function readMonacoThemeProbeTokens(root: Element): Partial<MonacoThemeTokens> {
   const successText = successElement
     ? window.getComputedStyle(successElement).color
     : undefined;
+  const outlineVariant = scrollbarRestElement
+    ? window.getComputedStyle(scrollbarRestElement).borderTopColor
+    : undefined;
+  const onSurfaceVariant = scrollbarHoverElement
+    ? window.getComputedStyle(scrollbarHoverElement).color
+    : undefined;
 
   probe.remove();
 
@@ -400,12 +439,14 @@ function readMonacoThemeProbeTokens(root: Element): Partial<MonacoThemeTokens> {
     ink: surfaceElement
       ? window.getComputedStyle(surfaceElement).color
       : undefined,
+    onSurfaceVariant,
     overlay:
       surface && parseColor(surface)
         ? relativeLuminance(parseColor(surface) as RGBColor) >= 0.5
           ? "#000000"
           : "#FFFFFF"
         : undefined,
+    outlineVariant,
     successText,
     surface,
   };
