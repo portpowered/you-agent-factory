@@ -32,6 +32,7 @@ func NewScriptRegistry(
 			Command:          config.Command,
 			Args:             append([]string(nil), config.Args...),
 			FactoryDirectory: config.FactoryDirectory,
+			RequestSelected:  config.RequestSelected,
 		},
 		script.Dependencies{
 			CommandRunner: dependencies.CommandRunner,

@@ -52,7 +52,7 @@ func New(
 		return nil, errMisconfigured("runners service is required")
 	}
 	if clock == nil {
-		clock = time.Now
+		return nil, errMisconfigured("clock is required")
 	}
 	return &Service{
 		runners:        runnerService,

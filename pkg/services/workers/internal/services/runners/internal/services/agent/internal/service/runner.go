@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +95,10 @@ func (s *service) Execute(
 			ID:       request.SessionID,
 		}
 	}
+	response, err = normalizeAgentResponse(response, request)
+	if err != nil {
+		return response, err
+	}
 	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession, provider)
 	if !hasTerminalRunProgress(result.Diagnostics) {
 		s.publish(workers.ProgressFragment{
@@ -106,6 +112,87 @@ func (s *service) Execute(
 		})
 	}
 	return response, nil
+}
+
+type decisionEnvelope struct {
+	Decision string `json:"decision"`
+	Feedback string `json:"feedback"`
+	Output   string `json:"output,omitempty"`
+}
+
+func normalizeAgentResponse(
+	response workers.RunnerExecutionResult,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	if request.DecisionEnvelope || strings.EqualFold(strings.TrimSpace(request.OutputFormat), "decision-envelope") {
+		return normalizeDecisionEnvelope(response, request)
+	}
+	if strings.TrimSpace(request.StopToken) == "" {
+		return response, nil
+	}
+	response.Outcome = evaluateAgentOutcome(response.Content, request.StopToken)
+	return response, nil
+}
+
+func normalizeDecisionEnvelope(
+	response workers.RunnerExecutionResult,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	var envelope decisionEnvelope
+	if err := json.Unmarshal([]byte(strings.TrimSpace(response.Content)), &envelope); err != nil {
+		return response, workers.NewProviderError(
+			workers.WorkFailureTypePermanentBadRequest,
+			"reviewer decision envelope is invalid",
+			err,
+		)
+	}
+	decision := strings.ToUpper(strings.TrimSpace(envelope.Decision))
+	if request.GoalRoutingDecisionEnvelope {
+		classification, err := normalizeGoalDecision(decision)
+		if err != nil {
+			return response, workers.NewProviderError(
+				workers.WorkFailureTypePermanentBadRequest,
+				"goal decision envelope is invalid",
+				err,
+			)
+		}
+		response.Outcome = workers.OutcomeAccepted
+		response.Classification = classification
+	} else {
+		switch workers.WorkOutcome(decision) {
+		case workers.OutcomeAccepted, workers.OutcomeContinue, workers.OutcomeRejected:
+			response.Outcome = workers.WorkOutcome(decision)
+		default:
+			return response, workers.NewProviderError(
+				workers.WorkFailureTypePermanentBadRequest,
+				"reviewer decision envelope has an unsupported decision",
+				fmt.Errorf("decision %q", envelope.Decision),
+			)
+		}
+	}
+	response.Content = strings.TrimSpace(envelope.Output)
+	response.Feedback = strings.TrimSpace(envelope.Feedback)
+	return response, nil
+}
+
+func normalizeGoalDecision(decision string) (string, error) {
+	classification := strings.ToLower(strings.ReplaceAll(decision, "-", "_"))
+	switch classification {
+	case "accepted", "needs_changes", "tests_failed", "needs_human", "blocked", "interrupted", "failed":
+		return classification, nil
+	default:
+		return "", fmt.Errorf("decision %q", decision)
+	}
+}
+
+func evaluateAgentOutcome(content, stopToken string) workers.WorkOutcome {
+	if strings.TrimSpace(stopToken) == "" || strings.Contains(content, stopToken) {
+		return workers.OutcomeAccepted
+	}
+	if strings.Contains(content, "<CONTINUE>") {
+		return workers.OutcomeContinue
+	}
+	return workers.OutcomeRejected
 }
 
 func hasTerminalRunProgress(diagnostics *providers.ExecuteDiagnostics) bool {

@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,6 +28,140 @@ func TestNewServiceExecuteRunsScriptInferenceAndAgentAttempts(t *testing.T) {
 		fixture.provider.executeCalls.Load() != 1 {
 		t.Fatalf("attempt effects = command %d model %d provider %d, want one each",
 			fixture.command.calls.Load(), fixture.local.calls.Load(), fixture.provider.executeCalls.Load())
+	}
+}
+
+func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
+	t.Parallel()
+	fixture := newStatelessTestFixture(t)
+
+	for _, command := range []string{"script-a", "script-b"} {
+		_, err := fixture.service.Execute(context.Background(), workers.ExecuteRequest{
+			Correlation: workers.ExecutionCorrelation{
+				DispatchID: command,
+				AttemptID:  "attempt-" + command,
+			},
+			Target: workers.ExecutionTarget{
+				WorkerName: "script-worker",
+				RunnerID:   runners.ScriptIdentity,
+				Command:    command,
+				Args:       []string{"--selected", command},
+			},
+		})
+		if err != nil {
+			t.Fatalf("script Execute(%q) error = %v", command, err)
+		}
+	}
+	commands := fixture.command.Requests()
+	if len(commands) != 2 {
+		t.Fatalf("script command requests = %d, want 2", len(commands))
+	}
+	for index, want := range []string{"script-a", "script-b"} {
+		if commands[index].Command != want {
+			t.Fatalf("script request[%d].Command = %q, want %q", index, commands[index].Command, want)
+		}
+		if len(commands[index].Args) != 2 || commands[index].Args[1] != want {
+			t.Fatalf("script request[%d].Args = %#v, want selected args", index, commands[index].Args)
+		}
+	}
+
+	for _, model := range []string{"model-a", "model-b"} {
+		_, err := fixture.service.Execute(context.Background(), workers.ExecuteRequest{
+			Correlation: workers.ExecutionCorrelation{
+				DispatchID: model,
+				AttemptID:  "attempt-" + model,
+			},
+			Target: workers.ExecutionTarget{
+				WorkerName: runners.InferenceIdentity,
+				RunnerID:   runners.InferenceIdentity,
+				Model:      workers.ModelReference{Name: model},
+			},
+			Input: workers.ExecutionInput{ModelOperation: "generate"},
+		})
+		if err != nil {
+			t.Fatalf("inference Execute(%q) error = %v", model, err)
+		}
+	}
+	models := fixture.local.Requests()
+	if len(models) != 2 {
+		t.Fatalf("inference requests = %d, want 2", len(models))
+	}
+	for index, want := range []string{"model-a", "model-b"} {
+		if models[index].Worker.Model != want {
+			t.Fatalf("inference request[%d].Worker.Model = %q, want %q", index, models[index].Worker.Model, want)
+		}
+	}
+}
+
+func TestNewServiceExecuteNormalizesOutcomeAndOutputContractPolicy(t *testing.T) {
+	t.Parallel()
+	fixture := newStatelessTestFixture(t)
+	base := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			DispatchID: "dispatch-outcome",
+			AttemptID:  "attempt-outcome",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: runners.AgentIdentity,
+			RunnerID:   runners.AgentIdentity,
+			Provider: workers.ProviderReference{
+				ID: string(providers.IDCodex),
+			},
+			Prompt: workers.PromptPolicy{UserMessage: "review this result"},
+		},
+	}
+	cases := []struct {
+		name    string
+		content string
+		output  workers.OutputPolicy
+		want    workers.ExecutionOutcome
+		text    string
+	}{
+		{
+			name:    "accepted",
+			content: `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
+			output:  workers.OutputPolicy{DecisionEnvelope: true},
+			want:    workers.ExecutionOutcomeAccepted,
+			text:    "ship",
+		},
+		{
+			name:    "continue",
+			content: `{"decision":"CONTINUE","feedback":"add tests","output":"next"}`,
+			output:  workers.OutputPolicy{DecisionEnvelope: true},
+			want:    workers.ExecutionOutcomeContinue,
+			text:    "next",
+		},
+		{
+			name:    "rejected",
+			content: `{"decision":"REJECTED","feedback":"not ready","output":"stop"}`,
+			output:  workers.OutputPolicy{DecisionEnvelope: true},
+			want:    workers.ExecutionOutcomeRejected,
+			text:    "stop",
+		},
+		{
+			name:    "structured-contract",
+			content: `{"action_completed":true,"spec_deviations":[],"temporal_artifacts":[],"audio_content":"speech","unexpected_speech":false,"verdict":"pass","confidence":0.9}`,
+			output:  workers.OutputPolicy{Contract: "structured-clip-qa/v1"},
+			want:    workers.ExecutionOutcomeAccepted,
+			text:    `{"action_completed":true,"spec_deviations":[],"temporal_artifacts":[],"audio_content":"speech","unexpected_speech":false,"verdict":"pass","confidence":0.9}`,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			fixture.provider.SetContent(test.content)
+			request := base.Clone()
+			request.Target.Output = test.output
+			result, err := fixture.service.Execute(context.Background(), request)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != test.want {
+				t.Fatalf("outcome = %q, failure = %#v, output = %#v, want %q", result.Outcome, result.Failure, result.Output, test.want)
+			}
+			if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != test.text {
+				t.Fatalf("output = %#v, want %q", result.Output, test.text)
+			}
+		})
 	}
 }
 
@@ -67,6 +202,11 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 			},
 		},
 		runners.InferenceDependencies{Models: local},
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -170,43 +310,84 @@ func assertStatelessHappyPath(
 
 type statelessTestCommandRunner struct {
 	calls atomic.Int32
+	mu    sync.Mutex
+	seen  []workers.CommandRequest
 }
 
 func (runner *statelessTestCommandRunner) Run(
-	context.Context,
-	workers.CommandRequest,
+	ctx context.Context,
+	request workers.CommandRequest,
 ) (workers.CommandResult, error) {
-	runner.calls.Add(1)
+	runner.record(request)
+	_ = ctx
 	return workers.CommandResult{Stdout: []byte("script-output")}, nil
 }
 
 func (runner *statelessTestCommandRunner) RunStreaming(
-	context.Context,
-	workers.CommandRequest,
-	platformprocess.OutputChunkObserver,
+	ctx context.Context,
+	request workers.CommandRequest,
+	_ platformprocess.OutputChunkObserver,
 ) (workers.CommandResult, error) {
-	runner.calls.Add(1)
+	runner.record(request)
+	_ = ctx
 	return workers.CommandResult{Stdout: []byte("script-output")}, nil
+}
+
+func (runner *statelessTestCommandRunner) record(request workers.CommandRequest) {
+	runner.calls.Add(1)
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	runner.seen = append(runner.seen, workers.CloneSubprocessExecutionRequest(request))
+}
+
+func (runner *statelessTestCommandRunner) Requests() []workers.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	result := make([]workers.CommandRequest, len(runner.seen))
+	for index, request := range runner.seen {
+		result[index] = workers.CloneSubprocessExecutionRequest(request)
+	}
+	return result
 }
 
 type statelessTestLocalInvoker struct {
 	calls atomic.Int32
+	mu    sync.Mutex
+	seen  []models.LocalInvocationRequest
 }
 
 func (invoker *statelessTestLocalInvoker) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
+	ctx context.Context,
+	request models.LocalInvocationRequest,
 ) (models.LocalInvocationResult, error) {
 	invoker.calls.Add(1)
+	invoker.mu.Lock()
+	invoker.seen = append(invoker.seen, request)
+	invoker.mu.Unlock()
+	_ = ctx
 	return models.LocalInvocationResult{
 		Handled: true,
 		Content: "inference-output",
 	}, nil
 }
 
+func (invoker *statelessTestLocalInvoker) Requests() []models.LocalInvocationRequest {
+	invoker.mu.Lock()
+	defer invoker.mu.Unlock()
+	return append([]models.LocalInvocationRequest(nil), invoker.seen...)
+}
+
 type statelessTestProviders struct {
 	providers.Service
 	executeCalls atomic.Int32
+	mu           sync.Mutex
+	content      string
+}
+
+func (provider *statelessTestProviders) SetContent(content string) {
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	provider.content = content
 }
 
 func (*statelessTestProviders) ResolveIdentity(
@@ -236,8 +417,14 @@ func (provider *statelessTestProviders) Execute(
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	provider.executeCalls.Add(1)
+	provider.mu.Lock()
+	content := provider.content
+	provider.mu.Unlock()
+	if content == "" {
+		content = "agent-output"
+	}
 	return providers.ExecuteResult{
-		Content: "agent-output",
+		Content: content,
 		SessionRef: &providers.SessionRef{
 			Provider: request.Provider,
 			Kind:     providers.SessionIDKind,

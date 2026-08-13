@@ -155,6 +155,7 @@ func NewRuntimeWithSelection(
 	providersLifecycleOwned bool,
 	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder ProviderRegistryRebinder,
+	statelessExecute workers.Service,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
 		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
@@ -167,6 +168,10 @@ func NewRuntimeWithSelection(
 		return nil, err
 	}
 	service := runtimeService.(*Service)
+	if statelessExecute == nil {
+		return nil, fmt.Errorf("construct Workers Runtime: stateless Execute service is required")
+	}
+	service.Root = service.Root.ReplaceExecute(statelessExecute)
 	service.providerCommandInjected = providerCommandInjected
 	service.scriptCommandInjected = scriptCommandInjected
 	service.providerLifecycles = &ownedProviderLifecycles{}

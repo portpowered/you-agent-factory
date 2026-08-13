@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 func (s *Service) normalizeResult(
@@ -29,8 +30,25 @@ func (s *Service) normalizeResult(
 		),
 	}
 	if runErr == nil {
-		result.Outcome = workers.ExecutionOutcomeAccepted
-		result.Output = proposedOutputFromContent(runnerResult.Content)
+		result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
+		result.Output = proposedOutputFromRunnerResult(runnerResult)
+		if result.Outcome == workers.ExecutionOutcomeFailed {
+			runErr = errors.New("runner returned failed outcome")
+		} else if result.Outcome == workers.ExecutionOutcomeAccepted {
+			contractErr := workerexecutor.ValidateOutputContract(
+				runnerResult.Content,
+				request.Target.Output.Contract,
+			)
+			if contractErr != nil {
+				runErr = workers.NewProviderError(
+					workers.WorkFailureTypePermanentBadRequest,
+					"output contract failed",
+					contractErr,
+				)
+			}
+		}
+	}
+	if runErr == nil {
 		return result
 	}
 
@@ -76,6 +94,26 @@ func (s *Service) normalizeResult(
 		result.Output = proposedOutputFromContent(content)
 	}
 	return result
+}
+
+func normalizeRunnerOutcome(outcome workers.WorkOutcome) workers.ExecutionOutcome {
+	switch outcome {
+	case workers.OutcomeContinue:
+		return workers.ExecutionOutcomeContinue
+	case workers.OutcomeRejected:
+		return workers.ExecutionOutcomeRejected
+	case workers.OutcomeFailed:
+		return workers.ExecutionOutcomeFailed
+	default:
+		return workers.ExecutionOutcomeAccepted
+	}
+}
+
+func proposedOutputFromRunnerResult(result workers.RunnerExecutionResult) workers.ProposedOutput {
+	output := proposedOutputFromContent(result.Content)
+	output.Feedback = result.Feedback
+	output.Classification = result.Classification
+	return output
 }
 
 func proposedOutputFromContent(content string) workers.ProposedOutput {

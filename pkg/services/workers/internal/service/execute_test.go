@@ -222,7 +222,7 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 			return nil
 		},
 		nil,
-		nil,
+		func() time.Time { return time.Unix(10, 0) },
 		nil,
 		nil,
 	)

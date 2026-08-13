@@ -402,16 +402,21 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Service: webhooksService,
 	}
 	workerExecutionFactory := provideWorkerExecutionFactory()
-	v68 := provideWorkerProcessEnvironment()
-	v69 := provideWorkerCurrentWorkingDirectory()
-	source := provideWorkersRetryRandomSource(edges2)
-	readFileInspector := provideWorkersWorkstationFileSystem(edges2)
-	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v70, err := provideFactoryRuntimeScriptCommandRunner(edges2)
+	v68, err := provideFactoryRuntimeScriptCommandRunner(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v71, err := provideWorkersRuntimeFactory(service, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v68, v69, source, readFileInspector, temporaryFileSystem, ptyAllocator, v10, v70, edges2, providerRegistry, v9)
+	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v68, readFileTree, clock, logger)
+	if err != nil {
+		return nil, err
+	}
+	v69 := provideWorkerProcessEnvironment()
+	v70 := provideWorkerCurrentWorkingDirectory()
+	source := provideWorkersRetryRandomSource(edges2)
+	readFileInspector := provideWorkersWorkstationFileSystem(edges2)
+	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
+	v71, err := provideWorkersRuntimeFactory(service, workersService, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v69, v70, source, readFileInspector, temporaryFileSystem, ptyAllocator, v10, v68, edges2, providerRegistry, v9)
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +429,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		AdaptCommandRunner:               v44,
 		ProviderFromCommandRunnerFactory: providerFromCommandRunnerFactory,
 		ProviderCommandRunner:            v10,
-		ScriptCommandRunner:              v70,
+		ScriptCommandRunner:              v68,
 	}
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(operatorsettingsService)
 	v74 := &wire.OperatorSettingsRuntimeOpeningPorts{
@@ -926,6 +931,8 @@ var factoryDefinitionsServicesSet = wire5.NewSet(
 )
 
 var workerServiceSet = wire5.NewSet(
+	provideStatelessWorkersService,
+	provideWorkersFactoryDocsFileSystem,
 	provideWorkerInvocationFactory,
 	provideProviderFromCommandRunnerFactory,
 	provideWorkerInvocationWithProgressFactory,

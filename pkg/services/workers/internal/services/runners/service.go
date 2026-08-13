@@ -74,6 +74,7 @@ type ScriptConfig struct {
 	Command          string
 	Args             []string
 	FactoryDirectory string
+	RequestSelected  bool
 }
 
 // ScriptDependencies are the exact effects projected into one Script Runner.

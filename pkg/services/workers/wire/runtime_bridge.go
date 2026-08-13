@@ -64,6 +64,7 @@ func NewRuntimeWithSelection(
 	providersLifecycleOwned bool,
 	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder ProviderRegistryRebinder,
+	statelessExecute workers.Service,
 ) (workers.RuntimeService, error) {
 	return workersinternal.NewRuntimeWithSelection(
 		sessions,
@@ -104,6 +105,7 @@ func NewRuntimeWithSelection(
 		providersLifecycleOwned,
 		providerRegistry,
 		providerRegistryRebinder,
+		statelessExecute,
 	)
 }
 

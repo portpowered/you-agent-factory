@@ -171,31 +171,39 @@ const (
 )
 
 type WorkstationExecutionRequest struct {
-	Dispatch                 work.WorkDispatch               `json:"dispatch"`
-	WorkerType               string                          `json:"worker_type,omitempty"`
-	WorkstationType          string                          `json:"workstation_type,omitempty"`
-	RunnerID                 string                          `json:"runner_id,omitempty"`
-	RunnerSelectionSource    RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
-	ExecutorProvider         string                          `json:"executor_provider,omitempty"`
-	ProjectID                string                          `json:"project_id,omitempty"`
-	FactorySessionID         string                          `json:"factory_session_id,omitempty"`
-	RecordingID              string                          `json:"recording_id,omitempty"`
-	Capabilities             *Capabilities                   `json:"capabilities,omitempty"`
-	InputTokens              []any                           `json:"input_tokens,omitempty"`
-	ModelOperation           string                          `json:"model_operation,omitempty"`
-	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
-	Model                    string                          `json:"model,omitempty"`
-	ModelProvider            string                          `json:"model_provider,omitempty"`
-	ReasoningEffort          string                          `json:"reasoning_effort,omitempty"`
-	SystemPrompt             string                          `json:"system_prompt,omitempty"`
-	UserMessage              string                          `json:"user_message,omitempty"`
-	OutputSchema             string                          `json:"output_schema,omitempty"`
-	OutputContract           string                          `json:"output_contract,omitempty"`
-	EnvVars                  map[string]string               `json:"env_vars,omitempty"`
-	ProcessEnvironment       []string                        `json:"-"`
-	Worktree                 string                          `json:"worktree,omitempty"`
-	WorkingDirectory         string                          `json:"working_directory,omitempty"`
-	WorkingDirectoryAuthored bool                            `json:"working_directory_authored,omitempty"`
+	Dispatch                    work.WorkDispatch               `json:"dispatch"`
+	WorkerName                  string                          `json:"worker_name,omitempty"`
+	WorkerType                  string                          `json:"worker_type,omitempty"`
+	WorkstationType             string                          `json:"workstation_type,omitempty"`
+	RunnerID                    string                          `json:"runner_id,omitempty"`
+	RunnerSelectionSource       RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
+	ExecutorProvider            string                          `json:"executor_provider,omitempty"`
+	ProjectID                   string                          `json:"project_id,omitempty"`
+	FactorySessionID            string                          `json:"factory_session_id,omitempty"`
+	RecordingID                 string                          `json:"recording_id,omitempty"`
+	Capabilities                *Capabilities                   `json:"capabilities,omitempty"`
+	InputTokens                 []any                           `json:"input_tokens,omitempty"`
+	ModelOperation              string                          `json:"model_operation,omitempty"`
+	ModelBindings               []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
+	Model                       string                          `json:"model,omitempty"`
+	ModelProvider               string                          `json:"model_provider,omitempty"`
+	ReasoningEffort             string                          `json:"reasoning_effort,omitempty"`
+	Command                     string                          `json:"command,omitempty"`
+	Args                        []string                        `json:"args,omitempty"`
+	FactoryDirectory            string                          `json:"factory_directory,omitempty"`
+	OutputFormat                string                          `json:"output_format,omitempty"`
+	StopToken                   string                          `json:"stop_token,omitempty"`
+	DecisionEnvelope            bool                            `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope bool                            `json:"goal_routing_decision_envelope,omitempty"`
+	SystemPrompt                string                          `json:"system_prompt,omitempty"`
+	UserMessage                 string                          `json:"user_message,omitempty"`
+	OutputSchema                string                          `json:"output_schema,omitempty"`
+	OutputContract              string                          `json:"output_contract,omitempty"`
+	EnvVars                     map[string]string               `json:"env_vars,omitempty"`
+	ProcessEnvironment          []string                        `json:"-"`
+	Worktree                    string                          `json:"worktree,omitempty"`
+	WorkingDirectory            string                          `json:"working_directory,omitempty"`
+	WorkingDirectoryAuthored    bool                            `json:"working_directory_authored,omitempty"`
 	// ResumeSession is the exact detached Providers-owned session identity a
 	// resumed Worker Session must continue. It is intentionally distinct from
 	// configuration's legacy SessionID: this value retains provider-specific
@@ -211,6 +219,7 @@ type WorkstationExecutionRequest struct {
 
 type ProviderInferenceRequest struct {
 	Dispatch                     work.WorkDispatch               `json:"dispatch"`
+	WorkerName                   string                          `json:"worker_name,omitempty"`
 	WorkerType                   string                          `json:"worker_type,omitempty"`
 	WorkstationType              string                          `json:"workstation_type,omitempty"`
 	RunnerID                     string                          `json:"runner_id,omitempty"`
@@ -231,6 +240,14 @@ type ProviderInferenceRequest struct {
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
 	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
+	Command                      string                          `json:"command,omitempty"`
+	Args                         []string                        `json:"args,omitempty"`
+	FactoryDirectory             string                          `json:"factory_directory,omitempty"`
+	OutputContract               string                          `json:"output_contract,omitempty"`
+	OutputFormat                 string                          `json:"output_format,omitempty"`
+	StopToken                    string                          `json:"stop_token,omitempty"`
+	DecisionEnvelope             bool                            `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope  bool                            `json:"goal_routing_decision_envelope,omitempty"`
 	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
@@ -252,11 +269,13 @@ type SubprocessExecutionRequest = CommandRequest
 func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) WorkstationExecutionRequest {
 	clone := request
 	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
+	clone.WorkerName = request.WorkerName
 	if request.Capabilities != nil {
 		capabilities := *request.Capabilities
 		clone.Capabilities = &capabilities
 	}
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
+	clone.Args = append([]string(nil), request.Args...)
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
@@ -267,7 +286,9 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInferenceRequest {
 	clone := request
 	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
+	clone.WorkerName = request.WorkerName
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
+	clone.Args = append([]string(nil), request.Args...)
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.RequiredOptionalCapabilities = append([]RunnerOptionalCapability(nil), request.RequiredOptionalCapabilities...)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
@@ -400,18 +421,22 @@ type ExecutionCorrelation struct {
 }
 
 type ExecutionTarget struct {
-	WorkerName      string
-	WorkstationName string
-	RunnerID        string
-	Provider        ProviderReference
-	Model           ModelReference
-	Prompt          PromptPolicy
-	Tools           ToolPolicy
-	Output          OutputPolicy
-	Environment     EnvironmentPolicy
-	Workspace       WorkspacePolicy
-	Permissions     PermissionPolicy
-	Timeout         time.Duration
+	WorkerName       string
+	WorkerType       string
+	WorkstationName  string
+	RunnerID         string
+	Command          string
+	Args             []string
+	FactoryDirectory string
+	Provider         ProviderReference
+	Model            ModelReference
+	Prompt           PromptPolicy
+	Tools            ToolPolicy
+	Output           OutputPolicy
+	Environment      EnvironmentPolicy
+	Workspace        WorkspacePolicy
+	Permissions      PermissionPolicy
+	Timeout          time.Duration
 }
 
 type ProviderReference struct {
@@ -438,7 +463,11 @@ type ToolPolicy struct {
 }
 
 type OutputPolicy struct {
-	Contract string
+	Contract                    string
+	Format                      string
+	StopToken                   string
+	DecisionEnvelope            bool
+	GoalRoutingDecisionEnvelope bool
 }
 
 type EnvironmentPolicy struct {
@@ -568,6 +597,7 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 
 func (target ExecutionTarget) Clone() ExecutionTarget {
 	clone := target
+	clone.Args = append([]string(nil), target.Args...)
 	clone.Tools.RequiredOptionalCapabilities = append(
 		[]RunnerOptionalCapability(nil),
 		target.Tools.RequiredOptionalCapabilities...,

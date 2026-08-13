@@ -33,27 +33,30 @@ var (
 	NewPlatformGitCommander = worktree.NewPlatformGitCommander
 )
 
-// ExecuteOptions are optional process-scoped Execute edges. Omitted values use
-// inert defaults so construction remains side-effect free.
-type ExecuteOptions struct {
-	Observe        workers.ObservationSink
-	Logger         logging.Logger
-	Clock          func() time.Time
-	Worktree       workers.FactoryWorktreePreparer
-	TemporaryFiles interface{ Cleanup(paths ...string) error }
-}
+// The runner construction records stay private to the Workers wire package;
+// these aliases expose only their detached inputs to the canonical process
+// graph without exposing runner implementations or registries.
+type AgentDependencies = runners.AgentDependencies
+type ScriptConfig = runners.ScriptConfig
+type ScriptDependencies = runners.ScriptDependencies
+type InferenceConfig = runners.InferenceConfig
+type InferenceDependencies = runners.InferenceDependencies
 
 // NewService constructs an inert Workers root from construction ports. It
 // composes the private runner registry once and installs a request-scoped
 // Execute capability without publishing runner or executor objects on the
 // returned service root.
 func NewService(
-	agentDependencies runners.AgentDependencies,
-	scriptConfig runners.ScriptConfig,
-	scriptDependencies runners.ScriptDependencies,
-	inferenceConfig runners.InferenceConfig,
-	inferenceDependencies runners.InferenceDependencies,
-	options ...ExecuteOptions,
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	temporaryFiles interface{ Cleanup(paths ...string) error },
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
@@ -84,35 +87,31 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	executeOptions := ExecuteOptions{}
-	if len(options) > 0 {
-		executeOptions = options[0]
-	}
 	executeService, err := executeservice.New(
 		runnerRegistry,
 		agentDependencies.Providers,
-		executeOptions.Observe,
-		executeOptions.Logger,
-		executeOptions.Clock,
-		executeOptions.Worktree,
-		executeOptions.TemporaryFiles,
+		observe,
+		logger,
+		clock,
+		worktree,
+		temporaryFiles,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
 	return workersinternal.NewRoot(
 		runtimeAssembly,
-		workstationswire.NewService(executeOptions.Logger),
+		workstationswire.NewService(logger),
 		executeService,
 	)
 }
 
 func validateConstructionPorts(
-	agentDependencies runners.AgentDependencies,
-	scriptConfig runners.ScriptConfig,
-	scriptDependencies runners.ScriptDependencies,
-	inferenceConfig runners.InferenceConfig,
-	inferenceDependencies runners.InferenceDependencies,
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
 ) error {
 	if agentDependencies.Providers == nil {
 		return fmt.Errorf("construct Workers: agent Providers service is required")
@@ -120,7 +119,7 @@ func validateConstructionPorts(
 	if agentDependencies.Publish == nil {
 		return fmt.Errorf("construct Workers: agent progress publisher is required")
 	}
-	if strings.TrimSpace(scriptConfig.Command) == "" {
+	if strings.TrimSpace(scriptConfig.Command) == "" && !scriptConfig.RequestSelected {
 		return fmt.Errorf("construct Workers: script command is required")
 	}
 	if scriptDependencies.CommandRunner == nil {

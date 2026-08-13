@@ -791,6 +791,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideWorkersRuntimeFactory(
 	providersService providers.Service,
+	statelessExecute workers.Service,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
@@ -953,6 +954,7 @@ func provideWorkersRuntimeFactory(
 			providersLifecycleOwned,
 			runtimeRegistry,
 			runtimeRebinder,
+			statelessExecute,
 		)
 	}, nil
 }
