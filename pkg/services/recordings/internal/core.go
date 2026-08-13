@@ -41,6 +41,12 @@ type combinedService struct {
 	scopeIssuer string
 	nextScopeID uint64
 	scopeByRef  map[recordings.RecordingScopeRef]*recordingScopeBinding
+
+	runtimeRouter          *runtimeLedgerRouter
+	runtimeSnapshotCapture factorydefinitions.LoadedFactorySnapshotCapturer
+	replaySnapshotDecoder  factorydefinitions.FactorySnapshotJSONDecoder
+	replayConfigDecoder    factorydefinitions.ReplayRuntimeConfigDecoder
+	replayInputs           recordings.ReplayInputLoader
 }
 
 var _ recordings.Service = (*combinedService)(nil)
