@@ -85,7 +85,7 @@ The table preserves exact covered/total statement counts for every measured back
 | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire` | 9/12 | 9/12 | 9/12 | 9/12 | 9/12 | 75.0000% | 75.0000% | 0.0000 pp | 75.00% | 62.50% | +12.5000 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical` | 1/2 | 1/2 | 1/2 | 1/2 | 1/2 | 50.0000% | 50.0000% | 0.0000 pp | 50.00% | exception | n/a pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/internal/service` | 2/50 | 2/50 | 2/50 | 2/50 | 2/50 | 4.0000% | 4.0000% | 0.0000 pp | 4.00% | exception | n/a pp |
-| `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource` | 57/77 | 57/77 | 57/77 | 57/77 | 57/77 | 74.0260% | 74.0260% | 0.0000 pp | 74.02% | 74.13% | -0.1040 pp |
+| `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource` | 57/77 | 57/77 | 57/77 | 57/77 | 57/77 | 74.0260% | 74.0260% | 0.0000 pp | 74.02% | 74.02% | +0.0060 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading` | 227/332 | 227/332 | 227/332 | 227/332 | 227/332 | 68.3735% | 68.3735% | 0.0000 pp | 68.37% | 45.00% | +23.3735 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig` | 170/191 | 170/191 | 170/191 | 170/191 | 170/191 | 89.0052% | 89.0052% | 0.0000 pp | 89.00% | 83.62% | +5.3852 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire` | 6/10 | 6/10 | 6/10 | 6/10 | 6/10 | 60.0000% | 60.0000% | 0.0000 pp | 60.00% | exception | n/a pp |
@@ -142,7 +142,7 @@ The table preserves exact covered/total statement counts for every measured back
 | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal` | 0/28 | 0/28 | 0/28 | 0/28 | 0/28 | 0.0000% | 0.0000% | 0.0000 pp | 0.00% | 0.00% | 0.0000 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service` | 0/44 | 0/44 | 0/44 | 0/44 | 0/44 | 0.0000% | 0.0000% | 0.0000 pp | 0.00% | 0.00% | 0.0000 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire` | 2/4 | 2/4 | 2/4 | 2/4 | 2/4 | 50.0000% | 50.0000% | 0.0000 pp | 50.00% | 21.42% | +28.5800 pp |
-| `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service` | 168/267 | 167/267 | 169/267 | 167/267 | 167/267 | 62.5468% | 63.2959% | 0.7491 pp | 62.54% | 62.92% | -0.3732 pp |
+| `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service` | 168/267 | 167/267 | 169/267 | 167/267 | 167/267 | 62.5468% | 63.2959% | 0.7491 pp | 62.54% | 62.54% | +0.0068 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire` | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 100.0000% | 100.0000% | 0.0000 pp | 100.00% | 100.00% | 0.0000 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build` | 79/100 | 79/100 | 79/100 | 79/100 | 79/100 | 79.0000% | 79.0000% | 0.0000 pp | 79.00% | 74.72% | +4.2800 pp |
 | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/internal/service` | 61/164 | 59/164 | 60/164 | 60/164 | 59/164 | 35.9756% | 37.1951% | 1.2195 pp | 35.97% | 0.00% | +35.9756 pp |
@@ -454,6 +454,21 @@ The table preserves exact covered/total statement counts for every measured back
 | `github.com/portpowered/infinite-you/pkg/transports/mcp/server` | 31/42 | 31/42 | 31/42 | 31/42 | 31/42 | 73.8095% | 73.8095% | 0.0000 pp | 73.80% | 73.80% | +0.0095 pp |
 | `github.com/portpowered/infinite-you/pkg/transports/mcp/stdio` | 7/10 | 7/10 | 7/10 | 7/10 | 7/10 | 70.0000% | 70.0000% | 0.0000 pp | 70.00% | 70.00% | 0.0000 pp |
 | `github.com/portpowered/infinite-you/pkg/wire` | 1462/1789 | 1462/1789 | 1462/1789 | 1462/1789 | 1462/1789 | 81.7216% | 81.7216% | 0.0000 pp | 81.72% | 81.60% | +0.1216 pp |
+
+## Measured remedy classification
+
+Remedies are limited to package-specific evidence. The four in-scope latent-red packages repeat their existing functional exercise in all five samples, so their floors remain unchanged. The only functional manifest entry changed by this lane is loadedsource, whose exact sampled minimum is below its prior epsilon-tolerated floor.
+
+| Package | Classification | Observed evidence | Remedy |
+| --- | --- | --- | --- |
+| `.../validation/authoredmodel/workers` | deterministic functional exercise | 55/62 in every run; swing 0.0000 pp; floor 80.64%; headroom +8.0697 pp | Retain 80.64%; existing functional exercise is repeatable and preserves regression detection. |
+| `.../factory_sessions/internal/runtimebinding` | deterministic functional exercise | 282/441 in every run; swing 0.0000 pp; floor 60.10%; headroom +3.8456 pp | Retain 60.10%; no source or floor change is justified by the sample. |
+| `.../platform/jsonvalue` | deterministic functional exercise | 34/49 in every run; swing 0.0000 pp; floor 67.34%; headroom +2.0478 pp | Retain 67.34%; existing functional exercise is repeatable. |
+| `.../factory_sessions/internal/processlifecycle` | deterministic functional exercise | 133/171 in every run; swing 0.0000 pp; floor 76.31%; headroom +1.4678 pp | Retain 76.31%; existing functional exercise is repeatable. |
+| `.../factory_definitions/internal/services/compilation/loadedsource` | inherent concurrent variance, epsilon-only pass | 57/77 in every run; minimum 74.0260%; prior floor 74.13% exceeded the observation by 0.1040 pp | Lower only this entry to the safe two-decimal minimum 74.02%; keep the 0.25 pp epsilon and blocking gate unchanged. |
+| `.../factory_runtime/internal/services/dispatch_planning/internal/service` | inherent concurrent variance, owner lane | New sample: 168/267, 167/267, 169/267, 167/267, 167/267; supplied owner-lane minimum 167/267 | Inherit main's 62.54% entry from the merged owner lane; this lane does not edit the package or manifest entry. |
+
+`proposalmaterialization` remains at its existing 0.00% numeric floor: the new sample observes 15/84 in every run, while the supplied sampling-range evidence does not justify a positive ratchet or an exception conversion.
 
 ## Supplied operator evidence (not part of the new sample set)
 

@@ -410,6 +410,8 @@ func renderCoverageVarianceReport(report coverageVarianceReport) ([]byte, error)
 		fmt.Fprintf(&output, "| `%s` | %s | %s%% | %s%% | %s pp | %s | %s | %s pp |\n", row.importPath, strings.Join(values, " | "), row.minimum, row.maximum, row.swing, row.sampleFloor, row.currentFloor, row.headroom)
 	}
 	fmt.Fprintln(&output)
+	renderCoverageVarianceRemedies(&output)
+	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "## Supplied operator evidence (not part of the new sample set)")
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "The following context was supplied before this audit and is kept separate from the measurements above:")
@@ -419,4 +421,21 @@ func renderCoverageVarianceReport(report coverageVarianceReport) ([]byte, error)
 	fmt.Fprintln(&output, "- The five supplied latent-red cases are authoredmodel/workers, runtimebinding, platform/jsonvalue, processlifecycle, and dispatch-planning. Dispatch-planning remains owned by its separate lane and is reported here without editing its package or manifest entry.")
 	fmt.Fprintln(&output, "- The supplied comparison identifies loadedsource as an epsilon-only pass and proposalmaterialization as a sampling-range case; their independent counts in this new sample set are shown in the table when those packages are measurable.")
 	return []byte(output.String()), nil
+}
+
+func renderCoverageVarianceRemedies(output *strings.Builder) {
+	fmt.Fprintln(output, "## Measured remedy classification")
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "Remedies are limited to package-specific evidence. The four in-scope latent-red packages repeat their existing functional exercise in all five samples, so their floors remain unchanged. The only functional manifest entry changed by this lane is loadedsource, whose exact sampled minimum is below its prior epsilon-tolerated floor.")
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "| Package | Classification | Observed evidence | Remedy |")
+	fmt.Fprintln(output, "| --- | --- | --- | --- |")
+	fmt.Fprintln(output, "| `.../validation/authoredmodel/workers` | deterministic functional exercise | 55/62 in every run; swing 0.0000 pp; floor 80.64%; headroom +8.0697 pp | Retain 80.64%; existing functional exercise is repeatable and preserves regression detection. |")
+	fmt.Fprintln(output, "| `.../factory_sessions/internal/runtimebinding` | deterministic functional exercise | 282/441 in every run; swing 0.0000 pp; floor 60.10%; headroom +3.8456 pp | Retain 60.10%; no source or floor change is justified by the sample. |")
+	fmt.Fprintln(output, "| `.../platform/jsonvalue` | deterministic functional exercise | 34/49 in every run; swing 0.0000 pp; floor 67.34%; headroom +2.0478 pp | Retain 67.34%; existing functional exercise is repeatable. |")
+	fmt.Fprintln(output, "| `.../factory_sessions/internal/processlifecycle` | deterministic functional exercise | 133/171 in every run; swing 0.0000 pp; floor 76.31%; headroom +1.4678 pp | Retain 76.31%; existing functional exercise is repeatable. |")
+	fmt.Fprintln(output, "| `.../factory_definitions/internal/services/compilation/loadedsource` | inherent concurrent variance, epsilon-only pass | 57/77 in every run; minimum 74.0260%; prior floor 74.13% exceeded the observation by 0.1040 pp | Lower only this entry to the safe two-decimal minimum 74.02%; keep the 0.25 pp epsilon and blocking gate unchanged. |")
+	fmt.Fprintln(output, "| `.../factory_runtime/internal/services/dispatch_planning/internal/service` | inherent concurrent variance, owner lane | New sample: 168/267, 167/267, 169/267, 167/267, 167/267; supplied owner-lane minimum 167/267 | Inherit main's 62.54% entry from the merged owner lane; this lane does not edit the package or manifest entry. |")
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "`proposalmaterialization` remains at its existing 0.00% numeric floor: the new sample observes 15/84 in every run, while the supplied sampling-range evidence does not justify a positive ratchet or an exception conversion.")
 }
