@@ -379,7 +379,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v57 := provideReplayArtifactLoader(storage)
 	v58 := provideFactorySessionReplayRecordingReader(edges2)
 	replayInputLoader := provideFactorySessionReplayInputs(v57, v58, loggingLogger)
-	root, err := provideRecordingsRoot(edges2, v5, storage, v39, replayInputLoader)
+	root, err := provideRecordingsRoot(edges2, v5, storage, v39, replayInputLoader, loggingLogger)
 	if err != nil {
 		return nil, err
 	}

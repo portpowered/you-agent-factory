@@ -91,6 +91,7 @@ func TestRuntimeRootActiveRecordingOwnsOpaqueScopeAndFinalizesOnce(t *testing.T)
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	now := func() time.Time { return time.Unix(1_700_000_100, 0).UTC() }
 	opened, err := root.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{

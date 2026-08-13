@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -27,6 +28,7 @@ func NewRuntimeRoot(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) recordings.Root {
 	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
@@ -37,13 +39,14 @@ func NewRuntimeRoot(
 		writer = NewReplayRecordingSnapshotWriter(writeFile)
 		tickers = NewRecordingFlushTickerFactory()
 	}
-	service := NewServiceWithLifecycleEffects(
+	service := NewServiceWithLifecycleEffectsAndLogger(
 		router,
 		projection,
 		targets,
 		writer,
 		tickers,
 		publication,
+		logger,
 		clocks...,
 	)
 	root, ok := service.(*combinedService)
