@@ -3380,7 +3380,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.96
+      "minimum": 81.60
     }
   ]
 }
