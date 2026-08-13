@@ -430,6 +430,11 @@ func assembleRuntimeBundle(
 	}); ok {
 		configurable.SetMockWorkersConfig(mockWorkersConfig)
 	}
+	if configurable, ok := activeFactory.(interface {
+		SetPromptSourceReader(func(string) ([]byte, error))
+	}); ok && inputFiles != nil {
+		configurable.SetPromptSourceReader(inputFiles.ReadFile)
+	}
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err
 	}

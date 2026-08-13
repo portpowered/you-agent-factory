@@ -81,6 +81,7 @@ type runtimeConfig struct {
 	scheduler                 scheduler.Scheduler
 	executeService            executeCapability
 	promptRenderer            workers.PromptRenderer
+	promptSourceReader        func(string) ([]byte, error)
 	attempts                  *attemptLifecycle
 	attemptCapacity           int
 	newID                     factory.IDGenerator
@@ -301,6 +302,16 @@ func (f *factoryImpl) SetMockWorkersConfig(config *workers.MockWorkersConfig) {
 		return
 	}
 	f.cfg.mockWorkersConfig = config.Clone()
+}
+
+// SetPromptSourceReader supplies the Runtime-owned read-only filesystem edge
+// used to refresh authored prompt sources at dispatch time. The reader is an
+// effect port; Runtime retains only the function and never a filesystem object.
+func (f *factoryImpl) SetPromptSourceReader(reader func(string) ([]byte, error)) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.promptSourceReader = reader
 }
 
 func normalizeRuntimeMode(mode interfaces.RuntimeMode) interfaces.RuntimeMode {

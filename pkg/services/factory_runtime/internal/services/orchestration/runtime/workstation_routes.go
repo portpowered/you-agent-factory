@@ -149,15 +149,16 @@ func applyRuntimeDefinitionSelection(
 		worker, workerFound = lookup.Worker(resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation))
 	}
 	if workerFound && worker != nil {
-		applyRuntimeWorkerSelection(selection, request.Execution, invocation, worker)
+		applyRuntimeWorkerSelection(cfg, selection, request.Execution, invocation, worker)
 	}
 	if workstationFound && workstation != nil {
-		applyRuntimeWorkstationSelection(selection, invocation, workstation)
+		applyRuntimeWorkstationSelection(cfg, selection, invocation, workstation)
 	}
 	applyRuntimeConfigSelection(cfg, selection)
 }
 
 func applyRuntimeWorkerSelection(
+	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
 	execution workers.WorkstationExecutionRequest,
 	invocation *work.InvocationArguments,
@@ -165,6 +166,14 @@ func applyRuntimeWorkerSelection(
 ) {
 	selection.workerName = firstRuntimeValue(strings.TrimSpace(execution.WorkerName), worker.Name)
 	selection.workerType = firstRuntimeValue(worker.Type, selection.workerType)
+	if body, ok := runtimePromptSourceContent(cfg, worker.Name, true, true); ok {
+		selection.systemPrompt = body
+	} else {
+		selection.systemPrompt = firstRuntimeValue(
+			selection.systemPrompt,
+			resolveRuntimeInvocationValue(worker.Body, invocation),
+		)
+	}
 	selection.providerID = firstRuntimeValue(
 		selection.providerID,
 		resolveRuntimeInvocationValue(worker.ExecutorProvider, invocation),
@@ -205,6 +214,7 @@ func applyRuntimeWorkerSelection(
 }
 
 func applyRuntimeWorkstationSelection(
+	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
 	invocation *work.InvocationArguments,
 	workstation *interfaces.FactoryWorkstationConfig,
@@ -217,10 +227,19 @@ func applyRuntimeWorkstationSelection(
 		selection.systemPrompt,
 		resolveRuntimeInvocationValue(workstation.Body, invocation),
 	)
-	selection.promptTemplate = firstRuntimeValue(
-		selection.promptTemplate,
-		resolveRuntimeInvocationValue(workstation.PromptTemplate, invocation),
-	)
+	if prompt, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
+		if source, sourceOK := runtimePromptSource(cfg, workstation.Name, false); sourceOK && source.IsTemplate {
+			selection.promptTemplate = prompt
+			selection.userMessage = ""
+		} else {
+			selection.userMessage = prompt
+		}
+	} else {
+		selection.promptTemplate = firstRuntimeValue(
+			selection.promptTemplate,
+			resolveRuntimeInvocationValue(workstation.PromptTemplate, invocation),
+		)
+	}
 	selection.outputSchema = firstRuntimeValue(
 		selection.outputSchema,
 		resolveRuntimeInvocationValue(workstation.OutputSchema, invocation),
@@ -264,6 +283,61 @@ func applyRuntimeWorkstationSelection(
 			len(workstation.ClassificationRoutes) > 0)
 }
 
+func runtimePromptSource(
+	cfg *runtimeConfig,
+	name string,
+	workerSource bool,
+) (interfaces.PromptSource, bool) {
+	if cfg == nil || cfg.runtimeConfig == nil {
+		return interfaces.PromptSource{}, false
+	}
+	lookup, ok := cfg.runtimeConfig.(interfaces.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return interfaces.PromptSource{}, false
+	}
+	if workerSource {
+		return lookup.WorkerPromptSource(name)
+	}
+	return lookup.WorkstationPromptSource(name)
+}
+
+func runtimePromptSourceContent(
+	cfg *runtimeConfig,
+	name string,
+	bodySource bool,
+	workerSource bool,
+) (string, bool) {
+	source, found := runtimePromptSource(cfg, name, workerSource)
+	if !found || cfg == nil || cfg.promptSourceReader == nil || strings.TrimSpace(source.Path) == "" {
+		return "", false
+	}
+	data, err := cfg.promptSourceReader(source.Path)
+	if err != nil {
+		return "", false
+	}
+	if !bodySource && source.IsTemplate {
+		return string(data), true
+	}
+	return runtimeAuthoredPromptBody(string(data)), true
+}
+
+func runtimeAuthoredPromptBody(content string) string {
+	if strings.HasPrefix(content, "---\r\n") {
+		content = strings.Replace(content, "\r\n", "\n", -1)
+	}
+	if !strings.HasPrefix(content, "---\n") {
+		return content
+	}
+	rest := content[len("---\n"):]
+	if index := strings.Index(rest, "\n---\n"); index >= 0 {
+		return strings.TrimSpace(rest[index+len("\n---\n"):])
+	}
+	if strings.HasSuffix(strings.TrimSpace(rest), "---") {
+		return ""
+	}
+	return content
+}
+
 func applyRuntimeConfigSelection(
 	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
@@ -300,10 +374,12 @@ func finalizeRuntimeExecutionSelection(
 	}
 	if selection.runnerID == "" && selection.model != "" &&
 		selection.workerType != interfaces.WorkerTypeInference {
-		// MODEL_WORKER is the provider-backed agent route. The inference runner
-		// is reserved for an explicitly authored INFERENCE_WORKER; legacy model
-		// workers default to the Codex provider when no provider was authored.
-		selection.runnerID = workers.RunnerIDCodex
+		// MODEL_WORKER is the provider-backed agent route. Resolve its runner
+		// from the authored executor/model provider, preserving the shared
+		// compatibility aliases and Codex default when neither is selectable.
+		selection.runnerID = workers.ResolveRunnerSelection(
+			"", "", firstRuntimeValue(selection.providerID, selection.modelProvider),
+		).RunnerID
 	}
 	if selection.runnerID == "" && selection.providerID == "" && selection.model == "" {
 		selection.runnerID = workers.RunnerIDCodex

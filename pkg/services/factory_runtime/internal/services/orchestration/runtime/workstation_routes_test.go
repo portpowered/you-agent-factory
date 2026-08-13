@@ -40,7 +40,7 @@ func TestRuntimeWorkstationRouteNamesIncludeWorkerAndWorkstationKeys(t *testing.
 
 func TestApplyRuntimeWorkstationSelectionMarksGoalRoutingEnvelope(t *testing.T) {
 	selection := runtimeExecutionSelection{}
-	applyRuntimeWorkstationSelection(&selection, nil, &interfaces.FactoryWorkstationConfig{
+	applyRuntimeWorkstationSelection(nil, &selection, nil, &interfaces.FactoryWorkstationConfig{
 		OutcomeFormat: interfaces.DecisionEnvelopeOutcomeFormat,
 		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
 			Label: "accepted",
@@ -49,5 +49,45 @@ func TestApplyRuntimeWorkstationSelectionMarksGoalRoutingEnvelope(t *testing.T) 
 
 	if !selection.decisionEnvelope || !selection.goalRoutingDecisionEnvelope {
 		t.Fatalf("selection output policy = %#v, want decision and goal-routing envelopes", selection)
+	}
+}
+
+func TestFinalizeRuntimeExecutionSelectionUsesProviderRunner(t *testing.T) {
+	tests := []struct {
+		name          string
+		providerID    string
+		modelProvider string
+		wantRunner    string
+	}{
+		{name: "authored claude model provider", modelProvider: "claude", wantRunner: workers.RunnerIDClaude},
+		{name: "authored agy executor provider", providerID: "agy", modelProvider: "codex", wantRunner: workers.RunnerIDAntigravity},
+		{name: "unknown provider uses codex default", modelProvider: "operator-provider", wantRunner: workers.RunnerIDCodex},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			selection := runtimeExecutionSelection{
+				providerID:    test.providerID,
+				modelProvider: test.modelProvider,
+				model:         "model",
+				workerType:    interfaces.WorkerTypeModel,
+			}
+			finalizeRuntimeExecutionSelection(&selection, nil)
+			if selection.runnerID != test.wantRunner {
+				t.Fatalf("runnerID = %q, want %q; selection = %#v", selection.runnerID, test.wantRunner, selection)
+			}
+		})
+	}
+}
+
+func TestApplyRuntimeWorkerSelectionUsesWorkerBodyAsSystemPrompt(t *testing.T) {
+	selection := runtimeExecutionSelection{}
+	applyRuntimeWorkerSelection(nil, &selection, workers.WorkstationExecutionRequest{}, nil, &interfaces.FactoryWorkerConfig{
+		Name: "worker",
+		Type: interfaces.WorkerTypeModel,
+		Body: "worker system prompt",
+	})
+
+	if selection.systemPrompt != "worker system prompt" {
+		t.Fatalf("systemPrompt = %q, want worker body", selection.systemPrompt)
 	}
 }
