@@ -124,6 +124,8 @@ var (
 
 const (
 	workerLifecycleSourceType = events.SourceType("worker_session_lifecycle")
+	workerLineageSourceType   = events.SourceType("worker_session_lineage")
+	workerLineageSourceEvent  = events.SourceEventID("successor")
 	workerDraftSchemaID       = events.SchemaID("workers.draft.v1")
 	openingSourceSequence     = events.SourceSequence(1)
 	openingSourceEventID      = events.SourceEventID("started")
@@ -160,7 +162,7 @@ func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory
 	}
 	identities := make(map[events.AppendIdentity]struct{}, len(history.Records))
 	for index, record := range history.Records {
-		if err := reduceWorkerRecord(&projection, identities, record, index, len(history.Records), history.WorkerSessionID, topic); err != nil {
+		if err := reduceWorkerRecord(&projection, identities, record, index, history.WorkerSessionID, topic); err != nil {
 			return WorkerRecordingProjection{}, err
 		}
 	}
@@ -197,7 +199,7 @@ func reduceWorkerRecord(
 	projection *WorkerRecordingProjection,
 	identities map[events.AppendIdentity]struct{},
 	record events.Record,
-	index, recordCount int,
+	index int,
 	sessionID string,
 	topic events.Topic,
 ) error {
@@ -212,6 +214,10 @@ func reduceWorkerRecord(
 		}
 		return err
 	}
+	lineageRecord := isWorkerLineageRecord(draft)
+	if projection.Terminal != nil && (!lineageRecord || !isWorkerSuccessorLineageRecord(record, draft)) {
+		return fmt.Errorf("%w: record follows terminal at position %d", ErrWorkerRecordingTerminal, record.ID.Position)
+	}
 	if index == 0 {
 		if err := validateWorkerOpening(record, draft, sessionID); err != nil {
 			return err
@@ -220,7 +226,7 @@ func reduceWorkerRecord(
 	} else if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted {
 		return fmt.Errorf("%w: duplicate SESSION/STARTED record at position %d", ErrWorkerRecordingOpening, record.ID.Position)
 	}
-	if err := reduceWorkerTerminal(projection, record, draft, recordCount, sessionID); err != nil {
+	if err := reduceWorkerTerminal(projection, record, draft, sessionID); err != nil {
 		return err
 	}
 	projection.Records = append(projection.Records, record.Detached())
@@ -228,7 +234,7 @@ func reduceWorkerRecord(
 	return nil
 }
 
-func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.Record, draft workers.Draft, recordCount int, sessionID string) error {
+func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.Record, draft workers.Draft, sessionID string) error {
 	if draft.Kind != workers.KindSession || !isWorkerTerminalPhase(draft.Phase) {
 		return nil
 	}
@@ -237,9 +243,6 @@ func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.R
 	}
 	if projection.Terminal != nil {
 		return fmt.Errorf("%w: multiple terminal records", ErrWorkerRecordingTerminal)
-	}
-	if record.ID.Position != events.AggregateSequence(recordCount) {
-		return fmt.Errorf("%w: record follows terminal at position %d", ErrWorkerRecordingTerminal, record.ID.Position)
 	}
 	status, err := workerTerminalStatus(draft)
 	if err != nil {
@@ -469,6 +472,15 @@ func decodeWorkerDraft(record events.Record) (workers.Draft, error) {
 	if err := workers.ValidateDraft(draft); err != nil {
 		return workers.Draft{}, fmt.Errorf("%w: Worker draft: %w", ErrWorkerRecordingDelivery, err)
 	}
+	if draft.Kind == workers.KindSession {
+		var payload workers.SessionPayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			return workers.Draft{}, fmt.Errorf("%w: Session payload JSON: %w", ErrWorkerRecordingDelivery, err)
+		}
+		if err := payload.ValidateLineage(); err != nil {
+			return workers.Draft{}, fmt.Errorf("%w: Session lineage: %w", ErrWorkerRecordingDelivery, err)
+		}
+	}
 	return draft, nil
 }
 
@@ -486,7 +498,36 @@ func validateWorkerOpening(record events.Record, draft workers.Draft, sessionID 
 		payload.Status != "STARTING" || payload.WorkerSessionID != sessionID {
 		return fmt.Errorf("%w: opening payload does not match STARTING/%q", ErrWorkerRecordingOpening, sessionID)
 	}
+	if err := payload.ValidateLineage(); err != nil {
+		return fmt.Errorf("%w: opening Session lineage is invalid", ErrWorkerRecordingOpening)
+	}
 	return nil
+}
+
+func isWorkerLineageRecord(draft workers.Draft) bool {
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseUpdated {
+		return false
+	}
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		return false
+	}
+	return payload.Lineage != nil
+}
+
+func isWorkerSuccessorLineageRecord(record events.Record, draft workers.Draft) bool {
+	if record.SourceType != workerLineageSourceType ||
+		record.SourceSequence != 1 || record.SourceEventID != workerLineageSourceEvent {
+		return false
+	}
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil || payload.Lineage == nil {
+		return false
+	}
+	expectedSourceID := events.SourceID(payload.WorkerSessionID + "/successor/" + payload.Lineage.SuccessorWorkerSessionID)
+	return record.SourceID == expectedSourceID && payload.AttemptReason == "" && payload.Lineage.SuccessorWorkerSessionID != "" &&
+		payload.Lineage.PredecessorWorkerSessionID == "" && payload.Lineage.PreviousDispatchID == "" &&
+		payload.Lineage.PreviousAttemptID == ""
 }
 
 func validateWorkerTerminal(record events.Record, sessionID string) error {
@@ -518,4 +559,12 @@ func workerTerminalStatus(draft workers.Draft) (string, error) {
 
 func isWorkerTerminalPhase(phase workers.Phase) bool {
 	return phase == workers.PhaseCompleted || phase == workers.PhaseFailed || phase == workers.PhaseCanceled
+}
+
+func cloneSessionLineage(value *workers.SessionLineage) *workers.SessionLineage {
+	if value == nil {
+		return nil
+	}
+	clone := value.Clone()
+	return &clone
 }

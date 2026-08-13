@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -140,6 +141,171 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 	assertLocalTerminalWorkerSessionControls(t, ctx, process, env, workingDirectory)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
 }
+
+// WSR-FT-015: root.BuildProcess/Process.Execute admits a paused Worker
+// Session through the exact recorded Provider Session and refuses an unknown
+// resume without another provider command side effect.
+func TestWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	runner := newWSRFT015StreamingProviderRunner()
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+	invoke := support.FakeInputs(ctx, []string{
+		"you", "--json", "worker-sessions", "invoke",
+		"--request-id", "wsr-015-invoke-request",
+		"--worker-session-id", "wsr-015-session",
+		"--dispatch-id", "wsr-015-dispatch",
+		"--workstation", "direct",
+		"--worker-type", "direct-worker",
+		"--runner", "codex",
+		"--provider", "codex",
+		"--model", "functional-model",
+		"--user-message", "hold the recorded provider session",
+	})
+	invoke.Input.Env = env
+	invoke.Input.WorkingDirectory = workingDirectory
+	invokeDone := make(chan error, 1)
+	go func() { invokeDone <- process.Execute(invoke.Input) }()
+	<-runner.initialSessionObserved
+
+	pause := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "pause", "wsr-015-session"})
+	pause.Input.Env = env
+	pause.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(pause.Input); err != nil {
+		t.Fatalf("WSR-FT-015 pause: %v\nstdout:%s\nstderr:%s", err, pause.Stdout(), pause.Stderr())
+	}
+	var paused struct {
+		Outcome string `json:"outcome"`
+		State   string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(pause.Stdout()), &paused); err != nil {
+		t.Fatalf("decode WSR-FT-015 pause: %v; stdout=%s", err, pause.Stdout())
+	}
+	if paused.Outcome != "APPLIED" || paused.State != "PAUSED" {
+		t.Fatalf("WSR-FT-015 pause result = %#v, want APPLIED/PAUSED", paused)
+	}
+
+	resume := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "resume", "wsr-015-session"})
+	resume.Input.Env = env
+	resume.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(resume.Input); err != nil {
+		t.Fatalf("WSR-FT-015 resume: %v\nstdout:%s\nstderr:%s", err, resume.Stdout(), resume.Stderr())
+	}
+	var resumed struct {
+		Outcome string `json:"outcome"`
+		State   string `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(resume.Stdout()), &resumed); err != nil {
+		t.Fatalf("decode WSR-FT-015 resume: %v; stdout=%s", err, resume.Stdout())
+	}
+	if resumed.Outcome != "APPLIED" || (resumed.State != "RUNNING" && resumed.State != "COMPLETED") {
+		t.Fatalf("WSR-FT-015 resume result = %#v, want APPLIED/RUNNING or COMPLETED", resumed)
+	}
+
+	if err := <-invokeDone; err != nil {
+		t.Fatalf("WSR-FT-015 invoke after resume: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	var invoked directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, invoke.Stdout(), &invoked)
+	if !invoked.Accepted || invoked.State != "COMPLETED" || !strings.Contains(invoked.Output, "resumed exact output") {
+		t.Fatalf("WSR-FT-015 final invoke result = %#v, want completed resumed output", invoked)
+	}
+
+	requests := runner.Requests()
+	if len(requests) != 2 {
+		t.Fatalf("WSR-FT-015 provider command requests = %d, want initial plus exact resume", len(requests))
+	}
+	if strings.Contains(strings.Join(requests[0].Args, " "), "resume") {
+		t.Fatalf("WSR-FT-015 initial provider command unexpectedly resumed: %#v", requests[0].Args)
+	}
+	resumeArgs := strings.Join(requests[1].Args, " ")
+	if !strings.Contains(resumeArgs, "resume") || !strings.Contains(resumeArgs, "wsr-015-recorded-thread") {
+		t.Fatalf("WSR-FT-015 resume provider command = %#v, want exact recorded session", requests[1].Args)
+	}
+
+	refusal := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "resume", "wsr-015-unknown-session"})
+	refusal.Input.Env = env
+	refusal.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(refusal.Input); err == nil {
+		t.Fatal("WSR-FT-015 unknown resume succeeded, want NOT_FOUND without provider side effect")
+	}
+	assertDirectWorkerSessionCLIError(t, refusal, string(factoryapi.ErrorResponseCodeNOTFOUND))
+	if runner.CallCount() != 2 {
+		t.Fatalf("WSR-FT-015 provider command calls after refused resume = %d, want 2", runner.CallCount())
+	}
+}
+
+type wsrFT015StreamingProviderRunner struct {
+	initialSessionObserved chan struct{}
+	initialOnce            sync.Once
+	mu                     sync.Mutex
+	requests               []platformprocess.CommandRequest
+}
+
+func newWSRFT015StreamingProviderRunner() *wsrFT015StreamingProviderRunner {
+	return &wsrFT015StreamingProviderRunner{initialSessionObserved: make(chan struct{})}
+}
+
+func (r *wsrFT015StreamingProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return r.RunStreaming(ctx, request, nil)
+}
+
+func (r *wsrFT015StreamingProviderRunner) RunStreaming(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+	observe platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	r.requests = append(r.requests, platformprocess.CommandRequest{Command: request.Command, Args: append([]string(nil), request.Args...)})
+	r.mu.Unlock()
+
+	args := strings.Join(request.Args, " ")
+	if strings.Contains(args, "resume") {
+		emitWSRFT015CodexOutput(observe, directCodexSessionOutput("wsr-015-recorded-thread", "resumed exact output"))
+		return platformprocess.CommandResult{}, nil
+	}
+	initial := directCodexSessionOutput("wsr-015-recorded-thread", "initial output")
+	if observe != nil {
+		line := strings.SplitN(string(initial), "\n", 2)[0] + "\n"
+		observe(platformprocess.OutputStreamStdout, []byte(line))
+	}
+	r.initialOnce.Do(func() { close(r.initialSessionObserved) })
+	<-ctx.Done()
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func (r *wsrFT015StreamingProviderRunner) Requests() []platformprocess.CommandRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, len(r.requests))
+	for i, request := range r.requests {
+		requests[i] = platformprocess.CommandRequest{Command: request.Command, Args: append([]string(nil), request.Args...)}
+	}
+	return requests
+}
+
+func (r *wsrFT015StreamingProviderRunner) CallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.requests)
+}
+
+func emitWSRFT015CodexOutput(observe platformprocess.OutputChunkObserver, output []byte) {
+	if observe == nil {
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(string(output), "\n"), "\n") {
+		observe(platformprocess.OutputStreamStdout, []byte(line+"\n"))
+	}
+}
+
+var _ platformprocess.CommandRunner = (*wsrFT015StreamingProviderRunner)(nil)
 
 func assertLocalTerminalWorkerSessionControls(t *testing.T, ctx context.Context, process support.Process, env []string, workingDirectory string) {
 	t.Helper()

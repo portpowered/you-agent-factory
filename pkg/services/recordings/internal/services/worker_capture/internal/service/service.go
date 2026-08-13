@@ -26,6 +26,8 @@ type Service struct {
 
 var _ recordings.WorkerSessionRecordingService = (*Service)(nil)
 var _ recordings.WorkerRecordingReader = (*Service)(nil)
+var _ recordings.WorkerRecordingWriter = (*Service)(nil)
+var _ recordings.WorkerRecordingFailureWriter = (*Service)(nil)
 var _ recordings.WorkerSessionRecordingFinalizer = (*capture)(nil)
 
 // New constructs the Worker capture capability. Construction is inert; the
@@ -73,6 +75,30 @@ func (service *Service) LoadWorkerRecording(
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
 	}
 	return reader.LoadWorkerRecording(ctx, recordingID)
+}
+
+// PersistWorkerRecord forwards a source-native record to the same durable
+// writer used by live capture. Worker Sessions uses this optional capability
+// for a continuation link that is appended after the source's execution
+// terminal has already closed its live capture handle.
+func (service *Service) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if service == nil || service.writer == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	return service.writer.PersistWorkerRecord(ctx, record)
+}
+
+// PersistWorkerRecordingFailure forwards a safe loss marker when a
+// post-terminal continuation record cannot be durably accepted.
+func (service *Service) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
+	if service == nil || service.writer == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	writer, ok := service.writer.(recordings.WorkerRecordingFailureWriter)
+	if !ok || writer == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	return writer.PersistWorkerRecordingFailure(ctx, failure)
 }
 
 // StartWorkerSessionRecording subscribes from aggregate position zero before

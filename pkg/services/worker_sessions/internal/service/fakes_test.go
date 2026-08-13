@@ -713,6 +713,17 @@ func TestContinue_PreAdmissionFailureReturnsTerminalSuccessorAndTypedError(t *te
 	if result.Session.Result == nil || result.Session.Result.Cause == nil {
 		t.Fatalf("Continue() result = %#v, want terminal failure cause", result.Session)
 	}
+	source, getErr := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SourceWorkerSessionID})
+	if getErr != nil {
+		t.Fatalf("Get(source after refused continuation) error = %v", getErr)
+	}
+	successor, getErr := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
+	if getErr != nil {
+		t.Fatalf("Get(successor after refused continuation) error = %v", getErr)
+	}
+	if source.SuccessorWorkerSessionID != "" || successor.PredecessorWorkerSessionID != "" {
+		t.Fatalf("refused continuation mutated lineage: source=%#v successor=%#v", source, successor)
+	}
 }
 
 func TestContinue_CanceledCallerDoesNotCancelReservedContinuation(t *testing.T) {

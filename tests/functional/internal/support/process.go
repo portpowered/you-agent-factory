@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -35,6 +36,23 @@ func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	return process
+}
+
+// BuildProcessWithRecordingReader constructs the same reusable process used by
+// the production command entrypoint and returns its selected recording read
+// capability alongside the customer process.
+func BuildProcessWithRecordingReader(
+	t testing.TB, edges serviceedges.Edges,
+) (Process, recordings.WorkerRecordingReader) {
+	t.Helper()
+	// Keep the aggregate overlay in test composition so functional fixtures
+	// exercise every external-effect replacement path while production callers
+	// continue to pass the exact owner ports through root.BuildProcess.
+	process, err := root.BuildProcess(context.Background(), serviceedges.Merge(serviceedges.Edges{}, edges))
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	return process, root.WorkerRecordingReaderFromProcess(process)
 }
 
 // RequireSafeCLIDiagnostic verifies the process-boundary fallback used when a

@@ -8,7 +8,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -628,5 +631,115 @@ func TestPublishRecord_OutOfOrderSourceSequence_IsRejected(t *testing.T) {
 	committed := readAllDrafts(t, eventsSvc, workersessions.Topic("worker-1"))
 	if len(committed) != 4 {
 		t.Fatalf("committed record count = %d, want 4 (opening, seq=1, seq=3, terminal; the out-of-order seq=2 must never commit)", len(committed))
+	}
+}
+
+func TestContinue_PersistsExactAttemptAndPortableContinuationLineage(t *testing.T) {
+	boundary := newControlledBoundary()
+	eventsSvc := newEventsAppender()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	reference := providers.SessionRef{Provider: providers.ID(" codex "), Kind: " session_id ", ID: " opaque-provider-session "}
+	sourceResult := startControlledSession(t, registry, boundary, "source-exact", "dispatch-exact")
+	boundary.complete(completedDispatchWithProviderSession("dispatch-exact", reference), nil)
+	if result := <-sourceResult; result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("source session = %#v, want COMPLETED", result.Session)
+	}
+	request := workersessions.ContinueRequest{
+		RequestID:                "continue-exact",
+		SourceWorkerSessionID:    "source-exact",
+		SuccessorWorkerSessionID: "successor-exact",
+		FollowUpInput:            "preserve the opaque reference",
+	}
+	continued, err := registry.Continue(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Continue() error = %v", err)
+	}
+	if continued.Session.PredecessorWorkerSessionID != request.SourceWorkerSessionID {
+		t.Fatalf("successor session = %#v, want predecessor lineage", continued.Session)
+	}
+	sourceRecords := readWorkerSessionRecords(t, eventsSvc, request.SourceWorkerSessionID)
+	assertSourceContinuationLineage(t, sourceRecords, request, reference)
+	successorRecords := readWorkerSessionRecords(t, eventsSvc, request.SuccessorWorkerSessionID)
+	assertSuccessorContinuationOpening(t, successorRecords, request, reference)
+	successorHandoff := boundary.currentRequest()
+	boundary.complete(completedDispatchWithProviderSession(successorHandoff.Execution.Dispatch.DispatchID, reference), nil)
+	successorRecords = readWorkerSessionRecords(t, eventsSvc, request.SuccessorWorkerSessionID)
+	if len(successorRecords) != 2 {
+		t.Fatalf("successor records = %#v, want opening and terminal", successorRecords)
+	}
+	assertPortableContinuationLineage(t, request, sourceRecords, successorRecords)
+}
+
+func readWorkerSessionRecords(t *testing.T, eventsSvc events.Service, id string) []events.Record {
+	t.Helper()
+	topic := workersessions.Topic(id)
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read(%q) error = %v", id, err)
+	}
+	return read.Records
+}
+
+func assertSourceContinuationLineage(t *testing.T, records []events.Record, request workersessions.ContinueRequest, reference providers.SessionRef) {
+	t.Helper()
+	if len(records) != 3 || records[2].SourceType != events.SourceType("worker_session_lineage") {
+		t.Fatalf("source records = %#v, want opening/terminal/successor lineage", records)
+	}
+	payload := decodeLineageSessionPayload(t, records[2])
+	if payload.Lineage == nil || payload.Lineage.SuccessorWorkerSessionID != request.SuccessorWorkerSessionID ||
+		payload.Continuation == nil || payload.Continuation.Provider != string(reference.Provider) ||
+		payload.Continuation.Kind != reference.Kind || payload.Continuation.ID != reference.ID {
+		t.Fatalf("source lineage payload = %#v, want exact successor and Provider Session reference", payload)
+	}
+}
+
+func assertSuccessorContinuationOpening(t *testing.T, records []events.Record, request workersessions.ContinueRequest, reference providers.SessionRef) {
+	t.Helper()
+	if len(records) == 0 {
+		t.Fatal("successor records are empty")
+	}
+	payload := decodeLineageSessionPayload(t, records[0])
+	if payload.AttemptReason != workers.AttemptReasonResume || payload.Lineage == nil ||
+		payload.Lineage.PredecessorWorkerSessionID != request.SourceWorkerSessionID ||
+		payload.Lineage.PreviousDispatchID != "dispatch-exact" || payload.Lineage.PreviousAttemptID != "dispatch-exact" ||
+		payload.Continuation == nil || payload.Continuation.Provider != string(reference.Provider) ||
+		payload.Continuation.Kind != reference.Kind || payload.Continuation.ID != reference.ID {
+		t.Fatalf("successor opening payload = %#v, want exact RESUME lineage", payload)
+	}
+}
+
+func assertPortableContinuationLineage(t *testing.T, request workersessions.ContinueRequest, sourceRecords, successorRecords []events.Record) {
+	t.Helper()
+	codec := recordings.WorkerRecordingCodec{}
+	for _, fixture := range []struct {
+		id      string
+		records []events.Record
+	}{
+		{id: request.SourceWorkerSessionID, records: sourceRecords},
+		{id: request.SuccessorWorkerSessionID, records: successorRecords},
+	} {
+		portable, err := codec.BuildWorkerPortableRecording(recordings.WorkerRecordingSnapshot{
+			RecordingID: "recording-exact-lineage",
+			Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+				WorkerSessionID: fixture.id,
+				Topic:           workersessions.Topic(fixture.id),
+				Status:          recordings.WorkerRecordingStatusComplete,
+				LastPosition:    fixture.records[len(fixture.records)-1].ID.Position,
+				Records:         fixture.records,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("BuildWorkerPortableRecording(%q) error = %v", fixture.id, err)
+		}
+		replayed, err := codec.ReplayWorkerPortableRecording(portable)
+		if err != nil || len(replayed.Projection.Records) != len(fixture.records) {
+			t.Fatalf("portable replay(%q) = %#v, %v, want chronological lineage", fixture.id, replayed, err)
+		}
+		if fixture.id == request.SuccessorWorkerSessionID && (portable.Correlation.Lineage == nil || portable.Correlation.Lineage.PredecessorWorkerSessionID != request.SourceWorkerSessionID) {
+			t.Fatalf("portable successor correlation = %#v, want predecessor", portable.Correlation)
+		}
 	}
 }

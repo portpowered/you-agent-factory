@@ -133,6 +133,53 @@ func TestWorkerCapturePersistenceFailureBlocksOpening(t *testing.T) {
 	}
 }
 
+func TestWorkerCaptureForwardsPostTerminalRecordAndFailure(t *testing.T) {
+	writer := &captureForwardingWriter{}
+	serviceValue, err := New(newRecordingEventsService(), writer, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := serviceValue.(*Service)
+	record := recordings.WorkerRecordingRecord{RecordingID: "recording-1", WorkerSessionID: "worker-1"}
+	failure := recordings.WorkerRecordingFailure{RecordingID: "recording-1", WorkerSessionID: "worker-1", Code: "LINEAGE_LOST"}
+	if err := service.PersistWorkerRecord(context.Background(), record); err != nil {
+		t.Fatalf("PersistWorkerRecord() error = %v", err)
+	}
+	if err := service.PersistWorkerRecordingFailure(context.Background(), failure); err != nil {
+		t.Fatalf("PersistWorkerRecordingFailure() error = %v", err)
+	}
+	if len(writer.records) != 1 || writer.records[0].RecordingID != record.RecordingID || len(writer.failures) != 1 || writer.failures[0].Code != failure.Code {
+		t.Fatalf("forwarded post-terminal evidence = records=%#v failures=%#v", writer.records, writer.failures)
+	}
+
+	var nilService *Service
+	if err := nilService.PersistWorkerRecord(context.Background(), record); !errors.Is(err, recordings.ErrMissingWorkerRecordingWriter) {
+		t.Fatalf("nil Service PersistWorkerRecord() = %v, want missing writer", err)
+	}
+	writerOnly, err := New(newRecordingEventsService(), recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error { return nil }), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writerOnly.(*Service).PersistWorkerRecordingFailure(context.Background(), failure); !errors.Is(err, recordings.ErrMissingWorkerRecordingWriter) {
+		t.Fatalf("writer without failure capability = %v, want missing writer", err)
+	}
+}
+
+type captureForwardingWriter struct {
+	records  []recordings.WorkerRecordingRecord
+	failures []recordings.WorkerRecordingFailure
+}
+
+func (writer *captureForwardingWriter) PersistWorkerRecord(_ context.Context, record recordings.WorkerRecordingRecord) error {
+	writer.records = append(writer.records, record)
+	return nil
+}
+
+func (writer *captureForwardingWriter) PersistWorkerRecordingFailure(_ context.Context, failure recordings.WorkerRecordingFailure) error {
+	writer.failures = append(writer.failures, failure)
+	return nil
+}
+
 func openingAppend(topic events.Topic, sessionID string) events.AppendRequest {
 	payload, _ := json.Marshal(workers.SessionPayload{Status: "STARTING", WorkerSessionID: sessionID})
 	draft, _ := json.Marshal(workers.Draft{

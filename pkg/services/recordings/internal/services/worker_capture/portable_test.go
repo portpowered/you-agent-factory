@@ -138,6 +138,44 @@ func TestWorkerPortableRecordingRejectsProviderOutputBeforeBinding(t *testing.T)
 	}
 }
 
+func TestWorkerRecordingRejectsInvalidAttemptLineageBeforeReplay(t *testing.T) {
+	snapshot := portableSnapshot(t, "snapshot", "codex", "codex")
+	session := snapshot.Sessions[0]
+	terminal := session.Records[len(session.Records)-1]
+	terminal.ID.Position = 4
+	invalid := workerRecord(t, session.Topic, 3, "worker_session_attempt", session.WorkerSessionID, 1, "retry", workers.Draft{
+		Kind:       workers.KindSession,
+		Phase:      workers.PhaseUpdated,
+		Provenance: lifecycleProvenanceForTest("codex"),
+		Payload: mustJSON(t, workers.SessionPayload{
+			Status:          "STARTING",
+			WorkerSessionID: session.WorkerSessionID,
+			DispatchID:      "dispatch-portable/attempt/2",
+			AttemptID:       "dispatch-portable/attempt/2",
+			Attempt:         2,
+			AttemptReason:   workers.AttemptReasonRetry,
+			Lineage: &workers.SessionLineage{
+				PreviousDispatchID: "previous-dispatch",
+				PreviousAttemptID:  "different-previous-attempt",
+			},
+		}),
+		DispatchID: "dispatch-portable/attempt/2",
+	})
+	session.Records = append(append([]events.Record(nil), session.Records[:len(session.Records)-1]...), invalid, terminal)
+	session.LastPosition = terminal.ID.Position
+	snapshot.Sessions[0] = session
+
+	_, err := workerRecordingCodec.ReduceWorkerRecording(WorkerRecordingHistory{
+		RecordingID:     snapshot.RecordingID,
+		WorkerSessionID: session.WorkerSessionID,
+		Topic:           session.Topic,
+		Records:         session.Records,
+	})
+	if !errors.Is(err, workers.ErrInvalidSessionLineage) {
+		t.Fatalf("ReduceWorkerRecording() error = %v, want invalid lineage", err)
+	}
+}
+
 func TestBuildWorkerPortableRecordingSelectsOneSessionFromMultiSessionSnapshot(t *testing.T) {
 	first := portableSnapshot(t, "snapshot", "codex", "codex")
 	second := first.Sessions[0]

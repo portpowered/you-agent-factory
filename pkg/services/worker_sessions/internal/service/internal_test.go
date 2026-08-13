@@ -18,7 +18,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -54,6 +53,14 @@ func (b failingPublishBoundary) Publish(context.Context, workers.WorkstationDisp
 
 func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
 	return b.err
+}
+
+type noAdmissionBoundary struct {
+	unusedExecution
+}
+
+func (noAdmissionBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
+	return nil
 }
 
 // cancellationResultBoundary supplies one deterministic boundary cancellation
@@ -124,11 +131,7 @@ func (u unusedExecution) Stop(context.Context) error {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	events, err := eventswire.NewService()
-	if err != nil {
-		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
-	}
-	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -1611,6 +1614,11 @@ func newPausedContinuationRegistry(t *testing.T) (*registry, *supervision, provi
 			Reference:       reference,
 		},
 	}
+	r.publications["worker-1"] = &publication{
+		open:         true,
+		lastSequence: make(map[sourceKey]events.SourceSequence),
+		accepted:     make(map[events.AppendIdentity]struct{}),
+	}
 	r.supervisions["worker-1"] = supervision
 	return r, supervision, reference
 }
@@ -1658,6 +1666,58 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 		mismatched.ProviderSessionAssociation.WorkerSessionID = "worker-2"
 		if err := validateResumeAssociation(mismatched); !errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation) {
 			t.Fatalf("validateResumeAssociation(mismatched) = %v, want ErrInvalidProviderSessionAssociation", err)
+		}
+	})
+
+	t.Run("resume refuses stale ownership before reserving a continuation", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			configure func(*supervision)
+			wantErr   error
+		}{
+			{
+				name: "attempt mismatch",
+				configure: func(supervision *supervision) {
+					supervision.dispatchID = "dispatch-foreign"
+				},
+				wantErr: workersessions.ErrProviderSessionAssociationAttemptMismatch,
+			},
+			{
+				name: "not admitted",
+				configure: func(supervision *supervision) {
+					supervision.accepted = false
+				},
+				wantErr: workersessions.ErrProviderSessionAssociationNotAvailable,
+			},
+			{
+				name: "active control",
+				configure: func(supervision *supervision) {
+					supervision.controlActive = true
+				},
+				wantErr: workersessions.ErrInvalidState,
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				r, supervision, _ := newPausedContinuationRegistry(t)
+				test.configure(supervision)
+				before := r.sessions["worker-1"]
+
+				result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+				if !errors.Is(err, test.wantErr) || result.Outcome != workersessions.ControlOutcomeFailed ||
+					result.Session.State != workersessions.StatePaused {
+					t.Fatalf("Resume() = %#v, %v, want failed PAUSED result with %v", result, err, test.wantErr)
+				}
+				if current := r.sessions["worker-1"]; !reflect.DeepEqual(current, before) {
+					t.Fatalf("Resume() mutated refused session: got %#v, want %#v", current, before)
+				}
+				supervision.mu.Lock()
+				continuing, publishing, attemptsMade := supervision.continuing, supervision.publishing, supervision.attemptsMade
+				supervision.mu.Unlock()
+				if continuing || publishing || attemptsMade != 0 {
+					t.Fatalf("refused Resume() reserved continuation state: continuing=%t publishing=%t attempts=%d", continuing, publishing, attemptsMade)
+				}
+			})
 		}
 	})
 
@@ -1733,6 +1793,20 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 		}
 		if result.Session.State != workersessions.StatePaused || supervision.dispatchID != "dispatch-1" {
 			t.Fatalf("Resume() after publish failure = %#v with dispatch %q, want restored PAUSED dispatch-1", result, supervision.dispatchID)
+		}
+	})
+
+	t.Run("missing admission restores the exact paused continuation", func(t *testing.T) {
+		r, supervision, _ := newPausedContinuationRegistry(t)
+		r.boundary = noAdmissionBoundary{unusedExecution: unusedExecution{t: t}}
+
+		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		if !errors.Is(err, workersessions.ErrStartAdmissionFailed) || result.Outcome != workersessions.ControlOutcomeFailed ||
+			result.Session.State != workersessions.StatePaused {
+			t.Fatalf("Resume() = %#v, %v, want failed PAUSED admission result", result, err)
+		}
+		if supervision.dispatchID != "dispatch-1" || supervision.continuing || supervision.publishing {
+			t.Fatalf("Resume() after missing admission left supervision = %#v, want restored paused attempt", supervision)
 		}
 	})
 
@@ -2015,6 +2089,160 @@ func (internalTestEventsAppender) Append(context.Context, events.AppendRequest) 
 func newEventsAppenderForInternalTest() EventsAppender {
 	return internalTestEventsAppender{}
 }
+
+// internalTestEventsService is the owner-local Events role used by white-box
+// registry tests. It retains enough real aggregate behavior for opening-topic
+// readiness and replay assertions without constructing the sibling Events
+// wire service from this package.
+type internalTestEventsService struct {
+	mu      sync.Mutex
+	records map[events.Topic][]events.Record
+}
+
+func newInternalTestEventsService() *internalTestEventsService {
+	return &internalTestEventsService{records: make(map[events.Topic][]events.Record)}
+}
+
+func (service *internalTestEventsService) Append(
+	ctx context.Context,
+	request events.AppendRequest,
+) (events.AppendResult, error) {
+	if err := request.Validate(); err != nil {
+		return events.AppendResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return events.AppendResult{}, err
+	}
+
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	records := service.records[request.Topic]
+	for _, record := range records {
+		if record.Identity() != request.Identity() {
+			continue
+		}
+		if reflect.DeepEqual(record.Payload, request.Payload) && record.SchemaID == request.SchemaID {
+			return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeDuplicate}, nil
+		}
+		return events.AppendResult{}, events.ErrOperationFailed
+	}
+	detached := request.Detached()
+	record := events.Record{
+		ID:             events.RecordID{Topic: request.Topic, Position: events.AggregateSequence(len(records) + 1)},
+		SourceType:     detached.SourceType,
+		SourceID:       detached.SourceID,
+		SourceSequence: detached.SourceSequence,
+		SourceEventID:  detached.SourceEventID,
+		SchemaID:       detached.SchemaID,
+		Payload:        detached.Payload,
+	}
+	service.records[request.Topic] = append(records, record.Detached())
+	return events.AppendResult{Record: record.Detached(), Outcome: events.AppendOutcomeAccepted}, nil
+}
+
+func (service *internalTestEventsService) AttachSource(
+	ctx context.Context,
+	request events.AttachSourceRequest,
+) (events.AttachSourceResult, error) {
+	if err := request.Validate(); err != nil {
+		return events.AttachSourceResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return events.AttachSourceResult{}, err
+	}
+	return events.AttachSourceResult{
+		ID:      events.AttachmentID{Destination: request.Destination, Source: request.Source},
+		Outcome: events.AttachOutcomeAccepted,
+		StartAt: request.StartAt,
+	}, nil
+}
+
+func (service *internalTestEventsService) Read(
+	ctx context.Context,
+	request events.ReadRequest,
+) (events.ReadResult, error) {
+	if err := request.Validate(); err != nil {
+		return events.ReadResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return events.ReadResult{}, err
+	}
+
+	service.mu.Lock()
+	records := append([]events.Record(nil), service.records[request.Topic]...)
+	service.mu.Unlock()
+	if request.From.Position > events.AggregateSequence(len(records)) {
+		return events.ReadResult{}, events.ErrUnresolvableCursor
+	}
+	retained := events.RetainedRange{
+		Topic:    request.Topic,
+		Earliest: 1,
+		Head:     events.AggregateSequence(len(records)),
+	}
+	if len(records) == 0 {
+		retained.Earliest = 0
+		return events.ReadResult{
+			Next:     request.From,
+			Retained: retained,
+			Outcome:  events.ReadOutcomeAtHead,
+		}, nil
+	}
+	start := int(request.From.Position)
+	if start == len(records) {
+		return events.ReadResult{
+			Next:     events.Cursor{Topic: request.Topic, Position: request.From.Position},
+			Retained: retained,
+			Outcome:  events.ReadOutcomeAtHead,
+		}, nil
+	}
+	end := start + request.Limit
+	if end > len(records) {
+		end = len(records)
+	}
+	page := make([]events.Record, end-start)
+	for index := range page {
+		page[index] = records[start+index].Detached()
+	}
+	return events.ReadResult{
+		Records:  page,
+		Next:     events.Cursor{Topic: request.Topic, Position: page[len(page)-1].ID.Position},
+		Retained: retained,
+		Outcome:  events.ReadOutcomeProgress,
+	}, nil
+}
+
+func (service *internalTestEventsService) Subscribe(
+	ctx context.Context,
+	request events.SubscribeRequest,
+) (events.Subscription, error) {
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	records := append([]events.Record(nil), service.records[request.Topic]...)
+	service.mu.Unlock()
+	index := int(request.From.Position)
+	return events.Subscription(func(nextCtx context.Context) events.Delivery {
+		if err := nextCtx.Err(); err != nil {
+			return events.Delivery{Kind: events.DeliveryCanceled}
+		}
+		if index >= len(records) {
+			return events.Delivery{Kind: events.DeliveryClosed}
+		}
+		record := records[index].Detached()
+		index++
+		return events.Delivery{
+			Kind:   events.DeliveryRecord,
+			Record: record,
+			Cursor: events.Cursor{Topic: request.Topic, Position: record.ID.Position},
+		}
+	}), nil
+}
+
+var _ events.Service = (*internalTestEventsService)(nil)
 
 func TestProviderBindingPublicationEdgesPreserveAttributionAndOrdering(t *testing.T) {
 	t.Run("canonical provider draft", testCanonicalProviderDraftEdges)
@@ -2782,6 +3010,549 @@ func TestContinuationReservationRejectsLifecycleEdges(t *testing.T) {
 	if !errors.Is(err, workersessions.ErrContinuationNotAccepted) {
 		t.Fatalf("continueReserved(stopping) = %v, want ErrContinuationNotAccepted", err)
 	}
+}
+
+func TestContinuationReservationRejectsAnUnresolvedSourceLineage(t *testing.T) {
+	request := continuationReservationRequest()
+	r := newContinuationSource(t, request)
+	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	r.continuationSources[request.SourceWorkerSessionID] = "another-request"
+
+	if _, err := r.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationSourceConflict) {
+		t.Fatalf("snapshotContinuationSourceLocked(unresolved source claim) = %v, want ErrContinuationSourceConflict", err)
+	}
+
+	r = newContinuationSource(t, request)
+	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	snapshot, err := r.snapshotContinuationSourceLocked(request)
+	if err != nil {
+		t.Fatalf("snapshotContinuationSourceLocked(valid) = %v, want nil", err)
+	}
+	r.continuationSources = nil
+	r.storeContinuationReservationLocked(request, continueTuple{
+		sourceID: request.SourceWorkerSessionID, successorID: request.SuccessorWorkerSessionID, input: request.FollowUpInput,
+	}, snapshot, continuationValidExecution("dispatch-1/continue/successor-1"))
+	if r.continuationSources[request.SourceWorkerSessionID] != request.RequestID {
+		t.Fatalf("storeContinuationReservationLocked() did not recreate the source claim map")
+	}
+}
+
+func TestResumeAssociationValidationRejectsUnavailableAttemptFacts(t *testing.T) {
+	r, supervision, _ := newPausedContinuationRegistry(t)
+	session := r.sessions["worker-1"]
+
+	if err := validateResumeAssociationForSupervision(session, nil); !errors.Is(err, workersessions.ErrProviderSessionAssociationNotAvailable) {
+		t.Fatalf("validateResumeAssociationForSupervision(nil supervision) = %v, want association unavailable", err)
+	}
+
+	supervision.dispatchID = " "
+	if err := validateResumeAssociationForSupervision(session, supervision); !errors.Is(err, workersessions.ErrProviderSessionAssociationNotAvailable) {
+		t.Fatalf("validateResumeAssociationForSupervision(blank dispatch) = %v, want association unavailable", err)
+	}
+
+	supervision.dispatchID = "dispatch-1"
+	supervision.turnID = "turn-foreign"
+	if err := validateResumeAssociationForSupervision(session, supervision); !errors.Is(err, workersessions.ErrProviderSessionAssociationAttemptMismatch) {
+		t.Fatalf("validateResumeAssociationForSupervision(mismatched turn) = %v, want attempt mismatch", err)
+	}
+}
+
+func TestContinuationLineagePublicationGuardsAndClosedPersistence(t *testing.T) {
+	ctx := context.Background()
+	payload := workers.SessionPayload{
+		Status:          string(workersessions.StateCompleted),
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+	}
+	identity := events.AppendIdentity{
+		SourceType:     continuationLineageSourceType,
+		SourceID:       "worker-1/successor/successor-1",
+		SourceSequence: continuationLineageSourceSequence,
+		SourceEventID:  continuationLineageSourceEventID,
+	}
+
+	missing := newTestRegistry(t)
+	if err := missing.publishSessionLineageRecord(ctx, "missing", identity, payload, true); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("publishSessionLineageRecord(missing) = %v, want session not found", err)
+	}
+
+	closed := newTestRegistry(t)
+	closed.reserveIfAbsent("worker-1")
+	if err := closed.publishSessionLineageRecord(ctx, "worker-1", identity, payload, false); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
+		t.Fatalf("publishSessionLineageRecord(closed) = %v, want publication not open", err)
+	}
+
+	writer := &continuationLineageRecordingStub{}
+	accepted := newTestRegistry(t)
+	accepted.reserveIfAbsent("worker-1")
+	accepted.publications["worker-1"].open = true
+	accepted.publications["worker-1"].recordingID = "recording-1"
+	accepted.recording = writer
+	if err := accepted.publishSessionLineageRecord(ctx, "worker-1", identity, payload, true); err != nil {
+		t.Fatalf("publishSessionLineageRecord(accepted) = %v, want nil", err)
+	}
+	if len(writer.records) != 1 || writer.records[0].RecordingID != "recording-1" {
+		t.Fatalf("closed lineage persistence = %#v, want one recording-1 record", writer.records)
+	}
+	if err := accepted.publishSessionLineageRecord(ctx, "worker-1", identity, payload, true); err != nil {
+		t.Fatalf("publishSessionLineageRecord(duplicate) = %v, want idempotent success", err)
+	}
+	outOfOrder := identity
+	outOfOrder.SourceSequence = 0
+	if err := accepted.publishSessionLineageRecord(ctx, "worker-1", outOfOrder, payload, true); !errors.Is(err, workersessions.ErrOutOfOrderPublication) {
+		t.Fatalf("publishSessionLineageRecord(out of order) = %v, want out of order", err)
+	}
+
+	writer.recordErr = errors.New("lineage persistence failed")
+	accepted.persistClosedLineageRecord(ctx, "recording-1", "worker-1", events.Record{})
+	if len(writer.failures) != 1 || writer.failures[0].Code != "CONTINUATION_LINEAGE_PERSISTENCE_FAILED" {
+		t.Fatalf("closed lineage persistence failure = %#v, want one classified failure", writer.failures)
+	}
+	withoutWriter := newTestRegistry(t)
+	withoutWriter.persistClosedLineageRecord(ctx, "recording-1", "worker-1", events.Record{})
+
+	failingAppend := newTestRegistry(t)
+	failingAppend.reserveIfAbsent("worker-1")
+	failingAppend.publications["worker-1"].open = true
+	appendErr := errors.New("lineage append failed")
+	failingAppend.events = failingContinuationEventsAppender{err: appendErr}
+	if err := failingAppend.publishSessionLineageRecord(ctx, "worker-1", identity, payload, true); !errors.Is(err, appendErr) {
+		t.Fatalf("publishSessionLineageRecord(append failure) = %v, want append failure", err)
+	}
+}
+
+func TestCommitContinuationLineageRejectsUnresolvableSourceAndKeepsLiveTruth(t *testing.T) {
+	request := continuationReservationRequest()
+	missing := newTestRegistry(t)
+	missing.continuationSources[request.SourceWorkerSessionID] = request.RequestID
+	missing.commitContinuationLineage(continuePlan{request: request})
+	if _, exists := missing.continuationSources[request.SourceWorkerSessionID]; exists {
+		t.Fatal("commitContinuationLineage() left an unresolved source reservation")
+	}
+
+	appendErr := errors.New("lineage append failed")
+	registry := newTestRegistry(t)
+	registry.events = failingContinuationEventsAppender{err: appendErr}
+	registry.sessions[request.SourceWorkerSessionID] = workersessions.Session{
+		ID:    request.SourceWorkerSessionID,
+		State: workersessions.StateCompleted,
+		Result: &workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeCompleted,
+		},
+		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+			WorkerSessionID: request.SourceWorkerSessionID,
+			TurnID:          "turn-1",
+			DispatchID:      "dispatch-1",
+			AttemptID:       "dispatch-1",
+			Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-1"},
+		},
+	}
+	registry.sessions[request.SuccessorWorkerSessionID] = workersessions.Session{
+		ID:    request.SuccessorWorkerSessionID,
+		State: workersessions.StateRunning,
+	}
+	registry.publications[request.SourceWorkerSessionID] = &publication{}
+	registry.continuationSources[request.SourceWorkerSessionID] = request.RequestID
+	registry.commitContinuationLineage(continuePlan{request: request})
+
+	if got := registry.sessions[request.SourceWorkerSessionID].SuccessorWorkerSessionID; got != request.SuccessorWorkerSessionID {
+		t.Fatalf("source successor after append failure = %q, want %q", got, request.SuccessorWorkerSessionID)
+	}
+	if got := registry.sessions[request.SuccessorWorkerSessionID].PredecessorWorkerSessionID; got != request.SourceWorkerSessionID {
+		t.Fatalf("successor predecessor after append failure = %q, want %q", got, request.SourceWorkerSessionID)
+	}
+}
+
+func TestControlHistoryGateAndOutcomeHelpersCoverClosedAndNilPaths(t *testing.T) {
+	pendingGate := &controlHistoryGate{pending: true, done: make(chan struct{})}
+	pendingClosed := make(chan struct{})
+	pendingReceived := make(chan struct{})
+	pendingRelease := make(chan struct{})
+	go func() {
+		pendingGate.close()
+		close(pendingClosed)
+	}()
+	go func() {
+		pendingGate.done <- struct{}{}
+		close(pendingReceived)
+		<-pendingRelease
+		pendingGate.done <- struct{}{}
+	}()
+	select {
+	case <-pendingReceived:
+	case <-time.After(time.Second):
+		t.Fatal("controlHistoryGate.close() did not wait for a pending reservation")
+	}
+	pendingGate.mu.Lock()
+	pendingGate.pending = false
+	pendingGate.mu.Unlock()
+	close(pendingRelease)
+	select {
+	case <-pendingClosed:
+	case <-time.After(time.Second):
+		t.Fatal("controlHistoryGate.close() did not finish after the pending reservation drained")
+	}
+
+	gate := &controlHistoryGate{}
+	if !gate.acquire() {
+		t.Fatal("controlHistoryGate.acquire() = false, want true")
+	}
+	closed := make(chan struct{})
+	go func() {
+		gate.close()
+		close(closed)
+	}()
+	gate.release()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("controlHistoryGate.close() did not finish after release")
+	}
+	gate.release()
+	if gate.acquire() {
+		t.Fatal("controlHistoryGate.acquire() = true after close, want false")
+	}
+
+	if got := controlContext(nil); got == nil {
+		t.Fatal("controlContext(nil) returned nil")
+	}
+	if got := controlResultOutcome(workersessions.ControlResult{Outcome: workersessions.ControlOutcomeApplied}, errors.New("ignored")); got != workersessions.ControlOutcomeApplied {
+		t.Fatalf("controlResultOutcome(applied) = %q, want APPLIED", got)
+	}
+	if got := controlResultOutcome(workersessions.ControlResult{}, errors.New("failed")); got != workersessions.ControlOutcomeFailed {
+		t.Fatalf("controlResultOutcome(error) = %q, want FAILED", got)
+	}
+	if got := controlResultOutcome(workersessions.ControlResult{}, nil); got != workersessions.ControlOutcomeNoop {
+		t.Fatalf("controlResultOutcome(nil) = %q, want NOOP", got)
+	}
+	if got := controlReservationFor(nil); got != nil {
+		t.Fatalf("controlReservationFor(nil) = %#v, want nil", got)
+	}
+}
+
+func TestAwaitContinueReplayReturnsCompletedReplayAfterCallerCancellation(t *testing.T) {
+	replayErr := errors.New("replayed continuation failed")
+	replay := &continueReplay{
+		done:   make(chan struct{}),
+		result: workersessions.ContinueResult{RequestID: "replayed"},
+		err:    replayErr,
+	}
+	ctxDone := make(chan struct{})
+	ctx := signaledCancellationContext{done: ctxDone}
+	go func() {
+		ctxDone <- struct{}{}
+		close(replay.done)
+	}()
+
+	result, err := awaitContinueReplay(ctx, replay)
+	if !errors.Is(err, replayErr) || result.RequestID != "replayed" {
+		t.Fatalf("awaitContinueReplay() = %#v, %v, want completed replay after cancellation", result, err)
+	}
+}
+
+func TestControlHistoryPublicationFailureAndClosedOutcomeRemainTruthful(t *testing.T) {
+	r, _, _ := newPausedContinuationRegistry(t)
+	appendErr := errors.New("control request append failed")
+	r.events = failingContinuationEventsAppender{err: appendErr}
+	if reservation, err := r.beginControlHistory(context.Background(), "worker-1", workersessions.ControlActionResume, "request-1"); reservation != nil || !errors.Is(err, appendErr) {
+		t.Fatalf("beginControlHistory(append failure) = %#v, %v, want append error without reservation", reservation, err)
+	}
+
+	r, _, _ = newPausedContinuationRegistry(t)
+	reservation, err := r.beginControlHistory(context.Background(), "worker-1", workersessions.ControlActionResume, "request-1")
+	if err != nil || reservation == nil {
+		t.Fatalf("beginControlHistory(valid) = %#v, %v, want reservation", reservation, err)
+	}
+	reservation.pub.open = false
+	r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, "", workersessions.StatePaused)
+	if err := r.appendControlRecord(context.Background(), reservation, workersessions.ControlRecordTypeOutcome, workersessions.ControlOutcomeFailed, "", workersessions.StatePaused); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
+		t.Fatalf("appendControlRecord(closed) = %v, want publication not open", err)
+	}
+
+	r, _, _ = newPausedContinuationRegistry(t)
+	reservation, err = r.beginControlHistory(context.Background(), "worker-1", workersessions.ControlActionResume, "request-logging")
+	if err != nil || reservation == nil {
+		t.Fatalf("beginControlHistory(logging) = %#v, %v, want reservation", reservation, err)
+	}
+	r.events = failingContinuationEventsAppender{err: appendErr}
+	r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, "dispatch-1/attempt/2", workersessions.StatePaused)
+
+	r, _, _ = newPausedContinuationRegistry(t)
+	r.events = &deleteSessionAfterAppendEventsAppender{
+		delegate: r.events,
+		delete: func() {
+			r.mu.Lock()
+			delete(r.sessions, "worker-1")
+			r.mu.Unlock()
+		},
+	}
+	result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "request-target-disappeared"})
+	if !errors.Is(err, workersessions.ErrSessionNotFound) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("Resume(target disappeared after request append) = %#v, %v, want failed session-not-found result", result, err)
+	}
+}
+
+func TestAcceptSupervisionRecordsFailedResumeWhenSessionCannotRun(t *testing.T) {
+	r, supervision, _ := newPausedContinuationRegistry(t)
+	reservation, err := r.beginControlHistory(context.Background(), "worker-1", workersessions.ControlActionResume, "request-not-startable")
+	if err != nil || reservation == nil {
+		t.Fatalf("beginControlHistory() = %#v, %v, want reservation", reservation, err)
+	}
+
+	r.acceptSupervision("worker-1", supervision)
+	current := r.sessions["worker-1"]
+	if current.State != workersessions.StatePaused {
+		t.Fatalf("acceptSupervision() state = %q, want PAUSED", current.State)
+	}
+	if supervision.accepted {
+		t.Fatal("acceptSupervision() marked a non-startable session accepted")
+	}
+}
+
+func TestRunInterruptRejectsSuccessorWithConflictingCapturedReference(t *testing.T) {
+	r := newTestRegistry(t)
+	sourceID := "source-1"
+	successorID := "successor-1"
+	execution := continuationValidExecution("dispatch-source")
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-source"}
+	wrongReference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-other"}
+	supervision := newSupervision("dispatch-source", "turn-1", execution)
+	supervision.signalDone()
+	r.sessions[sourceID] = workersessions.Session{
+		ID:    sourceID,
+		State: workersessions.StateCanceled,
+		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+			WorkerSessionID: sourceID,
+			TurnID:          "turn-1",
+			DispatchID:      "dispatch-source",
+			AttemptID:       "dispatch-source",
+			Reference:       reference,
+		},
+	}
+	r.supervisions[sourceID] = supervision
+	r.dispatchOwners["dispatch-source"] = sourceID
+	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
+	close(boundary.release)
+	r.boundary = boundary
+
+	result, err := r.runInterrupt(interruptPlan{
+		request: workersessions.InterruptRequest{
+			RequestID:                "interrupt-1",
+			SourceWorkerSessionID:    sourceID,
+			SuccessorWorkerSessionID: successorID,
+			ReplacementMessage:       "replacement",
+		},
+		execution:   execution,
+		reference:   wrongReference,
+		dispatchID:  "dispatch-source",
+		supervision: supervision,
+	})
+	if !errors.Is(err, workersessions.ErrInterruptSuccessorAdmissionFailed) || result.Accepted || result.Successor.ID != successorID {
+		t.Fatalf("runInterrupt() = %#v, %v, want successor admission reference failure", result, err)
+	}
+}
+
+func TestInterruptControlHistoryAppendFailureIsNotSessionNotFound(t *testing.T) {
+	r := newTestRegistry(t)
+	r.sessions["worker-1"] = workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StateRunning,
+		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+			WorkerSessionID: "worker-1",
+			TurnID:          "turn-1",
+			DispatchID:      "dispatch-1",
+			AttemptID:       "dispatch-1",
+			Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-1"},
+		},
+	}
+	r.supervisions["worker-1"] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	r.publications["worker-1"] = &publication{open: true}
+	appendErr := errors.New("interrupt control history append failed")
+	r.events = failingContinuationEventsAppender{err: appendErr}
+
+	result, err := r.Interrupt(context.Background(), workersessions.InterruptRequest{
+		RequestID:                "interrupt-append-failure",
+		SourceWorkerSessionID:    "worker-1",
+		SuccessorWorkerSessionID: "successor-1",
+		ReplacementMessage:       "replacement",
+	})
+	if !errors.Is(err, appendErr) || result.Phase != workersessions.InterruptPhaseValidation || result.Accepted {
+		t.Fatalf("Interrupt(control history append failure) = %#v, %v, want validation failure with append error", result, err)
+	}
+}
+
+func TestResume_LineagePublicationFailureRestoresThePausedAttempt(t *testing.T) {
+	r, supervision, _ := newPausedContinuationRegistry(t)
+	appendErr := errors.New("resume lineage append failed")
+	r.events = &failingNthContinuationEventsAppender{delegate: r.events, n: 2, err: appendErr}
+
+	result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "resume-lineage-failure"})
+	if !errors.Is(err, appendErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StatePaused {
+		t.Fatalf("Resume() = %#v, %v, want failed PAUSED result with lineage append error", result, err)
+	}
+	if supervision.dispatchID != "dispatch-1" || supervision.continuing || supervision.publishing || supervision.attemptsMade != 0 {
+		t.Fatalf("Resume() after lineage append failure supervision = %#v, want restored paused attempt", supervision)
+	}
+}
+
+func TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion(t *testing.T) {
+	request := continuationReservationRequest()
+	r := newContinuationSource(t, request)
+	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
+	r.boundary = boundary
+
+	outcomes := make(chan struct {
+		result workersessions.ContinueResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := r.Continue(context.Background(), request)
+		outcomes <- struct {
+			result workersessions.ContinueResult
+			err    error
+		}{result: result, err: err}
+	}()
+	select {
+	case <-boundary.ready:
+	case <-time.After(time.Second):
+		t.Fatal("continuation did not reach the admission barrier")
+	}
+	close(boundary.release)
+	select {
+	case outcome := <-outcomes:
+		if outcome.err != nil || outcome.result.Session.ID != request.SuccessorWorkerSessionID {
+			t.Fatalf("Continue() = %#v, %v, want admitted successor", outcome.result, outcome.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Continue() did not return after admission")
+	}
+}
+
+func TestPauseAndCancelIterationRejectMissingControlTargets(t *testing.T) {
+	r := newTestRegistry(t)
+	if result, retry, err := r.pauseIteration(context.Background(), workersessions.ControlRequest{ID: "missing"}); retry || !errors.Is(err, workersessions.ErrSessionNotFound) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("pauseIteration(missing) = %#v, %t, %v, want failed missing target", result, retry, err)
+	}
+	if result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: "missing"}, workersessions.ControlActionCancel, false); retry || !errors.Is(err, workersessions.ErrSessionNotFound) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("cancelControlIteration(missing) = %#v, %t, %v, want failed missing target", result, retry, err)
+	}
+}
+
+func TestObservationListRejectsMalformedPaginationCursor(t *testing.T) {
+	r := newObservationRegistry(nil, nil)
+	if _, err := r.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: "%%%"}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("ListWorkerSessionObservations(malformed cursor) = %v, want invalid pagination", err)
+	}
+}
+
+type failingContinuationEventsAppender struct{ err error }
+
+func (appender failingContinuationEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return events.AppendResult{}, appender.err
+}
+
+type deleteSessionAfterAppendEventsAppender struct {
+	delegate EventsAppender
+	delete   func()
+	once     sync.Once
+}
+
+type signaledCancellationContext struct {
+	done <-chan struct{}
+}
+
+func (ctx signaledCancellationContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+
+func (ctx signaledCancellationContext) Done() <-chan struct{} { return ctx.done }
+
+func (signaledCancellationContext) Err() error { return context.Canceled }
+
+func (signaledCancellationContext) Value(any) any { return nil }
+
+func (appender *deleteSessionAfterAppendEventsAppender) Append(ctx context.Context, request events.AppendRequest) (events.AppendResult, error) {
+	result, err := appender.delegate.Append(ctx, request)
+	appender.once.Do(appender.delete)
+	return result, err
+}
+
+type failingNthContinuationEventsAppender struct {
+	delegate EventsAppender
+	n        int
+	err      error
+	calls    int
+}
+
+func (appender *failingNthContinuationEventsAppender) Append(ctx context.Context, request events.AppendRequest) (events.AppendResult, error) {
+	appender.calls++
+	if appender.calls == appender.n {
+		return events.AppendResult{}, appender.err
+	}
+	return appender.delegate.Append(ctx, request)
+}
+
+type admitBeforeCompletionBoundary struct {
+	ready   chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (boundary *admitBeforeCompletionBoundary) Start(context.Context) error { return nil }
+
+func (boundary *admitBeforeCompletionBoundary) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
+	return boundary.PublishWithAdmission(ctx, request, nil, accept)
+}
+
+func (boundary *admitBeforeCompletionBoundary) PublishWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	if admitted != nil {
+		admitted()
+		boundary.once.Do(func() { close(boundary.ready) })
+		select {
+		case <-boundary.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	accept(context.Background(), request, workers.WorkstationDispatchResult{
+		DispatchID: request.Execution.Dispatch.DispatchID,
+		Result: workers.WorkResult{
+			DispatchID: request.Execution.Dispatch.DispatchID,
+			Outcome:    workers.OutcomeAccepted,
+		},
+	}, nil)
+	return nil
+}
+
+func (*admitBeforeCompletionBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	return workers.WorkstationDispatchCancelResult{Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+}
+
+func (*admitBeforeCompletionBoundary) Stop(context.Context) error { return nil }
+
+type continuationLineageRecordingStub struct {
+	recordErr error
+	records   []recordings.WorkerRecordingRecord
+	failures  []recordings.WorkerRecordingFailure
+}
+
+func (*continuationLineageRecordingStub) StartWorkerSessionRecording(context.Context, recordings.WorkerSessionRecordingRequest) (recordings.WorkerSessionRecording, error) {
+	return nil, nil
+}
+
+func (stub *continuationLineageRecordingStub) PersistWorkerRecord(_ context.Context, record recordings.WorkerRecordingRecord) error {
+	stub.records = append(stub.records, record)
+	return stub.recordErr
+}
+
+func (stub *continuationLineageRecordingStub) PersistWorkerRecordingFailure(_ context.Context, failure recordings.WorkerRecordingFailure) error {
+	stub.failures = append(stub.failures, failure)
+	return nil
 }
 
 func continuationReservationRequest() workersessions.ContinueRequest {

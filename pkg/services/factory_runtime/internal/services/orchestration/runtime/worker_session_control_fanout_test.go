@@ -7,13 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -59,6 +55,23 @@ func TestFanOutWorkerSessionControl_AttemptsEveryCapturedChildInStableOrder(t *t
 	}
 	if service.observedCanceledContext() {
 		t.Fatal("Worker Sessions received canceled fan-out context")
+	}
+}
+
+func TestFanOutWorkerSessionControl_PropagatesParentControlID(t *testing.T) {
+	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
+		{action: factory.WorkerSessionControlActionPause, id: "worker-a"}: {result: workersessions.ControlResult{Outcome: workersessions.ControlOutcomeApplied}},
+		{action: factory.WorkerSessionControlActionPause, id: "worker-b"}: {result: workersessions.ControlResult{Outcome: workersessions.ControlOutcomeNoop}},
+	})
+
+	result := fanOutWorkerSessionControl(context.Background(), service, capturedWorkerSessionControlTargets{
+		turnID: "turn-parent", workerSessionIDs: []string{"worker-a", "worker-b"},
+	}, factory.WorkerSessionControlActionPause, "control-parent")
+	if result.Outcome != factory.WorkerSessionControlAggregateOutcomePartial {
+		t.Fatalf("aggregate outcome = %q, want PARTIAL", result.Outcome)
+	}
+	if got, want := service.requestIDsSnapshot(), []string{"control-parent", "control-parent"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("child request IDs = %v, want %v", got, want)
 	}
 }
 
@@ -285,42 +298,36 @@ func TestFanOutWorkerSessionControl_StopActionsReachEveryCapturedChild(t *testin
 
 func TestFanOutWorkerSessionControl_ContinuesPastSynchronousProductionChild(t *testing.T) {
 	execution := newSynchronousFanOutExecution("dispatch-a", "dispatch-b")
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    execution,
-		RouteNames: []string{"review"},
-		Async:      false,
-	})
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
-	starts := make(chan workersessions.InvokeSessionResult, 2)
+	starts := make(chan workers.WorkstationDispatchResult, 2)
 	startErrs := make(chan error, 2)
-	for _, identity := range []struct{ sessionID, dispatchID string }{
-		{sessionID: "worker-a", dispatchID: "dispatch-a"},
-		{sessionID: "worker-b", dispatchID: "dispatch-b"},
+	for _, identity := range []struct{ dispatchID string }{
+		{dispatchID: "dispatch-a"},
+		{dispatchID: "dispatch-b"},
 	} {
-		go func(sessionID, dispatchID string) {
-			started, startErr := workerSessions.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{
-				ID: sessionID,
-				Execution: workers.WorkstationDispatchRequest{
-					WorkstationName: "review",
-					Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+		go func(dispatchID string) {
+			started, startErr := execution.DispatchWorkstation(context.Background(), workers.WorkstationDispatchRequest{
+				WorkstationName: "review",
+				Execution: workers.WorkstationExecutionRequest{
+					Dispatch: work.WorkDispatch{
 						DispatchID: dispatchID, WorkstationName: "review",
-					}},
+					},
 				},
 			})
 			starts <- started
 			startErrs <- startErr
-		}(identity.sessionID, identity.dispatchID)
+		}(identity.dispatchID)
 	}
 	<-execution.admitted("dispatch-a")
 	<-execution.admitted("dispatch-b")
 
+	workerSessions := &synchronousFanOutWorkerSessions{
+		fakeWorkerSessionsService: &fakeWorkerSessionsService{},
+		execution:                 execution,
+		dispatchIDs: map[string]string{
+			"worker-a": "dispatch-a",
+			"worker-b": "dispatch-b",
+		},
+	}
 	result := fanOutWorkerSessionControl(context.Background(), workerSessions, capturedWorkerSessionControlTargets{
 		turnID: "turn-synchronous", workerSessionIDs: []string{"worker-a", "worker-b"},
 	}, factory.WorkerSessionControlActionTerminate)
@@ -337,11 +344,11 @@ func TestFanOutWorkerSessionControl_ContinuesPastSynchronousProductionChild(t *t
 	}
 	for range 2 {
 		started := <-starts
-		if startErr := <-startErrs; startErr != nil ||
-			started.Session.State != workersessions.StateTerminated ||
-			started.Dispatch.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled ||
-			!errors.Is(started.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
-			t.Fatalf("synchronous Start() result = %#v, %v, want one terminated canceled result", started, startErr)
+		if startErr := <-startErrs; !errors.Is(startErr, workers.ErrWorkstationDispatchCanceled) {
+			t.Fatalf("synchronous dispatch error = %v, want cancellation", startErr)
+		}
+		if started.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+			t.Fatalf("synchronous dispatch result = %#v, want canceled result", started)
 		}
 	}
 }
@@ -452,6 +459,7 @@ type workerSessionControlSpy struct {
 	mu              sync.Mutex
 	responses       map[workerSessionControlCall]workerSessionControlResponse
 	calls           []workerSessionControlCall
+	requestIDs      []string
 	canceledContext bool
 }
 
@@ -483,6 +491,7 @@ func (s *workerSessionControlSpy) control(ctx context.Context, action factory.Wo
 	defer s.mu.Unlock()
 	call := workerSessionControlCall{action: action, id: req.ID}
 	s.calls = append(s.calls, call)
+	s.requestIDs = append(s.requestIDs, req.RequestID)
 	if ctx.Err() != nil {
 		s.canceledContext = true
 	}
@@ -496,6 +505,12 @@ func (s *workerSessionControlSpy) callsSnapshot() []workerSessionControlCall {
 	return append([]workerSessionControlCall(nil), s.calls...)
 }
 
+func (s *workerSessionControlSpy) requestIDsSnapshot() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.requestIDs...)
+}
+
 func (s *workerSessionControlSpy) observedCanceledContext() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -503,6 +518,36 @@ func (s *workerSessionControlSpy) observedCanceledContext() bool {
 }
 
 var _ workersessions.Service = (*workerSessionControlSpy)(nil)
+
+// synchronousFanOutWorkerSessions is an owner-local Worker Sessions seam for
+// this runtime test. It preserves the production effect under test—each
+// accepted child must cancel its exact Workers dispatch—without constructing
+// sibling services or their wire packages in a runtime unit test.
+type synchronousFanOutWorkerSessions struct {
+	*fakeWorkerSessionsService
+	execution   *synchronousFanOutExecution
+	dispatchIDs map[string]string
+}
+
+func (s *synchronousFanOutWorkerSessions) Terminate(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	dispatchID := s.dispatchIDs[req.ID]
+	canceled, err := s.execution.CancelWorkstationDispatch(ctx, workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
+	result := workersessions.ControlResult{
+		Action:     workersessions.ControlActionTerminate,
+		DispatchID: canceled.DispatchID,
+	}
+	if err != nil {
+		result.Outcome = workersessions.ControlOutcomeFailed
+		return result, err
+	}
+	result.Outcome = workersessions.ControlOutcomeApplied
+	return result, nil
+}
+
+var _ workersessions.Service = (*synchronousFanOutWorkerSessions)(nil)
 
 // synchronousFanOutExecution models two Workers-admitted dispatches behind the
 // real synchronous pool boundary. Each dispatch can finish only by exact

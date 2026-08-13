@@ -16,6 +16,7 @@ const (
 	ControlActionResume    ControlAction = "RESUME"
 	ControlActionCancel    ControlAction = "CANCEL"
 	ControlActionTerminate ControlAction = "TERMINATE"
+	ControlActionInterrupt ControlAction = "INTERRUPT"
 )
 
 // ControlOutcome classifies the result of one exact Worker Session control.
@@ -31,18 +32,76 @@ const (
 	ControlOutcomeFailed      ControlOutcome = "FAILED"
 )
 
-// ControlRequest identifies exactly one stable Worker Session. A supervised
-// session owns at most one immutable dispatch attempt at a time; the returned
-// ControlResult carries that dispatch identity without requiring callers to
-// reconstruct or guess it from a Worker execution request.
+// ControlRequest identifies exactly one stable Worker Session. RequestID is an
+// optional caller-owned control identity used to correlate durable request and
+// outcome records; the service derives a stable fallback when it is blank. A
+// supervised session owns at most one immutable dispatch attempt at a time;
+// the returned ControlResult carries that dispatch identity without requiring
+// callers to reconstruct or guess it from a Worker execution request.
 type ControlRequest struct {
-	ID string
+	ID        string
+	RequestID string
 }
 
 // Validate reports whether req identifies one stable Worker Session.
 func (req ControlRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
+	}
+	return nil
+}
+
+// ControlRecordType distinguishes the two source-native records that bracket
+// one lifecycle control. The request is committed before Worker Sessions
+// invokes a Workers boundary; the outcome is committed by the owning
+// supervision path before any resulting terminal record.
+type ControlRecordType string
+
+const (
+	ControlRecordTypeRequest ControlRecordType = "REQUEST"
+	ControlRecordTypeOutcome ControlRecordType = "OUTCOME"
+)
+
+// ControlRecordPayload is the detached payload used by Worker Session
+// control history. It deliberately carries both the caller correlation and
+// the server-owned attempt identity so durable replay never has to infer what
+// a control targeted from a later terminal record.
+type ControlRecordPayload struct {
+	RecordType      ControlRecordType `json:"recordType"`
+	Action          ControlAction     `json:"action"`
+	Outcome         ControlOutcome    `json:"outcome,omitempty"`
+	RequestID       string            `json:"requestId"`
+	CorrelationID   string            `json:"correlationId"`
+	WorkerSessionID string            `json:"workerSessionId"`
+	DispatchID      string            `json:"dispatchId,omitempty"`
+	AttemptID       string            `json:"attemptId,omitempty"`
+	State           State             `json:"state,omitempty"`
+}
+
+// Validate reports whether the payload is a complete request or outcome
+// bracket. It is intentionally independent of registry state so retained and
+// portable records can be checked without Workers or Providers.
+func (payload ControlRecordPayload) Validate() error {
+	if payload.RecordType != ControlRecordTypeRequest && payload.RecordType != ControlRecordTypeOutcome {
+		return fmt.Errorf("worker session: invalid control record type %q", payload.RecordType)
+	}
+	switch payload.Action {
+	case ControlActionPause, ControlActionResume, ControlActionCancel, ControlActionTerminate, ControlActionInterrupt:
+	default:
+		return fmt.Errorf("worker session: invalid control record action %q", payload.Action)
+	}
+	if !validSessionID(payload.WorkerSessionID) || strings.TrimSpace(payload.RequestID) == "" || strings.TrimSpace(payload.CorrelationID) == "" {
+		return ErrInvalidControlRecord
+	}
+	if payload.RecordType == ControlRecordTypeRequest && payload.Outcome != "" {
+		return ErrInvalidControlRecord
+	}
+	if payload.RecordType == ControlRecordTypeOutcome {
+		switch payload.Outcome {
+		case ControlOutcomeApplied, ControlOutcomeNoop, ControlOutcomeUnsupported, ControlOutcomeFailed:
+		default:
+			return ErrInvalidControlRecord
+		}
 	}
 	return nil
 }

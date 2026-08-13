@@ -599,6 +599,9 @@ var (
 	// ErrInvalidState reports a request, filter, or session naming a value
 	// outside the eight accepted lifecycle states.
 	ErrInvalidState = errors.New("worker session: invalid state")
+	// ErrInvalidControlRecord reports a malformed durable control request or
+	// outcome payload.
+	ErrInvalidControlRecord = errors.New("worker session: invalid control record")
 	// ErrSessionAlreadyExists reports Reserve called with an identity that is
 	// already registered.
 	ErrSessionAlreadyExists = errors.New("worker session: already exists")

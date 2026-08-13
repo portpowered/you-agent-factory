@@ -214,3 +214,50 @@ func TestValidateDraft_DoesNotMutateInputOnFailure(t *testing.T) {
 		t.Fatalf("ValidateDraft() mutated its input draft: got %+v, want %+v", draft, original)
 	}
 }
+
+func TestSessionPayloadValidateLineageRejectsContradictoryRelationships(t *testing.T) {
+	validContinuation := &SessionContinuation{Provider: "codex", Kind: "session_id", ID: "opaque"}
+	tests := []struct {
+		name    string
+		payload SessionPayload
+	}{
+		{
+			name: "missing resume lineage",
+			payload: SessionPayload{
+				WorkerSessionID: "current", DispatchID: "dispatch-current", AttemptID: "attempt-current",
+				AttemptReason: AttemptReasonResume, Continuation: validContinuation,
+			},
+		},
+		{
+			name: "self predecessor",
+			payload: SessionPayload{
+				WorkerSessionID: "current", DispatchID: "dispatch-current", AttemptID: "attempt-current",
+				AttemptReason: AttemptReasonResume, Continuation: validContinuation,
+				Lineage: &SessionLineage{PredecessorWorkerSessionID: "current", PreviousDispatchID: "dispatch-old", PreviousAttemptID: "dispatch-old"},
+			},
+		},
+		{
+			name: "mismatched prior attempts",
+			payload: SessionPayload{
+				WorkerSessionID: "current", DispatchID: "dispatch-current", AttemptID: "attempt-current",
+				AttemptReason: AttemptReasonRetry,
+				Lineage:       &SessionLineage{PreviousDispatchID: "dispatch-old", PreviousAttemptID: "attempt-old"},
+			},
+		},
+		{
+			name: "current dispatch reused",
+			payload: SessionPayload{
+				WorkerSessionID: "current", DispatchID: "dispatch-current", AttemptID: "attempt-current",
+				AttemptReason: AttemptReasonRetry,
+				Lineage:       &SessionLineage{PreviousDispatchID: "dispatch-current", PreviousAttemptID: "dispatch-current"},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.payload.ValidateLineage(); !errors.Is(err, ErrInvalidSessionLineage) {
+				t.Fatalf("ValidateLineage() error = %v, want ErrInvalidSessionLineage", err)
+			}
+		})
+	}
+}

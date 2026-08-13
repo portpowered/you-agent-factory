@@ -2,6 +2,7 @@ package workers
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 )
@@ -84,11 +85,10 @@ type Capabilities struct {
 	ProviderReconnect  bool `json:"providerReconnect"`
 }
 
-// AttemptReason identifies why the opening lifecycle record was created.
-// Worker Sessions emits INITIAL for the first record of a new session and
-// preserves RESUME when a caller starts with an exact provider continuation.
-// RETRY is reserved for a future attempt-specific lifecycle record; the first
-// record of a retried session remains the session's INITIAL opening.
+// AttemptReason identifies why an attempt lifecycle record was created.
+// Worker Sessions emits INITIAL for the first record of a new session, RETRY
+// for a subsequent provider attempt, and RESUME for a caller-started exact
+// provider continuation.
 type AttemptReason string
 
 const (
@@ -114,6 +114,99 @@ type SessionContinuation struct {
 	Provider string `json:"provider,omitempty"`
 	Kind     string `json:"kind,omitempty"`
 	ID       string `json:"id,omitempty"`
+}
+
+// SessionLineage carries the explicit relationship between one Worker
+// Session attempt and the attempt or Worker Session that preceded or follows
+// it. The current dispatch and attempt identities remain the surrounding
+// SessionPayload.DispatchID and AttemptID fields; keeping the prior identity
+// here makes a durable record self-describing without replay-time inference.
+type SessionLineage struct {
+	PredecessorWorkerSessionID string `json:"predecessorWorkerSessionId,omitempty"`
+	SuccessorWorkerSessionID   string `json:"successorWorkerSessionId,omitempty"`
+	PreviousDispatchID         string `json:"previousDispatchId,omitempty"`
+	PreviousAttemptID          string `json:"previousAttemptId,omitempty"`
+}
+
+var (
+	// ErrInvalidSessionContinuation reports a continuation payload that does
+	// not carry the complete exact provider/kind/opaque-ID tuple.
+	ErrInvalidSessionContinuation = errors.New("workers: invalid session continuation")
+	// ErrInvalidSessionLineage reports missing, self-referential, or
+	// contradictory durable Worker Session lineage.
+	ErrInvalidSessionLineage = errors.New("workers: invalid session lineage")
+)
+
+// Validate reports whether value is a complete exact continuation tuple. It
+// deliberately checks without trimming or replacing any field, so callers can
+// retain the authoritative Providers reference byte-for-byte.
+func (value SessionContinuation) Validate() error {
+	if strings.TrimSpace(value.Provider) == "" || strings.TrimSpace(value.Kind) == "" || strings.TrimSpace(value.ID) == "" {
+		return ErrInvalidSessionContinuation
+	}
+	return nil
+}
+
+// Validate reports whether value is a coherent relationship for the current
+// Worker Session and attempt. Empty lineage is valid for an initial opening;
+// once a relationship is present, both sides of every attempt correlation
+// must be explicit and the relationship may not point back to itself.
+func (value SessionLineage) Validate(currentWorkerSessionID, currentDispatchID, currentAttemptID string) error {
+	if value.PredecessorWorkerSessionID == "" && value.SuccessorWorkerSessionID == "" &&
+		value.PreviousDispatchID == "" && value.PreviousAttemptID == "" {
+		return ErrInvalidSessionLineage
+	}
+	if err := validateLineageSessionID(value.PredecessorWorkerSessionID, currentWorkerSessionID); err != nil {
+		return err
+	}
+	if err := validateLineageSessionID(value.SuccessorWorkerSessionID, currentWorkerSessionID); err != nil {
+		return err
+	}
+	if value.PredecessorWorkerSessionID != "" && value.PredecessorWorkerSessionID == value.SuccessorWorkerSessionID {
+		return ErrInvalidSessionLineage
+	}
+	if err := validateLineageAttemptIDs(value.PreviousDispatchID, value.PreviousAttemptID); err != nil {
+		return err
+	}
+	if err := rejectCurrentLineageAttempt(value.PreviousDispatchID, currentDispatchID); err != nil {
+		return err
+	}
+	return rejectCurrentLineageAttempt(value.PreviousAttemptID, currentAttemptID)
+}
+
+func validateLineageSessionID(value, current string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.TrimSpace(value) != value || value == current {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
+func validateLineageAttemptIDs(dispatchID, attemptID string) error {
+	if strings.TrimSpace(dispatchID) != dispatchID || strings.TrimSpace(attemptID) != attemptID {
+		return ErrInvalidSessionLineage
+	}
+	if (dispatchID == "") != (attemptID == "") {
+		return ErrInvalidSessionLineage
+	}
+	if dispatchID != "" && dispatchID != attemptID {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
+func rejectCurrentLineageAttempt(previous, current string) error {
+	if previous != "" && current != "" && previous == current {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
+// Clone returns a detached lineage value.
+func (value SessionLineage) Clone() SessionLineage {
+	return value
 }
 
 type Draft struct {
@@ -178,6 +271,7 @@ type SessionPayload struct {
 	Attempt           int                       `json:"attempt,omitempty"`
 	AttemptReason     AttemptReason             `json:"attemptReason,omitempty"`
 	Continuation      *SessionContinuation      `json:"continuation,omitempty"`
+	Lineage           *SessionLineage           `json:"lineage,omitempty"`
 	ProviderSelection *SessionProviderSelection `json:"providerSelection,omitempty"`
 	Model             string                    `json:"model,omitempty"`
 	ReasoningEffort   string                    `json:"reasoningEffort,omitempty"`
@@ -191,6 +285,78 @@ type SessionPayload struct {
 	// "set to null to clear" nullable-Title convention for session_info_update.
 	Title *string `json:"title,omitempty"`
 }
+
+// ValidateLineage checks the optional durable continuation facts on a Session
+// payload. Legacy initial and terminal payloads with no lineage remain valid;
+// any explicit continuation or lineage is checked rather than normalized.
+func (payload SessionPayload) ValidateLineage() error {
+	if err := payload.validateLineageValues(); err != nil {
+		return err
+	}
+	return validateAttemptReasonLineage(payload)
+}
+
+func (payload SessionPayload) validateLineageValues() error {
+	if payload.Continuation != nil {
+		if err := payload.Continuation.Validate(); err != nil {
+			return err
+		}
+	}
+	if payload.Lineage == nil {
+		return nil
+	}
+	if strings.TrimSpace(payload.WorkerSessionID) == "" ||
+		strings.TrimSpace(payload.DispatchID) == "" ||
+		strings.TrimSpace(payload.AttemptID) == "" {
+		return ErrInvalidSessionLineage
+	}
+	return payload.Lineage.Validate(payload.WorkerSessionID, payload.DispatchID, payload.AttemptID)
+}
+
+func validateAttemptReasonLineage(payload SessionPayload) error {
+	switch payload.AttemptReason {
+	case "":
+		return validateUnattributedLineage(payload.Lineage)
+	case AttemptReasonInitial:
+		return validateInitialLineage(payload)
+	case AttemptReasonRetry:
+		return validateRetryLineage(payload)
+	case AttemptReasonResume:
+		return validateResumeLineage(payload)
+	default:
+		return ErrInvalidSessionLineage
+	}
+}
+
+func validateUnattributedLineage(lineage *SessionLineage) error {
+	if lineage != nil && (lineage.PredecessorWorkerSessionID != "" || lineage.PreviousDispatchID != "") {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
+func validateInitialLineage(payload SessionPayload) error {
+	if payload.Continuation != nil || payload.Lineage != nil {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
+func validateRetryLineage(payload SessionPayload) error {
+	if payload.Lineage == nil || payload.Lineage.PreviousDispatchID == "" || payload.Continuation != nil ||
+		payload.Lineage.PredecessorWorkerSessionID != "" || payload.Lineage.SuccessorWorkerSessionID != "" {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
+func validateResumeLineage(payload SessionPayload) error {
+	if payload.Continuation == nil || payload.Lineage == nil || payload.Lineage.PreviousDispatchID == "" {
+		return ErrInvalidSessionLineage
+	}
+	return nil
+}
+
 type RunPayload struct {
 	Status string `json:"status,omitempty"`
 }

@@ -7,7 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -507,4 +509,168 @@ func TestPublishRecord_ConcurrentDuplicateDeliveryConvergesOnOneRecord(t *testin
 	if len(committed) != 3 {
 		t.Fatalf("committed record count = %d, want exactly 3 (opening, one published record, terminal)", len(committed))
 	}
+}
+
+func TestControlHistory_OrdersPauseResumeBracketsBeforeTerminalAndDeduplicatesReplay(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-control-history",
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		Reference:       reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "pause-1"})
+	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
+		t.Fatalf("Pause() = %#v, %v, want applied PAUSED", paused, err)
+	}
+	if repeated, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "pause-1"}); err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("replayed Pause() = %#v, %v, want NOOP without a second history bracket", repeated, err)
+	}
+
+	resumed, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "resume-1"})
+	if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied || resumed.Session.State != workersessions.StateRunning {
+		t.Fatalf("Resume() = %#v, %v, want applied RUNNING", resumed, err)
+	}
+	resumedResult := completedDispatchResult(resumed.DispatchID)
+	resumedResult.Result.ProviderSession = &workers.ProviderSessionMetadata{
+		Provider: reference.Provider.String(),
+		Kind:     reference.Kind,
+		ID:       reference.ID,
+	}
+	boundary.complete(resumedResult, nil)
+	if result := <-started; result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("InvokeSession() result = %#v, want COMPLETED", result)
+	}
+	if repeated, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "resume-1"}); err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("replayed terminal Resume() = %#v, %v, want NOOP without a second history bracket", repeated, err)
+	}
+
+	topic := workersessions.Topic("worker-1")
+	read := readControlHistory(t, eventsSvc, topic, 20)
+	if len(read.Records) != 7 {
+		t.Fatalf("control history record count = %d, want opening + pause bracket + resume attempt + resume bracket + terminal", len(read.Records))
+	}
+	assertPauseResumeControlHistory(t, read, resumed.DispatchID)
+	assertPortableControlHistory(t, "worker-1", topic, read)
+}
+
+func TestControlHistory_NaturalCompletionWinsAfterControlRequestAndBeforeTerminalRecord(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	started := startControlledSession(t, registry, boundary, "worker-natural", "dispatch-natural")
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-natural",
+		DispatchID:      "dispatch-natural",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-natural-race",
+		},
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	cancelEntered := make(chan struct{})
+	releaseCancel := make(chan struct{})
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		close(cancelEntered)
+		<-releaseCancel
+		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID}, nil
+	})
+
+	controlResult := make(chan struct {
+		result workersessions.ControlResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-natural", RequestID: "natural-race-control"})
+		controlResult <- struct {
+			result workersessions.ControlResult
+			err    error
+		}{result: result, err: err}
+	}()
+	<-cancelEntered
+
+	boundary.complete(completedDispatchResult("dispatch-natural"), nil)
+	close(releaseCancel)
+	control := <-controlResult
+	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeNoop || control.result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("racing Pause() = %#v, %v, want natural COMPLETED NOOP", control.result, control.err)
+	}
+	if result := <-started; result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("natural completion result = %#v, want COMPLETED", result)
+	}
+
+	topic := workersessions.Topic("worker-natural")
+	assertNaturalControlHistory(t, eventsSvc, topic)
+}
+
+func TestControlHistory_RecordsInterruptBracketBeforeSourceTerminal(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	sourceResult := startControlledSession(t, registry, boundary, "source-interrupt", "dispatch-source-interrupt")
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-interrupt-history",
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "source-interrupt",
+		DispatchID:      "dispatch-source-interrupt",
+		Reference:       reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	interrupted, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
+		RequestID:                "interrupt-history-1",
+		SourceWorkerSessionID:    "source-interrupt",
+		SuccessorWorkerSessionID: "successor-interrupt",
+		ReplacementMessage:       "replacement",
+	})
+	if err != nil || !interrupted.Accepted {
+		t.Fatalf("Interrupt() = %#v, %v, want accepted", interrupted, err)
+	}
+	if result := <-sourceResult; result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("source InvokeSession() = %#v, want CANCELED", result.Session)
+	}
+
+	topic := workersessions.Topic("source-interrupt")
+	assertInterruptControlHistory(t, eventsSvc, topic)
+
+	boundary.complete(completedDispatchResult(interrupted.Successor.ProviderSessionAssociation.DispatchID), nil)
 }

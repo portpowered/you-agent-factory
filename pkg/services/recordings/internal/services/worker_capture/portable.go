@@ -80,6 +80,7 @@ type WorkerPortableRecordingCorrelation struct {
 	Attempt           int                               `json:"attempt,omitempty"`
 	AttemptReason     workers.AttemptReason             `json:"attemptReason,omitempty"`
 	Continuation      *workers.SessionContinuation      `json:"continuation,omitempty"`
+	Lineage           *workers.SessionLineage           `json:"lineage,omitempty"`
 	ProviderSelection *workers.SessionProviderSelection `json:"providerSelection,omitempty"`
 	Model             string                            `json:"model,omitempty"`
 	ReasoningEffort   string                            `json:"reasoningEffort,omitempty"`
@@ -882,6 +883,7 @@ func correlationFromSessionPayload(payload workers.SessionPayload) WorkerPortabl
 		WorkIDs: append([]string(nil), payload.WorkIDs...), AttemptID: payload.AttemptID,
 		Attempt: payload.Attempt, AttemptReason: payload.AttemptReason,
 		Continuation:      cloneSessionContinuation(payload.Continuation),
+		Lineage:           cloneSessionLineage(payload.Lineage),
 		ProviderSelection: cloneProviderSelection(payload.ProviderSelection),
 		Model:             payload.Model, ReasoningEffort: payload.ReasoningEffort,
 	}
@@ -909,6 +911,7 @@ func cloneWorkerPortableRecording(recording WorkerPortableRecording) WorkerPorta
 	}
 	clone.Correlation.WorkIDs = append([]string(nil), recording.Correlation.WorkIDs...)
 	clone.Correlation.Continuation = cloneSessionContinuation(recording.Correlation.Continuation)
+	clone.Correlation.Lineage = cloneSessionLineage(recording.Correlation.Lineage)
 	clone.Correlation.ProviderSelection = cloneProviderSelection(recording.Correlation.ProviderSelection)
 	clone.Records = make([]WorkerPortableRecord, len(recording.Records))
 	for index, record := range recording.Records {

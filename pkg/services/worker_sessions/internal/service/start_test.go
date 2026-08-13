@@ -149,10 +149,14 @@ func assertOpeningRecordReady(t *testing.T, eventsSvc events.Service, topic even
 }
 
 func subscribeForTerminal(t *testing.T, eventsSvc events.Service, topic events.Topic) events.Subscription {
+	return subscribeForTerminalAt(t, eventsSvc, topic, 1)
+}
+
+func subscribeForTerminalAt(t *testing.T, eventsSvc events.Service, topic events.Topic, position events.AggregateSequence) events.Subscription {
 	t.Helper()
 	subscription, err := eventsSvc.Subscribe(context.Background(), events.SubscribeRequest{
 		Topic: topic,
-		From:  events.Cursor{Topic: topic, Position: 1},
+		From:  events.Cursor{Topic: topic, Position: position},
 		Limit: 1,
 	})
 	if err != nil {
@@ -161,13 +165,38 @@ func subscribeForTerminal(t *testing.T, eventsSvc events.Service, topic events.T
 	return subscription
 }
 
+func subscribeForTerminalHistory(t *testing.T, eventsSvc events.Service, topic events.Topic) events.Subscription {
+	t.Helper()
+	subscription, err := eventsSvc.Subscribe(context.Background(), events.SubscribeRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic, Position: 1},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("terminal history Subscribe() error = %v, want nil", err)
+	}
+	return subscription
+}
+
 func assertTerminalDelivery(t *testing.T, subscription events.Subscription) {
+	assertTerminalDeliveryAt(t, subscription, 2)
+}
+
+func assertTerminalDeliveryAt(t *testing.T, subscription events.Subscription, position events.AggregateSequence) {
 	t.Helper()
 	waitContext, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	delivery := subscription.Next(waitContext)
-	if delivery.Kind != events.DeliveryRecord || delivery.Record.ID.Position != 2 {
-		t.Fatalf("terminal delivery = %+v, want record at position 2", delivery)
+	for {
+		delivery := subscription.Next(waitContext)
+		if delivery.Kind != events.DeliveryRecord {
+			t.Fatalf("terminal delivery = %+v, want record at position %d", delivery, position)
+		}
+		if delivery.Record.ID.Position == position {
+			return
+		}
+		if delivery.Record.ID.Position > position {
+			t.Fatalf("terminal delivery = %+v, want record at position %d", delivery, position)
+		}
 	}
 }
 
@@ -183,6 +212,21 @@ func assertSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
 	}
 	if len(read.Records) != 2 {
 		t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+	}
+}
+
+func assertControlledSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
+	t.Helper()
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(id),
+		From:  events.Cursor{Topic: workersessions.Topic(id)},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("controlled session records for %q read error = %v", id, err)
+	}
+	if len(read.Records) != 4 {
+		t.Fatalf("controlled session records for %q = %+v, want opening, control request/outcome, and terminal", id, read.Records)
 	}
 }
 
@@ -437,7 +481,7 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 	accepted := waitForAsyncStart(t, outcomes)
 	assertAcceptedStart(t, accepted)
 
-	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic(request.ID))
+	terminalSubscription := subscribeForTerminalHistory(t, eventsSvc, workersessions.Topic(request.ID))
 	if err := lifecycle.Stop(context.Background()); err != nil {
 		t.Fatalf("Lifecycle.Stop() error = %v, want nil", err)
 	}
@@ -446,7 +490,7 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 	default:
 		t.Fatal("Lifecycle.Stop() returned before signaling Workers cancellation")
 	}
-	assertTerminalDelivery(t, terminalSubscription)
+	assertTerminalDeliveryAt(t, terminalSubscription, 4)
 	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
 	if err != nil {
 		t.Fatalf("session after Lifecycle.Stop() read error = %v", err)
@@ -454,7 +498,7 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 	if final.State != workersessions.StateTerminated {
 		t.Fatalf("session after Lifecycle.Stop() = %+v, want TERMINATED", final)
 	}
-	assertSessionRecords(t, eventsSvc, request.ID)
+	assertControlledSessionRecords(t, eventsSvc, request.ID)
 
 	if _, err := registry.Start(context.Background(), validAsyncStartRequest("worker-after-shutdown", "dispatch-after-shutdown")); !errors.Is(err, workersessions.ErrStartServerStopping) {
 		t.Fatalf("new Start() after Lifecycle.Stop() error = %v, want ErrStartServerStopping", err)
@@ -788,8 +832,8 @@ func TestStart_CancelBeforeAdmissionCannotReturnAcceptedOrDuplicateTerminal(t *t
 		From:  events.Cursor{Topic: topic},
 		Limit: 10,
 	})
-	if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 2 {
-		t.Fatalf("session topic after cancellation = %+v, %v, want one opening and one terminal record", read, err)
+	if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 4 {
+		t.Fatalf("session topic after cancellation = %+v, %v, want opening, control request/outcome, and terminal records", read, err)
 	}
 }
 
@@ -2107,7 +2151,11 @@ func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T
 			}, nil
 		},
 	}
-	registry := newRegistryWithExecution(execution)
+	eventsSvc := newEventsAppender()
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
 	request := validStartRequest("worker-retry", "dispatch-1")
 	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
 
@@ -2133,6 +2181,71 @@ func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T
 	}
 	if result.Session.ID != request.ID {
 		t.Fatalf("retry session ID = %q, want %q", result.Session.ID, request.ID)
+	}
+	assertRetryAttemptHistory(t, eventsSvc, request.ID)
+}
+
+func TestInvokeSession_RetryLineagePublicationFailureTerminalizesWithoutSecondHandoff(t *testing.T) {
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+					FailureMetadata: &workers.WorkFailureMetadata{
+						Family: workers.WorkFailureFamilyRetryable,
+						Type:   workers.WorkFailureTypeTimeout,
+					},
+				},
+			}, nil
+		},
+	}
+	eventsSvc := newEventsAppender()
+	appender := &failOnNthAppendEventsAppender{Service: eventsSvc, n: 2}
+	registry, err := newService(executionBoundary{execution: execution}, appender, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+
+	request := validStartRequest("worker-retry-lineage-failure", "dispatch-1")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want terminal result", err)
+	}
+	if result.Session.State != workersessions.StateFailed || result.DispatchErr == nil {
+		t.Fatalf("InvokeSession() = %#v, want failed result with lineage publication error", result)
+	}
+	if got := execution.callCount(); got != 1 {
+		t.Fatalf("Workers handoff count = %d, want one initial attempt", got)
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(request.ID),
+		From:  events.Cursor{Topic: workersessions.Topic(request.ID)},
+		Limit: 10,
+	})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("retry lineage failure history = %+v, %v, want opening and terminal records", read, err)
+	}
+}
+
+func assertRetryAttemptHistory(t *testing.T, eventsSvc events.Service, sessionID string) {
+	t.Helper()
+	topic := workersessions.Topic(sessionID)
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil || len(read.Records) != 3 {
+		t.Fatalf("retry history = %+v, %v, want opening/retry/terminal history", read, err)
+	}
+	retryPayload := decodeSessionPayload(t, decodeDraft(t, read.Records[1]))
+	if read.Records[1].SourceType != events.SourceType("worker_session_attempt") {
+		t.Fatalf("retry source type = %q, want worker_session_attempt", read.Records[1].SourceType)
+	}
+	if retryPayload.AttemptReason != workers.AttemptReasonRetry || retryPayload.Lineage == nil {
+		t.Fatalf("retry record = %#v, want explicit retry lineage", retryPayload)
+	}
+	if retryPayload.Lineage.PreviousDispatchID != "dispatch-1" || retryPayload.DispatchID != "dispatch-1/attempt/2" {
+		t.Fatalf("retry record = %#v, want previous/current attempt lineage", retryPayload)
 	}
 }
 

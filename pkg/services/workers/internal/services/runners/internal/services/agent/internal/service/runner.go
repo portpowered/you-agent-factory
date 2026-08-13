@@ -49,7 +49,7 @@ func (s *service) Execute(
 	if err := validateRequest(request); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
-	provider := providerIDForRunner(request.RunnerID).String()
+	provider := providerIDForRequest(request).String()
 	result, err := s.executeProviderAttempt(ctx, request)
 	if err != nil {
 		if response, normalizedErr, handled := continuationFailureResult(ctx, request, err); handled {
@@ -87,10 +87,18 @@ func (s *service) Execute(
 		return workers.RunnerExecutionResult{}, normalizedErr
 	}
 	result = result.Clone()
-	response := runnerResult(result, providerIDForRunner(request.RunnerID))
+	response := runnerResult(result, providerIDForRequest(request))
+	if response.ProviderSession == nil && request.ResumeSession != nil {
+		reference := request.ResumeSession.Clone()
+		response.ProviderSession = &workers.ProviderSessionMetadata{
+			Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
+			Kind:     reference.Kind,
+			ID:       reference.ID,
+		}
+	}
 	if response.ProviderSession == nil && strings.TrimSpace(request.SessionID) != "" {
 		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(providerIDForRunner(request.RunnerID).String()),
+			Provider: workers.CanonicalProviderSessionProvider(providerIDForRequest(request).String()),
 			Kind:     providers.SessionIDKind,
 			ID:       request.SessionID,
 		}
@@ -326,8 +334,10 @@ func (s *service) publishProviderProgress(
 }
 
 func validateRequest(request workers.RunnerExecutionRequest) error {
-	if err := providers.ID(request.RunnerID).Validate(); err != nil {
-		return badRequest("agent provider identity is invalid", err)
+	if request.ResumeSession == nil {
+		if err := providers.ID(request.RunnerID).Validate(); err != nil {
+			return badRequest("agent provider identity is invalid", err)
+		}
 	}
 	if strings.TrimSpace(request.Dispatch.DispatchID) == "" {
 		return badRequest("agent dispatch identity is required", nil)
@@ -357,7 +367,7 @@ func (s *service) executeProviderAttempt(
 	attempt.ProgressObserver = s.observeProviderProgress(
 		request.Dispatch.DispatchID,
 		live,
-		providerIDForRunner(request.RunnerID).String(),
+		providerIDForRequest(request).String(),
 	)
 	if request.ResumeSession != nil {
 		reference := request.ResumeSession.Clone()
@@ -497,7 +507,7 @@ func invalidContinuationReference(reference providers.SessionRef) providers.Cont
 }
 
 func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {
-	providerID := providerIDForRunner(request.RunnerID)
+	providerID := providerIDForRequest(request)
 	result := providers.ExecuteRequest{
 		Provider:           providerID,
 		AttemptID:          request.Dispatch.DispatchID,
@@ -523,6 +533,17 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 // Providers boundary.
 func providerIDForRunner(runnerID string) providers.ID {
 	return providers.ID(workers.NormalizeRunnerID(runnerID))
+}
+
+// providerIDForRequest makes the Worker Session-owned exact reference the
+// authority for continuation routing. Runner IDs remain the selection input
+// for ordinary execution, but cannot redirect or invalidate an admitted
+// continuation whose provider identity is already recorded in ResumeSession.
+func providerIDForRequest(request workers.RunnerExecutionRequest) providers.ID {
+	if request.ResumeSession != nil {
+		return request.ResumeSession.Provider
+	}
+	return providerIDForRunner(request.RunnerID)
 }
 
 func runnerResult(
@@ -567,7 +588,7 @@ func runnerFailureResult(
 	response := runnerResult(providers.ExecuteResult{
 		SessionRef:  failure.SessionRef,
 		Diagnostics: failure.Diagnostics,
-	}, providerIDForRunner(request.RunnerID))
+	}, providerIDForRequest(request))
 	if response.ProviderSession == nil && failure.SessionRef != nil {
 		response.ProviderSession = &workers.ProviderSessionMetadata{
 			Provider: workers.CanonicalProviderSessionProvider(

@@ -440,6 +440,24 @@ func (s *recordedWorkerSessionObservation) listLive(
 	return s.Service.ListObservations(ctx, req)
 }
 
+// Start carries the runtime-owned Worker recording identity into direct
+// Worker Session admission when the caller did not supply one explicitly.
+// Factory dispatch already fills this field at its orchestration boundary;
+// this adapter keeps the public HTTP/CLI start path on the same durable
+// recording contract.
+func (s *recordedWorkerSessionObservation) Start(
+	ctx context.Context,
+	req workersessions.StartRequest,
+) (workersessions.StartResult, error) {
+	if s == nil || s.Service == nil {
+		return workersessions.StartResult{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if strings.TrimSpace(req.Execution.Execution.RecordingID) == "" {
+		req.Execution.Execution.RecordingID = strings.TrimSpace(s.recordingID)
+	}
+	return s.Service.Start(ctx, req)
+}
+
 type workerRecordingHealth struct {
 	status recordings.WorkerRecordingStatus
 	reason string
