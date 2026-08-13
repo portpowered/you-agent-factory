@@ -178,8 +178,11 @@ func TestValidateConfigRejectsConflictingManifestOperations(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "choose only one") {
 		t.Fatalf("validateConfig() error = %v, want conflicting operation diagnostic", err)
 	}
-	if err := validateConfig(config{updateManifest: "minimums.json"}); err != nil {
-		t.Fatalf("validateConfig() single update error = %v", err)
+	if err := validateConfig(config{updateManifest: "minimums.json"}); err == nil || !strings.Contains(err.Error(), "-update-manifest requires -update-profiles") {
+		t.Fatalf("validateConfig() single update error = %v, want sampled-update requirement", err)
+	}
+	if err := validateConfig(config{updateProfiles: "one.out,two.out"}); err == nil || !strings.Contains(err.Error(), "-update-profiles requires -update-manifest") {
+		t.Fatalf("validateConfig() profile-only update error = %v, want manifest requirement", err)
 	}
 }
 

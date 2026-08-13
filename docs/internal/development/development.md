@@ -286,13 +286,17 @@ reviewed manifest after coverage is restored. Aggregate `-min` enforcement
 remains independent and blocking.
 The renderer sorts entries and truncates each exact ratio downward to two
 decimal percentage points, so identical profiles produce identical bytes and a
-generated floor never exceeds its measurement. Ratchet an existing reviewed
-manifest explicitly with
-`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file>`.
-The command reports every package as `added`, `raised`, `unchanged`, or
-`rejected` in import-path order. Any rejected decrease prevents the entire
-write; repeating the command without an added package or qualifying increase
-leaves the manifest byte-for-byte unchanged.
+generated floor never exceeds its measurement. Update an existing reviewed
+manifest from a complete sample set explicitly with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file> -update-profiles <profile-1>,<profile-2>,<profile-3>,<profile-4>,<profile-5>`.
+The command requires at least five readable, count-mode profiles with the same
+package universe and statement totals. It reports every package as `added`,
+`lowered`, `raised`, or `unchanged` in import-path order and derives numeric
+floors from the exact minimum covered/total ratio across the sample set. A
+single profile, duplicate, incompatible, or unreadable profile is rejected
+before the manifest is written. Existing complete exceptions are retained
+unchanged, and repeating the command with the same samples leaves the manifest
+byte-for-byte unchanged.
 
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 

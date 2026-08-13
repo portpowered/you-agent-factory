@@ -74,6 +74,7 @@ type config struct {
 	jobs                int
 	generateManifest    string
 	updateManifest      string
+	updateProfiles      string
 	packageManifest     string
 	varianceProfiles    string
 	varianceOutput      string
@@ -136,6 +137,9 @@ func execute(cfg config) error {
 	if cfg.varianceProfiles != "" || cfg.varianceOutput != "" {
 		return executeVarianceReport(cfg)
 	}
+	if strings.TrimSpace(cfg.updateProfiles) != "" {
+		return executeSampledManifestUpdate(cfg)
+	}
 	result, err := run(cfg)
 	if err != nil {
 		var validationErr *coverageManifestValidationError
@@ -161,15 +165,6 @@ func execute(cfg config) error {
 		}
 		fmt.Fprintf(stdoutWriter, "Created %s coverage manifest at %s.\n", cfg.suite, cfg.generateManifest)
 	}
-	if cfg.updateManifest != "" {
-		updates, err := updateCoverageManifestFile(cfg.updateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries))
-		for _, update := range updates {
-			fmt.Fprintln(stdoutWriter, update.String())
-		}
-		if err != nil {
-			return err
-		}
-	}
 	if err := writeCoverageSummaryJSON(cfg.jsonOutput, result); err != nil {
 		return err
 	}
@@ -190,7 +185,8 @@ func parseConfig() config {
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to 2")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
-	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
+	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "update an existing package-minimum manifest from a complete compatible profile sample set")
+	flag.StringVar(&cfg.updateProfiles, "update-profiles", "", "comma-separated complete coverage profiles for -update-manifest; requires at least five compatible profiles")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
 	flag.StringVar(&cfg.varianceProfiles, "variance-profiles", "", "comma-separated functional coverage profiles to aggregate into a variance report")
 	flag.StringVar(&cfg.varianceOutput, "variance-output", "", "write a deterministic functional coverage variance report to this path")
@@ -225,6 +221,12 @@ func validateConfig(cfg config) error {
 	if cfg.packageFloorEpsilon < 0 || math.IsNaN(cfg.packageFloorEpsilon) || math.IsInf(cfg.packageFloorEpsilon, 0) {
 		return fmt.Errorf("configure go coverage: -package-floor-epsilon must be a finite non-negative percentage-point value (got %v); set it to 0 or greater", cfg.packageFloorEpsilon)
 	}
+	if strings.TrimSpace(cfg.updateManifest) != "" && strings.TrimSpace(cfg.updateProfiles) == "" {
+		return errors.New("configure go coverage manifest update: -update-manifest requires -update-profiles with at least five compatible profiles")
+	}
+	if strings.TrimSpace(cfg.updateProfiles) != "" && strings.TrimSpace(cfg.updateManifest) == "" {
+		return errors.New("configure go coverage manifest update: -update-profiles requires -update-manifest")
+	}
 	varianceRequested := strings.TrimSpace(cfg.varianceProfiles) != "" || strings.TrimSpace(cfg.varianceOutput) != ""
 	if varianceRequested {
 		if strings.TrimSpace(cfg.varianceProfiles) == "" || strings.TrimSpace(cfg.varianceOutput) == "" {
@@ -233,7 +235,7 @@ func validateConfig(cfg config) error {
 		if cfg.suite != "functional" {
 			return fmt.Errorf("configure coverage variance: -suite must be functional (got %q)", cfg.suite)
 		}
-		if strings.TrimSpace(cfg.generateManifest) != "" || strings.TrimSpace(cfg.updateManifest) != "" {
+		if strings.TrimSpace(cfg.generateManifest) != "" || strings.TrimSpace(cfg.updateManifest) != "" || strings.TrimSpace(cfg.updateProfiles) != "" {
 			return errors.New("configure coverage variance: do not combine variance reporting with manifest generation or update")
 		}
 		if strings.TrimSpace(cfg.varianceCommit) == "" {

@@ -15,6 +15,7 @@ import (
 )
 
 const minimumVarianceSamples = 5
+const countCoverageProfileHeader = "mode: count"
 
 type coverageVarianceSample struct {
 	path   string
@@ -144,6 +145,9 @@ func readCoverageVarianceProfile(profilePath string, repoRoot string) (coverageV
 	if closeErr != nil {
 		return coverageVarianceSample{}, fmt.Errorf("aggregate coverage variance: close profile %q: %w", profilePath, closeErr)
 	}
+	if header != countCoverageProfileHeader {
+		return coverageVarianceSample{}, fmt.Errorf("aggregate coverage variance: profile %q uses %q; count-mode profiles are required", profilePath, header)
+	}
 	totals := make(map[string]packageCoverageTotals)
 	for importPath, packageTotals := range coverageTotals(blocks) {
 		if !isBackendCoveragePackage(importPath) {
@@ -179,6 +183,9 @@ func validateVarianceSampleCompatibility(samples []coverageVarianceSample) error
 		return errors.New("aggregate coverage variance: no samples were loaded")
 	}
 	first := samples[0]
+	if first.header != countCoverageProfileHeader {
+		return fmt.Errorf("aggregate coverage variance: profile %q uses %q; count-mode profiles are required", first.path, first.header)
+	}
 	wantPackages := sortedCoveragePackageNames(first.totals)
 	for _, sample := range samples[1:] {
 		if sample.header != first.header {
@@ -197,6 +204,28 @@ func validateVarianceSampleCompatibility(samples []coverageVarianceSample) error
 		}
 	}
 	return nil
+}
+
+func minimumCoverageTotals(samples []coverageVarianceSample) (map[string]packageCoverageTotals, error) {
+	if len(samples) < minimumVarianceSamples {
+		return nil, fmt.Errorf("requires at least %d profiles, received %d", minimumVarianceSamples, len(samples))
+	}
+	if err := validateVarianceSampleCompatibility(samples); err != nil {
+		return nil, err
+	}
+	packages := sortedCoveragePackageNames(samples[0].totals)
+	minimums := make(map[string]packageCoverageTotals, len(packages))
+	for _, importPath := range packages {
+		minimum := samples[0].totals[importPath]
+		for _, sample := range samples[1:] {
+			candidate := sample.totals[importPath]
+			if candidate.coveredStatements < minimum.coveredStatements {
+				minimum.coveredStatements = candidate.coveredStatements
+			}
+		}
+		minimums[importPath] = minimum
+	}
+	return minimums, nil
 }
 
 func sortedCoveragePackageNames(totals map[string]packageCoverageTotals) []string {
