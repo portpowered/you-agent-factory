@@ -18,31 +18,7 @@ type variancePackageFixture struct {
 func TestLoadCoverageVarianceProfilesAndRenderReport(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	packages := []string{modulePath + "/pkg/config", modulePath + "/pkg/service"}
-	covered := [][]int{{3, 1}, {4, 1}, {2, 1}, {5, 2}, {4, 1}}
-	paths := make([]string, 0, len(covered))
-	for index, values := range covered {
-		path := filepath.Join(root, fmt.Sprintf("run-%02d.out", index+1))
-		writeVarianceProfile(t, path, map[string]variancePackageFixture{
-			packages[0]: {total: 5, covered: values[0]},
-			packages[1]: {total: 2, covered: values[1]},
-		})
-		paths = append(paths, path)
-	}
-	slices.Reverse(paths)
-
-	samples, err := loadCoverageVarianceProfiles(paths, root)
-	if err != nil {
-		t.Fatalf("loadCoverageVarianceProfiles() error = %v", err)
-	}
-	report, err := buildCoverageVarianceReport("913a667d2-full", "functional", 2, samples, map[string]coverageVarianceCurrentFloor{
-		packages[0]: {label: "60.00%", floor: coverageFloor(6000), valid: true},
-		packages[1]: {label: "exception"},
-	})
-	if err != nil {
-		t.Fatalf("buildCoverageVarianceReport() error = %v", err)
-	}
+	_, report, _ := newVarianceReportFixture(t)
 	data, err := renderCoverageVarianceReport(report)
 	if err != nil {
 		t.Fatalf("renderCoverageVarianceReport() error = %v", err)
@@ -76,7 +52,12 @@ func TestLoadCoverageVarianceProfilesAndRenderReport(t *testing.T) {
 	if !bytes.Equal(data, genericSecond) {
 		t.Fatalf("generic variance report is not byte-stable:\nfirst=%s\nsecond=%s", data, genericSecond)
 	}
+}
 
+func TestRenderCoverageVarianceReportWithAnnotations(t *testing.T) {
+	t.Parallel()
+
+	root, report, packages := newVarianceReportFixture(t)
 	annotationPath := filepath.Join(root, "annotations.json")
 	annotationData := fmt.Sprintf(`{
   "summary": "The supplied annotation is limited to the measured sample set.",
@@ -119,6 +100,37 @@ func TestLoadCoverageVarianceProfilesAndRenderReport(t *testing.T) {
 	if !bytes.Equal(annotated, second) {
 		t.Fatalf("annotated variance report is not byte-stable:\nfirst=%s\nsecond=%s", annotated, second)
 	}
+}
+
+func newVarianceReportFixture(t *testing.T) (string, coverageVarianceReport, []string) {
+	t.Helper()
+
+	root := t.TempDir()
+	packages := []string{modulePath + "/pkg/config", modulePath + "/pkg/service"}
+	covered := [][]int{{3, 1}, {4, 1}, {2, 1}, {5, 2}, {4, 1}}
+	paths := make([]string, 0, len(covered))
+	for index, values := range covered {
+		path := filepath.Join(root, fmt.Sprintf("run-%02d.out", index+1))
+		writeVarianceProfile(t, path, map[string]variancePackageFixture{
+			packages[0]: {total: 5, covered: values[0]},
+			packages[1]: {total: 2, covered: values[1]},
+		})
+		paths = append(paths, path)
+	}
+	slices.Reverse(paths)
+
+	samples, err := loadCoverageVarianceProfiles(paths, root)
+	if err != nil {
+		t.Fatalf("loadCoverageVarianceProfiles() error = %v", err)
+	}
+	report, err := buildCoverageVarianceReport("913a667d2-full", "functional", 2, samples, map[string]coverageVarianceCurrentFloor{
+		packages[0]: {label: "60.00%", floor: coverageFloor(6000), valid: true},
+		packages[1]: {label: "exception"},
+	})
+	if err != nil {
+		t.Fatalf("buildCoverageVarianceReport() error = %v", err)
+	}
+	return root, report, packages
 }
 
 func TestLoadCoverageVarianceProfilesRejectsInvalidSampleSets(t *testing.T) {
