@@ -93,6 +93,17 @@ func TestUnimplementedService_SnapshotDistributeTypedOutcomes(t *testing.T) {
 	if _, err := unimplemented.MaterializeFactorySnapshot(ctx, factorydefinitions.MaterializeFactorySnapshotRequest{}); !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
 		t.Fatalf("MaterializeFactorySnapshot: got %v, want ErrUnsafeFactorySnapshotMaterialize", err)
 	}
+	_, runtimeSnapshotErr := unimplemented.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{})
+	var resolutionErr *factorydefinitions.RuntimeSnapshotResolutionError
+	if !errors.As(runtimeSnapshotErr, &resolutionErr) {
+		t.Fatalf("ResolveRuntimeSnapshot: got %T, want RuntimeSnapshotResolutionError", runtimeSnapshotErr)
+	}
+	if resolutionErr.Diagnostic.Code != factorydefinitions.RuntimeSnapshotDiagnosticUnavailable {
+		t.Fatalf("ResolveRuntimeSnapshot diagnostic = %#v, want unavailable", resolutionErr.Diagnostic)
+	}
+	if !errors.Is(runtimeSnapshotErr, factorydefinitions.ErrRuntimeSnapshotResolverUnavailable) {
+		t.Fatalf("ResolveRuntimeSnapshot: got %v, want ErrRuntimeSnapshotResolverUnavailable", runtimeSnapshotErr)
+	}
 
 	if _, err := unimplemented.ListBuiltInPackagedFactories(ctx, factorydefinitions.ListBuiltInPackagedFactoriesRequest{}); err == nil {
 		t.Fatal("ListBuiltInPackagedFactories: expected collaborator-required error")

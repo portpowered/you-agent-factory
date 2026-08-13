@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
@@ -126,6 +127,119 @@ func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
 	}
 	if _, err := service.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{RuntimeID: request.RuntimeID}); err != nil {
 		t.Fatalf("DeactivateRuntime() error = %v", err)
+	}
+}
+
+func TestRuntimeLifecycle_SnapshotConfigAndInputHelpers(t *testing.T) {
+	worker := factorydefinitions.FactoryWorkerConfig{Name: "worker-a"}
+	workstation := factorydefinitions.FactoryWorkstationConfig{Name: "workstation-a"}
+	config := &runtimeSnapshotConfig{
+		factoryDir:     "/factories/example",
+		runtimeBaseDir: "/runtime/example",
+		runtimeID:      "runtime-example",
+		config: factorydefinitions.FactoryConfig{
+			Name:         "example",
+			Workers:      []factorydefinitions.FactoryWorkerConfig{worker},
+			Workstations: []factorydefinitions.FactoryWorkstationConfig{workstation},
+		},
+	}
+	if config.FactoryDir() != "/factories/example" || config.RuntimeBaseDir() != "/runtime/example" || config.RuntimeInstanceID() != "runtime-example" {
+		t.Fatalf("runtimeSnapshotConfig identity = %q, %q, %q", config.FactoryDir(), config.RuntimeBaseDir(), config.RuntimeInstanceID())
+	}
+	if got := config.FactoryConfig(); got == nil || got.Name != "example" {
+		t.Fatalf("FactoryConfig() = %#v, want example", got)
+	}
+	if got, ok := config.Worker("worker-a"); !ok || got == nil || got.Name != "worker-a" {
+		t.Fatalf("Worker(worker-a) = %#v, %v", got, ok)
+	}
+	if _, ok := config.Worker("missing"); ok {
+		t.Fatal("Worker(missing) unexpectedly resolved")
+	}
+	if got, ok := config.Workstation("workstation-a"); !ok || got == nil || got.Name != "workstation-a" {
+		t.Fatalf("Workstation(workstation-a) = %#v, %v", got, ok)
+	}
+	if _, ok := config.Workstation("missing"); ok {
+		t.Fatal("Workstation(missing) unexpectedly resolved")
+	}
+
+	var nilConfig *runtimeSnapshotConfig
+	if nilConfig.FactoryDir() != "" || nilConfig.RuntimeBaseDir() != "" || nilConfig.RuntimeInstanceID() != "" || nilConfig.FactoryConfig() != nil {
+		t.Fatal("nil runtimeSnapshotConfig returned non-empty identity")
+	}
+	if _, ok := nilConfig.Worker("worker-a"); ok {
+		t.Fatal("nil runtimeSnapshotConfig resolved a worker")
+	}
+	if _, ok := nilConfig.Workstation("workstation-a"); ok {
+		t.Fatal("nil runtimeSnapshotConfig resolved a workstation")
+	}
+
+	validStates := map[string]map[string]bool{"task": {"ready": true}}
+	clonedStates := cloneValidStates(validStates)
+	clonedStates["task"]["ready"] = false
+	if validStates["task"]["ready"] != true {
+		t.Fatal("cloneValidStates() shared nested state")
+	}
+	if cloneValidStates(nil) != nil {
+		t.Fatal("cloneValidStates(nil) returned a non-nil map")
+	}
+
+	filesystem := runtimeFilesystemConfig(
+		"/factories/example",
+		automations.RuntimeFilesystemInputs{
+			KnownWorkTypes:    []string{"task"},
+			ValidStatesByType: validStates,
+		},
+		zap.NewNop(),
+		func(context.Context, work.WorkRequest) error { return nil },
+	)
+	if filesystem.Dir != filepath.Join("/factories/example", factorydefinitions.InputsDir) || len(filesystem.KnownWorkTypes) != 1 {
+		t.Fatalf("runtimeFilesystemConfig() = %#v", filesystem)
+	}
+}
+
+func TestRuntimeLifecycle_RejectsMalformedActivationRequests(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*automations.RuntimeActivationRequest)
+	}{
+		{name: "missing runtime ID", mutate: func(request *automations.RuntimeActivationRequest) { request.RuntimeID = "" }},
+		{name: "session mismatch", mutate: func(request *automations.RuntimeActivationRequest) { request.FactorySessionID = "other" }},
+		{name: "missing factory directory", mutate: func(request *automations.RuntimeActivationRequest) { request.Snapshot.FactoryDir = "" }},
+		{name: "missing factory name", mutate: func(request *automations.RuntimeActivationRequest) { request.Snapshot.EffectiveFactory.Name = "" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := runtimeActivationRequestForTest("runtime-invalid", "example")
+			test.mutate(&request)
+			if _, err := normalizeRuntimeActivationRequest(request); err == nil {
+				t.Fatal("normalizeRuntimeActivationRequest() error = nil, want invalid request")
+			}
+		})
+	}
+}
+
+func TestRuntimeLifecycle_OpaqueIdentityUsesPresenceAndType(t *testing.T) {
+	var nilPointer *int
+	if got := newOpaqueActivationIdentity(nil); got.present {
+		t.Fatal("nil interface was marked present")
+	}
+	if got := newOpaqueActivationIdentity(nilPointer); got.present {
+		t.Fatal("nil pointer was marked present")
+	}
+	first := newOpaqueActivationIdentity(func() {})
+	second := newOpaqueActivationIdentity(func() {})
+	if !first.matches(second) {
+		t.Fatalf("equivalent function identities did not match: %#v, %#v", first, second)
+	}
+	if newOpaqueActivationIdentity("value").matches(newOpaqueActivationIdentity(42)) {
+		t.Fatal("different opaque value types unexpectedly matched")
+	}
+	if runtimeLifecycleSentinel(automations.ErrorCodeInvalid) != automations.ErrInvalidRequest ||
+		runtimeLifecycleSentinel(automations.ErrorCodeNotFound) != automations.ErrNotFound ||
+		runtimeLifecycleSentinel(automations.ErrorCodeConflict) != automations.ErrConflict ||
+		runtimeLifecycleSentinel(automations.ErrorCodeFailed) != automations.ErrSupervisionFailed ||
+		runtimeLifecycleSentinel(automations.ErrorCode("unknown")) != nil {
+		t.Fatal("runtimeLifecycleSentinel() returned an unexpected sentinel")
 	}
 }
 

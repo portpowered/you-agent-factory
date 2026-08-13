@@ -318,6 +318,37 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewRootComposesHostedEffectsAndPublishesRuntimeCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
+	}
+	root, err := automationswire.NewRoot(
+		ports.logger,
+		ports.clock,
+		ports.commandRunner,
+		"automations-root",
+		"",
+		automationswire.HostedSourceInputs{
+			Clock:           ports.clock,
+			SecretResolver:  func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
+			LinearEndpoint:  "",
+			CheckpointStore: store,
+		},
+		ports.resolveTemplates,
+		ports.executionPolicy,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	if root.Operations == nil || root.Lifecycle == nil || root.Runtime == nil {
+		t.Fatalf("NewRoot() = %#v, want operations, lifecycle, and runtime capabilities", root)
+	}
+}
+
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 

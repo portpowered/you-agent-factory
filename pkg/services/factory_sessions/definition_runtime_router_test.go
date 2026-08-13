@@ -1,8 +1,10 @@
 package factorysessions
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -81,6 +83,214 @@ func TestDefinitionRuntimeRouter_DefaultHostServesExplicitSession(t *testing.T) 
 	if resolved == nil || resolved.ID != "default-host" {
 		t.Fatalf("resolved session = %#v, want default host session", resolved)
 	}
+}
+
+func TestDefinitionRuntimeRouter_ForwardsEveryBoundCapability(t *testing.T) {
+	router := NewDefinitionRuntimeRouter()
+	session := &factorydefinitions.DefinitionSession{ID: "session"}
+	hostValidateErr := errors.New("host validation")
+	hostReplaceErr := errors.New("host replace")
+	host := forwardingDefinitionHostStub{
+		session:       session,
+		persistRoot:   "/persist",
+		workflowID:    "workflow",
+		validateErr:   hostValidateErr,
+		replaceErr:    hostReplaceErr,
+		snapshot:      &factorydefinitions.FactorySnapshot{},
+		replaceResult: &factorydefinitions.FactorySplitLayoutReplaceResult{},
+	}
+	activateErr := errors.New("activate")
+	swapErr := errors.New("swap")
+	idleErr := errors.New("idle")
+	gateway := forwardingDefinitionGatewayStub{
+		session:       session,
+		runSessionID:  "session",
+		persistRoot:   "/activation-persist",
+		activatePaths: [2]string{"/persist", "/folder"},
+		saveNow:       time.Unix(42, 0),
+		idleErr:       idleErr,
+		activateErr:   activateErr,
+		swapErr:       swapErr,
+	}
+	if err := router.Bind("session", host, gateway); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+
+	hostRoute := router.Host()
+	if hostRoute.PersistRootDir() != "/persist" || hostRoute.WorkflowID() != "workflow" {
+		t.Fatalf("host identity = %q, %q", hostRoute.PersistRootDir(), hostRoute.WorkflowID())
+	}
+	if hostRoute.WorkstationLoader() != nil || hostRoute.CurrentRuntimeConfig() != nil {
+		t.Fatal("host value forwarding returned unexpected non-nil placeholder")
+	}
+	if got, err := hostRoute.RequireSession("session"); err != nil || got != session {
+		t.Fatalf("RequireSession() = %#v, %v", got, err)
+	}
+	if got, err := hostRoute.SessionRuntimeConfig("session"); err != nil || got != nil {
+		t.Fatalf("SessionRuntimeConfig() = %#v, %v", got, err)
+	}
+	if got := hostRoute.SessionFactoryPersistRoot(session); got != "/persist/session" {
+		t.Fatalf("SessionFactoryPersistRoot() = %q", got)
+	}
+	if err := hostRoute.ValidateEditableFactorySnapshot(context.Background(), &factorydefinitions.FactorySnapshot{}); !errors.Is(err, hostValidateErr) {
+		t.Fatalf("ValidateEditableFactorySnapshot() error = %v", err)
+	}
+	if got, err := hostRoute.GetCurrentFactorySnapshotForSession(context.Background(), "session"); err != nil || got != host.snapshot {
+		t.Fatalf("GetCurrentFactorySnapshotForSession() = %#v, %v", got, err)
+	}
+	if got, err := hostRoute.ReplaceFactoryLayoutAtDir("/target", &factorydefinitions.PreparedFactoryLayoutPayload{}); !errors.Is(err, hostReplaceErr) || got != host.replaceResult {
+		t.Fatalf("ReplaceFactoryLayoutAtDir() = %#v, %v", got, err)
+	}
+	if hostRoute.SessionFactoryPersistRoot(nil) != "" {
+		t.Fatal("SessionFactoryPersistRoot(nil) returned a path")
+	}
+
+	gatewayRoute := router.ActivationGateway()
+	if gatewayRoute.RunSessionID() != "session" {
+		t.Fatalf("RunSessionID() = %q", gatewayRoute.RunSessionID())
+	}
+	if got := gatewayRoute.SessionForActivation("session"); got != session {
+		t.Fatalf("SessionForActivation() = %#v", got)
+	}
+	if got, err := gatewayRoute.RequireSession("session"); err != nil || got != session {
+		t.Fatalf("activation RequireSession() = %#v, %v", got, err)
+	}
+	if gatewayRoute.SessionFactoryPersistRoot(session) != "/activation-persist/session" {
+		t.Fatalf("activation SessionFactoryPersistRoot() = %q", gatewayRoute.SessionFactoryPersistRoot(session))
+	}
+	if persist, folder := gatewayRoute.NamedFactoryActivationPaths(session); persist != "/persist" || folder != "/folder" {
+		t.Fatalf("NamedFactoryActivationPaths() = %q, %q", persist, folder)
+	}
+	if got := gatewayRoute.SaveNow(); !got.Equal(time.Unix(42, 0)) {
+		t.Fatalf("SaveNow() = %v", got)
+	}
+	lockCalled := false
+	if err := gatewayRoute.WithActivationLock(func() error { lockCalled = true; return nil }); err != nil || !lockCalled {
+		t.Fatalf("WithActivationLock() = %v, called=%v", err, lockCalled)
+	}
+	if err := gatewayRoute.RequireIdleRuntimeForSession(context.Background(), "session"); !errors.Is(err, idleErr) {
+		t.Fatalf("RequireIdleRuntimeForSession() error = %v", err)
+	}
+	if err := gatewayRoute.RequireIdleBeforeNamedFactoryActivation(context.Background(), "session", session); !errors.Is(err, idleErr) {
+		t.Fatalf("RequireIdleBeforeNamedFactoryActivation() error = %v", err)
+	}
+	if err := gatewayRoute.ActivateSessionEditableFactory(context.Background(), session, "session", "/root", "/factory", "name", "runtime"); !errors.Is(err, activateErr) {
+		t.Fatalf("ActivateSessionEditableFactory() error = %v", err)
+	}
+	if err := gatewayRoute.SwapPersistedNamedFactoryRuntime(context.Background(), "session", session, "/persist", "/folder", "/factory", "name"); !errors.Is(err, swapErr) {
+		t.Fatalf("SwapPersistedNamedFactoryRuntime() error = %v", err)
+	}
+	if gatewayRoute.SessionFactoryPersistRoot(nil) != "" {
+		t.Fatal("activation SessionFactoryPersistRoot(nil) returned a path")
+	}
+	if persist, folder := gatewayRoute.NamedFactoryActivationPaths(nil); persist != "" || folder != "" {
+		t.Fatalf("NamedFactoryActivationPaths(nil) = %q, %q", persist, folder)
+	}
+}
+
+type forwardingDefinitionHostStub struct {
+	session       *factorydefinitions.DefinitionSession
+	persistRoot   string
+	workflowID    string
+	validateErr   error
+	replaceErr    error
+	snapshot      *factorydefinitions.FactorySnapshot
+	replaceResult *factorydefinitions.FactorySplitLayoutReplaceResult
+}
+
+func (s forwardingDefinitionHostStub) PersistRootDir() string {
+	return s.persistRoot
+}
+
+func (forwardingDefinitionHostStub) WorkstationLoader() factorydefinitions.WorkstationLoader {
+	return nil
+}
+
+func (forwardingDefinitionHostStub) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
+	return nil
+}
+
+func (s forwardingDefinitionHostStub) WorkflowID() string {
+	return s.workflowID
+}
+
+func (s forwardingDefinitionHostStub) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
+	return s.session, nil
+}
+
+func (forwardingDefinitionHostStub) SessionRuntimeConfig(string) (factorydefinitions.LoadedFactorySource, error) {
+	return nil, nil
+}
+
+func (s forwardingDefinitionHostStub) SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string {
+	if session == nil {
+		return ""
+	}
+	return s.persistRoot + "/" + session.ID
+}
+
+func (s forwardingDefinitionHostStub) ValidateEditableFactorySnapshot(context.Context, *factorydefinitions.FactorySnapshot) error {
+	return s.validateErr
+}
+
+func (s forwardingDefinitionHostStub) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
+	return s.snapshot, nil
+}
+
+func (s forwardingDefinitionHostStub) ReplaceFactoryLayoutAtDir(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
+	return s.replaceResult, s.replaceErr
+}
+
+type forwardingDefinitionGatewayStub struct {
+	session       *factorydefinitions.DefinitionSession
+	runSessionID  string
+	persistRoot   string
+	activatePaths [2]string
+	saveNow       time.Time
+	idleErr       error
+	activateErr   error
+	swapErr       error
+}
+
+func (s forwardingDefinitionGatewayStub) RunSessionID() string { return s.runSessionID }
+
+func (s forwardingDefinitionGatewayStub) SessionForActivation(string) *factorydefinitions.DefinitionSession {
+	return s.session
+}
+
+func (s forwardingDefinitionGatewayStub) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
+	return s.session, nil
+}
+
+func (s forwardingDefinitionGatewayStub) SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string {
+	if session == nil {
+		return ""
+	}
+	return s.persistRoot + "/" + session.ID
+}
+
+func (s forwardingDefinitionGatewayStub) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
+	return s.activatePaths[0], s.activatePaths[1]
+}
+
+func (s forwardingDefinitionGatewayStub) SaveNow() time.Time { return s.saveNow }
+
+func (forwardingDefinitionGatewayStub) WithActivationLock(fn func() error) error { return fn() }
+
+func (s forwardingDefinitionGatewayStub) RequireIdleRuntimeForSession(context.Context, string) error {
+	return s.idleErr
+}
+
+func (s forwardingDefinitionGatewayStub) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
+	return s.idleErr
+}
+
+func (s forwardingDefinitionGatewayStub) ActivateSessionEditableFactory(context.Context, *factorydefinitions.DefinitionSession, string, string, string, string, string) error {
+	return s.activateErr
+}
+
+func (s forwardingDefinitionGatewayStub) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error {
+	return s.swapErr
 }
 
 type definitionRouterHostStub struct {
