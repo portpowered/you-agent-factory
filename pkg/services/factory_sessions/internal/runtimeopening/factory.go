@@ -136,14 +136,7 @@ type ModelsPorts struct {
 
 // RecordingsPorts contains Recordings-owned opening collaborators.
 type RecordingsPorts struct {
-	ProjectionFactory      RecordingsProjectionFactory
-	ServiceFactory         RecordingsServiceFactory
-	LifecycleFactory       RecordingLifecycleFactory
-	RuntimeLedgerFactory   RuntimeLedgerFactory
-	RuntimeRecorderFactory recordings.RuntimeRecorderFactory
-	ReplayClockFactory     ReplayClockFactory
-	ReplayExecutionFactory recordings.ReplayExecutionFactory
-	ReplayInputs           recordings.ReplayInputLoader
+	Root recordings.Root
 }
 
 // WorkersPorts contains Workers-owned opening collaborators.
@@ -186,14 +179,8 @@ type Factory struct {
 	automationFactory                AutomationFactory
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
-	recordingsProjectionFactory      RecordingsProjectionFactory
-	recordingsServiceFactory         RecordingsServiceFactory
-	recordingLifecycleFactory        RecordingLifecycleFactory
+	recordingsRoot                   recordings.Root
 	webhooksService                  webhooks.Service
-	runtimeLedgerFactory             RuntimeLedgerFactory
-	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
-	replayClockFactory               ReplayClockFactory
-	replayExecutionFactory           recordings.ReplayExecutionFactory
 	workersRuntimeFactory            WorkersRuntimeFactory
 	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
 	providerInvocationFactory        factoryruntime.ProviderInvocationExecutorFactory
@@ -214,7 +201,6 @@ type Factory struct {
 	loadFactory                      factorydefinitions.LoadedFactoryLoader
 	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
 	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	replayInputs                     recordings.ReplayInputLoader
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
 	newSessionLogger                 factoryruntime.SessionLoggerFactory
@@ -279,14 +265,8 @@ func NewFactory(
 		factorySessionsService:           factorySessions.Service,
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
-		recordingsProjectionFactory:      recordingsPorts.ProjectionFactory,
-		recordingsServiceFactory:         recordingsPorts.ServiceFactory,
-		recordingLifecycleFactory:        recordingsPorts.LifecycleFactory,
+		recordingsRoot:                   recordingsPorts.Root,
 		webhooksService:                  webhooksPorts.Service,
-		runtimeLedgerFactory:             recordingsPorts.RuntimeLedgerFactory,
-		runtimeRecorderFactory:           recordingsPorts.RuntimeRecorderFactory,
-		replayClockFactory:               recordingsPorts.ReplayClockFactory,
-		replayExecutionFactory:           recordingsPorts.ReplayExecutionFactory,
 		workersRuntimeFactory:            workersPorts.RuntimeFactory,
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
@@ -307,7 +287,6 @@ func NewFactory(
 		loadFactory:                      factoryDefinitions.LoadFactory,
 		newLoadedFactory:                 factoryDefinitions.NewLoadedFactory,
 		decodeReplayConfig:               factoryDefinitions.DecodeReplayConfig,
-		replayInputs:                     recordingsPorts.ReplayInputs,
 		captureLoadedFactorySnapshot:     factoryDefinitions.CaptureLoadedFactorySnapshot,
 		resolveClock:                     factoryRuntime.ResolveClock,
 		newSessionLogger:                 factoryRuntime.NewSessionLogger,
@@ -459,14 +438,7 @@ func validateRecordings(group *RecordingsPorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Recordings",
-		runtimeOpeningRequirement{"projection factory", group.ProjectionFactory},
-		runtimeOpeningRequirement{"service factory", group.ServiceFactory},
-		runtimeOpeningRequirement{"lifecycle factory", group.LifecycleFactory},
-		runtimeOpeningRequirement{"runtime ledger factory", group.RuntimeLedgerFactory},
-		runtimeOpeningRequirement{"runtime recorder factory", group.RuntimeRecorderFactory},
-		runtimeOpeningRequirement{"replay clock factory", group.ReplayClockFactory},
-		runtimeOpeningRequirement{"replay execution factory", group.ReplayExecutionFactory},
-		runtimeOpeningRequirement{"replay input loader", group.ReplayInputs},
+		runtimeOpeningRequirement{"root", group.Root},
 	)
 }
 
@@ -557,13 +529,7 @@ func (f *Factory) openRuntime(
 		f.automationFactory,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
-		f.recordingsProjectionFactory,
-		f.recordingsServiceFactory,
-		f.recordingLifecycleFactory,
-		f.runtimeLedgerFactory,
-		f.runtimeRecorderFactory,
-		f.replayClockFactory,
-		f.replayExecutionFactory,
+		f.recordingsRoot,
 		f.workersRuntimeFactory,
 		f.workersRuntimeExecutorsFactory,
 		f.providerInvocationFactory,
@@ -584,7 +550,6 @@ func (f *Factory) openRuntime(
 		f.loadFactory,
 		f.newLoadedFactory,
 		f.decodeReplayConfig,
-		f.replayInputs,
 		f.captureLoadedFactorySnapshot,
 		f.webhooksService,
 		f.resolveClock,

@@ -210,7 +210,7 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	calls := 0
 	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	replayInputs := &historicalReplayInputsRecorder{portable: portable, events: &events}
-	dependencies.Recordings.ReplayInputs = replayInputs
+	dependencies.Recordings.Root = &recordingsRootConstructionStub{replayInputs: replayInputs}
 	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
 		events = append(events, "runtime-instance-id")
 		return "historical-runtime"
@@ -332,14 +332,7 @@ func assertModelsPortsRetained(t *testing.T, factory *Factory, dependencies runt
 func assertRecordingsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.Recordings
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings projections", factory.recordingsProjectionFactory, group.ProjectionFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings service factory", factory.recordingsServiceFactory, group.ServiceFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings lifecycle", factory.recordingLifecycleFactory, group.LifecycleFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings ledger", factory.runtimeLedgerFactory, group.RuntimeLedgerFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings recorder", factory.runtimeRecorderFactory, group.RuntimeRecorderFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay clock", factory.replayClockFactory, group.ReplayClockFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay execution", factory.replayExecutionFactory, group.ReplayExecutionFactory)
-	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay inputs", factory.replayInputs, group.ReplayInputs)
+	assertRuntimeOpeningDependencyIdentity(t, "Recordings root", factory.recordingsRoot, group.Root)
 }
 
 func assertWebhooksPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
@@ -427,15 +420,8 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
 		{"Automations hosted sources factory", func(d *runtimeOpeningFixture) { d.Automations.HostedSourcesFactory = nil }},
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
-		{"Recordings projection factory", func(d *runtimeOpeningFixture) { d.Recordings.ProjectionFactory = nil }},
-		{"Recordings service factory", func(d *runtimeOpeningFixture) { d.Recordings.ServiceFactory = nil }},
-		{"Recordings lifecycle factory", func(d *runtimeOpeningFixture) { d.Recordings.LifecycleFactory = nil }},
+		{"Recordings root", func(d *runtimeOpeningFixture) { d.Recordings.Root = nil }},
 		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
-		{"Recordings runtime ledger factory", func(d *runtimeOpeningFixture) { d.Recordings.RuntimeLedgerFactory = nil }},
-		{"Recordings runtime recorder factory", func(d *runtimeOpeningFixture) { d.Recordings.RuntimeRecorderFactory = nil }},
-		{"Recordings replay clock factory", func(d *runtimeOpeningFixture) { d.Recordings.ReplayClockFactory = nil }},
-		{"Recordings replay execution factory", func(d *runtimeOpeningFixture) { d.Recordings.ReplayExecutionFactory = nil }},
-		{"Recordings replay input loader", func(d *runtimeOpeningFixture) { d.Recordings.ReplayInputs = nil }},
 		{"Workers execution factory", func(d *runtimeOpeningFixture) { d.Workers.ExecutionFactory = nil }},
 		{"Workers runtime factory", func(d *runtimeOpeningFixture) { d.Workers.RuntimeFactory = nil }},
 		{"Workers local runtime hooks factory", func(d *runtimeOpeningFixture) { d.Workers.LocalRuntimeHooksFactory = nil }},
@@ -494,18 +480,9 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			Factory:              inertRuntimeOpeningFunction[AutomationFactory](calls),
 			HostedSourcesFactory: inertRuntimeOpeningFunction[AutomationHostedSourcesFactory](calls),
 		},
-		Models: &ModelsPorts{Service: &modelsConstructionStub{}},
-		Recordings: &RecordingsPorts{
-			ProjectionFactory:      inertRuntimeOpeningFunction[RecordingsProjectionFactory](calls),
-			ServiceFactory:         inertRuntimeOpeningFunction[RecordingsServiceFactory](calls),
-			LifecycleFactory:       inertRuntimeOpeningFunction[RecordingLifecycleFactory](calls),
-			RuntimeLedgerFactory:   inertRuntimeOpeningFunction[RuntimeLedgerFactory](calls),
-			RuntimeRecorderFactory: inertRuntimeOpeningFunction[recordings.RuntimeRecorderFactory](calls),
-			ReplayClockFactory:     inertRuntimeOpeningFunction[ReplayClockFactory](calls),
-			ReplayExecutionFactory: inertRuntimeOpeningFunction[recordings.ReplayExecutionFactory](calls),
-			ReplayInputs:           replayInputsConstructionStub{},
-		},
-		Webhooks: &WebhooksPorts{Service: webhooksConstructionStub{}},
+		Models:     &ModelsPorts{Service: &modelsConstructionStub{}},
+		Recordings: &RecordingsPorts{Root: &recordingsRootConstructionStub{}},
+		Webhooks:   &WebhooksPorts{Service: webhooksConstructionStub{}},
 		Workers: &WorkersPorts{
 			ExecutionFactory:                 inertRuntimeOpeningFunction[WorkerExecutionFactory](calls),
 			RuntimeFactory:                   inertRuntimeOpeningFunction[WorkersRuntimeFactory](calls),
@@ -552,7 +529,16 @@ type factorySessionsConstructionStub struct {
 type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
 type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
-type replayInputsConstructionStub struct{ recordings.ReplayInputLoader }
+type recordingsRootConstructionStub struct {
+	recordings.Service
+	recordings.RuntimeOpening
+	replayInputs recordings.ReplayInputLoader
+}
+
+func (*recordingsRootConstructionStub) Projection() recordings.ProjectionService {
+	return &openingCoordinatorProjection{}
+}
+
 type webhooksConstructionStub struct{ webhooks.Service }
 
 type constructionMaterializer struct{ calls *int }
@@ -594,6 +580,17 @@ func (recorder *historicalReplayInputsRecorder) LoadReplayInput(
 }
 
 var _ recordings.ReplayInputLoader = (*historicalReplayInputsRecorder)(nil)
+
+func (stub *recordingsRootConstructionStub) LoadReplayInput(
+	request recordings.LoadReplayInputRequest,
+) (recordings.LoadReplayInputResult, error) {
+	if stub.replayInputs == nil {
+		return recordings.LoadReplayInputResult{}, nil
+	}
+	return stub.replayInputs.LoadReplayInput(request)
+}
+
+var _ recordings.Root = (*recordingsRootConstructionStub)(nil)
 
 // TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot proves the
 // operation path consumes the process root's private runtime capability
