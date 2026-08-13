@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
@@ -15,6 +16,90 @@ func TestRuntimeBridgeLocalRuntimeHooksConstructs(t *testing.T) {
 	t.Parallel()
 
 	_ = LocalRuntimeHooks()
+}
+
+func TestRuntimeBridgeCompatibilityConstructorsValidateDelegatedInputs(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewConfiguredRuntime(
+		nil,
+		nil,
+		models.RuntimeScopeRef{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
+		"",
+		"",
+		"",
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		false,
+		nil,
+		nil,
+		nil,
+	); err == nil {
+		t.Fatal("NewConfiguredRuntime() error = nil, want delegated construction error")
+	}
+	if _, err := BuildRuntimeExecutors(nil, nil, nil, "", nil, nil, false, nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
+		t.Fatal("BuildRuntimeExecutors() error = nil, want unsupported runtime error")
+	}
+	if _, err := NewInvocation(nil, nil, nil, nil, nil, nil, nil, nil, ""); err == nil {
+		t.Fatal("NewInvocation() error = nil, want delegated validation error")
+	}
+	if _, err := NewInvocationWithProgress(nil, nil, nil, nil, nil, nil, nil, nil, "", nil); err == nil {
+		t.Fatal("NewInvocationWithProgress() error = nil, want delegated validation error")
+	}
+	if _, err := NewProviderFromCommandRunner(nil, nil, nil, nil, nil, nil, nil, nil, ""); err == nil {
+		t.Fatal("NewProviderFromCommandRunner() error = nil, want delegated provider error")
+	}
+}
+
+func TestDefaultBindingAssemblerPreservesRoleAndSelection(t *testing.T) {
+	t.Parallel()
+
+	role := workers.RuntimeBuildRoleRequest{
+		Name: "reviewer",
+		Kind: workers.RuntimeBuildRoleKindWorker,
+	}
+	selection := workers.ResolvedRunnerSelection{
+		RunnerID: workers.RunnerIDCodex,
+		Source:   workers.RunnerSelectionSourceFactory,
+	}
+	binding, err := defaultBindingAssembler(
+		context.Background(),
+		role,
+		workers.RuntimeBuildOpeningOptions{},
+		selection,
+	)
+	if err != nil {
+		t.Fatalf("defaultBindingAssembler() error = %v", err)
+	}
+	if binding.RoleName != role.Name || binding.RoleKind != role.Kind || binding.RunnerSelection != selection {
+		t.Fatalf("binding = %#v, want role and selection preserved", binding)
+	}
 }
 
 func TestRuntimeBridgeNewMockCommandRunnerDecoratesNext(t *testing.T) {
