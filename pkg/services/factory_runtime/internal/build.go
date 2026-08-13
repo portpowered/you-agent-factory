@@ -369,6 +369,13 @@ func assembleRuntimeBundle(
 		net,
 		providerInvocation,
 	)
+	workerSessions, err := workerSessionsFactory(workstationBoundary, clock)
+	if err != nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
+	}
+	if workerSessions == nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
+	}
 	statelessService := executeServiceFromWorkstation(workerService, workstationBoundary)
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
@@ -378,6 +385,7 @@ func assembleRuntimeBundle(
 		net,
 		runtimeScheduler,
 		statelessService,
+		workerSessions,
 		loadedFactoryCfg,
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,

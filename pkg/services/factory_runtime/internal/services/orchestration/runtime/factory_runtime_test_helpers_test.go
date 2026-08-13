@@ -87,7 +87,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		cfg.net, cfg.scheduler, &testStatelessExecutionService{
 			service:   workerService,
 			executors: cfg.workerExecutors,
-		}, cfg.runtimeConfig,
+		}, workerSessionsService, cfg.runtimeConfig,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, "", nil, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,
@@ -106,9 +106,6 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 	)
 	if err != nil {
 		return nil, err
-	}
-	if impl, ok := runtime.(*factoryImpl); ok {
-		impl.cfg.workerSessions = workerSessionsService
 	}
 	return runtime, nil
 }

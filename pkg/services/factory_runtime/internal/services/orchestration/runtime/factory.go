@@ -121,6 +121,7 @@ func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	statelessService executeCapability,
+	workerSessionsService workersessions.Service,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -164,11 +165,15 @@ func New(
 	if statelessService == nil {
 		return nil, fmt.Errorf("a stateless Workers service is required")
 	}
+	if workerSessionsService == nil {
+		return nil, fmt.Errorf("a Worker Sessions service is required")
+	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
 	cfg := &runtimeConfig{
 		net:                       net,
 		scheduler:                 runtimeScheduler,
 		executeService:            statelessService,
+		workerSessions:            workerSessionsService,
 		attemptCapacity:           defaultRuntimeAttemptCapacity,
 		newID:                     newID,
 		runtimeConfig:             runtimeDefinitions,
