@@ -123,24 +123,7 @@ func (p *functionalRPCPeer) serve() error {
 				return err
 			}
 			if p.mode == "package-conformance" {
-				// Keep the stdio peer alive until the test has observed the
-				// completed Work. The ACP client must drain the prompt's preceding
-				// session/update notifications after receiving the response;
-				// exiting here races that drain and turns a successful prompt into
-				// peer-disconnected.
-				release := os.Getenv(acpPackageConformanceReleaseEnvironment)
-				if release == "" {
-					return fmt.Errorf("package-conformance mode requires %s", acpPackageConformanceReleaseEnvironment)
-				}
-				for {
-					if _, err := os.Stat(release); err == nil {
-						break
-					} else if !os.IsNotExist(err) {
-						return fmt.Errorf("inspect package-conformance release: %w", err)
-					}
-					runtime.Gosched()
-				}
-				return nil
+				return waitForPackageConformanceRelease()
 			}
 			if p.mode == "disconnect-once" && p.sessions == 1 {
 				marker := os.Getenv(acpDisconnectMarkerEnvironment)
@@ -198,6 +181,25 @@ func (p *functionalRPCPeer) serve() error {
 		return fmt.Errorf("read client RPC: %w", err)
 	}
 	return nil
+}
+
+func waitForPackageConformanceRelease() error {
+	// Keep the stdio peer alive until the test has observed the completed Work.
+	// The ACP client must drain the prompt's preceding session/update
+	// notifications after receiving the response; exiting here races that drain
+	// and turns a successful prompt into peer-disconnected.
+	release := os.Getenv(acpPackageConformanceReleaseEnvironment)
+	if release == "" {
+		return fmt.Errorf("package-conformance mode requires %s", acpPackageConformanceReleaseEnvironment)
+	}
+	for {
+		if _, err := os.Stat(release); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect package-conformance release: %w", err)
+		}
+		runtime.Gosched()
+	}
 }
 
 func (p *functionalRPCPeer) initialize(request rpcEnvelope) error {
