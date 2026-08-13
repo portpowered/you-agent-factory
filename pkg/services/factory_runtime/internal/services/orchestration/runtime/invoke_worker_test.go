@@ -509,9 +509,56 @@ func TestRuntimeExecutionSelectionMergesAuthoredWorkerWorkstationAndFactoryDefau
 			Type: work.WorkContentPartTypeText,
 			Text: "input message",
 		}}}},
+		nil,
 	)
 
 	assertRuntimeExecutionSelection(t, selection)
+}
+
+func TestRuntimeExecutionSelectionResolvesInvocationWorkerDefaults(t *testing.T) {
+	lookup := runtimefixtures.RuntimeConfigLookupFixture{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"goal-executor": {
+				Name:                        "goal-executor",
+				Type:                        interfaces.WorkerTypeAgent,
+				Model:                       "${executorModel}",
+				ModelProvider:               "${executorProvider}",
+				RuntimeDefaultModel:         "operator-model",
+				RuntimeDefaultModelProvider: "operator-provider",
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"execute": {
+				Name:           "execute",
+				WorkerTypeName: "goal-executor",
+			},
+		},
+	}
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "execute",
+		Execution:       workers.WorkstationExecutionRequest{},
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"executorProvider": {Values: []string{""}},
+		"executorModel":    {Values: []string{""}},
+	}}
+	selection := resolveRuntimeExecutionSelection(
+		&runtimeConfig{runtimeConfig: lookup}, request, nil, invocation,
+	)
+	if selection.providerID != "operator-provider" || selection.modelProvider != "operator-provider" ||
+		selection.model != "operator-model" || selection.runnerID != workers.RunnerIDCodex {
+		t.Fatalf("resolved selection = %#v, want operator provider/model and codex runner", selection)
+	}
+
+	invocation.Arguments["executorProvider"] = work.InvocationArgument{Values: []string{"explicit-provider"}}
+	invocation.Arguments["executorModel"] = work.InvocationArgument{Values: []string{"explicit-model"}}
+	selection = resolveRuntimeExecutionSelection(
+		&runtimeConfig{runtimeConfig: lookup}, request, nil, invocation,
+	)
+	if selection.providerID != "explicit-provider" || selection.modelProvider != "explicit-provider" ||
+		selection.model != "explicit-model" {
+		t.Fatalf("explicit selection = %#v, want invocation provider/model", selection)
+	}
 }
 
 func assertRuntimeExecutionSelection(t *testing.T, selection runtimeExecutionSelection) {

@@ -334,7 +334,7 @@ func executeRequestFromWorkstationRequest(
 	if err != nil {
 		return workers.ExecuteRequest{}, err
 	}
-	selection := resolveRuntimeExecutionSelection(cfg, request, inputs)
+	selection := resolveRuntimeExecutionSelection(cfg, request, inputs, &invocation)
 	workflowContext := runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext)
 	if err := renderRuntimePrompt(
 		cfg,

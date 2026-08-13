@@ -11,6 +11,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -85,10 +86,12 @@ func resolveRuntimeExecutionSelection(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,
 	inputs []workers.WorkInput,
+	invocation *work.InvocationArguments,
 ) runtimeExecutionSelection {
 	selection := initialRuntimeExecutionSelection(request.Execution)
+	resolveRuntimeSelectionInvocation(&selection, invocation)
 	if lookup, ok := runtimeDefinitionLookup(cfg); ok {
-		applyRuntimeDefinitionSelection(cfg, lookup, request, &selection)
+		applyRuntimeDefinitionSelection(cfg, lookup, request, invocation, &selection)
 	}
 	if selection.factoryDirectory == "" && cfg != nil && cfg.workflowContext != nil {
 		selection.factoryDirectory = strings.TrimSpace(cfg.workflowContext.FactoryDirectory)
@@ -134,6 +137,7 @@ func applyRuntimeDefinitionSelection(
 	cfg *runtimeConfig,
 	lookup interfaces.RuntimeDefinitionLookup,
 	request workers.WorkstationDispatchRequest,
+	invocation *work.InvocationArguments,
 	selection *runtimeExecutionSelection,
 ) {
 	if selection.workerName == "" {
@@ -142,13 +146,13 @@ func applyRuntimeDefinitionSelection(
 	worker, workerFound := lookup.Worker(selection.workerName)
 	workstation, workstationFound := lookup.Workstation(strings.TrimSpace(request.WorkstationName))
 	if !workerFound && workstationFound {
-		worker, workerFound = lookup.Worker(workstation.WorkerTypeName)
+		worker, workerFound = lookup.Worker(resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation))
 	}
 	if workerFound && worker != nil {
-		applyRuntimeWorkerSelection(selection, request.Execution, worker)
+		applyRuntimeWorkerSelection(selection, request.Execution, invocation, worker)
 	}
 	if workstationFound && workstation != nil {
-		applyRuntimeWorkstationSelection(selection, workstation)
+		applyRuntimeWorkstationSelection(selection, invocation, workstation)
 	}
 	applyRuntimeConfigSelection(cfg, selection)
 }
@@ -156,20 +160,40 @@ func applyRuntimeDefinitionSelection(
 func applyRuntimeWorkerSelection(
 	selection *runtimeExecutionSelection,
 	execution workers.WorkstationExecutionRequest,
+	invocation *work.InvocationArguments,
 	worker *interfaces.FactoryWorkerConfig,
 ) {
 	selection.workerName = firstRuntimeValue(strings.TrimSpace(execution.WorkerName), worker.Name)
 	selection.workerType = firstRuntimeValue(worker.Type, selection.workerType)
-	selection.providerID = firstRuntimeValue(selection.providerID, worker.ExecutorProvider, worker.Provider)
-	selection.model = firstRuntimeValue(selection.model, worker.Model)
-	selection.modelProvider = firstRuntimeValue(selection.modelProvider, worker.ModelProvider)
-	selection.reasoningEffort = firstRuntimeValue(selection.reasoningEffort, worker.ReasoningEffort)
-	selection.modelLocality = strings.TrimSpace(worker.ModelLocality)
-	selection.command = firstRuntimeValue(selection.command, worker.Command)
+	selection.providerID = firstRuntimeValue(
+		selection.providerID,
+		resolveRuntimeInvocationValue(worker.ExecutorProvider, invocation),
+		resolveRuntimeInvocationValue(worker.Provider, invocation),
+	)
+	selection.model = firstRuntimeValue(
+		selection.model,
+		resolveRuntimeWorkerValue(worker.Model, invocation, worker.RuntimeDefaultModel),
+	)
+	selection.modelProvider = firstRuntimeValue(
+		selection.modelProvider,
+		resolveRuntimeWorkerValue(worker.ModelProvider, invocation, worker.RuntimeDefaultModelProvider),
+	)
+	selection.reasoningEffort = firstRuntimeValue(
+		selection.reasoningEffort,
+		resolveRuntimeInvocationValue(worker.ReasoningEffort, invocation),
+	)
+	selection.modelLocality = strings.TrimSpace(resolveRuntimeInvocationValue(worker.ModelLocality, invocation))
+	selection.command = firstRuntimeValue(
+		selection.command,
+		resolveRuntimeInvocationValue(worker.Command, invocation),
+	)
 	if len(selection.args) == 0 {
-		selection.args = append([]string(nil), worker.Args...)
+		selection.args = resolveRuntimeInvocationArgs(worker.Args, invocation)
 	}
-	selection.stopToken = firstRuntimeValue(selection.stopToken, worker.StopToken)
+	selection.stopToken = firstRuntimeValue(
+		selection.stopToken,
+		resolveRuntimeInvocationValue(worker.StopToken, invocation),
+	)
 	selection.skipPermissions = selection.skipPermissions || worker.SkipPermissions
 	if selection.timeout <= 0 {
 		selection.timeout = worker.TimeoutDuration()
@@ -182,24 +206,55 @@ func applyRuntimeWorkerSelection(
 
 func applyRuntimeWorkstationSelection(
 	selection *runtimeExecutionSelection,
+	invocation *work.InvocationArguments,
 	workstation *interfaces.FactoryWorkstationConfig,
 ) {
-	selection.runnerID = firstRuntimeValue(selection.runnerID, workstation.Runner)
-	selection.systemPrompt = firstRuntimeValue(selection.systemPrompt, workstation.Body)
-	selection.promptTemplate = firstRuntimeValue(selection.promptTemplate, workstation.PromptTemplate)
-	selection.outputSchema = firstRuntimeValue(selection.outputSchema, workstation.OutputSchema)
-	selection.outputContract = firstRuntimeValue(selection.outputContract, workstation.OutputContract)
-	selection.modelOperation = firstRuntimeValue(selection.modelOperation, workstation.Operation)
+	selection.runnerID = firstRuntimeValue(
+		selection.runnerID,
+		resolveRuntimeInvocationValue(workstation.Runner, invocation),
+	)
+	selection.systemPrompt = firstRuntimeValue(
+		selection.systemPrompt,
+		resolveRuntimeInvocationValue(workstation.Body, invocation),
+	)
+	selection.promptTemplate = firstRuntimeValue(
+		selection.promptTemplate,
+		resolveRuntimeInvocationValue(workstation.PromptTemplate, invocation),
+	)
+	selection.outputSchema = firstRuntimeValue(
+		selection.outputSchema,
+		resolveRuntimeInvocationValue(workstation.OutputSchema, invocation),
+	)
+	selection.outputContract = firstRuntimeValue(
+		selection.outputContract,
+		resolveRuntimeInvocationValue(workstation.OutputContract, invocation),
+	)
+	selection.modelOperation = firstRuntimeValue(
+		selection.modelOperation,
+		resolveRuntimeInvocationValue(workstation.Operation, invocation),
+	)
 	selection.scriptClassifier = workstation.Type == interfaces.WorkstationTypeClassify &&
 		selection.workerType == interfaces.WorkerTypeScript
-	selection.outputFormat = firstRuntimeValue(selection.outputFormat, workstation.OutcomeFormat)
-	selection.workingDirectory = firstRuntimeValue(selection.workingDirectory, workstation.WorkingDirectory)
+	selection.outputFormat = firstRuntimeValue(
+		selection.outputFormat,
+		resolveRuntimeInvocationValue(workstation.OutcomeFormat, invocation),
+	)
+	selection.workingDirectory = firstRuntimeValue(
+		selection.workingDirectory,
+		resolveRuntimeInvocationValue(workstation.WorkingDirectory, invocation),
+	)
 	selection.workingDirectoryAuthored = selection.workingDirectoryAuthored ||
 		strings.TrimSpace(workstation.WorkingDirectory) != ""
-	selection.worktree = firstRuntimeValue(selection.worktree, workstation.Worktree)
-	selection.environment = mergeRuntimeStringMaps(workstation.Env, selection.environment)
+	selection.worktree = firstRuntimeValue(
+		selection.worktree,
+		resolveRuntimeInvocationValue(workstation.Worktree, invocation),
+	)
+	selection.environment = mergeRuntimeStringMaps(
+		resolveRuntimeInvocationMap(workstation.Env, invocation),
+		selection.environment,
+	)
 	if selection.timeout <= 0 {
-		selection.timeout = parseRuntimeDuration(workstation.Timeout)
+		selection.timeout = parseRuntimeDuration(resolveRuntimeInvocationValue(workstation.Timeout, invocation))
 	}
 	selection.decisionEnvelope = selection.decisionEnvelope ||
 		workstation.OutputContract == "decision"
@@ -262,6 +317,104 @@ func finalizeRuntimeExecutionSelection(
 		selection.toolExecutionMode = workers.RunnerToolExecutionModeDisabled
 	}
 	selection.environment = mergeRuntimeStringMaps(nil, selection.environment)
+}
+
+func resolveRuntimeSelectionInvocation(
+	selection *runtimeExecutionSelection,
+	invocation *work.InvocationArguments,
+) {
+	if selection == nil {
+		return
+	}
+	selection.workerName = resolveRuntimeInvocationValue(selection.workerName, invocation)
+	selection.workerType = resolveRuntimeInvocationValue(selection.workerType, invocation)
+	selection.runnerID = resolveRuntimeInvocationValue(selection.runnerID, invocation)
+	selection.providerID = resolveRuntimeInvocationValue(selection.providerID, invocation)
+	selection.model = resolveRuntimeInvocationValue(selection.model, invocation)
+	selection.modelProvider = resolveRuntimeInvocationValue(selection.modelProvider, invocation)
+	selection.modelLocality = resolveRuntimeInvocationValue(selection.modelLocality, invocation)
+	selection.reasoningEffort = resolveRuntimeInvocationValue(selection.reasoningEffort, invocation)
+	selection.modelOperation = resolveRuntimeInvocationValue(selection.modelOperation, invocation)
+	selection.command = resolveRuntimeInvocationValue(selection.command, invocation)
+	selection.factoryDirectory = resolveRuntimeInvocationValue(selection.factoryDirectory, invocation)
+	selection.systemPrompt = resolveRuntimeInvocationValue(selection.systemPrompt, invocation)
+	selection.promptTemplate = resolveRuntimeInvocationValue(selection.promptTemplate, invocation)
+	selection.userMessage = resolveRuntimeInvocationValue(selection.userMessage, invocation)
+	selection.outputSchema = resolveRuntimeInvocationValue(selection.outputSchema, invocation)
+	selection.outputContract = resolveRuntimeInvocationValue(selection.outputContract, invocation)
+	selection.outputFormat = resolveRuntimeInvocationValue(selection.outputFormat, invocation)
+	selection.stopToken = resolveRuntimeInvocationValue(selection.stopToken, invocation)
+	selection.workingDirectory = resolveRuntimeInvocationValue(selection.workingDirectory, invocation)
+	selection.worktree = resolveRuntimeInvocationValue(selection.worktree, invocation)
+}
+
+func resolveRuntimeWorkerValue(
+	authored string,
+	invocation *work.InvocationArguments,
+	fallback string,
+) string {
+	value := resolveRuntimeInvocationValue(authored, invocation)
+	if strings.TrimSpace(value) == "" {
+		if _, exact := runtimeInvocationParameter(authored); exact {
+			return fallback
+		}
+	}
+	return value
+}
+
+func resolveRuntimeInvocationValue(
+	authored string,
+	invocation *work.InvocationArguments,
+) string {
+	name, exact := runtimeInvocationParameter(authored)
+	if !exact {
+		return authored
+	}
+	if invocation == nil || invocation.Arguments == nil {
+		return ""
+	}
+	argument, ok := invocation.Arguments[name]
+	if !ok || len(argument.Values) == 0 {
+		return ""
+	}
+	return argument.Values[0]
+}
+
+func resolveRuntimeInvocationArgs(
+	authored []string,
+	invocation *work.InvocationArguments,
+) []string {
+	if len(authored) == 0 {
+		return nil
+	}
+	resolved := make([]string, len(authored))
+	for index, value := range authored {
+		resolved[index] = resolveRuntimeInvocationValue(value, invocation)
+	}
+	return resolved
+}
+
+func resolveRuntimeInvocationMap(
+	authored map[string]string,
+	invocation *work.InvocationArguments,
+) map[string]string {
+	if len(authored) == 0 {
+		return nil
+	}
+	resolved := make(map[string]string, len(authored))
+	for key, value := range authored {
+		resolved[key] = resolveRuntimeInvocationValue(value, invocation)
+	}
+	return resolved
+}
+
+func runtimeInvocationParameter(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) < 4 || !strings.HasPrefix(trimmed, "${") || !strings.HasSuffix(trimmed, "}") {
+		return "", false
+	}
+	name := strings.TrimSpace(trimmed[2 : len(trimmed)-1])
+	return name, name != ""
 }
 
 func renderRuntimePrompt(
