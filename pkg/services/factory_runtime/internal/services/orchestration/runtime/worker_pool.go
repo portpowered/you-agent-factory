@@ -29,6 +29,12 @@ const defaultRuntimeAttemptCapacity = 64
 
 type attemptTerminalFunc func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error)
 
+// attemptPreparation opens a Runtime-adjacent observation window after
+// Runtime admits an attempt but before the detached Workers Execute call.
+// The returned terminal hook runs only for the one callback that wins the
+// Runtime terminal race.
+type attemptPreparation func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error)
+
 // executeCapability is deliberately private to Runtime. Workers' aggregate
 // Service already exposes Execute, but publishing another service-root
 // interface would make the public Workers contract own Runtime's lifecycle
@@ -102,6 +108,17 @@ func (l *attemptLifecycle) startWithRetry(
 	terminal attemptTerminalFunc,
 	allowRetry bool,
 ) error {
+	return l.startWithPreparation(ctx, request, async, terminal, allowRetry, nil)
+}
+
+func (l *attemptLifecycle) startWithPreparation(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	async bool,
+	terminal attemptTerminalFunc,
+	allowRetry bool,
+	prepare attemptPreparation,
+) error {
 	if l == nil || l.service == nil {
 		return ErrAttemptLifecycleUnavailable
 	}
@@ -127,6 +144,16 @@ func (l *attemptLifecycle) startWithRetry(
 		cancel()
 		return err
 	}
+	var preparedTerminal attemptTerminalFunc
+	if prepare != nil {
+		preparedTerminal, err = prepare(context.WithoutCancel(execCtx), request)
+		if err != nil {
+			l.finish(attempt)
+			cancel()
+			close(attempt.done)
+			return err
+		}
+	}
 
 	run := func() {
 		result, err := l.executeSafely(execCtx, request)
@@ -139,6 +166,9 @@ func (l *attemptLifecycle) startWithRetry(
 		if canceled {
 			result = canceledAttemptResult(request, result)
 			err = nil
+		}
+		if preparedTerminal != nil {
+			preparedTerminal(context.Background(), request, result, err)
 		}
 		terminal(context.Background(), request, result, err)
 	}

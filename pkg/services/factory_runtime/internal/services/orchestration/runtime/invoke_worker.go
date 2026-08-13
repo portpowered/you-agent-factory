@@ -29,6 +29,7 @@ func startThroughStatelessWorkers(
 	if cfg == nil || cfg.attempts == nil {
 		return ErrAttemptLifecycleUnavailable
 	}
+	request = runtimeRecordingRequest(cfg, request)
 	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
 	if err != nil {
 		return err
@@ -52,14 +53,6 @@ func startThroughStatelessWorkers(
 			sessionID = recordedSessionID
 		}
 	}
-	if cfg.workerSessions != nil {
-		if _, reserveErr := cfg.workerSessions.Reserve(
-			context.WithoutCancel(ctx),
-			workersessions.ReserveRequest{ID: sessionID},
-		); reserveErr != nil {
-			return reserveErr
-		}
-	}
 	if cfg.eventHistory != nil {
 		cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
 			request.Execution.Dispatch.Execution.DispatchCreatedTick,
@@ -69,10 +62,37 @@ func startThroughStatelessWorkers(
 			cfg.clock.Now(),
 		)
 	}
-	return startStatelessAttemptWithRequest(
+	startErr := startStatelessAttemptWithRequest(
 		ctx, cfg, request, executeRequest,
 		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil, accept,
 	)
+	if startErr != nil && errors.Is(startErr, workersessions.ErrStartOpeningPublication) {
+		result, dispatchErr := failedWorkstationDispatchResult(request, startErr)
+		if accept != nil {
+			accept(context.Background(), request, result, dispatchErr)
+		}
+		return nil
+	}
+	return startErr
+}
+
+func failedWorkstationDispatchResult(
+	request workers.WorkstationDispatchRequest,
+	dispatchErr error,
+) (workers.WorkstationDispatchResult, error) {
+	dispatchID := request.Execution.Dispatch.DispatchID
+	transitionID := request.Execution.Dispatch.TransitionID
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID:   dispatchID,
+			TransitionID: transitionID,
+			Outcome:      workers.OutcomeFailed,
+			Error:        dispatchErr.Error(),
+		},
+	}, dispatchErr
 }
 
 func startStatelessAttempt(
@@ -85,6 +105,7 @@ func startStatelessAttempt(
 	if cfg == nil || cfg.attempts == nil {
 		return ErrAttemptLifecycleUnavailable
 	}
+	request = runtimeRecordingRequest(cfg, request)
 	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
 	if err != nil {
 		return err
@@ -127,11 +148,33 @@ func startStatelessAttemptWithRequestMode(
 	accept workers.WorkstationDispatchAcceptFunc,
 	allowRetry bool,
 ) error {
+	request = runtimeRecordingRequest(cfg, request)
+	if strings.TrimSpace(executeRequest.Correlation.RuntimeID) == "" {
+		executeRequest.Correlation.RuntimeID = strings.TrimSpace(request.Execution.RecordingID)
+	}
 	start := cfg.attempts.start
 	if allowRetry {
 		start = cfg.attempts.startRetry
 	}
-	return start(
+	prepare := runtimeAttemptPreparation(cfg, request, executeRequest, allowRetry)
+	if prepare == nil {
+		return start(
+			ctx,
+			executeRequest,
+			async,
+			func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+				dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
+					request,
+					result,
+					executeErr,
+				)
+				if accept != nil {
+					accept(callbackCtx, request, dispatchResult, dispatchErr)
+				}
+			},
+		)
+	}
+	return cfg.attempts.startWithPreparation(
 		ctx,
 		executeRequest,
 		async,
@@ -145,7 +188,75 @@ func startStatelessAttemptWithRequestMode(
 				accept(callbackCtx, request, dispatchResult, dispatchErr)
 			}
 		},
+		allowRetry,
+		prepare,
 	)
+}
+
+// runtimeRecordingRequest carries the process-owned recording identity into
+// the detached Runtime path. Callers may provide an explicit identity, while
+// ordinary Factory dispatches inherit the recording opened for this runtime.
+func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
+	if cfg == nil || strings.TrimSpace(request.Execution.RecordingID) != "" {
+		return request
+	}
+	request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
+	return request
+}
+
+func runtimeAttemptPreparation(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	allowRetry bool,
+) attemptPreparation {
+	if cfg == nil || cfg.workerSessions == nil {
+		return nil
+	}
+	recorder, ok := cfg.workerSessions.(workersessions.RuntimeAttemptService)
+	if !ok || recorder == nil {
+		return nil
+	}
+	return func(ctx context.Context, _ workers.ExecuteRequest) (attemptTerminalFunc, error) {
+		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
+		attempt, err := recorder.BeginRuntimeAttempt(
+			context.WithoutCancel(ctx),
+			workersessions.RuntimeAttemptRequest{
+				ID:        sessionID,
+				AttemptID: executeRequest.Correlation.AttemptID,
+				Execution: request,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
+				request,
+				result,
+				executeErr,
+			)
+			_ = attempt.Complete(callbackCtx, dispatchResult, dispatchErr)
+		}, nil
+	}
+}
+
+func runtimeWorkerSessionID(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+	allowRetry bool,
+) string {
+	if allowRetry && strings.TrimSpace(executeRequest.Correlation.AttemptID) != "" {
+		return strings.TrimSpace(executeRequest.Correlation.AttemptID)
+	}
+	sessionID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
+		if recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch); found {
+			sessionID = recordedSessionID
+		}
+	}
+	return sessionID
 }
 
 func cancelStatelessAttempt(
@@ -590,8 +701,11 @@ func cloneRuntimeCapabilities(value *workers.Capabilities) *workers.Capabilities
 	return &clone
 }
 
-// InvokeWorker runs one orchestrator-resolved Worker through the same Worker
-// Sessions supervision a Petri dispatch gets.
+// InvokeWorker runs one orchestrator-resolved Worker through the same
+// Runtime-owned attempt lifecycle a Petri dispatch gets. When the composed
+// Worker Sessions service exposes the optional runtime-attempt bridge, the
+// invocation also receives the durable opening/observation window without
+// transferring execution or cancellation ownership away from Runtime.
 //
 // The body is deliberately the same three steps as startThroughWorkerSessions:
 // reserve the Worker Session, commit the dispatch/Worker Session association to
@@ -672,6 +786,16 @@ func (f *factoryImpl) invokeStatelessWorker(
 	executeRequest, err := executeRequestFromWorkstationRequest(f.cfg, execution)
 	if err != nil {
 		return factory.InvokeWorkerResult{}, err
+	}
+	if f.cfg.eventHistory != nil {
+		sessionID := runtimeWorkerSessionID(f.cfg, execution, executeRequest, false)
+		f.cfg.eventHistory.RecordDispatchWorkerSessionAssociation(
+			f.currentTick(),
+			dispatchID,
+			sessionID,
+			executeRequest.Input.Dispatch.Execution.RequestID,
+			f.cfg.clock.Now(),
+		)
 	}
 	_, resumed := f.cfg.attempts.terminalAttemptID(dispatchID)
 	if !resumed {

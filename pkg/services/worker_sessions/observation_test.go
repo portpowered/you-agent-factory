@@ -599,6 +599,23 @@ func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
 	if len(forwarded) != 1 {
 		t.Fatalf("internal association hand-off forwarded=%#v, want suppressed", forwarded)
 	}
+
+	// A Runtime-owned worker observation can be associated successfully while
+	// its durable source-native publication is temporarily unavailable. The
+	// response stream still receives that provider-authored fragment.
+	observer.observeErr = nil
+	observer.publishErr = ErrProviderBindingConflict
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:               "runtime-dispatch-publication-fallback",
+		Kind:                     workers.ProgressFragmentKind,
+		Type:                     "message.delta",
+		Payload:                  "still visible",
+		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
+		ProviderSessionRef:       workers.CloneProviderSessionMetadata(progress.ProviderSessionRef),
+	})
+	if len(forwarded) != 2 || forwarded[1].DispatchID != "runtime-dispatch-publication-fallback" {
+		t.Fatalf("publication fallback forwarded=%#v, want one downstream progress", forwarded)
+	}
 }
 
 func TestPublisher_SuppressesConflictingCanonicalOutput(t *testing.T) {

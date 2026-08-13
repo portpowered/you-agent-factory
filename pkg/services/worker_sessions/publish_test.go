@@ -41,6 +41,13 @@ func validPublishRequest() workersessions.PublishRecordRequest {
 	}
 }
 
+func TestProviderSessionObservationPublisher_FallbackNilReceiverIsSafe(t *testing.T) {
+	var publisher *workersessions.ProviderSessionObservationPublisher
+	if got := publisher.WithUnassociatedProgressFallback(); got != nil {
+		t.Fatalf("nil fallback publisher = %v, want nil", got)
+	}
+}
+
 // TestPublishRecordRequest_Validate_AcceptsWellFormedRequest proves a request
 // whose SessionID, complete Events identity, SchemaID, and Draft are each
 // individually well-formed passes Validate unchanged.

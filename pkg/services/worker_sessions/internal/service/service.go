@@ -77,7 +77,12 @@ type registry struct {
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
 	// the only accepted route from a provider observation to its owner.
-	dispatchOwners   map[string]string
+	dispatchOwners map[string]string
+	// runtimeAttempts marks sessions opened by Factory Runtime's detached
+	// execution path. Those attempts share the provider-observation lookup but
+	// deliberately do not install Worker Sessions-owned supervision: Runtime
+	// remains the sole admission, cancellation, and execution owner.
+	runtimeAttempts  map[string]struct{}
 	boundary         workers.WorkstationPoolBoundary
 	events           EventsAppender
 	eventReader      EventsReader
@@ -145,6 +150,7 @@ func New(
 		continuationSources: make(map[string]string),
 		interruptReplays:    make(map[string]*interruptReplay),
 		dispatchOwners:      make(map[string]string),
+		runtimeAttempts:     make(map[string]struct{}),
 		boundary:            boundary,
 		events:              eventsAppender,
 		clock:               clock,
@@ -516,15 +522,22 @@ func (r *registry) associateProviderSessionLocked(
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrSessionNotFound
 	}
 	supervision := r.supervisions[req.WorkerSessionID]
-	if supervision == nil || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
+	_, runtimeOwned := r.runtimeAttempts[req.WorkerSessionID]
+	if (supervision == nil && !runtimeOwned) || r.dispatchOwners[req.DispatchID] != req.WorkerSessionID {
 		return workersessions.ProviderSessionAssociationResult{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 
+	turnID := ""
+	dispatchID := req.DispatchID
+	if supervision != nil {
+		turnID = supervision.turnID
+		dispatchID = supervision.dispatchID
+	}
 	association := workersessions.ProviderSessionAssociation{
 		WorkerSessionID: req.WorkerSessionID,
-		TurnID:          supervision.turnID,
-		DispatchID:      supervision.dispatchID,
-		AttemptID:       supervision.dispatchID,
+		TurnID:          turnID,
+		DispatchID:      dispatchID,
+		AttemptID:       dispatchID,
 		Reference:       req.Reference.Clone(),
 	}
 	if existing := session.ProviderSessionAssociation; existing != nil {
