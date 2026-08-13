@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -89,7 +88,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
-	process := BuildProcess(t, edges)
+	process, recordingReader := BuildProcessWithRecordingReader(t, edges)
 
 	args := append([]string{"you", "run"}, functionalRunArgs(t, cfg)...)
 	inputs := FakeInputs(context.Background(), args)
@@ -132,10 +131,6 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		}
 	})
 	command := StartProcessCommand(t, process, inputs.Input)
-	var recordingReader recordings.WorkerRecordingReader
-	if applicationProcess, ok := process.(*initializerapplication.Process); ok {
-		recordingReader = root.WorkerRecordingReaderFromProcess(applicationProcess)
-	}
 	server := &FunctionalAPIServer{process: command, api: api, recordingReader: recordingReader}
 	server.url = api.WaitForURL(t)
 	if cfg.WaitForServiceModeRuntime {
