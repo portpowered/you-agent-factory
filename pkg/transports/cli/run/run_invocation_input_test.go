@@ -271,6 +271,65 @@ func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterRe
 	}
 }
 
+func TestRunFactoryInvocationPrefersCanonicalOutcomeOverContextCancellation(t *testing.T) {
+	var output bytes.Buffer
+	operation := testInvocationOperation{invokeFactory: func(
+		context.Context,
+		factorysessions.InvocationTarget,
+		factorysessions.InvocationRequest,
+		func([]interfaces.FactoryEvent),
+	) (factorysessions.FactoryInvocationOutcome, error) {
+		return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
+			Status:    interfaces.InvocationTerminalStatusCanceled,
+			ErrorCode: string(interfaces.InvocationErrorCodeCanceled),
+			Message:   "invocation was canceled while waiting for primary result",
+		}}, context.Canceled
+	}}
+	cfg := RunConfig{
+		InvocationOutputMode: InvocationOutputResponseStream,
+		JSONOutput:           true, Output: &output,
+	}
+	err := runFactoryInvocation(
+		context.Background(), cfg, invocationTarget(cfg, nil),
+		factoryapi.InvocationRequest{}, operation, testResponsePresentation(), nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), string(interfaces.InvocationErrorCodeCanceled)) {
+		t.Fatalf("runFactoryInvocation error = %v, want canonical cancellation", err)
+	}
+	if strings.Contains(err.Error(), InvocationErrorCodeCancelled) {
+		t.Fatalf("runFactoryInvocation error = %v, want no derived RUN cancellation wrapper", err)
+	}
+	if !strings.Contains(output.String(), `"status":"`+string(interfaces.InvocationTerminalStatusCanceled)+`"`) {
+		t.Fatalf("output = %q, want canceled terminal record", output.String())
+	}
+}
+
+func TestRunFactoryInvocationUsesRunCancellationWhenOutcomeIsUndetermined(t *testing.T) {
+	var output bytes.Buffer
+	operation := testInvocationOperation{invokeFactory: func(
+		context.Context,
+		factorysessions.InvocationTarget,
+		factorysessions.InvocationRequest,
+		func([]interfaces.FactoryEvent),
+	) (factorysessions.FactoryInvocationOutcome, error) {
+		return factorysessions.FactoryInvocationOutcome{}, context.Canceled
+	}}
+	cfg := RunConfig{
+		InvocationOutputMode: InvocationOutputResponseStream,
+		JSONOutput:           true, Output: &output,
+	}
+	err := runFactoryInvocation(
+		context.Background(), cfg, invocationTarget(cfg, nil),
+		factoryapi.InvocationRequest{}, operation, testResponsePresentation(), nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), InvocationErrorCodeCancelled) {
+		t.Fatalf("runFactoryInvocation error = %v, want derived RUN cancellation fallback", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("output = %q, want no terminal record for undetermined outcome", output.String())
+	}
+}
+
 // TestRunFactoryInvocationRejectsUndeterminedResultWithNilError proves that
 // runFactoryInvocation cannot silently report success when InvokeFactory
 // returns neither a determined terminal result (empty Status) nor an error.

@@ -178,6 +178,7 @@ func finishFactoryInvocation(
 	runErr error,
 	writeErr error,
 	outputWriter *responseStreamCancelOnWriteError,
+	result apisurface.FactoryInvocationResult,
 ) error {
 	if outputWriter != nil {
 		if recordedErr := outputWriter.Err(); recordedErr != nil {
@@ -187,6 +188,14 @@ func finishFactoryInvocation(
 			return recordedErr
 		}
 	}
+	if result.Status != "" && isContextDerivedInvocationFailure(runErr) {
+		// The invocation result is the authoritative terminal outcome. A
+		// cancellation or timeout returned alongside it can be the caller's
+		// context reaching the post-result cleanup path; mapping that context
+		// first would replace INVOCATION_CANCELED (or another canonical result
+		// code) with the generic RUN_* wrapper.
+		return writeErr
+	}
 	if runErr != nil {
 		if writeErr != nil {
 			return errors.Join(MapInvocationFailure(runErr), writeErr)
@@ -194,6 +203,41 @@ func finishFactoryInvocation(
 		return MapInvocationFailure(runErr)
 	}
 	return writeErr
+}
+
+func isContextDerivedInvocationFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	if err == context.Canceled || err == context.DeadlineExceeded {
+		return true
+	}
+	var invocationErr *InvocationError
+	if errors.As(err, &invocationErr) {
+		return invocationErr.Code == InvocationErrorCodeCancelled ||
+			invocationErr.Code == InvocationErrorCodeTimeout
+	}
+	var cliErr factoryruntimecli.InvocationCLIError
+	if errors.As(err, &cliErr) {
+		return cliErr.InvocationErrorCode() == InvocationErrorCodeCancelled ||
+			cliErr.InvocationErrorCode() == InvocationErrorCodeTimeout
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		causes := joined.Unwrap()
+		if len(causes) == 0 {
+			return false
+		}
+		for _, cause := range causes {
+			if !isContextDerivedInvocationFailure(cause) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return isContextDerivedInvocationFailure(wrapped.Unwrap())
+	}
+	return false
 }
 
 func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
