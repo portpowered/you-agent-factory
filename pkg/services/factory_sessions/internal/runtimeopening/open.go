@@ -128,6 +128,17 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	if effort := strings.TrimSpace(configured.Workers.WorkerReasoningEffort); effort != "" &&
+		load.LoadedFactoryCfg != nil {
+		if err := load.LoadedFactoryCfg.MutateWorkers(func(worker *factorydefinitions.FactoryWorkerConfig) error {
+			if worker != nil {
+				worker.ReasoningEffort = effort
+			}
+			return nil
+		}); err != nil {
+			return runtimeProducts{}, fmt.Errorf("apply worker reasoning effort override: %w", err)
+		}
+	}
 	if load.HistoricalReplay != nil {
 		return historicalReplayRuntimeProducts(logger, *load.HistoricalReplay), nil
 	}

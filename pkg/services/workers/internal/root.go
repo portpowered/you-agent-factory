@@ -228,6 +228,28 @@ func (r *Root) RenderPrompt(
 	return renderer.RenderPrompt(template, tokens, workflowContext)
 }
 
+// ResolveTemplateFields forwards request-scoped workstation field rendering
+// to the canonical Workers prompting implementation. Factory Runtime uses
+// this optional capability when it constructs a detached execution target.
+func (r *Root) ResolveTemplateFields(
+	workingDirectory string,
+	environment map[string]string,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	worktree string,
+) (*workers.ResolvedTemplateFields, error) {
+	if r == nil || r.execute == nil {
+		return nil, fmt.Errorf("resolve Worker template fields: execution service is unavailable")
+	}
+	return workerprompting.ResolveTemplateFields(
+		workingDirectory,
+		environment,
+		tokens,
+		workflowContext,
+		worktree,
+	)
+}
+
 // RuntimeOwnsModelEventRecording marks the process-scoped detached root. The
 // Factory Runtime records model boundary events against its own ledger after a
 // request completes; Workers itself remains independent of Factory Session

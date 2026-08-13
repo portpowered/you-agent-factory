@@ -56,24 +56,40 @@ func (s *Service) normalizeResult(
 
 	if errors.Is(runErr, context.Canceled) {
 		result.Outcome = workers.ExecutionOutcomeCanceled
-		result.Failure = &workers.ExecutionFailure{
-			Type:    workers.WorkFailureTypeUnknown,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: "execution canceled",
+		var providerErr *workers.ProviderError
+		if errors.As(runErr, &providerErr) && providerErr != nil {
+			result.Failure = failureFromError(providerErr)
+		} else if request.Target.RunnerID == "script" {
+			result.Failure = &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeUnknown,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: "execution cancelled: context canceled",
+			}
+		} else {
+			result.Failure = &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeUnknown,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: "execution canceled",
+			}
 		}
 		return result
 	}
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		result.Outcome = workers.ExecutionOutcomeFailed
-		result.Failure = &workers.ExecutionFailure{
-			Type:      workers.WorkFailureTypeTimeout,
-			Family:    workers.WorkFailureFamilyRetryable,
-			Message:   "execution timed out",
-			RetryHint: true,
-			Detail: &workers.FailureDetail{
-				Reason:  workers.WorkFailureTypeTimeout,
-				Message: "execution timed out",
-			},
+		var providerErr *workers.ProviderError
+		if errors.As(runErr, &providerErr) && providerErr != nil {
+			result.Failure = failureFromError(providerErr)
+		} else {
+			result.Failure = &workers.ExecutionFailure{
+				Type:      workers.WorkFailureTypeTimeout,
+				Family:    workers.WorkFailureFamilyRetryable,
+				Message:   "execution timed out",
+				RetryHint: true,
+				Detail: &workers.FailureDetail{
+					Reason:  workers.WorkFailureTypeTimeout,
+					Message: "execution timed out",
+				},
+			}
 		}
 		return result
 	}
@@ -109,6 +125,26 @@ func normalizeRunnerOutcome(outcome workers.WorkOutcome) workers.ExecutionOutcom
 	default:
 		return workers.ExecutionOutcomeAccepted
 	}
+}
+
+// normalizeProviderOverrideResult preserves the Agent runner's output-policy
+// decision when a process-scoped Provider override replaces the native Agent
+// runner. The override is an effect seam, not a second outcome policy owner.
+func normalizeProviderOverrideResult(
+	result workers.RunnerExecutionResult,
+	request workers.RunnerExecutionRequest,
+) workers.RunnerExecutionResult {
+	if result.Outcome != "" || strings.TrimSpace(request.StopToken) == "" {
+		return result
+	}
+	if workers.ContainsStopToken(result.Content, request.StopToken) {
+		result.Outcome = workers.OutcomeAccepted
+	} else if strings.Contains(result.Content, "<CONTINUE>") {
+		result.Outcome = workers.OutcomeContinue
+	} else {
+		result.Outcome = workers.OutcomeRejected
+	}
+	return result
 }
 
 func proposedOutputFromRunnerResult(result workers.RunnerExecutionResult) workers.ProposedOutput {

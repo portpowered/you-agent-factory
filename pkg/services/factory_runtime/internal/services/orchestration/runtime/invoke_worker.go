@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -60,6 +61,26 @@ func startThroughStatelessWorkers(
 			cfg.clock.Now(),
 		)
 	}
+	if isLogicalWorkstationDispatch(cfg, request) {
+		if accept != nil {
+			accept(
+				context.Background(),
+				request,
+				workers.WorkstationDispatchResult{
+					DispatchID:      request.Execution.Dispatch.DispatchID,
+					WorkstationName: request.WorkstationName,
+					TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+					Result: workers.WorkResult{
+						DispatchID:   request.Execution.Dispatch.DispatchID,
+						TransitionID: request.Execution.Dispatch.TransitionID,
+						Outcome:      workers.OutcomeAccepted,
+					},
+				},
+				nil,
+			)
+		}
+		return nil
+	}
 	startErr := startStatelessAttemptWithRequest(
 		ctx, cfg, request, executeRequest,
 		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil, accept,
@@ -72,6 +93,19 @@ func startThroughStatelessWorkers(
 		return nil
 	}
 	return startErr
+}
+
+func isLogicalWorkstationDispatch(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+) bool {
+	lookup, ok := runtimeDefinitionLookup(cfg)
+	if !ok {
+		return false
+	}
+	name := firstRuntimeValue(request.WorkstationName, request.Execution.Dispatch.WorkstationName)
+	workstation, found := lookup.Workstation(name)
+	return found && workstation != nil && workstation.Type == interfaces.WorkstationTypeLogical
 }
 
 func failedWorkstationDispatchResult(

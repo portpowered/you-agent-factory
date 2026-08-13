@@ -81,6 +81,7 @@ type runtimeConfig struct {
 	scheduler                 scheduler.Scheduler
 	executeService            executeCapability
 	promptRenderer            workers.PromptRenderer
+	templateFieldResolver     runtimeTemplateFieldResolver
 	promptSourceReader        func(string) ([]byte, error)
 	attempts                  *attemptLifecycle
 	attemptCapacity           int
@@ -176,11 +177,13 @@ func New(
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
 	promptRenderer, _ := statelessService.(workers.PromptRenderer)
+	templateFieldResolver, _ := statelessService.(runtimeTemplateFieldResolver)
 	cfg := &runtimeConfig{
 		net:                       net,
 		scheduler:                 runtimeScheduler,
 		executeService:            statelessService,
 		promptRenderer:            promptRenderer,
+		templateFieldResolver:     templateFieldResolver,
 		workerSessions:            workerSessionsService,
 		attemptCapacity:           defaultRuntimeAttemptCapacity,
 		newID:                     newID,

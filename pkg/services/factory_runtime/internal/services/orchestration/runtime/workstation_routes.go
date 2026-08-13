@@ -82,6 +82,16 @@ type runtimeExecutionSelection struct {
 	timeout                     time.Duration
 }
 
+type runtimeTemplateFieldResolver interface {
+	ResolveTemplateFields(
+		string,
+		map[string]string,
+		[]workers.Token,
+		*workers.Context,
+		string,
+	) (*workers.ResolvedTemplateFields, error)
+}
+
 func resolveRuntimeExecutionSelection(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,
@@ -228,12 +238,8 @@ func applyRuntimeWorkstationSelection(
 		resolveRuntimeInvocationValue(workstation.Body, invocation),
 	)
 	if prompt, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
-		if source, sourceOK := runtimePromptSource(cfg, workstation.Name, false); sourceOK && source.IsTemplate {
-			selection.promptTemplate = prompt
-			selection.userMessage = ""
-		} else {
-			selection.userMessage = prompt
-		}
+		selection.promptTemplate = prompt
+		selection.userMessage = ""
 	} else {
 		selection.promptTemplate = firstRuntimeValue(
 			selection.promptTemplate,
@@ -272,6 +278,11 @@ func applyRuntimeWorkstationSelection(
 		resolveRuntimeInvocationMap(workstation.Env, invocation),
 		selection.environment,
 	)
+	if selection.timeout <= 0 {
+		selection.timeout = parseRuntimeDuration(
+			resolveRuntimeInvocationValue(workstation.Limits.MaxExecutionTime, invocation),
+		)
+	}
 	if selection.timeout <= 0 {
 		selection.timeout = parseRuntimeDuration(resolveRuntimeInvocationValue(workstation.Timeout, invocation))
 	}
@@ -504,25 +515,45 @@ func renderRuntimePrompt(
 	workflowContext *workers.Context,
 	inputs []workers.WorkInput,
 ) error {
-	if selection == nil || selection.userMessage != "" || selection.promptTemplate == "" {
+	if selection == nil {
 		return nil
 	}
-	if cfg == nil || cfg.promptRenderer == nil {
-		// Legacy test and adapter callers may not provide the optional renderer.
-		// Preserve their detached execution behavior by using the same payload
-		// fallback as an empty authored prompt.
-		selection.userMessage = workInputMessage(inputs)
+	if selection.userMessage == "" && selection.promptTemplate != "" {
+		if cfg == nil || cfg.promptRenderer == nil {
+			// Legacy test and adapter callers may not provide the optional renderer.
+			// Preserve their detached execution behavior by using the same payload
+			// fallback as an empty authored prompt.
+			selection.userMessage = workInputMessage(inputs)
+		} else {
+			rendered, err := cfg.promptRenderer.RenderPrompt(
+				selection.promptTemplate,
+				tokens,
+				workflowContext,
+			)
+			if err != nil {
+				return fmt.Errorf("render workstation prompt: %w", err)
+			}
+			selection.userMessage = rendered
+		}
+	}
+	if cfg == nil || cfg.templateFieldResolver == nil {
 		return nil
 	}
-	rendered, err := cfg.promptRenderer.RenderPrompt(
-		selection.promptTemplate,
+	resolved, err := cfg.templateFieldResolver.ResolveTemplateFields(
+		selection.workingDirectory,
+		selection.environment,
 		tokens,
 		workflowContext,
+		selection.worktree,
 	)
 	if err != nil {
-		return fmt.Errorf("render workstation prompt: %w", err)
+		return fmt.Errorf("resolve workstation execution fields: %w", err)
 	}
-	selection.userMessage = rendered
+	if resolved != nil {
+		selection.workingDirectory = resolved.WorkingDirectory
+		selection.worktree = resolved.Worktree
+		selection.environment = cloneRuntimeStringMap(resolved.Env)
+	}
 	return nil
 }
 

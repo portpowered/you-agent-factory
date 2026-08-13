@@ -137,7 +137,15 @@ func (s *Service) executeStarted(
 	runnerResult, runErr := s.runRunner(execCtx, request, identity, temporaryFiles)
 
 	if contextErr := execCtx.Err(); contextErr != nil {
-		runErr = contextErr
+		var providerErr *workers.ProviderError
+		// Runner-owned cancellation errors carry the canonical provider
+		// message and should survive the context deadline/cancellation check.
+		// A raw runner error is still normalized to the authoritative context
+		// error so cancellation cannot be reported as an arbitrary process
+		// failure.
+		if !errors.As(runErr, &providerErr) || providerErr == nil {
+			runErr = contextErr
+		}
 	}
 	cleanupErr := cleanup.run(s.logger)
 	if cleanupErr != nil {
@@ -179,7 +187,8 @@ func (s *Service) runRunner(
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if s.providerOverride != nil && identity == runners.AgentIdentity {
-		return s.providerOverride.Infer(ctx, runnerRequest)
+		result, err := s.providerOverride.Infer(ctx, runnerRequest)
+		return normalizeProviderOverrideResult(result, runnerRequest), err
 	}
 	return s.runners.Execute(ctx, runners.ExecuteRequest{
 		Identity:             identity,
