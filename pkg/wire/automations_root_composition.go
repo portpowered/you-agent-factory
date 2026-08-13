@@ -14,10 +14,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type automationsRootPeer interface {
-	Root() automations.Root
-}
-
 type noopAutomationCommandRunner struct{}
 
 func (noopAutomationCommandRunner) Run(
@@ -34,12 +30,9 @@ func AutomationsRootFromEdges(
 	workflowID string,
 	defaultFactoryDir string,
 ) (automations.Root, error) {
-	hostedPollers, err := provideAutomationHostedPollers(edges, zap.NewNop())
+	hostedSourceInputs, err := provideAutomationHostedSourceInputs(edges)
 	if err != nil {
 		return automations.Root{}, fmt.Errorf("compose Automations root: %w", err)
-	}
-	if hostedPollers == nil {
-		return automations.Root{}, fmt.Errorf("compose Automations root: hosted sources returned nil pollers")
 	}
 
 	commandRunner := workers.CommandRunner(noopAutomationCommandRunner{})
@@ -52,22 +45,21 @@ func AutomationsRootFromEdges(
 		return automations.Root{}, fmt.Errorf("compose Automations root: %w", err)
 	}
 
-	service, err := automationswire.NewService(
+	root, err := automationswire.NewRoot(
 		zap.NewNop(),
 		platformclock.Real{},
 		commandRunner,
 		workflowID,
 		defaultFactoryDir,
-		hostedPollers,
+		hostedSourceInputs,
 		workerswire.ResolveTemplateFields,
 		ports.WorkstationExecution,
 	)
-	if err != nil || service == nil {
-		return automations.Root{}, fmt.Errorf("compose Automations root: construct service: %w", err)
+	if err != nil {
+		return automations.Root{}, fmt.Errorf("compose Automations root: construct root: %w", err)
 	}
-	peer, ok := service.(automationsRootPeer)
-	if !ok {
-		return automations.Root{}, fmt.Errorf("compose Automations root: service does not expose Root()")
+	if root.Operations == nil {
+		return automations.Root{}, fmt.Errorf("compose Automations root: constructed root has no operations")
 	}
-	return peer.Root(), nil
+	return root, nil
 }

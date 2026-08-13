@@ -112,7 +112,10 @@ func (prepared PreparedInvocationSchedules) Abort() {
 type Root struct {
 	Operations Service
 	Lifecycle  RuntimeLifecycle
+	Runtime    RuntimeOperations
 }
+
+var _ Service = Root{}
 
 func rootOperationsAvailable(operations any) bool {
 	if operations == nil {
@@ -203,10 +206,14 @@ func (r Root) ActivateRuntime(
 	ctx context.Context,
 	request RuntimeActivationRequest,
 ) (RuntimeActivationResult, error) {
-	if !rootOperationsAvailable(r.Lifecycle) {
+	lifecycle := r.Lifecycle
+	if !rootOperationsAvailable(lifecycle) && rootOperationsAvailable(r.Runtime) {
+		lifecycle = r.Runtime
+	}
+	if !rootOperationsAvailable(lifecycle) {
 		return RuntimeActivationResult{}, unavailableRootError("ActivateRuntime")
 	}
-	return r.Lifecycle.ActivateRuntime(ctx, request)
+	return lifecycle.ActivateRuntime(ctx, request)
 }
 
 // DeactivateRuntime releases one runtime-scoped Automations owner.
@@ -214,10 +221,36 @@ func (r Root) DeactivateRuntime(
 	ctx context.Context,
 	request RuntimeDeactivationRequest,
 ) (RuntimeDeactivationResult, error) {
-	if !rootOperationsAvailable(r.Lifecycle) {
+	lifecycle := r.Lifecycle
+	if !rootOperationsAvailable(lifecycle) && rootOperationsAvailable(r.Runtime) {
+		lifecycle = r.Runtime
+	}
+	if !rootOperationsAvailable(lifecycle) {
 		return RuntimeDeactivationResult{}, unavailableRootError("DeactivateRuntime")
 	}
-	return r.Lifecycle.DeactivateRuntime(ctx, request)
+	return lifecycle.DeactivateRuntime(ctx, request)
+}
+
+// StartRuntime starts the source activity owned by one activated runtime.
+// Activation remains separate so input preseed can complete before source
+// goroutines are published to the runtime host.
+func (r Root) StartRuntime(ctx context.Context, runtimeID string) error {
+	if !rootOperationsAvailable(r.Runtime) {
+		return unavailableRootError("StartRuntime")
+	}
+	return r.Runtime.StartRuntime(ctx, runtimeID)
+}
+
+// PrepareInvocationSchedules prepares runtime-owned schedules without
+// exposing the Automations implementation or its scheduler state.
+func (r Root) PrepareInvocationSchedules(
+	ctx context.Context,
+	request InvocationScheduleRequest,
+) (PreparedInvocationSchedules, error) {
+	if !rootOperationsAvailable(r.Runtime) {
+		return PreparedInvocationSchedules{}, unavailableRootError("PrepareInvocationSchedules")
+	}
+	return r.Runtime.PrepareInvocationSchedules(ctx, request)
 }
 
 // ReconcileRequest carries desired automation specs and observed instance facts

@@ -486,24 +486,20 @@ func provideInitialFactorySnapshotFactory(
 	}
 }
 
-func provideAutomationsService(
-	edges serviceedges.Edges,
+func provideAutomationsRoot(
+	hostedSourceInputs automationswire.HostedSourceInputs,
 	logger *zap.Logger,
 	clock factoryruntime.Clock,
 	commandRunner factorysessionwire.ScriptCommandRunner,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
-) (automations.Service, error) {
-	hostedPollers, err := provideAutomationHostedPollers(edges, logger)
-	if err != nil {
-		return nil, err
-	}
-	return automationswire.NewService(
+) (automations.Root, error) {
+	return automationswire.NewRoot(
 		logger,
 		clock,
 		commandRunner,
 		"",
 		"",
-		hostedPollers,
+		hostedSourceInputs,
 		workerswire.ResolveTemplateFields,
 		workstationExecution,
 	)

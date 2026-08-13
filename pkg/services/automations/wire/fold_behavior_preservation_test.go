@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -265,7 +266,7 @@ func TestWireFoldPreservesHostedPollerComposition(t *testing.T) {
 	}
 
 	ports := validConstructionPorts(t)
-	ports.hostedPollers = automationswire.NewHostedPollers(
+	ports.hostedPollers = hostedsourceswire.NewHostedPollers(
 		ports.logger, clockwork.NewFakeClock(), nil, nil, "", store,
 	)
 

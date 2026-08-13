@@ -21,7 +21,7 @@ func (automationFactoryCommandRunner) Run(
 	return workers.CommandResult{}, nil
 }
 
-func TestProvideAutomationsServiceConstructsThroughAutomationsWire(t *testing.T) {
+func TestProvideAutomationsRootConstructsThroughAutomationsWire(t *testing.T) {
 	t.Parallel()
 
 	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
@@ -29,18 +29,29 @@ func TestProvideAutomationsServiceConstructsThroughAutomationsWire(t *testing.T)
 		t.Fatalf("InvocationPolicyPortsFromNestedOwner() error = %v", err)
 	}
 
-	service, err := provideAutomationsService(
-		serviceedges.Edges{},
+	hostedSourceInputs, err := provideAutomationHostedSourceInputs(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideAutomationHostedSourceInputs() error = %v", err)
+	}
+	root, err := provideAutomationsRoot(
+		hostedSourceInputs,
 		zap.NewNop(),
 		platformclock.Real{},
 		automationFactoryCommandRunner{},
 		ports.WorkstationExecution,
 	)
-	if service == nil {
-		t.Fatal("provideAutomationsService() returned nil service")
+	if err != nil {
+		t.Fatalf("provideAutomationsRoot() error = %v", err)
 	}
-	var published automations.Service = service
+	var published automations.Service = root
 	if published == nil {
-		t.Fatal("constructed service is not assignable to automations.Service")
+		t.Fatal("constructed root is not assignable to automations.Service")
+	}
+	if root.Runtime == nil {
+		t.Fatal("constructed root has no runtime capability")
+	}
+	var runtime automations.RuntimeOperations = root
+	if runtime == nil {
+		t.Fatal("constructed root is not assignable to RuntimeOperations")
 	}
 }

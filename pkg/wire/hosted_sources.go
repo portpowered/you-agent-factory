@@ -15,19 +15,17 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
-	"go.uber.org/zap"
 )
 
-func provideAutomationHostedPollers(
+func provideAutomationHostedSourceInputs(
 	edges serviceedges.Edges,
-	logger *zap.Logger,
-) (automations.HostedPollers, error) {
+) (automationswire.HostedSourceInputs, error) {
 	checkpointStore := edges.HostedLinearCheckpointStore
 	if checkpointStore == nil {
 		var err error
 		checkpointStore, err = automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
 		if err != nil {
-			return nil, err
+			return automationswire.HostedSourceInputs{}, err
 		}
 	}
 	clock := edges.HostedClock
@@ -42,14 +40,13 @@ func provideAutomationHostedPollers(
 	if secretResolver == nil {
 		secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
 	}
-	return automationswire.NewHostedPollers(
-		logger,
-		clock,
-		httpClient,
-		secretResolver,
-		edges.HostedLinearEndpoint,
-		checkpointStore,
-	), nil
+	return automationswire.HostedSourceInputs{
+		Clock:           clock,
+		HTTPClient:      httpClient,
+		SecretResolver:  secretResolver,
+		LinearEndpoint:  edges.HostedLinearEndpoint,
+		CheckpointStore: checkpointStore,
+	}, nil
 }
 
 func provideFactoryWebhooksService(

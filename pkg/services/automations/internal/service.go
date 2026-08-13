@@ -20,6 +20,7 @@ import (
 )
 
 var _ automations.Service = (*Service)(nil)
+var _ automations.RuntimeOperations = (*Service)(nil)
 
 // Clock is the automation time source needed for scheduling and supervision.
 type Clock = automations.Clock
@@ -117,7 +118,7 @@ func (s *Service) Root() automations.Root {
 	if s == nil || s.reconciler == nil {
 		return automations.Root{}
 	}
-	return automations.Root{Operations: s, Lifecycle: s}
+	return automations.Root{Operations: s, Lifecycle: s, Runtime: s}
 }
 
 func (s *Service) Reconcile(

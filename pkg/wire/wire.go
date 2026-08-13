@@ -9,6 +9,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -155,7 +156,9 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
-	provideAutomationsService,
+	provideAutomationHostedSourceInputs,
+	provideAutomationsRoot,
+	wire.Bind(new(automations.Service), new(automations.Root)),
 	provideFactorySessionsService,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,

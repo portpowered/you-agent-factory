@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -54,7 +55,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		logger:        zap.NewNop(),
 		clock:         clockwork.NewFakeClock(),
 		commandRunner: stubCommandRunner{},
-		hostedPollers: automationswire.NewHostedPollers(
+		hostedPollers: hostedsourceswire.NewHostedPollers(
 			zap.NewNop(), clockwork.NewFakeClock(), nil, nil, "", store,
 		),
 		resolveTemplates: func(

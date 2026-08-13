@@ -23,6 +23,16 @@ type RuntimeStarter interface {
 	StartRuntime(context.Context, string) error
 }
 
+// RuntimeOperations is the runtime-scoped capability retained by the
+// published Automations root. It keeps source ownership and invocation
+// schedule preparation behind one process-scoped root while allowing Factory
+// Runtime to request the explicit lifecycle operations it needs.
+type RuntimeOperations interface {
+	RuntimeLifecycle
+	RuntimeStarter
+	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+}
+
 // RuntimeActivationRequest carries the detached definition and the exact
 // runtime-scoped effects needed by Automations to activate its sources.
 type RuntimeActivationRequest struct {
