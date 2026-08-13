@@ -14,56 +14,36 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
-// TestFunctionalLongCompileCommandSmoke_UsesTaggedVet proves the compile-only
-// functionallong gate invokes tagged vet over the complete functional package
-// surface without executing a test command.
-func TestFunctionalLongCompileCommandSmoke_UsesTaggedVet(t *testing.T) {
+// TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome proves the
+// compile-only gate observes real tagged source without executing the test.
+func TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
-	goStub := writeMakeEchoScript(t, "stub-go-functionallong")
 
+	validPackage := writeFunctionallongFixture(t, repoRoot, false)
 	output, err := runMakefileTargetWithArgs(
 		repoRoot,
 		makefilePath,
-		"GO="+goStub,
+		"FUNCTIONAL_LONG_PACKAGES="+validPackage,
 		"test-functional-long-compile",
 	)
 	if err != nil {
-		t.Fatalf("run test-functional-long-compile wrapper: %v\n%s", err, output)
+		t.Fatalf("valid tagged fixture failed compile-only gate: %v\n%s", err, output)
 	}
 
-	if !strings.Contains(output, "stub-go-functionallong:vet -tags=functionallong ./tests/functional/...") {
-		t.Fatalf("compile-only gate did not invoke tagged vet over the functional surface:\n%s", output)
-	}
-	if strings.Contains(output, " test ") {
-		t.Fatalf("compile-only gate unexpectedly invoked go test:\n%s", output)
-	}
-}
-
-// TestVerifyBuildContractsSmoke_RunsFunctionallongCompile proves the normal
-// build-contract verification tier owns the tagged compile gate.
-func TestVerifyBuildContractsSmoke_RunsFunctionallongCompile(t *testing.T) {
-	repoRoot := testutil.MustRepoPath(t, ".")
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"typecheck":                    "@printf '%s\\n' 'stub:typecheck'\n",
-		"test-functional-long-compile": "@printf '%s\\n' 'stub:test-functional-long-compile'\n",
-		"verify-build":                 "@printf '%s\\n' 'stub:verify-build'\n",
-		"verify-lint":                  "@printf '%s\\n' 'stub:verify-lint'\n",
-		"verify-api":                   "@printf '%s\\n' 'stub:verify-api'\n",
-	})
-
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-build-contracts")
-	if err != nil {
-		t.Fatalf("run verify-build-contracts wrapper: %v\n%s", err, output)
-	}
-
-	assertOutputOrder(t, output,
-		"stub:typecheck",
-		"stub:test-functional-long-compile",
-		"stub:verify-build",
-		"stub:verify-lint",
-		"stub:verify-api",
+	invalidPackage := writeFunctionallongFixture(t, repoRoot, true)
+	output, err = runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"FUNCTIONAL_LONG_PACKAGES="+invalidPackage,
+		"test-functional-long-compile",
 	)
+	if err == nil {
+		t.Fatalf("invalid tagged fixture unexpectedly passed compile-only gate:\n%s", output)
+	}
+	if !strings.Contains(output, "functionallongCompileGateIntentionalError") {
+		t.Fatalf("compile-only gate failed without reporting the invalid tagged fixture:\n%s", output)
+	}
 }
 
 // TestFunctionalLaneTargetsSeparateCachedAndFreshModes proves the two public

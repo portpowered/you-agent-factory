@@ -108,6 +108,57 @@ func writeMakeEchoScript(t *testing.T, label string) string {
 	return filepath.ToSlash(path)
 }
 
+func writeFunctionallongFixture(t *testing.T, repoRoot string, invalid bool) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp(repoRoot, ".functionallong-gate-")
+	if err != nil {
+		t.Fatalf("create functionallong fixture directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("remove functionallong fixture directory: %v", err)
+		}
+	})
+
+	source := strings.Join([]string{
+		"//go:build functionallong",
+		"",
+		"package functionallongfixture",
+		"",
+		"func compiledOnly() string {",
+		"\treturn \"compiled\"",
+		"}",
+	}, "\n") + "\n"
+	if invalid {
+		source += "\nvar _ = functionallongCompileGateIntentionalError\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fixture_functionallong.go"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write functionallong fixture source: %v", err)
+	}
+
+	testSource := strings.Join([]string{
+		"//go:build functionallong",
+		"",
+		"package functionallongfixture",
+		"",
+		"import \"testing\"",
+		"",
+		"func TestCompileOnlyGateMustNotExecute(t *testing.T) {",
+		"\tt.Fatal(\"the functionallong compile gate must not execute tests\")",
+		"}",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "fixture_functionallong_test.go"), []byte(testSource), 0o644); err != nil {
+		t.Fatalf("write functionallong fixture test: %v", err)
+	}
+
+	relativePath, err := filepath.Rel(repoRoot, dir)
+	if err != nil {
+		t.Fatalf("make functionallong fixture path relative: %v", err)
+	}
+	return "./" + filepath.ToSlash(relativePath)
+}
+
 func writeExecutableScript(t *testing.T, label string, body string) string {
 	t.Helper()
 	requirePOSIXShell(t)
