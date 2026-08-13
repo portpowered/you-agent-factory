@@ -149,10 +149,14 @@ func assertOpeningRecordReady(t *testing.T, eventsSvc events.Service, topic even
 }
 
 func subscribeForTerminal(t *testing.T, eventsSvc events.Service, topic events.Topic) events.Subscription {
+	return subscribeForTerminalAt(t, eventsSvc, topic, 1)
+}
+
+func subscribeForTerminalAt(t *testing.T, eventsSvc events.Service, topic events.Topic, position events.AggregateSequence) events.Subscription {
 	t.Helper()
 	subscription, err := eventsSvc.Subscribe(context.Background(), events.SubscribeRequest{
 		Topic: topic,
-		From:  events.Cursor{Topic: topic, Position: 1},
+		From:  events.Cursor{Topic: topic, Position: position},
 		Limit: 1,
 	})
 	if err != nil {
@@ -161,13 +165,38 @@ func subscribeForTerminal(t *testing.T, eventsSvc events.Service, topic events.T
 	return subscription
 }
 
+func subscribeForTerminalHistory(t *testing.T, eventsSvc events.Service, topic events.Topic) events.Subscription {
+	t.Helper()
+	subscription, err := eventsSvc.Subscribe(context.Background(), events.SubscribeRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic, Position: 1},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("terminal history Subscribe() error = %v, want nil", err)
+	}
+	return subscription
+}
+
 func assertTerminalDelivery(t *testing.T, subscription events.Subscription) {
+	assertTerminalDeliveryAt(t, subscription, 2)
+}
+
+func assertTerminalDeliveryAt(t *testing.T, subscription events.Subscription, position events.AggregateSequence) {
 	t.Helper()
 	waitContext, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	delivery := subscription.Next(waitContext)
-	if delivery.Kind != events.DeliveryRecord || delivery.Record.ID.Position != 2 {
-		t.Fatalf("terminal delivery = %+v, want record at position 2", delivery)
+	for {
+		delivery := subscription.Next(waitContext)
+		if delivery.Kind != events.DeliveryRecord {
+			t.Fatalf("terminal delivery = %+v, want record at position %d", delivery, position)
+		}
+		if delivery.Record.ID.Position == position {
+			return
+		}
+		if delivery.Record.ID.Position > position {
+			t.Fatalf("terminal delivery = %+v, want record at position %d", delivery, position)
+		}
 	}
 }
 
@@ -183,6 +212,21 @@ func assertSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
 	}
 	if len(read.Records) != 2 {
 		t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+	}
+}
+
+func assertControlledSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
+	t.Helper()
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(id),
+		From:  events.Cursor{Topic: workersessions.Topic(id)},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("controlled session records for %q read error = %v", id, err)
+	}
+	if len(read.Records) != 4 {
+		t.Fatalf("controlled session records for %q = %+v, want opening, control request/outcome, and terminal", id, read.Records)
 	}
 }
 
@@ -437,7 +481,7 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 	accepted := waitForAsyncStart(t, outcomes)
 	assertAcceptedStart(t, accepted)
 
-	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic(request.ID))
+	terminalSubscription := subscribeForTerminalHistory(t, eventsSvc, workersessions.Topic(request.ID))
 	if err := lifecycle.Stop(context.Background()); err != nil {
 		t.Fatalf("Lifecycle.Stop() error = %v, want nil", err)
 	}
@@ -446,7 +490,7 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 	default:
 		t.Fatal("Lifecycle.Stop() returned before signaling Workers cancellation")
 	}
-	assertTerminalDelivery(t, terminalSubscription)
+	assertTerminalDeliveryAt(t, terminalSubscription, 4)
 	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
 	if err != nil {
 		t.Fatalf("session after Lifecycle.Stop() read error = %v", err)
@@ -454,7 +498,7 @@ func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *te
 	if final.State != workersessions.StateTerminated {
 		t.Fatalf("session after Lifecycle.Stop() = %+v, want TERMINATED", final)
 	}
-	assertSessionRecords(t, eventsSvc, request.ID)
+	assertControlledSessionRecords(t, eventsSvc, request.ID)
 
 	if _, err := registry.Start(context.Background(), validAsyncStartRequest("worker-after-shutdown", "dispatch-after-shutdown")); !errors.Is(err, workersessions.ErrStartServerStopping) {
 		t.Fatalf("new Start() after Lifecycle.Stop() error = %v, want ErrStartServerStopping", err)
@@ -788,8 +832,8 @@ func TestStart_CancelBeforeAdmissionCannotReturnAcceptedOrDuplicateTerminal(t *t
 		From:  events.Cursor{Topic: topic},
 		Limit: 10,
 	})
-	if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 2 {
-		t.Fatalf("session topic after cancellation = %+v, %v, want one opening and one terminal record", read, err)
+	if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 4 {
+		t.Fatalf("session topic after cancellation = %+v, %v, want opening, control request/outcome, and terminal records", read, err)
 	}
 }
 

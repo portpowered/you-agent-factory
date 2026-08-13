@@ -217,6 +217,7 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 		t.Fatalf("Worker Session terminal phase = %q, want CANCELED; frames=%#v", events.phase, events.frames)
 	}
 	assertSingleTerminalWorkerSessionEvent(t, events.frames, "control-session", "CANCELED")
+	assertOrderedWorkerSessionControlBracket(t, events.frames, "control-session", "CANCELED")
 
 	repeated := postWorkerSessionControl(t, server.URL(), "control-session", "cancel")
 	defer repeated.Body.Close()
@@ -266,6 +267,39 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 		t.Fatalf("worker command calls after repeated/mixed controls = %d, want one", runner.callCount())
 	}
 	functionalevidence.Covers(t, "rest/cancelWorkerSession")
+}
+
+func assertOrderedWorkerSessionControlBracket(
+	t *testing.T,
+	frames []factoryapi.WorkerSessionEvent,
+	wantWorkerSessionID, wantTerminalPhase string,
+) {
+	t.Helper()
+	var controls []factoryapi.WorkerSessionEvent
+	var terminal *factoryapi.WorkerSessionEvent
+	for index := range frames {
+		frame := frames[index]
+		if frame.WorkerSessionId != wantWorkerSessionID {
+			t.Fatalf("Worker Session frame[%d] identity = %q, want %q", index, frame.WorkerSessionId, wantWorkerSessionID)
+		}
+		if frame.Event.SourceType == "worker_session_control" {
+			controls = append(controls, frame)
+		}
+		if frame.Event.SourceType == "worker_session_lifecycle" && workerSessionEventPhase(frame) == wantTerminalPhase {
+			terminal = &frame
+		}
+	}
+	if len(controls) != 2 {
+		t.Fatalf("Worker Session control records = %d, want request/outcome pair; frames=%#v", len(controls), frames)
+	}
+	if controls[0].Event.SourceEventId != "request" || controls[0].Event.SourceSequence != 1 ||
+		controls[1].Event.SourceEventId != "outcome" || controls[1].Event.SourceSequence != 2 ||
+		controls[0].Event.SourceId != controls[1].Event.SourceId {
+		t.Fatalf("Worker Session control identities = %#v, want matching request sequence 1 before outcome sequence 2", controls)
+	}
+	if terminal == nil || controls[1].Event.Position >= terminal.Event.Position {
+		t.Fatalf("Worker Session control positions = request %d outcome %d terminal %#v, want bracket before terminal", controls[0].Event.Position, controls[1].Event.Position, terminal)
+	}
 }
 
 func startDirectWorkerSessionServer(t *testing.T, runner platformprocess.CommandRunner) *support.FunctionalAPIServer {

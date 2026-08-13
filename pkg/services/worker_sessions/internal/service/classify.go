@@ -785,6 +785,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 	if pub == nil {
 		return workersessions.ErrSessionNotFound
 	}
+	pub.control.close()
 	pub.mu.Lock()
 	if !pub.open {
 		pub.mu.Unlock()

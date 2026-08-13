@@ -56,7 +56,7 @@ func (f *factoryImpl) controlAssociatedWorkerSessions(
 	}
 
 	captured := captureAssociatedWorkerSessionTargets(f.eventHistory, turnID)
-	result := fanOutWorkerSessionControl(ctx, f.cfg.workerSessions, captured, action)
+	result := fanOutWorkerSessionControl(ctx, f.cfg.workerSessions, captured, action, controlID)
 	f.workerSessionControlResults[key] = cloneWorkerSessionControlResult(result)
 	f.logWorkerSessionControlFanout(result)
 	return result
@@ -79,6 +79,7 @@ func fanOutWorkerSessionControl(
 	service workersessions.Service,
 	captured capturedWorkerSessionControlTargets,
 	action factory.WorkerSessionControlAction,
+	controlIDs ...string,
 ) factory.WorkerSessionControlResult {
 	result := newWorkerSessionControlNoOp(captured.turnID, action)
 	targets := captured.workerSessionIDsSnapshot()
@@ -93,6 +94,10 @@ func fanOutWorkerSessionControl(
 		ctx = context.Background()
 	}
 	controlCtx := context.WithoutCancel(ctx)
+	controlID := ""
+	if len(controlIDs) > 0 {
+		controlID = strings.TrimSpace(controlIDs[0])
+	}
 	result.Children = make([]factory.WorkerSessionControlChildResult, 0, len(targets))
 	for _, workerSessionID := range targets {
 		child := factory.WorkerSessionControlChildResult{WorkerSessionID: workerSessionID}
@@ -102,7 +107,7 @@ func fanOutWorkerSessionControl(
 			continue
 		}
 		controlResult, err := callWorkerSessionControl(
-			controlCtx, service, action, workersessions.ControlRequest{ID: workerSessionID},
+			controlCtx, service, action, workersessions.ControlRequest{ID: workerSessionID, RequestID: controlID},
 		)
 		child.DispatchID = controlResult.DispatchID
 		child.Outcome = workerSessionControlChildOutcome(controlResult.Outcome, err)

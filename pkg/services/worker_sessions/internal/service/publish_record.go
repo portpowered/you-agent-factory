@@ -497,7 +497,9 @@ type sourceKey struct {
 // guards them. lastSequence and open are owned entirely by that lock; a
 // publication is never read or written without holding mu.
 type publication struct {
-	mu sync.Mutex
+	mu                sync.Mutex
+	control           controlHistoryGate
+	completedControls map[string]struct{}
 	// open is true only between a successfully committed opening record and
 	// the start of the terminal-record commit attempt. PublishRecord rejects
 	// every call observed while open is false, whether that is because the

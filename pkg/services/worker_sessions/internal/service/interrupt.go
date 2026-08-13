@@ -53,8 +53,19 @@ func (r *registry) Interrupt(
 		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, err)
 	}
 	req = req.Normalize()
+	reservation, historyErr := r.beginControlHistory(
+		callerCtx,
+		req.SourceWorkerSessionID,
+		workersessions.ControlActionInterrupt,
+		req.RequestID,
+	)
+	if historyErr != nil && !errors.Is(historyErr, workersessions.ErrSessionNotFound) {
+		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false)
+		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, historyErr)
+	}
 	replay, owner, err := r.reserveInterrupt(req)
 	if err != nil {
+		r.finishInterruptControlHistory(reservation, req.SourceWorkerSessionID, workersessions.ControlOutcomeFailed, "")
 		result := r.interruptResultSnapshot(req, workersessions.InterruptPhaseValidation, false)
 		r.logInterruptRejected(req, workersessions.InterruptPhaseValidation, err)
 		return result, newInterruptError(workersessions.InterruptPhaseValidation, result, err)
@@ -67,6 +78,11 @@ func (r *registry) Interrupt(
 	outcomes := make(chan interruptCompletion, 1)
 	go func() {
 		result, interruptErr := r.runInterrupt(replay.plan)
+		outcome := workersessions.ControlOutcomeFailed
+		if interruptErr == nil || result.Source.State == workersessions.StateCanceled {
+			outcome = workersessions.ControlOutcomeApplied
+		}
+		r.finishInterruptControlHistory(reservation, req.SourceWorkerSessionID, outcome, replay.plan.dispatchID)
 		r.finishInterruptReplay(replay, result, interruptErr)
 		r.finishStart()
 		outcomes <- interruptCompletion{result: result, err: interruptErr}
@@ -245,6 +261,12 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 	finishInterruptBoundary(plan.supervision, canceled)
 	if !canceled {
 		cause := interruptCancellationCause(cancelResult, cancelErr)
+		r.finishInterruptControlHistory(
+			controlReservationFor(plan.supervision),
+			plan.request.SourceWorkerSessionID,
+			workersessions.ControlOutcomeFailed,
+			plan.dispatchID,
+		)
 		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false)
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
@@ -252,6 +274,12 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 	source, _ := r.Get(context.Background(), workersessions.GetRequest{ID: plan.request.SourceWorkerSessionID})
 	if source.State != workersessions.StateCanceled {
 		cause := fmt.Errorf("%w: authoritative source state is %s", workersessions.ErrInterruptSourceCancellationFailed, source.State)
+		r.finishInterruptControlHistory(
+			controlReservationFor(plan.supervision),
+			plan.request.SourceWorkerSessionID,
+			workersessions.ControlOutcomeFailed,
+			plan.dispatchID,
+		)
 		result := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false)
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
@@ -282,6 +310,22 @@ func (r *registry) runInterrupt(plan interruptPlan) (workersessions.InterruptRes
 		"outcome", "accepted",
 	)
 	return result, nil
+}
+
+func (r *registry) finishInterruptControlHistory(
+	reservation *controlHistoryReservation,
+	sourceID string,
+	outcome workersessions.ControlOutcome,
+	dispatchID string,
+) {
+	if reservation == nil {
+		return
+	}
+	state := workersessions.StateReserved
+	if session, err := r.Get(context.Background(), workersessions.GetRequest{ID: sourceID}); err == nil {
+		state = session.State
+	}
+	r.finishControlHistory(reservation, outcome, dispatchID, state)
 }
 
 func interruptSuccessorMatches(

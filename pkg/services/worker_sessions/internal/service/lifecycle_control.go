@@ -20,10 +20,15 @@ func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest)
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	reservation, err := r.beginControlHistory(ctx, req.ID, workersessions.ControlActionPause, req.RequestID)
+	if err != nil {
+		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
 	for {
-		result, retry, err := r.pauseIteration(ctx, req)
+		result, retry, iterationErr := r.pauseIteration(ctx, req)
 		if !retry {
-			return result, err
+			r.finishControlHistory(reservation, controlResultOutcome(result, iterationErr), result.DispatchID, result.Session.State)
+			return result, iterationErr
 		}
 	}
 }
@@ -109,35 +114,54 @@ func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
-	session, supervision, err := r.controlTarget(req.ID)
+	reservation, err := r.beginControlHistory(ctx, req.ID, workersessions.ControlActionResume, req.RequestID)
 	if err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	session, supervision, err := r.controlTarget(req.ID)
+	if err != nil {
+		r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, "", workersessions.StateReserved)
+		return workersessions.ControlResult{Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
 	if session.Terminal() {
-		return r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision), nil
+		result := r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision)
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		return result, nil
 	}
 	if supervision != nil && supervision.resumeInFlight() {
-		return r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision), nil
+		result := r.controlNoop(req.ID, workersessions.ControlActionResume, session, supervision)
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		return result, nil
 	}
 	if session.State == workersessions.StatePaused && session.ProviderSessionAssociation == nil {
-		return r.rejectedResume(session, supervision, workersessions.ErrProviderSessionAssociationMissing)
+		result, rejectedErr := r.rejectedResume(session, supervision, workersessions.ErrProviderSessionAssociationMissing)
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		return result, rejectedErr
 	}
 	if session.State != workersessions.StatePaused || supervision == nil {
-		return r.unsupportedControl(ctx, req, workersessions.ControlActionResume)
+		result, unsupportedErr := r.unsupportedControl(ctx, req, workersessions.ControlActionResume)
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		return result, unsupportedErr
 	}
 	if err := validateResumeAssociation(session); err != nil {
-		return r.rejectedResume(session, supervision, err)
+		result, rejectedErr := r.rejectedResume(session, supervision, err)
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		return result, rejectedErr
 	}
 
 	continuation, previousDispatchID, prepared := r.prepareContinuation(req.ID, supervision, session.ProviderSessionAssociation.Reference)
 	if !prepared {
 		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		return r.controlNoop(req.ID, workersessions.ControlActionResume, current, supervision), nil
+		result := r.controlNoop(req.ID, workersessions.ControlActionResume, current, supervision)
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
+		return result, nil
 	}
 	publishErr := r.boundary.PublishWithAdmission(
 		context.WithoutCancel(ctx),
 		continuation,
-		func() { r.acceptSupervision(req.ID, supervision) },
+		func() {
+			r.acceptSupervision(req.ID, supervision)
+		},
 		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
 			r.completeSupervision(req.ID, supervision, result, dispatchErr)
 		},
@@ -146,12 +170,14 @@ func (r *registry) Resume(ctx context.Context, req workersessions.ControlRequest
 		r.revertContinuation(req.ID, supervision, previousDispatchID)
 		current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeFailed, DispatchID: continuation.Execution.Dispatch.DispatchID}
+		r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
 		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 		return result, publishErr
 	}
 	r.finishContinuationPublication(supervision)
 	current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 	result := workersessions.ControlResult{Session: current, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeApplied, DispatchID: continuation.Execution.Dispatch.DispatchID}
+	r.finishControlHistory(reservation, result.Outcome, result.DispatchID, result.Session.State)
 	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(result.Action), "outcome", string(result.Outcome))
 	return result, nil
 }
@@ -298,10 +324,15 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
+	if err != nil {
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
 	for {
-		result, retry, err := r.cancelControlIteration(ctx, req, action, detachContext)
+		result, retry, iterationErr := r.cancelControlIteration(ctx, req, action, detachContext)
 		if !retry {
-			return result, err
+			r.finishControlHistory(reservation, controlResultOutcome(result, iterationErr), result.DispatchID, result.Session.State)
+			return result, iterationErr
 		}
 	}
 }
@@ -336,6 +367,7 @@ func (r *registry) cancelControlIteration(
 		return workersessions.ControlResult{}, true, nil
 	case cancellationAttemptBeforeAdmission:
 		final, _ := r.commitControlTerminal(req.ID, controlTerminalState(action))
+		r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, supervision.dispatchID, final.State)
 		supervision.signalDone()
 		return r.controlApplied(req.ID, action, final, supervision), false, nil
 	case cancellationAttemptBoundary:
@@ -398,6 +430,7 @@ func (r *registry) terminalizePausedControl(id string, action workersessions.Con
 	state := controlTerminalState(action)
 	final, committed := r.commitControlTerminal(id, state)
 	if committed {
+		r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, supervision.dispatchID, final.State)
 		r.logTerminal(id, supervision.dispatchID, final)
 		r.publishTerminalRecordOrLog(r.supervisionContext(supervision), id, supervision.dispatchID, state, workersessions.TerminalResult{})
 		supervision.signalDone()
@@ -507,6 +540,7 @@ type supervision struct {
 	controlAction      workersessions.ControlAction
 	controlActive      bool
 	controlDone        chan struct{}
+	controlHistory     *controlHistoryReservation
 	interrupting       bool
 	interruptRequestID string
 	interruptDone      chan struct{}
@@ -713,6 +747,18 @@ func (s *supervision) lastResult() workers.WorkstationDispatchResult {
 // dispatch must remain controllable throughout that wait.
 func (r *registry) acceptSupervision(id string, supervision *supervision) {
 	running := r.transitionToRunning(id)
+	reservation := controlReservationFor(supervision)
+	if reservation != nil && reservation.action == workersessions.ControlActionResume {
+		outcome := workersessions.ControlOutcomeApplied
+		state := workersessions.StateRunning
+		if !running {
+			outcome = workersessions.ControlOutcomeFailed
+			if current, err := r.Get(context.Background(), workersessions.GetRequest{ID: id}); err == nil {
+				state = current.State
+			}
+		}
+		r.finishControlHistory(reservation, outcome, supervision.dispatchID, state)
+	}
 	supervision.mu.Lock()
 	supervision.accepted = running
 	serverOwned := supervision.serverOwned
@@ -819,6 +865,7 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 
 	if action == workersessions.ControlActionPause && dispatchCanceled(result, dispatchErr) {
 		if r.transitionToPaused(id) {
+			r.finishControlHistory(controlReservationFor(supervision), workersessions.ControlOutcomeApplied, dispatchID, workersessions.StatePaused)
 			supervision.mu.Lock()
 			supervision.requestedAction = ""
 			supervision.mu.Unlock()
@@ -845,6 +892,16 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	}
 
 	state, terminal := dispatchedTerminal(action, result, dispatchErr)
+	controlOutcome := controlOutcomeFromDispatch(action, result, dispatchErr)
+	if action == workersessions.ControlActionPause && state != workersessions.StatePaused {
+		controlOutcome = workersessions.ControlOutcomeNoop
+	}
+	if reservation := controlReservationFor(supervision); reservation != nil {
+		if reservation.action == workersessions.ControlActionResume && action == "" {
+			controlOutcome = workersessions.ControlOutcomeFailed
+		}
+		r.finishControlHistory(reservation, controlOutcome, dispatchID, state)
+	}
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
 		r.logTerminal(id, dispatchID, final)

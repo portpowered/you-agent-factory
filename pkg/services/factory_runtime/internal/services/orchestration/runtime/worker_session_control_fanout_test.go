@@ -62,6 +62,23 @@ func TestFanOutWorkerSessionControl_AttemptsEveryCapturedChildInStableOrder(t *t
 	}
 }
 
+func TestFanOutWorkerSessionControl_PropagatesParentControlID(t *testing.T) {
+	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
+		{action: factory.WorkerSessionControlActionPause, id: "worker-a"}: {result: workersessions.ControlResult{Outcome: workersessions.ControlOutcomeApplied}},
+		{action: factory.WorkerSessionControlActionPause, id: "worker-b"}: {result: workersessions.ControlResult{Outcome: workersessions.ControlOutcomeNoop}},
+	})
+
+	result := fanOutWorkerSessionControl(context.Background(), service, capturedWorkerSessionControlTargets{
+		turnID: "turn-parent", workerSessionIDs: []string{"worker-a", "worker-b"},
+	}, factory.WorkerSessionControlActionPause, "control-parent")
+	if result.Outcome != factory.WorkerSessionControlAggregateOutcomePartial {
+		t.Fatalf("aggregate outcome = %q, want PARTIAL", result.Outcome)
+	}
+	if got, want := service.requestIDsSnapshot(), []string{"control-parent", "control-parent"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("child request IDs = %v, want %v", got, want)
+	}
+}
+
 func TestFanOutWorkerSessionControl_ClassifiesFullNoOpUnsupportedAndPartialOutcomes(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -452,6 +469,7 @@ type workerSessionControlSpy struct {
 	mu              sync.Mutex
 	responses       map[workerSessionControlCall]workerSessionControlResponse
 	calls           []workerSessionControlCall
+	requestIDs      []string
 	canceledContext bool
 }
 
@@ -483,6 +501,7 @@ func (s *workerSessionControlSpy) control(ctx context.Context, action factory.Wo
 	defer s.mu.Unlock()
 	call := workerSessionControlCall{action: action, id: req.ID}
 	s.calls = append(s.calls, call)
+	s.requestIDs = append(s.requestIDs, req.RequestID)
 	if ctx.Err() != nil {
 		s.canceledContext = true
 	}
@@ -494,6 +513,12 @@ func (s *workerSessionControlSpy) callsSnapshot() []workerSessionControlCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]workerSessionControlCall(nil), s.calls...)
+}
+
+func (s *workerSessionControlSpy) requestIDsSnapshot() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.requestIDs...)
 }
 
 func (s *workerSessionControlSpy) observedCanceledContext() bool {
