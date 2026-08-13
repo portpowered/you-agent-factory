@@ -13,12 +13,20 @@ import (
 )
 
 type recordingsAdapter struct {
-	root recordings.Service
+	root RecordingsReadRoot
+}
+
+// RecordingsReadRoot is the narrow Recordings projection port needed by Work
+// list/get reads. It deliberately excludes lifecycle and scope operations so
+// adapters and tests do not depend on unrelated Recordings capabilities.
+type RecordingsReadRoot interface {
+	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
+	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
 }
 
 // NewRecordingsAdapter constructs the private Work state_access Recordings port
 // from the published Recordings service root contract.
-func NewRecordingsAdapter(root recordings.Service) stateaccess.RecordingsAdapter {
+func NewRecordingsAdapter(root RecordingsReadRoot) stateaccess.RecordingsAdapter {
 	if root == nil {
 		return nil
 	}

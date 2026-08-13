@@ -130,6 +130,8 @@ type (
 	LiveRecordingTargetRequest                                 = recordingcontracts.LiveRecordingTargetRequest
 	LoadReplayArtifactRequest                                  = recordingcontracts.LoadReplayArtifactRequest
 	LoadReplayArtifactResult                                   = recordingcontracts.LoadReplayArtifactResult
+	LoadReplayInputRequest                                     = recordingcontracts.LoadReplayInputRequest
+	LoadReplayInputResult                                      = recordingcontracts.LoadReplayInputResult
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
 	LoadReplayRecordingResult                                  = recordingcontracts.LoadReplayRecordingResult
 	MetadataMismatchWarning                                    = recordingcontracts.MetadataMismatchWarning
@@ -181,6 +183,31 @@ type (
 	RecordingReadFile                                          = recordingcontracts.RecordingReadFile
 	RecordingRemovePath                                        = recordingcontracts.RecordingRemovePath
 	RecordingRenamePath                                        = recordingcontracts.RecordingRenamePath
+	RecordingScopeRef                                          = recordingcontracts.RecordingScopeRef
+	RecordingScopeService                                      = recordingcontracts.RecordingScopeService
+	RecordingScopeStatus                                       = recordingcontracts.RecordingScopeStatus
+	OpenRecordingScopeRequest                                  = recordingcontracts.OpenRecordingScopeRequest
+	OpenRecordingScopeResult                                   = recordingcontracts.OpenRecordingScopeResult
+	SubscribeRecordingScopeRequest                             = recordingcontracts.SubscribeRecordingScopeRequest
+	SubscribeRecordingScopeResult                              = recordingcontracts.SubscribeRecordingScopeResult
+	LoadReplayRecordingScopeRequest                            = recordingcontracts.LoadReplayRecordingScopeRequest
+	LoadReplayRecordingScopeResult                             = recordingcontracts.LoadReplayRecordingScopeResult
+	CreateReplayPlanScopeRequest                               = recordingcontracts.CreateReplayPlanScopeRequest
+	CreateReplayPlanScopeResult                                = recordingcontracts.CreateReplayPlanScopeResult
+	ObserveReplayScopeRequest                                  = recordingcontracts.ObserveReplayScopeRequest
+	ObserveReplayScopeResult                                   = recordingcontracts.ObserveReplayScopeResult
+	ReconstructRecordingScopeRequest                           = recordingcontracts.ReconstructRecordingScopeRequest
+	ReconstructRecordingScopeResult                            = recordingcontracts.ReconstructRecordingScopeResult
+	QuerySimpleDashboardScopeRequest                           = recordingcontracts.QuerySimpleDashboardScopeRequest
+	QuerySimpleDashboardScopeResult                            = recordingcontracts.QuerySimpleDashboardScopeResult
+	QueryWorkstationRequestsScopeRequest                       = recordingcontracts.QueryWorkstationRequestsScopeRequest
+	QueryWorkstationRequestsScopeResult                        = recordingcontracts.QueryWorkstationRequestsScopeResult
+	BuildPortableArtifactScopeRequest                          = recordingcontracts.BuildPortableArtifactScopeRequest
+	BuildPortableArtifactScopeResult                           = recordingcontracts.BuildPortableArtifactScopeResult
+	ExportPortableArtifactScopeRequest                         = recordingcontracts.ExportPortableArtifactScopeRequest
+	ExportPortableArtifactScopeResult                          = recordingcontracts.ExportPortableArtifactScopeResult
+	ReadPortableArtifactScopeRequest                           = recordingcontracts.ReadPortableArtifactScopeRequest
+	ReadPortableArtifactScopeResult                            = recordingcontracts.ReadPortableArtifactScopeResult
 	RecordingSnapshot                                          = recordingcontracts.RecordingSnapshot
 	RecordingSnapshotWriter                                    = recordingcontracts.RecordingSnapshotWriter
 	RecordingStatusFacts                                       = recordingcontracts.RecordingStatusFacts
@@ -188,6 +215,18 @@ type (
 	RecordingStatusResult                                      = recordingcontracts.RecordingStatusResult
 	RecordingTargetRequest                                     = recordingcontracts.RecordingTargetRequest
 	RecordingTemporaryFile                                     = recordingcontracts.RecordingTemporaryFile
+	AppendRecordingScopeEventRequest                           = recordingcontracts.AppendRecordingScopeEventRequest
+	AppendRecordingScopeEventResult                            = recordingcontracts.AppendRecordingScopeEventResult
+	BeginRecordingScopeRequest                                 = recordingcontracts.BeginRecordingScopeRequest
+	BeginRecordingScopeResult                                  = recordingcontracts.BeginRecordingScopeResult
+	CloseRecordingScopeRequest                                 = recordingcontracts.CloseRecordingScopeRequest
+	CloseRecordingScopeResult                                  = recordingcontracts.CloseRecordingScopeResult
+	FinalizeRecordingScopeRequest                              = recordingcontracts.FinalizeRecordingScopeRequest
+	FinalizeRecordingScopeResult                               = recordingcontracts.FinalizeRecordingScopeResult
+	FlushRecordingScopeRequest                                 = recordingcontracts.FlushRecordingScopeRequest
+	FlushRecordingScopeResult                                  = recordingcontracts.FlushRecordingScopeResult
+	QueryRecordingScopeRequest                                 = recordingcontracts.QueryRecordingScopeRequest
+	QueryRecordingScopeResult                                  = recordingcontracts.QueryRecordingScopeResult
 	RecordRecordingErrorRequest                                = recordingcontracts.RecordRecordingErrorRequest
 	RecordRecordingErrorResult                                 = recordingcontracts.RecordRecordingErrorResult
 	RecordRecordingEventRequest                                = recordingcontracts.RecordRecordingEventRequest
@@ -215,6 +254,8 @@ type (
 	RuntimeEventLedger                                         = recordingcontracts.RuntimeEventLedger
 	RuntimeLedger                                              = recordingcontracts.RuntimeLedger
 	RuntimeOpeningRequest                                      = recordingcontracts.RuntimeOpeningRequest
+	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
+	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
 	RuntimeRecorder                                            = recordingcontracts.RuntimeRecorder
 	RuntimeRecorderFactory                                     = recordingcontracts.RuntimeRecorderFactory
 	SessionLifecycleControlInput                               = recordingcontracts.SessionLifecycleControlInput
@@ -271,6 +312,15 @@ type (
 	WorldStateView                                             = recordingcontracts.WorldStateView
 	WorldStateViewSchemaVersion                                = recordingcontracts.WorldStateViewSchemaVersion
 )
+
+// RuntimeOpening is the Recordings-owned capability used while Factory
+// Runtime opens a private runtime scope. Replay input loading remains on the
+// same process root so Factory Sessions cannot construct a second Recordings
+// graph for historical replay.
+type RuntimeOpening = recordingcontracts.RuntimeOpening
+
+// Root is the complete process-scoped Recordings authority.
+type Root = recordingcontracts.Root
 
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable
@@ -408,7 +458,14 @@ var (
 	ErrRecordingBindingConflict                        = recordingcontracts.ErrRecordingBindingConflict
 	ErrRecordingSnapshotEncoding                       = recordingcontracts.ErrRecordingSnapshotEncoding
 	ErrRecordingSnapshotWrite                          = recordingcontracts.ErrRecordingSnapshotWrite
+	ErrRecordingScopeClosed                            = recordingcontracts.ErrRecordingScopeClosed
+	ErrRecordingScopeFinalized                         = recordingcontracts.ErrRecordingScopeFinalized
+	ErrRecordingScopeForeign                           = recordingcontracts.ErrRecordingScopeForeign
+	ErrRecordingScopeInvalid                           = recordingcontracts.ErrRecordingScopeInvalid
+	ErrRecordingScopeStale                             = recordingcontracts.ErrRecordingScopeStale
+	ErrRecordingScopeUnknown                           = recordingcontracts.ErrRecordingScopeUnknown
 	ErrRecordingWriteRejected                          = recordingcontracts.ErrRecordingWriteRejected
+	ErrInvalidRecordingScopeRef                        = recordingcontracts.ErrInvalidRecordingScopeRef
 	ErrReplayPlanNotFound                              = recordingcontracts.ErrReplayPlanNotFound
 	ErrReplayRecordingNotFinalized                     = recordingcontracts.ErrReplayRecordingNotFinalized
 	ErrReplayRecordingNotFound                         = recordingcontracts.ErrReplayRecordingNotFound

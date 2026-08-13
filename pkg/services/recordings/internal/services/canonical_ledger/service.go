@@ -13,5 +13,6 @@ import (
 // aware subscribe for canonical Factory events behind the Recordings root.
 type Service interface {
 	Append(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error)
+	AppendWithValidation(recordings.AppendRecordedEventRequest, func(recordings.CanonicalEvent) error) (recordings.AppendRecordedEventResult, error)
 	SubscribeFrom(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
 }

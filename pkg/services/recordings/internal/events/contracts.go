@@ -11,14 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// RuntimeLedgerFactory constructs session-scoped canonical ledgers.
-type RuntimeLedgerFactory func(
-	recordings.InitialStructureSource,
-	func() time.Time,
-	string,
-	interfaces.RuntimeDefinitionLookup,
-) recordings.RuntimeEventLedger
-
 // NewRuntimeLedger exposes the concrete event ledger through its public port.
 func NewRuntimeLedger(
 	topology recordings.InitialStructureSource,
@@ -59,6 +51,21 @@ func (h *FactoryEventHistory) AppendRecordedEventWithResult(event interfaces.Fac
 	}
 	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
 	return h.appendEvent(event), nil
+}
+
+// AppendRecordedEventWithValidation assigns the canonical sequence and lets
+// the owner validate the detached event before this history publishes it.
+// The validation callback runs while the history write lock is held, so a
+// rejected owner proposal cannot leave a partially appended event behind.
+func (h *FactoryEventHistory) AppendRecordedEventWithValidation(
+	event interfaces.FactoryEvent,
+	validate func(interfaces.FactoryEvent) error,
+) (interfaces.FactoryEvent, error) {
+	if h == nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("factory event history is unavailable")
+	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
+	return h.appendEventWithValidation(event, validate)
 }
 
 func (h *FactoryEventHistory) assignLiveChangeSessionSequenceLocked(event *interfaces.FactoryEvent) {

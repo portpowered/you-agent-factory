@@ -86,8 +86,7 @@ func (a *Assembly) Assemble(
 	completionFactory func(string) func(string),
 	petriMutationRecorder factoryruntime.PetriMutationRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
-	runtimeLedgerFactory factoryruntime.RuntimeLedgerFactory,
-	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
+	recordingsRuntime recordings.RuntimeOpening,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	dir string,
 	factoryRootDir string,
@@ -95,7 +94,6 @@ func (a *Assembly) Assemble(
 	loadedFactory factorydefinitions.MutableLoadedFactorySource,
 	runtimeInstanceID string,
 	replayArtifact *factorydefinitions.ReplayArtifact,
-	replayExecutionFactory recordings.ReplayExecutionFactory,
 	automationService automations.Service,
 	serviceMode bool,
 ) (
@@ -154,20 +152,19 @@ func (a *Assembly) Assemble(
 		completionFactory,
 		petriMutationRecorder,
 		worldStateProjector,
-		runtimeLedgerFactory,
-		runtimeRecorderFactory,
+		recordingsRuntime,
 		loadFactory,
 		initialFactorySnapshot,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
-	if replayExecutionFactory == nil {
+	if recordingsRuntime == nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, fmt.Errorf(
-			"Recordings replay execution factory is required",
+			"Recordings runtime opening is required",
 		)
 	}
-	replayProvider, replayCommandRunner, replayHooks, completionPlanner, err := replayExecutionFactory(
+	replayProvider, replayCommandRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
 		replayArtifact,
 	)
 	if err != nil {

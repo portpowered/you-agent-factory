@@ -114,6 +114,125 @@ func invalidSubscribeScope(scope recordings.CanonicalEventScope) error {
 	return nil
 }
 
+func (fake *peerRootServiceFake) BeginRecordingScope(
+	context.Context,
+	recordings.BeginRecordingScopeRequest,
+) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) OpenRecordingScope(
+	context.Context,
+	recordings.OpenRecordingScopeRequest,
+) (recordings.OpenRecordingScopeResult, error) {
+	return recordings.OpenRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) AppendRecordingScopeEvent(
+	context.Context,
+	recordings.AppendRecordingScopeEventRequest,
+) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) SubscribeRecordingScope(
+	context.Context,
+	recordings.SubscribeRecordingScopeRequest,
+) (recordings.SubscribeRecordingScopeResult, error) {
+	return recordings.SubscribeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) FlushRecordingScope(
+	context.Context,
+	recordings.FlushRecordingScopeRequest,
+) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) FinalizeRecordingScope(
+	context.Context,
+	recordings.FinalizeRecordingScopeRequest,
+) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) CloseRecordingScope(
+	context.Context,
+	recordings.CloseRecordingScopeRequest,
+) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) QueryRecordingScope(
+	context.Context,
+	recordings.QueryRecordingScopeRequest,
+) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) LoadReplayRecordingScope(
+	context.Context,
+	recordings.LoadReplayRecordingScopeRequest,
+) (recordings.LoadReplayRecordingScopeResult, error) {
+	return recordings.LoadReplayRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) CreateReplayPlanScope(
+	context.Context,
+	recordings.CreateReplayPlanScopeRequest,
+) (recordings.CreateReplayPlanScopeResult, error) {
+	return recordings.CreateReplayPlanScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) ObserveReplayScope(
+	context.Context,
+	recordings.ObserveReplayScopeRequest,
+) (recordings.ObserveReplayScopeResult, error) {
+	return recordings.ObserveReplayScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) ReconstructRecordingScope(
+	context.Context,
+	recordings.ReconstructRecordingScopeRequest,
+) (recordings.ReconstructRecordingScopeResult, error) {
+	return recordings.ReconstructRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) QuerySimpleDashboardScope(
+	context.Context,
+	recordings.QuerySimpleDashboardScopeRequest,
+) (recordings.QuerySimpleDashboardScopeResult, error) {
+	return recordings.QuerySimpleDashboardScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) QueryWorkstationRequestsScope(
+	context.Context,
+	recordings.QueryWorkstationRequestsScopeRequest,
+) (recordings.QueryWorkstationRequestsScopeResult, error) {
+	return recordings.QueryWorkstationRequestsScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) BuildPortableArtifactScope(
+	context.Context,
+	recordings.BuildPortableArtifactScopeRequest,
+) (recordings.BuildPortableArtifactScopeResult, error) {
+	return recordings.BuildPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) ExportPortableArtifactScope(
+	context.Context,
+	recordings.ExportPortableArtifactScopeRequest,
+) (recordings.ExportPortableArtifactScopeResult, error) {
+	return recordings.ExportPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *peerRootServiceFake) ReadPortableArtifactScope(
+	context.Context,
+	recordings.ReadPortableArtifactScopeRequest,
+) (recordings.ReadPortableArtifactScopeResult, error) {
+	return recordings.ReadPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
 type peerEventSubscription struct {
 	outcomes []recordings.SubscriptionOutcome
 }

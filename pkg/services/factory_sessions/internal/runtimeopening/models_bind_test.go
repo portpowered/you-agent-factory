@@ -536,9 +536,7 @@ func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Fa
 		modelService:                   modelService,
 		factorySessionsService:         sessionsRoot,
 		factorySessionsRuntimeAssembly: sessionsRoot,
-		recordingsProjectionFactory:    openingCoordinatorProjections,
-		runtimeLedgerFactory:           openingCoordinatorLedgerFactory,
-		runtimeRecorderFactory:         openingCoordinatorRecorder,
+		recordingsRoot:                 &recordingsRootConstructionStub{},
 		automationHostedSourcesFactory: openingCoordinatorHostedPollers,
 		factoryScaffoldInitializer:     openingCoordinatorInitializeScaffold,
 		editableFactoryValidator:       openingCoordinatorValidateEditable,
@@ -618,8 +616,7 @@ func (assembler *openingCoordinatorRuntimeAssembler) Assemble(
 	func(string) func(string),
 	factoryruntime.PetriMutationRecorder,
 	factoryruntime.WorldStateProjector,
-	factoryruntime.RuntimeLedgerFactory,
-	recordings.RuntimeRecorderFactory,
+	recordings.RuntimeOpening,
 	factorydefinitions.InitialFactorySnapshotFactory,
 	string,
 	string,
@@ -627,7 +624,6 @@ func (assembler *openingCoordinatorRuntimeAssembler) Assemble(
 	factorydefinitions.MutableLoadedFactorySource,
 	string,
 	*factorydefinitions.ReplayArtifact,
-	recordings.ReplayExecutionFactory,
 	automations.Service,
 	bool,
 ) (
@@ -721,30 +717,6 @@ func openingCoordinatorDurableExecution(
 	_ factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, error) {
 	return DurableExecution{}, nil
-}
-
-func openingCoordinatorProjections() recordings.ProjectionService {
-	return openingCoordinatorProjection{}
-}
-
-func openingCoordinatorLedgerFactory() factoryruntime.RuntimeLedgerFactory {
-	return func(
-		recordings.InitialStructureSource,
-		func() time.Time,
-		factorydefinitions.RuntimeDefinitionLookup,
-	) recordings.RuntimeEventLedger {
-		return nil
-	}
-}
-
-func openingCoordinatorRecorder(
-	time.Duration,
-	factorydefinitions.LoadedFactorySource,
-	func() time.Time,
-	string,
-	string,
-) (recordings.RuntimeRecorder, error) {
-	return nil, nil
 }
 
 func openingCoordinatorHostedPollers(

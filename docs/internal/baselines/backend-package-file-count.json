@@ -129,7 +129,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
-      "fileCount": 28,
+      "fileCount": 27,
       "owner": "factory-session-maintainers",
       "removalReason": "Partition runtime opening composition, model binding, and runtime construction by responsibility."
     },

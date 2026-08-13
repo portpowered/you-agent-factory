@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -40,17 +41,10 @@ func openRuntime(
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
-	workFactory WorkFactory,
 	automationFactory AutomationFactory,
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
-	recordingsProjectionFactory RecordingsProjectionFactory,
-	recordingsServiceFactory RecordingsServiceFactory,
-	recordingLifecycleFactory RecordingLifecycleFactory,
-	runtimeLedgerFactory RuntimeLedgerFactory,
-	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
-	replayClockFactory ReplayClockFactory,
-	replayExecutionFactory recordings.ReplayExecutionFactory,
+	recordingsRoot recordings.Root,
 	workersRuntimeFactory WorkersRuntimeFactory,
 	workersRuntimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
@@ -71,7 +65,6 @@ func openRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	webhooksService webhooks.Service,
 	resolveClock factoryruntime.ClockResolver,
@@ -86,6 +79,9 @@ func openRuntime(
 ) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
+	}
+	if recordingsRoot == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings root is required")
 	}
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
@@ -110,8 +106,8 @@ func openRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		replayInputs,
-		replayClockFactory,
+		recordingsRoot,
+		recordingsRoot.ReplayClock,
 		automationHostedSourcesFactory,
 		factoryScaffoldInitializer,
 		editableFactoryValidator,
@@ -132,37 +128,9 @@ func openRuntime(
 	if clock == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
 	}
-	if recordingsProjectionFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings projection factory is required")
-	}
-	recordingProjections := recordingsProjectionFactory()
+	recordingProjections := recordingsRoot.Projection()
 	if recordingProjections == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings projection factory returned nil service")
-	}
-	if runtimeLedgerFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime ledger factory is required")
-	}
-	newRuntimeLedger := runtimeLedgerFactory()
-	if newRuntimeLedger == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime ledger factory returned nil")
-	}
-	if runtimeRecorderFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime recorder factory is required")
-	}
-	var runtimeRecording recordings.RuntimeRecorder
-	sessionRecorderFactory := func(
-		flushInterval time.Duration,
-		loaded factorydefinitions.LoadedFactorySource,
-		now func() time.Time,
-		recordingID string,
-		recordPath string,
-	) (recordings.RuntimeRecorder, error) {
-		recorder, err := runtimeRecorderFactory(flushInterval, loaded, now, recordingID, recordPath)
-		if err != nil || recorder == nil {
-			return recorder, err
-		}
-		runtimeRecording = recorder
-		return recorder, nil
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings projection is unavailable")
 	}
 	if durableExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
@@ -330,8 +298,7 @@ func openRuntime(
 			runtimeService.DispatchCompletionObserverFactory(),
 			mutationOwner.RecordPetriTokenMutations,
 			recordingProjections.ReconstructFactoryWorldState,
-			newRuntimeLedger,
-			sessionRecorderFactory,
+			recordingsRoot,
 			initialFactorySnapshotFactory,
 			configured.Definition.Directory,
 			root.FactoryRootDir,
@@ -339,20 +306,26 @@ func openRuntime(
 			load.LoadedFactoryCfg,
 			configured.Runtime.RuntimeInstanceID,
 			load.ReplayArtifact,
-			replayExecutionFactory,
 			service2,
 			configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	cleanup.Add(startupRuntime.CloseArtifacts)
+	cleanup.Add(func() error {
+		var finalizationErr error
+		if finalizer, ok := startupRuntime.(interface {
+			FinalizeRecording(time.Time) error
+		}); ok {
+			finalizationErr = finalizer.FinalizeRecording(clock.Now().UTC())
+		}
+		return errors.Join(finalizationErr, startupRuntime.CloseArtifacts())
+	})
 	webhookSubscription, err := startFactoryWebhookSubscription(
 		ctx,
 		webhooksService,
-		recordingsServiceFactory,
+		recordingsRoot,
 		startupRuntime.RecordingLedger(),
-		recordingProjections,
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
 	)
@@ -418,27 +391,6 @@ func openRuntime(
 	if err := attachFactoryDefinitionServiceToRuntime(sessionRuntime, factoryDefinitionOwner); err != nil {
 		return runtimeProducts{}, err
 	}
-	if workFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory is required")
-	}
-	workDomain := workFactory(runtimeService)
-	if workDomain == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory returned nil service")
-	}
-	if recordingLifecycleFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory is required")
-	}
-	recordingLifecycle := recordingLifecycleFactory(startupRuntime.RecordingLedger(), recordingProjections)
-	if recordingLifecycle == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory returned nil lifecycle")
-	}
-	if err := bindRuntimeRecordingLifecycle(
-		runtimeRecording,
-		recordingLifecycle,
-		recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID},
-	); err != nil {
-		return runtimeProducts{}, err
-	}
 	if processRuntimeFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions process runtime factory is required")
 	}
@@ -474,7 +426,7 @@ func openRuntime(
 		rootRuntime,
 		factoryWorkflows,
 		workflowPreview,
-		workDomain,
+		workService,
 		serviceService,
 		modelsBind,
 		providerSessions,
@@ -495,9 +447,8 @@ func openRuntime(
 func startFactoryWebhookSubscription(
 	ctx context.Context,
 	webhooksService webhooks.Service,
-	recordingsServiceFactory RecordingsServiceFactory,
+	recordingsService recordings.Service,
 	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
 	loaded factorydefinitions.MutableLoadedFactorySource,
 	active bool,
 ) (webhooks.Subscription, error) {
@@ -507,12 +458,8 @@ func startFactoryWebhookSubscription(
 	if webhooksService == nil {
 		return nil, fmt.Errorf("construct runtime scope: Webhooks service is required")
 	}
-	if recordingsServiceFactory == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings service factory is required for Webhooks")
-	}
-	recordingsService := recordingsServiceFactory(ledger, projection)
 	if recordingsService == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings service factory returned nil service")
+		return nil, fmt.Errorf("construct runtime scope: Recordings service is required for Webhooks")
 	}
 	scope := recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID}
 	return webhooksService.Start(ctx, webhooks.StartRequest{
@@ -569,29 +516,6 @@ func lastCanonicalCursor(
 			StreamGenerationID: ledger.StreamGenerationID(),
 			Sequence:           recordings.CanonicalEventSequence(event.Context.Sequence),
 		}
-	}
-	return nil
-}
-
-// bindRuntimeRecordingLifecycle binds the runtime recorder to the already-
-// narrowed RecordingLifecycle capability supplied explicitly by the caller,
-// rather than discovering it from a broader Recordings Service through a
-// caller-local type assertion. A nil runtimeRecording (recording disabled)
-// is a no-op.
-func bindRuntimeRecordingLifecycle(
-	runtimeRecording recordings.RuntimeRecorder,
-	recordingLifecycle recordings.RecordingLifecycle,
-	scope recordings.CanonicalEventScope,
-) error {
-	if runtimeRecording == nil {
-		return nil
-	}
-	binder, ok := runtimeRecording.(recordings.RuntimeRecordingBinder)
-	if !ok {
-		return fmt.Errorf("construct runtime scope: runtime recording does not support Recordings binding")
-	}
-	if err := binder.BindRecordingLifecycle(recordingLifecycle, scope); err != nil {
-		return fmt.Errorf("construct runtime scope: bind runtime recording: %w", err)
 	}
 	return nil
 }

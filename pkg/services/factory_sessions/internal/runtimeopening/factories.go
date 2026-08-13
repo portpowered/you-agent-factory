@@ -12,18 +12,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
-
-// The factory roles below are consumed only while opening a Factory Session
-// runtime. Keeping them here makes the dependency direction explicit: Wire
-// supplies implementations, while this package owns the operation signature it
-// needs. They are aliases to function signatures so the remaining legacy Wire
-// providers can be cut over without an intermediate adapter graph.
-type WorkFactory = func(work.RuntimeResolver) work.Service
 
 type AutomationFactory = func(
 	*zap.Logger,
@@ -51,22 +43,6 @@ type ConductorInvocationWithProgressFactory = func(
 	workers.PTYAllocator,
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
-
-type RecordingsProjectionFactory = func() recordings.ProjectionService
-
-// RecordingsServiceFactory constructs the canonical Recordings root over the
-// runtime ledger and projection shared by one Factory Session.
-type RecordingsServiceFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.Service
-
-// RecordingLifecycleFactory constructs the Recordings-owned narrow lifecycle
-// capability bound to the runtime recorder while opening a Factory Session
-// runtime. Wire supplies this factory directly so this path never discovers
-// the capability from a broader Recordings Service at call time.
-type RecordingLifecycleFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.RecordingLifecycle
-
-type RuntimeLedgerFactory = func() factoryruntime.RuntimeLedgerFactory
-
-type ReplayClockFactory = func(*factorydefinitions.ReplayArtifact) recordings.Clock
 
 type WorkersRuntimeFactory = func(
 	roles.CurrentRuntimeResolver,

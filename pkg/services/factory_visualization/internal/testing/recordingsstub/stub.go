@@ -19,7 +19,7 @@ type Service struct {
 }
 
 var (
-	_ recordings.Service          = (*Service)(nil)
+	_ recordings.Service           = (*Service)(nil)
 	_ recordings.ProjectionService = (*Service)(nil)
 )
 
@@ -155,6 +155,125 @@ func (stub *Service) FinishRecording(recordings.FinishRecordingRequest) (recordi
 
 func (stub *Service) QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
 	return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) BeginRecordingScope(
+	context.Context,
+	recordings.BeginRecordingScopeRequest,
+) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) AppendRecordingScopeEvent(
+	context.Context,
+	recordings.AppendRecordingScopeEventRequest,
+) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrInvalidRecordingEvent
+}
+
+func (stub *Service) FlushRecordingScope(
+	context.Context,
+	recordings.FlushRecordingScopeRequest,
+) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) FinalizeRecordingScope(
+	context.Context,
+	recordings.FinalizeRecordingScopeRequest,
+) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) CloseRecordingScope(
+	context.Context,
+	recordings.CloseRecordingScopeRequest,
+) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) QueryRecordingScope(
+	context.Context,
+	recordings.QueryRecordingScopeRequest,
+) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) OpenRecordingScope(
+	context.Context,
+	recordings.OpenRecordingScopeRequest,
+) (recordings.OpenRecordingScopeResult, error) {
+	return recordings.OpenRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) SubscribeRecordingScope(
+	context.Context,
+	recordings.SubscribeRecordingScopeRequest,
+) (recordings.SubscribeRecordingScopeResult, error) {
+	return recordings.SubscribeRecordingScopeResult{}, recordings.ErrReconnectCursorNotFound
+}
+
+func (stub *Service) LoadReplayRecordingScope(
+	context.Context,
+	recordings.LoadReplayRecordingScopeRequest,
+) (recordings.LoadReplayRecordingScopeResult, error) {
+	return recordings.LoadReplayRecordingScopeResult{}, recordings.ErrMissingReplayArtifact
+}
+
+func (stub *Service) CreateReplayPlanScope(
+	context.Context,
+	recordings.CreateReplayPlanScopeRequest,
+) (recordings.CreateReplayPlanScopeResult, error) {
+	return recordings.CreateReplayPlanScopeResult{}, recordings.ErrInvalidReplayArtifact
+}
+
+func (stub *Service) ObserveReplayScope(
+	context.Context,
+	recordings.ObserveReplayScopeRequest,
+) (recordings.ObserveReplayScopeResult, error) {
+	return recordings.ObserveReplayScopeResult{}, recordings.ErrInvalidReplayArtifact
+}
+
+func (stub *Service) ReconstructRecordingScope(
+	context.Context,
+	recordings.ReconstructRecordingScopeRequest,
+) (recordings.ReconstructRecordingScopeResult, error) {
+	return recordings.ReconstructRecordingScopeResult{}, recordings.ErrInvalidProjectionInput
+}
+
+func (stub *Service) QuerySimpleDashboardScope(
+	context.Context,
+	recordings.QuerySimpleDashboardScopeRequest,
+) (recordings.QuerySimpleDashboardScopeResult, error) {
+	return recordings.QuerySimpleDashboardScopeResult{}, recordings.ErrInvalidProjectionInput
+}
+
+func (stub *Service) QueryWorkstationRequestsScope(
+	context.Context,
+	recordings.QueryWorkstationRequestsScopeRequest,
+) (recordings.QueryWorkstationRequestsScopeResult, error) {
+	return recordings.QueryWorkstationRequestsScopeResult{}, recordings.ErrInvalidProjectionInput
+}
+
+func (stub *Service) BuildPortableArtifactScope(
+	context.Context,
+	recordings.BuildPortableArtifactScopeRequest,
+) (recordings.BuildPortableArtifactScopeResult, error) {
+	return recordings.BuildPortableArtifactScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) ExportPortableArtifactScope(
+	context.Context,
+	recordings.ExportPortableArtifactScopeRequest,
+) (recordings.ExportPortableArtifactScopeResult, error) {
+	return recordings.ExportPortableArtifactScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) ReadPortableArtifactScope(
+	context.Context,
+	recordings.ReadPortableArtifactScopeRequest,
+) (recordings.ReadPortableArtifactScopeResult, error) {
+	return recordings.ReadPortableArtifactScopeResult{}, recordings.ErrMissingRecordingTarget
 }
 
 func (stub *Service) LoadReplayRecording(recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error) {

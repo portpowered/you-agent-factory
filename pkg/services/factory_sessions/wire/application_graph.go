@@ -110,15 +110,9 @@ type (
 	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
 	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
 	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
-	WorkFactory                            = runtimeopening.WorkFactory
 	AutomationFactory                      = runtimeopening.AutomationFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
-	RecordingsServiceFactory               = runtimeopening.RecordingsServiceFactory
-	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
-	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
 	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
 	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
 	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory

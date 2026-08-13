@@ -11,12 +11,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
-
-type inertRecordingsLedger struct {
-	recordings.Ledger
-}
 
 // TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory proves the
 // Wire recordings factory wires artifact close/export/read through the singular
@@ -32,18 +27,21 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
-	factory := provideRecordingsFactory(
+	root, err := provideRecordingsRoot(
 		edges,
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
+		nil,
+		nil,
+		nil,
 	)
-	rootService := factory(
-		&inertRecordingsLedger{},
-		recordingswire.NewProjectionService(),
-	)
-	if rootService == nil {
-		t.Fatal("provideRecordingsFactory() returned nil service")
+	if err != nil {
+		t.Fatalf("provideRecordingsRoot() error = %v", err)
 	}
+	if root == nil {
+		t.Fatal("provideRecordingsRoot() returned nil root")
+	}
+	var rootService recordings.Service = root
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-build-process"}
 	artifactPath := filepath.Join(t.TempDir(), "build-process.json")
 	bound, err := rootService.BindRecording(recordings.BindRecordingRequest{

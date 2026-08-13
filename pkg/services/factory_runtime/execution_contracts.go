@@ -17,6 +17,9 @@ import (
 type CompletionRecorder func(interfaces.FactoryCompletionRecord)
 type PetriMutationRecorder func(sessionID string, mutations []interfaces.TokenMutationRecord) error
 type FactoryEventRecorder func(interfaces.FactoryEvent)
+// RuntimeLedgerFactory remains a compatibility seam until the Factory
+// Sessions opening cutover removes the legacy factories in the next stack
+// slice.
 type RuntimeLedgerFactory func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
 
 type SubmissionHook interface {

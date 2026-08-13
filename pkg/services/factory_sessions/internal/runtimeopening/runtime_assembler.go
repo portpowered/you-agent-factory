@@ -60,8 +60,7 @@ type FactoryRuntimeAssembler interface {
 		func(string) func(string),
 		factoryruntime.PetriMutationRecorder,
 		factoryruntime.WorldStateProjector,
-		factoryruntime.RuntimeLedgerFactory,
-		recordings.RuntimeRecorderFactory,
+		recordings.RuntimeOpening,
 		factorydefinitions.InitialFactorySnapshotFactory,
 		string,
 		string,
@@ -69,7 +68,6 @@ type FactoryRuntimeAssembler interface {
 		factorydefinitions.MutableLoadedFactorySource,
 		string,
 		*factorydefinitions.ReplayArtifact,
-		recordings.ReplayExecutionFactory,
 		automations.Service,
 		bool,
 	) (

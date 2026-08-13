@@ -58,6 +58,52 @@ func NewReplayInputLoader(
 	return recordingsinternal.NewReplayInputLoader(readFile, loadLegacy, logger)
 }
 
+// NewRuntimeRoot constructs the singular process-scoped Recordings authority.
+// Runtime ledgers, projection use, replay collaborators, and recording
+// lifecycle state are acquired through the returned root's RuntimeOpening
+// capability rather than through opening-local constructors.
+func NewRuntimeRoot(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) (recordings.Root, error) {
+	publication, err := recordingsinternal.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	root := recordingsinternal.NewRuntimeRoot(
+		targets,
+		writeFile,
+		publication,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		clocks...,
+	)
+	if root == nil {
+		return nil, fmt.Errorf("construct Recordings: runtime root rejected its dependencies")
+	}
+	return root, nil
+}
+
 // NewProjectionService constructs the Recordings projection capability for
 // process-graph composition.
 func NewProjectionService() recordings.ProjectionService {

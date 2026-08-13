@@ -78,18 +78,18 @@ composition, and BTRC-P1 for the follow-on characterization packet.
 | D-24 | FactorySessions.GenerateRuntimeInstanceID | Runtime instance ID generator | build-time dependency | Factory Sessions | ID is created per opened runtime; no cleanup | FSE-01 |
 | D-25 | FactorySessions.ResolveHome | Home-directory resolver | build-time dependency | initializer | Process-scoped environment resolution | PSS-I01 |
 | D-26 | FactorySessions.ProviderIdentities | Provider identity resolver | build-time dependency | Providers | Resolver belongs to provider identity policy | FSE-07 |
-| D-27 | Work.Factory | Work service constructor from runtime resolver | build-time dependency | Work | Work service closes with runtime scope | WSE-04 |
+| D-27 | Work.Factory | Work service constructor from runtime resolver | delete | delete: runtime-opening WorkFactory seam | Removed; canonical Wire owns the Work root | WSE-04 |
 | D-28 | Work.ContentMaterializer | Work content materialization capability | build-time dependency | Work | Materialized content cleanup belongs to Work | WSE-04 |
 | D-29 | Automations.Factory | Automation service constructor | build-time dependency | Automations | Automation service closes with runtime scope | WSE-08 |
 | D-30 | Automations.HostedSourcesFactory | Hosted-source constructor | build-time dependency | Automations | Hosted pollers close with Automations | WSE-08 |
 | D-31 | Models.Service | Models service root used for runtime scope binding | build-time dependency | Models | Model runtime scope cleanup is reverse-unwound by opener | WSE-03 |
-| D-32 | Recordings.ProjectionFactory | Recording projection constructor | build-time dependency | Recordings | Projection service closes with recording scope | FSE-06 |
-| D-33 | Recordings.LifecycleFactory | Recording lifecycle constructor | build-time dependency | Recordings | Lifecycle closes with runtime recording | FSE-06 |
-| D-34 | Recordings.RuntimeLedgerFactory | Runtime ledger constructor | build-time dependency | Recordings | Ledger is closed by recording lifecycle | FSE-06 |
-| D-35 | Recordings.RuntimeRecorderFactory | Runtime recorder constructor | build-time dependency | Recordings | Runtime recorder flushes and closes during cleanup | FSE-06 |
-| D-36 | Recordings.ReplayClockFactory | Replay clock constructor | build-time dependency | Recordings | Replay-only value; no live cleanup | FSE-06 |
-| D-37 | Recordings.ReplayExecutionFactory | Replay execution constructor | build-time dependency | Recordings | Replay execution closes with replay scope | FSE-06 |
-| D-38 | Recordings.ReplayInputs | Replay input loader | build-time dependency | Recordings | Replay inputs are read for one replay and released | FSE-06 |
+| D-32 | Recordings.ProjectionFactory | Recording projection constructor | delete | delete: per-opening Recordings projection factory | Shared stateless projection is owned by the canonical root | FSE-06 |
+| D-33 | Recordings.LifecycleFactory | Recording lifecycle constructor | delete | delete: per-opening Recordings lifecycle factory | Opaque recording scopes own lifecycle state in Recordings | FSE-06 |
+| D-34 | Recordings.RuntimeLedgerFactory | Runtime ledger constructor | delete | delete: per-opening Recordings runtime-ledger factory | Runtime ledgers are opened and routed by the canonical root | FSE-06 |
+| D-35 | Recordings.RuntimeRecorderFactory | Runtime recorder constructor | delete | delete: per-opening Recordings runtime-recorder factory | Scope owner finalizes runtime recorders exactly once | FSE-06 |
+| D-36 | Recordings.ReplayClockFactory | Replay clock constructor | delete | delete: per-opening Recordings replay-clock factory | Replay clock is a root capability | FSE-06 |
+| D-37 | Recordings.ReplayExecutionFactory | Replay execution constructor | delete | delete: per-opening Recordings replay-execution factory | Replay execution is a root capability | FSE-06 |
+| D-38 | Recordings.ReplayInputs | Replay input loader | delete | delete: runtime-opening replay-input field | Replay input loading is retained by the canonical root | FSE-06 |
 | D-39 | Workers.ExecutionFactory | Workers execution constructor | build-time dependency | Workers | Workers runtime/session build closes through runtime cleanup | WSE-02 |
 | D-40 | Workers.RuntimeFactory | Workers runtime constructor | build-time dependency | Workers | Workers runtime is closed by session build cleanup | WSE-02 |
 | D-41 | Workers.LocalRuntimeHooksFactory | Unused local-runtime hook constructor retained in opening dependencies | delete | delete: unused runtime-opening bridge | No lifecycle; remove validation, storage, and composition | WSE-03 |
@@ -150,17 +150,17 @@ questions and are both reconciled explicitly.
 | F-18 | GenerateRuntimeInstanceID | Generates runtime instance identity | build-time dependency | Factory Sessions | Per-runtime value; no separate cleanup | FSE-01 |
 | F-19 | ResolveHome | Resolves the process home directory | build-time dependency | initializer | Process-scoped resolution | PSS-I01 |
 | F-20 | ProviderIdentities | Resolves provider identities | build-time dependency | Providers | Provider identity policy owns capability | FSE-07 |
-| F-21 | WorkFactory | Builds Work from a runtime resolver | build-time dependency | Work | Work closes with runtime scope | WSE-04 |
+| F-21 | WorkFactory | Builds Work from a runtime resolver | delete | delete: runtime-opening WorkFactory seam | Canonical Wire supplies one Work root | WSE-04 |
 | F-22 | ContentMaterializer | Materializes Work content | build-time dependency | Work | Work owns materialized-content cleanup | WSE-04 |
 | F-23 | AutomationFactory | Builds Automations service | build-time dependency | Automations | Automation service closes with runtime | WSE-08 |
 | F-24 | HostedSourcesFactory | Builds hosted automation pollers | build-time dependency | Automations | Pollers close with Automations | WSE-08 |
-| F-25 | ProjectionFactory | Builds Recordings projections | build-time dependency | Recordings | Projection lifecycle owned by Recordings | FSE-06 |
-| F-26 | LifecycleFactory | Builds recording lifecycle | build-time dependency | Recordings | Lifecycle owns recorder flush/close | FSE-06 |
-| F-27 | RuntimeLedgerFactory | Builds runtime ledger | build-time dependency | Recordings | Ledger close owned by recording lifecycle | FSE-06 |
-| F-28 | RuntimeRecorderFactory | Builds runtime recorder | build-time dependency | Recordings | Recorder flush/close is cleanup-owned | FSE-06 |
-| F-29 | ReplayClockFactory | Builds replay clock | build-time dependency | Recordings | Replay-only, no live cleanup | FSE-06 |
-| F-30 | ReplayExecutionFactory | Builds replay execution | build-time dependency | Recordings | Replay scope owns close | FSE-06 |
-| F-31 | ReplayInputs | Loads replay inputs | build-time dependency | Recordings | One replay scope; inputs released after use | FSE-06 |
+| F-25 | ProjectionFactory | Builds Recordings projections | delete | delete: per-opening Recordings projection factory | Canonical root owns the shared projection capability | FSE-06 |
+| F-26 | LifecycleFactory | Builds recording lifecycle | delete | delete: per-opening Recordings lifecycle factory | Opaque scope owner owns lifecycle state | FSE-06 |
+| F-27 | RuntimeLedgerFactory | Builds runtime ledger | delete | delete: per-opening Recordings runtime-ledger factory | Canonical root opens private ledgers | FSE-06 |
+| F-28 | RuntimeRecorderFactory | Builds runtime recorder | delete | delete: per-opening Recordings runtime-recorder factory | Scope finalization owns recorder cleanup | FSE-06 |
+| F-29 | ReplayClockFactory | Builds replay clock | delete | delete: per-opening Recordings replay-clock factory | Canonical root exposes replay clock capability | FSE-06 |
+| F-30 | ReplayExecutionFactory | Builds replay execution | delete | delete: per-opening Recordings replay-execution factory | Canonical root exposes replay execution capability | FSE-06 |
+| F-31 | ReplayInputs | Loads replay inputs | delete | delete: runtime-opening replay-input field | Canonical root retains the replay-input capability | FSE-06 |
 | F-32 | ExecutionFactory | Builds Workers execution runtime | build-time dependency | Workers | Workers cleanup closes runtime and session build | WSE-02 |
 | F-33 | RuntimeFactory | Builds Workers runtime implementation | build-time dependency | Workers | Workers runtime cleanup | WSE-02 |
 | F-34 | LocalRuntimeHooksFactory | Builds unused local-runtime hooks | delete | delete: unused runtime-opening bridge | No lifecycle; remove from composition | WSE-03 |
@@ -179,7 +179,7 @@ cross ownership boundaries after several services have been assembled.
 | L-01 | RuntimeAssembly.Complete | Completes Runtime assembly and returns session/invocation roles | private owner state | Factory Sessions | Completion owns the resulting runtime scope | FSE-05 |
 | L-02 | DefinitionActivationGateway type assertion | Extracts a Definitions activation gateway from completed runtime | delete | delete: private runtime-to-definitions extraction | Remove assertion by making activation an explicit Definitions capability | FSE-03 |
 | L-03 | AttachFactoryDefinitionService | Attaches Definitions service to completed runtime | delete | delete: runtime attachment bridge | Definitions owns its service; no late attachment | FSE-03 |
-| L-04 | RecordingLifecycleFactory plus BindRecordingLifecycle | Creates and attaches recording lifecycle after recorder creation | private owner state | Recordings | Recordings owns lifecycle binding and recorder flush/close | FSE-06 |
+| L-04 | RecordingLifecycleFactory plus BindRecordingLifecycle | Creates and attaches recording lifecycle after recorder creation | delete | delete: runtime-opening lifecycle binding bridge | Recordings binds and finalizes its opaque scope internally | FSE-06 |
 | L-05 | ProcessRuntimeFactory.Bind | Binds process runtime to the opened session runtime | delete | delete: process lifecycle binding bridge | initializer owns process binding and unwind | PSS-I01 |
 | L-06 | BindWorkerInvoker | Injects durable execution into the runtime root | delete | delete: runtime invoker callback injector | Runtime receives its invocation capability at construction | FSE-03 |
 | L-07 | fanOutWorkerProgress | Injects worker progress publisher into runtime execution | delete | delete: progress callback injector | Runtime/Workers own progress channel at construction | WSE-03 |

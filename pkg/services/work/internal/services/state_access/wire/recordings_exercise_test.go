@@ -77,10 +77,6 @@ type recordingsRootFake struct {
 	worldState recordings.WorldStateView
 }
 
-func (fake *recordingsRootFake) Append(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error) {
-	return recordings.AppendRecordedEventResult{}, recordings.ErrInvalidAppendEvent
-}
-
 func (fake *recordingsRootFake) SubscribeFrom(
 	_ context.Context,
 	_ recordings.SubscribeRequest,
@@ -100,95 +96,10 @@ func (fake *recordingsRootFake) SubscribeFrom(
 		},
 	}, nil
 }
-
 func (fake *recordingsRootFake) ReconstructWorldState(
-	recordings.ReconstructWorldStateRequest,
+	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {
 	return recordings.ReconstructWorldStateResult{WorldState: fake.worldState}, nil
-}
-
-func (fake *recordingsRootFake) QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest) (recordings.SimpleDashboardQueryResult, error) {
-	return recordings.SimpleDashboardQueryResult{}, recordings.ErrInvalidProjectionInput
-}
-
-func (fake *recordingsRootFake) QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest) (recordings.WorkstationRequestsQueryResult, error) {
-	return recordings.WorkstationRequestsQueryResult{}, recordings.ErrInvalidProjectionInput
-}
-
-func (fake *recordingsRootFake) ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest) error {
-	return recordings.ErrInvalidProjectionInput
-}
-
-func (fake *recordingsRootFake) BindRecording(recordings.BindRecordingRequest) (recordings.BindRecordingResult, error) {
-	return recordings.BindRecordingResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) StartRecording(recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
-	return recordings.StartRecordingResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) RecordRecordingEvent(recordings.RecordRecordingEventRequest) (recordings.RecordRecordingEventResult, error) {
-	return recordings.RecordRecordingEventResult{}, recordings.ErrInvalidRecordingEvent
-}
-
-func (fake *recordingsRootFake) RecordRecordingError(recordings.RecordRecordingErrorRequest) (recordings.RecordRecordingErrorResult, error) {
-	return recordings.RecordRecordingErrorResult{}, recordings.ErrInvalidRecordingFailure
-}
-
-func (fake *recordingsRootFake) FlushRecording(recordings.FlushRecordingRequest) (recordings.FlushRecordingResult, error) {
-	return recordings.FlushRecordingResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) StopRecording(recordings.StopRecordingRequest) (recordings.StopRecordingResult, error) {
-	return recordings.StopRecordingResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) FinishRecording(recordings.FinishRecordingRequest) (recordings.FinishRecordingResult, error) {
-	return recordings.FinishRecordingResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
-	return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) LoadReplayRecording(recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error) {
-	return recordings.LoadReplayRecordingResult{}, recordings.ErrMissingReplayArtifact
-}
-
-func (fake *recordingsRootFake) CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
-	return recordings.CreateReplayPlanResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) ObserveReplay(recordings.ObserveReplayRequest) (recordings.ObserveReplayResult, error) {
-	return recordings.ObserveReplayResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error) {
-	return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) ValidatePortableArtifact(recordings.ValidatePortableArtifactRequest) (recordings.ValidatePortableArtifactResult, error) {
-	return recordings.ValidatePortableArtifactResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) EncodePortableArtifact(recordings.EncodePortableArtifactRequest) (recordings.EncodePortableArtifactResult, error) {
-	return recordings.EncodePortableArtifactResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) DecodePortableArtifact(recordings.DecodePortableArtifactRequest) (recordings.DecodePortableArtifactResult, error) {
-	return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) SummarizePortableArtifact(recordings.SummarizePortableArtifactRequest) (recordings.SummarizePortableArtifactResult, error) {
-	return recordings.SummarizePortableArtifactResult{}, recordings.ErrInvalidReplayArtifact
-}
-
-func (fake *recordingsRootFake) ExportPortableArtifact(context.Context, recordings.ExportPortableArtifactRequest) (recordings.ExportPortableArtifactResult, error) {
-	return recordings.ExportPortableArtifactResult{}, recordings.ErrMissingRecordingTarget
-}
-
-func (fake *recordingsRootFake) ReadPortableArtifact(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error) {
-	return recordings.ReadPortableArtifactResult{}, recordings.ErrMissingRecordingTarget
 }
 
 func recordingsBackedWorldPayload(t *testing.T, workID, workTypeID, stateName string) string {
