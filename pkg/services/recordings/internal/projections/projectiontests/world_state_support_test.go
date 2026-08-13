@@ -358,7 +358,7 @@ func initialStructureEvent(eventTime time.Time) factoryapi.FactoryEvent {
 			Workstations: &[]factoryapi.Workstation{{
 				Id:        stringPtrForProjectionTest("t-review"),
 				Name:      "Review",
-				Worker:    "reviewer",
+				Worker:    stringPtrForProjectionTest("reviewer"),
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
@@ -385,7 +385,7 @@ func initialStructureEventWithNonSuccessRouteArrays(eventTime time.Time) factory
 			Workstations: &[]factoryapi.Workstation{{
 				Id:          stringPtrForProjectionTest("t-review"),
 				Name:        "Review",
-				Worker:      "reviewer",
+				Worker:      stringPtrForProjectionTest("reviewer"),
 				Inputs:      []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:     &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnContinue:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "retry"}, {WorkType: "task", State: "init"}},
@@ -410,7 +410,7 @@ func factoryChangeEvent(eventTime time.Time) factoryapi.FactoryEvent {
 			Workstations: &[]factoryapi.Workstation{{
 				Id:      stringPtrForProjectionTest("t-plan"),
 				Name:    "Plan",
-				Worker:  "planner",
+				Worker:  stringPtrForProjectionTest("planner"),
 				Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
 				Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
 			}},
@@ -439,7 +439,7 @@ func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 			Workstations: &[]factoryapi.Workstation{{
 				Id:        stringPtrForProjectionTest("t-review"),
 				Name:      "Review",
-				Worker:    "reviewer",
+				Worker:    stringPtrForProjectionTest("reviewer"),
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},

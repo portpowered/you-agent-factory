@@ -257,6 +257,13 @@ func New(
 			effectiveEventHistory.RecordWorkstationRequest(
 				record.Dispatch.Execution.DispatchCreatedTick, record, cfg.clock.Now(),
 			)
+			if record.HumanApproval {
+				if approvalRecorder, ok := effectiveEventHistory.(recordings.HumanApprovalRequestRecorder); ok {
+					approvalRecorder.RecordHumanApprovalRequested(
+						record.Dispatch.Execution.DispatchCreatedTick, record, cfg.clock.Now(),
+					)
+				}
+			}
 			if cfg.dispatchRecorder != nil {
 				cfg.dispatchRecorder(record)
 			}

@@ -601,6 +601,25 @@ func generatedFactoryDispatchEvents(t *testing.T) []factoryapi.FactoryEvent {
 		},
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-human-approval-requested",
+			Type:          factoryapi.FactoryEventTypeHumanApprovalRequested,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:   3,
+				Tick:       2,
+				EventTime:  eventTime,
+				TraceIds:   &traceIDs,
+				WorkIds:    &workIDs,
+				DispatchId: &scriptDispatchID,
+			},
+			Payload: factoryEventPayload(t, factoryapi.HumanApprovalRequestedEventPayload{
+				ApprovalId:    "approval-dispatch-script-1",
+				Decisions:     []factoryapi.HumanApprovalRequestedEventPayloadDecisions{factoryapi.HumanApprovalRequestedEventPayloadDecisionsAPPROVE, factoryapi.HumanApprovalRequestedEventPayloadDecisionsREJECT},
+				Status:        factoryapi.HumanApprovalRequestedEventPayloadStatusPENDING,
+				WorkstationId: "transition-1",
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-dispatch-worker-session-association",
 			Type:          factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 			Context: factoryapi.FactoryEventContext{

@@ -281,6 +281,15 @@ func invocationWorldStateToInternal(state InvocationWorldState) invocationreturn
 		FailedWorkItemsByID:      make(map[string]invocationreturnpolicy.WorkItem, len(state.FailedWorkItemsByID)),
 		TerminalWorkByID:         make(map[string]invocationreturnpolicy.InvocationTerminalWork, len(state.TerminalWorkByID)),
 		WorkStateChangesByWorkID: make(map[string][]invocationreturnpolicy.InvocationWorkStateChange, len(state.WorkStateChangesByWorkID)),
+		PendingHumanApprovals:    make([]invocationreturnpolicy.InvocationHumanApproval, 0, len(state.PendingHumanApprovals)),
+	}
+	for _, approval := range state.PendingHumanApprovals {
+		inner.PendingHumanApprovals = append(inner.PendingHumanApprovals, invocationreturnpolicy.InvocationHumanApproval{
+			ApprovalID: approval.ApprovalID, SessionID: approval.SessionID, DispatchID: approval.DispatchID,
+			WorkstationID: approval.WorkstationID, WorkstationName: approval.WorkstationName,
+			Decisions: append([]string(nil), approval.Decisions...), Status: approval.Status,
+			WorkItemIDs: append([]string(nil), approval.WorkItemIDs...),
+		})
 	}
 	for id, request := range state.WorkRequestsByID {
 		inner.WorkRequestsByID[id] = invocationreturnpolicy.InvocationWorkRequest{
@@ -404,10 +413,15 @@ func primaryResultErrorFromInternal(err *invocationreturnpolicy.PrimaryResultErr
 		RequestID: err.RequestID,
 		Policy:    err.Policy,
 		Context: InvocationFailureContext{
-			SessionID: err.Context.SessionID,
-			WorkID:    err.Context.WorkID,
-			WorkName:  err.Context.WorkName,
-			WorkState: err.Context.WorkState,
+			SessionID:       err.Context.SessionID,
+			WorkID:          err.Context.WorkID,
+			WorkName:        err.Context.WorkName,
+			WorkState:       err.Context.WorkState,
+			ApprovalID:      err.Context.ApprovalID,
+			DispatchID:      err.Context.DispatchID,
+			WorkstationID:   err.Context.WorkstationID,
+			WorkstationName: err.Context.WorkstationName,
+			Decisions:       append([]string(nil), err.Context.Decisions...),
 		},
 	}
 }

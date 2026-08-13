@@ -125,6 +125,102 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	assertGeneratedExpectedArtifactContext(t, payload.ExpectedArtifactContext)
 }
 
+func TestFactoryEventHistory_RecordHumanApprovalRequestedFollowsDispatchAndContainsNoWorkPayload(t *testing.T) {
+	eventTime := time.Date(2026, 4, 22, 16, 5, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	record := interfaces.FactoryDispatchRecord{
+		DispatchID:    "dispatch-approval-1",
+		CreatedTick:   7,
+		HumanApproval: true,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-approval-1",
+			TransitionID:    "approval-workstation",
+			WorkstationName: "Release Approval",
+			Execution: work.ExecutionMetadata{
+				RequestID: "request-approval-1",
+			},
+			InputTokens: workerexecution.InputTokens(workerexecution.Token{
+				ID: "token-approval-1",
+				Color: workerexecution.Color{
+					WorkID:  "work-approval-1",
+					TraceID: "trace-approval-1",
+					StructuredResult: map[string]any{
+						"secret": "must-not-be-copied",
+					},
+				},
+			}),
+		},
+	}
+
+	history.RecordWorkstationRequest(7, record, eventTime)
+	history.RecordHumanApprovalRequested(7, record, eventTime)
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 2 {
+		t.Fatalf("canonical events = %d, want DISPATCH_REQUEST plus HUMAN_APPROVAL_REQUESTED", len(events))
+	}
+	if events[0].Type != factoryapi.FactoryEventTypeDispatchRequest || events[1].Type != factoryapi.FactoryEventTypeHumanApprovalRequested {
+		t.Fatalf("canonical event order = (%s, %s), want dispatch then human approval", events[0].Type, events[1].Type)
+	}
+	if events[1].Id != "factory-event/human-approval-requested/approval-dispatch-approval-1" {
+		t.Fatalf("approval event ID = %q, want stable approval identity", events[1].Id)
+	}
+	if events[1].Context.DispatchId == nil || *events[1].Context.DispatchId != "dispatch-approval-1" ||
+		events[1].Context.RequestId == nil || *events[1].Context.RequestId != "request-approval-1" {
+		t.Fatalf("approval event context = %#v, want dispatch/request correlation", events[1].Context)
+	}
+	if got := stringSliceValueForEventHistoryTest(events[1].Context.WorkIds); len(got) != 1 || got[0] != "work-approval-1" {
+		t.Fatalf("approval event Work IDs = %#v, want ordered work correlation", got)
+	}
+
+	payload, err := events[1].Payload.AsHumanApprovalRequestedEventPayload()
+	if err != nil {
+		t.Fatalf("decode approval payload: %v", err)
+	}
+	if payload.ApprovalId != "approval-dispatch-approval-1" || payload.WorkstationId != "approval-workstation" ||
+		payload.Status != factoryapi.HumanApprovalRequestedEventPayloadStatusPENDING || !reflect.DeepEqual(payload.Decisions, []factoryapi.HumanApprovalRequestedEventPayloadDecisions{
+		factoryapi.HumanApprovalRequestedEventPayloadDecisionsAPPROVE,
+		factoryapi.HumanApprovalRequestedEventPayloadDecisionsREJECT,
+	}) {
+		t.Fatalf("approval payload = %#v, want fixed decisions and pending status", payload)
+	}
+	encoded, err := json.Marshal(events[1])
+	if err != nil {
+		t.Fatalf("marshal approval event: %v", err)
+	}
+	if strings.Contains(string(encoded), "must-not-be-copied") || strings.Contains(string(encoded), "secret") {
+		t.Fatalf("approval event copied mutable Work payload: %s", encoded)
+	}
+}
+
+func TestFactoryEventHistory_RecordHumanApprovalRequestedUsesCanonicalWorkstationID(t *testing.T) {
+	runtimeConfig := eventHistoryDefinitionOnlyRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"Release Approval": &interfaces.FactoryWorkstationConfig{ID: "approval-workstation", Name: "Release Approval"},
+		},
+	}
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), time.Now, runtimeConfig)
+	record := interfaces.FactoryDispatchRecord{
+		HumanApproval: true,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-canonical-workstation",
+			TransitionID:    "Release Approval",
+			WorkstationName: "Release Approval",
+		},
+	}
+	history.RecordHumanApprovalRequested(1, record, time.Now())
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("canonical events = %d, want one human approval event", len(events))
+	}
+	payload, err := events[0].Payload.AsHumanApprovalRequestedEventPayload()
+	if err != nil {
+		t.Fatalf("decode approval payload: %v", err)
+	}
+	if payload.WorkstationId != "approval-workstation" {
+		t.Fatalf("approval workstation id = %q, want explicit canonical id", payload.WorkstationId)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t *testing.T) {
 	localZone := time.FixedZone("Factory/Local", 7*60*60)
 	eventTime := time.Date(2026, 4, 22, 23, 30, 0, 0, localZone)

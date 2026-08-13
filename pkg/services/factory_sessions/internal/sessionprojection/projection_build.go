@@ -2,6 +2,7 @@ package sessionprojection
 
 import (
 	"fmt"
+	"sort"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -43,12 +44,44 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 		}
 		result.JavaScript = worldState.JavaScriptRuntime
 		result.JavaScriptSession = worldState.SessionBracket
+		result.PendingHumanApprovals = pendingHumanApprovals(worldState.PendingHumanApprovalsByID)
 	}
 	result.JavaScript = JavaScriptRuntimeStateFromCheckpoints(input.CheckpointStore, result.JavaScript)
 	if input.Snapshot != nil {
 		result.Enabled = append([]interfaces.EnabledTransition(nil), input.Snapshot.EnabledTransitions...)
 	}
 	return result, nil
+}
+
+func pendingHumanApprovals(values map[string]interfaces.FactoryWorldHumanApproval) []interfaces.FactoryWorldHumanApproval {
+	if len(values) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(values))
+	for id := range values {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	result := make([]interfaces.FactoryWorldHumanApproval, 0, len(ids))
+	for _, id := range ids {
+		approval := values[id]
+		approval.WorkItemIDs = append([]string(nil), approval.WorkItemIDs...)
+		approval.TraceIDs = append([]string(nil), approval.TraceIDs...)
+		approval.Decisions = append([]interfaces.HumanApprovalDecision(nil), approval.Decisions...)
+		if approval.WorkstationDescription != nil {
+			description := *approval.WorkstationDescription
+			description.Locales = append([]string(nil), approval.WorkstationDescription.Locales...)
+			if approval.WorkstationDescription.Values != nil {
+				description.Values = make(map[string]string, len(approval.WorkstationDescription.Values))
+				for locale, text := range approval.WorkstationDescription.Values {
+					description.Values[locale] = text
+				}
+			}
+			approval.WorkstationDescription = &description
+		}
+		result = append(result, approval)
+	}
+	return result
 }
 
 func projectLiveSession(session *livesession.LiveSession) *factorysessions.ScopedLiveSessionSummary {

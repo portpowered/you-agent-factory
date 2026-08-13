@@ -83,16 +83,21 @@ const (
 // FactoryInvocationResult carries the transport-independent outcome of one
 // Factory Session invocation after input resolution and result selection.
 type FactoryInvocationResult struct {
-	RequestID     string
-	TraceID       string
-	Status        InvocationTerminalStatus
-	PrimaryResult []work.WorkContentPart
-	ErrorCode     string
-	Message       string
-	SessionID     string
-	WorkID        string
-	WorkName      string
-	WorkState     string
+	RequestID       string
+	TraceID         string
+	Status          InvocationTerminalStatus
+	PrimaryResult   []work.WorkContentPart
+	ErrorCode       string
+	Message         string
+	SessionID       string
+	WorkID          string
+	WorkName        string
+	WorkState       string
+	ApprovalID      string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
 }
 
 // CanonicalEventTime normalizes runtime event boundary timestamps to UTC while
@@ -359,6 +364,10 @@ type FactoryDispatchRecord struct {
 	Dispatch       work.WorkDispatch
 	HeldMutations  []MarkingMutation
 	ConsumedTokens []string
+	// HumanApproval marks a dispatch that is durably pending operator input.
+	// Such a dispatch owns its consumed tokens but must never enter a Worker,
+	// Provider, Model, script, runner, or capacity execution path.
+	HumanApproval bool
 }
 
 // FactoryCompletionRecord stores a worker result at the logical tick where the

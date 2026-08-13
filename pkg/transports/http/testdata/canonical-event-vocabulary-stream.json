@@ -164,6 +164,26 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-human-approval-requested",
+    "type": "HUMAN_APPROVAL_REQUESTED",
+    "context": {
+      "sequence": 4,
+      "tick": 2,
+      "eventTime": "2026-04-21T12:00:04.100Z",
+      "dispatchId": "dispatch-1",
+      "requestId": "request-1",
+      "traceIds": ["trace-1"],
+      "workIds": ["work-1"]
+    },
+    "payload": {
+      "approvalId": "approval-dispatch-1",
+      "workstationId": "approval-workstation",
+      "decisions": ["APPROVE", "REJECT"],
+      "status": "PENDING"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-dispatch-worker-session-association",
     "type": "DISPATCH_WORKER_SESSION_ASSOCIATION",
     "context": {

@@ -52,10 +52,15 @@ type PrimaryResultSelection struct {
 // InvocationFailureContext carries sanitized session and work identifiers that
 // help operators recover from non-success invocation outcomes.
 type InvocationFailureContext struct {
-	SessionID string
-	WorkID    string
-	WorkName  string
-	WorkState string
+	SessionID       string
+	WorkID          string
+	WorkName        string
+	WorkState       string
+	ApprovalID      string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
 }
 
 // PrimaryResultError describes a stable primary-result selection failure.
@@ -300,6 +305,21 @@ func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryRe
 	}
 
 	scope := invocationScopeWorkIDs(invocationWorldState(input).PayloadLineage, request.WorkItems)
+	if approval, found := scopedPendingHumanApproval(invocationWorldState(input).PendingHumanApprovals, scope); found {
+		item, itemFound := scopedCurrentWorkItem(invocationWorldState(input).WorkItemsByID, scope)
+		if !itemFound {
+			if len(request.WorkItems) == 0 {
+				return nil, false
+			}
+			item = request.WorkItems[0]
+		}
+		return humanApprovalPrimaryResultError(
+			requestID,
+			resolvedInvocationReturnPolicy(input.InvocationReturn),
+			item,
+			approval,
+		), true
+	}
 	for _, stateName := range []string{"blocked", "needs-human"} {
 		item, found := scopedWorkItemInState(invocationWorldState(input).WorkItemsByID, scope, stateName)
 		if !found {
@@ -308,6 +328,59 @@ func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryRe
 		return classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(input.InvocationReturn), item), true
 	}
 	return nil, false
+}
+
+func scopedPendingHumanApproval(
+	approvals []InvocationHumanApproval,
+	scope map[string]struct{},
+) (InvocationHumanApproval, bool) {
+	if len(approvals) == 0 || len(scope) == 0 {
+		return InvocationHumanApproval{}, false
+	}
+	sorted := append([]InvocationHumanApproval(nil), approvals...)
+	sort.SliceStable(sorted, func(left, right int) bool {
+		return strings.Compare(sorted[left].ApprovalID, sorted[right].ApprovalID) < 0
+	})
+	for _, approval := range sorted {
+		if strings.TrimSpace(approval.Status) != "" && strings.TrimSpace(approval.Status) != "PENDING" {
+			continue
+		}
+		for _, workID := range approval.WorkItemIDs {
+			if _, ok := scope[strings.TrimSpace(workID)]; ok {
+				return approval, true
+			}
+		}
+	}
+	return InvocationHumanApproval{}, false
+}
+
+func humanApprovalPrimaryResultError(
+	requestID string,
+	policy string,
+	item WorkItem,
+	approval InvocationHumanApproval,
+) *PrimaryResultError {
+	context := invocationFailureContextFromWorkItem(approval.SessionID, item)
+	context.ApprovalID = strings.TrimSpace(approval.ApprovalID)
+	context.DispatchID = strings.TrimSpace(approval.DispatchID)
+	context.WorkstationID = strings.TrimSpace(approval.WorkstationID)
+	context.WorkstationName = strings.TrimSpace(approval.WorkstationName)
+	context.Decisions = append([]string(nil), approval.Decisions...)
+	workstationLabel := context.WorkstationName
+	if workstationLabel == "" {
+		workstationLabel = context.WorkstationID
+	}
+	return &PrimaryResultError{
+		Code:      PrimaryResultErrorCodeNeedsHuman,
+		RequestID: requestID,
+		Policy:    policy,
+		Message: fmt.Sprintf(
+			"invocation needs human input: work %q is waiting for approval at workstation %q",
+			workDisplayLabel(item),
+			workstationLabel,
+		),
+		Context: context,
+	}
 }
 
 // ClassifyMissingPrimaryResultWorkItem maps one current work item onto the

@@ -104,6 +104,26 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 			Type: factoryapi.WorkStateType(item.State.Type),
 		}
 	}
+	if item.HumanApproval != nil {
+		approval := factoryapi.HumanApproval{
+			ApprovalId:      item.HumanApproval.ApprovalID,
+			SessionId:       item.HumanApproval.SessionID,
+			DispatchId:      item.HumanApproval.DispatchID,
+			WorkstationId:   item.HumanApproval.WorkstationID,
+			WorkstationName: item.HumanApproval.WorkstationName,
+			Status:          factoryapi.HumanApprovalStatus(item.HumanApproval.Status),
+			WorkIds:         []string{item.WorkID},
+			Decisions:       make([]factoryapi.HumanApprovalDecisions, 0, len(item.HumanApproval.Decisions)),
+		}
+		for _, decision := range item.HumanApproval.Decisions {
+			approval.Decisions = append(approval.Decisions, factoryapi.HumanApprovalDecisions(decision))
+		}
+		if item.HumanApproval.Description != "" {
+			description := item.HumanApproval.Description
+			approval.Description = &description
+		}
+		result.HumanApproval = &approval
+	}
 	if len(item.Relations) > 0 {
 		relations := make([]factoryapi.Relation, 0, len(item.Relations))
 		for _, relation := range item.Relations {

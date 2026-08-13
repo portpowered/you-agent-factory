@@ -139,6 +139,16 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 			TargetWorkID:   "work-draft",
 			RequiredState:  "complete",
 		}},
+		HumanApproval: &work.HumanApprovalReadModel{
+			ApprovalID:      "approval-dispatch-1",
+			SessionID:       "session-1",
+			DispatchID:      "dispatch-1",
+			WorkstationID:   "release-approval",
+			WorkstationName: "Release Approval",
+			Description:     "Approve the release",
+			Decisions:       []string{"APPROVE", "REJECT"},
+			Status:          "PENDING",
+		},
 		ExpectedArtifacts: []work.ExpectedArtifactReadModel{{
 			Name: "report", Pattern: "reports/review.json", NonEmpty: true,
 			Verification: work.ExpectedArtifactVerificationSatisfied,
@@ -146,6 +156,14 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 	})
 	assertDetachedWorkFields(t, got)
 	assertDetachedWorkCollections(t, got)
+	if got.HumanApproval == nil || got.HumanApproval.ApprovalId != "approval-dispatch-1" ||
+		got.HumanApproval.SessionId != "session-1" ||
+		got.HumanApproval.WorkstationName != "Release Approval" ||
+		got.HumanApproval.Description == nil || *got.HumanApproval.Description != "Approve the release" ||
+		got.HumanApproval.Status != factoryapi.HumanApprovalStatus("PENDING") ||
+		len(got.HumanApproval.Decisions) != 2 {
+		t.Fatalf("human approval = %#v, want safe pending approval projection", got.HumanApproval)
+	}
 	assertExpectedArtifactAPI(t, got)
 }
 

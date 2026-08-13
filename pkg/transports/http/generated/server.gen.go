@@ -206,6 +206,7 @@ const (
 	FactoryEventTypeFactoryChangeFailed              FactoryEventType = "FACTORY_CHANGE_FAILED"
 	FactoryEventTypeFactoryChangeRequest             FactoryEventType = "FACTORY_CHANGE_REQUEST"
 	FactoryEventTypeFactoryStateResponse             FactoryEventType = "FACTORY_STATE_RESPONSE"
+	FactoryEventTypeHumanApprovalRequested           FactoryEventType = "HUMAN_APPROVAL_REQUESTED"
 	FactoryEventTypeInferenceRequest                 FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse                FactoryEventType = "INFERENCE_RESPONSE"
 	FactoryEventTypeInitialStructureRequest          FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
@@ -695,6 +696,28 @@ const (
 	HostedWorkerProviderLinear HostedWorkerProvider = "LINEAR"
 )
 
+// Defines values for HumanApprovalDecisions.
+const (
+	HumanApprovalDecisionsAPPROVE HumanApprovalDecisions = "APPROVE"
+	HumanApprovalDecisionsREJECT  HumanApprovalDecisions = "REJECT"
+)
+
+// Defines values for HumanApprovalStatus.
+const (
+	HumanApprovalStatusPENDING HumanApprovalStatus = "PENDING"
+)
+
+// Defines values for HumanApprovalRequestedEventPayloadDecisions.
+const (
+	HumanApprovalRequestedEventPayloadDecisionsAPPROVE HumanApprovalRequestedEventPayloadDecisions = "APPROVE"
+	HumanApprovalRequestedEventPayloadDecisionsREJECT  HumanApprovalRequestedEventPayloadDecisions = "REJECT"
+)
+
+// Defines values for HumanApprovalRequestedEventPayloadStatus.
+const (
+	HumanApprovalRequestedEventPayloadStatusPENDING HumanApprovalRequestedEventPayloadStatus = "PENDING"
+)
+
 // Defines values for InferenceOutcome.
 const (
 	InferenceOutcomeFailed    InferenceOutcome = "FAILED"
@@ -720,6 +743,12 @@ const (
 	InvocationInputSourceKindAudioStream InvocationInputSourceKind = "audioStream"
 	InvocationInputSourceKindFileRef     InvocationInputSourceKind = "fileRef"
 	InvocationInputSourceKindText        InvocationInputSourceKind = "text"
+)
+
+// Defines values for InvocationResponseDecisions.
+const (
+	APPROVE InvocationResponseDecisions = "APPROVE"
+	REJECT  InvocationResponseDecisions = "REJECT"
 )
 
 // Defines values for InvocationResponseErrorCode.
@@ -1396,6 +1425,11 @@ const (
 // Defines values for SortBy.
 const (
 	SortByStateType SortBy = "state.type"
+)
+
+// Defines values for ListHumanApprovalsBySessionIdParamsStatus.
+const (
+	PENDING ListHumanApprovalsBySessionIdParamsStatus = "PENDING"
 )
 
 // Defines values for ListWorkBySessionIdParamsSortBy.
@@ -4268,8 +4302,11 @@ type FactorySessionRuntime struct {
 	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
 
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
-	OrchestratorKind FactoryOrchestratorKind        `json:"orchestratorKind"`
-	Petri            *FactorySessionPetriProjection `json:"petri,omitempty"`
+	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// PendingHumanApprovals Durable pending HUMAN_APPROVAL requests reconstructed from canonical events.
+	PendingHumanApprovals *[]HumanApproval               `json:"pendingHumanApprovals,omitempty"`
+	Petri                 *FactorySessionPetriProjection `json:"petri,omitempty"`
 
 	// PolicyHash Stable hash of the effective orchestrator policy.
 	PolicyHash *string                `json:"policyHash,omitempty"`
@@ -5053,6 +5090,61 @@ type HostedWorkerAuth struct {
 // HostedWorkerProvider Built-in repository-owned hosted worker providers supported by the public factory-config contract.
 type HostedWorkerProvider string
 
+// HumanApproval Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology.
+type HumanApproval struct {
+	// ApprovalId Stable approval identity derived from the canonical dispatch.
+	ApprovalId string                   `json:"approvalId"`
+	Decisions  []HumanApprovalDecisions `json:"decisions"`
+
+	// Description Localized safe description resolved from the effective factory.
+	Description *string `json:"description,omitempty"`
+
+	// DispatchId Dispatch reserved for the pending approval.
+	DispatchId string `json:"dispatchId"`
+
+	// EventId Stable canonical HUMAN_APPROVAL_REQUESTED event identifier.
+	EventId *string `json:"eventId,omitempty"`
+
+	// RequestedAt Canonical event time for the pending approval request.
+	RequestedAt *time.Time `json:"requestedAt,omitempty"`
+
+	// SessionId Factory Session that owns the pending approval.
+	SessionId string              `json:"sessionId"`
+	Status    HumanApprovalStatus `json:"status"`
+
+	// WorkIds Work identities consumed by the reserved dispatch.
+	WorkIds []string `json:"workIds"`
+
+	// WorkstationId Stable authored HUMAN_APPROVAL workstation identity.
+	WorkstationId string `json:"workstationId"`
+
+	// WorkstationName Customer-authored workstation name.
+	WorkstationName string `json:"workstationName"`
+}
+
+// HumanApprovalDecisions defines model for HumanApproval.Decisions.
+type HumanApprovalDecisions string
+
+// HumanApprovalStatus defines model for HumanApproval.Status.
+type HumanApprovalStatus string
+
+// HumanApprovalRequestedEventPayload Canonical request for operator input at a HUMAN_APPROVAL workstation. FactoryEvent.context carries session, dispatch, request, trace, and Work lineage; this payload intentionally contains no mutable Work content or display text.
+type HumanApprovalRequestedEventPayload struct {
+	// ApprovalId Stable approval identity derived from the reserved dispatch.
+	ApprovalId string                                        `json:"approvalId"`
+	Decisions  []HumanApprovalRequestedEventPayloadDecisions `json:"decisions"`
+	Status     HumanApprovalRequestedEventPayloadStatus      `json:"status"`
+
+	// WorkstationId Authored HUMAN_APPROVAL workstation identity.
+	WorkstationId string `json:"workstationId"`
+}
+
+// HumanApprovalRequestedEventPayloadDecisions defines model for HumanApprovalRequestedEventPayload.Decisions.
+type HumanApprovalRequestedEventPayloadDecisions string
+
+// HumanApprovalRequestedEventPayloadStatus defines model for HumanApprovalRequestedEventPayload.Status.
+type HumanApprovalRequestedEventPayloadStatus string
+
 // HybridLogicalTimestamp defines model for HybridLogicalTimestamp.
 type HybridLogicalTimestamp struct {
 	// Logical Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
@@ -5196,6 +5288,15 @@ type InvocationRequest struct {
 
 // InvocationResponse defines model for InvocationResponse.
 type InvocationResponse struct {
+	// ApprovalId Pending human-approval identity when errorCode is INVOCATION_NEEDS_HUMAN.
+	ApprovalId *string `json:"approvalId,omitempty"`
+
+	// Decisions Fixed decision vocabulary available to the operator.
+	Decisions *[]InvocationResponseDecisions `json:"decisions,omitempty"`
+
+	// DispatchId Reserved dispatch identity that is waiting for operator input.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
 	// ErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
 	ErrorCode *InvocationResponseErrorCode `json:"errorCode,omitempty"`
 
@@ -5225,7 +5326,16 @@ type InvocationResponse struct {
 
 	// WorkState Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
 	WorkState *string `json:"workState,omitempty"`
+
+	// WorkstationId Authored HUMAN_APPROVAL workstation identity.
+	WorkstationId *string `json:"workstationId,omitempty"`
+
+	// WorkstationName Customer-authored HUMAN_APPROVAL workstation name.
+	WorkstationName *string `json:"workstationName,omitempty"`
 }
+
+// InvocationResponseDecisions defines model for InvocationResponse.Decisions.
+type InvocationResponseDecisions string
 
 // InvocationResponseErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
 type InvocationResponseErrorCode string
@@ -5312,6 +5422,12 @@ type ListFactorySessionsResponse struct {
 
 	// Sessions Live workspace session summaries when scope is LIVE or ALL.
 	Sessions []FactorySessionSummary `json:"sessions"`
+}
+
+// ListHumanApprovalsResponse defines model for ListHumanApprovalsResponse.
+type ListHumanApprovalsResponse struct {
+	// Approvals Deterministically ordered pending approvals for one session.
+	Approvals []HumanApproval `json:"approvals"`
 }
 
 // ListModelsResponse defines model for ListModelsResponse.
@@ -7293,6 +7409,9 @@ type Work struct {
 	// ExpectedArtifacts Effective expected artifact declarations and their latest recorded verification state.
 	ExpectedArtifacts *[]WorkExpectedArtifact `json:"expectedArtifacts,omitempty"`
 
+	// HumanApproval Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology.
+	HumanApproval *HumanApproval `json:"humanApproval,omitempty"`
+
 	// Name A human readable name for the work, not unique
 	Name string `json:"name"`
 
@@ -8540,6 +8659,9 @@ type FactoryDispatchStatusFilter = FactoryDispatchStatus
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
 
+// HumanApprovalID defines model for HumanApprovalID.
+type HumanApprovalID = string
+
 // LogicalSessionKeyId defines model for LogicalSessionKeyId.
 type LogicalSessionKeyId = string
 
@@ -8696,6 +8818,15 @@ type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
 }
+
+// ListHumanApprovalsBySessionIdParams defines parameters for ListHumanApprovalsBySessionId.
+type ListHumanApprovalsBySessionIdParams struct {
+	// Status Optional status filter for pending human approvals.
+	Status *ListHumanApprovalsBySessionIdParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListHumanApprovalsBySessionIdParamsStatus defines parameters for ListHumanApprovalsBySessionId.
+type ListHumanApprovalsBySessionIdParamsStatus string
 
 // ListFactorySessionDispatchesParams defines parameters for ListFactorySessionDispatches.
 type ListFactorySessionDispatchesParams struct {
@@ -9304,6 +9435,32 @@ func (t *FactoryEvent_Payload) FromDispatchRequestEventPayload(v DispatchRequest
 
 // MergeDispatchRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchRequestEventPayload
 func (t *FactoryEvent_Payload) MergeDispatchRequestEventPayload(v DispatchRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsHumanApprovalRequestedEventPayload returns the union data inside the FactoryEvent_Payload as a HumanApprovalRequestedEventPayload
+func (t FactoryEvent_Payload) AsHumanApprovalRequestedEventPayload() (HumanApprovalRequestedEventPayload, error) {
+	var body HumanApprovalRequestedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromHumanApprovalRequestedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided HumanApprovalRequestedEventPayload
+func (t *FactoryEvent_Payload) FromHumanApprovalRequestedEventPayload(v HumanApprovalRequestedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeHumanApprovalRequestedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided HumanApprovalRequestedEventPayload
+func (t *FactoryEvent_Payload) MergeHumanApprovalRequestedEventPayload(v HumanApprovalRequestedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -12140,6 +12297,12 @@ type ServerInterface interface {
 	// Get one factory session
 	// (GET /factory-sessions/{session_id})
 	GetFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// List pending human approvals for one session
+	// (GET /factory-sessions/{session_id}/approvals)
+	ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ListHumanApprovalsBySessionIdParams)
+	// Show one pending human approval
+	// (GET /factory-sessions/{session_id}/approvals/{approval_id})
+	GetHumanApprovalBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, approvalId HumanApprovalID)
 	// Approve one durable factory session
 	// (POST /factory-sessions/{session_id}/approve)
 	ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -12443,6 +12606,76 @@ func (siw *ServerInterfaceWrapper) GetFactorySession(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListHumanApprovalsBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListHumanApprovalsBySessionIdParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListHumanApprovalsBySessionId(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHumanApprovalBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetHumanApprovalBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "approval_id" -------------
+	var approvalId HumanApprovalID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "approval_id", mux.Vars(r)["approval_id"], &approvalId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "approval_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHumanApprovalBySessionId(w, r, sessionId, approvalId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14537,6 +14770,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.CloseFactorySession).Methods("DELETE")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.GetFactorySession).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/approvals", wrapper.ListHumanApprovalsBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/approvals/{approval_id}", wrapper.GetHumanApprovalBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/approve", wrapper.ApproveFactorySession).Methods("POST")
 

@@ -14,32 +14,35 @@ import (
 )
 
 const (
-	workListStateNameInputID    = "you.work.list.flag.state-name"
-	workListStateTypeInputID    = "you.work.list.flag.state-type"
-	workListNameInputID         = "you.work.list.flag.name"
-	workListWorkTypeNameInputID = "you.work.list.flag.work-type-name"
-	workListTraceIDInputID      = "you.work.list.flag.trace-id"
-	workListTerminalInputID     = "you.work.list.flag.terminal"
-	workListNonTerminalInputID  = "you.work.list.flag.non-terminal"
-	workListSortByInputID       = "you.work.list.flag.sort-by"
-	workListMaxResultsInputID   = "you.work.list.flag.max-results"
-	workListNextTokenInputID    = "you.work.list.flag.next-token"
-	workListCountsInputID       = "you.work.list.flag.counts"
-	workListSessionInputID      = "you.work.list.flag.session"
-	workWatchSessionInputID     = "you.work.watch.flag.session"
-	workWatchFollowInputID      = "you.work.watch.flag.follow"
-	workShowWorkIDInputID       = "you.work.show.arg.0"
-	workShowSessionInputID      = "you.work.show.flag.session"
-	workMoveWorkIDInputID       = "you.work.move.arg.0"
-	workMoveStateNameInputID    = "you.work.move.arg.1"
-	workMoveSessionInputID      = "you.work.move.flag.session"
-	workMoveRequestIDInputID    = "you.work.move.flag.request-id"
-	workVisualizeBatchInputID   = "you.work.visualize.arg.0"
-	workVisualizeFormatInputID  = "you.work.visualize.flag.format"
-	workServerInputID           = "you.flag.server"
-	workJSONInputID             = "you.flag.json"
-	workVerboseInputID          = "you.flag.verbose"
-	workDebugInputID            = "you.flag.debug"
+	workListStateNameInputID          = "you.work.list.flag.state-name"
+	workListStateTypeInputID          = "you.work.list.flag.state-type"
+	workListNameInputID               = "you.work.list.flag.name"
+	workListWorkTypeNameInputID       = "you.work.list.flag.work-type-name"
+	workListTraceIDInputID            = "you.work.list.flag.trace-id"
+	workListTerminalInputID           = "you.work.list.flag.terminal"
+	workListNonTerminalInputID        = "you.work.list.flag.non-terminal"
+	workListSortByInputID             = "you.work.list.flag.sort-by"
+	workListMaxResultsInputID         = "you.work.list.flag.max-results"
+	workListNextTokenInputID          = "you.work.list.flag.next-token"
+	workListCountsInputID             = "you.work.list.flag.counts"
+	workListSessionInputID            = "you.work.list.flag.session"
+	workWatchSessionInputID           = "you.work.watch.flag.session"
+	workWatchFollowInputID            = "you.work.watch.flag.follow"
+	workShowWorkIDInputID             = "you.work.show.arg.0"
+	workShowSessionInputID            = "you.work.show.flag.session"
+	workMoveWorkIDInputID             = "you.work.move.arg.0"
+	workMoveStateNameInputID          = "you.work.move.arg.1"
+	workMoveSessionInputID            = "you.work.move.flag.session"
+	workMoveRequestIDInputID          = "you.work.move.flag.request-id"
+	workVisualizeBatchInputID         = "you.work.visualize.arg.0"
+	workVisualizeFormatInputID        = "you.work.visualize.flag.format"
+	workApprovalListSessionInputID    = "you.work.approval.list.flag.session"
+	workApprovalShowApprovalIDInputID = "you.work.approval.show.arg.0"
+	workApprovalShowSessionInputID    = "you.work.approval.show.flag.session"
+	workServerInputID                 = "you.flag.server"
+	workJSONInputID                   = "you.flag.json"
+	workVerboseInputID                = "you.flag.verbose"
+	workDebugInputID                  = "you.flag.debug"
 )
 
 // ResolvedWorkRunE executes one Work command from invocation-local resolved
@@ -53,11 +56,27 @@ type ResolvedWorkRunE func(
 // ResolvedWorkHandlers supplies typed handlers for the runnable Work commands.
 // Construction maps these handlers through the stable IDs in the manifest.
 type ResolvedWorkHandlers struct {
-	List      ResolvedWorkRunE
-	Watch     ResolvedWorkRunE
-	Show      ResolvedWorkRunE
-	Move      ResolvedWorkRunE
-	Visualize ResolvedWorkRunE
+	ApprovalList ResolvedWorkRunE
+	ApprovalShow ResolvedWorkRunE
+	List         ResolvedWorkRunE
+	Watch        ResolvedWorkRunE
+	Show         ResolvedWorkRunE
+	Move         ResolvedWorkRunE
+	Visualize    ResolvedWorkRunE
+}
+
+// ResolvedApprovalListBinding supplies the effects used by the pending
+// approval list stable-input adapter.
+type ResolvedApprovalListBinding struct {
+	ListHumanApprovals func(workcli.ListHumanApprovalsConfig) error
+	DiagnosticsWriter  func(*cobra.Command) io.Writer
+}
+
+// ResolvedApprovalShowBinding supplies the effects used by the pending
+// approval show stable-input adapter.
+type ResolvedApprovalShowBinding struct {
+	ShowHumanApproval func(workcli.ShowHumanApprovalConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
 }
 
 // ResolvedListBinding supplies the effects used by the Work list stable-input
@@ -113,6 +132,65 @@ func ResolvedListRunE(binding ResolvedListBinding) ResolvedWorkRunE {
 			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
 		}
 		return binding.ListWork(cfg)
+	}
+}
+
+// ResolvedApprovalListRunE maps canonical approval-list input IDs into one
+// transport request without retaining Cobra-backed pointers between calls.
+func ResolvedApprovalListRunE(binding ResolvedApprovalListBinding) ResolvedWorkRunE {
+	return func(cmd *cobra.Command, inputs resolvedinput.Inputs, inherited resolvedinput.Inputs) error {
+		if binding.ListHumanApprovals == nil {
+			return fmt.Errorf("human approval list service is required")
+		}
+		sessionID, err := inputs.String(workApprovalListSessionInputID)
+		if err != nil {
+			return fmt.Errorf("resolve human approval list inputs: %w", err)
+		}
+		globals, err := resolvedWorkGlobals(inherited)
+		if err != nil {
+			return fmt.Errorf("resolve human approval list inputs: %w", err)
+		}
+		cfg := workcli.ListHumanApprovalsConfig{
+			Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+			JSON: globals.json, Verbose: globals.verbose || globals.debug,
+			Debug: globals.debug, Output: cmd.OutOrStdout(),
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.ListHumanApprovals(cfg)
+	}
+}
+
+// ResolvedApprovalShowRunE maps canonical approval-show input IDs into one
+// transport request without retaining Cobra-backed pointers between calls.
+func ResolvedApprovalShowRunE(binding ResolvedApprovalShowBinding) ResolvedWorkRunE {
+	return func(cmd *cobra.Command, inputs resolvedinput.Inputs, inherited resolvedinput.Inputs) error {
+		if binding.ShowHumanApproval == nil {
+			return fmt.Errorf("human approval show service is required")
+		}
+		approvalID, err := inputs.String(workApprovalShowApprovalIDInputID)
+		if err != nil {
+			return fmt.Errorf("resolve human approval show inputs: %w", err)
+		}
+		sessionID, err := inputs.String(workApprovalShowSessionInputID)
+		if err != nil {
+			return fmt.Errorf("resolve human approval show inputs: %w", err)
+		}
+		globals, err := resolvedWorkGlobals(inherited)
+		if err != nil {
+			return fmt.Errorf("resolve human approval show inputs: %w", err)
+		}
+		cfg := workcli.ShowHumanApprovalConfig{
+			Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+			ApprovalID: approvalID, JSON: globals.json,
+			Verbose: globals.verbose || globals.debug, Debug: globals.debug,
+			Output: cmd.OutOrStdout(),
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.ShowHumanApproval(cfg)
 	}
 }
 
@@ -450,11 +528,13 @@ func (r *Registry) VerifyWorkRunnableCoverage(manifest climanifest.Manifest) err
 // Deprecated: use ResolvedWorkHandlers. This compatibility shape remains only
 // until production root composition adopts NewResolvedWorkCommand.
 type WorkHandlers struct {
-	ListRunE      RunE
-	WatchRunE     RunE
-	ShowRunE      RunE
-	MoveRunE      RunE
-	VisualizeRunE RunE
+	ApprovalListRunE RunE
+	ApprovalShowRunE RunE
+	ListRunE         RunE
+	WatchRunE        RunE
+	ShowRunE         RunE
+	MoveRunE         RunE
+	VisualizeRunE    RunE
 }
 
 // NewWorkRegistry registers handlers for the leased live-binding Work
@@ -481,12 +561,26 @@ func NewWorkRegistry(handlers WorkHandlers) (*Registry, error) {
 			return fmt.Errorf("work watch service is required")
 		}
 	}
+	approvalListRunE := handlers.ApprovalListRunE
+	if approvalListRunE == nil {
+		approvalListRunE = func(*cobra.Command, []string) error {
+			return fmt.Errorf("human approval list service is required")
+		}
+	}
+	approvalShowRunE := handlers.ApprovalShowRunE
+	if approvalShowRunE == nil {
+		approvalShowRunE = func(*cobra.Command, []string) error {
+			return fmt.Errorf("human approval show service is required")
+		}
+	}
 
 	registry := NewRegistry()
 	registrations := []struct {
 		commandID string
 		handler   RunE
 	}{
+		{commandID: "you.work.approval.list", handler: approvalListRunE},
+		{commandID: "you.work.approval.show", handler: approvalShowRunE},
 		{commandID: "you.work.list", handler: handlers.ListRunE},
 		{commandID: "you.work.watch", handler: watchRunE},
 		{commandID: "you.work.show", handler: handlers.ShowRunE},

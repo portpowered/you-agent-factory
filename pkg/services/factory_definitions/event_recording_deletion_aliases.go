@@ -13,6 +13,9 @@ type (
 	DispatchQueuedEventPayload                   = contracts.DispatchQueuedEventPayload
 	DispatchReconciledEventPayload               = contracts.DispatchReconciledEventPayload
 	DispatchRequestEventPayload                  = contracts.DispatchRequestEventPayload
+	HumanApprovalRequestedEventPayload           = contracts.HumanApprovalRequestedEventPayload
+	HumanApprovalDecision                        = contracts.HumanApprovalDecision
+	HumanApprovalStatus                          = contracts.HumanApprovalStatus
 	DispatchWorkerSessionAssociationEventPayload = contracts.DispatchWorkerSessionAssociationEventPayload
 	FactoryChangeEventPayload                    = contracts.FactoryChangeEventPayload
 	FactoryChangeRequestEventPayload             = contracts.FactoryChangeRequestEventPayload
@@ -55,6 +58,7 @@ const (
 	FactoryEventTypeDispatchRequest               = contracts.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = contracts.FactoryEventTypeDispatchResponse
 	FactoryEventTypeDispatchWorkerSessionAssoc    = contracts.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested        = contracts.FactoryEventTypeHumanApprovalRequested
 	FactoryEventTypeFactoryChange                 = contracts.FactoryEventTypeFactoryChange
 	FactoryEventTypeFactoryChangeRequest          = contracts.FactoryEventTypeFactoryChangeRequest
 	FactoryEventTypeFactoryChangeFailed           = contracts.FactoryEventTypeFactoryChangeFailed
@@ -81,6 +85,9 @@ const (
 	FactoryEventTypeSessionStarted                = contracts.FactoryEventTypeSessionStarted
 	FactoryEventTypeWorkRequest                   = contracts.FactoryEventTypeWorkRequest
 	FactoryEventTypeWorkStateChange               = contracts.FactoryEventTypeWorkStateChange
+	HumanApprovalDecisionApprove                  = contracts.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                   = contracts.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                    = contracts.HumanApprovalStatusPending
 )
 
 var NewFactoryEvent = contracts.NewFactoryEvent

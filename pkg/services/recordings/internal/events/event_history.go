@@ -29,6 +29,7 @@ const (
 	eventIDRelationshipPrefix               = "factory-event/relationship-change"
 	eventIDDispatchCreatedPrefix            = "factory-event/dispatch-created"
 	eventIDDispatchCompletedPrefix          = "factory-event/dispatch-completed"
+	eventIDHumanApprovalRequestedPrefix     = "factory-event/human-approval-requested"
 	eventIDDispatchWorkerSessionAssocPrefix = "factory-event/dispatch-worker-session-association"
 	eventIDStateChangePrefix                = "factory-event/factory-state-change"
 	eventIDWorkStateChangePrefix            = "factory-event/work-state-change"
@@ -441,6 +442,68 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 			Metadata:                 dispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
 		},
 	))
+}
+
+// RecordHumanApprovalRequested records the durable operator-input boundary
+// immediately after its matching DISPATCH_REQUEST. It carries no mutable Work
+// content or display copy; replay resolves those facts from the topology and
+// the event context.
+func (h *FactoryEventHistory) RecordHumanApprovalRequested(tick int, record interfaces.FactoryDispatchRecord, eventTime time.Time) {
+	if h == nil || !record.HumanApproval || record.Dispatch.DispatchID == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
+	approvalID := "approval-" + record.Dispatch.DispatchID
+	workstationID := humanApprovalWorkstationID(h.runtimeConfig, record.Dispatch)
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeHumanApprovalRequested,
+		fmt.Sprintf("%s/%s", eventIDHumanApprovalRequestedPrefix, approvalID),
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:                     tick,
+			EventTime:                eventTime,
+			DispatchID:               stringPtr(record.Dispatch.DispatchID),
+			RequestID:                stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
+			TraceIDs:                 stringSlicePtr(traceIDsFromTokens(inputTokens)),
+			WorkIDs:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
+			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
+		}),
+		interfaces.HumanApprovalRequestedEventPayload{
+			ApprovalID:    approvalID,
+			WorkstationID: workstationID,
+			Decisions: []interfaces.HumanApprovalDecision{
+				interfaces.HumanApprovalDecisionApprove,
+				interfaces.HumanApprovalDecisionReject,
+			},
+			Status: interfaces.HumanApprovalStatusPending,
+		},
+	))
+}
+
+func humanApprovalWorkstationID(
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+	dispatch work.WorkDispatch,
+) string {
+	workstationID := strings.TrimSpace(dispatch.TransitionID)
+	if workstationID == "" {
+		workstationID = strings.TrimSpace(dispatch.WorkstationName)
+	}
+	if runtimeConfig == nil {
+		return workstationID
+	}
+	for _, name := range []string{dispatch.WorkstationName, dispatch.TransitionID} {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		workstation, ok := runtimeConfig.Workstation(name)
+		if !ok || workstation == nil {
+			continue
+		}
+		return interfaces.CanonicalFactoryGraphWorkstationID(*workstation)
+	}
+	return workstationID
 }
 
 // RecordDispatchWorkerSessionAssociation records the canonical, stable

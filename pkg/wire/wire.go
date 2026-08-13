@@ -366,6 +366,8 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideUpdateFactoryFromFileOperation,
 	provideDeleteFactoryOperation,
 	provideListWorkOperation,
+	provideListHumanApprovalsOperation,
+	provideShowHumanApprovalOperation,
 	provideWatchWorkOperation,
 	provideShowWorkOperation,
 	provideMoveWorkOperation,

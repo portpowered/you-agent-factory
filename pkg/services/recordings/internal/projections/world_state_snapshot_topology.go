@@ -40,16 +40,17 @@ type snapshotFactoryWorkState struct {
 }
 
 type snapshotFactoryWorkstation struct {
-	ID          *string              `json:"id"`
-	Name        string               `json:"name"`
-	Worker      string               `json:"worker"`
-	Behavior    *string              `json:"behavior"`
-	Type        *string              `json:"type"`
-	Inputs      []snapshotFactoryIO  `json:"inputs"`
-	Outputs     *[]snapshotFactoryIO `json:"outputs"`
-	OnContinue  *[]snapshotFactoryIO `json:"onContinue"`
-	OnRejection *[]snapshotFactoryIO `json:"onRejection"`
-	OnFailure   *[]snapshotFactoryIO `json:"onFailure"`
+	ID          *string                     `json:"id"`
+	Name        string                      `json:"name"`
+	Description *interfaces.NameValueConfig `json:"description"`
+	Worker      string                      `json:"worker"`
+	Behavior    *string                     `json:"behavior"`
+	Type        *string                     `json:"type"`
+	Inputs      []snapshotFactoryIO         `json:"inputs"`
+	Outputs     *[]snapshotFactoryIO        `json:"outputs"`
+	OnContinue  *[]snapshotFactoryIO        `json:"onContinue"`
+	OnRejection *[]snapshotFactoryIO        `json:"onRejection"`
+	OnFailure   *[]snapshotFactoryIO        `json:"onFailure"`
 }
 
 type snapshotFactoryIO struct {
@@ -146,7 +147,7 @@ func workstationsFromSnapshot(workstations []snapshotFactoryWorkstation) []inter
 			config["configured_worker"] = workstation.Worker
 		}
 		converted = append(converted, interfaces.FactoryWorkstation{
-			ID: id, Name: workstation.Name, WorkerID: workstation.Worker,
+			ID: id, Name: workstation.Name, Description: cloneNameValue(workstation.Description), WorkerID: workstation.Worker,
 			Kind: stringValue(workstation.Behavior), Config: nilIfEmptyStringMap(config),
 			InputPlaceIDs:     placeIDsFromSnapshotIOs(workstation.Inputs),
 			OutputPlaceIDs:    placeIDsFromSnapshotIOsPtr(workstation.Outputs),

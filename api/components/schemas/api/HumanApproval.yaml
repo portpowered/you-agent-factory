@@ -1,0 +1,59 @@
+type: object
+additionalProperties: false
+required:
+  - approvalId
+  - sessionId
+  - dispatchId
+  - workstationId
+  - workstationName
+  - decisions
+  - status
+  - workIds
+description: >-
+  Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch.
+  The event ledger owns identity and status; display metadata is resolved from
+  the effective factory topology.
+properties:
+  approvalId:
+    type: string
+    description: Stable approval identity derived from the canonical dispatch.
+  sessionId:
+    type: string
+    description: Factory Session that owns the pending approval.
+  dispatchId:
+    type: string
+    description: Dispatch reserved for the pending approval.
+  workstationId:
+    type: string
+    description: Stable authored HUMAN_APPROVAL workstation identity.
+  workstationName:
+    type: string
+    description: Customer-authored workstation name.
+  description:
+    type: string
+    description: Localized safe description resolved from the effective factory.
+  decisions:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      enum:
+        - APPROVE
+        - REJECT
+  status:
+    type: string
+    enum:
+      - PENDING
+  workIds:
+    type: array
+    items:
+      type: string
+    description: Work identities consumed by the reserved dispatch.
+  eventId:
+    type: string
+    description: Stable canonical HUMAN_APPROVAL_REQUESTED event identifier.
+  requestedAt:
+    type: string
+    format: date-time
+    description: Canonical event time for the pending approval request.

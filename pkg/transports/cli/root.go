@@ -107,6 +107,8 @@ type WatchWorkOperation func(workcli.WatchConfig) error
 type ShowWorkOperation func(workcli.ShowConfig) error
 type MoveWorkOperation func(workcli.MoveConfig) error
 type VisualizeWorkOperation func(workcli.VisualizeConfig) error
+type ListHumanApprovalsOperation func(workcli.ListHumanApprovalsConfig) error
+type ShowHumanApprovalOperation func(workcli.ShowHumanApprovalConfig) error
 type ListWorkerSessionsOperation = workersessionscli.ListOperation
 type ShowWorkerSessionsOperation = workersessionscli.ShowOperation
 type ReadWorkerSessionOperation = workersessionscli.ReadOperation
@@ -161,6 +163,8 @@ type CommandOperations struct {
 	UpdateFactoryFromFile             UpdateFactoryFromFileOperation
 	DeleteFactory                     DeleteFactoryOperation
 	ListWork                          ListWorkOperation
+	ListHumanApprovals                ListHumanApprovalsOperation
+	ShowHumanApproval                 ShowHumanApprovalOperation
 	WatchWork                         WatchWorkOperation
 	ShowWork                          ShowWorkOperation
 	MoveWork                          MoveWorkOperation
@@ -231,6 +235,8 @@ type CommandFactory struct {
 	UpdateFactoryFromFile      func(factorycli.UpdateFromFileConfig) error
 	DeleteFactory              func(factorycli.DeleteConfig) error
 	ListWork                   func(workcli.ListConfig) error
+	ListHumanApprovals         func(workcli.ListHumanApprovalsConfig) error
+	ShowHumanApproval          func(workcli.ShowHumanApprovalConfig) error
 	WatchWork                  func(workcli.WatchConfig) error
 	ShowWork                   func(workcli.ShowConfig) error
 	MoveWork                   func(workcli.MoveConfig) error
@@ -297,6 +303,8 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		UpdateFactoryFromFile:             operations.UpdateFactoryFromFile,
 		DeleteFactory:                     operations.DeleteFactory,
 		ListWork:                          operations.ListWork,
+		ListHumanApprovals:                operations.ListHumanApprovals,
+		ShowHumanApproval:                 operations.ShowHumanApproval,
 		WatchWork:                         operations.WatchWork,
 		ShowWork:                          operations.ShowWork,
 		MoveWork:                          operations.MoveWork,

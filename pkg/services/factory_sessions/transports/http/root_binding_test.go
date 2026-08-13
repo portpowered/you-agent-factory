@@ -72,6 +72,76 @@ func TestHandlerFromRoot_ListFactorySessionsInvokesSessionsRoot(t *testing.T) {
 	}
 }
 
+func TestHandlerFromRoot_HumanApprovalReadUsesSessionProjection(t *testing.T) {
+	t.Parallel()
+
+	root := &httpSessionsRootFake{
+		sessions: map[string]factorysessions.SessionProjection{
+			"session-approval": {
+				Runtime: factorysessions.RuntimeProjection{
+					PendingHumanApprovals: []factorydefinitions.FactoryWorldHumanApproval{{
+						ApprovalID: "approval-1", SessionID: "session-approval", DispatchID: "dispatch-1",
+						WorkstationID: "approval-workstation", WorkstationName: "Release Approval",
+						Decisions: []factorydefinitions.HumanApprovalDecision{
+							factorydefinitions.HumanApprovalDecisionApprove,
+							factorydefinitions.HumanApprovalDecisionReject,
+						},
+						Status: factorydefinitions.HumanApprovalStatusPending, WorkItemIDs: []string{"work-1"},
+						EventID: "event-approval-1",
+					}},
+				},
+			},
+			"session-empty": {},
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+
+	listRecorder := httptest.NewRecorder()
+	handler.ListHumanApprovalsBySessionId(listRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-approval/approvals", nil),
+		factoryapi.SessionID("session-approval"), factoryapi.ListHumanApprovalsBySessionIdParams{})
+	if listRecorder.Code != http.StatusOK || !strings.Contains(listRecorder.Body.String(), `"approvalId":"approval-1"`) ||
+		!strings.Contains(listRecorder.Body.String(), `"workIds":["work-1"]`) {
+		t.Fatalf("list response = %d %s, want session-scoped pending approval", listRecorder.Code, listRecorder.Body.String())
+	}
+	emptyRecorder := httptest.NewRecorder()
+	handler.ListHumanApprovalsBySessionId(emptyRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-empty/approvals", nil),
+		factoryapi.SessionID("session-empty"), factoryapi.ListHumanApprovalsBySessionIdParams{})
+	if emptyRecorder.Code != http.StatusOK || !strings.Contains(emptyRecorder.Body.String(), `"approvals":[]`) {
+		t.Fatalf("empty list response = %d %s, want deterministic empty array", emptyRecorder.Code, emptyRecorder.Body.String())
+	}
+
+	getRecorder := httptest.NewRecorder()
+	handler.GetHumanApprovalBySessionId(getRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-approval/approvals/approval-1", nil),
+		factoryapi.SessionID("session-approval"), factoryapi.HumanApprovalID("approval-1"))
+	if getRecorder.Code != http.StatusOK || !strings.Contains(getRecorder.Body.String(), `"sessionId":"session-approval"`) {
+		t.Fatalf("get response = %d %s, want session-scoped approval resource", getRecorder.Code, getRecorder.Body.String())
+	}
+
+	statusRecorder := httptest.NewRecorder()
+	handler.ListHumanApprovalsBySessionId(statusRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-approval/approvals?status=APPROVED", nil),
+		factoryapi.SessionID("session-approval"), factoryapi.ListHumanApprovalsBySessionIdParams{
+			Status: func() *factoryapi.ListHumanApprovalsBySessionIdParamsStatus {
+				status := factoryapi.ListHumanApprovalsBySessionIdParamsStatus("APPROVED")
+				return &status
+			}(),
+		})
+	if statusRecorder.Code != http.StatusBadRequest || !strings.Contains(statusRecorder.Body.String(), `"code":"BAD_REQUEST"`) {
+		t.Fatalf("malformed status response = %d %s, want typed bad request", statusRecorder.Code, statusRecorder.Body.String())
+	}
+
+	unknownRecorder := httptest.NewRecorder()
+	handler.GetHumanApprovalBySessionId(unknownRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-approval/approvals/missing", nil),
+		factoryapi.SessionID("session-approval"), factoryapi.HumanApprovalID("missing"))
+	if unknownRecorder.Code != http.StatusNotFound || !strings.Contains(unknownRecorder.Body.String(), `"code":"NOT_FOUND"`) {
+		t.Fatalf("unknown approval response = %d %s, want typed not-found", unknownRecorder.Code, unknownRecorder.Body.String())
+	}
+}
+
 type httpSessionsRootFake struct {
 	sessions          map[string]factorysessions.SessionProjection
 	getSession        func(context.Context, string) (factorysessions.SessionProjection, error)

@@ -688,7 +688,10 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 }
 
 func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfaces.DispatchRecord, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (bool, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	if len(records) == 0 || (e.dispatchHandler == nil && e.dispatchHook == nil) {
+	if len(records) == 0 {
+		return false, snapshot, nil
+	}
+	if e.dispatchHandler == nil && e.dispatchHook == nil && !containsHumanApprovalDispatch(e.state, records) {
 		return false, snapshot, nil
 	}
 	for _, rec := range records {
@@ -702,6 +705,7 @@ func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfa
 
 func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interfaces.DispatchRecord) error {
 	now := e.clock.Now()
+	humanApproval := isHumanApprovalDispatch(e.state, rec.Dispatch)
 	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
 	rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
 	e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
@@ -721,7 +725,14 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 			Dispatch:       rec.Dispatch,
 			HeldMutations:  rec.Mutations,
 			ConsumedTokens: consumedTokenIDs(workers.WorkDispatchInputTokens(rec.Dispatch)),
+			HumanApproval:  humanApproval,
 		})
+	}
+	// A HUMAN_APPROVAL dispatch remains reserved in the in-flight table until a
+	// later resolution lane supplies an explicit result. It never enters the
+	// worker/provider/model/script or capacity execution boundary.
+	if humanApproval {
+		return nil
 	}
 	if e.dispatchHook != nil {
 		if err := e.dispatchHook.SubmitDispatch(ctx, rec.Dispatch); err != nil {
@@ -732,6 +743,23 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 		e.dispatchHandler(rec.Dispatch)
 	}
 	return nil
+}
+
+func isHumanApprovalDispatch(net *state.Net, dispatch work.WorkDispatch) bool {
+	if net == nil {
+		return false
+	}
+	transition := net.Transitions[dispatch.TransitionID]
+	return transition != nil && transition.Type == petri.TransitionHumanApproval
+}
+
+func containsHumanApprovalDispatch(net *state.Net, records []interfaces.DispatchRecord) bool {
+	for _, record := range records {
+		if isHumanApprovalDispatch(net, record.Dispatch) {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {

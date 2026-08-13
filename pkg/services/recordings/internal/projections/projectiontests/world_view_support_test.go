@@ -551,14 +551,14 @@ func systemTimeInitialStructureEvent(eventTime time.Time) factoryapi.FactoryEven
 					Id:       stringPtrForProjectionTest("daily-refresh"),
 					Name:     "Daily refresh",
 					Behavior: workstationKindPtrForWorldViewTest(factoryapi.WorkstationKindCron),
-					Worker:   "refresh-worker",
+					Worker:   stringPtrForProjectionTest("refresh-worker"),
 					Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}, {WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
 					Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},
 				},
 				{
 					Id:      stringPtrForProjectionTest(interfaces.SystemTimeExpiryTransitionID),
 					Name:    interfaces.SystemTimeExpiryTransitionID,
-					Worker:  "",
+					Worker:  stringPtrForProjectionTest(""),
 					Inputs:  []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
 					Outputs: nil,
 				},
@@ -574,7 +574,7 @@ func resourceCountProjectionEvents(eventTime time.Time) []factoryapi.FactoryEven
 	workstation := factoryapi.Workstation{
 		Id:      &workstationID,
 		Name:    "Implement",
-		Worker:  "agent",
+		Worker:  stringPtrForProjectionTest("agent"),
 		Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}, {WorkType: "agent-slot", State: "available"}},
 		Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
 	}

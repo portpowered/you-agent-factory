@@ -411,6 +411,50 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/approvals:
+    get:
+      tags:
+        - Work
+      operationId: listHumanApprovalsBySessionId
+      summary: List pending human approvals for one session
+      description: Lists durable HUMAN_APPROVAL requests reconstructed from the canonical Factory Event ledger for the explicitly selected Factory Session. Results are deterministically ordered by approval identity and are read-only in this lane.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/HumanApprovalStatus'
+      responses:
+        '200':
+          description: Deterministically ordered pending approvals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListHumanApprovalsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/approvals/{approval_id}:
+    get:
+      tags:
+        - Work
+      operationId: getHumanApprovalBySessionId
+      summary: Show one pending human approval
+      description: Returns one durable pending HUMAN_APPROVAL projection by stable approval identity.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/HumanApprovalID'
+      responses:
+        '200':
+          description: One pending human approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanApproval'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions:
     get:
       tags:
@@ -1925,6 +1969,23 @@ components:
       description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
       schema:
         type: string
+    HumanApprovalID:
+      name: approval_id
+      in: path
+      required: true
+      description: Stable pending human-approval identifier.
+      schema:
+        type: string
+        minLength: 1
+    HumanApprovalStatus:
+      name: status
+      in: query
+      required: false
+      description: Optional status filter for pending human approvals.
+      schema:
+        type: string
+        enum:
+          - PENDING
     WorkerSessionID:
       name: worker_session_id
       in: path
@@ -2654,6 +2715,26 @@ components:
         workState:
           type: string
           description: Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
+        approvalId:
+          type: string
+          description: Pending human-approval identity when errorCode is INVOCATION_NEEDS_HUMAN.
+        dispatchId:
+          type: string
+          description: Reserved dispatch identity that is waiting for operator input.
+        workstationId:
+          type: string
+          description: Authored HUMAN_APPROVAL workstation identity.
+        workstationName:
+          type: string
+          description: Customer-authored HUMAN_APPROVAL workstation name.
+        decisions:
+          type: array
+          description: Fixed decision vocabulary available to the operator.
+          items:
+            type: string
+            enum:
+              - APPROVE
+              - REJECT
     InvocationTerminalStatus:
       type: string
       description: Terminal status for a factory-session invocation.
@@ -4706,6 +4787,79 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifact'
           description: Shared artifact projections for the session runtime.
+        pendingHumanApprovals:
+          type: array
+          items:
+            $ref: '#/components/schemas/HumanApproval'
+          description: Durable pending HUMAN_APPROVAL requests reconstructed from canonical events.
+    HumanApproval:
+      type: object
+      additionalProperties: false
+      required:
+        - approvalId
+        - sessionId
+        - dispatchId
+        - workstationId
+        - workstationName
+        - decisions
+        - status
+        - workIds
+      description: Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology.
+      properties:
+        approvalId:
+          type: string
+          description: Stable approval identity derived from the canonical dispatch.
+        sessionId:
+          type: string
+          description: Factory Session that owns the pending approval.
+        dispatchId:
+          type: string
+          description: Dispatch reserved for the pending approval.
+        workstationId:
+          type: string
+          description: Stable authored HUMAN_APPROVAL workstation identity.
+        workstationName:
+          type: string
+          description: Customer-authored workstation name.
+        description:
+          type: string
+          description: Localized safe description resolved from the effective factory.
+        decisions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - APPROVE
+              - REJECT
+        status:
+          type: string
+          enum:
+            - PENDING
+        workIds:
+          type: array
+          items:
+            type: string
+          description: Work identities consumed by the reserved dispatch.
+        eventId:
+          type: string
+          description: Stable canonical HUMAN_APPROVAL_REQUESTED event identifier.
+        requestedAt:
+          type: string
+          format: date-time
+          description: Canonical event time for the pending approval request.
+    ListHumanApprovalsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - approvals
+      properties:
+        approvals:
+          type: array
+          description: Deterministically ordered pending approvals for one session.
+          items:
+            $ref: '#/components/schemas/HumanApproval'
     FactoryStopKind:
       type: string
       description: Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
@@ -8296,6 +8450,7 @@ components:
             - $ref: '#/components/schemas/WorkRequestEventPayload'
             - $ref: '#/components/schemas/RelationshipChangeRequestEventPayload'
             - $ref: '#/components/schemas/DispatchRequestEventPayload'
+            - $ref: '#/components/schemas/HumanApprovalRequestedEventPayload'
             - $ref: '#/components/schemas/DispatchWorkerSessionAssociationEventPayload'
             - $ref: '#/components/schemas/ModelRequestEventPayload'
             - $ref: '#/components/schemas/ModelResponseEventPayload'
@@ -8352,6 +8507,7 @@ components:
           WORK_REQUEST: '#/components/schemas/WorkRequestEventPayload'
           RELATIONSHIP_CHANGE_REQUEST: '#/components/schemas/RelationshipChangeRequestEventPayload'
           DISPATCH_REQUEST: '#/components/schemas/DispatchRequestEventPayload'
+          HUMAN_APPROVAL_REQUESTED: '#/components/schemas/HumanApprovalRequestedEventPayload'
           DISPATCH_WORKER_SESSION_ASSOCIATION: '#/components/schemas/DispatchWorkerSessionAssociationEventPayload'
           MODEL_REQUEST: '#/components/schemas/ModelRequestEventPayload'
           MODEL_RESPONSE: '#/components/schemas/ModelResponseEventPayload'
@@ -8413,6 +8569,7 @@ components:
         - FactoryEventTypeWorkRequest
         - FactoryEventTypeRelationshipChangeRequest
         - FactoryEventTypeDispatchRequest
+        - FactoryEventTypeHumanApprovalRequested
         - FactoryEventTypeDispatchWorkerSessionAssociation
         - FactoryEventTypeModelRequest
         - FactoryEventTypeModelResponse
@@ -8448,6 +8605,7 @@ components:
         - WORK_REQUEST
         - RELATIONSHIP_CHANGE_REQUEST
         - DISPATCH_REQUEST
+        - HUMAN_APPROVAL_REQUESTED
         - DISPATCH_WORKER_SESSION_ASSOCIATION
         - MODEL_REQUEST
         - MODEL_RESPONSE
@@ -8483,6 +8641,7 @@ components:
         - Work entered the factory as a normalized request.
         - A relationship-change request between work items was recorded.
         - A workstation request began processing a set of input work.
+        - A HUMAN_APPROVAL workstation reserved its input Work and is waiting for operator input.
         - A dispatch was associated with the Worker Session allocated to execute it.
         - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
         - A model-backed worker invocation returned with resource, load, output, and failure evidence.
@@ -8869,6 +9028,35 @@ components:
           $ref: '#/components/schemas/DispatchRequestEventMetadata'
         expectedArtifactContext:
           $ref: '#/components/schemas/ExpectedArtifactTemplateContext'
+    HumanApprovalRequestedEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - approvalId
+        - workstationId
+        - decisions
+        - status
+      description: Canonical request for operator input at a HUMAN_APPROVAL workstation. FactoryEvent.context carries session, dispatch, request, trace, and Work lineage; this payload intentionally contains no mutable Work content or display text.
+      properties:
+        approvalId:
+          type: string
+          description: Stable approval identity derived from the reserved dispatch.
+        workstationId:
+          type: string
+          description: Authored HUMAN_APPROVAL workstation identity.
+        decisions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - APPROVE
+              - REJECT
+        status:
+          type: string
+          enum:
+            - PENDING
     DispatchWorkerSessionAssociationEventPayload:
       type: object
       additionalProperties: false
@@ -13233,6 +13421,9 @@ components:
         stopSummary:
           $ref: '#/components/schemas/FactoryStopSummary'
           description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
+        humanApproval:
+          $ref: '#/components/schemas/HumanApproval'
+          description: Pending HUMAN_APPROVAL request currently owning this Work item, when present.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

@@ -205,6 +205,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkRequest,
 	factoryapi.FactoryEventTypeRelationshipChangeRequest,
 	factoryapi.FactoryEventTypeDispatchRequest,
+	factoryapi.FactoryEventTypeHumanApprovalRequested,
 	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 	factoryapi.FactoryEventTypeModelRequest,
 	factoryapi.FactoryEventTypeModelResponse,
@@ -274,6 +275,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeDispatchRequest: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchRequestEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeHumanApprovalRequested: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsHumanApprovalRequestedEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -406,6 +411,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.DispatchRequestEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchRequestEventPayload(value.(factoryapi.DispatchRequestEventPayload))
+	},
+	reflect.TypeOf(factoryapi.HumanApprovalRequestedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromHumanApprovalRequestedEventPayload(value.(factoryapi.HumanApprovalRequestedEventPayload))
 	},
 	reflect.TypeOf(factoryapi.DispatchWorkerSessionAssociationEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchWorkerSessionAssociationEventPayload(value.(factoryapi.DispatchWorkerSessionAssociationEventPayload))

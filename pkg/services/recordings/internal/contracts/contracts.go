@@ -311,6 +311,9 @@ type (
 	DispatchQueuedEventPayload                 = interfaces.DispatchQueuedEventPayload
 	DispatchReconciledEventPayload             = interfaces.DispatchReconciledEventPayload
 	DispatchRequestEventPayload                = interfaces.DispatchRequestEventPayload
+	HumanApprovalDecision                      = interfaces.HumanApprovalDecision
+	HumanApprovalRequestedEventPayload         = interfaces.HumanApprovalRequestedEventPayload
+	HumanApprovalStatus                        = interfaces.HumanApprovalStatus
 	FactoryChangeEventPayload                  = interfaces.FactoryChangeEventPayload
 	FactoryChangeRequestEventPayload           = interfaces.FactoryChangeRequestEventPayload
 	FactoryChangeFailedEventPayload            = interfaces.FactoryChangeFailedEventPayload
@@ -351,6 +354,10 @@ const (
 	FactoryEventTypeDispatchRequest               = interfaces.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
 	FactoryEventTypeDispatchWorkerSessionAssoc    = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested        = interfaces.FactoryEventTypeHumanApprovalRequested
+	HumanApprovalDecisionApprove                  = interfaces.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                   = interfaces.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                    = interfaces.HumanApprovalStatusPending
 	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
 	FactoryEventTypeFactoryChangeRequest          = interfaces.FactoryEventTypeFactoryChangeRequest
 	FactoryEventTypeFactoryChangeFailed           = interfaces.FactoryEventTypeFactoryChangeFailed
@@ -399,6 +406,7 @@ type (
 	FactoryWorldAgentRunResponse              = interfaces.FactoryWorldAgentRunResponse
 	FactoryWorldDispatch                      = interfaces.FactoryWorldDispatch
 	FactoryWorldDispatchCompletion            = interfaces.FactoryWorldDispatchCompletion
+	FactoryWorldHumanApproval                 = interfaces.FactoryWorldHumanApproval
 	FactoryWorldFailureDetail                 = interfaces.FactoryWorldFailureDetail
 	FactoryWorldInferenceAttempt              = interfaces.FactoryWorldInferenceAttempt
 	FactoryWorldJavaScriptChildDispatchCounts = interfaces.FactoryWorldJavaScriptChildDispatchCounts
@@ -1750,6 +1758,13 @@ type RuntimeLedger interface {
 	RecordSessionLifecycleControl(SessionLifecycleControlInput, time.Time)
 	SetFactoryRunnerOverride(string)
 	SetInitialStructureFactory(*interfaces.FactorySnapshot)
+}
+
+// HumanApprovalRequestRecorder is the optional Recordings capability used by
+// Factory Runtime to publish a pending HUMAN_APPROVAL_REQUESTED fact without
+// widening every legacy RuntimeLedger test double.
+type HumanApprovalRequestRecorder interface {
+	RecordHumanApprovalRequested(int, FactoryDispatchRecord, time.Time)
 }
 
 // RuntimeEventLedger combines runtime-domain and Worker event publication for

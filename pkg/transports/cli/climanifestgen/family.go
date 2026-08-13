@@ -66,6 +66,9 @@ func AssertRepresentativeFamilyCommandID(id string) error {
 // for the work inspection/control family cutover slice.
 var WorkFamilyCommandIDs = []string{
 	"you.work",
+	"you.work.approval",
+	"you.work.approval.list",
+	"you.work.approval.show",
 	"you.work.list",
 	"you.work.watch",
 	"you.work.show",

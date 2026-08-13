@@ -1097,7 +1097,7 @@ func TestReconstructFactoryWorldState_LogicalMoveCronDispatchOmitsWorkerMetadata
 						Name:     "scheduled-route",
 						Behavior: &workstationKind,
 						Type:     &workstationType,
-						Worker:   "",
+						Worker:   stringPtrForProjectionTest(""),
 						Inputs:   []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
 						Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 					}},

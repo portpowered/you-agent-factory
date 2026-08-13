@@ -217,6 +217,7 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 		out = append(out, interfaces.FactoryWorkstation{
 			ID:                transition.ID,
 			Name:              transition.Name,
+			Description:       workstationDescription(transition.Name, runtimeConfig),
 			WorkerID:          transition.WorkerType,
 			Kind:              kind,
 			Config:            workstationConfig(transition, runtimeConfig),
@@ -229,6 +230,25 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 		})
 	}
 	return out
+}
+
+func workstationDescription(name string, runtimeConfig interfaces.RuntimeWorkstationLookup) *interfaces.NameValueConfig {
+	if runtimeConfig == nil {
+		return nil
+	}
+	workstation, ok := runtimeWorkstation(name, runtimeConfig)
+	if !ok || workstation == nil || workstation.Description == nil {
+		return nil
+	}
+	copyValue := *workstation.Description
+	copyValue.Locales = append([]string(nil), workstation.Description.Locales...)
+	if workstation.Description.Values != nil {
+		copyValue.Values = make(map[string]string, len(workstation.Description.Values))
+		for locale, value := range workstation.Description.Values {
+			copyValue.Values[locale] = value
+		}
+	}
+	return &copyValue
 }
 
 func workstationConfig(transition *petri.Transition, runtimeConfig interfaces.RuntimeWorkstationLookup) map[string]string {

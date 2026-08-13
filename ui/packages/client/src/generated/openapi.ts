@@ -238,6 +238,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/approvals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List pending human approvals for one session
+     * @description Lists durable HUMAN_APPROVAL requests reconstructed from the canonical Factory Event ledger for the explicitly selected Factory Session. Results are deterministically ordered by approval identity and are read-only in this lane.
+     */
+    get: operations["listHumanApprovalsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/approvals/{approval_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one pending human approval
+     * @description Returns one durable pending HUMAN_APPROVAL projection by stable approval identity.
+     */
+    get: operations["getHumanApprovalBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/worker-sessions": {
     parameters: {
       query?: never;
@@ -1290,6 +1330,16 @@ export interface components {
       workName?: string;
       /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
       workState?: string;
+      /** @description Pending human-approval identity when errorCode is INVOCATION_NEEDS_HUMAN. */
+      approvalId?: string;
+      /** @description Reserved dispatch identity that is waiting for operator input. */
+      dispatchId?: string;
+      /** @description Authored HUMAN_APPROVAL workstation identity. */
+      workstationId?: string;
+      /** @description Customer-authored HUMAN_APPROVAL workstation name. */
+      workstationName?: string;
+      /** @description Fixed decision vocabulary available to the operator. */
+      decisions?: InvocationResponseDecisions[];
     };
     /**
      * @description Terminal status for a factory-session invocation.
@@ -2100,6 +2150,39 @@ export interface components {
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
+      /** @description Durable pending HUMAN_APPROVAL requests reconstructed from canonical events. */
+      pendingHumanApprovals?: components["schemas"]["HumanApproval"][];
+    };
+    /** @description Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology. */
+    HumanApproval: {
+      /** @description Stable approval identity derived from the canonical dispatch. */
+      approvalId: string;
+      /** @description Factory Session that owns the pending approval. */
+      sessionId: string;
+      /** @description Dispatch reserved for the pending approval. */
+      dispatchId: string;
+      /** @description Stable authored HUMAN_APPROVAL workstation identity. */
+      workstationId: string;
+      /** @description Customer-authored workstation name. */
+      workstationName: string;
+      /** @description Localized safe description resolved from the effective factory. */
+      description?: string;
+      decisions: HumanApprovalDecisions[];
+      /** @enum {string} */
+      status: HumanApprovalStatus;
+      /** @description Work identities consumed by the reserved dispatch. */
+      workIds: string[];
+      /** @description Stable canonical HUMAN_APPROVAL_REQUESTED event identifier. */
+      eventId?: string;
+      /**
+       * Format: date-time
+       * @description Canonical event time for the pending approval request.
+       */
+      requestedAt?: string;
+    };
+    ListHumanApprovalsResponse: {
+      /** @description Deterministically ordered pending approvals for one session. */
+      approvals: components["schemas"]["HumanApproval"][];
     };
     /**
      * @description Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
@@ -3947,6 +4030,7 @@ export interface components {
         | components["schemas"]["WorkRequestEventPayload"]
         | components["schemas"]["RelationshipChangeRequestEventPayload"]
         | components["schemas"]["DispatchRequestEventPayload"]
+        | components["schemas"]["HumanApprovalRequestedEventPayload"]
         | components["schemas"]["DispatchWorkerSessionAssociationEventPayload"]
         | components["schemas"]["ModelRequestEventPayload"]
         | components["schemas"]["ModelResponseEventPayload"]
@@ -4163,6 +4247,16 @@ export interface components {
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
       expectedArtifactContext?: components["schemas"]["ExpectedArtifactTemplateContext"];
+    };
+    /** @description Canonical request for operator input at a HUMAN_APPROVAL workstation. FactoryEvent.context carries session, dispatch, request, trace, and Work lineage; this payload intentionally contains no mutable Work content or display text. */
+    HumanApprovalRequestedEventPayload: {
+      /** @description Stable approval identity derived from the reserved dispatch. */
+      approvalId: string;
+      /** @description Authored HUMAN_APPROVAL workstation identity. */
+      workstationId: string;
+      decisions: HumanApprovalRequestedEventPayloadDecisions[];
+      /** @enum {string} */
+      status: HumanApprovalRequestedEventPayloadStatus;
     };
     /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
     DispatchWorkerSessionAssociationEventPayload: {
@@ -6446,6 +6540,8 @@ export interface components {
       expectedArtifacts?: components["schemas"]["WorkExpectedArtifact"][];
       /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
       stopSummary?: components["schemas"]["FactoryStopSummary"];
+      /** @description Pending HUMAN_APPROVAL request currently owning this Work item, when present. */
+      humanApproval?: components["schemas"]["HumanApproval"];
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
@@ -7145,6 +7241,10 @@ export interface components {
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
     SessionID: string;
+    /** @description Stable pending human-approval identifier. */
+    HumanApprovalID: string;
+    /** @description Optional status filter for pending human approvals. */
+    HumanApprovalStatus: ComponentsParametersHumanApprovalStatus;
     /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
     WorkerSessionID: string;
     /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
@@ -7610,6 +7710,62 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listHumanApprovalsBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Optional status filter for pending human approvals. */
+        status?: components["parameters"]["HumanApprovalStatus"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered pending approvals. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListHumanApprovalsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getHumanApprovalBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable pending human-approval identifier. */
+        approval_id: components["parameters"]["HumanApprovalID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One pending human approval. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HumanApproval"];
+        };
+      };
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
@@ -9195,6 +9351,12 @@ export const InvocationResponseErrorCode = {
 } as const;
 export type InvocationResponseErrorCode =
   (typeof InvocationResponseErrorCode)[keyof typeof InvocationResponseErrorCode];
+export const InvocationResponseDecisions = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+} as const;
+export type InvocationResponseDecisions =
+  (typeof InvocationResponseDecisions)[keyof typeof InvocationResponseDecisions];
 export const InvocationTerminalStatus = {
   // Invocation completed and any primaryResult is authoritative.
   InvocationTerminalStatusCompleted: "COMPLETED",
@@ -9591,6 +9753,17 @@ export const FactorySessionTargetRefKind = {
 } as const;
 export type FactorySessionTargetRefKind =
   (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const HumanApprovalDecisions = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+} as const;
+export type HumanApprovalDecisions =
+  (typeof HumanApprovalDecisions)[keyof typeof HumanApprovalDecisions];
+export const HumanApprovalStatus = {
+  PENDING: "PENDING",
+} as const;
+export type HumanApprovalStatus =
+  (typeof HumanApprovalStatus)[keyof typeof HumanApprovalStatus];
 export const FactoryStopKind = {
   PAUSED: "PAUSED",
   BLOCKED: "BLOCKED",
@@ -10007,6 +10180,8 @@ export const FactoryEventType = {
   FactoryEventTypeRelationshipChangeRequest: "RELATIONSHIP_CHANGE_REQUEST",
   // A workstation request began processing a set of input work.
   FactoryEventTypeDispatchRequest: "DISPATCH_REQUEST",
+  // A HUMAN_APPROVAL workstation reserved its input Work and is waiting for operator input.
+  FactoryEventTypeHumanApprovalRequested: "HUMAN_APPROVAL_REQUESTED",
   // A dispatch was associated with the Worker Session allocated to execute it.
   FactoryEventTypeDispatchWorkerSessionAssociation:
     "DISPATCH_WORKER_SESSION_ASSOCIATION",
@@ -10080,6 +10255,17 @@ export const FactoryResourceCapacityChangeOutcome = {
 } as const;
 export type FactoryResourceCapacityChangeOutcome =
   (typeof FactoryResourceCapacityChangeOutcome)[keyof typeof FactoryResourceCapacityChangeOutcome];
+export const HumanApprovalRequestedEventPayloadDecisions = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+} as const;
+export type HumanApprovalRequestedEventPayloadDecisions =
+  (typeof HumanApprovalRequestedEventPayloadDecisions)[keyof typeof HumanApprovalRequestedEventPayloadDecisions];
+export const HumanApprovalRequestedEventPayloadStatus = {
+  PENDING: "PENDING",
+} as const;
+export type HumanApprovalRequestedEventPayloadStatus =
+  (typeof HumanApprovalRequestedEventPayloadStatus)[keyof typeof HumanApprovalRequestedEventPayloadStatus];
 export const InferenceOutcome = {
   // The provider attempt returned a successful response.
   InferenceOutcomeSucceeded: "SUCCEEDED",
@@ -10916,6 +11102,11 @@ export const GlobalConfigACPIntegrationTransport = {
 } as const;
 export type GlobalConfigACPIntegrationTransport =
   (typeof GlobalConfigACPIntegrationTransport)[keyof typeof GlobalConfigACPIntegrationTransport];
+export const ComponentsParametersHumanApprovalStatus = {
+  PENDING: "PENDING",
+} as const;
+export type ComponentsParametersHumanApprovalStatus =
+  (typeof ComponentsParametersHumanApprovalStatus)[keyof typeof ComponentsParametersHumanApprovalStatus];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

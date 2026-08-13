@@ -17,8 +17,8 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 	if work.Name() != "work" {
 		t.Fatalf("work name = %q, want work", work.Name())
 	}
-	if len(work.Commands()) != 5 {
-		t.Fatalf("work child count = %d, want 5 runnable leaves", len(work.Commands()))
+	if len(work.Commands()) != 6 {
+		t.Fatalf("work child count = %d, want approval plus 5 runnable leaves", len(work.Commands()))
 	}
 	if work.Runnable() {
 		t.Fatal("you work must remain non-runnable")
@@ -28,6 +28,8 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"work approval list",
+		"work approval show",
 		"work list",
 		"work watch",
 		"work show",
@@ -361,6 +363,8 @@ func TestNewWorkFamilyCommandRegistersEveryManifestLocalFlag(t *testing.T) {
 		commandID string
 		path      string
 	}{
+		{commandID: "you.work.approval.list", path: "work approval list"},
+		{commandID: "you.work.approval.show", path: "work approval show"},
 		{commandID: "you.work.list", path: "work list"},
 		{commandID: "you.work.watch", path: "work watch"},
 		{commandID: "you.work.show", path: "work show"},
@@ -573,24 +577,26 @@ func mustWorkFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry
 
 func testWorkBindings() WorkFamilyBindings {
 	return WorkFamilyBindings{LocalTargets: map[string]any{
-		"you.work.list.flag.state-name":     testScalarTarget(""),
-		"you.work.list.flag.state-type":     testScalarTarget(""),
-		"you.work.list.flag.name":           testScalarTarget(""),
-		"you.work.list.flag.work-type-name": testScalarTarget(""),
-		"you.work.list.flag.trace-id":       testScalarTarget(""),
-		"you.work.list.flag.terminal":       testScalarTarget(false),
-		"you.work.list.flag.non-terminal":   testScalarTarget(false),
-		"you.work.list.flag.sort-by":        testScalarTarget(""),
-		"you.work.list.flag.max-results":    testScalarTarget(0),
-		"you.work.list.flag.next-token":     testScalarTarget(""),
-		"you.work.list.flag.counts":         testScalarTarget(false),
-		"you.work.list.flag.session":        testScalarTarget(""),
-		"you.work.watch.flag.follow":        testScalarTarget(false),
-		"you.work.watch.flag.session":       testScalarTarget(""),
-		"you.work.show.flag.session":        testScalarTarget(""),
-		"you.work.move.flag.session":        testScalarTarget(""),
-		"you.work.move.flag.request-id":     testScalarTarget(""),
-		"you.work.visualize.flag.format":    testScalarTarget("mermaid"),
+		"you.work.list.flag.state-name":       testScalarTarget(""),
+		"you.work.list.flag.state-type":       testScalarTarget(""),
+		"you.work.list.flag.name":             testScalarTarget(""),
+		"you.work.list.flag.work-type-name":   testScalarTarget(""),
+		"you.work.list.flag.trace-id":         testScalarTarget(""),
+		"you.work.list.flag.terminal":         testScalarTarget(false),
+		"you.work.list.flag.non-terminal":     testScalarTarget(false),
+		"you.work.list.flag.sort-by":          testScalarTarget(""),
+		"you.work.list.flag.max-results":      testScalarTarget(0),
+		"you.work.list.flag.next-token":       testScalarTarget(""),
+		"you.work.list.flag.counts":           testScalarTarget(false),
+		"you.work.list.flag.session":          testScalarTarget(""),
+		"you.work.approval.list.flag.session": testScalarTarget(""),
+		"you.work.approval.show.flag.session": testScalarTarget(""),
+		"you.work.watch.flag.follow":          testScalarTarget(false),
+		"you.work.watch.flag.session":         testScalarTarget(""),
+		"you.work.show.flag.session":          testScalarTarget(""),
+		"you.work.move.flag.session":          testScalarTarget(""),
+		"you.work.move.flag.request-id":       testScalarTarget(""),
+		"you.work.visualize.flag.format":      testScalarTarget("mermaid"),
 	}}
 }
 
@@ -600,6 +606,12 @@ func workPathForID(commandID string) string {
 	switch commandID {
 	case "you.work.list":
 		return "work list"
+	case "you.work.approval":
+		return "work approval"
+	case "you.work.approval.list":
+		return "work approval list"
+	case "you.work.approval.show":
+		return "work approval show"
 	case "you.work.watch":
 		return "work watch"
 	case "you.work.show":
@@ -644,10 +656,12 @@ func TestNewResolvedWorkCommandTreeBuildsOnlyGeneratedWorkFamily(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Find(work) error = %v", err)
 	}
-	if len(work.Commands()) != 5 {
-		t.Fatalf("work children=%d, want 5", len(work.Commands()))
+	if len(work.Commands()) != 6 {
+		t.Fatalf("work children=%d, want approval plus 5 leaves", len(work.Commands()))
 	}
 	for _, path := range [][]string{
+		{"work", "approval", "list"},
+		{"work", "approval", "show"},
 		{"work", "list"},
 		{"work", "watch"},
 		{"work", "show"},
@@ -816,9 +830,9 @@ func TestNewResolvedWorkCommandReturnsDetachedSubtree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if work.Name() != "work" || work.Parent() != nil || len(work.Commands()) != 5 {
+	if work.Name() != "work" || work.Parent() != nil || len(work.Commands()) != 6 {
 		t.Fatalf(
-			"detached work = name %q parent %v children %d, want five leaves",
+			"detached work = name %q parent %v children %d, want approval plus five leaves",
 			work.Name(),
 			work.Parent(),
 			len(work.Commands()),

@@ -466,6 +466,54 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/approvals:
+    get:
+      tags:
+        - Work
+      operationId: listHumanApprovalsBySessionId
+      summary: List pending human approvals for one session
+      description: >-
+        Lists durable HUMAN_APPROVAL requests reconstructed from the canonical
+        Factory Event ledger for the explicitly selected Factory Session.
+        Results are deterministically ordered by approval identity and are
+        read-only in this lane.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/HumanApprovalStatus'
+      responses:
+        '200':
+          description: Deterministically ordered pending approvals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListHumanApprovalsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/approvals/{approval_id}:
+    get:
+      tags:
+        - Work
+      operationId: getHumanApprovalBySessionId
+      summary: Show one pending human approval
+      description: Returns one durable pending HUMAN_APPROVAL projection by stable approval identity.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/HumanApprovalID'
+      responses:
+        '200':
+          description: One pending human approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanApproval'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions:
     get:
       tags:
@@ -2225,6 +2273,10 @@ components:
   parameters:
     SessionID:
       $ref: './components/parameters/SessionID.yaml'
+    HumanApprovalID:
+      $ref: './components/parameters/HumanApprovalID.yaml'
+    HumanApprovalStatus:
+      $ref: './components/parameters/HumanApprovalStatus.yaml'
     WorkerSessionID:
       $ref: './components/parameters/WorkerSessionID.yaml'
     ResourceID:
@@ -2517,6 +2569,10 @@ components:
       $ref: './components/schemas/api/FactorySession.yaml'
     FactorySessionRuntime:
       $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    HumanApproval:
+      $ref: './components/schemas/api/HumanApproval.yaml'
+    ListHumanApprovalsResponse:
+      $ref: './components/schemas/api/ListHumanApprovalsResponse.yaml'
     FactoryStopKind:
       $ref: './components/schemas/api/FactoryStopKind.yaml'
     FactoryStopDispatchSummary:
@@ -2869,6 +2925,8 @@ components:
       $ref: './components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml'
     DispatchRequestEventPayload:
       $ref: './components/schemas/events/payloads/DispatchRequestEventPayload.yaml'
+    HumanApprovalRequestedEventPayload:
+      $ref: './components/schemas/events/payloads/HumanApprovalRequestedEventPayload.yaml'
     DispatchWorkerSessionAssociationEventPayload:
       $ref: './components/schemas/events/payloads/DispatchWorkerSessionAssociationEventPayload.yaml'
     ModelRequestEventPayload:

@@ -45,6 +45,7 @@ func PublicEmittableFactoryEventKinds() []PublicEmittableKind {
 		{Kind: recordings.FactoryEventTypeWorkRequest, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordWorkRequest"},
 		{Kind: recordings.FactoryEventTypeRelationshipChangeRequest, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordRelationshipChange"},
 		{Kind: recordings.FactoryEventTypeDispatchRequest, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordWorkstationRequest"},
+		{Kind: recordings.FactoryEventTypeHumanApprovalRequested, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordHumanApprovalRequested"},
 		{Kind: recordings.FactoryEventTypeDispatchWorkerSessionAssoc, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordDispatchWorkerSessionAssociation"},
 		{Kind: recordings.FactoryEventTypeDispatchResponse, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordWorkstationResponse"},
 		{Kind: recordings.FactoryEventTypeFactoryStateResponse, EmissionEvidence: "pkg/services/recordings/internal/events/event_history.go RecordFactoryStateChange"},

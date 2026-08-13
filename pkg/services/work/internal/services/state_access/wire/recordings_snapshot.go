@@ -67,6 +67,7 @@ func readModelFromWorkItem(
 		ExpectedArtifacts:        expectedArtifactsFromWorldItem(item, state),
 	}
 	read.State = workStateFromItem(item, state, inFlight)
+	read.HumanApproval = humanApprovalForWork(item.ID, state)
 	for _, relation := range state.RelationsByWorkID[item.ID] {
 		read.Relations = append(read.Relations, work.ReadRelation{
 			Type:           work.RelationType(relation.Type),
@@ -77,6 +78,35 @@ func readModelFromWorkItem(
 		})
 	}
 	return read
+}
+
+func humanApprovalForWork(workID string, state interfaces.FactoryWorldState) *work.HumanApprovalReadModel {
+	approvalIDs := make([]string, 0, len(state.PendingHumanApprovalsByID))
+	for approvalID := range state.PendingHumanApprovalsByID {
+		approvalIDs = append(approvalIDs, approvalID)
+	}
+	sort.Strings(approvalIDs)
+	for _, approvalID := range approvalIDs {
+		approval := state.PendingHumanApprovalsByID[approvalID]
+		for _, approvalWorkID := range approval.WorkItemIDs {
+			if approvalWorkID != workID {
+				continue
+			}
+			result := &work.HumanApprovalReadModel{
+				ApprovalID: approval.ApprovalID, SessionID: approval.SessionID, DispatchID: approval.DispatchID,
+				WorkstationID: approval.WorkstationID, WorkstationName: approval.WorkstationName,
+				Decisions: make([]string, 0, len(approval.Decisions)), Status: string(approval.Status),
+			}
+			if approval.WorkstationDescription != nil {
+				result.Description = interfaces.ResolveNameValue(*approval.WorkstationDescription, "")
+			}
+			for _, decision := range approval.Decisions {
+				result.Decisions = append(result.Decisions, string(decision))
+			}
+			return result
+		}
+	}
+	return nil
 }
 
 func workStateFromItem(

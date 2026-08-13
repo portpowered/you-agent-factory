@@ -1,0 +1,32 @@
+type: object
+additionalProperties: false
+required:
+  - approvalId
+  - workstationId
+  - decisions
+  - status
+description: >-
+  Canonical request for operator input at a HUMAN_APPROVAL workstation.
+  FactoryEvent.context carries session, dispatch, request, trace, and Work
+  lineage; this payload intentionally contains no mutable Work content or
+  display text.
+properties:
+  approvalId:
+    type: string
+    description: Stable approval identity derived from the reserved dispatch.
+  workstationId:
+    type: string
+    description: Authored HUMAN_APPROVAL workstation identity.
+  decisions:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      enum:
+        - APPROVE
+        - REJECT
+  status:
+    type: string
+    enum:
+      - PENDING

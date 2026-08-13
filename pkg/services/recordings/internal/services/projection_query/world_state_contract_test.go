@@ -46,6 +46,17 @@ func TestFactoryWorldState_RoundTripsDetachedProjectionPayload(t *testing.T) {
 	state := recordings.FactoryWorldState{
 		Tick:      3,
 		EventTime: time.Date(2026, 7, 28, 5, 15, 0, 0, time.UTC),
+		PendingHumanApprovalsByID: map[string]recordings.FactoryWorldHumanApproval{
+			"approval-1": {
+				ApprovalID: "approval-1", SessionID: "session-1", DispatchID: "dispatch-1",
+				WorkstationID: "approval-workstation", WorkstationName: "Release Approval",
+				Decisions: []recordings.HumanApprovalDecision{
+					recordings.HumanApprovalDecisionApprove,
+					recordings.HumanApprovalDecisionReject,
+				},
+				Status: recordings.HumanApprovalStatusPending, WorkItemIDs: []string{"work-1", "work-2"},
+			},
+		},
 		TerminalWorkByID: map[string]recordings.FactoryTerminalWork{
 			"work-1": {
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "goal", State: "done"},
@@ -62,7 +73,10 @@ func TestFactoryWorldState_RoundTripsDetachedProjectionPayload(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatalf("unmarshal world state: %v", err)
 	}
-	if decoded.Tick != state.Tick || decoded.TerminalWorkByID["work-1"].Status != "TERMINAL" {
+	approval := decoded.PendingHumanApprovalsByID["approval-1"]
+	if decoded.Tick != state.Tick || decoded.TerminalWorkByID["work-1"].Status != "TERMINAL" ||
+		approval.SessionID != "session-1" || approval.WorkstationName != "Release Approval" ||
+		!reflect.DeepEqual(approval.WorkItemIDs, []string{"work-1", "work-2"}) {
 		t.Fatalf("decoded = %#v, want tick and terminal status from %#v", decoded, state)
 	}
 }

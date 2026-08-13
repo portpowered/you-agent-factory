@@ -31,6 +31,7 @@ const (
 	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeDispatchWorkerSessionAssoc    FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
+	FactoryEventTypeHumanApprovalRequested        FactoryEventType = "HUMAN_APPROVAL_REQUESTED"
 	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
 	FactoryEventTypeFactoryChangeRequest          FactoryEventType = "FACTORY_CHANGE_REQUEST"
 	FactoryEventTypeFactoryChangeFailed           FactoryEventType = "FACTORY_CHANGE_FAILED"
@@ -714,6 +715,33 @@ type DispatchRequestEventPayload struct {
 	TransitionID             string                                `json:"transitionId"`
 }
 
+// HumanApprovalDecision is one of the fixed operator decisions exposed by a
+// pending HUMAN_APPROVAL workstation. The requested event deliberately
+// records the decision vocabulary, not mutable prompt or Work content.
+type HumanApprovalDecision string
+
+const (
+	HumanApprovalDecisionApprove HumanApprovalDecision = "APPROVE"
+	HumanApprovalDecisionReject  HumanApprovalDecision = "REJECT"
+)
+
+// HumanApprovalStatus is the durable lifecycle state of an approval request.
+// Resolution is intentionally owned by a later workflow; this lane records
+// only the pending state.
+type HumanApprovalStatus string
+
+const HumanApprovalStatusPending HumanApprovalStatus = "PENDING"
+
+// HumanApprovalRequestedEventPayload contains only stable approval identity
+// and fixed decision vocabulary. Session, dispatch, Work, trace, and ordering
+// identity remain authoritative on FactoryEventContext.
+type HumanApprovalRequestedEventPayload struct {
+	ApprovalID    string                  `json:"approvalId"`
+	WorkstationID string                  `json:"workstationId"`
+	Decisions     []HumanApprovalDecision `json:"decisions"`
+	Status        HumanApprovalStatus     `json:"status"`
+}
+
 // DispatchWorkerSessionAssociationEventPayload records the canonical,
 // stable dispatch-to-Worker-Session identity association. Runtime commits
 // this record before invoking worker_sessions.Service.Start for the
@@ -828,6 +856,7 @@ type FactoryStateDefinition struct {
 type FactoryWorkstation struct {
 	ID                string                             `json:"id"`
 	Name              string                             `json:"name"`
+	Description       *NameValueConfig                   `json:"description,omitempty"`
 	WorkerID          string                             `json:"worker_id,omitempty"`
 	Kind              string                             `json:"kind,omitempty"`
 	Config            map[string]string                  `json:"config,omitempty"`

@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - approvals
+properties:
+  approvals:
+    type: array
+    description: Deterministically ordered pending approvals for one session.
+    items:
+      $ref: './HumanApproval.yaml'
