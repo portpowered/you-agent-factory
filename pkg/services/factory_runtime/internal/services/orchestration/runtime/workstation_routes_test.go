@@ -67,6 +67,7 @@ func TestFinalizeRuntimeExecutionSelectionUsesProviderRunner(t *testing.T) {
 	}{
 		{name: "authored claude model provider", modelProvider: "claude", wantRunner: workers.RunnerIDClaude},
 		{name: "authored agy executor provider", providerID: "agy", modelProvider: "codex", wantRunner: workers.RunnerIDAntigravity},
+		{name: "authored ACP integration", providerID: workers.ExecutorProviderACP, modelProvider: "copilot-acp", wantRunner: "copilot-acp"},
 		{name: "unknown provider uses codex default", modelProvider: "operator-provider", wantRunner: workers.RunnerIDCodex},
 	}
 	for _, test := range tests {
@@ -82,6 +83,21 @@ func TestFinalizeRuntimeExecutionSelectionUsesProviderRunner(t *testing.T) {
 				t.Fatalf("runnerID = %q, want %q; selection = %#v", selection.runnerID, test.wantRunner, selection)
 			}
 		})
+	}
+}
+
+func TestFinalizeRuntimeExecutionSelectionCanonicalizesACPProvider(t *testing.T) {
+	selection := runtimeExecutionSelection{
+		providerID:    workers.ExecutorProviderACP,
+		modelProvider: "cursor-acp",
+		model:         "test-model",
+		workerType:    interfaces.WorkerTypeModel,
+	}
+
+	finalizeRuntimeExecutionSelection(&selection, nil)
+
+	if selection.providerID != "cursor-acp" || selection.runnerID != "cursor-acp" {
+		t.Fatalf("selection = %#v, want concrete ACP provider and runner", selection)
 	}
 }
 

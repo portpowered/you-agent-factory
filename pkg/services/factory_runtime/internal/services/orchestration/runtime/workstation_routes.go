@@ -395,6 +395,19 @@ func finalizeRuntimeExecutionSelection(
 	if strings.EqualFold(strings.TrimSpace(selection.providerID), "script_wrap") {
 		selection.providerID = strings.TrimSpace(selection.modelProvider)
 	}
+	// ACP is an authored execution mechanism, not a Providers catalog ID.
+	// Detached Workers authorizes Target.Provider.ID before it reaches the
+	// agent runner, so carry the concrete model-provider identity across this
+	// boundary and use it for runner selection as well.
+	if strings.EqualFold(strings.TrimSpace(selection.providerID), workers.ExecutorProviderACP) {
+		if identity, err := workers.RunnerIdentityForWorker(
+			selection.providerID,
+			selection.modelProvider,
+		); err == nil && identity != "" {
+			selection.providerID = identity
+			selection.runnerID = identity
+		}
+	}
 	if selection.providerID == "" {
 		selection.providerID = selection.modelProvider
 	}
