@@ -24,6 +24,9 @@ export function useDashboardSessionTabFocus({
     const activeSessionIsLive =
       currentActiveSessionID !== null &&
       sessions.some((session) => session.id === currentActiveSessionID);
+    const requestedFocusSessionIsLive =
+      requestedFocusSessionID !== null &&
+      sessions.some((session) => session.id === requestedFocusSessionID);
     const activeSessionChanged =
       currentActiveSessionID !== lastCommittedActiveSessionID.current;
     const focusSessionID =
@@ -32,22 +35,39 @@ export function useDashboardSessionTabFocus({
         : activeSessionChanged
           ? currentActiveSessionID
           : null;
+    const focusButton = focusSessionID
+      ? sessionButtonRefs.current.get(focusSessionID)
+      : undefined;
 
-    if (focusSessionID && activeSessionIsLive) {
-      sessionButtonRefs.current.get(focusSessionID)?.focus();
+    if (focusButton && activeSessionIsLive) {
+      focusButton.focus();
     }
 
-    if (
+    if (!requestedFocusSessionIsLive) {
+      pendingFocusSessionID.current = null;
+    } else if (
+      focusSessionID === requestedFocusSessionID &&
+      focusButton &&
+      activeSessionIsLive
+    ) {
+      // Keep the request until the keyed DOM ref is committed and focused.
+      pendingFocusSessionID.current = null;
+    } else if (
       requestedFocusSessionID !== null &&
-      requestedFocusSessionID !== currentActiveSessionID
+      requestedFocusSessionID !== currentActiveSessionID &&
+      activeSessionChanged
     ) {
       pendingFocusSessionID.current = null;
-    } else if (focusSessionID === requestedFocusSessionID) {
-      pendingFocusSessionID.current = null;
+    } else if (
+      requestedFocusSessionID !== null &&
+      requestedFocusSessionIsLive &&
+      requestedFocusSessionID !== currentActiveSessionID
+    ) {
+      onSelectSession(requestedFocusSessionID);
     }
 
     lastCommittedActiveSessionID.current = currentActiveSessionID;
-  }, [activeSession?.id, sessions]);
+  }, [activeSession?.id, onSelectSession, sessions]);
 
   function getSessionButtonRef(sessionID: string) {
     const existingCallback = sessionButtonRefCallbacks.current.get(sessionID);

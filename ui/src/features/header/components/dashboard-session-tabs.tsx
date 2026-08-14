@@ -376,7 +376,7 @@ function SessionTabsContent({
                 }
               }}
               onClick={() => {
-                onSelectSession(session.id);
+                selectAndFocusSession(session.id);
               }}
               closeDisabled={closingSessionID === session.id}
               messages={messages}
