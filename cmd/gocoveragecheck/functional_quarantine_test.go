@@ -141,6 +141,8 @@ func TestReadFunctionalQuarantineRejectsUnknownFieldsAndTrailingValues(t *testin
 		want string
 	}{
 		{name: "unknown field", data: `{"version":1,"suite":"functional","entries":[],"unexpected":true}`, want: "unknown field"},
+		{name: "missing entries", data: `{"version":1,"suite":"functional"}`, want: "entries must be an array"},
+		{name: "null entries", data: `{"version":1,"suite":"functional","entries":null}`, want: "entries must be an array"},
 		{name: "trailing value", data: `{"version":1,"suite":"functional","entries":[]} {}`, want: "multiple JSON values"},
 	}
 	for _, test := range tests {

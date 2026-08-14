@@ -91,6 +91,9 @@ func readFunctionalQuarantineFile(path string) (functionalQuarantine, error) {
 	if err := ensureJSONEOF(decoder); err != nil {
 		return functionalQuarantine{}, fmt.Errorf("parse functional quarantine %q: %w", path, err)
 	}
+	if manifest.Entries == nil {
+		return functionalQuarantine{}, fmt.Errorf("parse functional quarantine %q: entries must be an array", path)
+	}
 	return manifest, nil
 }
 
