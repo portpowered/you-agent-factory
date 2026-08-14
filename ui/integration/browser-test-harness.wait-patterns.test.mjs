@@ -16,6 +16,8 @@ import {
   waitForFactoryGraphSelectionDeleteButton,
   waitForFactoryGraphSelectionReady,
   waitForStableBoundingBox,
+  waitForStableFactoryGraphNodePlacement,
+  waitForStableFactoryGraphViewport,
 } from "./browser-test-harness.mjs";
 
 describe("browser wait pattern helpers", () => {
@@ -62,7 +64,63 @@ describe("browser wait pattern helpers", () => {
     );
     expect(locator.boundingBox).toHaveBeenCalledTimes(3);
   });
+});
 
+describe("factory graph wait helpers", () => {
+  it("waitForStableFactoryGraphViewport observes two matching transforms", async () => {
+    const flowViewport = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce("matrix(1, 0, 0, 1, 0, 0)")
+        .mockResolvedValue("matrix(1, 0, 0, 1, 20, -12)"),
+    };
+    const page = {
+      locator: vi.fn(() => flowViewport),
+    };
+
+    await expect(waitForStableFactoryGraphViewport(page, 500, 1)).resolves.toBe(
+      "matrix(1, 0, 0, 1, 20, -12)",
+    );
+    expect(page.locator).toHaveBeenCalledWith(
+      "[data-current-activity-flow] .react-flow__viewport",
+    );
+    expect(flowViewport.evaluate).toHaveBeenCalledTimes(3);
+  });
+
+  it("waitForStableFactoryGraphNodePlacement observes settled geometry and transforms", async () => {
+    const sample = {
+      node: { height: 120, width: 180, x: 420, y: 260 },
+      nodeTransform: "translate(420px, 260px)",
+      viewport: { height: 720, width: 1280, x: 0, y: 0 },
+      viewportTransform: "matrix(1, 0, 0, 1, -80, 40)",
+    };
+    const page = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ...sample,
+          node: { ...sample.node, x: 1200 },
+        })
+        .mockResolvedValue(sample),
+    };
+
+    await expect(
+      waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-workstation:review",
+        500,
+        1,
+      ),
+    ).resolves.toEqual(sample);
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      "rf__node-workstation:review",
+    );
+    expect(page.evaluate).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("browser wait pattern helpers", () => {
   it("waitForFactoryGraphSelectionReady waits for measured graph internals", async () => {
     const readinessMarker = {
       count: vi.fn().mockResolvedValueOnce(0).mockResolvedValue(1),

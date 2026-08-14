@@ -186,6 +186,144 @@ export async function waitForStableBoundingBox(
   return stableBox;
 }
 
+/** Wait until React Flow has committed the same viewport transform twice. */
+export async function waitForStableFactoryGraphViewport(
+  page,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+) {
+  const flowViewport = page.locator(
+    "[data-current-activity-flow] .react-flow__viewport",
+  );
+  let previousTransform = null;
+  let stableTransform = null;
+
+  await waitForDurableCheckpoint(
+    "factory graph viewport settlement",
+    async () => {
+      const nextTransform = await flowViewport
+        .evaluate((element) => window.getComputedStyle(element).transform)
+        .catch(() => null);
+      const stable =
+        nextTransform !== null && nextTransform === previousTransform;
+      previousTransform = nextTransform;
+
+      if (!stable) {
+        return false;
+      }
+
+      stableTransform = nextTransform;
+      return true;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+
+  return stableTransform;
+}
+
+function graphNodePlacementSamplesEqual(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.nodeTransform === right.nodeTransform &&
+    left.viewportTransform === right.viewportTransform &&
+    left.node.x === right.node.x &&
+    left.node.y === right.node.y &&
+    left.node.width === right.node.width &&
+    left.node.height === right.node.height &&
+    left.viewport.x === right.viewport.x &&
+    left.viewport.y === right.viewport.y &&
+    left.viewport.width === right.viewport.width &&
+    left.viewport.height === right.viewport.height
+  );
+}
+
+function graphNodePlacementIsWithinViewport(sample) {
+  const nodeCenterX = sample.node.x + sample.node.width / 2;
+  const nodeCenterY = sample.node.y + sample.node.height / 2;
+  return (
+    nodeCenterX >= sample.viewport.x &&
+    nodeCenterX <= sample.viewport.x + sample.viewport.width &&
+    nodeCenterY >= sample.viewport.y &&
+    nodeCenterY <= sample.viewport.y + sample.viewport.height
+  );
+}
+
+/**
+ * Wait until a graph node's DOM geometry and both React Flow transforms settle
+ * while its center is inside the visible graph viewport.
+ */
+export async function waitForStableFactoryGraphNodePlacement(
+  page,
+  nodeTestId,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+) {
+  let previousSample = null;
+  let stableSample = null;
+
+  await waitForDurableCheckpoint(
+    `factory graph node placement: ${nodeTestId}`,
+    async () => {
+      const nextSample = await page
+        .evaluate((testId) => {
+          const target = [...document.querySelectorAll("[data-testid]")].find(
+            (element) => element.getAttribute("data-testid") === testId,
+          );
+          const flowNode = target?.closest(".react-flow__node");
+          const graphSurface = target?.closest("[data-current-activity-flow]");
+          const flowViewport = flowNode
+            ?.closest(".react-flow")
+            ?.querySelector(".react-flow__viewport");
+
+          if (!target || !flowNode || !graphSurface || !flowViewport) {
+            return null;
+          }
+
+          const nodeBox = target.getBoundingClientRect();
+          const viewportBox = graphSurface.getBoundingClientRect();
+          return {
+            node: {
+              height: nodeBox.height,
+              width: nodeBox.width,
+              x: nodeBox.x,
+              y: nodeBox.y,
+            },
+            nodeTransform: window.getComputedStyle(flowNode).transform,
+            viewport: {
+              height: viewportBox.height,
+              width: viewportBox.width,
+              x: viewportBox.x,
+              y: viewportBox.y,
+            },
+            viewportTransform: window.getComputedStyle(flowViewport).transform,
+          };
+        }, nodeTestId)
+        .catch(() => null);
+      const stable = graphNodePlacementSamplesEqual(previousSample, nextSample);
+      previousSample = nextSample;
+
+      if (
+        !stable ||
+        !nextSample ||
+        !graphNodePlacementIsWithinViewport(nextSample)
+      ) {
+        return false;
+      }
+
+      stableSample = nextSample;
+      return true;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+
+  return stableSample;
+}
+
 /** Wait until React Flow has measured every graph node for selection gestures. */
 export async function waitForFactoryGraphSelectionReady(
   page,
