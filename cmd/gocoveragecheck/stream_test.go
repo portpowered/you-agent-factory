@@ -222,6 +222,96 @@ func TestMainStreamFlagConfiguresOnlyCoverageChildOutput(t *testing.T) {
 	}
 }
 
+func TestCompletedCoverageStreamModePreservesCoverageAndVerdict(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	t.Cleanup(func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	})
+
+	configPackage := modulePath + "/pkg/config"
+	for _, tc := range []struct {
+		name string
+		min  float64
+	}{
+		{name: "passing", min: 80},
+		{name: "failing", min: 101},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observations := make([]completedCoverageObservation, 0, 2)
+			for _, stream := range []bool{false, true} {
+				var stdout bytes.Buffer
+				var stderr bytes.Buffer
+				stdoutWriter = &stdout
+				stderrWriter = &stderr
+				commandRunner = func(invocation commandInvocation) (string, string, error) {
+					childStdout, childStderr, err := fakeGoCoverageCommandPassing(invocation)
+					if invocation.stdoutWriter != nil {
+						if _, writeErr := io.WriteString(invocation.stdoutWriter, childStdout); writeErr != nil {
+							return childStdout, childStderr, writeErr
+						}
+					}
+					if invocation.stderrWriter != nil {
+						if _, writeErr := io.WriteString(invocation.stderrWriter, childStderr); writeErr != nil {
+							return childStdout, childStderr, writeErr
+						}
+					}
+					return childStdout, childStderr, err
+				}
+
+				runErr := execute(config{
+					min:       tc.min,
+					totalOnly: true,
+					coverpkg:  configPackage,
+					packages:  "./pkg/config",
+					stream:    stream,
+				})
+				match := totalCoveragePattern.FindStringSubmatch(stdout.String())
+				if len(match) != 2 {
+					t.Fatalf("stream=%v stdout = %q, want total coverage percentage", stream, stdout.String())
+				}
+				observations = append(observations, completedCoverageObservation{
+					stream:     stream,
+					percentage: match[1],
+					verdict:    errorString(runErr),
+				})
+				if stderr.Len() != 0 {
+					t.Fatalf("stream=%v stderr = %q, want empty", stream, stderr.String())
+				}
+			}
+
+			if observations[0].percentage != observations[1].percentage {
+				t.Fatalf("coverage percentage buffered=%q, streamed=%q, want identical", observations[0].percentage, observations[1].percentage)
+			}
+			if observations[0].verdict != observations[1].verdict {
+				t.Fatalf("coverage verdict buffered=%q, streamed=%q, want identical", observations[0].verdict, observations[1].verdict)
+			}
+			if tc.min <= 100 && observations[0].verdict != "" {
+				t.Fatalf("buffered verdict = %q, want pass", observations[0].verdict)
+			}
+			if tc.min > 100 && observations[0].verdict == "" {
+				t.Fatal("buffered verdict unexpectedly passed")
+			}
+		})
+	}
+}
+
+type completedCoverageObservation struct {
+	stream     bool
+	percentage string
+	verdict    string
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 type streamCapture struct {
 	mu          sync.Mutex
 	data        bytes.Buffer
