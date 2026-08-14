@@ -46,7 +46,7 @@ results on unchanged local runs. Use `make test-functional-fresh` when the
 result must come from a new execution, including CI-equivalent evidence and
 flake investigation. The functional coverage lane is authoritative and does
 not use the cache: `cmd/gocoveragecheck` passes `-count=1` together with its
-coverage profile, timing, and short-mode flags, then retains the existing
+coverage profile, timing, and configured tier's `-short` flag, then retains the existing
 coverage-floor and package-manifest checks.
 
 The coverage lanes intentionally use separate profiles. The
@@ -74,6 +74,15 @@ Package-plus-test entries become package-specific `-run` selectors, while
 package entries remove the whole package. Duplicate, malformed, stale, or
 overlapping selectors fail closed before the instrumented run, so a new
 functional package or test is selected automatically without a manifest edit.
+
+The required pull-request tier is `pr-short`: it runs the complete discovered
+tree with `-short`, subtracts only the true environment quarantine, and reports
+tests skipped by `testing.Short()` as `deferred-short-tests`. Those deferred
+tests are not quarantine entries. A push to `main` selects the explicit
+`merge-full` tier, runs the same subtractive selection with `-short=false`, and
+has a 75-minute job budget so the deferred behavior executes after merge. The
+CI output names each tier's trigger, budget, selection rule, and quarantine
+path. Set `FUNCTIONAL_SHORT=false` locally to exercise the full tier.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains

@@ -291,8 +291,34 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 		t.Fatalf("Packages[0].Outcome = %q, want pass", summary.Packages[0].Outcome)
 	}
 	if !strings.Contains(stdout.String(), "Functional suite inventory: discovered-packages=1 observed-packages=1") ||
-		!strings.Contains(stdout.String(), "top-level-tests=1 (pass=1 fail=0 skip=0)") {
+		!strings.Contains(stdout.String(), "top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0") {
 		t.Fatalf("stdout = %q, want full functional inventory summary", stdout.String())
+	}
+}
+
+func TestWriteFunctionalTimingInventorySummaryReportsShortDeferredTests(t *testing.T) {
+	originalStdout := stdoutWriter
+	defer func() { stdoutWriter = originalStdout }()
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	summary := functionalTimingSummaryJSON{
+		ExpectedPackageCount: 1,
+		PackageCount:         1,
+		TestCount:            4,
+		TestPassCount:        1,
+		TestSkipCount:        3,
+	}
+
+	writeFunctionalTimingInventorySummary(summary, true)
+	if !strings.Contains(stdout.String(), "deferred-short-tests=3") {
+		t.Fatalf("short-tier summary = %q, want deferred-short-tests=3", stdout.String())
+	}
+
+	stdout.Reset()
+	writeFunctionalTimingInventorySummary(summary, false)
+	if !strings.Contains(stdout.String(), "deferred-short-tests=0") {
+		t.Fatalf("full-tier summary = %q, want deferred-short-tests=0", stdout.String())
 	}
 }
 

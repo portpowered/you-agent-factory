@@ -334,7 +334,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
 		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
 		if timingWriteErr == nil && cfg.suite == "functional" {
-			writeFunctionalTimingInventorySummary(summary)
+			writeFunctionalTimingInventorySummary(summary, cfg.short)
 		}
 	}
 
