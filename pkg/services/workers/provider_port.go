@@ -17,6 +17,12 @@ type Provider interface {
 
 const ExecutorProviderACP = "ACP"
 
+// UsesACPProvider reports whether a request retains the authored ACP
+// execution mechanism marker.
+func UsesACPProvider(executorProvider string) bool {
+	return strings.EqualFold(strings.TrimSpace(executorProvider), ExecutorProviderACP)
+}
+
 // RunnerIdentityForWorker maps the authored execution mechanism and provider
 // identity into the Providers catalog identity selected at runtime.
 func RunnerIdentityForWorker(executorProvider, modelProvider string) (string, error) {

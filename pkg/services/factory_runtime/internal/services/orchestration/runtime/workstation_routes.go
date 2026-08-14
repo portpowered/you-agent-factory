@@ -66,6 +66,7 @@ type runtimeExecutionSelection struct {
 	noop                        bool
 	runnerID                    string
 	providerID                  string
+	executorProvider            string
 	model                       string
 	modelProvider               string
 	modelLocality               string
@@ -136,6 +137,7 @@ func initialRuntimeExecutionSelection(
 		workerType:                  firstRuntimeValue(execution.WorkerType, execution.Dispatch.WorkerType),
 		runnerID:                    strings.TrimSpace(execution.RunnerID),
 		providerID:                  strings.TrimSpace(execution.ExecutorProvider),
+		executorProvider:            strings.TrimSpace(execution.ExecutorProvider),
 		model:                       strings.TrimSpace(execution.Model),
 		modelProvider:               strings.TrimSpace(execution.ModelProvider),
 		reasoningEffort:             strings.TrimSpace(execution.ReasoningEffort),
@@ -226,9 +228,11 @@ func applyRuntimeWorkerSelection(
 			resolveRuntimeInvocationValue(worker.Body, invocation),
 		)
 	}
+	executorProvider := resolveRuntimeInvocationValue(worker.ExecutorProvider, invocation)
+	selection.executorProvider = firstRuntimeValue(selection.executorProvider, executorProvider)
 	selection.providerID = firstRuntimeValue(
 		selection.providerID,
-		resolveRuntimeInvocationValue(worker.ExecutorProvider, invocation),
+		executorProvider,
 		resolveRuntimeInvocationValue(worker.Provider, invocation),
 	)
 	selection.model = firstRuntimeValue(
@@ -430,7 +434,9 @@ func finalizeRuntimeExecutionSelection(
 	// Detached Workers authorizes Target.Provider.ID before it reaches the
 	// agent runner, so carry the concrete model-provider identity across this
 	// boundary and use it for runner selection as well.
-	if strings.EqualFold(strings.TrimSpace(selection.providerID), workers.ExecutorProviderACP) {
+	if workers.UsesACPProvider(selection.executorProvider) ||
+		workers.UsesACPProvider(selection.providerID) {
+		selection.executorProvider = workers.ExecutorProviderACP
 		if identity, err := workers.RunnerIdentityForWorker(
 			selection.providerID,
 			selection.modelProvider,
@@ -509,6 +515,7 @@ func resolveRuntimeSelectionInvocation(
 	selection.workerType = resolveRuntimeInvocationValue(selection.workerType, invocation)
 	selection.runnerID = resolveRuntimeInvocationValue(selection.runnerID, invocation)
 	selection.providerID = resolveRuntimeInvocationValue(selection.providerID, invocation)
+	selection.executorProvider = resolveRuntimeInvocationValue(selection.executorProvider, invocation)
 	selection.model = resolveRuntimeInvocationValue(selection.model, invocation)
 	selection.modelProvider = resolveRuntimeInvocationValue(selection.modelProvider, invocation)
 	selection.modelLocality = resolveRuntimeInvocationValue(selection.modelLocality, invocation)

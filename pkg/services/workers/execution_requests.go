@@ -441,6 +441,9 @@ type ExecutionTarget struct {
 	WorkerType      string
 	WorkstationName string
 	RunnerID        string
+	// ExecutorProvider preserves the authored execution mechanism separately
+	// from Provider, whose ID may be canonicalized to a concrete catalog ID.
+	ExecutorProvider string
 	// Noop accepts a worker dispatch without invoking a provider, model, or
 	// command runner. Runtime sets this only for an authored worker that has no
 	// runtime definition, preserving topology-only factories without retaining

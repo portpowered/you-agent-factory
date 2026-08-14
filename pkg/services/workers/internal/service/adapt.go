@@ -39,7 +39,7 @@ func adaptRunnerRequest(
 		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
 		WorkstationType:              request.Target.WorkstationName,
 		RunnerID:                     runnerIDForRequest(request, identity),
-		ExecutorProvider:             providerIdentity(request.Target.Provider),
+		ExecutorProvider:             firstNonEmpty(request.Target.ExecutorProvider, providerIdentity(request.Target.Provider)),
 		ModelOperation:               request.Input.ModelOperation,
 		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
 		InputTokens:                  workers.InputTokens(inputTokens...),

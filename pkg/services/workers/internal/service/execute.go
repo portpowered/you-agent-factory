@@ -211,7 +211,8 @@ func (s *Service) runRunner(
 		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
-	if s.providerOverride != nil && identity == runners.AgentIdentity {
+	if s.providerOverride != nil && identity == runners.AgentIdentity &&
+		!workers.UsesACPProvider(runnerRequest.ExecutorProvider) {
 		return s.executeProviderWithRetry(ctx, runnerRequest, func(
 			request workers.RunnerExecutionRequest,
 		) (workers.RunnerExecutionResult, error) {
