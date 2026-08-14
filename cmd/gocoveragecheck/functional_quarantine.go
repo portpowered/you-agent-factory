@@ -63,19 +63,176 @@ type goTestListEvent struct {
 	Test    string `json:"Test"`
 }
 
-func resolveFunctionalCoverageSelection(path string, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, error) {
+func resolveFunctionalCoverageSelection(path string, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
-		return functionalCoverageSelection{}, err
+		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	inventory, err := discoverFunctionalTestInventory(packages, timeout, short, jobs, repoRoot)
 	if err != nil {
-		return functionalCoverageSelection{}, err
+		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	if err := validateFunctionalQuarantine(manifest, inventory); err != nil {
-		return functionalCoverageSelection{}, err
+		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
-	return buildFunctionalCoverageSelection(manifest, inventory)
+	selection, err := buildFunctionalCoverageSelection(manifest, inventory)
+	if err != nil {
+		return functionalCoverageSelection{}, functionalQuarantine{}, err
+	}
+	return selection, manifest, nil
+}
+
+const (
+	functionalQuarantineOutcomePass = timingOutcomePass
+	functionalQuarantineOutcomeFail = timingOutcomeFail
+	functionalQuarantineOutcomeSkip = timingOutcomeSkip
+)
+
+type functionalQuarantineOutcomeResult struct {
+	Entry               functionalQuarantineEntry
+	Observed            string
+	Detail              string
+	TestFailureObserved bool
+}
+
+func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string) error {
+	if len(manifest.Entries) == 0 {
+		return nil
+	}
+
+	results := make([]functionalQuarantineOutcomeResult, 0, len(manifest.Entries))
+	var failures []error
+	for _, entry := range manifest.Entries {
+		result, err := runFunctionalQuarantineSelector(entry, timeout, short, repoRoot)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q execution error (fail-closed): %w", functionalSelectorDisplay(entry), err))
+			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, compactFunctionalQuarantineDetail(err.Error()))
+			continue
+		}
+
+		results = append(results, result)
+		expected, expectedErr := expectedFunctionalQuarantineOutcome(entry.Bucket)
+		if expectedErr != nil {
+			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has no expected outcome for bucket %q: %w", functionalSelectorDisplay(entry), entry.Bucket, expectedErr))
+			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, compactFunctionalQuarantineDetail(expectedErr.Error()))
+			continue
+		}
+
+		status := "expected"
+		if result.Observed == functionalQuarantineOutcomePass {
+			status = "unexpected-pass"
+			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q passed unexpectedly (bucket=%s); remove or narrow this quarantine entry", functionalSelectorDisplay(entry), entry.Bucket))
+		} else if result.Observed != expected {
+			status = "unexpected-outcome"
+			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q observed %s, expected %s for bucket=%s; verify the quarantine bucket and precondition", functionalSelectorDisplay(entry), result.Observed, expected, entry.Bucket))
+		}
+		fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, compactFunctionalQuarantineDetail(result.Detail))
+	}
+
+	passCount, failCount, skipCount := 0, 0, 0
+	for _, result := range results {
+		switch result.Observed {
+		case functionalQuarantineOutcomePass:
+			passCount++
+		case functionalQuarantineOutcomeFail:
+			failCount++
+		case functionalQuarantineOutcomeSkip:
+			skipCount++
+		}
+	}
+	fmt.Fprintf(stdoutWriter, "Functional quarantine ratchet: selectors=%d observed-pass=%d observed-fail=%d observed-skip=%d execution-errors=%d\n", len(manifest.Entries), passCount, failCount, skipCount, len(manifest.Entries)-len(results))
+	return errors.Join(failures...)
+}
+
+func runFunctionalQuarantineSelector(entry functionalQuarantineEntry, timeout time.Duration, short bool, repoRoot string) (functionalQuarantineOutcomeResult, error) {
+	args := []string{"test", "-json", "-count=1"}
+	if short {
+		args = append(args, "-short")
+	}
+	args = append(args, fmt.Sprintf("-timeout=%s", timeout))
+	if entry.Test != "" {
+		args = append(args, "-run="+exactFunctionalTestRunPattern([]string{entry.Test}))
+	}
+	args = append(args, entry.Package)
+
+	stdout, stderr, commandErr := runCommand(commandInvocation{
+		name: "go",
+		args: args,
+		env:  os.Environ(),
+		dir:  repoRoot,
+	})
+	result, parseErr := parseFunctionalQuarantineOutcome(stdout, entry)
+	if parseErr != nil {
+		if commandErr != nil {
+			return functionalQuarantineOutcomeResult{}, errors.Join(parseErr, fmt.Errorf("%w: %s", commandErr, compactFunctionalQuarantineDetail(mergeGoTestFailureDetail(stderr, stdout))))
+		}
+		return functionalQuarantineOutcomeResult{}, parseErr
+	}
+	if commandErr != nil && (result.Observed != functionalQuarantineOutcomeFail || !result.TestFailureObserved) {
+		return functionalQuarantineOutcomeResult{}, fmt.Errorf("go test returned an execution error after observing %s without a failing test event: %s", result.Observed, compactFunctionalQuarantineDetail(mergeGoTestFailureDetail(stderr, stdout)))
+	}
+	return result, nil
+}
+
+func parseFunctionalQuarantineOutcome(jsonOutput string, entry functionalQuarantineEntry) (functionalQuarantineOutcomeResult, error) {
+	var result functionalQuarantineOutcomeResult
+	result.Entry = entry
+	var terminal *goTestTimingEvent
+	for _, line := range strings.Split(jsonOutput, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var event goTestTimingEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return functionalQuarantineOutcomeResult{}, fmt.Errorf("decode go test JSON output: %w", err)
+		}
+		if event.Package != entry.Package {
+			return functionalQuarantineOutcomeResult{}, fmt.Errorf("go test reported unexpected package %q for selector %q", event.Package, functionalSelectorDisplay(entry))
+		}
+		if event.Test != "" && event.Action == functionalQuarantineOutcomeFail {
+			result.TestFailureObserved = true
+		}
+		if entry.Test != "" && event.Test != entry.Test {
+			continue
+		}
+		if entry.Test == "" && event.Test != "" {
+			continue
+		}
+		switch event.Action {
+		case functionalQuarantineOutcomePass, functionalQuarantineOutcomeFail, functionalQuarantineOutcomeSkip:
+			if terminal != nil {
+				return functionalQuarantineOutcomeResult{}, fmt.Errorf("selector %q reported duplicate terminal outcomes", functionalSelectorDisplay(entry))
+			}
+			copy := event
+			terminal = &copy
+			result.Detail = firstTimingFailureReason(event.Output)
+		}
+	}
+	if terminal == nil {
+		return functionalQuarantineOutcomeResult{}, fmt.Errorf("selector %q produced no terminal outcome; it may be stale or execution was incomplete", functionalSelectorDisplay(entry))
+	}
+	result.Observed = terminal.Action
+	return result, nil
+}
+
+func expectedFunctionalQuarantineOutcome(bucket string) (string, error) {
+	switch bucket {
+	case functionalBucketEnvironment:
+		return functionalQuarantineOutcomeSkip, nil
+	case functionalBucketFailure:
+		return functionalQuarantineOutcomeFail, nil
+	default:
+		return "", fmt.Errorf("unsupported quarantine bucket")
+	}
+}
+
+func compactFunctionalQuarantineDetail(detail string) string {
+	detail = strings.TrimSpace(strings.ReplaceAll(detail, "\n", " "))
+	if len(detail) > maxTimingFailureReasonLength {
+		return detail[:maxTimingFailureReasonLength] + "..."
+	}
+	return detail
 }
 
 func readFunctionalQuarantineFile(path string) (functionalQuarantine, error) {

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -251,4 +252,158 @@ func TestRenderFunctionalQuarantineFixtureIsStable(t *testing.T) {
 	if !bytes.Equal(first, second) {
 		t.Fatalf("manifest JSON is not deterministic:\nfirst=%s\nsecond=%s", first, second)
 	}
+}
+
+func TestFunctionalQuarantineRatchetAcceptsExpectedOutcomesIndependently(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packageSkip := modulePath + "/tests/functional/alpha"
+	packageTestSkip := modulePath + "/tests/functional/beta"
+	packageFail := modulePath + "/tests/functional/gamma"
+	manifest := functionalQuarantine{Entries: []functionalQuarantineEntry{
+		{Package: packageSkip, Bucket: functionalBucketEnvironment, Reason: "requires an unavailable runtime"},
+		{Package: packageTestSkip, Test: "TestOptIn", Bucket: functionalBucketEnvironment, Reason: "requires an opt-in credential"},
+		{Package: packageFail, Bucket: functionalBucketFailure, Reason: "known defect", FollowUp: "issue-123"},
+	}}
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	var invocations []commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		packagePath := invocation.args[len(invocation.args)-1]
+		switch packagePath {
+		case packageSkip:
+			return marshalFunctionalTimingEvents(
+				goTestTimingEvent{Action: "start", Package: packagePath},
+				goTestTimingEvent{Action: timingOutcomeSkip, Package: packagePath},
+			), "", nil
+		case packageTestSkip:
+			return marshalFunctionalTimingEvents(
+				goTestTimingEvent{Action: "start", Package: packagePath},
+				goTestTimingEvent{Action: "skip", Package: packagePath, Test: "TestOptIn"},
+				goTestTimingEvent{Action: timingOutcomeSkip, Package: packagePath},
+			), "", nil
+		case packageFail:
+			return marshalFunctionalTimingEvents(
+				goTestTimingEvent{Action: "start", Package: packagePath},
+				goTestTimingEvent{Action: "fail", Package: packagePath, Test: "TestKnown", Output: "--- FAIL: TestKnown (0.01s)\n"},
+				goTestTimingEvent{Action: timingOutcomeFail, Package: packagePath, Output: "--- FAIL: TestKnown (0.01s)\n"},
+			), "assertion failed", errors.New("exit status 1")
+		default:
+			return "", "", errors.New("unexpected package")
+		}
+	}
+
+	if err := runFunctionalQuarantineRatchet(manifest, time.Minute, true, t.TempDir()); err != nil {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v", err)
+	}
+	if len(invocations) != len(manifest.Entries) {
+		t.Fatalf("ratchet invocations = %d, want one independent invocation per entry", len(invocations))
+	}
+	if !slices.Contains(invocations[1].args, "-run=^(?:TestOptIn)$") {
+		t.Fatalf("test selector invocation = %v, want exact -run selector", invocations[1].args)
+	}
+	for _, want := range []string{
+		`selector="` + packageSkip + `" bucket=ENVIRONMENT-DEPENDENT expected=skip observed=skip status=expected`,
+		`selector="` + packageTestSkip + `#TestOptIn" bucket=ENVIRONMENT-DEPENDENT expected=skip observed=skip status=expected`,
+		`selector="` + packageFail + `" bucket=GENUINELY FAILING expected=fail observed=fail status=expected`,
+		"Functional quarantine ratchet: selectors=3 observed-pass=0 observed-fail=1 observed-skip=2 execution-errors=0",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("ratchet stdout = %q, want substring %q", stdout.String(), want)
+		}
+	}
+}
+
+func TestFunctionalQuarantineRatchetRejectsUnexpectedPass(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/recovered"
+	entry := functionalQuarantineEntry{Package: packagePath, Test: "TestRecovered", Bucket: functionalBucketEnvironment, Reason: "requires an unavailable runtime"}
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	commandRunner = func(commandInvocation) (string, string, error) {
+		return marshalFunctionalTimingEvents(
+			goTestTimingEvent{Action: "start", Package: packagePath},
+			goTestTimingEvent{Action: "run", Package: packagePath, Test: entry.Test},
+			goTestTimingEvent{Action: timingOutcomePass, Package: packagePath, Test: entry.Test},
+			goTestTimingEvent{Action: timingOutcomePass, Package: packagePath},
+		), "", nil
+	}
+
+	err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, true, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "passed unexpectedly") || !strings.Contains(err.Error(), "remove or narrow") {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want actionable unexpected-pass failure", err)
+	}
+	if !strings.Contains(stdout.String(), "status=unexpected-pass") {
+		t.Fatalf("ratchet stdout = %q, want unexpected-pass diagnostic", stdout.String())
+	}
+}
+
+func TestFunctionalQuarantineRatchetRejectsStaleSelector(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/stale"
+	entry := functionalQuarantineEntry{Package: packagePath, Test: "TestMissingAtRuntime", Bucket: functionalBucketEnvironment, Reason: "requires an unavailable runtime"}
+	stdoutWriter = &bytes.Buffer{}
+	commandRunner = func(commandInvocation) (string, string, error) {
+		return marshalFunctionalTimingEvents(
+			goTestTimingEvent{Action: "start", Package: packagePath},
+			goTestTimingEvent{Action: timingOutcomePass, Package: packagePath},
+		), "", nil
+	}
+
+	err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, true, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "no terminal outcome") || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want stale-selector failure", err)
+	}
+}
+
+func TestFunctionalQuarantineRatchetRejectsExecutionError(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/infra-error"
+	entry := functionalQuarantineEntry{Package: packagePath, Bucket: functionalBucketEnvironment, Reason: "requires an unavailable runtime"}
+	stdoutWriter = &bytes.Buffer{}
+	commandRunner = func(commandInvocation) (string, string, error) {
+		return "", "compiler unavailable", errors.New("exit status 2")
+	}
+
+	err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, true, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "execution error") || !strings.Contains(err.Error(), "fail-closed") || !strings.Contains(err.Error(), "compiler unavailable") {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want fail-closed execution diagnostic", err)
+	}
+}
+
+func marshalFunctionalTimingEvents(events ...goTestTimingEvent) string {
+	lines := make([]string, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			panic(err)
+		}
+		lines = append(lines, string(data))
+	}
+	return strings.Join(lines, "\n")
 }

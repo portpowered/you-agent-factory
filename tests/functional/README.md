@@ -74,6 +74,12 @@ Package-plus-test entries become package-specific `-run` selectors, while
 package entries remove the whole package. Duplicate, malformed, stale, or
 overlapping selectors fail closed before the instrumented run, so a new
 functional package or test is selected automatically without a manifest edit.
+Before the selected green run, CI executes every quarantine entry independently
+with `go test -json`: environment-dependent entries must still emit `skip`, and
+genuine-failure entries must still emit `fail`. A passing entry fails the gate
+with an instruction to remove or narrow the quarantine; missing terminal events,
+unexpected outcomes, and subprocess errors fail closed and remain visible in
+the ratchet diagnostics.
 
 The required pull-request tier is `pr-short`: it runs the complete discovered
 tree with `-short`, subtracts only the true environment quarantine, and reports

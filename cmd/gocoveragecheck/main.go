@@ -335,7 +335,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 		if !filepath.IsAbs(quarantinePath) {
 			quarantinePath = filepath.Join(repoRoot, quarantinePath)
 		}
-		selection, selectionErr := resolveFunctionalCoverageSelection(
+		selection, manifest, selectionErr := resolveFunctionalCoverageSelection(
 			quarantinePath,
 			testPackages,
 			cfg.timeout,
@@ -360,6 +360,9 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 			selection.SelectedTestCount,
 			filepath.ToSlash(cfg.functionalQuarantine),
 		)
+		if err := runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot); err != nil {
+			return coverageResult{}, err
+		}
 		testPackages = selectedFunctionalPackages(selection)
 	}
 	coverPackageArgument := strings.Join(coverPackages, ",")
