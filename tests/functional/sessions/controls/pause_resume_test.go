@@ -202,6 +202,7 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 
 	baseURL := server.URL()
 	sessionID := factorysessions.DefaultSessionID
+	eventStream := openPauseResumeLifecycleEventStream(t, server)
 
 	pause := postSessionLifecycleControl(
 		t,
@@ -235,15 +236,11 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 		t.Fatalf("resume response = %#v, want accepted resume", resume)
 	}
 
-	waitForSessionWorkIDsAtCustomerState(
+	waitForPauseResumeLifecycleControlEvents(
 		t,
-		baseURL,
-		[]string{workID},
-		support.WorkCustomerLocation("task", "complete"),
-		pauseResumeDrainWaitTimeout,
+		eventStream,
+		pauseResumeDurableStatusTimeout,
 	)
-
-	assertPauseResumeLifecycleControlEvents(t, server.GetFactoryEvents(t))
 }
 
 // TestInterruptedWorkInspectSurfacesDispatchAndStopSummary proves work stopped
