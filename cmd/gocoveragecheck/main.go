@@ -28,10 +28,12 @@ var (
 )
 
 type commandInvocation struct {
-	name string
-	args []string
-	env  []string
-	dir  string
+	name         string
+	args         []string
+	env          []string
+	dir          string
+	stdoutWriter io.Writer
+	stderrWriter io.Writer
 }
 
 type commandRunnerFunc func(commandInvocation) (string, string, error)
@@ -58,8 +60,16 @@ var (
 		}
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		if invocation.stdoutWriter == nil {
+			cmd.Stdout = &stdout
+		} else {
+			cmd.Stdout = io.MultiWriter(&stdout, invocation.stdoutWriter)
+		}
+		if invocation.stderrWriter == nil {
+			cmd.Stderr = &stderr
+		} else {
+			cmd.Stderr = io.MultiWriter(&stderr, invocation.stderrWriter)
+		}
 		err := cmd.Run()
 		return stdout.String(), stderr.String(), err
 	}
@@ -91,6 +101,7 @@ type config struct {
 	profile             string
 	short               bool
 	suite               string
+	stream              bool
 	timeout             time.Duration
 	totalOnly           bool
 }
@@ -204,6 +215,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.profile, "profile", "", "coverage profile output path; defaults to a temp file")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.StringVar(&cfg.suite, "suite", "unit", "test suite to execute when -packages is empty: unit or functional")
+	flag.BoolVar(&cfg.stream, "stream", false, "stream coverage-test child stdout and stderr to their output sinks while running")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.totalOnly, "total-only", false, "disable package-local coverage gates while retaining per-package reporting")
 	flag.Parse()
