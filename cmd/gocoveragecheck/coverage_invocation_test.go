@@ -575,6 +575,84 @@ func TestRunGoTestCoverageLanePropagatesBatchedFailureAndCleansProfiles(t *testi
 	}
 }
 
+func TestRunGoTestCoverageLaneRejectsIncompleteOrIncompatibleBatchProfiles(t *testing.T) {
+	originalCommandRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalCommandRunner })
+
+	commonArgs := []string{
+		"test",
+		"-coverpkg=" + modulePath + "/pkg/...",
+		"-p=2",
+		"-count=1",
+		"-covermode=count",
+		"-timeout=10m",
+	}
+	testPackages := makeOversizedTestPackages(1000)
+	repoRoot, err := repoRootDir()
+	if err != nil {
+		t.Fatalf("repoRootDir() error = %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		profileFor func(batch int) (string, bool)
+		wantError  string
+	}{
+		{
+			name: "successful batch without profile",
+			profileFor: func(batch int) (string, bool) {
+				return "mode: count\n" + modulePath + "/pkg/config/config.go:1.1,2.1 3 1\n", batch != 2
+			},
+			wantError: "go coverage batch 2 completed without writing profile",
+		},
+		{
+			name: "incompatible profile mode",
+			profileFor: func(batch int) (string, bool) {
+				mode := "count"
+				if batch == 2 {
+					mode = "atomic"
+				}
+				return "mode: " + mode + "\n" + modulePath + "/pkg/config/config.go:1.1,2.1 3 1\n", true
+			},
+			wantError: "merge go coverage profiles: mode headers differ",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			profilePath := filepath.Join(t.TempDir(), "merged-coverage.out")
+			invocationCount := 0
+			commandRunner = func(invocation commandInvocation) (string, string, error) {
+				invocationCount++
+				profileData, writeProfile := tc.profileFor(invocationCount)
+				if writeProfile {
+					if err := writeFakeCoverageProfile(helperCoverProfilePath(invocation.args), profileData); err != nil {
+						return "", "", err
+					}
+				}
+				return "", "", nil
+			}
+
+			err := runGoTestCoverageLane(
+				config{},
+				commonArgs,
+				testPackages,
+				profilePath,
+				repoRoot,
+				[]string{modulePath + "/pkg/config"},
+				"windows",
+				"run unit coverage",
+			)
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("runGoTestCoverageLane() error = %v, want diagnostic containing %q", err, tc.wantError)
+			}
+			if invocationCount < 3 {
+				t.Fatalf("coverage invocations = %d, want multiple batches", invocationCount)
+			}
+		})
+	}
+}
+
 func makeOversizedTestPackages(count int) []string {
 	packages := make([]string, 0, count)
 	for index := 0; index < count; index++ {

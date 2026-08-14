@@ -323,7 +323,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	coverageTestArgs := []string{
 		"test",
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
-		fmt.Sprintf("-p=%d", cfg.testJobs()),
+		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS)),
 		// Coverage is an authoritative measurement, so every package must run
 		// even when a prior non-instrumented invocation is cached.
 		"-count=1",
@@ -385,9 +385,14 @@ func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
 	}
 }
 
-func (cfg config) testJobs() int {
+func (cfg config) testJobs(targetOS string) int {
 	if cfg.jobs > 0 {
 		return cfg.jobs
+	}
+	if targetOS == "windows" && (cfg.suite == "" || cfg.suite == "unit") {
+		// Full unit coverage instrumentation exceeds the Windows host's stable
+		// memory boundary when go test builds two instrumented packages at once.
+		return 1
 	}
 	return defaultCoverageJobs
 }
