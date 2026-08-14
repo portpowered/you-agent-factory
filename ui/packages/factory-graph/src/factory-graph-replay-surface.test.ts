@@ -103,6 +103,73 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
   );
 });
 
+test("keeps authored dimensions when replay advances to a later runtime tick", () => {
+  const source = {
+    factory: {
+      layout: {
+        nodes: [
+          {
+            id: "worker:alex",
+            position: { x: 40, y: 80 },
+            size: { height: 100, width: 260 },
+          },
+        ],
+        schemaVersion: 1,
+      },
+      name: "Runtime update",
+    },
+    runtime: {
+      activity: {
+        activeDispatchOverlays: [],
+        activeWorkstationNodeIds: [],
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+      },
+      load: {
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+        workStateCounts: [],
+      },
+      topology: {
+        connections: [],
+        issues: [],
+        nodes: [
+          {
+            entityId: "alex",
+            handles: [],
+            id: "worker:alex",
+            kind: "worker",
+            label: "Alex",
+          },
+        ],
+        ok: true,
+        selectedTick: 4,
+      },
+    },
+    selectedTick: 4,
+  } satisfies FactoryGraphSource;
+
+  const updatedSource = structuredClone(source);
+  updatedSource.runtime.activity.selectedTick = 5;
+  updatedSource.runtime.load.selectedTick = 5;
+  updatedSource.runtime.topology.selectedTick = 5;
+  updatedSource.selectedTick = 5;
+
+  const node = projectFactoryGraphReplayFlow(updatedSource).nodes.find(
+    (candidate) => candidate.id === "worker:alex",
+  );
+
+  expect(node).toMatchObject({
+    height: 100,
+    initialHeight: 100,
+    initialWidth: 260,
+    measured: { height: 100, width: 260 },
+    width: 260,
+  });
+});
+
 test("projects authored workstation semantics and id-based activity onto the graph node", () => {
   const source = {
     factory: {
