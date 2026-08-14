@@ -319,6 +319,9 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	if timingEnabled {
 		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
 		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+		if timingWriteErr == nil && cfg.suite == "functional" {
+			writeFunctionalTimingInventorySummary(summary)
+		}
 	}
 
 	var mergeErr error

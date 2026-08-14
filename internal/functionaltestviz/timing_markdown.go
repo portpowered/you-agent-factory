@@ -28,7 +28,17 @@ func RenderFunctionalTimingMarkdown(summary FunctionalTimingSummary) string {
 		"- Package elapsed total: %.3fs (functional-test packages run concurrently, so this total can exceed wall-clock duration)\n",
 		summary.PackageElapsedSecondsSum,
 	)
+	if summary.ExpectedPackageCount > 0 {
+		fmt.Fprintf(&b, "- Discovered functional packages: %d\n", summary.ExpectedPackageCount)
+	}
 	fmt.Fprintf(&b, "- Package count: %d\n\n", summary.PackageCount)
+	if summary.TestCount > 0 || summary.InventoryTestCount > 0 {
+		if summary.InventoryTestCount > 0 {
+			fmt.Fprintf(&b, "- Top-level test inventory: %d\n", summary.InventoryTestCount)
+		}
+		fmt.Fprintf(&b, "- Top-level tests with observed outcomes: %d\n", summary.TestCount)
+		fmt.Fprintf(&b, "- Top-level test outcomes: pass=%d, fail=%d, skip=%d\n\n", summary.TestPassCount, summary.TestFailCount, summary.TestSkipCount)
+	}
 
 	if len(packages) == 0 {
 		b.WriteString("- _No functional-test packages in timing summary._\n")
@@ -46,7 +56,46 @@ func RenderFunctionalTimingMarkdown(summary FunctionalTimingSummary) string {
 		b.WriteString(pkg.Outcome)
 		b.WriteString(" |\n")
 	}
+
+	renderFunctionalTestFailures(&b, summary.Tests)
 	return b.String()
+}
+
+func renderFunctionalTestFailures(output *strings.Builder, tests []FunctionalTestTiming) {
+	failed := make([]FunctionalTestTiming, 0)
+	for _, test := range tests {
+		if test.Outcome == timingOutcomeFail {
+			failed = append(failed, test)
+		}
+	}
+	if len(failed) == 0 {
+		return
+	}
+	sort.SliceStable(failed, func(i, j int) bool {
+		if failed[i].Package != failed[j].Package {
+			return failed[i].Package < failed[j].Package
+		}
+		return failed[i].Test < failed[j].Test
+	})
+
+	output.WriteString("\n### Failed top-level tests\n\n")
+	output.WriteString("| Package | Test | Elapsed (s) | Reason |\n")
+	output.WriteString("| --- | --- | ---: | --- |\n")
+	for _, test := range failed {
+		output.WriteString("| `")
+		output.WriteString(test.Package)
+		output.WriteString("` | `")
+		output.WriteString(test.Test)
+		output.WriteString("` | ")
+		fmt.Fprintf(output, "%.3f", test.Seconds)
+		output.WriteString(" | ")
+		if test.Reason == "" {
+			output.WriteString("_no concise reason captured_")
+		} else {
+			output.WriteString(strings.ReplaceAll(test.Reason, "|", "\\|"))
+		}
+		output.WriteString(" |\n")
+	}
 }
 
 func stableOrderedTimingPackages(packages []FunctionalPackageTiming) []FunctionalPackageTiming {

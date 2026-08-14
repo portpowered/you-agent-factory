@@ -218,7 +218,10 @@ jobs:
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
-      - name: Run backend functional coverage and visualization
+      # This is the authoritative Linux functional run. gocoveragecheck
+      # expands ./tests/functional/... once and writes package plus top-level
+      # test outcomes before the coverage gate returns, including on failure.
+      - name: Run complete Linux functional coverage and inventory
         if: matrix.suite == 'functional'
         run: bash scripts/ci/run-functional-test-viz.sh
         env:
