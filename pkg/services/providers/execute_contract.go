@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // ErrExecuteCancelled reports that one provider execution attempt was cancelled
@@ -133,6 +135,14 @@ type ExecuteRequest struct {
 	// it completes simply leaves the observer uncalled and returns its facts
 	// in ExecuteDiagnostics.Progress as before.
 	ProgressObserver ProgressObserver
+	// ExecutionLogger is the caller-owned command log sink for this one
+	// attempt. Like the observers above it is an invocation-scoped effect and
+	// never a selection input: a native adapter forwards it with the
+	// subprocess request so a process-scoped command runner writes this
+	// attempt's diagnostics to the caller's log without retaining any
+	// caller state between attempts. A nil sink leaves the runner's
+	// construction-time logger in force.
+	ExecutionLogger logging.Logger
 }
 
 // SessionObserver receives one detached Provider-owned session identity

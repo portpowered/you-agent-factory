@@ -272,6 +272,12 @@ type ProviderInferenceRequest struct {
 	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
 	// It is intentionally excluded from serialized provider payloads.
 	TemporaryFiles TemporaryFileSystem `json:"-"`
+	// ExecutionLogger is the request-scoped command log sink installed by
+	// Workers Execute. Runners forward it to the Providers boundary so a
+	// process-scoped command runner can write this attempt's diagnostics to
+	// the opened Runtime's log. Like TemporaryFiles it is a detached
+	// request-scoped effect and is excluded from serialized provider payloads.
+	ExecutionLogger logging.Logger `json:"-"`
 }
 
 type RunnerExecutionRequest = ProviderInferenceRequest
@@ -310,6 +316,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.TemporaryFiles = request.TemporaryFiles
+	clone.ExecutionLogger = request.ExecutionLogger
 	return clone
 }
 

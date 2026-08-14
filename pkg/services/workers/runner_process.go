@@ -207,7 +207,7 @@ type LoggingCommandRunner struct {
 }
 
 func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	logger := commandExecutionLogger(ctx, r.Logger)
+	logger := commandExecutionLogger(req, r.Logger)
 	runner := r.Runner
 	if runner == nil {
 		return CommandResult{}, errors.New("workers logging command runner is required")
@@ -234,7 +234,7 @@ func (r LoggingCommandRunner) RunStreaming(
 	req CommandRequest,
 	observer OutputChunkObserver,
 ) (CommandResult, error) {
-	logger := commandExecutionLogger(ctx, r.Logger)
+	logger := commandExecutionLogger(req, r.Logger)
 	if r.Runner == nil {
 		return CommandResult{}, errors.New("workers logging command runner is required")
 	}

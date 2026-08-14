@@ -70,6 +70,7 @@ func adaptRunnerRequest(
 		WorkflowContext:              context.workflow,
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
 		TemporaryFiles:               temporaryFiles,
+		ExecutionLogger:              request.Input.ExecutionLogger,
 	}
 }
 
