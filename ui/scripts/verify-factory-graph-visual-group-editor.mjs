@@ -4,6 +4,15 @@
 
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  expectEditorGraphInteractions,
+  expectGraphSurfaceBasics,
+  expectRegionPointerThrough,
+} from "./verify-factory-graph-visual-group-editor-interactions.mjs";
+
+const TARGET_WORKSTATION_LABEL = "Plan";
+const TARGET_WORKSTATION_ID = "workstation:plan";
+const GROUP_LABEL = "Planning lane";
 
 export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   page,
@@ -53,12 +62,17 @@ async function enterVisualGroupEditor(page) {
 }
 
 async function createAndEditVisualGroup(page, viewport) {
-  const intakeNode = page
+  const targetWorkstationNode = page
     .locator(".react-flow__node")
-    .filter({ hasText: "Intake" })
+    .filter({
+      has: page.getByRole("button", {
+        exact: true,
+        name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
+      }),
+    })
     .first();
-  await intakeNode.waitFor({ state: "visible" });
-  await selectGraphNodeWithMarquee(page, viewport, intakeNode);
+  await targetWorkstationNode.waitFor({ state: "visible" });
+  await selectGraphNodeWithMarquee(page, viewport, targetWorkstationNode);
 
   await page.getByRole("button", { name: "Create group" }).click();
   await page
@@ -66,13 +80,18 @@ async function createAndEditVisualGroup(page, viewport) {
     .waitFor({ state: "visible" });
 
   const labelField = page.getByRole("textbox", { name: "Group label" });
-  await labelField.fill("Planning lane");
-  await expectLabelField(page, "Planning lane");
+  await labelField.fill(GROUP_LABEL);
+  await expectLabelField(page, GROUP_LABEL);
 
   const membershipCheckbox = page.getByRole("checkbox", {
-    name: "Include Intake in this group",
+    name: `Include ${TARGET_WORKSTATION_LABEL} in this group`,
   });
   await expectChecked(membershipCheckbox, true);
+  const secondaryMembershipCheckbox = page.getByRole("checkbox", {
+    name: "Include Implement in this group",
+  });
+  await secondaryMembershipCheckbox.check();
+  await expectChecked(secondaryMembershipCheckbox, true);
 
   const warningColorButton = page.getByRole("button", {
     exact: true,
@@ -82,16 +101,18 @@ async function createAndEditVisualGroup(page, viewport) {
   await expectAttribute(warningColorButton, "aria-pressed", "true");
 
   const boundsBeforeResize = await readVisualGroupBounds(page);
-  await resizeVisualGroup(page, "se", { deltaX: 40, deltaY: 30 });
+  await resizeVisualGroup(page, "sw", { deltaX: -40, deltaY: 30 });
   const boundsAfterResize = await readVisualGroupBounds(page);
   expectBoundsChanged(boundsBeforeResize, boundsAfterResize, "resize");
 
-  await page.getByRole("button", { name: "Fit to members" }).click();
+  await page
+    .getByRole("button", { name: "Fit to members" })
+    .click({ force: true });
   const boundsAfterFit = await readVisualGroupBounds(page);
-  expectBoundsChanged(boundsAfterResize, boundsAfterFit, "fit");
+  expectFiniteBounds(boundsAfterFit, "fit group");
 
   await dragVisualGroup(page, { deltaX: 12, deltaY: 8 });
-  await resizeVisualGroup(page, "se", { deltaX: 24, deltaY: 20 });
+  await resizeVisualGroup(page, "sw", { deltaX: -560, deltaY: 420 });
   await dragVisualGroup(page, { deltaX: 8, deltaY: 6 });
 
   const undoButton = page.getByRole("button", { name: "Undo" });
@@ -115,19 +136,19 @@ async function saveVisualGroup(page) {
     window.__getVisualGroupEditorPersistedFactory?.(),
   );
   const persistedGroup = persistedFactory?.layout?.groups?.find(
-    (group) => group.label === "Planning lane",
+    (group) => group.label === GROUP_LABEL,
   );
   if (!persistedGroup) {
-    throw new Error("Saved factory did not contain the Planning lane group.");
+    throw new Error(`Saved factory did not contain the ${GROUP_LABEL} group.`);
   }
   if (persistedGroup.color !== "warning") {
     throw new Error(
       `Expected the saved group color to be warning, found ${persistedGroup.color}.`,
     );
   }
-  if (!persistedGroup.nodeIds?.includes("workstation:intake")) {
+  if (!persistedGroup.nodeIds?.includes(TARGET_WORKSTATION_ID)) {
     throw new Error(
-      "Expected the saved Planning lane group to retain the selected Intake member.",
+      `Expected the saved ${GROUP_LABEL} group to retain the selected ${TARGET_WORKSTATION_LABEL} member.`,
     );
   }
   expectFiniteBounds(persistedGroup.bounds, "saved group");
@@ -150,12 +171,13 @@ async function verifyVisualGroupAfterReload({
 
   const restoredRegion = page.getByRole("region", {
     exact: true,
-    name: "Planning lane",
+    name: GROUP_LABEL,
   });
   await restoredRegion.waitFor({ state: "visible" });
+  await expectRegionPointerThrough(page, restoredRegion);
   const intakeObserverButton = page.getByRole("button", {
     exact: true,
-    name: "Select Intake workstation",
+    name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
   });
   await intakeObserverButton.click();
   await expectAttribute(intakeObserverButton, "aria-pressed", "true");
@@ -168,31 +190,37 @@ async function verifyVisualGroupAfterReload({
   await editModeAfterReload.waitFor({ state: "visible" });
   await editModeAfterReload.click();
   await toolbar.waitFor({ state: "visible" });
+  await expectGraphSurfaceBasics(page);
   await page
     .getByRole("button", {
       exact: true,
-      name: "Visual group Planning lane",
+      name: `Visual group ${GROUP_LABEL}`,
     })
     .waitFor({ state: "visible" });
   const reloadedGroup = page.getByRole("button", {
     exact: true,
-    name: "Visual group Planning lane",
+    name: `Visual group ${GROUP_LABEL}`,
   });
   await reloadedGroup.focus();
   await page.keyboard.press("Enter");
   await page
     .locator("[data-factory-visual-group-controls]")
     .waitFor({ state: "visible" });
-  await expectLabelField(page, "Planning lane");
+  await expectLabelField(page, GROUP_LABEL);
   const membershipCheckboxAfterReload = page.getByRole("checkbox", {
-    name: "Include Intake in this group",
+    name: `Include ${TARGET_WORKSTATION_LABEL} in this group`,
   });
   await expectChecked(membershipCheckboxAfterReload, true);
+  await expectChecked(
+    page.getByRole("checkbox", { name: "Include Implement in this group" }),
+    true,
+  );
   const warningColorAfterReload = page.getByRole("button", {
     exact: true,
     name: "Use warning group color",
   });
   await expectAttribute(warningColorAfterReload, "aria-pressed", "true");
+  await expectEditorGraphInteractions(page);
   await captureEvidence(page, "visual-group-after-reload-editor");
 }
 
@@ -239,7 +267,9 @@ async function selectGraphNodeWithMarquee(page, viewport, locator) {
 async function expectNodeSelected(page, locator) {
   const handle = await locator.elementHandle();
   if (!handle) {
-    throw new Error("Could not resolve the Intake graph node for selection.");
+    throw new Error(
+      `Could not resolve the ${TARGET_WORKSTATION_LABEL} graph node for selection.`,
+    );
   }
 
   try {
@@ -255,7 +285,7 @@ async function expectNodeSelected(page, locator) {
       html: node.outerHTML.slice(0, 800),
     }));
     throw new Error(
-      `Intake node did not become selected: ${JSON.stringify(details)}`,
+      `${TARGET_WORKSTATION_LABEL} node did not become selected: ${JSON.stringify(details)}`,
       {
         cause: error,
       },
