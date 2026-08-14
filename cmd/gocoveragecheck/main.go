@@ -268,25 +268,42 @@ func (cfg config) packageCoverageMin() float64 {
 }
 
 func run(cfg config) (coverageResult, error) {
-	profilePath := cfg.profile
-	cleanup := func() error { return nil }
-	if profilePath == "" {
-		file, err := os.CreateTemp("", "go-coverage-*.out")
-		if err != nil {
-			return coverageResult{}, fmt.Errorf("create temp coverage profile: %w", err)
-		}
-		profilePath = file.Name()
-		if err := file.Close(); err != nil {
-			return coverageResult{}, fmt.Errorf("close temp coverage profile: %w", err)
-		}
-		cleanup = func() error {
-			return os.Remove(profilePath)
-		}
+	return runForOS(cfg, runtime.GOOS)
+}
+
+func runForOS(cfg config, targetOS string) (result coverageResult, runErr error) {
+	profilePath, cleanup, err := prepareCoverageProfile(cfg.profile)
+	if err != nil {
+		return coverageResult{}, err
 	}
 	defer func() {
-		_ = cleanup()
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("remove temporary coverage profile: %w", cleanupErr))
+		}
 	}()
+	return runCoverageProfile(cfg, targetOS, profilePath)
+}
 
+func prepareCoverageProfile(profilePath string) (string, func() error, error) {
+	if profilePath != "" {
+		return profilePath, func() error { return nil }, nil
+	}
+	file, err := os.CreateTemp("", "go-coverage-*.out")
+	if err != nil {
+		return "", nil, fmt.Errorf("create temp coverage profile: %w", err)
+	}
+	profilePath = file.Name()
+	cleanup := func() error { return os.Remove(profilePath) }
+	if err := file.Close(); err != nil {
+		return "", nil, errors.Join(
+			fmt.Errorf("close temp coverage profile: %w", err),
+			cleanup(),
+		)
+	}
+	return profilePath, cleanup, nil
+}
+
+func runCoverageProfile(cfg config, targetOS string, profilePath string) (coverageResult, error) {
 	coverPackages, testPackages, err := resolveCoverageLane(cfg)
 	if err != nil {
 		return coverageResult{}, err
@@ -296,14 +313,14 @@ func run(cfg config) (coverageResult, error) {
 		return coverageResult{}, err
 	}
 	coverPackageArgument := strings.Join(coverPackages, ",")
-	if runtime.GOOS == "windows" && strings.TrimSpace(cfg.coverpkg) == "" {
+	if targetOS == "windows" && strings.TrimSpace(cfg.coverpkg) == "" {
 		// A fully expanded backend package list exceeds Windows' command-line
 		// limit. A package pattern keeps the invocation to one logical coverage
 		// pass; the resolved list above remains authoritative for profile
 		// filtering, reporting, and package gates.
 		coverPackageArgument = modulePath + "/pkg/..."
 	}
-	mergedTestArgs := []string{
+	coverageTestArgs := []string{
 		"test",
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
 		fmt.Sprintf("-p=%d", cfg.testJobs()),
@@ -312,19 +329,15 @@ func run(cfg config) (coverageResult, error) {
 		"-count=1",
 	}
 	if cfg.short {
-		mergedTestArgs = append(mergedTestArgs, "-short")
+		coverageTestArgs = append(coverageTestArgs, "-short")
 	}
-	mergedTestArgs = append(mergedTestArgs,
+	coverageTestArgs = append(coverageTestArgs,
 		fmt.Sprintf("-covermode=%s", cfg.covermode),
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 
-	mergedTestArgs = append(mergedTestArgs, fmt.Sprintf("-coverprofile=%s", profilePath))
-	if strings.TrimSpace(cfg.timingOutput) != "" {
-		mergedTestArgs = append(mergedTestArgs, "-json")
-	}
-	mergedTestArgs = append(mergedTestArgs, testPackages...)
-	if err := runGoTestCoverageLane(cfg, mergedTestArgs, testPackages, "run go test coverage lane"); err != nil {
+	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS)
+	if err := runGoTestCoverageLane(cfg, coverageTestArgs, testPackages, profilePath, repoRoot, coverPackages, targetOS, "run go test coverage lane", testPackageArgs); err != nil {
 		return coverageResult{}, err
 	}
 	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
@@ -385,64 +398,6 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 		baselinePath = filepath.Join(repoRoot, baselinePath)
 	}
 	return readPackageCoverageBaseline(baselinePath)
-}
-
-// runGoTestCoverageLane runs the merged go test coverage invocation once. When
-// cfg.timingOutput is set, it also captures package timing from the same
-// process's -json stdout and writes the timing summary before returning,
-// regardless of whether the go test invocation itself failed, so a failed or
-// crashed lane still leaves trustworthy (possibly incomplete) timing
-// diagnostics on disk.
-func runGoTestCoverageLane(cfg config, args []string, testPackages []string, failurePrefix string) error {
-	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	started := time.Now()
-	stdout, stderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: args,
-		env:  os.Environ(),
-	})
-	wallSeconds := time.Since(started).Seconds()
-
-	var timingWriteErr error
-	if timingEnabled {
-		summary := buildFunctionalTimingSummary(stdout, testPackages, wallSeconds)
-		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
-	}
-
-	if err != nil {
-		detail := mergeGoTestFailureDetail(stderr, stdout)
-		var testErr error
-		if detail != "" {
-			testErr = fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
-		} else {
-			testErr = fmt.Errorf("%s: %w", failurePrefix, err)
-		}
-		return errors.Join(testErr, timingWriteErr)
-	}
-	return timingWriteErr
-}
-
-func runCommand(invocation commandInvocation) (string, string, error) {
-	return commandRunner(invocation)
-}
-
-func mergeGoTestFailureDetail(stderr string, stdout string) string {
-	stderr = strings.TrimSpace(compactCoverageOutput(stderr))
-	stdout = strings.TrimSpace(compactCoverageOutput(stdout))
-	switch {
-	case stdout == "":
-		return stderr
-	case stderr == "":
-		return stdout
-	case strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
-		return stdout + "\n" + stderr
-	default:
-		return stderr + "\n" + stdout
-	}
-}
-
-func compactCoverageOutput(output string) string {
-	return coveragePackageListPattern.ReplaceAllString(output, "$1")
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {
@@ -522,6 +477,23 @@ func listGoPackages(patterns []string, include func(string) bool, requireNonTest
 		return nil, errors.New("resolve go coverage lane: no packages matched")
 	}
 	return packages, nil
+}
+
+func compactUnitTestPackageArgs(cfg config, testPackages []string, targetOS string) []string {
+	// The compact patterns are safe only for the default unit package universe:
+	// custom package lists and functional packages retain their existing args.
+	if targetOS != "windows" || (cfg.suite != "" && cfg.suite != "unit") || strings.TrimSpace(cfg.packages) != "" {
+		return nil
+	}
+	allPackages, err := listGoPackages([]string{"./pkg/..."}, func(string) bool { return true }, false)
+	if err != nil {
+		return nil
+	}
+	patterns, err := compactGoPackagePatterns(allPackages, testPackages, modulePath+"/pkg")
+	if err != nil {
+		return nil
+	}
+	return patterns
 }
 
 func parseGoListPackageLine(line string) (string, int, bool) {
