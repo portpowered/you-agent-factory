@@ -28,10 +28,22 @@ const (
 )
 
 var (
-	ErrToolPolicyDenied       = errors.New("agent tool execution denied by policy")
-	ErrToolNotSupported       = errors.New("agent tool is not supported")
-	ErrToolFileSystemRequired = errors.New("agent tool filesystem is required")
+	ErrToolPolicyDenied         = errors.New("agent tool execution denied by policy")
+	ErrToolNotSupported         = errors.New("agent tool is not supported")
+	ErrToolFileSystemRequired   = errors.New("agent tool filesystem is required")
+	ErrAgentRunToolsUnsupported = errors.New("agent-run tools are unsupported by the text-only Workers Runner")
 )
+
+const agentRunToolsUnsupportedRecoveryAction = "set agentTools.policy to DISABLED or use a Runner/provider contract with structured tool calls"
+
+func agentRunToolsUnsupportedError(policy string) error {
+	return fmt.Errorf(
+		"%w: configured policy %q cannot execute structured tool calls; %s",
+		ErrAgentRunToolsUnsupported,
+		workerconfig.NormalizeAgentToolPolicy(policy),
+		agentRunToolsUnsupportedRecoveryAction,
+	)
+}
 
 // ToolDiagnostic records a safe summary for one tool lifecycle event.
 type ToolDiagnostic struct {

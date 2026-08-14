@@ -99,10 +99,20 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 	}
 	workerDef = effectiveAgentRunWorkerDefinition(request, workerDef)
 
-	baseReq := agentRunInferenceRequest(request, workerDef)
-	inferencer := newRunnerInferencer(executor.runner, baseReq)
 	toolPolicy := interfaces.EffectiveAgentToolPolicy(workerDef.AgentTools)
 	toolRecorder := NewToolDiagnosticRecorder()
+	// The Workers Runner returns text only, so reject configured tools before
+	// the harness can advertise definitions that cannot produce a continuation.
+	if interfaces.AgentToolsAllowExecution(toolPolicy) {
+		duration := executor.clockNow().Sub(start)
+		err := agentRunToolsUnsupportedError(toolPolicy)
+		result := agentRunFailureWorkResult(request.Dispatch, err, duration, toolPolicy, toolRecorder)
+		executor.recordAgentRunResponse(request.Dispatch, result, duration, nil)
+		return result, nil
+	}
+
+	baseReq := agentRunInferenceRequest(request, workerDef)
+	inferencer := newRunnerInferencer(executor.runner, baseReq)
 	harnessResult, err := executor.harness.Execute(ctx, HarnessInput{
 		SystemPrompt: request.SystemPrompt,
 		UserMessage:  request.UserMessage,

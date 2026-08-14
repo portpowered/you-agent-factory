@@ -452,6 +452,63 @@ func TestToolsConfiguredTextOnlyRunnerMakesOneProviderInference(t *testing.T) {
 	}
 }
 
+func TestAgentRunExecutor_RejectsToolsBeforeHarnessOrProvider(t *testing.T) {
+	t.Parallel()
+
+	runner := &stubRunner{response: "must not run"}
+	harness := &recordingHarnessAdapter{}
+	executor := NewAgentRunExecutorWithDependencies(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": {
+					Type: interfaces.WorkerTypeAgent,
+					AgentTools: &interfaces.AgentToolsConfig{
+						Policy: interfaces.AgentToolPolicyReadOnly,
+					},
+				},
+			},
+		},
+		runner,
+		nil,
+		harness,
+		nil,
+		time.Now,
+	)
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if !strings.Contains(result.Error, "text-only Workers Runner") ||
+		!strings.Contains(result.Error, "agentTools.policy to DISABLED") {
+		t.Fatalf("Error = %q, want actionable text-only Runner guidance", result.Error)
+	}
+	if result.Output != "" {
+		t.Fatalf("Output = %q, want no misleading completion", result.Output)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Diagnostics = nil, want unsupported capability diagnostics")
+	}
+	if got := result.Diagnostics.Metadata[DiagnosticFailureClass]; got != FailureClassToolCapability {
+		t.Fatalf("failure class = %q, want %q", got, FailureClassToolCapability)
+	}
+	if got := result.Diagnostics.Metadata[DiagnosticRecoveryAction]; got != agentRunToolsUnsupportedRecoveryAction {
+		t.Fatalf("recovery action = %q, want %q", got, agentRunToolsUnsupportedRecoveryAction)
+	}
+	if got := result.Diagnostics.Metadata[DiagnosticToolPolicy]; got != interfaces.AgentToolPolicyReadOnly {
+		t.Fatalf("tool policy = %q, want %q", got, interfaces.AgentToolPolicyReadOnly)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("provider inference count = %d, want after-change count 0", runner.calls)
+	}
+	if harness.lastInput.Inferencer != nil {
+		t.Fatal("harness was invoked, so unreachable tools may have been advertised")
+	}
+}
+
 func TestLibraryHarnessAdapter_EnabledToolsRequireFileSystem(t *testing.T) {
 	t.Parallel()
 
@@ -577,7 +634,7 @@ func TestAgentRunExecutor_ToolRuntimeFailureSurfacesFailureClass(t *testing.T) {
 				"agent-worker": {
 					Type: interfaces.WorkerTypeAgent,
 					AgentTools: &interfaces.AgentToolsConfig{
-						Policy: interfaces.AgentToolPolicyReadOnly,
+						Policy: interfaces.AgentToolPolicyDisabled,
 					},
 				},
 			},
@@ -608,7 +665,7 @@ func TestAgentRunExecutor_ToolPolicyViolationSurfacesFailureClass(t *testing.T) 
 				"agent-worker": {
 					Type: interfaces.WorkerTypeAgent,
 					AgentTools: &interfaces.AgentToolsConfig{
-						Policy: interfaces.AgentToolPolicyReadOnly,
+						Policy: interfaces.AgentToolPolicyDisabled,
 					},
 				},
 			},
