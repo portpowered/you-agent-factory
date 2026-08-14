@@ -3,11 +3,9 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -318,13 +316,6 @@ func normalizedProviderFailureMessage(providerErr *workers.ProviderError) string
 	var panicErr *workers.WorkerExecutorPanicError
 	if errors.As(providerErr.Cause, &panicErr) && panicErr != nil {
 		return panicErr.Error()
-	}
-	// Provider-owned normalized failures carry the Providers sentinel through
-	// Cause. Preserve the public provider-error prefix for those failures, but
-	// leave Workers-owned typed failures (panic, cleanup, and contract errors)
-	// at their established customer-facing message.
-	if errors.Is(providerErr.Cause, providers.ErrExecuteFailed) {
-		return fmt.Sprintf("%s: %s", providerErr.Error(), message)
 	}
 	return message
 }
