@@ -56,7 +56,9 @@ func (s *Service) normalizeSuccessfulResult(
 	case workers.ExecutionOutcomeFailed:
 		return result, errors.New("runner returned failed outcome")
 	case workers.ExecutionOutcomeRejected:
-		if s != nil && s.providerOverride != nil && resolveRunnerIdentity(request.Target) == runners.AgentIdentity {
+		if s != nil && s.providerOverride != nil &&
+			resolveRunnerIdentity(request.Target) == runners.AgentIdentity &&
+			!hasProviderCompletionEvidence(runnerResult) {
 			message, _ := workerexecutor.CompletionValidationFailure(runnerResult)
 			return result, workers.NewProviderError(workers.WorkFailureTypeUnknown, message, nil)
 		}
@@ -82,6 +84,26 @@ func (s *Service) normalizeSuccessfulResult(
 		}
 	}
 	return result, nil
+}
+
+func hasProviderCompletionEvidence(result workers.RunnerExecutionResult) bool {
+	if strings.TrimSpace(result.Content) == "" {
+		return false
+	}
+	values := make([]string, 0, 2)
+	if result.Diagnostics != nil {
+		values = append(values, result.Diagnostics.Metadata[workers.ProviderResponseMetadataCompletionEvidence])
+		if result.Diagnostics.Provider != nil {
+			values = append(values, result.Diagnostics.Provider.ResponseMetadata[workers.ProviderResponseMetadataCompletionEvidence])
+		}
+	}
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "agent_message", "provider_response":
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeFailedResult(
@@ -287,6 +309,10 @@ func normalizedProviderFailureMessage(providerErr *workers.ProviderError) string
 	message := strings.TrimSpace(providerErr.Message)
 	if message == "" {
 		return strings.TrimSpace(providerErr.Error())
+	}
+	var panicErr *workers.WorkerExecutorPanicError
+	if errors.As(providerErr.Cause, &panicErr) && panicErr != nil {
+		return panicErr.Error()
 	}
 	// Provider-owned normalized failures carry the Providers sentinel through
 	// Cause. Preserve the public provider-error prefix for those failures, but

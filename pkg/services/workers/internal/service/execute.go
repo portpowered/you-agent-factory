@@ -15,6 +15,11 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
+const (
+	detachedProviderMaxRetries     = 2
+	detachedProviderInitialBackoff = 100 * time.Millisecond
+)
+
 // Execute validates and clones the request, runs one private runner attempt,
 // normalizes terminal outcomes, delivers safe observations, and releases
 // request-scoped resources before returning.
@@ -188,7 +193,11 @@ func (s *Service) runRunner(
 ) (runnerResult workers.RunnerExecutionResult, runErr error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			runErr = panicFailure(recovered, debug.Stack())
+			runErr = panicFailure(
+				recovered,
+				debug.Stack(),
+				s.providerOverride != nil && identity == runners.AgentIdentity,
+			)
 		}
 	}()
 	if request.Input.MockWorkers != nil {
@@ -203,14 +212,88 @@ func (s *Service) runRunner(
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if s.providerOverride != nil && identity == runners.AgentIdentity {
-		result, err := s.providerOverride.Infer(ctx, runnerRequest)
-		return normalizeProviderOverrideResult(result, runnerRequest), err
+		return s.executeProviderWithRetry(ctx, runnerRequest, func(
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			result, err := s.providerOverride.Infer(ctx, request)
+			return normalizeProviderOverrideResult(result, request), err
+		})
 	}
-	return s.runners.Execute(ctx, runners.ExecuteRequest{
-		Identity:             identity,
-		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
-		Attempt:              runnerRequest,
+	if identity != runners.AgentIdentity {
+		return s.runners.Execute(ctx, runners.ExecuteRequest{
+			Identity:             identity,
+			RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
+			Attempt:              runnerRequest,
+		})
+	}
+	return s.executeProviderWithRetry(ctx, runnerRequest, func(
+		request workers.RunnerExecutionRequest,
+	) (workers.RunnerExecutionResult, error) {
+		return s.runners.Execute(ctx, runners.ExecuteRequest{
+			Identity:             identity,
+			RequiredCapabilities: request.RequiredOptionalCapabilities,
+			Attempt:              request,
+		})
 	})
+}
+
+// executeProviderWithRetry preserves the legacy provider-attempt policy at the
+// stateless Workers boundary. Runtime still owns Work-level attempts; this
+// loop only retries retryable provider failures and carries the exact opaque
+// Provider Session into the next provider call.
+func (s *Service) executeProviderWithRetry(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+	execute func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error),
+) (workers.RunnerExecutionResult, error) {
+	for retryCount := 0; ; retryCount++ {
+		result, err := execute(request)
+		if err == nil {
+			return result, nil
+		}
+
+		providerErr := workers.NormalizeProviderExecutionError(err)
+		decision := workers.WorkFailureDecisionFromProviderError(providerErr)
+		if providerErr == nil || !decision.Retryable || retryCount >= detachedProviderMaxRetries {
+			return result, err
+		}
+
+		if session := providerSessionForRetry(providerErr, result); session != nil {
+			request.SessionID = strings.TrimSpace(session.ID)
+			request.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
+				request.RequiredOptionalCapabilities,
+				workers.RunnerOptionalCapabilitySessionResume,
+			)
+		}
+		if err := sleepForDetachedProviderRetry(ctx, detachedProviderInitialBackoff<<retryCount); err != nil {
+			return result, err
+		}
+	}
+}
+
+func providerSessionForRetry(
+	providerErr *workers.ProviderError,
+	result workers.RunnerExecutionResult,
+) *workers.ProviderSessionMetadata {
+	if providerErr != nil && providerErr.ProviderSession != nil &&
+		strings.TrimSpace(providerErr.ProviderSession.ID) != "" {
+		return workers.CloneProviderSessionMetadata(providerErr.ProviderSession)
+	}
+	if result.ProviderSession != nil && strings.TrimSpace(result.ProviderSession.ID) != "" {
+		return workers.CloneProviderSessionMetadata(result.ProviderSession)
+	}
+	return nil
+}
+
+func sleepForDetachedProviderRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Service) withTimeout(
@@ -335,12 +418,16 @@ func deliverObservation(
 	return sink(ctx, observation)
 }
 
-func panicFailure(_ any, stack []byte) error {
+func panicFailure(recovered any, stack []byte, preserveCompatibilityCause bool) error {
 	message := "worker runner panicked"
+	var cause error
+	if preserveCompatibilityCause {
+		cause = &workers.WorkerExecutorPanicError{Cause: recovered}
+	}
 	failure := workers.NewProviderError(
 		workers.WorkFailureTypeUnknown,
 		message,
-		nil,
+		cause,
 	)
 	failure.Diagnostics = &workers.WorkDiagnostics{
 		Panic: &workers.PanicDiagnostic{
