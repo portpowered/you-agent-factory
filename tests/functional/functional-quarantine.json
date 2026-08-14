@@ -56,13 +56,6 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/providers",
-      "test": "TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials",
-      "bucket": "GENUINELY FAILING",
-      "reason": "Same-machine rejection/process failure reproduced, with the authoritative run also failing worker-session start; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair mock-worker startup and remove this entry after the exact selector passes"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
       "test": "TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers",
       "bucket": "GENUINELY FAILING",
       "reason": "Timed out waiting for the process API server in the model and script worker variants; reproduced on the same machine at ed502b781 and db7379d47",
@@ -105,20 +98,6 @@
       "bucket": "GENUINELY FAILING",
       "reason": "/events replay failed with unexpected EOF; reproduced on the same machine at ed502b781 and db7379d47",
       "followUp": "Repair event replay framing and remove this entry after the exact selector passes"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
-      "test": "TestDashboard_EngineStateSnapshot_EndToEnd",
-      "bucket": "GENUINELY FAILING",
-      "reason": "Provider sessions were absent from events and sess-world-view-success was missing; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair provider-session event projection and remove this entry after the exact selector passes"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
-      "test": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact",
-      "bucket": "GENUINELY FAILING",
-      "reason": "Event order stopped before dispatch-created/inference-request/inference-response/dispatch-completed; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair canonical inference event emission and remove this entry after the exact selector passes"
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
