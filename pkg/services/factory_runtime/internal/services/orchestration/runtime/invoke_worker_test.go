@@ -445,6 +445,33 @@ func TestDetachedResultMaterializationPreservesFailureAndContinuationFacts(t *te
 	}
 }
 
+func TestDetachedScriptProcessFailureDoesNotPropagateRetryMetadata(t *testing.T) {
+	t.Parallel()
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "script-station",
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-script-failure"},
+		},
+	}
+	result, err := workstationDispatchResultFromExecute(request, workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Family:  workers.WorkFailureFamilyTerminal,
+			Type:    workers.WorkFailureTypeInternalServerError,
+			Message: "script exited with status 1",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("workstationDispatchResultFromExecute() error = %v", err)
+	}
+	if result.Result.FailureMetadata != nil {
+		t.Fatalf("failure metadata = %#v, want nil for ordinary script process failure", result.Result.FailureMetadata)
+	}
+	if result.Result.Outcome != workers.OutcomeFailed || result.Result.Error != "script exited with status 1" {
+		t.Fatalf("result = %#v, want terminal failed result", result.Result)
+	}
+}
+
 func TestAttemptLifecycleRejectsConflictingWorkerCorrelation(t *testing.T) {
 	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		return workers.ExecuteResult{

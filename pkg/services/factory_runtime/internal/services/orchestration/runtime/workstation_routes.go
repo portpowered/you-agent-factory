@@ -387,6 +387,14 @@ func finalizeRuntimeExecutionSelection(
 	fileSystems ...expectedArtifactFileSystem,
 ) {
 	fileSystem := firstExpectedArtifactFileSystem(fileSystems)
+	// SCRIPT_WRAP is the legacy command-wrapper spelling for a model-backed
+	// worker. Detached Workers execution needs the canonical Providers identity
+	// carried by modelProvider; retaining SCRIPT_WRAP here makes the stateless
+	// agent boundary reject an otherwise valid authored worker after a runtime
+	// replacement.
+	if strings.EqualFold(strings.TrimSpace(selection.providerID), "script_wrap") {
+		selection.providerID = strings.TrimSpace(selection.modelProvider)
+	}
 	if selection.providerID == "" {
 		selection.providerID = selection.modelProvider
 	}

@@ -85,6 +85,21 @@ func TestFinalizeRuntimeExecutionSelectionUsesProviderRunner(t *testing.T) {
 	}
 }
 
+func TestFinalizeRuntimeExecutionSelectionCanonicalizesScriptWrapProvider(t *testing.T) {
+	selection := runtimeExecutionSelection{
+		providerID:    "SCRIPT_WRAP",
+		modelProvider: "codex",
+		model:         "gpt-5-codex",
+		workerType:    interfaces.WorkerTypeModel,
+	}
+
+	finalizeRuntimeExecutionSelection(&selection, nil)
+
+	if selection.providerID != "codex" || selection.runnerID != workers.RunnerIDCodex {
+		t.Fatalf("selection = %#v, want canonical codex provider and runner", selection)
+	}
+}
+
 func TestApplyRuntimeWorkerSelectionUsesWorkerBodyAsSystemPrompt(t *testing.T) {
 	selection := runtimeExecutionSelection{}
 	applyRuntimeWorkerSelection(nil, &selection, workers.WorkstationExecutionRequest{}, nil, &interfaces.FactoryWorkerConfig{

@@ -59,9 +59,11 @@ func workstationDispatchResultFromExecute(
 	}
 	if result.Failure != nil {
 		workResult.Error = strings.TrimSpace(result.Failure.Message)
-		workResult.FailureMetadata = &workers.WorkFailureMetadata{
-			Family: result.Failure.Family,
-			Type:   result.Failure.Type,
+		if shouldPropagateFailureMetadata(request, result.Failure) {
+			workResult.FailureMetadata = &workers.WorkFailureMetadata{
+				Family: result.Failure.Family,
+				Type:   result.Failure.Type,
+			}
 		}
 	}
 	if executeErr != nil && terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
@@ -81,6 +83,30 @@ func workstationDispatchResultFromExecute(
 		Result:          workResult,
 		ProposedOutput:  &proposedOutput,
 	}, executeErr
+}
+
+// shouldPropagateFailureMetadata preserves the script workstation boundary:
+// ordinary process failures are terminal Work results without retry metadata,
+// while timeout and missing-executable failures retain their explicit
+// classifications.
+func shouldPropagateFailureMetadata(
+	request workers.WorkstationDispatchRequest,
+	failure *workers.ExecutionFailure,
+) bool {
+	if failure == nil || !isScriptWorkstationDispatch(request) {
+		return true
+	}
+	switch failure.Type {
+	case workers.WorkFailureTypeTimeout, workers.WorkFailureTypeMissingExecutable:
+		return true
+	default:
+		return false
+	}
+}
+
+func isScriptWorkstationDispatch(request workers.WorkstationDispatchRequest) bool {
+	return strings.TrimSpace(request.Execution.RunnerID) == "script" ||
+		strings.EqualFold(strings.TrimSpace(request.WorkstationName), "script-station")
 }
 
 func primaryOutputText(parts []work.WorkContentPart) string {

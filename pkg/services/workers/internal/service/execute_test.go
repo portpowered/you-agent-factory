@@ -47,6 +47,31 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	assertSafeCompletedObservations(t, observations)
 }
 
+func TestExecuteScriptProcessFailureRemainsTerminal(t *testing.T) {
+	t.Parallel()
+
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			return workers.RunnerExecutionResult{}, workers.NewProviderError(
+				workers.WorkFailureTypeInternalServerError,
+				"script process failed",
+				errors.New("exit status 1"),
+			)
+		},
+	}, nil)
+
+	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-script-failure", "attempt-script-failure"))
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		t.Fatalf("result = %#v, want failed result", result)
+	}
+	if result.Failure.Family != workers.WorkFailureFamilyTerminal || result.Failure.RetryHint {
+		t.Fatalf("script failure = %#v, want terminal non-retryable failure", result.Failure)
+	}
+}
+
 func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
 	t.Parallel()
 

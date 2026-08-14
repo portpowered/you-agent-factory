@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
@@ -78,7 +79,31 @@ func normalizeFailedResult(
 	case errors.Is(runErr, context.DeadlineExceeded):
 		return timeoutResult(result, runErr)
 	default:
-		return genericFailureResult(result, request, runnerResult, runErr)
+		return normalizeScriptFailure(
+			genericFailureResult(result, request, runnerResult, runErr),
+			request,
+		)
+	}
+}
+
+// normalizeScriptFailure preserves the established workstation boundary for
+// ordinary script process failures. A non-zero exit or command-start failure
+// is terminal Work, while timeout and missing-executable failures retain their
+// explicit metadata for the existing retry/diagnostic policy.
+func normalizeScriptFailure(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+) workers.ExecuteResult {
+	if request.Target.RunnerID != runners.ScriptIdentity || result.Failure == nil {
+		return result
+	}
+	switch result.Failure.Type {
+	case workers.WorkFailureTypeTimeout, workers.WorkFailureTypeMissingExecutable:
+		return result
+	default:
+		result.Failure.Family = workers.WorkFailureFamilyTerminal
+		result.Failure.RetryHint = false
+		return result
 	}
 }
 
