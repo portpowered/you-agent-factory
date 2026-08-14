@@ -298,6 +298,9 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		updated.RuntimeFactorySessionID != "runtime-session-1" {
 		t.Fatalf("replacement metadata = %#v", updated)
 	}
+	if updated.ResponseEvents == nil || updated.ResponseEvents.FactorySessionID() != "runtime-session-1" {
+		t.Fatalf("replacement response-event store = %#v, want runtime-session-1", updated.ResponseEvents)
+	}
 	if runtimebinding.PreparedSpecFromSession(updated) != preparedSpec {
 		t.Fatal("replacement did not preserve the prepared runtime specification")
 	}

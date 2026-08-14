@@ -187,7 +187,8 @@ func Replace(
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
-		Target: session.Target,
+		RuntimeFactorySessionID: session.RuntimeFactorySessionID,
+		Target:                  session.Target,
 		Handle: &SessionState{
 			Handle: replacementHandle, Instance: replacement,
 			Spec: preparedSpec,
@@ -205,9 +206,6 @@ func Replace(
 		Select: isActive, AddEventTypeRecorder: replacement.AddEventTypeRecorder,
 	})
 	updated := state.Resolve(session.ID)
-	if updated != nil {
-		updated.RuntimeFactorySessionID = session.RuntimeFactorySessionID
-	}
 	if isActive {
 		runtimeState.SetActive(serviceCtx, session.ID, replacementHandle)
 	}
