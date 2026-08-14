@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -194,14 +196,26 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 // Factory Events in chronological order with public control operation kinds.
 func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	support.WriteAgentConfig(
+		t,
+		factoryDir,
+		"mock-worker",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("buffered task accepted COMPLETE"),
+	})
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
+		FactoryDir: factoryDir,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
 	defer server.Stop(t)
 
 	baseURL := server.URL()
 	sessionID := factorysessions.DefaultSessionID
+	eventStream := openPauseResumeLifecycleEventStream(t, server)
 
 	pause := postSessionLifecycleControl(
 		t,
@@ -235,15 +249,11 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 		t.Fatalf("resume response = %#v, want accepted resume", resume)
 	}
 
-	waitForSessionWorkIDsAtCustomerState(
+	waitForPauseResumeLifecycleControlEvents(
 		t,
-		baseURL,
-		[]string{workID},
-		support.WorkCustomerLocation("task", "complete"),
-		pauseResumeDrainWaitTimeout,
+		eventStream,
+		pauseResumeDurableStatusTimeout,
 	)
-
-	assertPauseResumeLifecycleControlEvents(t, server.GetFactoryEvents(t))
 }
 
 // TestInterruptedWorkInspectSurfacesDispatchAndStopSummary proves work stopped
