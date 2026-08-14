@@ -10,6 +10,7 @@ import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import { useDashboardSessionTabFocus } from "../hooks/use-dashboard-session-tab-focus";
 import {
   type DashboardSessionTabsState,
   useDashboardSessionTabsState,
@@ -200,10 +201,15 @@ function SessionTabsContent({
   sessions: FactorySessionSummary[];
   streamStatus: DashboardStreamState["status"];
 }) {
-  const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sessionTabsID = useId();
   const [draggedSessionID, setDraggedSessionID] = useState<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const { getSessionButtonRef, moveSessionFocus, selectAndFocusSession } =
+    useDashboardSessionTabFocus({
+      activeSession,
+      onSelectSession,
+      sessions,
+    });
 
   if (isPending) {
     return (
@@ -250,21 +256,6 @@ function SessionTabsContent({
     );
   }
 
-  function focusSessionButton(index: number) {
-    sessionButtonRefs.current[index]?.focus();
-  }
-
-  function moveSessionFocus(currentIndex: number, offset: number) {
-    const nextIndex =
-      (currentIndex + offset + sessions.length) % sessions.length;
-    const nextSession = sessions[nextIndex];
-    if (!nextSession) {
-      return;
-    }
-    onSelectSession(nextSession.id);
-    focusSessionButton(nextIndex);
-  }
-
   function dropInsertionIndex(
     event: ReactDragEvent<HTMLDivElement>,
     index: number,
@@ -308,9 +299,7 @@ function SessionTabsContent({
           {sessions.map((session, index) => (
             <SessionTabButton
               active={session.id === activeSession?.id}
-              buttonRef={(element) => {
-                sessionButtonRefs.current[index] = element;
-              }}
+              buttonRef={getSessionButtonRef(session.id)}
               controlsID={sessionPanelID(sessionTabsID, session.id)}
               dragPreview={draggedSessionID === session.id}
               draggable={sessions.length > 1}
@@ -355,22 +344,27 @@ function SessionTabsContent({
                   case "ArrowLeft":
                   case "ArrowUp":
                     event.preventDefault();
-                    moveSessionFocus(index, -1);
+                    moveSessionFocus(session.id, -1);
                     return;
                   case "ArrowRight":
                   case "ArrowDown":
                     event.preventDefault();
-                    moveSessionFocus(index, 1);
+                    moveSessionFocus(session.id, 1);
                     return;
                   case "Home":
                     event.preventDefault();
-                    onSelectSession(sessions[0]?.id ?? session.id);
-                    focusSessionButton(0);
+                    if (sessions[0]) {
+                      selectAndFocusSession(sessions[0].id);
+                    }
                     return;
                   case "End":
                     event.preventDefault();
-                    onSelectSession(sessions.at(-1)?.id ?? session.id);
-                    focusSessionButton(sessions.length - 1);
+                    {
+                      const lastSession = sessions.at(-1);
+                      if (lastSession) {
+                        selectAndFocusSession(lastSession.id);
+                      }
+                    }
                     return;
                   case "Delete":
                   case "Backspace":
