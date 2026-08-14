@@ -33,6 +33,10 @@ import {
   resolveFactoryGraphConnectionAnchorContext,
 } from "../editor/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../editor-runtime/factory-graph-editor-runtime";
+import {
+  factoryLayoutNodeSize,
+  type FactoryLayout,
+} from "../layout/factory-graph-layout-operations";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../operations/factory-graph-customer-display";
 import {
   workstationRendersProgressOutcomeHandleValidation,
@@ -124,6 +128,8 @@ export interface ProjectFactoryGraphToReactFlowOptions {
   /** When true, omit edges whose handles are absent from rendered connection anchors. */
   filterEdgesToRenderedHandles?: boolean;
   factoryDefinition?: CanonicalFactoryDefinition | null;
+  /** Authored layout state; React Flow measurements are never read here. */
+  layout?: FactoryLayout | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   mode?: FactoryGraphReactFlowMode;
@@ -253,7 +259,11 @@ function buildFactoryGraphReactFlowNode(input: {
           ),
         )
       : undefined;
+  const authoredLayout = input.input.layout ?? input.input.factoryDefinition?.layout;
   const dimensions = resolveFactoryGraphNodeDimensions(input.node.kind, {
+    authoredDimensions: authoredLayout
+      ? factoryLayoutNodeSize(authoredLayout, input.node.id)
+      : undefined,
     content: [input.node.label],
   }).resolvedDimensions;
   return {

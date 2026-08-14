@@ -26,6 +26,7 @@ export async function projectFactoryGraphWithCanonicalLayout(input: {
   return {
     layoutPositionsByNodeId,
     projection: projectFactoryGraphToReactFlow({
+      layout: input.canonicalLayout,
       layoutPositionsByNodeId,
       topology: input.topology,
     }),

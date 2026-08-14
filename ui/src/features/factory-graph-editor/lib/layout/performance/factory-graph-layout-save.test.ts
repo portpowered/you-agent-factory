@@ -14,6 +14,7 @@ import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,
   moveFactoryLayoutNode,
+  setFactoryLayoutNodeSize,
 } from "../factory-graph-layout-operations";
 
 const EDGE_ID = "workstation-output:workstation:draft->work-state:story:done";
@@ -60,6 +61,40 @@ describe("factory graph layout save", () => {
     ).entries()) {
       expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
     }
+  });
+
+  it("round-trips authored node sizes without changing factory topology", () => {
+    const pendingLayout = setFactoryLayoutNodeSize(
+      createDefaultFactoryLayout(),
+      "workstation:draft",
+      { height: 340, width: 420 },
+      { x: 144, y: 288 },
+    );
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      pendingLayout,
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    expect(saveInput.value.layout?.nodes).toEqual([
+      {
+        id: "workstation:draft",
+        position: { x: 144, y: 288 },
+        size: { height: 340, width: 420 },
+      },
+    ]);
+    expect(factoryLayoutFromDefinition(saveInput.value).nodes).toEqual(
+      saveInput.value.layout?.nodes,
+    );
+    expect(saveInput.value.workstations).toEqual(
+      baseFactoryDefinition.workstations,
+    );
+    expect(saveInput.value.workTypes).toEqual(baseFactoryDefinition.workTypes);
   });
 
   it("persists authored edge waypoints through the shared layout save pipeline", () => {

@@ -11,8 +11,16 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
         edges: [],
         groups: [],
         nodes: [
-          { id: "worker:alex", position: { x: 40, y: 80 } },
-          { id: "doc:factory/docs/runbook.md", position: { x: 640, y: 120 } },
+          {
+            id: "worker:alex",
+            position: { x: 40, y: 80 },
+            size: { height: 100, width: 260 },
+          },
+          {
+            id: "doc:factory/docs/runbook.md",
+            position: { x: 640, y: 120 },
+            size: { height: 200, width: 360 },
+          },
         ],
         viewport: { x: 12, y: 24, zoom: 0.8 },
       },
@@ -68,18 +76,28 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
   expect(flow.nodes).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
+        height: 100,
+        initialHeight: 100,
+        initialWidth: 260,
         id: "worker:alex",
+        measured: { height: 100, width: 260 },
         position: { x: 40, y: 80 },
         type: "worker",
+        width: 260,
       }),
       expect.objectContaining({
         data: expect.objectContaining({
           selectedDoc: true,
           targetPath: "factory/docs/runbook.md",
         }),
+        height: 200,
+        initialHeight: 200,
+        initialWidth: 360,
         id: "doc:factory/docs/runbook.md",
+        measured: { height: 200, width: 360 },
         position: { x: 640, y: 120 },
         type: "doc",
+        width: 360,
       }),
     ]),
   );

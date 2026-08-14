@@ -56,6 +56,7 @@ export function useEditableFactoryGraph(
     return projectFactoryGraphToReactFlow({
       factoryDefinition,
       filterEdgesToRenderedHandles: true,
+      layout: layoutDraftState.layout,
       layoutPositionsByNodeId,
       locale: options.locale ?? undefined,
       topology: draftState.graph,

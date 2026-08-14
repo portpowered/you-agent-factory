@@ -3,9 +3,16 @@ import { useMemo } from "react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import {
+  factoryLayoutFromDefinition,
+  type FactoryLayout,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { GraphLayout } from "../../flowchart/lib/layout";
-import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
+import {
+  applyFactoryLayoutNodeSizesToGraphLayout,
+  buildCurrentActivityGraphLayoutFromFactory,
+} from "../lib/current-activity-factory-graph-layout";
 import { EMPTY_GRAPH_LAYOUT } from "../lib/react-flow-current-activity-card-graph";
 import {
   createWorkflowTopologyAsyncCache,
@@ -37,6 +44,7 @@ export function useCurrentActivityGraphLayoutForFactory(
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
   visibilityPreset: FactoryGraphEditorVisibilityPreset = "all",
   buildLayout: CurrentActivityGraphLayoutBuilder = buildCurrentActivityGraphLayoutFromFactory,
+  canonicalLayout?: FactoryLayout,
 ) {
   const factory =
     factoryOverride === undefined ? snapshot.factory : factoryOverride;
@@ -63,7 +71,7 @@ export function useCurrentActivityGraphLayoutForFactory(
 
   return useWorkflowTopologyAsyncCache({
     cache: GRAPH_LAYOUT_CACHE,
-    dependencies: [buildLayout, layoutSource],
+    dependencies: [buildLayout, canonicalLayout, layoutSource],
     fallbackValue: EMPTY_GRAPH_LAYOUT,
     initialValue: EMPTY_GRAPH_LAYOUT,
     loadLayout: () =>
@@ -74,7 +82,18 @@ export function useCurrentActivityGraphLayoutForFactory(
             layoutSource.visibilityPreset,
           )
         : Promise.resolve(EMPTY_GRAPH_LAYOUT),
-    mapResolvedLayout: identityGraphLayout,
+    mapResolvedLayout: (layout) => {
+      if (layoutSource.kind !== "factory") {
+        return layout;
+      }
+
+      return applyFactoryLayoutNodeSizesToGraphLayout({
+        canonicalLayout:
+          canonicalLayout ?? factoryLayoutFromDefinition(layoutSource.factory),
+        factory: layoutSource.factory,
+        graphLayout: layout,
+      });
+    },
     topologyKey: `${layoutSource.key}|builder:${builderCacheKey}`,
   });
 }
@@ -91,8 +110,4 @@ function getGraphLayoutBuilderCacheKey(
   nextGraphLayoutBuilderID += 1;
   GRAPH_LAYOUT_BUILDER_IDS.set(buildLayout, builderID);
   return builderID;
-}
-
-function identityGraphLayout(layout: GraphLayout) {
-  return layout;
 }

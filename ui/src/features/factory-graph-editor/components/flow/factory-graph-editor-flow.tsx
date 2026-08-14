@@ -27,6 +27,7 @@ import type {
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "../../lib/draft/factory-graph-draft-types";
+import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import type { FactoryGraphConnectionEndpoint } from "../../lib/editor/factory-graph-editor-connections";
 import { createFactoryGraphWorkstationResolver } from "../../lib/editor/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../../lib/editor-runtime/factory-graph-editor-runtime";
@@ -64,6 +65,7 @@ export {
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
   factoryDefinition?: CanonicalFactoryDefinition | null;
+  layout?: FactoryLayout | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
@@ -93,6 +95,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
       pendingRemovalNodeIds: input.pendingRemovalNodeIds,
       validationProjection: input.validationProjection,
     },
+    layout: input.layout,
     layoutPositionsByNodeId: input.layoutPositionsByNodeId,
     locale: input.locale,
     mode: "editor",

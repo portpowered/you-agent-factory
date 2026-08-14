@@ -129,6 +129,50 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
     );
   });
 
+  it("uses authored node sizes while keeping invalid saved sizes finite", async () => {
+    const factory = factoryWithSupportingFiles({
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "# Guide" },
+          targetPath: "factory/docs/guide.md",
+          type: "DOC",
+        },
+      ],
+    });
+    const factoryWithLayout: CanonicalFactoryDefinition = {
+      ...factory,
+      layout: {
+        nodes: [
+          {
+            id: "workstation:writer",
+            position: { x: 0, y: 0 },
+            size: { height: 420, width: 320 },
+          },
+          {
+            id: "doc:factory/docs/guide.md",
+            position: { x: 360, y: 0 },
+            size: { height: Number.POSITIVE_INFINITY, width: Number.NaN },
+          },
+        ],
+        schemaVersion: 1,
+      },
+    };
+
+    const layout = await buildCurrentActivityGraphLayoutFromFactory(
+      factoryWithLayout,
+    );
+    const workstation = layout.nodes.find(
+      (node) => node.nodeId === "workstation:writer",
+    );
+    const doc = layout.nodes.find(
+      (node) => node.nodeId === "doc:factory/docs/guide.md",
+    );
+
+    expect(workstation).toMatchObject({ height: 420, width: 320 });
+    expect(doc?.height).toBeFinite();
+    expect(doc?.width).toBeFinite();
+  });
+
   it("projects the shipped goal state inventory without the removed execute state", async () => {
     const layout = await buildCurrentActivityGraphLayoutFromFactory({
       name: "@you/goal",

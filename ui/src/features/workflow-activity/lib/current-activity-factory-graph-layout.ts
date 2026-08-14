@@ -1,5 +1,6 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: this projection keeps canonical factory graph mapping rules together.
 import {
+  type FactoryGraphNodeFamily,
   factoryGraphNodeFamilyRole,
   resolveFactoryGraphNodeDimensions,
 } from "@you-agent-factory/factory-graph";
@@ -25,6 +26,11 @@ import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-grap
 import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import {
+  factoryLayoutFromDefinition,
+  factoryLayoutNodeSize,
+  type FactoryLayout,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
 import {
@@ -280,6 +286,77 @@ function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
         : [node.label];
   return resolveFactoryGraphNodeDimensions(node.kind, { content })
     .resolvedDimensions;
+}
+
+/**
+ * Applies authored Factory node sizes to a cached graph-layout projection.
+ * React Flow measurement state is intentionally not part of this operation.
+ */
+export function applyFactoryLayoutNodeSizesToGraphLayout(input: {
+  canonicalLayout: FactoryLayout;
+  factory: CanonicalFactoryDefinition;
+  graphLayout: GraphLayout;
+}): GraphLayout {
+  const normalizedFactory = normalizeFactoryDefinitionForGraph(input.factory);
+  const topologyNodesById = new Map(
+    buildFactoryGraphTopologyFromDefinition(normalizedFactory).nodes.map(
+      (node) => [node.id, node],
+    ),
+  );
+
+  return {
+    ...input.graphLayout,
+    nodes: input.graphLayout.nodes.map((positionedNode) => {
+      const factoryGraphNode = topologyNodesById.get(positionedNode.nodeId);
+      const family =
+        factoryGraphNode?.kind ?? familyForPositionedNode(positionedNode);
+      const content = factoryGraphNode
+        ? sizingContentForFactoryGraphNode(factoryGraphNode)
+        : [positionedNode.nodeId];
+      const dimensions = resolveFactoryGraphNodeDimensions(family, {
+        authoredDimensions: factoryLayoutNodeSize(
+          input.canonicalLayout,
+          positionedNode.nodeId,
+        ),
+        content,
+      }).resolvedDimensions;
+
+      return {
+        ...positionedNode,
+        height: dimensions.height,
+        width: dimensions.width,
+      };
+    }),
+  };
+}
+
+function familyForPositionedNode(
+  node: PositionedNode,
+): FactoryGraphNodeFamily {
+  switch (node.nodeKind) {
+    case "doc":
+      return "doc";
+    case "resource":
+      return "resource";
+    case "state_position":
+      return "work-state";
+    case "workstation":
+      return "workstation";
+    case "constraint":
+      return "constraint";
+  }
+}
+
+function sizingContentForFactoryGraphNode(
+  node: FactoryGraphNode,
+): readonly string[] {
+  if (node.key.kind === "doc") {
+    return [node.label, node.key.name];
+  }
+  if (node.key.kind === "work-state") {
+    return [node.label, node.key.workTypeName, node.key.stateName];
+  }
+  return [node.label];
 }
 
 function seedNodeFromFactoryGraphNode(
@@ -666,7 +743,12 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     }
   }
 
-  return layoutFactoryGraphSeeds(nodes, edges);
+  const graphLayout = await layoutFactoryGraphSeeds(nodes, edges);
+  return applyFactoryLayoutNodeSizesToGraphLayout({
+    canonicalLayout: factoryLayoutFromDefinition(normalizedFactory),
+    factory: normalizedFactory,
+    graphLayout,
+  });
 }
 
 async function layoutFactoryGraphSeeds(
