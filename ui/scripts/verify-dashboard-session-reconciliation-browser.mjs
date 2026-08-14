@@ -9,6 +9,17 @@ const viewports = [
   { height: 900, label: "desktop", width: 1440 },
 ];
 
+async function waitForSelectedTab(tab, failureMessage) {
+  try {
+    await tab
+      .locator("xpath=..")
+      .getByRole("tab", { selected: true })
+      .waitFor({ state: "visible" });
+  } catch {
+    throw new Error(failureMessage);
+  }
+}
+
 async function verifyViewport(browser, viewport) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
@@ -59,17 +70,15 @@ async function verifyViewport(browser, viewport) {
     const tabs = navigation.getByRole("tab");
     await tabs.first().focus();
     await page.keyboard.press("End");
-    if ((await tabs.nth(1).getAttribute("aria-selected")) !== "true") {
-      throw new Error(
-        `End key did not select the last session at ${viewport.label}.`,
-      );
-    }
+    await waitForSelectedTab(
+      tabs.last(),
+      `End key did not select the last session at ${viewport.label}.`,
+    );
     await page.keyboard.press("Home");
-    if ((await tabs.first().getAttribute("aria-selected")) !== "true") {
-      throw new Error(
-        `Home key did not restore the first session at ${viewport.label}.`,
-      );
-    }
+    await waitForSelectedTab(
+      tabs.first(),
+      `Home key did not restore the first session at ${viewport.label}.`,
+    );
 
     await page.getByRole("button", { name: "Fail refresh" }).click();
     await page
