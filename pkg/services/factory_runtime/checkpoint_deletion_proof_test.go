@@ -2,12 +2,19 @@ package factory_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+)
+
+const (
+	externalConsumerProofBuildMaxDuration = 60 * time.Second
+	externalConsumerProofBuildCleanupTime = 5 * time.Second
 )
 
 // DEL-RUN-CKPT proof: CaptureCheckpoint, LoadCheckpoint, and RestoreCheckpoint
@@ -35,10 +42,26 @@ func TestServiceDoesNotExposeDeletedCheckpointMethods(t *testing.T) {
 // ./...`, and normal package discovery never compile it as part of this
 // module; only this test compiles it, on purpose, expecting failure.
 func TestExternalConsumerCannotCallDeletedCheckpointMethods(t *testing.T) {
-	t.Parallel()
+	// Keep the compiler proof serial with the package's other tests. The nested
+	// Go build can contend with the package test binary for the Windows build
+	// cache, so parallel scheduling turns a slow compile into an unbounded wait.
+	buildContext, cancel := externalConsumerProofBuildContext(t)
+	defer cancel()
 
-	cmd := exec.Command("go", "build", "./testdata/checkpointdeletionproof")
+	cmd := exec.CommandContext(buildContext, "go", "build", "./testdata/checkpointdeletionproof")
+	// Give the nested build private cache and temporary-build directories. The
+	// external proof may run beside other package builds, and sharing those
+	// directories was the observed source of Windows lock contention.
+	cmd.Env = append(os.Environ(), "GOCACHE="+t.TempDir(), "GOTMPDIR="+t.TempDir())
+	// CommandContext kills the go process when the proof deadline expires.
+	// WaitDelay bounds the reap and pipe cleanup so orphaned compiler output
+	// cannot keep CombinedOutput blocked after cancellation.
+	cmd.WaitDelay = externalConsumerProofBuildCleanupTime
 	output, err := cmd.CombinedOutput()
+	if contextErr := buildContext.Err(); contextErr != nil {
+		childDeadline, _ := buildContext.Deadline()
+		t.Fatalf("external-consumer checkpoint deletion proof build ended with %v; child was killed and reaped at its %s deadline: %v\nbuild output:\n%s", contextErr, childDeadline.Format(time.RFC3339Nano), err, output)
+	}
 	if err == nil {
 		t.Fatalf("expected compilation of testdata/checkpointdeletionproof to fail because CaptureCheckpoint/LoadCheckpoint/RestoreCheckpoint no longer exist on factory.Service, but the build succeeded")
 	}
@@ -52,6 +75,27 @@ func TestExternalConsumerCannotCallDeletedCheckpointMethods(t *testing.T) {
 	if !strings.Contains(got, "undefined") {
 		t.Errorf("expected an undefined-method compiler diagnostic, got build output:\n%s", got)
 	}
+}
+
+func externalConsumerProofBuildContext(t *testing.T) (context.Context, context.CancelFunc) {
+	t.Helper()
+
+	testDeadline, hasTestDeadline := t.Deadline()
+	if !hasTestDeadline {
+		return context.WithTimeout(context.Background(), externalConsumerProofBuildMaxDuration)
+	}
+
+	now := time.Now()
+	childDeadline := testDeadline.Add(-externalConsumerProofBuildCleanupTime)
+	maxChildDeadline := now.Add(externalConsumerProofBuildMaxDuration)
+	if childDeadline.After(maxChildDeadline) {
+		childDeadline = maxChildDeadline
+	}
+	if !childDeadline.After(now) {
+		t.Fatalf("external-consumer checkpoint deletion proof has no time left for a bounded child build and cleanup before the test deadline")
+	}
+
+	return context.WithDeadline(context.Background(), childDeadline)
 }
 
 // externalConsumerPeer implements factory.Service using only the surviving
