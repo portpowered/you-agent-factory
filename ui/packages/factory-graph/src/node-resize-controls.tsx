@@ -56,9 +56,13 @@ export function FactoryGraphNodeResizeControls({
     [onResizeEnd, refreshNodeInternals],
   );
   const handleFitToContent = useCallback(() => {
-    onFitToContent?.(fitDimensions);
-    refreshNodeInternals();
-  }, [fitDimensions, onFitToContent, refreshNodeInternals]);
+    if (!onFitToContent) {
+      return;
+    }
+
+    const dimensions = fitDimensions;
+    requestAnimationFrame(() => onFitToContent(dimensions));
+  }, [fitDimensions, onFitToContent]);
   const handleResetSize = useCallback(() => {
     onResetSize?.();
     refreshNodeInternals();

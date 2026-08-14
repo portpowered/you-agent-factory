@@ -289,6 +289,42 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
     });
   });
 
+  it("keeps React Flow dimension events disposable instead of treating them as authored layout", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 160,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout);
+    const dimensionChange = {
+      dimensions: { height: 240, width: 300 },
+      id: "workstation:review",
+      type: "dimensions" as const,
+    };
+
+    act(() => {
+      result.current.handleNodesChange([dimensionChange]);
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({
+      height: 160,
+      width: 220,
+    });
+  });
+
   it("derives node and edge selected flags from editor-local graph selection", () => {
     const edgeId =
       "workstation-output:workstation:review->work-state:story:done";

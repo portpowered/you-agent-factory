@@ -11,7 +11,7 @@ const port = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
 const storybookUrl = `http://${host}:${port}`;
 const storyId =
   "factory-graph-editor-visual-groups--editor-save-reload-workflow";
-const workstationId = "workstation:intake";
+const workstationId = "workstation:plan";
 
 const server = await ensureStorybookServer({ host, port: Number(port) });
 const browser = await chromium.launch();
@@ -42,34 +42,44 @@ try {
   await page.getByRole("button", { name: "Leave editor" }).waitFor({
     state: "visible",
   });
-  const selectedButton = await workstationButton(page);
-  await selectedButton.click();
-  await selectedButton.waitFor({ state: "visible" });
-  await page.waitForFunction(
-    (node) => node.getAttribute("aria-pressed") === "true",
-    await selectedButton.elementHandle(),
-  );
+  const selectedButton = await selectWorkstation(page);
 
   const resizeActions = page.locator(
     "[data-factory-graph-node-resize-actions]",
   );
   await resizeActions.waitFor({ state: "visible" });
   const fitButton = page.getByRole("button", { name: "Fit to content" });
-  const resetButton = page.getByRole("button", { name: "Reset size" });
   await fitButton.waitFor({ state: "visible" });
-  await resetButton.waitFor({ state: "visible" });
+
+  const attachedEdgeIdsBeforeResize = await attachedEdgeIds(page);
+  if (attachedEdgeIdsBeforeResize.length === 0) {
+    throw new Error("The selected workstation has no attached graph edges.");
+  }
+  const workstationHandleIds = await page
+    .locator(`[data-nodeid="${workstationId}"]`)
+    .evaluateAll((handles) =>
+      handles
+        .map((handle) => handle.getAttribute("data-handleid"))
+        .filter((handleId) => handleId !== null),
+    );
+  if (
+    !workstationHandleIds.includes("workstation-input-target") ||
+    !workstationHandleIds.includes("workstation-output-source")
+  ) {
+    throw new Error(
+      `The selected workstation is missing attached input/output handles: ${JSON.stringify(workstationHandleIds)}.`,
+    );
+  }
 
   await fitButton.focus();
+  await assertFocused(fitButton, "Fit to content");
   await page.keyboard.press("Enter");
-  await page.waitForFunction(
-    () =>
-      document.activeElement?.getAttribute("aria-label") === "Fit to content",
-  );
-  await resetButton.focus();
+  await selectWorkstation(page);
+  const resetButtonAfterFit = page.getByRole("button", { name: "Reset size" });
+  await resetButtonAfterFit.waitFor({ state: "visible" });
+  await resetButtonAfterFit.focus();
+  await assertFocused(resetButtonAfterFit, "Reset size");
   await page.keyboard.press("Enter");
-  await page.waitForFunction(
-    () => document.activeElement?.getAttribute("aria-label") === "Reset size",
-  );
 
   const resizeHandles = page.locator(".factory-graph-node-resize-control");
   if ((await resizeHandles.count()) !== 4) {
@@ -120,6 +130,15 @@ try {
   ) {
     throw new Error(
       `Pointer resize did not increase both axes: before=${JSON.stringify(beforeResize)} after=${JSON.stringify(resizedDimensions)}.`,
+    );
+  }
+  const attachedEdgeIdsAfterResize = await attachedEdgeIds(page);
+  if (
+    JSON.stringify(attachedEdgeIdsAfterResize) !==
+    JSON.stringify(attachedEdgeIdsBeforeResize)
+  ) {
+    throw new Error(
+      `Attached graph edges changed during resize: before=${JSON.stringify(attachedEdgeIdsBeforeResize)} after=${JSON.stringify(attachedEdgeIdsAfterResize)}.`,
     );
   }
 
@@ -182,9 +201,21 @@ try {
 
 async function workstationButton(page) {
   const button = page.getByRole("button", {
-    name: "Select Intake workstation",
+    name: "Select Plan workstation",
   });
   await button.waitFor({ state: "visible" });
+  return button;
+}
+
+async function selectWorkstation(page) {
+  const button = await workstationButton(page);
+  if ((await button.getAttribute("aria-pressed")) !== "true") {
+    await button.click();
+  }
+  await page.waitForFunction(
+    (node) => node.getAttribute("aria-pressed") === "true",
+    await button.elementHandle(),
+  );
   return button;
 }
 
@@ -193,7 +224,7 @@ async function nodeDimensions(button) {
     const node = element.closest(".react-flow__node");
     if (!node) {
       throw new Error(
-        "Could not find the React Flow node for the workstation.",
+        "Could not find the React Flow node for the Plan workstation.",
       );
     }
     return {
@@ -207,6 +238,18 @@ async function nodeDimensions(button) {
   });
 }
 
+async function attachedEdgeIds(page) {
+  return page
+    .locator(".react-flow__edge")
+    .evaluateAll(
+      (edges, nodeId) =>
+        edges
+          .map((edge) => edge.getAttribute("data-id"))
+          .filter((edgeId) => edgeId?.includes(nodeId)),
+      workstationId,
+    );
+}
+
 function assertDimensionsMatchSaved(actual, saved) {
   if (
     Math.abs(actual.width - saved.width) > 1 ||
@@ -214,6 +257,17 @@ function assertDimensionsMatchSaved(actual, saved) {
   ) {
     throw new Error(
       `Reloaded Factory graph dimensions differed from authored size: saved=${JSON.stringify(saved)} actual=${JSON.stringify(actual)}.`,
+    );
+  }
+}
+
+async function assertFocused(locator, label) {
+  const isFocused = await locator.evaluate(
+    (element) => element === document.activeElement,
+  );
+  if (!isFocused) {
+    throw new Error(
+      `${label} did not receive focus before keyboard activation.`,
     );
   }
 }

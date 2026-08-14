@@ -55,6 +55,7 @@ const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   string,
   { x: number; y: number }
 >();
+const EMPTY_RESIZE_DIMENSIONS = new Map<string, FactoryGraphNodeDimensions>();
 
 export type CurrentActivityGraphRenderProjection = {
   canonicalLayoutViewport: { x: number; y: number; zoom: number } | null;
@@ -284,33 +285,12 @@ function useCurrentActivityNodeResizeState(input: {
     setDimensionsByNodeId(new Map());
   }, [input.graphKey, controller.enabled]);
 
-  const handleDimensionsChange = useCallback((changes: NodeChange[]) => {
-    const dimensionChanges = changes.filter(
-      (change): change is Extract<NodeChange, { type: "dimensions" }> =>
-        change.type === "dimensions" && change.dimensions !== undefined,
-    );
-    if (dimensionChanges.length === 0) {
-      return;
-    }
-
-    setDimensionsByNodeId((currentDimensions) => {
-      const nextDimensions = new Map(currentDimensions);
-      for (const change of dimensionChanges) {
-        const dimensions = change.dimensions;
-        if (!dimensions) {
-          nextDimensions.delete(change.id);
-          continue;
-        }
-        nextDimensions.set(change.id, {
-          height: dimensions.height,
-          width: dimensions.width,
-        });
-      }
-      return nextDimensions;
-    });
-  }, []);
-
-  return { controller, dimensionsByNodeId, handleDimensionsChange };
+  return {
+    controller,
+    dimensionsByNodeId: hostController
+      ? EMPTY_RESIZE_DIMENSIONS
+      : dimensionsByNodeId,
+  };
 }
 
 function useActiveGraphHighlights({
@@ -337,7 +317,6 @@ function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
   graphSelection: FactoryGraphEditorSelectionController,
   dimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
-  handleDimensionsChange: (changes: NodeChange[]) => void,
 ) {
   const basePositionKey = useMemo(
     () =>
@@ -357,8 +336,6 @@ function useCurrentActivityGraphNodePresentation(
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       const positionChanges: NodeChange[] = [];
-
-      handleDimensionsChange(changes);
 
       for (const change of changes) {
         if (change.type === "position") {
@@ -403,7 +380,7 @@ function useCurrentActivityGraphNodePresentation(
           : currentPositionState;
       });
     },
-    [basePositionKey, handleDimensionsChange],
+    [basePositionKey],
   );
   const transientPositionsByNodeId =
     transientPositionState.basePositionKey === basePositionKey
@@ -412,20 +389,24 @@ function useCurrentActivityGraphNodePresentation(
 
   const displayNodes = useMemo(
     () =>
-      baseNodes.map((node) => ({
-        ...node,
-        ...(dimensionsByNodeId.has(node.id)
-          ? {
-              height: dimensionsByNodeId.get(node.id)?.height,
-              initialHeight: dimensionsByNodeId.get(node.id)?.height,
-              initialWidth: dimensionsByNodeId.get(node.id)?.width,
-              measured: dimensionsByNodeId.get(node.id),
-              width: dimensionsByNodeId.get(node.id)?.width,
-            }
-          : {}),
-        position: transientPositionsByNodeId.get(node.id) ?? node.position,
-        selected: graphSelection.isNodeSelected(node.id),
-      })),
+      baseNodes.map(
+        ({
+          initialHeight: _initialHeight,
+          initialWidth: _initialWidth,
+          measured: _measured,
+          ...node
+        }) => ({
+          ...node,
+          ...(dimensionsByNodeId.has(node.id)
+            ? {
+                height: dimensionsByNodeId.get(node.id)?.height,
+                width: dimensionsByNodeId.get(node.id)?.width,
+              }
+            : {}),
+          position: transientPositionsByNodeId.get(node.id) ?? node.position,
+          selected: graphSelection.isNodeSelected(node.id),
+        }),
+      ),
     [baseNodes, dimensionsByNodeId, graphSelection, transientPositionsByNodeId],
   );
 
@@ -626,7 +607,6 @@ export function useCurrentActivityGraphViewModel({
       baseNodes,
       graphSelection,
       nodeResizeState.dimensionsByNodeId,
-      nodeResizeState.handleDimensionsChange,
     );
   const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(
     graphSelection,
