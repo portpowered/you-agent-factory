@@ -286,6 +286,7 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	if err != nil {
 		return err
 	}
+	configureCoverageInvocationStreaming(&plan, cfg.stream)
 
 	started := time.Now()
 	var stdout strings.Builder
@@ -363,6 +364,16 @@ func appendCoverageOutput(output *strings.Builder, chunk string) {
 
 func runCommand(invocation commandInvocation) (string, string, error) {
 	return commandRunner(invocation)
+}
+
+func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled bool) {
+	if !enabled {
+		return
+	}
+	for index := range plan.invocations {
+		plan.invocations[index].stdoutWriter = stdoutWriter
+		plan.invocations[index].stderrWriter = stderrWriter
+	}
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {
