@@ -7,6 +7,7 @@ import { CurrentActivityGraphViewport } from "../react-flow-current-activity-car
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -58,47 +59,49 @@ vi.mock("@xyflow/react", async () => {
       }, [onInit, onMoveEnd]);
 
       return (
-        <div
-          className={className}
-          data-default-viewport={JSON.stringify(defaultViewport ?? null)}
-          data-fit-view={String(fitView ?? false)}
-          data-testid="mock-react-flow"
-        >
-          <button
-            onClick={() => onMoveEnd?.(null, { x: 12, y: 34, zoom: 1.25 })}
-            type="button"
+        <ReactFlowProvider>
+          <div
+            className={className}
+            data-default-viewport={JSON.stringify(defaultViewport ?? null)}
+            data-fit-view={String(fitView ?? false)}
+            data-testid="mock-react-flow"
           >
-            pan-viewport
-          </button>
-          <button
-            onClick={() => {
-              const draggedNodes = (nodes ?? []).filter(
-                (node) => node.selected,
-              );
-              const primaryNode = draggedNodes[0] ?? nodes?.[0];
-              if (!primaryNode) {
-                return;
-              }
+            <button
+              onClick={() => onMoveEnd?.(null, { x: 12, y: 34, zoom: 1.25 })}
+              type="button"
+            >
+              pan-viewport
+            </button>
+            <button
+              onClick={() => {
+                const draggedNodes = (nodes ?? []).filter(
+                  (node) => node.selected,
+                );
+                const primaryNode = draggedNodes[0] ?? nodes?.[0];
+                if (!primaryNode) {
+                  return;
+                }
 
-              onNodeDragStart?.(null, primaryNode, nodes ?? []);
-              onNodeDragStop?.(
-                null,
-                {
-                  ...primaryNode,
-                  position: {
-                    x: primaryNode.position.x + 16,
-                    y: primaryNode.position.y + 8,
+                onNodeDragStart?.(null, primaryNode, nodes ?? []);
+                onNodeDragStop?.(
+                  null,
+                  {
+                    ...primaryNode,
+                    position: {
+                      x: primaryNode.position.x + 16,
+                      y: primaryNode.position.y + 8,
+                    },
                   },
-                },
-                nodes ?? [],
-              );
-            }}
-            type="button"
-          >
-            drag-selected-nodes
-          </button>
-          {children}
-        </div>
+                  nodes ?? [],
+                );
+              }}
+              type="button"
+            >
+              drag-selected-nodes
+            </button>
+            {children}
+          </div>
+        </ReactFlowProvider>
       );
     },
   };

@@ -21,6 +21,7 @@ let reactFlowErrorToReport: { errorId: string; message: string } | null = null;
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -50,14 +51,16 @@ vi.mock("@xyflow/react", async () => {
       });
 
       return (
-        <div data-testid="mock-react-flow">
-          <ul aria-label="Rendered graph edges">
-            {(edges ?? []).map((edge) => (
-              <li key={edge.id}>{edge.id}</li>
-            ))}
-          </ul>
-          {children}
-        </div>
+        <ReactFlowProvider>
+          <div data-testid="mock-react-flow">
+            <ul aria-label="Rendered graph edges">
+              {(edges ?? []).map((edge) => (
+                <li key={edge.id}>{edge.id}</li>
+              ))}
+            </ul>
+            {children}
+          </div>
+        </ReactFlowProvider>
       );
     },
   };

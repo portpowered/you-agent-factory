@@ -253,7 +253,11 @@ function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
  */
 function FactoryGraphInitializationState({ nodeIds }: { nodeIds: string[] }) {
   const updateNodeInternals = useUpdateNodeInternals();
-  const stableNodeIds = useMemo(() => nodeIds, [nodeIds]);
+  const nodeIdKey = nodeIds.join(",");
+  const stableNodeIds = useMemo(
+    () => (nodeIdKey === "" ? [] : nodeIdKey.split(",")),
+    [nodeIdKey],
+  );
   const missingNodeIds = useStore((state) => {
     if (state.nodeLookup.size === 0) {
       return null;
@@ -822,6 +826,7 @@ export function CurrentActivityGraphViewport({
               proOptions={{ hideAttribution: true }}
             >
               <FactoryGraphInitializationState
+                key="factory-graph-initialization"
                 nodeIds={nodes.map((node) => node.id)}
               />
               <DashboardGraphBackground key="factory-graph-background" />
