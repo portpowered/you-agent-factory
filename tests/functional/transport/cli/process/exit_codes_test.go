@@ -206,10 +206,11 @@ func TestBuiltCLIDeclaredCancellationExitCodes(t *testing.T) {
 	}
 }
 
-// assertContinuousRunReady uses the public runtime status observation after
+// assertContinuousRunReady waits on the public runtime status observation after
 // listener binding. The dashboard URL proves only that HTTP is readable; a
 // RUNNING Factory state proves the continuous runtime loop reached its active
-// lifecycle boundary before the process receives SIGINT.
+// lifecycle boundary before the process receives SIGINT. The deadline only
+// bounds failure when that lifecycle signal is missing.
 func assertContinuousRunReady(t testing.TB, dashboardURL string) {
 	t.Helper()
 
@@ -217,10 +218,9 @@ func assertContinuousRunReady(t testing.TB, dashboardURL string) {
 	if !ok || baseURL == "" {
 		t.Fatalf("dashboard URL = %q, want /dashboard/ui suffix", dashboardURL)
 	}
-	status := support.GetJSON[factoryapi.StatusResponse](t, baseURL+"/status")
-	if status.FactoryState != "RUNNING" {
-		t.Fatalf("continuous runtime state = %q, want RUNNING; status=%#v", status.FactoryState, status)
-	}
+	support.WaitForStatus(t, baseURL, 30*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.FactoryState == "RUNNING"
+	})
 }
 
 func interruptBuiltCLIAndAssertExit130(t testing.TB, command *exec.Cmd, waitTimeout time.Duration) {
