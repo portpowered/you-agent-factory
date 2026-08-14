@@ -99,10 +99,10 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 	}
 	workerDef = effectiveAgentRunWorkerDefinition(request, workerDef)
 
-	baseReq := agentRunInferenceRequest(request, workerDef)
-	inferencer := newRunnerInferencer(executor.runner, baseReq)
 	toolPolicy := interfaces.EffectiveAgentToolPolicy(workerDef.AgentTools)
 	toolRecorder := NewToolDiagnosticRecorder()
+	baseReq := agentRunInferenceRequest(request, workerDef)
+	inferencer := newRunnerInferencer(executor.runner, baseReq)
 	harnessResult, err := executor.harness.Execute(ctx, HarnessInput{
 		SystemPrompt: request.SystemPrompt,
 		UserMessage:  request.UserMessage,

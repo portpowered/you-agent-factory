@@ -26,6 +26,31 @@ func (localToolFileSystem) Abs(path string) (string, error)            { return 
 func (localToolFileSystem) Stat(path string) (fs.FileInfo, error)      { return os.Stat(path) }
 func (localToolFileSystem) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
 func (localToolFileSystem) ReadDir(path string) ([]fs.DirEntry, error) { return os.ReadDir(path) }
+
+type structuredToolCallInferencer struct{}
+
+func (structuredToolCallInferencer) Infer(context.Context, messages.InferenceRequest) (messages.InferenceResult, error) {
+	return messages.InferenceResult{
+		Message: messages.Message{
+			Role: messages.RoleAssistant,
+			ToolCalls: []messages.ToolCall{{
+				ID:        "call-1",
+				Name:      ToolNameReadFile,
+				Arguments: `{"path":"note.txt"}`,
+			}},
+		},
+	}, nil
+}
+
+func (structuredToolCallInferencer) InferStream(context.Context, messages.InferenceRequest) (<-chan messages.StreamMessage, error) {
+	ch := make(chan messages.StreamMessage, 4)
+	ch <- messages.StreamMessage{Type: messages.StreamTypeMessageStart, Role: messages.RoleAssistant, Value: messages.NewMessageStartValue()}
+	ch <- messages.StreamMessage{Type: messages.StreamTypeToolCallStart, Role: messages.RoleAssistant, Value: messages.NewToolCallStartValue("call-1", ToolNameReadFile)}
+	ch <- messages.StreamMessage{Type: messages.StreamTypeToolCallEnd, Role: messages.RoleAssistant, Value: messages.NewToolCallEndValue("call-1", ToolNameReadFile, `{"path":"note.txt"}`)}
+	ch <- messages.StreamMessage{Type: messages.StreamTypeMessageEnd, Role: messages.RoleAssistant, Value: messages.NewMessageEndValue(messages.TokenUsage{})}
+	close(ch)
+	return ch, nil
+}
 func (localToolFileSystem) MkdirAll(path string, mode fs.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
@@ -424,6 +449,108 @@ func TestLibraryHarnessAdapter_EnabledToolsRegistersExecutor(t *testing.T) {
 	}
 }
 
+func TestToolsConfiguredTextOnlyRunnerMakesOneProviderInference(t *testing.T) {
+	t.Parallel()
+
+	runner := &sequenceRunner{response: "done"}
+	adapter := NewLibraryHarnessAdapter(localToolFileSystem{})
+	result, err := adapter.Execute(context.Background(), HarnessInput{
+		UserMessage:  "inspect the workspace",
+		Inferencer:   newRunnerInferencer(runner, workerexecution.ProviderInferenceRequest{}),
+		ToolPolicy:   interfaces.AgentToolPolicyReadOnly,
+		WorkingDir:   t.TempDir(),
+		ToolRecorder: NewToolDiagnosticRecorder(),
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.FinalText != "done" {
+		t.Fatalf("FinalText = %q, want done", result.FinalText)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("provider inference count = %d, want baseline 1", runner.calls)
+	}
+	for _, message := range result.Messages {
+		if len(message.ToolCalls) > 0 {
+			t.Fatalf("messages = %#v, want no structured tool call from text-only Runner", result.Messages)
+		}
+	}
+}
+
+func TestAgentRunExecutor_PermissiveToolsWithoutToolCallSucceeds(t *testing.T) {
+	t.Parallel()
+
+	runner := &stubRunner{response: "done"}
+	executor := NewAgentRunExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": {
+					Type: interfaces.WorkerTypeAgent,
+					AgentTools: &interfaces.AgentToolsConfig{
+						Policy: interfaces.AgentToolPolicyReadOnly,
+					},
+				},
+			},
+		},
+		runner,
+		localToolFileSystem{},
+		time.Now,
+	)
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
+	}
+	if result.Output != "done" {
+		t.Fatalf("Output = %q, want done", result.Output)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Diagnostics = nil, want tool policy diagnostics")
+	}
+	if got := result.Diagnostics.Metadata[DiagnosticToolPolicy]; got != interfaces.AgentToolPolicyReadOnly {
+		t.Fatalf("tool policy = %q, want %q", got, interfaces.AgentToolPolicyReadOnly)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("provider inference count = %d, want one no-call inference", runner.calls)
+	}
+	if result.Diagnostics.Metadata[DiagnosticFailureClass] != "" {
+		t.Fatalf("failure class = %q, want no failure", result.Diagnostics.Metadata[DiagnosticFailureClass])
+	}
+}
+
+func TestLibraryHarnessAdapter_RejectsStructuredToolCallAtCallTime(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewToolDiagnosticRecorder()
+	adapter := NewLibraryHarnessAdapter(localToolFileSystem{})
+	result, err := adapter.Execute(context.Background(), HarnessInput{
+		UserMessage:  "inspect the workspace",
+		Inferencer:   structuredToolCallInferencer{},
+		ToolPolicy:   interfaces.AgentToolPolicyReadOnly,
+		WorkingDir:   t.TempDir(),
+		ToolRecorder: recorder,
+	})
+	if !errors.Is(err, ErrAgentRunToolsUnsupported) {
+		t.Fatalf("Execute error = %v, messages = %#v, tool events = %#v, want structured tool capability failure", err, result.Messages, recorder.Events())
+	}
+	if result.FinalText != "" {
+		t.Fatalf("FinalText = %q, want no misleading completion", result.FinalText)
+	}
+	metadata := toolDiagnosticsMetadata(interfaces.AgentToolPolicyReadOnly, recorder)
+	if metadata[DiagnosticToolCallCount] != "2" {
+		t.Fatalf("tool diagnostic event count = %q, want start and unsupported events", metadata[DiagnosticToolCallCount])
+	}
+	if !strings.Contains(metadata[DiagnosticToolDiagnostics], "read_file:unsupported") {
+		t.Fatalf("tool diagnostics = %q, want call-time unsupported diagnostic", metadata[DiagnosticToolDiagnostics])
+	}
+	if !strings.Contains(err.Error(), "agentTools.policy to DISABLED") {
+		t.Fatalf("error = %q, want actionable recovery guidance", err)
+	}
+}
+
 func TestLibraryHarnessAdapter_EnabledToolsRequireFileSystem(t *testing.T) {
 	t.Parallel()
 
@@ -549,7 +676,7 @@ func TestAgentRunExecutor_ToolRuntimeFailureSurfacesFailureClass(t *testing.T) {
 				"agent-worker": {
 					Type: interfaces.WorkerTypeAgent,
 					AgentTools: &interfaces.AgentToolsConfig{
-						Policy: interfaces.AgentToolPolicyReadOnly,
+						Policy: interfaces.AgentToolPolicyDisabled,
 					},
 				},
 			},
@@ -580,7 +707,7 @@ func TestAgentRunExecutor_ToolPolicyViolationSurfacesFailureClass(t *testing.T) 
 				"agent-worker": {
 					Type: interfaces.WorkerTypeAgent,
 					AgentTools: &interfaces.AgentToolsConfig{
-						Policy: interfaces.AgentToolPolicyReadOnly,
+						Policy: interfaces.AgentToolPolicyDisabled,
 					},
 				},
 			},

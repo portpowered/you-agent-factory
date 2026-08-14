@@ -28,6 +28,7 @@ const (
 	FailureClassToolDenied     = "agent_run_tool_denied"
 	FailureClassToolPolicy     = "agent_run_tool_policy_violation"
 	FailureClassToolRuntime    = "agent_run_tool_failure"
+	FailureClassToolCapability = "agent_run_tool_capability_unsupported"
 )
 
 const maxAgentRunProviderFailureTypeLength = 64
@@ -147,6 +148,8 @@ func formatAgentRunError(err error) string {
 		return "agent run model runtime failure: " + err.Error()
 	case FailureClassToolDenied, FailureClassToolPolicy:
 		return "agent run tool policy violation: " + safeToolPolicyFailureSummary(err)
+	case FailureClassToolCapability:
+		return "agent run tools unsupported: " + safeToolPolicyFailureSummary(err)
 	case FailureClassToolRuntime:
 		return "agent run tool failure: " + safeToolRuntimeFailureSummary(err)
 	case FailureClassProvider:
@@ -216,6 +219,9 @@ func safeProviderFailureSummary(providerErr *workerexecution.ProviderError) stri
 }
 
 func recoveryActionForError(err error) string {
+	if errors.Is(err, ErrAgentRunToolsUnsupported) {
+		return agentRunToolsUnsupportedRecoveryAction
+	}
 	if providerErr := normalizedProviderErrorForAgentRun(err); providerErr != nil {
 		return recoveryActionForProviderFailure(providerErr)
 	}
@@ -367,6 +373,9 @@ func safeToolRuntimeFailureSummary(err error) string {
 }
 
 func toolFailureClass(err error) (string, bool) {
+	if errors.Is(err, ErrAgentRunToolsUnsupported) {
+		return FailureClassToolCapability, true
+	}
 	if errors.Is(err, ErrToolPolicyDenied) {
 		return FailureClassToolPolicy, true
 	}
