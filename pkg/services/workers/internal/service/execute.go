@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 const (
@@ -223,10 +225,15 @@ func (s *Service) runRunner(
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if providerOverride != nil && identity == runners.AgentIdentity &&
 		!usesACPProvider(runnerRequest.ExecutorProvider) {
+		providerRunner := workerrecording.NewProviderRunner(
+			workerexecutor.RunnerFromProvider(providerOverride),
+			request.Input.InferenceEventRecorder,
+			s.clock,
+		)
 		return s.executeProviderWithRetry(ctx, runnerRequest, func(
 			request workers.RunnerExecutionRequest,
 		) (workers.RunnerExecutionResult, error) {
-			result, err := providerOverride.Infer(ctx, request)
+			result, err := providerRunner.Execute(ctx, request)
 			return normalizeProviderOverrideResult(result, request), err
 		})
 	}

@@ -567,6 +567,10 @@ type ExecutionInput struct {
 	ExecutionLogger     logging.Logger      `json:"-"`
 	ProgressPublisher   ProgressPublisher   `json:"-"`
 	ScriptEventRecorder ScriptEventRecorder `json:"-"`
+	// InferenceEventRecorder receives the canonical provider request/response
+	// facts for this detached attempt. It is a request-scoped capability and is
+	// never retained by the process-scoped Workers service.
+	InferenceEventRecorder InferenceEventRecorder `json:"-"`
 }
 
 type WorkInput struct {

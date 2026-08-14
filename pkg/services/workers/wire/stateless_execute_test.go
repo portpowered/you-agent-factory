@@ -196,6 +196,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
+	var events []workers.InferenceEvent
 	request := workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
 			FactorySessionID: "session-override",
@@ -211,6 +212,11 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 			Output:     workers.OutputPolicy{StopToken: "<COMPLETE>"},
 			Prompt:     workers.PromptPolicy{UserMessage: "override prompt"},
 		},
+		Input: workers.ExecutionInput{
+			InferenceEventRecorder: func(event workers.InferenceEvent) {
+				events = append(events, event)
+			},
+		},
 	}
 	result, err := service.Execute(context.Background(), request)
 	if err != nil {
@@ -222,6 +228,15 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
 		result.Output.Primary[0].Text != "override output\n<COMPLETE>" {
 		t.Fatalf("override result = %#v, want accepted normalized output", result)
+	}
+	if len(events) != 2 || events[0].Request == nil || events[1].Response == nil {
+		t.Fatalf("inference events = %#v, want request and response", events)
+	}
+	if events[0].Request.InferenceRequestID == "" || events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
+		t.Fatalf("inference request correlation = %#v, want matching IDs", events)
+	}
+	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "session-attempt-override" {
+		t.Fatalf("provider session event = %#v, want override session identity", events[1].Response.ProviderSession)
 	}
 }
 
@@ -569,7 +584,14 @@ func (provider *statelessProviderOverride) Infer(
 ) (workers.InferenceResponse, error) {
 	provider.calls.Add(1)
 	provider.request = request
-	return workers.InferenceResponse{Content: "override output\n<COMPLETE>"}, nil
+	return workers.InferenceResponse{
+		Content: "override output\n<COMPLETE>",
+		ProviderSession: &workers.ProviderSessionMetadata{
+			Provider: "codex",
+			Kind:     "session-id",
+			ID:       "session-attempt-override",
+		},
+	}, nil
 }
 
 func (provider *statelessTestProviders) SetContent(content string) {

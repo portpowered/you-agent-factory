@@ -842,6 +842,17 @@ func runtimeScriptEventRecorder(cfg *runtimeConfig) workers.ScriptEventRecorder 
 	return recorder.RecordScriptEvent
 }
 
+func runtimeInferenceEventRecorder(cfg *runtimeConfig) workers.InferenceEventRecorder {
+	if cfg == nil || cfg.eventHistory == nil {
+		return nil
+	}
+	recorder, ok := cfg.eventHistory.(recordings.WorkerEventRecorder)
+	if !ok || recorder == nil {
+		return nil
+	}
+	return recorder.RecordInferenceEvent
+}
+
 func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities {
 	if value == nil {
 		return nil

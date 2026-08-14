@@ -16,6 +16,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
@@ -408,7 +409,7 @@ func recordProviderRunner(
 	recorder workers.InferenceEventRecorder,
 	clock func() time.Time,
 ) workers.Runner {
-	return runner
+	return workerrecording.NewProviderRunner(runner, recorder, clock)
 }
 
 func (a runnerProviderAdapter) Infer(
