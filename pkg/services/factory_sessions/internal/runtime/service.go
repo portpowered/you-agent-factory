@@ -251,6 +251,23 @@ func (s *Service) CloseResponseStreams(session *livesession.LiveSession) {
 	s.responses.Close(livesession.CanonicalID(session))
 }
 
+// RotateResponseStreams retires one runtime's response streams while allowing
+// its replacement to allocate fresh dispatch streams under the same stable
+// Factory Session identity. The response-event store itself remains closed;
+// the replacement registers a new store whose publications continue at the
+// shared Events authority's sequence.
+func (s *Service) RotateResponseStreams(session *livesession.LiveSession) {
+	if s == nil || s.responses == nil || session == nil {
+		return
+	}
+	if s.responseEvents != nil {
+		s.responseEvents.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
+	s.responses.Rotate(livesession.CanonicalID(session))
+}
+
 // Registry exposes the canonical registry to bounded compatibility adapters.
 func (s *Service) Registry() sessionregistry.Service {
 	if s == nil {

@@ -29,3 +29,27 @@ func TestRegistryOwnsAndReleasesSessionStreamSets(t *testing.T) {
 		t.Fatalf("Subscribe after close = %v, want %v", err, responsestream.ErrSubscriptionClosed)
 	}
 }
+
+func TestRegistryRotatesSessionStreamSets(t *testing.T) {
+	created := 0
+	registry := responsestream.NewRegistry(func() *responsestream.SessionResponseStream {
+		created++
+		return newResponseStream()
+	}, &fixedClock{})
+
+	first := registry.Streams("session-a")
+	first.Stream("dispatch-a")
+	registry.Rotate("session-a")
+	if registry.Existing("session-a") != nil {
+		t.Fatal("rotated session retained its retired stream set")
+	}
+
+	second := registry.Streams("session-a")
+	if second == first {
+		t.Fatal("rotated session reused its retired stream set")
+	}
+	stream := second.Stream("dispatch-b")
+	if stream == nil || created != 2 {
+		t.Fatalf("rotated stream allocation = (%v, %d), want a fresh dispatch stream and two total streams", stream, created)
+	}
+}

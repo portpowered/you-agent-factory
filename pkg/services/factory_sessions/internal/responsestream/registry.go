@@ -67,6 +67,25 @@ func (r *Registry) Close(sessionID string) {
 	}
 }
 
+// Rotate closes the current stream set and removes it so the next runtime
+// using the same session identity receives a fresh set. Runtime replacement
+// needs this distinction from Close: a retired runtime must reject late
+// publications, while its successor must be able to allocate new dispatch
+// streams under the stable session identity.
+func (r *Registry) Rotate(sessionID string) {
+	if r == nil {
+		return
+	}
+	key := strings.TrimSpace(sessionID)
+	r.mu.Lock()
+	streams := r.sets[key]
+	delete(r.sets, key)
+	r.mu.Unlock()
+	if streams != nil {
+		streams.Close()
+	}
+}
+
 // CloseDispatch completes one dispatch stream without allocating a session set.
 func (r *Registry) CloseDispatch(sessionID, dispatchID string) bool {
 	streams := r.Existing(sessionID)

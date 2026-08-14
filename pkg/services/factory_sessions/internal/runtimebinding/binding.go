@@ -183,7 +183,7 @@ func Replace(
 			executionBaseDir = runtimeBaseDir
 		}
 	}
-	state.CloseResponseStreams(session)
+	state.RotateResponseStreams(session)
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
