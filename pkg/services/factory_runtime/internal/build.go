@@ -267,6 +267,45 @@ func (f *RuntimeFactory) Build(
 	if len(mockWorkersConfigs) > 0 {
 		mockWorkersConfig = mockWorkersConfigs[0]
 	}
+	var sharedWorkersService workers.Service
+	if service, ok := workerService.(workers.Service); ok {
+		sharedWorkersService = service
+	}
+	var promptRenderer runtime.PromptRenderer
+	if renderer, ok := workerService.(runtime.PromptRenderer); ok {
+		promptRenderer = renderer
+	}
+	var templateFieldResolver runtime.TemplateFieldResolver
+	if resolver, ok := workerService.(runtime.TemplateFieldResolver); ok {
+		templateFieldResolver = resolver
+	}
+	var progressPublisher workers.ProgressPublisher
+	if publisherProvider, ok := workerService.(interface {
+		RuntimeProgressPublisher() workers.ProgressPublisher
+	}); ok {
+		progressPublisher = publisherProvider.RuntimeProgressPublisher()
+	}
+	directWorkstationExecutor := runtime.NewWorkstationRequestExecutor(
+		runtime.WorkstationRequestExecutorConfig{
+			Service:                    sharedWorkersService,
+			RuntimeDefinitions:         loadedFactoryCfg,
+			InvocationInterpolation:    f.invocationInterpolation,
+			InvocationFileReader:       invocationFileReader(f.inputFiles),
+			WorkflowContext:            RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
+			FactorySessionID:           sessionID,
+			RuntimeID:                  runtimeInstanceID,
+			RecordingID:                workerRecordingIdentity(runtimeInstanceID, recordPath),
+			EventHistory:               eventHistory,
+			NewID:                      f.newID,
+			PromptRenderer:             promptRenderer,
+			TemplateFieldResolver:      templateFieldResolver,
+			PromptSourceReader:         invocationFileReader(f.inputFiles),
+			MockWorkers:                mockWorkersConfig,
+			ProgressPublisher:          progressPublisher,
+			Net:                        net,
+			ExpectedArtifactFileSystem: f.inputFiles,
+		},
+	)
 
 	bundle, err := assembleRuntimeBundle(
 		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
@@ -278,6 +317,7 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
 		workerService,
+		directWorkstationExecutor,
 		mockWorkersConfig,
 		providerInvocation,
 		workerSessionsFactory,
@@ -335,6 +375,7 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
+	directWorkstationExecutor workers.WorkstationRequestExecutor,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
@@ -382,6 +423,7 @@ func assembleRuntimeBundle(
 		workerService,
 		workerExecutors,
 		net,
+		directWorkstationExecutor,
 		providerInvocation,
 	)
 	workerSessions, err := workerSessionsFactory(workstationBoundary, clock)

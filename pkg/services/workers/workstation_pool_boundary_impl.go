@@ -49,7 +49,10 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 	if cfg.ServiceFactory != nil {
 		service = cfg.ServiceFactory()
 	}
-	adapter := workerExecutorRequestAdapter{executors: cfg.Executors}
+	adapter := workerExecutorRequestAdapter{
+		executors:       cfg.Executors,
+		requestExecutor: cfg.RequestExecutor,
+	}
 	bindings := assembleWorkstationPoolBindings(cfg.RouteNames, adapter, capacity, queueCapacity)
 	if cfg.ProviderInvocation != nil {
 		// The role kind is workstation, not worker, because every route in this
@@ -84,7 +87,8 @@ type workstationPoolBoundary struct {
 }
 
 type workerExecutorRequestAdapter struct {
-	executors map[string]WorkerExecutor
+	executors       map[string]WorkerExecutor
+	requestExecutor WorkstationRequestExecutor
 }
 
 func (a workerExecutorRequestAdapter) Execute(
@@ -108,6 +112,9 @@ func (a workerExecutorRequestAdapter) Execute(
 	}
 	executor := a.executors[workerType]
 	if executor == nil {
+		if a.requestExecutor != nil {
+			return a.requestExecutor.Execute(ctx, request)
+		}
 		return WorkResult{}, fmt.Errorf(
 			"no executor registered for worker type %q",
 			workerType,

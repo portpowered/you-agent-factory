@@ -72,7 +72,11 @@ type WorkstationPoolBoundaryConfig struct {
 	// route bindings for this runtime.
 	ServiceFactory func() WorkstationExecutionService
 	Executors      map[string]WorkerExecutor
-	RouteNames     []string
+	// RequestExecutor handles detached workstation requests when a runtime
+	// supplies the shared stateless Execute boundary instead of a legacy
+	// per-worker executor map.
+	RequestExecutor WorkstationRequestExecutor
+	RouteNames      []string
 	// ProviderInvocation is the executor for Workers with no authored
 	// workstation behind them, published under ProviderInvocationRoute. It is
 	// assembled as a worker-role binding rather than a workstation-role one

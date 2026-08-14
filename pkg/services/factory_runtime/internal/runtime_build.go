@@ -27,6 +27,15 @@ type ProgressPublisherFactory func(string) workers.ProgressPublisher
 type DispatchCompletionFactory func(string) func(string)
 type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFactory
 
+type runtimeWorkersServiceWithProgress struct {
+	workers.Service
+	publisher workers.ProgressPublisher
+}
+
+func (service runtimeWorkersServiceWithProgress) RuntimeProgressPublisher() workers.ProgressPublisher {
+	return service.publisher
+}
+
 type runtimeOpeningWithFlush struct {
 	recordings.RuntimeOpening
 	flushInterval time.Duration
@@ -228,6 +237,10 @@ func buildBundle(
 	if err != nil {
 		return nil, err
 	}
+	workerServiceWithProgress := workers.Service(runtimeWorkersServiceWithProgress{
+		Service:   workerExecution,
+		publisher: providerSessionProgress.Publish,
+	})
 	workerOptions := makeWorkerOptionsLoader(workerExecution, runtimeExecutorsFactory, spec, factoryRunnerID, verbose, skipRunnerPrerequisiteValidation, invocationSkipPermissionsOverride, providerSessionProgress.Publish, runtimeFactory.loggerFactory)
 
 	bundle, err := runtimeFactory.Build(
@@ -265,7 +278,7 @@ func buildBundle(
 			flushInterval:  recordFlushInterval,
 		},
 		workerOptions,
-		workerExecution,
+		workerServiceWithProgress,
 		providerInvocation,
 		workerSessionsFactory,
 		dispatchCompleted,
@@ -487,6 +500,7 @@ func buildRuntimeWorkstationBoundary(
 	service runtimeWorkstationService,
 	executors map[string]workers.WorkerExecutor,
 	net *state.Net,
+	requestExecutor workers.WorkstationRequestExecutor,
 	providerInvocation workers.WorkstationRequestExecutor,
 ) workers.WorkstationPoolBoundary {
 	if factory == nil || service == nil {
@@ -495,6 +509,7 @@ func buildRuntimeWorkstationBoundary(
 	return factory(workers.WorkstationPoolBoundaryConfig{
 		Service:            service,
 		Executors:          executors,
+		RequestExecutor:    requestExecutor,
 		RouteNames:         runtimeBoundaryRouteNames(net, executors),
 		ProviderInvocation: providerInvocation,
 		Async:              true,
