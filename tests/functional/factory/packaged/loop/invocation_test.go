@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ import (
 
 func TestPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T) {
 	start := time.Date(2026, time.July, 29, 20, 0, 0, 0, time.UTC)
-	fakeClock := clockwork.NewFakeClockAt(start)
+	fakeClock := newLoopSchedulerClockAt(start)
 	runner := newBlockingLoopRunner()
 	submissions := make(chan work.FactorySubmissionRecord, 16)
 	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedLoopFactoryName)
@@ -52,7 +53,7 @@ func TestPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T) {
 		t.Fatal("loop executor did not begin trigger-at-start execution")
 	}
 
-	waitForLoopClockWaiter(t, fakeClock)
+	waitForLoopSchedulerTimer(t, fakeClock)
 	fakeClock.Advance(time.Minute)
 	skipped := waitForLoopSubmission(t, submissions, "scheduled-execution")
 	assertLoopSubmission(t, skipped, "skipped", "SKIPPED_OVERLAP", "2", start.Add(time.Minute), start.Add(time.Minute))
@@ -62,7 +63,7 @@ func TestPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T) {
 
 	close(runner.release)
 	waitForLoopDispatchCompletion(t, server)
-	waitForLoopClockWaiter(t, fakeClock)
+	waitForLoopSchedulerTimer(t, fakeClock)
 	fakeClock.Advance(time.Minute)
 	recovered := waitForLoopSubmission(t, submissions, "scheduled-execution")
 	assertLoopSubmission(t, recovered, "init", "SCHEDULED", "3", start.Add(2*time.Minute), start.Add(2*time.Minute))
@@ -94,6 +95,48 @@ type blockingLoopRunner struct {
 	once    sync.Once
 	mu      sync.Mutex
 	count   int
+}
+
+// loopSchedulerClock keeps the fake clock's scheduler-specific timer
+// registration observable. FakeClock.BlockUntilContext only reports the total
+// waiter count, so an unrelated server timer could otherwise release an
+// advance before the loop scheduler re-arms.
+type loopSchedulerClock struct {
+	*clockwork.FakeClock
+	schedulerTimers chan struct{}
+}
+
+var _ clockwork.Clock = (*loopSchedulerClock)(nil)
+
+func newLoopSchedulerClockAt(start time.Time) *loopSchedulerClock {
+	return &loopSchedulerClock{
+		FakeClock:       clockwork.NewFakeClockAt(start),
+		schedulerTimers: make(chan struct{}, 8),
+	}
+}
+
+func (clock *loopSchedulerClock) AfterFunc(duration time.Duration, callback func()) clockwork.Timer {
+	timer := clock.FakeClock.AfterFunc(duration, callback)
+	if loopSchedulerTimerCaller() {
+		clock.schedulerTimers <- struct{}{}
+	}
+	return timer
+}
+
+func loopSchedulerTimerCaller() bool {
+	pcs := make([]uintptr, 8)
+	n := runtime.Callers(2, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		frame, more := frames.Next()
+		if strings.Contains(frame.Function, "gocron/v2.(*scheduler).selectStart") ||
+			strings.Contains(frame.Function, "gocron/v2.(*scheduler).selectExecJobsOutForRescheduling") {
+			return true
+		}
+		if !more {
+			return false
+		}
+	}
 }
 
 func newBlockingLoopRunner() *blockingLoopRunner {
@@ -197,12 +240,12 @@ func assertLoopSubmission(
 	}
 }
 
-func waitForLoopClockWaiter(t *testing.T, clock *clockwork.FakeClock) {
+func waitForLoopSchedulerTimer(t *testing.T, clock *loopSchedulerClock) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := clock.BlockUntilContext(ctx, 1); err != nil {
-		t.Fatalf("wait for loop scheduler timer: %v", err)
+	select {
+	case <-clock.schedulerTimers:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for loop scheduler timer")
 	}
 }
 
