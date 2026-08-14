@@ -479,33 +479,54 @@ func resolveRuntimeModelBindings(
 				Selector: &models.ModelOperationBindingSelector{Slot: input.Name},
 			}
 		}
-		current := models.ResolvedModelOperationBinding{Slot: binding.Slot, Source: "OMITTED"}
-		if !runtimeModelSelectorEmpty(binding.Selector) {
-			for _, part := range request.Content {
-				if runtimeModelSelectorMatches(part, binding.Selector) {
-					current.Source = "INPUT"
-					current.Content = []work.WorkContentPart{part}
-					break
-				}
-			}
-		}
-		if len(current.Content) == 0 && len(binding.Config) > 0 {
-			current.Source = "CONFIG"
-			current.Content = work.CloneWorkContentParts(binding.Config)
-		}
-		if len(current.Content) == 0 && len(binding.DefaultContent) > 0 {
-			current.Source = "DEFAULT"
-			current.Content = work.CloneWorkContentParts(binding.DefaultContent)
-		}
-		if len(current.Content) == 0 && input.Required {
-			return nil, fmt.Errorf(
-				"required slot %q could not be resolved for operation %q",
-				input.Name, request.Operation,
-			)
+		current, err := resolveRuntimeModelBinding(input, binding, request)
+		if err != nil {
+			return nil, err
 		}
 		resolved = append(resolved, current)
 	}
 	return resolved, nil
+}
+
+func resolveRuntimeModelBinding(
+	input factorydefinitions.ModelOperationSlot,
+	binding models.ModelOperationBinding,
+	request models.Request,
+) (models.ResolvedModelOperationBinding, error) {
+	current := models.ResolvedModelOperationBinding{Slot: binding.Slot, Source: "OMITTED"}
+	if !runtimeModelSelectorEmpty(binding.Selector) {
+		current.Content = firstRuntimeModelInput(request.Content, binding.Selector)
+		if len(current.Content) > 0 {
+			current.Source = "INPUT"
+		}
+	}
+	if len(current.Content) == 0 && len(binding.Config) > 0 {
+		current.Source = "CONFIG"
+		current.Content = work.CloneWorkContentParts(binding.Config)
+	}
+	if len(current.Content) == 0 && len(binding.DefaultContent) > 0 {
+		current.Source = "DEFAULT"
+		current.Content = work.CloneWorkContentParts(binding.DefaultContent)
+	}
+	if len(current.Content) == 0 && input.Required {
+		return models.ResolvedModelOperationBinding{}, fmt.Errorf(
+			"required slot %q could not be resolved for operation %q",
+			input.Name, request.Operation,
+		)
+	}
+	return current, nil
+}
+
+func firstRuntimeModelInput(
+	content []work.WorkContentPart,
+	selector *models.ModelOperationBindingSelector,
+) []work.WorkContentPart {
+	for _, part := range content {
+		if runtimeModelSelectorMatches(part, selector) {
+			return []work.WorkContentPart{part}
+		}
+	}
+	return nil
 }
 
 func runtimeModelSelectorEmpty(selector *models.ModelOperationBindingSelector) bool {

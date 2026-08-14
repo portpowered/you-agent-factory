@@ -304,7 +304,13 @@ func TestRuntimeModelContentParsesStructuredAndTextResponses(t *testing.T) {
 
 func TestRuntimeModelStreamAndOutputHelpers(t *testing.T) {
 	t.Parallel()
+	testRuntimeModelOutputHelpers(t)
+	testRuntimeModelStreamHelpers(t)
+	testRuntimeModelBindingHelpers(t)
+}
 
+func testRuntimeModelOutputHelpers(t *testing.T) {
+	t.Helper()
 	text := work.WorkContentPart{Type: work.WorkContentPartTypeText, Text: "answer"}
 	if got := runtimeModelOutput(workers.ExecuteResult{Output: workers.ProposedOutput{Primary: []work.WorkContentPart{text}}}); got != "answer" {
 		t.Fatalf("runtimeModelOutput(text) = %q, want answer", got)
@@ -316,7 +322,13 @@ func TestRuntimeModelStreamAndOutputHelpers(t *testing.T) {
 	if got := runtimeModelOutput(workers.ExecuteResult{Output: workers.ProposedOutput{Primary: []work.WorkContentPart{structured}}}); !strings.Contains(got, `"ok"`) {
 		t.Fatalf("runtimeModelOutput(structured) = %q, want JSON", got)
 	}
+	if got := runtimeModelOutput(workers.ExecuteResult{Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, Metadata: map[string]any{"unsupported": func() {}}}}}}); got != "" {
+		t.Fatalf("runtimeModelOutput(unmarshalable) = %q, want empty fallback", got)
+	}
+}
 
+func testRuntimeModelStreamHelpers(t *testing.T) {
+	t.Helper()
 	audio := []work.WorkContentPart{{Type: work.WorkContentPartTypeAudio, File: "answer.wav"}}
 	file, contentType, err := runtimeModelStream(audio, &models.Options{ResponseMode: models.ResponseModeAudioStream})
 	if err != nil || file != "answer.wav" || contentType != "application/octet-stream" {
@@ -328,7 +340,14 @@ func TestRuntimeModelStreamAndOutputHelpers(t *testing.T) {
 	if file, contentType, err := runtimeModelStream(audio, nil); err != nil || file != "" || contentType != "" {
 		t.Fatalf("runtimeModelStream(no options) = (%q, %q, %v), want empty success", file, contentType, err)
 	}
+	if file, contentType, err := runtimeModelStream([]work.WorkContentPart{{Type: work.WorkContentPartTypeAudio, File: "answer.wav", ContentType: "audio/wav"}}, &models.Options{ResponseMode: models.ResponseModeAudioStream}); err != nil || file != "answer.wav" || contentType != "audio/wav" {
+		t.Fatalf("runtimeModelStream(explicit type) = (%q, %q, %v), want audio/wav", file, contentType, err)
+	}
+}
 
+func testRuntimeModelBindingHelpers(t *testing.T) {
+	t.Helper()
+	text := work.WorkContentPart{Type: work.WorkContentPartTypeText, Text: "answer"}
 	bindings := []models.ResolvedModelOperationBinding{{Slot: "input", Source: "INPUT", Content: []work.WorkContentPart{text}}}
 	message := runtimeModelUserMessage(" invoke ", []work.WorkContentPart{text}, bindings)
 	var decoded struct {
@@ -347,12 +366,6 @@ func TestRuntimeModelStreamAndOutputHelpers(t *testing.T) {
 	}
 	if got := runtimeModelUserMessage("invoke", []work.WorkContentPart{{Metadata: map[string]any{"unsupported": func() {}}}}, nil); got != "invoke" {
 		t.Fatalf("runtimeModelUserMessage(unmarshalable) = %q, want operation fallback", got)
-	}
-	if got := runtimeModelOutput(workers.ExecuteResult{Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, Metadata: map[string]any{"unsupported": func() {}}}}}}); got != "" {
-		t.Fatalf("runtimeModelOutput(unmarshalable) = %q, want empty fallback", got)
-	}
-	if file, contentType, err := runtimeModelStream([]work.WorkContentPart{{Type: work.WorkContentPartTypeAudio, File: "answer.wav", ContentType: "audio/wav"}}, &models.Options{ResponseMode: models.ResponseModeAudioStream}); err != nil || file != "answer.wav" || contentType != "audio/wav" {
-		t.Fatalf("runtimeModelStream(explicit type) = (%q, %q, %v), want audio/wav", file, contentType, err)
 	}
 }
 
@@ -480,7 +493,19 @@ func TestRuntimeModelInvokerRejectsUnavailableOpenedCapabilities(t *testing.T) {
 	sessions := &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: localConfig}}}
 	readyModels := &runtimeInvokerModelsStub{readiness: models.GetModelReadinessResult{Readiness: models.Runtime{ReadinessState: models.ReadinessStateReady}}}
 	request := models.Request{Operation: "invoke"}
+	assertRuntimeModelInvokerBaseUnavailable(t, readyModels, sessions, request)
+	assertRuntimeModelInvokerLookupFailures(t, scope, localConfig, sessions, readyModels, request)
+	assertRuntimeModelInvokerLocalFailures(t, scope, sessions, readyModels, request)
+	assertRuntimeModelInvokerRemoteFailures(t, scope, readyModels, request)
+}
 
+func assertRuntimeModelInvokerBaseUnavailable(
+	t *testing.T,
+	readyModels *runtimeInvokerModelsStub,
+	sessions *runtimeInvokerSessionsStub,
+	request models.Request,
+) {
+	t.Helper()
 	var nilInvoker *runtimeModelInvoker
 	if _, err := nilInvoker.InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "Models service is not available") {
 		t.Fatalf("nil invoker error = %v, want Models unavailable", err)
@@ -494,7 +519,17 @@ func TestRuntimeModelInvokerRejectsUnavailableOpenedCapabilities(t *testing.T) {
 	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
 		t.Fatalf("zero scope error = %v, want ErrRuntimeScopeInvalid", err)
 	}
+}
 
+func assertRuntimeModelInvokerLookupFailures(
+	t *testing.T,
+	scope models.RuntimeScopeRef,
+	localConfig *factorydefinitions.FactoryConfig,
+	sessions *runtimeInvokerSessionsStub,
+	readyModels *runtimeInvokerModelsStub,
+	request models.Request,
+) {
+	t.Helper()
 	sessions.err = errors.New("session lookup failed")
 	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "session lookup failed") {
 		t.Fatalf("session lookup error = %v, want lookup failure", err)
@@ -523,12 +558,29 @@ func TestRuntimeModelInvokerRejectsUnavailableOpenedCapabilities(t *testing.T) {
 	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: sessionsWithConfig(requiredConfig)}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "required slot") {
 		t.Fatalf("required binding error = %v, want required-slot failure", err)
 	}
+}
 
+func assertRuntimeModelInvokerLocalFailures(
+	t *testing.T,
+	scope models.RuntimeScopeRef,
+	sessions *runtimeInvokerSessionsStub,
+	readyModels *runtimeInvokerModelsStub,
+	request models.Request,
+) {
+	t.Helper()
 	localErrorModels := &runtimeInvokerModelsStub{readiness: readyModels.readiness, localErr: errors.New("local invocation failed")}
 	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: localErrorModels, Scope: scope, Sessions: sessions}).InvokeModel(context.Background(), "local-model", request); err == nil || !strings.Contains(err.Error(), "local invocation failed") {
 		t.Fatalf("local invocation error = %v, want local failure", err)
 	}
+}
 
+func assertRuntimeModelInvokerRemoteFailures(
+	t *testing.T,
+	scope models.RuntimeScopeRef,
+	readyModels *runtimeInvokerModelsStub,
+	request models.Request,
+) {
+	t.Helper()
 	remoteConfig := &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{
 		Name: "remote-worker", Type: factorydefinitions.WorkerTypeModel, Model: "remote-model", ModelLocality: factorydefinitions.ModelLocalityCloud,
 		Operations: []factorydefinitions.ModelOperation{{Name: "invoke", Outputs: []factorydefinitions.ModelOperationSlot{{Name: "result", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeJSON}}}}},

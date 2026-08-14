@@ -21,35 +21,6 @@ type expectedArtifactFileSystem interface {
 	EvalSymlinks(string) (string, error)
 }
 
-type runtimePromptRenderError struct {
-	cause error
-}
-
-func (err *runtimePromptRenderError) Error() string {
-	if err == nil || err.cause == nil {
-		return "runtime prompt rendering failed"
-	}
-	return err.cause.Error()
-}
-
-func (err *runtimePromptRenderError) Unwrap() error {
-	if err == nil {
-		return nil
-	}
-	return err.cause
-}
-
-func wrapRuntimePromptRenderError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var existing *runtimePromptRenderError
-	if errors.As(err, &existing) {
-		return err
-	}
-	return &runtimePromptRenderError{cause: err}
-}
-
 func expectedArtifactFileSystemFrom(value any) expectedArtifactFileSystem {
 	fileSystem, _ := value.(expectedArtifactFileSystem)
 	return fileSystem
@@ -576,36 +547,6 @@ func finalizeRuntimeRunnerSelection(selection *runtimeExecutionSelection) {
 	if selection.runnerID == "" && selection.providerID == "" && selection.model == "" {
 		selection.runnerID = workers.RunnerIDCodex
 	}
-}
-
-func validateRuntimeExecutionSelection(selection runtimeExecutionSelection) error {
-	if strings.EqualFold(strings.TrimSpace(selection.runnerID), "script") &&
-		strings.TrimSpace(selection.command) == "" {
-		return fmt.Errorf("construct script worker: misconfigured: script command is required")
-	}
-	return nil
-}
-
-func finalizeRuntimeWorkspaceSelection(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	fileSystem expectedArtifactFileSystem,
-) {
-	baseDirectory := strings.TrimSpace(selection.factoryDirectory)
-	if cfg != nil {
-		if runtimeLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup); ok && runtimeLookup != nil {
-			baseDirectory = firstRuntimeValue(
-				strings.TrimSpace(runtimeLookup.RuntimeBaseDir()),
-				baseDirectory,
-			)
-		}
-	}
-	if selection.workingDirectory == "" {
-		// Detached execution must carry the same default workspace that the
-		// legacy workstation executor derived from RuntimeConfig.
-		selection.workingDirectory = baseDirectory
-	}
-	selection.workingDirectory = resolveRuntimePath(baseDirectory, selection.workingDirectory, fileSystem)
 }
 
 func resolveRuntimeSelectionInvocation(

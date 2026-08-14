@@ -237,57 +237,6 @@ func startStatelessAttemptWithRequestMode(
 	)
 }
 
-func normalizeScriptClassifierResult(
-	target workers.ExecutionTarget,
-	result workers.ExecuteResult,
-) workers.ExecuteResult {
-	if !target.Output.ScriptClassifier || strings.TrimSpace(target.RunnerID) != "script" ||
-		result.Outcome != workers.ExecutionOutcomeAccepted {
-		return result
-	}
-	output := strings.TrimSpace(primaryOutputText(result.Output.Primary))
-	if output == "" {
-		return result
-	}
-	lines := strings.Split(output, "\n")
-	label := strings.TrimSpace(lines[len(lines)-1])
-	result.Output.Primary = []work.WorkContentPart{{
-		Type: work.WorkContentPartTypeText,
-		Text: label,
-	}}
-	result.Output.Classification = label
-	return result
-}
-
-func normalizeDetachedExecutionResult(
-	cfg *runtimeConfig,
-	request workers.ExecuteRequest,
-	result workers.ExecuteResult,
-) workers.ExecuteResult {
-	result = normalizeScriptClassifierResult(request.Target, result)
-	return verifyExpectedArtifactsForDispatch(cfg, request, result)
-}
-
-// runtimeRecordingRequest carries process-owned recording, runtime, and
-// generation identities into the detached Runtime path. Callers may provide
-// explicit identities, while ordinary Factory dispatches inherit the values
-// opened for this runtime.
-func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
-	if cfg == nil {
-		return request
-	}
-	if strings.TrimSpace(request.Execution.RecordingID) == "" {
-		request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
-	}
-	if strings.TrimSpace(request.Execution.RuntimeID) == "" {
-		request.Execution.RuntimeID = strings.TrimSpace(cfg.runtimeID)
-	}
-	if strings.TrimSpace(request.Execution.GenerationID) == "" && cfg.eventHistory != nil {
-		request.Execution.GenerationID = strings.TrimSpace(cfg.eventHistory.StreamGenerationID())
-	}
-	return request
-}
-
 func runtimeAttemptPreparation(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,
@@ -473,24 +422,6 @@ func executionCorrelationFromDispatch(
 		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Attempt ID generator returned an empty ID")
 	}
 	return correlation, nil
-}
-
-func runtimeWorkflowContext(cfg *runtimeConfig, sessionID string, supplied *workers.Context) *workers.Context {
-	if context := supplied.Clone(); context != nil {
-		if strings.TrimSpace(context.SessionID) == "" {
-			context.SessionID = strings.TrimSpace(sessionID)
-		}
-		return context
-	}
-	if cfg != nil {
-		if context := cfg.workflowContext.Clone(); context != nil {
-			if strings.TrimSpace(context.SessionID) == "" {
-				context.SessionID = strings.TrimSpace(sessionID)
-			}
-			return context
-		}
-	}
-	return &workers.Context{SessionID: strings.TrimSpace(sessionID)}
 }
 
 func executionTargetFromSelection(

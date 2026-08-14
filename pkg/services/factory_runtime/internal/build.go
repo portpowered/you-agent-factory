@@ -418,11 +418,7 @@ func assembleRuntimeBundle(
 	if workerExecutors == nil {
 		workerExecutors = make(map[string]workers.WorkerExecutor)
 	}
-	if loggerBinder, ok := directWorkstationExecutor.(interface {
-		SetRuntimeLogger(factory.Logger)
-	}); ok {
-		loggerBinder.SetRuntimeLogger(structuredLogger)
-	}
+	bindRuntimeLogger(directWorkstationExecutor, structuredLogger)
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
@@ -521,6 +517,14 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
+}
+
+func bindRuntimeLogger(executor workers.WorkstationRequestExecutor, logger factory.Logger) {
+	if loggerBinder, ok := executor.(interface {
+		SetRuntimeLogger(factory.Logger)
+	}); ok {
+		loggerBinder.SetRuntimeLogger(logger)
+	}
 }
 
 func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {

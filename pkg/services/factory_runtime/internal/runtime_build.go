@@ -322,16 +322,8 @@ func buildBundle(
 	if err != nil {
 		return nil, err
 	}
-	workerServiceWithProgress := workers.Service(runtimeWorkersServiceWithProgress{
-		Service:               workerExecution,
-		publisher:             providerSessionProgress.Publish,
-		providerOverride:      spec.ProviderOverride,
-		commandRunnerOverride: spec.CommandRunnerOverride,
-		replayCommandRunner:   spec.ReplayCommandRunner,
-		clock:                 spec.Clock,
-	})
+	workerServiceWithProgress := newRuntimeWorkersService(workerExecution, providerSessionProgress, spec)
 	workerOptions := makeWorkerOptionsLoader(workerExecution, runtimeExecutorsFactory, spec, factoryRunnerID, verbose, skipRunnerPrerequisiteValidation, invocationSkipPermissionsOverride, providerSessionProgress.Publish, runtimeFactory.loggerFactory)
-
 	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
@@ -376,13 +368,36 @@ func buildBundle(
 	if err != nil {
 		return nil, err
 	}
-	if setter, ok := bundle.Factory.(interface {
-		SetReplayEvents([]factorydefinitions.FactoryEvent)
-	}); ok {
-		setter.SetReplayEvents(spec.ReplayEvents)
-	}
+	setReplayEvents(bundle.Factory, spec.ReplayEvents)
 	setBundleProgressPublisher(bundle, providerSessionProgress.Publish)
 	return bundle, nil
+}
+
+func newRuntimeWorkersService(
+	workerExecution workers.Service,
+	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	spec runtimebuild.SessionBuildSpec,
+) workers.Service {
+	return workers.Service(runtimeWorkersServiceWithProgress{
+		Service:               workerExecution,
+		publisher:             providerSessionProgress.Publish,
+		providerOverride:      spec.ProviderOverride,
+		commandRunnerOverride: spec.CommandRunnerOverride,
+		replayCommandRunner:   spec.ReplayCommandRunner,
+		clock:                 spec.Clock,
+	})
+}
+
+func setReplayEvents(
+	bundleFactory factory.Factory,
+	events []factorydefinitions.FactoryEvent,
+) {
+	setter, ok := bundleFactory.(interface {
+		SetReplayEvents([]factorydefinitions.FactoryEvent)
+	})
+	if ok {
+		setter.SetReplayEvents(events)
+	}
 }
 
 func prepareBundleExecution(

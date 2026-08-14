@@ -70,7 +70,6 @@ type factoryImpl struct {
 	capacitySnapshotMu          sync.Mutex
 	effectiveFactoryConfig      *interfaces.FactoryConfig
 }
-
 type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
@@ -124,16 +123,6 @@ type runtimeConfig struct {
 var _ factory.Factory = (*factoryImpl)(nil)
 var _ factory.Service = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
-
-// SetReplayEvents binds the immutable canonical history loaded for a legacy
-// replay. Runtime execution may regenerate derived events, while observation
-// streams continue to expose the persisted event positions.
-func (f *factoryImpl) SetReplayEvents(events []interfaces.FactoryEvent) {
-	if f == nil || f.cfg == nil {
-		return
-	}
-	f.cfg.replayEvents = cloneAndSortFactoryEvents(events)
-}
 
 // New constructs a Factory from explicit runtime collaborators.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
