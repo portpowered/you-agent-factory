@@ -237,6 +237,10 @@ async function marqueeSelectGraphNode(page, nodeLocator, nodeTestId) {
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(endX, endY);
+  await page.locator(".react-flow__selection").waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
   await page.mouse.up();
 }
 
