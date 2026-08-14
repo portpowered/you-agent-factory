@@ -187,7 +187,8 @@ func (s *Service) runRunner(
 		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
-	if s.providerOverride != nil && identity == runners.AgentIdentity {
+	if s.providerOverride != nil && identity == runners.AgentIdentity &&
+		!workers.UsesNamedProvider(runnerRequest.ExecutorProvider, runnerRequest.ModelProvider) {
 		result, err := s.providerOverride.Infer(ctx, runnerRequest)
 		return normalizeProviderOverrideResult(result, runnerRequest), err
 	}
