@@ -155,10 +155,19 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		}
 
 		status := "expected"
-		if result.Observed == functionalQuarantineOutcomePass {
+		switch {
+		case result.Observed == functionalQuarantineOutcomePass:
 			status = "unexpected-pass"
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q passed unexpectedly (bucket=%s); remove or narrow this quarantine entry", functionalSelectorDisplay(entry), entry.Bucket))
-		} else if result.Observed != expected {
+		case result.Observed == expected:
+		case unmeasurableFunctionalQuarantineOutcome(short, expected, result.Observed):
+			// Under -short the selector never executes, so "did it fail?" is
+			// unmeasurable rather than answered. Treating that as a violation
+			// makes a GENUINELY FAILING entry impossible to validate on the PR
+			// tier, which runs -short while pushes do not. Report it and move
+			// on; unexpected-pass above still catches stale entries.
+			status = "unmeasurable-under-short"
+		default:
 			status = "unexpected-outcome"
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q observed %s, expected %s for bucket=%s; verify the quarantine bucket and precondition", functionalSelectorDisplay(entry), result.Observed, expected, entry.Bucket))
 		}
@@ -250,6 +259,21 @@ func parseFunctionalQuarantineOutcome(jsonOutput string, entry functionalQuarant
 	}
 	result.Observed = terminal.Action
 	return result, nil
+}
+
+// unmeasurableFunctionalQuarantineOutcome reports whether a quarantined
+// selector's outcome could not be measured because the run was short-mode.
+//
+// The functional tier differs between triggers: a pull request runs -short and
+// a push to the default branch does not. A test that self-skips under
+// testing.Short() is therefore observed as a skip on the PR tier no matter
+// whether it fails, so asserting expected=fail there asks an unanswerable
+// question. Only a GENUINELY FAILING entry is affected; an ENVIRONMENT-DEPENDENT
+// entry already expects a skip.
+func unmeasurableFunctionalQuarantineOutcome(short bool, expected, observed string) bool {
+	return short &&
+		expected == functionalQuarantineOutcomeFail &&
+		observed == functionalQuarantineOutcomeSkip
 }
 
 func expectedFunctionalQuarantineOutcome(bucket string) (string, error) {

@@ -321,6 +321,61 @@ func TestFunctionalQuarantineRatchetAcceptsExpectedOutcomesIndependently(t *test
 	}
 }
 
+func TestFunctionalQuarantineRatchetTreatsShortSkipAsUnmeasurableForFailureBucket(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/shortskipped"
+	entry := functionalQuarantineEntry{
+		Package:  packagePath,
+		Test:     "TestKnownFailureGuardedByShort",
+		Bucket:   functionalBucketFailure,
+		Reason:   "known defect; reproduced on the same machine at tip and parent",
+		FollowUp: "fix the defect and remove this entry",
+	}
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		return marshalFunctionalTimingEvents(
+			goTestTimingEvent{Action: "start", Package: packagePath},
+			goTestTimingEvent{Action: "skip", Package: packagePath, Test: entry.Test},
+			goTestTimingEvent{Action: timingOutcomeSkip, Package: packagePath},
+		), "", nil
+	}
+
+	manifest := functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}
+
+	// short=true is the pull-request tier. The selector self-skips under
+	// testing.Short(), so whether it fails cannot be observed and must not be
+	// reported as a bucket violation.
+	if err := runFunctionalQuarantineRatchet(manifest, time.Minute, true, t.TempDir()); err != nil {
+		t.Fatalf("runFunctionalQuarantineRatchet(short=true) error = %v, want a GENUINELY FAILING entry to survive an unmeasurable short-mode skip", err)
+	}
+	wantStatus := `bucket=GENUINELY FAILING expected=fail observed=skip status=unmeasurable-under-short`
+	if !strings.Contains(stdout.String(), wantStatus) {
+		t.Fatalf("ratchet stdout = %q, want substring %q", stdout.String(), wantStatus)
+	}
+
+	// short=false is the push tier, where the selector does execute. A skip
+	// there is a genuine bucket mismatch and must still fail closed.
+	stdout.Reset()
+	err := runFunctionalQuarantineRatchet(manifest, time.Minute, false, t.TempDir())
+	if err == nil {
+		t.Fatal("runFunctionalQuarantineRatchet(short=false) error = nil, want an unexpected-outcome failure when the selector skips on the full tier")
+	}
+	if !strings.Contains(err.Error(), "observed skip, expected fail") {
+		t.Fatalf("runFunctionalQuarantineRatchet(short=false) error = %v, want an observed/expected mismatch diagnostic", err)
+	}
+	if !strings.Contains(stdout.String(), "status=unexpected-outcome") {
+		t.Fatalf("ratchet stdout = %q, want status=unexpected-outcome on the full tier", stdout.String())
+	}
+}
+
 func TestFunctionalQuarantineRatchetRejectsUnexpectedPass(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter
