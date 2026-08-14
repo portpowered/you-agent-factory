@@ -152,6 +152,7 @@ var btrcHostedServiceSuccessEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 	factoryapi.FactoryEventTypeModelRequest,
 	factoryapi.FactoryEventTypeModelResponse,
+	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
 }
 
@@ -165,6 +166,7 @@ var btrcHostedServiceFailureEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 	factoryapi.FactoryEventTypeModelRequest,
 	factoryapi.FactoryEventTypeModelResponse,
+	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
 }
 

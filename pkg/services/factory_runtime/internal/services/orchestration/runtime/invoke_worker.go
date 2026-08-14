@@ -7,17 +7,17 @@ import (
 	"strings"
 	"sync"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// startThroughStatelessWorkers is the Runtime-owned WSE-B dispatch edge. The
-// legacy workstation request is used only as an internal compatibility input
-// while Runtime projects it into the detached Execute contract. No executor,
-// runner, pool, or binding is passed to Workers.
+// startThroughStatelessWorkers is the Runtime-owned WSE-B dispatch edge; the
+// compatibility request is projected into the detached Execute contract.
 func startThroughStatelessWorkers(
 	ctx context.Context,
 	cfg *runtimeConfig,
@@ -30,6 +30,14 @@ func startThroughStatelessWorkers(
 	request = runtimeRecordingRequest(cfg, request)
 	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
 	if err != nil {
+		if isRuntimePromptRenderError(err) {
+			dispatchErr := fmt.Errorf("prompt render failed: %w", err)
+			result, resultErr := failedWorkstationDispatchResult(request, dispatchErr)
+			if accept != nil {
+				accept(context.Background(), request, result, resultErr)
+			}
+			return nil
+		}
 		return err
 	}
 	// Petri dispatches are single-attempt at this boundary. Keep their
@@ -60,6 +68,26 @@ func startThroughStatelessWorkers(
 			cfg.clock.Now(),
 		)
 	}
+	if isLogicalWorkstationDispatch(cfg, request) {
+		if accept != nil {
+			accept(
+				context.Background(),
+				request,
+				workers.WorkstationDispatchResult{
+					DispatchID:      request.Execution.Dispatch.DispatchID,
+					WorkstationName: request.WorkstationName,
+					TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+					Result: workers.WorkResult{
+						DispatchID:   request.Execution.Dispatch.DispatchID,
+						TransitionID: request.Execution.Dispatch.TransitionID,
+						Outcome:      workers.OutcomeAccepted,
+					},
+				},
+				nil,
+			)
+		}
+		return nil
+	}
 	startErr := startStatelessAttemptWithRequest(
 		ctx, cfg, request, executeRequest,
 		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil, accept,
@@ -72,6 +100,19 @@ func startThroughStatelessWorkers(
 		return nil
 	}
 	return startErr
+}
+
+func isLogicalWorkstationDispatch(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+) bool {
+	lookup, ok := runtimeDefinitionLookup(cfg)
+	if !ok {
+		return false
+	}
+	name := firstRuntimeValue(request.WorkstationName, request.Execution.Dispatch.WorkstationName)
+	workstation, found := lookup.Workstation(name)
+	return found && workstation != nil && workstation.Type == interfaces.WorkstationTypeLogical
 }
 
 func failedWorkstationDispatchResult(
@@ -155,14 +196,17 @@ func startStatelessAttemptWithRequestMode(
 		start = cfg.attempts.startRetry
 	}
 	prepare := runtimeAttemptPreparation(cfg, request, executeRequest, allowRetry)
+	prepare = prepareDetachedModelRecording(cfg, prepare)
 	if prepare == nil {
 		return start(
 			ctx,
 			executeRequest,
 			async,
 			func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+				result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
+				recordDetachedAgentRunResponse(cfg, executeRequest, result, executeErr)
 				dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-					request,
+					workstationDispatchRequestForResult(request, executeRequest),
 					result,
 					executeErr,
 				)
@@ -177,8 +221,10 @@ func startStatelessAttemptWithRequestMode(
 		executeRequest,
 		async,
 		func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
+			recordDetachedAgentRunResponse(cfg, executeRequest, result, executeErr)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-				request,
+				workstationDispatchRequestForResult(request, executeRequest),
 				result,
 				executeErr,
 			)
@@ -189,17 +235,6 @@ func startStatelessAttemptWithRequestMode(
 		allowRetry,
 		prepare,
 	)
-}
-
-// runtimeRecordingRequest carries the process-owned recording identity into
-// the detached Runtime path. Callers may provide an explicit identity, while
-// ordinary Factory dispatches inherit the recording opened for this runtime.
-func runtimeRecordingRequest(cfg *runtimeConfig, request workers.WorkstationDispatchRequest) workers.WorkstationDispatchRequest {
-	if cfg == nil || strings.TrimSpace(request.Execution.RecordingID) != "" {
-		return request
-	}
-	request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
-	return request
 }
 
 func runtimeAttemptPreparation(
@@ -217,7 +252,7 @@ func runtimeAttemptPreparation(
 	if !ok || recorder == nil {
 		return nil
 	}
-	return func(ctx context.Context, _ workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
@@ -231,8 +266,9 @@ func runtimeAttemptPreparation(
 			return nil, err
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-				request,
+				workstationDispatchRequestForResult(request, executeRequest),
 				result,
 				executeErr,
 			)
@@ -284,24 +320,56 @@ func executeRequestFromWorkstationRequest(
 	execution := request.Execution
 	dispatch := execution.Dispatch
 	workstationName := firstRuntimeValue(request.WorkstationName, dispatch.WorkstationName)
-	inputs, invocation, attemptNumber := workInputsFromDispatch(dispatch)
+	request.WorkstationName = workstationName
+	tokens := workers.WorkDispatchInputTokens(dispatch)
+	_, invocation, _ := workInputsFromTokens(tokens, dispatch)
 	correlation, err := executionCorrelationFromDispatch(cfg, execution, dispatch)
 	if err != nil {
 		return workers.ExecuteRequest{}, err
 	}
-	selection := resolveRuntimeExecutionSelection(cfg, request, inputs)
+	orderedTokens, err := orderedRuntimeWorkDispatchTokens(cfg, request, &invocation)
+	if err != nil {
+		return workers.ExecuteRequest{}, err
+	}
+	inputs, invocation, attemptNumber := workInputsFromTokens(orderedTokens, dispatch)
+	selection := resolveRuntimeExecutionSelection(cfg, request, orderedTokens, inputs, &invocation)
+	if err := validateRuntimeExecutionSelection(selection); err != nil {
+		return workers.ExecuteRequest{}, err
+	}
+	workflowContext := runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext)
+	if err := renderRuntimePrompt(
+		cfg,
+		&selection,
+		orderedTokens,
+		workflowContext,
+		inputs,
+		&invocation,
+	); err != nil {
+		return workers.ExecuteRequest{}, err
+	}
+	modelBindings := workers.CloneResolvedModelOperationBindings(selection.modelBindings)
+	if len(modelBindings) == 0 {
+		modelBindings = workers.CloneResolvedModelOperationBindings(execution.ModelBindings)
+	}
 	return workers.ExecuteRequest{
 		Correlation: correlation,
 		Target: executionTargetFromSelection(
 			selection, workstationName, execution.ProcessEnvironment,
 		),
 		Input: workers.ExecutionInput{
-			Work:           inputs,
-			Dispatch:       work.CloneWorkDispatch(dispatch),
-			Invocation:     invocation,
-			ModelBindings:  workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
-			ModelOperation: execution.ModelOperation,
-			Resume:         continuationFromLegacySession(execution.ResumeSession),
+			Work:                   inputs,
+			Dispatch:               work.CloneWorkDispatch(dispatch),
+			RecordingID:            execution.RecordingID,
+			Invocation:             invocation,
+			ModelBindings:          modelBindings,
+			ModelOperation:         firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
+			Resume:                 continuationFromLegacySession(execution.ResumeSession),
+			WorkflowContext:        workflowContext,
+			MockWorkers:            cfg.mockWorkersConfig.Clone(),
+			ProgressPublisher:      cfg.progressPublisher,
+			ScriptEventRecorder:    runtimeScriptEventRecorder(cfg),
+			InferenceEventRecorder: runtimeInferenceEventRecorder(cfg),
+			ExecutionLogger:        cfg.logger,
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
@@ -313,18 +381,39 @@ func executionCorrelationFromDispatch(
 	dispatch work.WorkDispatch,
 ) (workers.ExecutionCorrelation, error) {
 	sessionID := strings.TrimSpace(execution.FactorySessionID)
-	if sessionID == "" && cfg != nil {
-		sessionID = sessionIDFromFactoryConfig(cfg)
+	runtimeID := strings.TrimSpace(execution.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = strings.TrimSpace(execution.RecordingID)
+	}
+	if runtimeID == "" && cfg != nil {
+		runtimeID = strings.TrimSpace(cfg.runtimeID)
+		if runtimeID == "" {
+			runtimeID = strings.TrimSpace(cfg.recordingID)
+		}
+	}
+	generationID := strings.TrimSpace(execution.GenerationID)
+	if generationID == "" && cfg != nil && cfg.eventHistory != nil {
+		generationID = strings.TrimSpace(cfg.eventHistory.StreamGenerationID())
 	}
 	correlation := workers.ExecutionCorrelation{
 		FactorySessionID: sessionID,
-		RuntimeID:        strings.TrimSpace(execution.RecordingID),
+		RuntimeID:        runtimeID,
+		GenerationID:     generationID,
 		DispatchID:       strings.TrimSpace(dispatch.DispatchID),
 		RequestID:        firstRuntimeValue(dispatch.Execution.RequestID, execution.ProjectID),
 		TraceID:          strings.TrimSpace(dispatch.Execution.TraceID),
 	}
 	if correlation.DispatchID == "" {
 		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: dispatch ID is required")
+	}
+	if correlation.FactorySessionID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Factory Session ID is required")
+	}
+	if correlation.RuntimeID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Runtime ID is required")
+	}
+	if correlation.GenerationID == "" {
+		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: generation ID is required")
 	}
 	if cfg == nil || cfg.newID == nil {
 		return workers.ExecutionCorrelation{}, fmt.Errorf("build worker attempt: Attempt ID generator is required")
@@ -336,16 +425,57 @@ func executionCorrelationFromDispatch(
 	return correlation, nil
 }
 
+// applyRuntimeAgentRunSelection restates the Workers WorkstationBehaviorRouter
+// decision at the boundary that owns Factory definitions: an agent-run
+// workstation staffed by an agent worker executes its agent/tool loop, and
+// everything else executes one provider attempt. Runtime resolves it here and
+// hands Workers a detached tool policy, so the routing survives without
+// Workers reading a Factory definition or a workstation pool.
+//
+// WSE-09 relocates the request-scoped Workstation implementation; this
+// selection belongs with it and moves when that step lands.
+func applyRuntimeAgentRunSelection(
+	selection *runtimeExecutionSelection,
+	workstation *interfaces.FactoryWorkstationConfig,
+	worker *interfaces.FactoryWorkerConfig,
+) {
+	if selection == nil || workstation == nil || worker == nil {
+		return
+	}
+	if !interfaces.IsAgentRunWorkstationType(workstation.Type) ||
+		!interfaces.IsAgentWorkerType(worker.Type) {
+		return
+	}
+	selection.agentRunHarness = true
+	selection.agentToolPolicy = interfaces.EffectiveAgentToolPolicy(worker.AgentTools)
+}
+
 func executionTargetFromSelection(
 	selection runtimeExecutionSelection,
 	workstationName string,
 	processEnvironment []string,
 ) workers.ExecutionTarget {
+	prepareFactoryWorktree := strings.TrimSpace(selection.worktree) != "" &&
+		!selection.workingDirectoryAuthored &&
+		strings.EqualFold(strings.TrimSpace(selection.modelProvider), string(modelprovider.ProviderCodex))
+	workingDirectory := selection.workingDirectory
+	if prepareFactoryWorktree {
+		// Workers prepares the checkout before adapting the runner request. Keep
+		// the preflight default out of the target so preparation can promote the
+		// checkout path to both the environment and workspace working directory.
+		workingDirectory = ""
+	}
 	return workers.ExecutionTarget{
-		WorkerName:       selection.workerName,
-		WorkerType:       selection.workerType,
+		WorkerName: selection.workerName,
+		// WorkerType is the authored worker identity carried into command
+		// requests. The definition taxonomy remains available in the runtime
+		// selection for route decisions, while mock and provider adapters match
+		// the customer-facing worker name.
+		WorkerType:       firstRuntimeValue(selection.workerName, selection.workerType),
 		WorkstationName:  workstationName,
 		RunnerID:         selection.runnerID,
+		ExecutorProvider: selection.executorProvider,
+		Noop:             selection.noop,
 		Capabilities:     cloneRuntimeCapabilities(selection.capabilities),
 		Command:          selection.command,
 		Args:             append([]string(nil), selection.args...),
@@ -365,32 +495,44 @@ func executionTargetFromSelection(
 			UserMessage:  selection.userMessage,
 			OutputSchema: selection.outputSchema,
 		},
-		Tools: workers.ToolPolicy{ExecutionMode: selection.toolExecutionMode},
+		Tools: workers.ToolPolicy{
+			ExecutionMode:   selection.toolExecutionMode,
+			AgentLoop:       selection.agentRunHarness,
+			AgentToolPolicy: selection.agentToolPolicy,
+		},
 		Output: workers.OutputPolicy{
 			Format:                      selection.outputFormat,
 			StopToken:                   selection.stopToken,
 			Contract:                    selection.outputContract,
 			DecisionEnvelope:            selection.decisionEnvelope,
 			GoalRoutingDecisionEnvelope: selection.goalRoutingDecisionEnvelope,
+			Classifier:                  selection.classifier,
+			ScriptClassifier:            selection.scriptClassifier,
 		},
 		Timeout: selection.timeout,
 		Environment: workers.EnvironmentPolicy{
 			Vars:                selection.environment,
 			ProcessEnvironment:  append([]string(nil), processEnvironment...),
-			WorkingDirectory:    selection.workingDirectory,
+			WorkingDirectory:    workingDirectory,
 			WorkingDirectorySet: selection.workingDirectoryAuthored,
 		},
 		Workspace: workers.WorkspacePolicy{
-			Worktree:         selection.worktree,
-			WorkingDirectory: selection.workingDirectory,
-			FactoryDirectory: selection.factoryDirectory,
+			Worktree:           selection.worktree,
+			WorkingDirectory:   workingDirectory,
+			PrepareWorktree:    prepareFactoryWorktree,
+			RetainWorktree:     prepareFactoryWorktree,
+			FactoryDirectory:   selection.factoryDirectory,
+			CheckoutIdentifier: selection.worktree,
 		},
 		Permissions: workers.PermissionPolicy{SkipPermissions: selection.skipPermissions},
 	}
 }
 
 func workInputsFromDispatch(dispatch work.WorkDispatch) ([]workers.WorkInput, work.InvocationArguments, int) {
-	tokens := workers.WorkDispatchInputTokens(dispatch)
+	return workInputsFromTokens(workers.WorkDispatchInputTokens(dispatch), dispatch)
+}
+
+func workInputsFromTokens(tokens []workers.Token, dispatch work.WorkDispatch) ([]workers.WorkInput, work.InvocationArguments, int) {
 	inputs := make([]workers.WorkInput, 0, len(tokens))
 	invocation := work.InvocationArguments{}
 	attemptNumber := 1
@@ -411,11 +553,22 @@ func workInputsFromDispatch(dispatch work.WorkDispatch) ([]workers.WorkInput, wo
 		if len(token.History.FailureLog) > 0 {
 			lastFailure = token.History.FailureLog[len(token.History.FailureLog)-1].Error
 		}
+		content := work.CloneWorkContentParts(token.Color.Content)
+		if len(content) == 0 && len(token.Color.Payload) > 0 {
+			// Older admitted Work tokens carry their canonical text in Payload.
+			// Preserve that input when detached execution crosses into the newer
+			// content-shaped Worker contract.
+			content = []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: string(token.Color.Payload),
+			}}
+		}
 		inputs = append(inputs, workers.WorkInput{
 			WorkID:     token.Color.WorkID,
+			Name:       token.Color.Name,
 			WorkTypeID: token.Color.WorkTypeID,
 			RequestID:  token.Color.RequestID,
-			Content:    work.CloneWorkContentParts(token.Color.Content),
+			Content:    content,
 			Tags:       cloneRuntimeStringMap(token.Color.Tags),
 			Relations:  append([]work.Relation(nil), token.Color.Relations...),
 			Lineage: workers.WorkLineage{
@@ -726,9 +879,11 @@ func providerInvocationExecutionRequest(
 	req factory.InvokeWorkerRequest,
 	dispatchID string,
 ) workers.WorkstationDispatchRequest {
-	requestID := ""
+	requestID := sessionIDFromFactoryConfig(f.cfg)
 	if f.cfg != nil && f.cfg.workflowContext != nil {
-		requestID = strings.TrimSpace(f.cfg.workflowContext.SessionID)
+		if sessionID := strings.TrimSpace(f.cfg.workflowContext.SessionID); sessionID != "" {
+			requestID = sessionID
+		}
 	}
 	// The worker name is the Workers-facing worker type: it is what a
 	// mock-worker configuration matches on at the subprocess boundary, and an
@@ -747,6 +902,10 @@ func providerInvocationExecutionRequest(
 	if recordingID == "" && f.cfg != nil {
 		recordingID = strings.TrimSpace(f.cfg.recordingID)
 	}
+	runtimeID := ""
+	if f.cfg != nil {
+		runtimeID = strings.TrimSpace(f.cfg.runtimeID)
+	}
 	return workers.WorkstationDispatchRequest{
 		WorkstationName: workers.ProviderInvocationRoute,
 		Execution: workers.WorkstationExecutionRequest{
@@ -756,6 +915,7 @@ func providerInvocationExecutionRequest(
 			RunnerID:         strings.TrimSpace(req.RunnerID),
 			ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 			FactorySessionID: requestID,
+			RuntimeID:        runtimeID,
 			RecordingID:      recordingID,
 			Capabilities:     cloneSessionCapabilities(req.Capabilities),
 			SystemPrompt:     req.SystemPrompt,
@@ -767,14 +927,6 @@ func providerInvocationExecutionRequest(
 			WorkingDirectory: strings.TrimSpace(req.WorkingDirectory),
 		},
 	}
-}
-
-func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
 }
 
 // invokeWorkerResultFrom narrows one Worker Sessions outcome onto the caller

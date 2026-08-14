@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -71,12 +72,16 @@ func TestAttemptLifecycleBoundsCapacityAndCleansActiveState(t *testing.T) {
 
 func TestAttemptLifecycleCancellationIsPerDispatch(t *testing.T) {
 	started := make(chan string, 2)
+	cancelObserved := make(chan struct{})
+	releaseFirst := make(chan struct{})
 	releaseSecond := make(chan struct{})
 	results := make(chan workers.ExecuteResult, 2)
 	service := attemptExecuteFunc(func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		started <- request.Correlation.DispatchID
 		if request.Correlation.DispatchID == "dispatch-1" {
 			<-ctx.Done()
+			close(cancelObserved)
+			<-releaseFirst
 			return workers.ExecuteResult{}, ctx.Err()
 		}
 		<-releaseSecond
@@ -100,7 +105,9 @@ func TestAttemptLifecycleCancellationIsPerDispatch(t *testing.T) {
 		t.Fatalf("started dispatches = %#v", startedDispatches)
 	}
 	requireCancelOutcome(t, lifecycle, "dispatch-1", workers.WorkstationDispatchCancelOutcomeCanceled, "cancel(first)")
+	<-cancelObserved
 	requireCancelOutcome(t, lifecycle, "dispatch-1", workers.WorkstationDispatchCancelOutcomeAlreadyCanceled, "repeat cancel(first)")
+	close(releaseFirst)
 	requireAttemptOutcome(t, <-results, workers.ExecutionOutcomeCanceled, "canceled result")
 	requireAttemptCount(t, lifecycle, 1, "after first cancellation")
 	close(releaseSecond)
@@ -208,8 +215,14 @@ func TestAttemptLifecyclePanicAndDuplicateTerminalAreExactlyOnce(t *testing.T) {
 
 func attemptTestRequest(dispatchID, attemptID string) workers.ExecuteRequest {
 	return workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{DispatchID: dispatchID, AttemptID: attemptID},
-		Target:      workers.ExecutionTarget{RunnerID: workers.RunnerIDCodex},
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-test",
+			RuntimeID:        "runtime-test",
+			GenerationID:     "generation-test",
+			DispatchID:       dispatchID,
+			AttemptID:        attemptID,
+		},
+		Target: workers.ExecutionTarget{RunnerID: workers.RunnerIDCodex},
 	}
 }
 func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.T) {
@@ -234,6 +247,12 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 		newID:          func() string { return "attempt-1" },
 		attempts:       newAttemptLifecycle(service, func() string { return "attempt-1" }, 1),
 		inlineDispatch: true,
+		workflowContext: &workers.Context{
+			FactoryDirectory: "factory-1",
+			WorkDirectory:    "work-1",
+			EnvVars:          map[string]string{"SESSION_VALUE": "session-1"},
+			ProjectID:        "project-1",
+		},
 	}
 	request := workers.WorkstationDispatchRequest{
 		WorkstationName: "workstation-a",
@@ -243,6 +262,7 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 			RunnerID:         workers.RunnerIDCodex,
 			FactorySessionID: "session-1",
 			RecordingID:      "runtime-1",
+			GenerationID:     "generation-1",
 			Model:            "model-a",
 			ModelProvider:    "provider-a",
 			Dispatch: work.WorkDispatch{
@@ -282,6 +302,18 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 	assertDetachedDispatchResult(t, got, gotErr)
 	assertDetachedCorrelation(t, observed)
 	assertDetachedWorkInput(t, observed)
+	if observed.Input.WorkflowContext == nil ||
+		observed.Input.WorkflowContext.SessionID != "session-1" ||
+		observed.Input.WorkflowContext.FactoryDirectory != "factory-1" ||
+		observed.Input.WorkflowContext.WorkDirectory != "work-1" ||
+		observed.Input.WorkflowContext.EnvVars["SESSION_VALUE"] != "session-1" ||
+		observed.Input.WorkflowContext.ProjectID != "project-1" {
+		t.Fatalf("workflow context = %#v, want detached session context", observed.Input.WorkflowContext)
+	}
+	observed.Input.WorkflowContext.EnvVars["SESSION_VALUE"] = "mutated"
+	if cfg.workflowContext.EnvVars["SESSION_VALUE"] != "session-1" {
+		t.Fatalf("runtime workflow context was mutated through Execute request: %#v", cfg.workflowContext)
+	}
 }
 
 func assertDetachedDispatchResult(t *testing.T, got workers.WorkstationDispatchResult, gotErr error) {
@@ -304,9 +336,50 @@ func assertDetachedCorrelation(t *testing.T, observed workers.ExecuteRequest) {
 		t.Fatalf("correlation = %#v", observed.Correlation)
 	}
 	if observed.Correlation.FactorySessionID != "session-1" ||
+		observed.Correlation.RuntimeID != "runtime-1" ||
+		observed.Correlation.GenerationID != "generation-1" ||
 		observed.Correlation.RequestID != "request-1" ||
 		observed.Correlation.TraceID != "trace-1" {
 		t.Fatalf("correlation lineage = %#v", observed.Correlation)
+	}
+}
+
+func TestStartThroughStatelessWorkersUsesRuntimeIdentityWhenRecordingIsDisabled(t *testing.T) {
+	var observed workers.ExecuteRequest
+	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		observed = request
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	})
+	cfg := &runtimeConfig{
+		executeService: service,
+		attempts:       newAttemptLifecycle(service, func() string { return "attempt-config" }, 1),
+		newID:          func() string { return "attempt-config" },
+		inlineDispatch: true,
+		runtimeID:      "runtime-config",
+		eventHistory:   &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "generation-config"},
+		clock:          testRuntimeClock{},
+	}
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "review",
+		Execution: workers.WorkstationExecutionRequest{
+			FactorySessionID: "session-config",
+			RunnerID:         workers.RunnerIDCodex,
+			Dispatch: work.WorkDispatch{
+				DispatchID:   "dispatch-config",
+				TransitionID: "review",
+				Execution:    work.ExecutionMetadata{RequestID: "request-config"},
+			},
+		},
+	}
+	if err := startThroughStatelessWorkers(context.Background(), cfg, request, nil); err != nil {
+		t.Fatalf("startThroughStatelessWorkers() error = %v", err)
+	}
+	if observed.Correlation.FactorySessionID != "session-config" ||
+		observed.Correlation.RuntimeID != "runtime-config" ||
+		observed.Correlation.GenerationID != "generation-config" ||
+		observed.Correlation.DispatchID != "dispatch-config" ||
+		observed.Correlation.AttemptID != "dispatch-config" {
+		t.Fatalf("runtime correlation = %#v, want explicit process/runtime identity", observed.Correlation)
 	}
 }
 
@@ -369,6 +442,33 @@ func TestDetachedResultMaterializationPreservesFailureAndContinuationFacts(t *te
 	if result.Result.Diagnostics == nil || result.Result.Diagnostics.Provider == nil ||
 		result.Result.Diagnostics.Provider.ResponseMetadata["duration_ms"] != "12" {
 		t.Fatalf("diagnostics = %#v, want safe provider metadata", result.Result.Diagnostics)
+	}
+}
+
+func TestDetachedScriptProcessFailureDoesNotPropagateRetryMetadata(t *testing.T) {
+	t.Parallel()
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "script-station",
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-script-failure"},
+		},
+	}
+	result, err := workstationDispatchResultFromExecute(request, workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Family:  workers.WorkFailureFamilyTerminal,
+			Type:    workers.WorkFailureTypeInternalServerError,
+			Message: "script exited with status 1",
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("workstationDispatchResultFromExecute() error = %v", err)
+	}
+	if result.Result.FailureMetadata != nil {
+		t.Fatalf("failure metadata = %#v, want nil for ordinary script process failure", result.Result.FailureMetadata)
+	}
+	if result.Result.Outcome != workers.OutcomeFailed || result.Result.Error != "script exited with status 1" {
+		t.Fatalf("result = %#v, want terminal failed result", result.Result)
 	}
 }
 
@@ -438,13 +538,61 @@ func TestRuntimeExecutionSelectionMergesAuthoredWorkerWorkstationAndFactoryDefau
 	selection := resolveRuntimeExecutionSelection(
 		&runtimeConfig{runtimeConfig: lookup},
 		request,
+		nil,
 		[]workers.WorkInput{{Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input message",
 		}}}},
+		nil,
 	)
 
 	assertRuntimeExecutionSelection(t, selection)
+}
+
+func TestRuntimeExecutionSelectionResolvesInvocationWorkerDefaults(t *testing.T) {
+	lookup := runtimefixtures.RuntimeConfigLookupFixture{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"goal-executor": {
+				Name:                        "goal-executor",
+				Type:                        interfaces.WorkerTypeAgent,
+				Model:                       "${executorModel}",
+				ModelProvider:               "${executorProvider}",
+				RuntimeDefaultModel:         "operator-model",
+				RuntimeDefaultModelProvider: "operator-provider",
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"execute": {
+				Name:           "execute",
+				WorkerTypeName: "goal-executor",
+			},
+		},
+	}
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "execute",
+		Execution:       workers.WorkstationExecutionRequest{},
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"executorProvider": {Values: []string{""}},
+		"executorModel":    {Values: []string{""}},
+	}}
+	selection := resolveRuntimeExecutionSelection(
+		&runtimeConfig{runtimeConfig: lookup}, request, nil, nil, invocation,
+	)
+	if selection.providerID != "operator-provider" || selection.modelProvider != "operator-provider" ||
+		selection.model != "operator-model" || selection.runnerID != workers.RunnerIDCodex {
+		t.Fatalf("resolved selection = %#v, want operator provider/model and codex runner", selection)
+	}
+
+	invocation.Arguments["executorProvider"] = work.InvocationArgument{Values: []string{"explicit-provider"}}
+	invocation.Arguments["executorModel"] = work.InvocationArgument{Values: []string{"explicit-model"}}
+	selection = resolveRuntimeExecutionSelection(
+		&runtimeConfig{runtimeConfig: lookup}, request, nil, nil, invocation,
+	)
+	if selection.providerID != "explicit-provider" || selection.modelProvider != "explicit-provider" ||
+		selection.model != "explicit-model" {
+		t.Fatalf("explicit selection = %#v, want invocation provider/model", selection)
+	}
 }
 
 func assertRuntimeExecutionSelection(t *testing.T, selection runtimeExecutionSelection) {
@@ -622,6 +770,7 @@ func TestStartThroughStatelessWorkersPreservesDetachedDispatchFacts(t *testing.T
 			RunnerID:         workers.RunnerIDCodex,
 			FactorySessionID: "session-facts",
 			RecordingID:      "runtime-facts",
+			GenerationID:     "generation-facts",
 		},
 	}
 	if err := startThroughStatelessWorkers(context.Background(), cfg, request, nil); err != nil {

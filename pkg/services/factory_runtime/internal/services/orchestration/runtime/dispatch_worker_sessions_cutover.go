@@ -168,6 +168,7 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 		f.cfg.worldStateProjector,
 		f.clock,
 		f.cfg.providerSessions,
+		f.cfg.replayEvents,
 		f.cfg.recordingID,
 		workerRecordingReader,
 		sessionIDFromFactoryConfig(f.cfg),
@@ -184,6 +185,7 @@ type recordedWorkerSessionObservation struct {
 	projector        factory.WorldStateProjector
 	clock            factory.Clock
 	providerSessions providersessions.Service
+	replayEvents     []interfaces.FactoryEvent
 	recordingID      string
 	recordingReader  recordings.WorkerRecordingReader
 	factorySessionID string
@@ -229,6 +231,19 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 		result = append(result, observation)
 	}
 	return result, knownWork, nil
+}
+
+func (s *recordedWorkerSessionObservation) canonicalEvents() []interfaces.FactoryEvent {
+	if s == nil {
+		return nil
+	}
+	if len(s.replayEvents) > 0 {
+		return cloneAndSortFactoryEvents(s.replayEvents)
+	}
+	if s.ledger == nil {
+		return nil
+	}
+	return s.ledger.CanonicalEvents()
 }
 
 func latestFactoryEventTick(events []interfaces.FactoryEvent) int {
@@ -377,7 +392,7 @@ func newRecordedWorkerSessionObservation(
 	clock factory.Clock,
 	providerSessions providersessions.Service,
 ) workersessions.Service {
-	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, "", nil)
+	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, nil, "", nil)
 }
 
 func (s *recordedWorkerSessionObservation) ListObservations(
@@ -394,7 +409,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return s.listLive(ctx, req)
 	}
 
-	events := s.ledger.CanonicalEvents()
+	events := s.canonicalEvents()
 	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID)
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
@@ -849,6 +864,7 @@ func newRecordedWorkerSessionObservationWithRecording(
 	projector factory.WorldStateProjector,
 	clock factory.Clock,
 	providerSessions providersessions.Service,
+	replayEvents []interfaces.FactoryEvent,
 	recordingID string,
 	recordingReader recordings.WorkerRecordingReader,
 	factorySessionIDs ...string,
@@ -859,7 +875,7 @@ func newRecordedWorkerSessionObservationWithRecording(
 	}
 	return &recordedWorkerSessionObservation{
 		Service: live, ledger: ledger, projector: projector, clock: clock,
-		providerSessions: providerSessions, recordingID: strings.TrimSpace(recordingID),
+		providerSessions: providerSessions, replayEvents: cloneAndSortFactoryEvents(replayEvents), recordingID: strings.TrimSpace(recordingID),
 		recordingReader: recordingReader, factorySessionID: factorySessionID,
 	}
 }

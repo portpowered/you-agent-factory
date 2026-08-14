@@ -40,6 +40,7 @@ type RuntimeFactory struct {
 	workPropagation           interfaces.WorkPropagationPolicyService
 	workService               work.Service
 	decisionEnvelopes         interfaces.DecisionEnvelopeService
+	invocationInterpolation   interfaces.InvocationInterpolationService
 	baseLogger                *zap.Logger
 	loggerFactory             factory.RuntimeLoggerFactory
 	runtimeLogs               factory.RuntimeLogOwner
@@ -60,6 +61,7 @@ func NewRuntimeFactory(
 	workPropagation interfaces.WorkPropagationPolicyService,
 	workService work.Service,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
 	baseLogger *zap.Logger,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogOwner,
@@ -79,6 +81,7 @@ func NewRuntimeFactory(
 		workPropagation:           workPropagation,
 		workService:               workService,
 		decisionEnvelopes:         decisionEnvelopes,
+		invocationInterpolation:   invocationInterpolation,
 		baseLogger:                baseLogger,
 		loggerFactory:             loggerFactory,
 		runtimeLogs:               runtimeLogs,
@@ -136,6 +139,7 @@ func (f *RuntimeFactory) Build(
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
+	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	if f == nil || f.newID == nil {
 		return nil, fmt.Errorf("Factory Runtime ID generator is required")
@@ -229,6 +233,9 @@ func (f *RuntimeFactory) Build(
 	if !ok || loaded == nil {
 		return nil, fmt.Errorf("loaded Factory source is required for Recordings runtime scope")
 	}
+	if err := validateConfiguredRuntimeWorkers(loadedFactoryCfg); err != nil {
+		return nil, err
+	}
 	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
 		Topology:         net,
 		Definitions:      loadedFactoryCfg,
@@ -259,6 +266,49 @@ func (f *RuntimeFactory) Build(
 			return nil, err
 		}
 	}
+	var mockWorkersConfig *workers.MockWorkersConfig
+	if len(mockWorkersConfigs) > 0 {
+		mockWorkersConfig = mockWorkersConfigs[0]
+	}
+	var sharedWorkersService workers.Service
+	if service, ok := workerService.(workers.Service); ok {
+		sharedWorkersService = service
+	}
+	var promptRenderer runtime.PromptRenderer
+	if renderer, ok := workerService.(runtime.PromptRenderer); ok {
+		promptRenderer = renderer
+	}
+	var templateFieldResolver runtime.TemplateFieldResolver
+	if resolver, ok := workerService.(runtime.TemplateFieldResolver); ok {
+		templateFieldResolver = resolver
+	}
+	var progressPublisher workers.ProgressPublisher
+	if publisherProvider, ok := workerService.(interface {
+		RuntimeProgressPublisher() workers.ProgressPublisher
+	}); ok {
+		progressPublisher = publisherProvider.RuntimeProgressPublisher()
+	}
+	directWorkstationExecutor := runtime.NewWorkstationRequestExecutor(
+		runtime.WorkstationRequestExecutorConfig{
+			Service:                    sharedWorkersService,
+			RuntimeDefinitions:         loadedFactoryCfg,
+			InvocationInterpolation:    f.invocationInterpolation,
+			InvocationFileReader:       invocationFileReader(f.inputFiles),
+			WorkflowContext:            RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
+			FactorySessionID:           sessionID,
+			RuntimeID:                  runtimeInstanceID,
+			RecordingID:                workerRecordingIdentity(runtimeInstanceID, recordPath),
+			EventHistory:               eventHistory,
+			NewID:                      f.newID,
+			PromptRenderer:             promptRenderer,
+			TemplateFieldResolver:      templateFieldResolver,
+			PromptSourceReader:         invocationFileReader(f.inputFiles),
+			MockWorkers:                mockWorkersConfig,
+			ProgressPublisher:          progressPublisher,
+			Net:                        net,
+			ExpectedArtifactFileSystem: f.inputFiles,
+		},
+	)
 
 	bundle, err := assembleRuntimeBundle(
 		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
@@ -270,6 +320,8 @@ func (f *RuntimeFactory) Build(
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
 		workerExecutors,
 		workerService,
+		directWorkstationExecutor,
+		mockWorkersConfig,
 		providerInvocation,
 		workerSessionsFactory,
 		f.workerPoolBoundaryFactory,
@@ -284,12 +336,32 @@ func (f *RuntimeFactory) Build(
 		f.inputFiles,
 		f.inputDirectoryWalker,
 		f.decisionEnvelopes,
+		f.invocationInterpolation,
 	)
 	if err != nil {
 		return nil, err
 	}
 	bundleBuilt = true
 	return bundle, nil
+}
+
+func validateConfiguredRuntimeWorkers(loaded factory.LoadedConfig) error {
+	if loaded == nil || loaded.FactoryConfig() == nil {
+		return fmt.Errorf("factory config is required")
+	}
+	for _, configured := range loaded.FactoryConfig().Workers {
+		definition, ok := loaded.Worker(configured.Name)
+		if !ok || definition == nil {
+			continue
+		}
+		if interfaces.IsScriptWorkerType(definition.Type) && strings.TrimSpace(definition.Command) == "" {
+			return fmt.Errorf(
+				"construct script worker %q: misconfigured: script command is required",
+				configured.Name,
+			)
+		}
+	}
+	return nil
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -325,6 +397,8 @@ func assembleRuntimeBundle(
 	eventHistory recordings.RuntimeLedger,
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
+	directWorkstationExecutor workers.WorkstationRequestExecutor,
+	mockWorkersConfig *workers.MockWorkersConfig,
 	providerInvocation workers.WorkstationRequestExecutor,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	workerPoolBoundaryFactory factory.WorkstationPoolBoundaryFactory,
@@ -339,7 +413,12 @@ func assembleRuntimeBundle(
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
 ) (*factoryhost.Bundle, error) {
+	if workerExecutors == nil {
+		workerExecutors = make(map[string]workers.WorkerExecutor)
+	}
+	bindRuntimeLogger(directWorkstationExecutor, structuredLogger)
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
@@ -367,6 +446,7 @@ func assembleRuntimeBundle(
 		workerService,
 		workerExecutors,
 		net,
+		directWorkstationExecutor,
 		providerInvocation,
 	)
 	workerSessions, err := workerSessionsFactory(workstationBoundary, clock)
@@ -387,6 +467,8 @@ func assembleRuntimeBundle(
 		statelessService,
 		workerSessions,
 		loadedFactoryCfg,
+		invocationInterpolation,
+		invocationFileReader(inputFiles),
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,
 		structuredLogger,
@@ -394,6 +476,7 @@ func assembleRuntimeBundle(
 		inlineDispatch,
 		eventHistory,
 		workerRecordingIdentity(runtimeInstanceID, recordPath),
+		runtimeInstanceID,
 		worldStateProjector,
 		providerSessions,
 		effectiveSubmissionRecorder,
@@ -409,10 +492,21 @@ func assembleRuntimeBundle(
 		workService,
 		workRequestIDs,
 		newID,
+		runtimeDirs,
 		decisionEnvelopes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetMockWorkersConfig(*workers.MockWorkersConfig)
+	}); ok {
+		configurable.SetMockWorkersConfig(mockWorkersConfig)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetPromptSourceReader(func(string) ([]byte, error))
+	}); ok && inputFiles != nil {
+		configurable.SetPromptSourceReader(inputFiles.ReadFile)
 	}
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err
@@ -423,6 +517,21 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
+}
+
+func bindRuntimeLogger(executor workers.WorkstationRequestExecutor, logger factory.Logger) {
+	if loggerBinder, ok := executor.(interface {
+		SetRuntimeLogger(factory.Logger)
+	}); ok {
+		loggerBinder.SetRuntimeLogger(logger)
+	}
+}
+
+func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {
+	if inputFiles == nil {
+		return nil
+	}
+	return inputFiles.ReadFile
 }
 
 // workerRecordingIdentity keeps the Worker source-native recording identity

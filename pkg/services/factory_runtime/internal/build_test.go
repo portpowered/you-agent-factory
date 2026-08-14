@@ -493,7 +493,7 @@ func testOrchestrationCompilation() factory.OrchestrationCompilation {
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 		nil, testRuntimePoolBoundaryFactory,
@@ -511,7 +511,7 @@ func testRuntimeFactoryWithSinkCallbacks(
 	onMetricsClose func(),
 ) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, nil, zap.NewNop(), testRuntimeLoggerFactory,
+		nil, nil, outputAsPayloadPolicy(), nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory,
 		testRuntimeLogOwner{root: logDir, onClose: onLogClose},
 		testRuntimeMetricsOwner{root: metricsDir, onClose: onMetricsClose},
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,

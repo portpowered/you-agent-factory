@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
@@ -18,75 +19,209 @@ func (s *Service) normalizeResult(
 	runErr error,
 	duration time.Duration,
 ) workers.ExecuteResult {
-	result := workers.ExecuteResult{
-		Correlation: correlation,
-		Metrics: workers.ExecutionMetrics{
-			Duration: duration,
-		},
-		Diagnostics: safeDiagnosticsFromWork(runnerResult.Diagnostics),
-		Continuation: continuationFromSession(
-			runnerResult.ProviderSession,
-			request.Input.Resume,
-		),
+	result := baseExecuteResult(correlation, request, runnerResult, duration)
+	if runErr == nil {
+		result, runErr = s.normalizeSuccessfulResult(result, request, runnerResult)
 	}
 	if runErr == nil {
-		result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
-		result.Output = proposedOutputFromRunnerResult(runnerResult)
-		if result.Outcome == workers.ExecutionOutcomeFailed {
-			runErr = errors.New("runner returned failed outcome")
-		} else if result.Outcome == workers.ExecutionOutcomeAccepted {
-			contractErr := workerexecutor.ValidateOutputContract(
-				runnerResult.Content,
-				request.Target.Output.Contract,
-			)
-			if contractErr != nil {
-				runErr = workers.NewProviderError(
+		return result
+	}
+	return normalizeFailedResult(result, request, runnerResult, runErr)
+}
+
+func baseExecuteResult(
+	correlation workers.ExecutionCorrelation,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+	duration time.Duration,
+) workers.ExecuteResult {
+	return workers.ExecuteResult{
+		Correlation:  correlation,
+		Metrics:      workers.ExecutionMetrics{Duration: duration},
+		Diagnostics:  safeDiagnosticsFromWork(runnerResult.Diagnostics),
+		Continuation: continuationFromSession(runnerResult.ProviderSession, request.Input.Resume),
+	}
+}
+
+func (s *Service) normalizeSuccessfulResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+) (workers.ExecuteResult, error) {
+	result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
+	result.Output = proposedOutputFromRunnerResult(runnerResult)
+	switch result.Outcome {
+	case workers.ExecutionOutcomeFailed:
+		return result, errors.New("runner returned failed outcome")
+	case workers.ExecutionOutcomeRejected:
+		if s != nil && s.providerOverride != nil &&
+			resolveRunnerIdentity(request.Target) == runners.AgentIdentity &&
+			!usesACPProvider(request.Target.ExecutorProvider) &&
+			!hasProviderCompletionEvidence(runnerResult) {
+			message, _ := workerexecutor.CompletionValidationFailure(runnerResult)
+			return result, workers.NewProviderError(workers.WorkFailureTypeUnknown, message, nil)
+		}
+	case workers.ExecutionOutcomeAccepted:
+		if schema := strings.TrimSpace(request.Target.Prompt.OutputSchema); schema != "" {
+			structured, err := workerexecutor.ParseOutputAgainstSchema(runnerResult.Content, schema)
+			if err != nil {
+				return result, workers.NewProviderError(
 					workers.WorkFailureTypePermanentBadRequest,
-					"output contract failed",
-					contractErr,
+					"structured output schema violation: "+err.Error(),
+					nil,
 				)
 			}
+			result.StructuredResult = structured
+			result.StructuredResultPresent = true
+		}
+		if err := workerexecutor.ValidateOutputContract(runnerResult.Content, request.Target.Output.Contract); err != nil {
+			return result, workers.NewProviderError(
+				workers.WorkFailureTypePermanentBadRequest,
+				"output contract failed",
+				err,
+			)
 		}
 	}
-	if runErr == nil {
-		return result
-	}
+	return result, nil
+}
 
-	if errors.Is(runErr, context.Canceled) {
-		result.Outcome = workers.ExecutionOutcomeCanceled
-		result.Failure = &workers.ExecutionFailure{
-			Type:    workers.WorkFailureTypeUnknown,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: "execution canceled",
-		}
-		return result
-	}
-	if errors.Is(runErr, context.DeadlineExceeded) {
-		result.Outcome = workers.ExecutionOutcomeFailed
-		result.Failure = &workers.ExecutionFailure{
-			Type:      workers.WorkFailureTypeTimeout,
-			Family:    workers.WorkFailureFamilyRetryable,
-			Message:   "execution timed out",
-			RetryHint: true,
-			Detail: &workers.FailureDetail{
-				Reason:  workers.WorkFailureTypeTimeout,
-				Message: "execution timed out",
-			},
-		}
-		return result
-	}
+func usesACPProvider(executorProvider string) bool {
+	return strings.EqualFold(strings.TrimSpace(executorProvider), workers.ExecutorProviderACP)
+}
 
+func hasProviderCompletionEvidence(result workers.RunnerExecutionResult) bool {
+	if strings.TrimSpace(result.Content) == "" {
+		return false
+	}
+	values := make([]string, 0, 2)
+	if result.Diagnostics != nil {
+		values = append(values, result.Diagnostics.Metadata[workers.ProviderResponseMetadataCompletionEvidence])
+		if result.Diagnostics.Provider != nil {
+			values = append(values, result.Diagnostics.Provider.ResponseMetadata[workers.ProviderResponseMetadataCompletionEvidence])
+		}
+	}
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "agent_message", "provider_response":
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeFailedResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+	runErr error,
+) workers.ExecuteResult {
+	switch {
+	case errors.Is(runErr, context.Canceled):
+		return canceledResult(result, request, runErr)
+	case errors.Is(runErr, context.DeadlineExceeded):
+		return timeoutResult(result, runErr)
+	default:
+		result = genericFailureResult(result, request, runnerResult, runErr)
+		if request.Input.MockWorkers != nil {
+			result = prefixMockProviderFailure(result, runErr)
+		}
+		return normalizeScriptFailure(result, request)
+	}
+}
+
+func prefixMockProviderFailure(
+	result workers.ExecuteResult,
+	runErr error,
+) workers.ExecuteResult {
+	if result.Failure == nil || strings.TrimSpace(result.Failure.Message) == "" {
+		return result
+	}
+	var providerErr *workers.ProviderError
+	if !errors.As(runErr, &providerErr) || providerErr == nil {
+		return result
+	}
+	prefix := strings.TrimSpace(providerErr.Error()) + ": "
+	if strings.HasPrefix(result.Failure.Message, prefix) {
+		return result
+	}
+	result.Failure.Message = prefix + result.Failure.Message
+	if result.Failure.Detail != nil {
+		result.Failure.Detail.Message = result.Failure.Message
+	}
+	return result
+}
+
+// normalizeScriptFailure preserves the established workstation boundary for
+// ordinary script process failures. A non-zero exit or command-start failure
+// is terminal Work, while timeout and missing-executable failures retain their
+// explicit metadata for the existing retry/diagnostic policy.
+func normalizeScriptFailure(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+) workers.ExecuteResult {
+	if request.Target.RunnerID != runners.ScriptIdentity || result.Failure == nil {
+		return result
+	}
+	switch result.Failure.Type {
+	case workers.WorkFailureTypeTimeout, workers.WorkFailureTypeMissingExecutable:
+		return result
+	default:
+		result.Failure.Family = workers.WorkFailureFamilyTerminal
+		result.Failure.RetryHint = false
+		return result
+	}
+}
+
+func canceledResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runErr error,
+) workers.ExecuteResult {
+	result.Outcome = workers.ExecutionOutcomeCanceled
+	var providerErr *workers.ProviderError
+	if errors.As(runErr, &providerErr) && providerErr != nil {
+		result.Failure = failureFromError(providerErr)
+		return result
+	}
+	message := "execution canceled"
+	if request.Target.RunnerID == "script" {
+		message = "execution cancelled: context canceled"
+	}
+	result.Failure = &workers.ExecutionFailure{
+		Type: workers.WorkFailureTypeUnknown, Family: workers.WorkFailureFamilyTerminal, Message: message,
+	}
+	return result
+}
+
+func timeoutResult(result workers.ExecuteResult, runErr error) workers.ExecuteResult {
+	result.Outcome = workers.ExecutionOutcomeFailed
+	var providerErr *workers.ProviderError
+	if errors.As(runErr, &providerErr) && providerErr != nil {
+		result.Failure = failureFromError(providerErr)
+		return result
+	}
+	result.Failure = &workers.ExecutionFailure{
+		Type: workers.WorkFailureTypeTimeout, Family: workers.WorkFailureFamilyRetryable,
+		Message: "execution timed out", RetryHint: true,
+		Detail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "execution timed out"},
+	}
+	return result
+}
+
+func genericFailureResult(
+	result workers.ExecuteResult,
+	request workers.ExecuteRequest,
+	runnerResult workers.RunnerExecutionResult,
+	runErr error,
+) workers.ExecuteResult {
 	result.Outcome = workers.ExecutionOutcomeFailed
 	result.Failure = failureFromError(runErr)
-	if result.Diagnostics == nil {
-		var providerErr *workers.ProviderError
-		if errors.As(runErr, &providerErr) && providerErr != nil {
+	var providerErr *workers.ProviderError
+	if errors.As(runErr, &providerErr) && providerErr != nil {
+		if result.Diagnostics == nil {
 			result.Diagnostics = safeDiagnosticsFromWork(providerErr.Diagnostics)
 		}
-	}
-	if result.Continuation == nil {
-		var providerErr *workers.ProviderError
-		if errors.As(runErr, &providerErr) && providerErr != nil {
+		if result.Continuation == nil {
 			result.Continuation = continuationFromSession(providerErr.ProviderSession, request.Input.Resume)
 		}
 	}
@@ -109,10 +244,34 @@ func normalizeRunnerOutcome(outcome workers.WorkOutcome) workers.ExecutionOutcom
 	}
 }
 
+// normalizeProviderOverrideResult preserves the Agent runner's output-policy
+// decision when a process-scoped Provider override replaces the native Agent
+// runner. The override is an effect seam, not a second outcome policy owner.
+func normalizeProviderOverrideResult(
+	result workers.RunnerExecutionResult,
+	request workers.RunnerExecutionRequest,
+) workers.RunnerExecutionResult {
+	if result.Outcome != "" || strings.TrimSpace(request.StopToken) == "" {
+		return result
+	}
+	if workers.ContainsStopToken(result.Content, request.StopToken) {
+		result.Outcome = workers.OutcomeAccepted
+	} else if strings.Contains(result.Content, "<CONTINUE>") {
+		result.Outcome = workers.OutcomeContinue
+	} else {
+		result.Outcome = workers.OutcomeRejected
+	}
+	return result
+}
+
 func proposedOutputFromRunnerResult(result workers.RunnerExecutionResult) workers.ProposedOutput {
 	output := proposedOutputFromContent(result.Content)
 	output.Feedback = result.Feedback
 	output.Classification = result.Classification
+	// Decision-envelope reviewers record work on the envelope. The detached
+	// path must propose it just as the workstation executor did, so Runtime
+	// keeps validating and materializing those items.
+	output.ProposedWork = workers.ProposedWorkFromFactoryWorkItems(result.RecordedOutputWork)
 	return output
 }
 
@@ -143,10 +302,7 @@ func failureFromError(err error) *workers.ExecutionFailure {
 			failureType = metadata.Type
 			family = metadata.Family
 		}
-		message := strings.TrimSpace(providerErr.Message)
-		if message == "" {
-			message = strings.TrimSpace(providerErr.Error())
-		}
+		message := normalizedProviderFailureMessage(providerErr)
 		if message == "" {
 			message = "worker execution failed"
 		}
@@ -174,6 +330,21 @@ func failureFromError(err error) *workers.ExecutionFailure {
 			Message: message,
 		},
 	}
+}
+
+func normalizedProviderFailureMessage(providerErr *workers.ProviderError) string {
+	if providerErr == nil {
+		return ""
+	}
+	message := strings.TrimSpace(providerErr.Message)
+	if message == "" {
+		return strings.TrimSpace(providerErr.Error())
+	}
+	var panicErr *workers.WorkerExecutorPanicError
+	if errors.As(providerErr.Cause, &panicErr) && panicErr != nil {
+		return panicErr.Error()
+	}
+	return message
 }
 
 func continuationFromSession(

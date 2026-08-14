@@ -40,17 +40,15 @@ func openRuntime(
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	durableExecutionFactory DurableExecutionFactory,
-	workerExecutionFactory WorkerExecutionFactory,
+	workerService workers.Service,
 	modelService models.Service,
 	automationService automations.Service,
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsRoot recordings.Root,
-	workersRuntimeFactory WorkersRuntimeFactory,
 	workersRuntimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
-	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory,
 	factoryDefinitions factorydefinitions.Service,
 	definitionRuntimeRouter *factorysessions.DefinitionRuntimeRouter,
 	factoryScaffoldInitializer factorysessions.FactoryScaffoldInitializer,
@@ -70,7 +68,6 @@ func openRuntime(
 	webhooksService webhooks.Service,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
-	adaptWorkerCommandRunner WorkerCommandRunnerAdapter,
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	processRuntimeFactory roles.ProcessRuntimeFactory,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
@@ -130,6 +127,17 @@ func openRuntime(
 	)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	if effort := strings.TrimSpace(configured.Workers.WorkerReasoningEffort); effort != "" &&
+		load.LoadedFactoryCfg != nil {
+		if err := load.LoadedFactoryCfg.MutateWorkers(func(worker *factorydefinitions.FactoryWorkerConfig) error {
+			if worker != nil {
+				worker.ReasoningEffort = effort
+			}
+			return nil
+		}); err != nil {
+			return runtimeProducts{}, fmt.Errorf("apply worker reasoning effort override: %w", err)
+		}
 	}
 	if load.HistoricalReplay != nil {
 		return historicalReplayRuntimeProducts(logger, *load.HistoricalReplay), nil
@@ -197,43 +205,12 @@ func openRuntime(
 			err = cleanup.Unwind(err)
 		}
 	}()
-	selectedModels := modelsBind.Root
 	if workService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work service is required")
 	}
-	if workerExecutionFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: worker execution operation is required")
+	if workerService == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Workers service is required")
 	}
-	var initialProgressPublisher workers.ProgressPublisher
-	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
-		initialProgressPublisher = inferenceProgressPublisherFactory(sessionID)
-	}
-	sessionBuildRuntimes := &sessionBuildRuntimeSink{}
-	cleanup.Add(func() error {
-		return sessionBuildRuntimes.Close(context.WithoutCancel(ctx))
-	})
-	serviceService, sessionBuildFactory, err := workerExecutionFactory(
-		configured.Runtime,
-		configured.Workers,
-		clock,
-		logger,
-		providerCommandRunner,
-		scriptCommandRunner,
-		initialProgressPublisher,
-		nil,
-		providerOverride,
-		runtimeService,
-		selectedModels, modelsBind.Scope, workService,
-		workersRuntimeFactory,
-		durableExecution.ACPIntegrations,
-		sessionBuildRuntimes.Add,
-	)
-	if err != nil {
-		return runtimeProducts{}, err
-	}
-	cleanup.Add(func() error {
-		return serviceService.Close(context.WithoutCancel(ctx))
-	})
 	if automationService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations service is required")
 	}
@@ -285,8 +262,6 @@ func openRuntime(
 			configured.Workers.InvocationSkipPermissionsOverride,
 			clock,
 			logger,
-			serviceService,
-			sessionBuildFactory,
 			providerInvocationFactory,
 			workersRuntimeExecutorsFactory,
 			workersMockCommandRunnerFactory,
@@ -426,7 +401,7 @@ func openRuntime(
 		factoryWorkflows,
 		workflowPreview,
 		workService,
-		serviceService,
+		workerService,
 		modelsBind,
 		providerSessions,
 		startupRuntime,

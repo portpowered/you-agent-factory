@@ -79,12 +79,15 @@ type OpenedProcessApplication struct {
 
 type OpenedInvocationRuntime struct {
 	Workers        workers.Service
+	ModelInvoker   workers.ModelInvoker
 	Sessions       factorysessions.Service
 	Invoker        SessionInvoker
 	InputResolver  InvocationInputResolver
 	Execution      durableexecution.Service
 	Lifecycle      LifecycleRuntime
 	ModelsScope    models.RuntimeScopeRef
+	RuntimeID      string
+	GenerationID   string
 	CloseArtifacts func() error
 }
 

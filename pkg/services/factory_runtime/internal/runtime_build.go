@@ -13,6 +13,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
+	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -26,6 +27,99 @@ import (
 type ProgressPublisherFactory func(string) workers.ProgressPublisher
 type DispatchCompletionFactory func(string) func(string)
 type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFactory
+
+type runtimeWorkersServiceWithProgress struct {
+	workers.Service
+	publisher             workers.ProgressPublisher
+	providerOverride      workers.Provider
+	commandRunnerOverride workers.CommandRunner
+	replayCommandRunner   workers.CommandRunner
+	clock                 workers.Clock
+}
+
+func (service runtimeWorkersServiceWithProgress) RuntimeProgressPublisher() workers.ProgressPublisher {
+	return service.publisher
+}
+
+// Execute carries runtime-local effect substitutions into the shared Workers
+// boundary. Replay uses these detached ports to reproduce provider and script
+// outcomes without mutating the process-scoped Workers service.
+func (service runtimeWorkersServiceWithProgress) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if service.providerOverride != nil {
+		request.Input.ProviderOverride = service.providerOverride
+	}
+	commandRunner := service.commandRunnerOverride
+	if service.replayCommandRunner != nil {
+		commandRunner = service.replayCommandRunner
+	}
+	if commandRunner != nil {
+		// Session build specs may carry a raw injected command edge (or a
+		// process-scoped logging runner). Clone logging runners before binding
+		// the opened Runtime's sink so concurrent sessions never mutate shared
+		// command-runner state.
+		if request.Input.ExecutionLogger != nil && service.clock != nil {
+			switch typed := commandRunner.(type) {
+			case workers.LoggingCommandRunner:
+				typed.Logger = request.Input.ExecutionLogger
+				typed.Clock = service.clock
+				commandRunner = typed
+			case *workers.LoggingCommandRunner:
+				if typed != nil {
+					clone := *typed
+					clone.Logger = request.Input.ExecutionLogger
+					clone.Clock = service.clock
+					commandRunner = &clone
+				}
+			default:
+				commandRunner = workers.CommandRunnerWithLogging(
+					commandRunner,
+					request.Input.ExecutionLogger,
+					service.clock,
+				)
+			}
+		}
+		request.Input.CommandRunnerOverride = commandRunner
+	}
+	return service.Service.Execute(ctx, request)
+}
+
+func (service runtimeWorkersServiceWithProgress) RuntimeOwnsModelEventRecording() bool {
+	owner, ok := service.Service.(interface {
+		RuntimeOwnsModelEventRecording() bool
+	})
+	return ok && owner.RuntimeOwnsModelEventRecording()
+}
+
+func (service runtimeWorkersServiceWithProgress) RenderPrompt(
+	template string,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+) (string, error) {
+	renderer, ok := service.Service.(runtime.PromptRenderer)
+	if !ok {
+		return "", fmt.Errorf("render Worker prompt: renderer is unavailable")
+	}
+	return renderer.RenderPrompt(template, tokens, workflowContext)
+}
+
+func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
+	workingDirectory string,
+	environment map[string]string,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	worktree string,
+) (*workers.ResolvedTemplateFields, error) {
+	resolver, ok := service.Service.(runtime.TemplateFieldResolver)
+	if !ok {
+		return nil, fmt.Errorf("resolve Worker template fields: resolver is unavailable")
+	}
+	return resolver.ResolveTemplateFields(
+		workingDirectory, environment, tokens, workflowContext, worktree,
+	)
+}
 
 type runtimeOpeningWithFlush struct {
 	recordings.RuntimeOpening
@@ -78,9 +172,8 @@ func NewRuntimeBuild(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	runtimeFactory *RuntimeFactory,
-	workerExecution workers.RuntimeService,
+	workerService workers.Service,
 	workerSessionsFactory factory.WorkerSessionsFactory,
-	sessionBuildFactory workers.SessionBuildFactory,
 	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factory.WorkersMockCommandRunnerFactory,
@@ -121,9 +214,6 @@ func NewRuntimeBuild(
 		runtimeFactory.newID,
 		baseLogger,
 		func(ctx context.Context, spec runtimebuild.SessionBuildSpec) (*factoryhost.Bundle, error) {
-			if sessionBuildFactory == nil {
-				return nil, fmt.Errorf("Workers session-build runtime factory is required")
-			}
 			var progressPublisher workers.ProgressPublisher
 			if progressFactory != nil {
 				progressPublisher = progressFactory(spec.SessionID)
@@ -135,13 +225,8 @@ func NewRuntimeBuild(
 			// creates Worker Sessions, ensuring reference-bearing progress cannot
 			// reach the response stream before its Worker Session association.
 			providerSessionProgress := workersessions.NewProviderSessionObservationPublisher(progressPublisher).WithUnassociatedProgressFallback()
-			runtimeWorkers, err := sessionBuildFactory(
-				spec.ProviderCommandRunner,
-				spec.CommandRunnerOverride,
-				providerSessionProgress.Publish,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("construct runtime Worker service: %w", err)
+			if workerService == nil {
+				return nil, fmt.Errorf("Workers service is required")
 			}
 			var dispatchCompleted func(string)
 			if completionFactory != nil {
@@ -170,7 +255,8 @@ func NewRuntimeBuild(
 				verbose,
 				skipRunnerPrerequisiteValidation,
 				invocationSkipPermissionsOverride,
-				runtimeWorkers,
+				workerService,
+				mockWorkersConfig,
 				workerSessionsFactory,
 				runtimeExecutorsFactory,
 				providerSessionProgress,
@@ -186,8 +272,6 @@ func NewRuntimeBuild(
 	)
 }
 
-// backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
-// pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func buildBundle(
 	ctx context.Context,
 	spec runtimebuild.SessionBuildSpec,
@@ -211,7 +295,8 @@ func buildBundle(
 	verbose bool,
 	skipRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	workerExecution workers.RuntimeService,
+	workerExecution workers.Service,
+	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
 	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
@@ -222,57 +307,24 @@ func buildBundle(
 	recordingsRuntime recordings.RuntimeOpening,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*factoryhost.Bundle, error) {
-	loadedFactoryCfg, ok := spec.LoadedFactoryCfg.(factorydefinitions.LoadedFactorySource)
-	if !ok || loadedFactoryCfg == nil {
-		return nil, fmt.Errorf("loaded Factory config is required")
+	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
+		spec, defaultSessionID, recordingsRuntime, initialFactorySnapshot,
+	)
+	if err != nil {
+		return nil, err
 	}
-	sessionID := strings.TrimSpace(spec.SessionID)
-	if sessionID == "" {
-		sessionID = strings.TrimSpace(defaultSessionID)
+	workerSessionsFactory, providerInvocation, err := prepareBundleExecution(
+		workerSessionsFactory,
+		providerSessionProgress,
+		providerInvocationFactory,
+		spec.ProviderCommandRunner,
+	)
+	if err != nil {
+		return nil, err
 	}
-	if sessionID == "" {
-		return nil, fmt.Errorf("default Factory Session ID is required")
-	}
-	if recordingsRuntime == nil {
-		return nil, fmt.Errorf("Recordings runtime opening is required")
-	}
-	var initialFactory *factorydefinitions.FactorySnapshot
-	var snapshotErr error
-	if initialFactorySnapshot != nil {
-		initialFactory, snapshotErr = initialFactorySnapshot(loadedFactoryCfg)
-	}
-	if snapshotErr != nil {
-		spec.BaseLogger.Warn(
-			"editable factory event snapshot unavailable; using runtime-thin factory event payload",
-			zap.Error(snapshotErr),
-		)
-	}
-	if providerSessionProgress == nil {
-		return nil, fmt.Errorf("Worker Session provider progress bridge is required")
-	}
-	if workerSessionsFactory == nil {
-		return nil, fmt.Errorf("Worker Sessions factory is required")
-	}
-	workerSessionsFactory = bindProviderSessionProgress(workerSessionsFactory, providerSessionProgress)
-
-	// The provider-invocation route is built from the same session-local
-	// progress bridge Workers publishes through, so a Worker with no authored
-	// workstation still reports against its own Worker Session rather than
-	// against the Factory Session stream. An absent factory leaves the route
-	// unbound, which is how a runtime declares it hosts no such Worker.
-	var providerInvocation workers.WorkstationRequestExecutor
-	var err error
-	if providerInvocationFactory != nil {
-		providerInvocation, err = providerInvocationFactory(
-			spec.ProviderCommandRunner,
-			providerSessionProgress.Publish,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("construct provider-invocation Worker executor: %w", err)
-		}
-	}
-
-	return runtimeFactory.Build(
+	workerServiceWithProgress := newRuntimeWorkersService(workerExecution, providerSessionProgress, spec)
+	workerOptions := makeWorkerOptionsLoader(workerExecution, runtimeExecutorsFactory, spec, factoryRunnerID, verbose, skipRunnerPrerequisiteValidation, invocationSkipPermissionsOverride, providerSessionProgress.Publish, runtimeFactory.loggerFactory)
+	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
 		spec.FolderPath,
@@ -306,26 +358,175 @@ func buildBundle(
 			RuntimeOpening: recordingsRuntime,
 			flushInterval:  recordFlushInterval,
 		},
-		func(history recordings.WorkerEventRecorder, logger *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-			return loadWorkerOptions(
-				workerExecution,
-				runtimeExecutorsFactory,
-				spec,
-				factoryRunnerID,
-				verbose,
-				skipRunnerPrerequisiteValidation,
-				invocationSkipPermissionsOverride,
-				providerSessionProgress.Publish,
-				history,
-				logger,
-				runtimeFactory.loggerFactory,
-			)
-		},
-		workerExecution,
+		workerOptions,
+		workerServiceWithProgress,
 		providerInvocation,
 		workerSessionsFactory,
 		dispatchCompleted,
+		mockWorkersConfig,
 	)
+	if err != nil {
+		return nil, err
+	}
+	setReplayEvents(bundle.Factory, spec.ReplayEvents)
+	setBundleProgressPublisher(bundle, providerSessionProgress.Publish)
+	return bundle, nil
+}
+
+func newRuntimeWorkersService(
+	workerExecution workers.Service,
+	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	spec runtimebuild.SessionBuildSpec,
+) workers.Service {
+	return workers.Service(runtimeWorkersServiceWithProgress{
+		Service:               workerExecution,
+		publisher:             providerSessionProgress.Publish,
+		providerOverride:      spec.ProviderOverride,
+		commandRunnerOverride: spec.CommandRunnerOverride,
+		replayCommandRunner:   spec.ReplayCommandRunner,
+		clock:                 spec.Clock,
+	})
+}
+
+func setReplayEvents(
+	bundleFactory factory.Factory,
+	events []factorydefinitions.FactoryEvent,
+) {
+	setter, ok := bundleFactory.(interface {
+		SetReplayEvents([]factorydefinitions.FactoryEvent)
+	})
+	if ok {
+		setter.SetReplayEvents(events)
+	}
+}
+
+func prepareBundleExecution(
+	workerSessionsFactory factory.WorkerSessionsFactory,
+	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	providerInvocationFactory factory.ProviderInvocationExecutorFactory,
+	providerCommandRunner workers.CommandRunner,
+) (factory.WorkerSessionsFactory, workers.WorkstationRequestExecutor, error) {
+	if err := validateBundleDependencies(providerSessionProgress, workerSessionsFactory); err != nil {
+		return nil, nil, err
+	}
+	workerSessionsFactory = bindProviderSessionProgress(workerSessionsFactory, providerSessionProgress)
+	providerInvocation, err := buildProviderInvocation(
+		providerInvocationFactory,
+		providerCommandRunner,
+		providerSessionProgress.Publish,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return workerSessionsFactory, providerInvocation, nil
+}
+
+func makeWorkerOptionsLoader(
+	workerExecution workers.Service,
+	runtimeExecutorsFactory factory.WorkersRuntimeExecutorsFactory,
+	spec runtimebuild.SessionBuildSpec,
+	factoryRunnerID string,
+	verbose bool,
+	skipRunnerPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	progressPublisher workers.ProgressPublisher,
+	loggerFactory factory.RuntimeLoggerFactory,
+) func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
+	return func(history recordings.WorkerEventRecorder, logger *zap.Logger) (map[string]workers.WorkerExecutor, error) {
+		runtimeService, ok := workerExecution.(workers.RuntimeService)
+		if !ok || runtimeExecutorsFactory == nil {
+			return nil, nil
+		}
+		return loadWorkerOptions(
+			runtimeService,
+			runtimeExecutorsFactory,
+			spec,
+			factoryRunnerID,
+			verbose,
+			skipRunnerPrerequisiteValidation,
+			invocationSkipPermissionsOverride,
+			progressPublisher,
+			history,
+			logger,
+			loggerFactory,
+		)
+	}
+}
+
+func setBundleProgressPublisher(bundle *factoryhost.Bundle, publisher workers.ProgressPublisher) {
+	if configurable, ok := bundle.Factory.(interface {
+		SetProgressPublisher(workers.ProgressPublisher)
+	}); ok {
+		configurable.SetProgressPublisher(publisher)
+	}
+}
+
+func resolveBundleInputs(
+	spec runtimebuild.SessionBuildSpec,
+	defaultSessionID string,
+	recordingsRuntime recordings.RuntimeOpening,
+	initialFactorySnapshot InitialFactorySnapshotFactory,
+) (factorydefinitions.LoadedFactorySource, string, *factorydefinitions.FactorySnapshot, error) {
+	loadedFactoryCfg, ok := spec.LoadedFactoryCfg.(factorydefinitions.LoadedFactorySource)
+	if !ok || loadedFactoryCfg == nil {
+		return nil, "", nil, fmt.Errorf("loaded Factory config is required")
+	}
+	sessionID := firstNonEmptySessionID(spec.SessionID, defaultSessionID)
+	if sessionID == "" {
+		return nil, "", nil, fmt.Errorf("default Factory Session ID is required")
+	}
+	if recordingsRuntime == nil {
+		return nil, "", nil, fmt.Errorf("Recordings runtime opening is required")
+	}
+	var initialFactory *factorydefinitions.FactorySnapshot
+	if initialFactorySnapshot == nil {
+		return loadedFactoryCfg, sessionID, nil, nil
+	}
+	initialFactory, err := initialFactorySnapshot(loadedFactoryCfg)
+	if err != nil {
+		spec.BaseLogger.Warn(
+			"editable factory event snapshot unavailable; using runtime-thin factory event payload",
+			zap.Error(err),
+		)
+	}
+	return loadedFactoryCfg, sessionID, initialFactory, nil
+}
+
+func firstNonEmptySessionID(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func validateBundleDependencies(
+	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	workerSessionsFactory factory.WorkerSessionsFactory,
+) error {
+	if providerSessionProgress == nil {
+		return fmt.Errorf("Worker Session provider progress bridge is required")
+	}
+	if workerSessionsFactory == nil {
+		return fmt.Errorf("Worker Sessions factory is required")
+	}
+	return nil
+}
+
+func buildProviderInvocation(
+	factory factory.ProviderInvocationExecutorFactory,
+	commandRunner workers.CommandRunner,
+	publisher workers.ProgressPublisher,
+) (workers.WorkstationRequestExecutor, error) {
+	if factory == nil {
+		return nil, nil
+	}
+	providerInvocation, err := factory(commandRunner, publisher)
+	if err != nil {
+		return nil, fmt.Errorf("construct provider-invocation Worker executor: %w", err)
+	}
+	return providerInvocation, nil
 }
 
 // bindProviderSessionProgress keeps the Workers progress bridge session-local:
@@ -394,11 +595,11 @@ func executeServiceFromWorkstation(
 	if service == nil {
 		return nil
 	}
-	if boundary != nil {
-		return workstationExecuteAdapter{boundary: boundary}
-	}
 	if execute, ok := service.(runtimeExecuteService); ok {
 		return execute
+	}
+	if boundary != nil {
+		return workstationExecuteAdapter{boundary: boundary}
 	}
 	return workstationExecuteAdapter{service: service}
 }
@@ -408,6 +609,7 @@ func buildRuntimeWorkstationBoundary(
 	service runtimeWorkstationService,
 	executors map[string]workers.WorkerExecutor,
 	net *state.Net,
+	requestExecutor workers.WorkstationRequestExecutor,
 	providerInvocation workers.WorkstationRequestExecutor,
 ) workers.WorkstationPoolBoundary {
 	if factory == nil || service == nil {
@@ -416,6 +618,7 @@ func buildRuntimeWorkstationBoundary(
 	return factory(workers.WorkstationPoolBoundaryConfig{
 		Service:            service,
 		Executors:          executors,
+		RequestExecutor:    requestExecutor,
 		RouteNames:         runtimeBoundaryRouteNames(net, executors),
 		ProviderInvocation: providerInvocation,
 		Async:              true,
@@ -504,6 +707,10 @@ func (adapter workstationExecuteAdapter) Execute(
 			WorkerType:       request.Target.WorkerType,
 			RunnerID:         request.Target.RunnerID,
 			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			RecordingID:      request.Input.RecordingID,
+			GenerationID:     request.Correlation.GenerationID,
+			WorkflowContext:  request.Input.WorkflowContext.Clone(),
 			InputTokens:      append([]any(nil), dispatch.InputTokens...),
 		},
 	})
@@ -606,7 +813,10 @@ func workstationDispatchRequestFromExecute(
 			WorkerType:                  firstBuildValue(request.Target.WorkerName, request.Target.WorkerType),
 			RunnerID:                    request.Target.RunnerID,
 			FactorySessionID:            request.Correlation.FactorySessionID,
-			RecordingID:                 request.Correlation.RuntimeID,
+			RuntimeID:                   request.Correlation.RuntimeID,
+			RecordingID:                 request.Input.RecordingID,
+			GenerationID:                request.Correlation.GenerationID,
+			WorkflowContext:             request.Input.WorkflowContext.Clone(),
 			ProjectID:                   dispatch.ProjectID,
 			Capabilities:                cloneBuildCapabilities(request.Target.Capabilities),
 			InputTokens:                 append([]any(nil), dispatch.InputTokens...),
@@ -767,7 +977,7 @@ func buildContinuationSession(value *workers.ProviderContinuationRef) *providers
 	}
 	return &providers.SessionRef{
 		Provider: providers.ID(strings.TrimSpace(value.Provider)),
-		Kind:     "session",
+		Kind:     providers.SessionIDKind,
 		ID:       strings.TrimSpace(value.ProviderSessionID),
 	}
 }

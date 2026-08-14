@@ -88,7 +88,6 @@ func scriptInvocationRuntimeService(t *testing.T, scriptRunner workers.CommandRu
 		platformfilesystem.Local{},
 	)
 	return &Service{
-		sessions:                inertCurrentRuntimeResolver{},
 		executorBuilder:         executorBuilder,
 		scriptFactory:           scriptFactory,
 		scriptCommandRunner:     scriptRunner,

@@ -315,7 +315,8 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	}
 	streamContext, cancel := context.WithCancel(streamContext)
 	limit = observationStreamLimit(limit)
-	if err := validateRecordedObservationCursor(s.ledger, fact, cursor); err != nil {
+	canonicalEvents := s.canonicalEvents()
+	if err := validateRecordedObservationCursor(s.ledger, canonicalEvents, fact, cursor); err != nil {
 		cancel()
 		return workersessions.ObservationSubscription{}, true, err
 	}
@@ -324,10 +325,18 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 		sequence := int(cursor.Position)
 		reconnect = &interfaces.FactoryEventReconnectCursor{AfterSequence: &sequence}
 	}
-	source, subscribeErr := s.ledger.Subscribe(streamContext, reconnect, interfaces.FactoryEventReconnectScope{
-		DispatchID: fact.dispatchID,
-		Limit:      limit,
-	})
+	var source interfaces.FactoryEventStream
+	var subscribeErr error
+	if len(s.replayEvents) > 0 {
+		source, subscribeErr = s.subscribeReplayObservationEvents(
+			streamContext, canonicalEvents, fact.dispatchID, limit, replayOnly,
+		)
+	} else {
+		source, subscribeErr = s.ledger.Subscribe(streamContext, reconnect, interfaces.FactoryEventReconnectScope{
+			DispatchID: fact.dispatchID,
+			Limit:      limit,
+		})
+	}
 	if subscribeErr != nil {
 		cancel()
 		if errors.Is(subscribeErr, context.Canceled) {
@@ -354,6 +363,33 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	), true, nil
 }
 
+func (s *recordedWorkerSessionObservation) subscribeReplayObservationEvents(
+	ctx context.Context,
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+	limit int,
+	replayOnly bool,
+) (interfaces.FactoryEventStream, error) {
+	if replayOnly {
+		closed := make(chan interfaces.FactoryEvent)
+		close(closed)
+		return interfaces.FactoryEventStream{
+			StreamGenerationID: s.ledger.StreamGenerationID(),
+			History:            cloneAndSortFactoryEvents(events),
+			Events:             closed,
+		}, nil
+	}
+	source, err := s.ledger.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{
+		DispatchID: dispatchID,
+		Limit:      limit,
+	})
+	if err != nil {
+		return interfaces.FactoryEventStream{}, err
+	}
+	source.History = cloneAndSortFactoryEvents(events)
+	return source, nil
+}
+
 func observationStreamLimit(limit int) int {
 	if limit <= 0 {
 		return workersessions.DefaultObservationStreamLimit
@@ -378,6 +414,7 @@ func recordedObservationHistory(
 
 func validateRecordedObservationCursor(
 	ledger recordings.RuntimeLedger,
+	events []interfaces.FactoryEvent,
 	fact recordedDispatchObservation,
 	cursor *workersessions.ObservationCursor,
 ) error {
@@ -397,7 +434,7 @@ func validateRecordedObservationCursor(
 	}
 	var highest uint64
 	var acknowledged *interfaces.FactoryEvent
-	for _, event := range ledger.CanonicalEvents() {
+	for _, event := range events {
 		sequence := event.Context.Sequence
 		if sequence > 0 && uint64(sequence) > highest {
 			highest = uint64(sequence)
@@ -491,7 +528,7 @@ func (s *recordedWorkerSessionObservation) recordedObservationFacts(
 	if s == nil || s.ledger == nil || s.projector == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable
 	}
-	ordered := cloneAndSortFactoryEvents(s.ledger.CanonicalEvents())
+	ordered := s.canonicalEvents()
 	world, err := s.projector(ordered, latestFactoryEventTick(ordered))
 	if err != nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable

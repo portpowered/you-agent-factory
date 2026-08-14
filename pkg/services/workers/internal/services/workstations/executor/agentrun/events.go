@@ -47,6 +47,7 @@ func agentRunResponseEvent(
 		ID:         fmt.Sprintf("%s/%s", agentRunResponseEventIDPrefix, dispatch.DispatchID),
 		DispatchID: dispatch.DispatchID,
 		EventTime:  eventTime,
+		Tick:       executionTick(dispatch.Execution),
 		Payload: workerexecution.AgentRunResponseEventPayload{
 			AgentRunID:     agentRunID(dispatch.DispatchID),
 			Outcome:        string(result.Outcome),
@@ -54,6 +55,13 @@ func agentRunResponseEvent(
 			Diagnostics:    diagnostics,
 		},
 	}
+}
+
+func executionTick(metadata work.ExecutionMetadata) int {
+	if metadata.CurrentTick != 0 {
+		return metadata.CurrentTick
+	}
+	return metadata.DispatchCreatedTick
 }
 
 func agentRunSafeDiagnostics(

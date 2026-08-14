@@ -63,9 +63,13 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	if handler == nil || handler.mappings == nil || handler.providerSessionsHTTP == nil || handler.modelsContent == nil {
 		return nil, fmt.Errorf("bind HTTP handler: process-scoped handler is required")
 	}
+	modelInvoker := opened.ModelInvoker
+	if modelInvoker == nil {
+		modelInvoker = opened.Workers
+	}
 	modelsAdapter := modelshttp.NewAdapter(
 		opened.Models,
-		opened.Workers,
+		modelInvoker,
 		handler.modelsContent,
 		opened.ModelsScope,
 	)

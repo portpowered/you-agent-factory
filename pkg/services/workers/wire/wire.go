@@ -58,6 +58,8 @@ func NewService(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
+	providerOverrides ...workers.Provider,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
@@ -84,11 +86,15 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
+	var providerOverride workers.Provider
+	if len(providerOverrides) > 0 {
+		providerOverride = providerOverrides[0]
+	}
 	runtimeAssembly, err := runtimeassemblywire.NewService(runnerRegistry, defaultBindingAssembler)
 	if err != nil {
 		return nil, err
 	}
-	executeService, err := executeservice.New(
+	executeService, err := executeservice.NewWithProviderOverride(
 		runnerRegistry,
 		agentDependencies.Providers,
 		observe,
@@ -97,6 +103,9 @@ func NewService(
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
+		providerOverride,
+		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
+		scriptDependencies.FactoryDocs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)

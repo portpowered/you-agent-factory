@@ -28,10 +28,14 @@ const (
 // ProgressFragment is the provider-neutral transient observation emitted by
 // Workers and accepted by a Factory Session response stream.
 type ProgressFragment struct {
-	DispatchID string
-	Kind       string
-	Type       string
-	Payload    string
+	// Correlation is the detached identity of the attempt that emitted this
+	// progress fact. DispatchID remains populated for compatibility with
+	// existing stream consumers.
+	Correlation ExecutionCorrelation
+	DispatchID  string
+	Kind        string
+	Type        string
+	Payload     string
 	// Provider is the provider identity selected for this attempt. It is
 	// intentionally independent from ProviderSessionReference: a provider may
 	// author progress without exposing a resumable native session identity.

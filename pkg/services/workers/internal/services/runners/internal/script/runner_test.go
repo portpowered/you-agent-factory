@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
@@ -91,6 +91,140 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 		captured.ProjectID != "request-project" ||
 		captured.Execution.RequestID != "request-1" {
 		t.Fatalf("command execution metadata = %#v", captured)
+	}
+}
+
+func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
+	commandEdge := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("completed")}}
+	contextFactoryDirectory := filepath.Join("factory-root", "detached")
+	scriptRunner, err := New(Config{
+		Command:          "scripts/run.sh",
+		FactoryDirectory: filepath.Join("factory-root", "configured"),
+		Args: []string{
+			`{{ .Context.Project }}`,
+			`{{ .Context.Env.RUNTIME }}`,
+			`{{ .Context.WorkDir }}`,
+			`{{ .Context.SessionID }}`,
+		},
+	}, testDependencies(commandEdge, func(directory string) (map[string]string, error) {
+		if directory != contextFactoryDirectory {
+			t.Fatalf("Factory docs directory = %q, want detached context directory %q", directory, contextFactoryDirectory)
+		}
+		return nil, nil
+	}))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := validRequest()
+	request.FactoryDirectory = ""
+	request.WorkingDirectory = ""
+	request.Worktree = ""
+	request.ProjectID = ""
+	request.EnvVars = nil
+	request.SessionID = ""
+	request.Correlation = workers.ExecutionCorrelation{FactorySessionID: "session-correlation"}
+	request.WorkflowContext = &workers.Context{
+		FactoryDirectory: contextFactoryDirectory,
+		WorkDirectory:    "detached-work-dir",
+		EnvVars:          map[string]string{"RUNTIME": "detached-env"},
+		ProjectID:        "detached-project",
+		SessionID:        "detached-session",
+	}
+	if _, err := scriptRunner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	captured := commandEdge.Request()
+	wantArgs := []string{"detached-project", "detached-env", "detached-work-dir", "detached-session"}
+	if !reflect.DeepEqual(captured.Args, wantArgs) {
+		t.Fatalf("command args = %#v, want detached workflow context values %#v", captured.Args, wantArgs)
+	}
+	if captured.Command != filepath.Join(contextFactoryDirectory, "scripts", "run.sh") {
+		t.Fatalf("command = %q, want detached context factory script", captured.Command)
+	}
+	if captured.WorkDir != "detached-work-dir" || captured.ProjectID != "detached-project" {
+		t.Fatalf("command context = %#v, want detached workflow context", captured)
+	}
+	assertEnv(t, captured.Env, "RUNTIME", "detached-env")
+}
+
+func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
+	t.Run("non-streaming override preserves output and correlation", func(t *testing.T) {
+		constructionRunner := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("construction")}}
+		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
+		request := validRequest()
+		request.Correlation = workers.ExecutionCorrelation{
+			FactorySessionID: "session-detached",
+			RuntimeID:        "runtime-detached",
+			GenerationID:     "generation-detached",
+			DispatchID:       "dispatch-detached",
+			AttemptID:        "attempt-detached",
+		}
+		override := nonStreamingCommandRunner{result: workers.CommandResult{
+			Stdout: []byte("override stdout"),
+			Stderr: []byte("override stderr"),
+		}}
+		var fragments []workers.ProgressFragment
+		var events []workers.ScriptEvent
+		ctx := workerexecution.WithCommandRunnerOverride(t.Context(), override)
+		ctx = workerexecution.WithProgressPublisher(ctx, func(fragment workers.ProgressFragment) {
+			fragments = append(fragments, fragment)
+		})
+		ctx = workerexecution.WithScriptEventRecorder(ctx, func(event workers.ScriptEvent) {
+			events = append(events, event)
+		})
+
+		result, err := scriptRunner.Execute(ctx, request)
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if result.Content != "override stdout" {
+			t.Fatalf("result content = %q, want override output", result.Content)
+		}
+		if constructionRunner.Calls() != 0 {
+			t.Fatalf("construction command calls = %d, want request override only", constructionRunner.Calls())
+		}
+		if len(fragments) != 2 || fragments[0].Payload != "override stdout" || fragments[1].Payload != "override stderr" {
+			t.Fatalf("request-scoped progress = %#v, want stdout and stderr chunks", fragments)
+		}
+		for _, fragment := range fragments {
+			if fragment.Correlation != request.Correlation {
+				t.Fatalf("progress correlation = %#v, want %#v", fragment.Correlation, request.Correlation)
+			}
+		}
+		if len(events) != 2 {
+			t.Fatalf("request-scoped script events = %d, want request and response", len(events))
+		}
+	})
+
+	t.Run("streaming override keeps streaming boundary", func(t *testing.T) {
+		constructionRunner := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("construction")}}
+		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
+		override := &streamingCommandEdge{
+			chunks: []outputChunk{{stream: platformprocess.OutputStreamStdout, payload: "streamed"}},
+			result: workers.CommandResult{Stdout: []byte("streamed")},
+		}
+		ctx := workerexecution.WithCommandRunnerOverride(t.Context(), override)
+		result, err := scriptRunner.Execute(ctx, validRequest())
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if result.Content != "streamed" || constructionRunner.Calls() != 0 {
+			t.Fatalf("streaming override result/calls = %q/%d, want streamed/0", result.Content, constructionRunner.Calls())
+		}
+	})
+}
+
+func TestCommandRunnerWithStreamingFallbackPreservesResultWithoutObserver(t *testing.T) {
+	want := workers.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr"), ExitCode: 3}
+	runner := commandRunnerWithStreamingFallback{runner: nonStreamingCommandRunner{result: want}}
+	got, err := runner.RunStreaming(context.Background(), workers.CommandRequest{}, nil)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RunStreaming() result = %#v, want %#v", got, want)
 	}
 }
 
@@ -784,216 +918,4 @@ func newTestRunner(
 		t.Fatalf("New() error = %v", err)
 	}
 	return scriptRunner
-}
-
-func emptyDocs(string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-
-func testDependencies(
-	commandRunner workers.CommandRunner,
-	factoryDocs workers.FactoryDocsLoader,
-) Dependencies {
-	return Dependencies{
-		CommandRunner: commandRunner,
-		FactoryDocs:   factoryDocs,
-		Now:           func() time.Time { return time.Unix(0, 0) },
-		Publish:       func(workers.ProgressFragment) {},
-		Record:        func(workers.ScriptEvent) {},
-	}
-}
-
-type outputChunk struct {
-	stream  string
-	payload string
-}
-
-type streamingCommandEdge struct {
-	mu           sync.Mutex
-	observations *observationLog
-	request      workers.CommandRequest
-	chunks       []outputChunk
-	result       workers.CommandResult
-	err          error
-}
-
-func (edge *streamingCommandEdge) Run(
-	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return edge.RunStreaming(ctx, request, nil)
-}
-
-func (edge *streamingCommandEdge) RunStreaming(
-	_ context.Context,
-	request workers.CommandRequest,
-	observer platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
-	edge.mu.Lock()
-	edge.request = workers.CloneSubprocessExecutionRequest(request)
-	edge.mu.Unlock()
-	if edge.observations != nil {
-		edge.observations.Append("command")
-	}
-	for _, chunk := range edge.chunks {
-		if observer != nil {
-			observer(chunk.stream, []byte(chunk.payload))
-		}
-	}
-	return workers.CommandResult{
-		Stdout:   append([]byte(nil), edge.result.Stdout...),
-		Stderr:   append([]byte(nil), edge.result.Stderr...),
-		ExitCode: edge.result.ExitCode,
-	}, edge.err
-}
-
-func (edge *streamingCommandEdge) Request() workers.CommandRequest {
-	edge.mu.Lock()
-	defer edge.mu.Unlock()
-	return workers.CloneSubprocessExecutionRequest(edge.request)
-}
-
-type observationLog struct {
-	mu       sync.Mutex
-	values   []string
-	terminal workers.ScriptResponseEventPayload
-}
-
-func (log *observationLog) Append(value string) {
-	log.mu.Lock()
-	defer log.mu.Unlock()
-	log.values = append(log.values, value)
-}
-
-func (log *observationLog) Values() []string {
-	log.mu.Lock()
-	defer log.mu.Unlock()
-	return append([]string(nil), log.values...)
-}
-
-func (log *observationLog) SetTerminal(terminal workers.ScriptResponseEventPayload) {
-	log.mu.Lock()
-	defer log.mu.Unlock()
-	log.terminal = terminal
-	if terminal.ExitCode != nil {
-		exitCode := *terminal.ExitCode
-		log.terminal.ExitCode = &exitCode
-	}
-}
-
-func (log *observationLog) Terminal() workers.ScriptResponseEventPayload {
-	log.mu.Lock()
-	defer log.mu.Unlock()
-	terminal := log.terminal
-	if log.terminal.ExitCode != nil {
-		exitCode := *log.terminal.ExitCode
-		terminal.ExitCode = &exitCode
-	}
-	return terminal
-}
-
-type sequenceClock struct {
-	mu    sync.Mutex
-	times []time.Time
-}
-
-func (clock *sequenceClock) Now() time.Time {
-	clock.mu.Lock()
-	defer clock.mu.Unlock()
-	if len(clock.times) == 0 {
-		return time.Time{}
-	}
-	value := clock.times[0]
-	clock.times = clock.times[1:]
-	return value
-}
-
-type nonStreamingCommandRunner struct{}
-
-func (nonStreamingCommandRunner) Run(
-	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
-}
-
-type captureCommandRunner struct {
-	mu      sync.Mutex
-	request workers.CommandRequest
-	result  workers.CommandResult
-	calls   int
-}
-
-func (runner *captureCommandRunner) Run(
-	_ context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return runner.RunStreaming(context.Background(), request, nil)
-}
-
-func (runner *captureCommandRunner) RunStreaming(
-	_ context.Context,
-	request workers.CommandRequest,
-	_ platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	runner.calls++
-	runner.request = workers.CloneSubprocessExecutionRequest(request)
-	return runner.result, nil
-}
-
-func (runner *captureCommandRunner) Request() workers.CommandRequest {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return workers.CloneSubprocessExecutionRequest(runner.request)
-}
-
-func (runner *captureCommandRunner) Calls() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return runner.calls
-}
-
-func assertFailureType(t *testing.T, err error, want workers.WorkFailureType) {
-	t.Helper()
-	var failure *workers.ProviderError
-	if !errors.As(err, &failure) || failure.Type != want {
-		t.Fatalf("error = %#v, want ProviderError type %q", err, want)
-	}
-}
-
-func assertEnvAbsent(t *testing.T, env []string, name string) {
-	t.Helper()
-	prefix := name + "="
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			t.Fatalf("environment %s = %#v, want absent when Factory declares bounded env", name, env)
-		}
-	}
-}
-
-func assertEnv(t *testing.T, env []string, name, want string) {
-	t.Helper()
-	prefix := name + "="
-	for _, entry := range env {
-		if entry == prefix+want {
-			return
-		}
-	}
-	t.Fatalf("environment %s = %#v, want %q", name, env, want)
-}
-
-func assertEnvCount(t *testing.T, env []string, name string, want int) {
-	t.Helper()
-	prefix := name + "="
-	count := 0
-	for _, entry := range env {
-		if len(entry) >= len(prefix) && entry[:len(prefix)] == prefix {
-			count++
-		}
-	}
-	if count != want {
-		t.Fatalf("environment %s count = %d, want %d in %#v", name, count, want, env)
-	}
 }

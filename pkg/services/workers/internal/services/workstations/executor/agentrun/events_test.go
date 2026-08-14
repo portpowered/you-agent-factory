@@ -64,7 +64,10 @@ func TestAgentRunSafeDiagnostics_IncludesTranscript(t *testing.T) {
 func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 	t.Parallel()
 
-	dispatch := work.WorkDispatch{DispatchID: "dispatch-42"}
+	dispatch := work.WorkDispatch{
+		DispatchID: "dispatch-42",
+		Execution:  work.ExecutionMetadata{CurrentTick: 7},
+	}
 	result := workerexecution.WorkResult{
 		Outcome: workerexecution.OutcomeAccepted,
 		Output:  "done",
@@ -78,6 +81,9 @@ func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 	)
 	if event.ID != "factory-event/agent-run-response/dispatch-42" || event.DispatchID != "dispatch-42" {
 		t.Fatalf("event identity = %#v", event)
+	}
+	if event.Tick != 7 {
+		t.Fatalf("event tick = %d, want 7", event.Tick)
 	}
 	if event.Payload.DurationMillis != 1500 || event.Payload.AgentRunID != "dispatch-42/agent-run/1" {
 		t.Fatalf("payload = %#v", event.Payload)

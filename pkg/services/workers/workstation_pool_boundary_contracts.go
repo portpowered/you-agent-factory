@@ -62,9 +62,21 @@ type WorkstationPoolBoundary interface {
 // WorkstationPoolBoundaryConfig assembles one immutable workstation-route
 // snapshot for a runtime session.
 type WorkstationPoolBoundaryConfig struct {
-	Service    WorkstationExecutionService
-	Executors  map[string]WorkerExecutor
-	RouteNames []string
+	// Service is the compatibility pool service used when no factory is
+	// supplied. Production composition should provide ServiceFactory so every
+	// Factory Runtime receives a private pool owner rather than mutating the
+	// process-scoped Workers root.
+	Service WorkstationExecutionService
+	// ServiceFactory constructs the pool owner for this runtime. The returned
+	// service must be inert until StartWorkstationPool receives the immutable
+	// route bindings for this runtime.
+	ServiceFactory func() WorkstationExecutionService
+	Executors      map[string]WorkerExecutor
+	// RequestExecutor handles detached workstation requests when a runtime
+	// supplies the shared stateless Execute boundary instead of a legacy
+	// per-worker executor map.
+	RequestExecutor WorkstationRequestExecutor
+	RouteNames      []string
 	// ProviderInvocation is the executor for Workers with no authored
 	// workstation behind them, published under ProviderInvocationRoute. It is
 	// assembled as a worker-role binding rather than a workstation-role one

@@ -29,7 +29,6 @@ import (
 
 // NewRuntime constructs the public Workers runtime role.
 func NewRuntime(
-	sessions CurrentRuntimeResolver,
 	modelService models.Service,
 	providersService providers.Service,
 	modelsScope models.RuntimeScopeRef,
@@ -64,7 +63,6 @@ func NewRuntime(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := New(
-		sessions,
 		modelService,
 		providersService,
 		providerCommandRunner,
@@ -113,11 +111,10 @@ func NewRuntime(
 	return runtimeService, nil
 }
 
-// NewRuntimeWithSelection constructs the Workers runtime while preserving
+// NewConfiguredRuntime constructs the legacy runtime compatibility role while preserving
 // whether command runners came from an external edge or Wire's production
 // adapter selection.
-func NewRuntimeWithSelection(
-	sessions CurrentRuntimeResolver,
+func NewConfiguredRuntime(
 	modelService models.Service,
 	providersService providers.Service,
 	modelsScope models.RuntimeScopeRef,
@@ -158,7 +155,7 @@ func NewRuntimeWithSelection(
 	statelessExecute workers.Service,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
-		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
+		modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
 		progressPublisher, allocator, logger, verbose, factoryRunnerID, runWorktree, workerReasoningEffort, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
@@ -190,10 +187,8 @@ func NewRuntimeWithSelection(
 			service.executorBuilder = builder.
 				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
 				WithProviderIdentityResolution(providerRegistry.CanonicalIdentity).
-				WithProviderRegistry(providerRegistry).
-				WithAgentRunnerCutover(true)
+				WithProviderRegistry(providerRegistry)
 		}
-		service.agentDispatchUsesRegisteredRunner = true
 	}
 	return service, nil
 }

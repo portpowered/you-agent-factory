@@ -62,6 +62,9 @@ func TestNewWorkstationPool_IsInertUntilStarted(t *testing.T) {
 	if !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
 		t.Fatalf("DispatchWorkstation before start = %v, want ErrWorkstationPoolUnavailable", err)
 	}
+	if _, err := pool.CancelWorkstationDispatch(context.Background(), workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-1"}); err == nil {
+		t.Fatal("CancelWorkstationDispatch before start error = nil, want unavailable pool error")
+	}
 }
 
 // TestNewWorkstationPool_StoppedPoolRefusesFurtherWork pins the lifecycle a

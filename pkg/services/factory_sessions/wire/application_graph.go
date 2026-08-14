@@ -113,11 +113,8 @@ type (
 	WorkFactory                            = runtimeopening.WorkFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
-	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
 	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
 	DurableExecution                       = runtimeopening.DurableExecution
-	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
 	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
 	ProviderCommandRunner                  = runtimeopening.ProviderCommandRunner
 	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
@@ -166,7 +163,6 @@ var (
 	NewProcessLifecycleFactory = processlifecycle.NewFactory
 	NewRuntimeHostService      = runtimehosting.New
 	NewDurableExecutionRuntime = runtimeopening.NewDurableExecution
-	NewWorkerExecutionRuntime  = runtimeopening.NewWorkerExecution
 	ModelHostDiagnosticLogger  = runtimeopening.ModelHostDiagnosticLogger
 	ModelHostDiagnosticMetrics = runtimeopening.ModelHostDiagnosticMetrics
 	NewExecutionOpeningFactory = executionopening.NewFactory

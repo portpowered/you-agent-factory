@@ -21,12 +21,10 @@ import (
 // ProviderRegistryRebinder reconstructs the provider registry for runtime command edges.
 type ProviderRegistryRebinder = workersinternal.ProviderRegistryRebinder
 
-// CurrentRuntimeResolver resolves the active Factory Session runtime.
-type CurrentRuntimeResolver = workersinternal.CurrentRuntimeResolver
-
-// NewRuntimeWithSelection constructs the Workers runtime through owner-internal implementation.
-func NewRuntimeWithSelection(
-	sessions CurrentRuntimeResolver,
+// NewConfiguredRuntime constructs the legacy runtime compatibility role through
+// the owner-internal implementation. Process composition uses NewService and
+// never invokes this compatibility path.
+func NewConfiguredRuntime(
 	modelService models.Service,
 	providersService providers.Service,
 	modelsScope models.RuntimeScopeRef,
@@ -66,8 +64,7 @@ func NewRuntimeWithSelection(
 	providerRegistryRebinder ProviderRegistryRebinder,
 	statelessExecute workers.Service,
 ) (workers.RuntimeService, error) {
-	return workersinternal.NewRuntimeWithSelection(
-		sessions,
+	return workersinternal.NewConfiguredRuntime(
 		modelService,
 		providersService,
 		modelsScope,

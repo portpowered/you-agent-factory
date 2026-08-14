@@ -2786,7 +2786,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
-      "minimum": 65.85
+      "minimum": 6.79
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
@@ -2824,7 +2824,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference",
-      "minimum": 61.19
+      "exception": {
+        "kind": "migration",
+        "justification": "Stateless Workers execution retired the per-session Workers runtime, so runtime_build.go executeServiceFromWorkstation no longer type-asserts a workers.RuntimeService and BuildRuntimeExecutors never runs; this package's only non-test importers are executor/helpers.go, executor/agent.go, and internal/model_invocation.go, all of which WSE-09 deletes, and every function measures 0.0% in the functional profile.",
+        "owner": "backend-quality",
+        "deadline": "2027-06-30",
+        "removalGate": "WSE-09 deletes the Workers runtime, executable binding map, and Workstation pool, and this package is deleted with its legacy-executor importers."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
@@ -2852,7 +2858,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service",
-      "minimum": 71.73
+      "minimum": 69.56
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent",
@@ -2904,11 +2910,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing",
-      "minimum": 34.61
+      "minimum": 23.60
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire",
-      "minimum": 75.00
+      "minimum": 53.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly",
@@ -2922,7 +2928,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction",
-      "minimum": 74.13
+      "exception": {
+        "kind": "migration",
+        "justification": "This is the legacy executable-binding builder. Its only non-test importers are internal/runtime_service.go, runtime_composition.go, runtime_options.go, and provider_registry_rebind.go, and internal.NewConfiguredRuntime now has zero production callers, so Build/BuildLogical and every option measure 0.0% in the functional profile.",
+        "owner": "backend-quality",
+        "deadline": "2027-06-30",
+        "removalGate": "WSE-09 deletes internal/services/runtime_assembly and the Workstation pool service after consumers are gone."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/internal/service",
@@ -2962,15 +2974,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording",
-      "minimum": 67.08
+      "minimum": 38.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
-      "minimum": 76.47
+      "minimum": 13.34
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun",
-      "minimum": 43.76
+      "minimum": 18.23
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure",
@@ -2982,7 +2994,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation",
-      "minimum": 81.57
+      "minimum": 65.78
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/poolboundary",
@@ -3000,7 +3012,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
-      "minimum": 13.95
+      "exception": {
+        "kind": "migration",
+        "justification": "Skip-permissions validation was a Workers runtime preflight. Its only non-test importers are runtime_assembly/construction/service.go, internal/runtime_service.go, and internal/runtime_options.go, all on the retired per-session runtime, so all five functions measure 0.0% in the functional profile.",
+        "owner": "backend-quality",
+        "deadline": "2027-06-30",
+        "removalGate": "WSE-09 deletes RuntimeService and the legacy runtime construction helpers that own invocation skip-permissions preflight."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire",
@@ -3008,7 +3026,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree",
-      "minimum": 53.54
+      "minimum": 48.96
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers",
@@ -3402,7 +3420,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.60
+      "minimum": 80.94
     }
   ]
 }

@@ -235,6 +235,16 @@ func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error)
 	return document, nil
 }
 
+// ParseOutputAgainstSchema exposes the shared schema parser to the detached Workers normalizer.
+func ParseOutputAgainstSchema(content, schema string) (any, error) {
+	return parseOutputAgainstSchema(content, []byte(schema))
+}
+
+// CompletionValidationFailure exposes the shared provider completion policy to the detached Workers normalizer.
+func CompletionValidationFailure(response workerexecution.InferenceResponse) (string, string) {
+	return completionValidationFailure(response)
+}
+
 const (
 	structuredOutputValidationDetailLimit = 512
 	structuredOutputValidationCauseLimit  = 3

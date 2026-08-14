@@ -77,6 +77,33 @@ type contextualLogger struct {
 	fields []any
 }
 
+// commandExecutionLogger resolves the sink one command execution must write
+// to. The Runtime-selected sink travels with the request, so a process-scoped
+// runner constructed with a placeholder logger still reaches the opened
+// Runtime's log without consulting the execution context or retaining any
+// Factory Session state between requests.
+func commandExecutionLogger(req CommandRequest, logger logging.Logger) logging.Logger {
+	if req.ExecutionLogger != nil {
+		return logging.EnsureLogger(req.ExecutionLogger)
+	}
+	return logging.EnsureLogger(logger)
+}
+
+func commandResultForLogging(
+	runner CommandRunner,
+	ctx context.Context,
+	request CommandRequest,
+	result CommandResult,
+) CommandResult {
+	projector, ok := runner.(interface {
+		CommandResultForLogging(context.Context, CommandRequest, CommandResult) CommandResult
+	})
+	if !ok {
+		return result
+	}
+	return projector.CommandResultForLogging(ctx, request, result)
+}
+
 func commandContextLogger(logger logging.Logger, req CommandRequest) logging.Logger {
 	fields := workLogFields(req.Execution, "dispatch_id", req.DispatchID)
 	if req.WorkerType != "" {

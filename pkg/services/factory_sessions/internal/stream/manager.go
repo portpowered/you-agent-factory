@@ -153,6 +153,9 @@ func (m *Manager) inferenceProgressPublisher(
 	normalizedSessionID := normalizeSessionID(sessionID)
 	return func(fragment factorysessions.ProgressFragment) {
 		dispatchID := strings.TrimSpace(fragment.DispatchID)
+		if !shouldPublishProgressFragment(fragment) {
+			return
+		}
 		var session *livesession.LiveSession
 		defer func() {
 			if recovered := recover(); recovered != nil {
@@ -211,6 +214,24 @@ func (m *Manager) inferenceProgressPublisher(
 		if m.observer != nil {
 			m.observer.ObserveResponseStreamPublished(session, normalizedSessionID, stored)
 		}
+	}
+}
+
+// shouldPublishProgressFragment keeps Worker-owned ACP item progress out of
+// the Factory response stream. Worker Session history retains these facts,
+// while the Factory response stream receives the authoritative terminal
+// message/run records and the customer-facing reasoning and metadata updates.
+// Native adapter progress without a normalized kind remains eligible for the
+// native fragment mapper.
+func shouldPublishProgressFragment(fragment factorysessions.ProgressFragment) bool {
+	if fragment.Kind != factorysessions.ProgressFragmentKind {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(fragment.Metadata["kind"])) {
+	case "message", "tool", "run":
+		return false
+	default:
+		return true
 	}
 }
 

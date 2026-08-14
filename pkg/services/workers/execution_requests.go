@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -172,16 +173,21 @@ const (
 )
 
 type WorkstationExecutionRequest struct {
-	Dispatch                    work.WorkDispatch               `json:"dispatch"`
-	WorkerName                  string                          `json:"worker_name,omitempty"`
-	WorkerType                  string                          `json:"worker_type,omitempty"`
-	WorkstationType             string                          `json:"workstation_type,omitempty"`
-	RunnerID                    string                          `json:"runner_id,omitempty"`
-	RunnerSelectionSource       RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
-	ExecutorProvider            string                          `json:"executor_provider,omitempty"`
-	ProjectID                   string                          `json:"project_id,omitempty"`
-	FactorySessionID            string                          `json:"factory_session_id,omitempty"`
-	RecordingID                 string                          `json:"recording_id,omitempty"`
+	Dispatch              work.WorkDispatch     `json:"dispatch"`
+	WorkerName            string                `json:"worker_name,omitempty"`
+	WorkerType            string                `json:"worker_type,omitempty"`
+	WorkstationType       string                `json:"workstation_type,omitempty"`
+	RunnerID              string                `json:"runner_id,omitempty"`
+	RunnerSelectionSource RunnerSelectionSource `json:"runner_selection_source,omitempty"`
+	ExecutorProvider      string                `json:"executor_provider,omitempty"`
+	ProjectID             string                `json:"project_id,omitempty"`
+	FactorySessionID      string                `json:"factory_session_id,omitempty"`
+	RuntimeID             string                `json:"runtime_id,omitempty"`
+	RecordingID           string                `json:"recording_id,omitempty"`
+	GenerationID          string                `json:"generation_id,omitempty"`
+	// WorkflowContext carries the detached environment selected for this
+	// attempt when a compatibility workstation boundary forwards the request.
+	WorkflowContext             *Context                        `json:"-"`
 	Capabilities                *Capabilities                   `json:"capabilities,omitempty"`
 	InputTokens                 []any                           `json:"input_tokens,omitempty"`
 	ModelOperation              string                          `json:"model_operation,omitempty"`
@@ -221,6 +227,7 @@ type WorkstationExecutionRequest struct {
 
 type ProviderInferenceRequest struct {
 	Dispatch                     work.WorkDispatch               `json:"dispatch"`
+	Correlation                  ExecutionCorrelation            `json:"-"`
 	WorkerName                   string                          `json:"worker_name,omitempty"`
 	WorkerType                   string                          `json:"worker_type,omitempty"`
 	WorkstationType              string                          `json:"workstation_type,omitempty"`
@@ -253,6 +260,7 @@ type ProviderInferenceRequest struct {
 	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
+	WorkflowContext              *Context                        `json:"-"`
 	// ResumeSession carries an exact typed Providers reference for continuation
 	// attempts. When non-nil, the provider runner must call Providers.Continue
 	// with this value unchanged and must not select ordinary execution.
@@ -264,6 +272,12 @@ type ProviderInferenceRequest struct {
 	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
 	// It is intentionally excluded from serialized provider payloads.
 	TemporaryFiles TemporaryFileSystem `json:"-"`
+	// ExecutionLogger is the request-scoped command log sink installed by
+	// Workers Execute. Runners forward it to the Providers boundary so a
+	// process-scoped command runner can write this attempt's diagnostics to
+	// the opened Runtime's log. Like TemporaryFiles it is a detached
+	// request-scoped effect and is excluded from serialized provider payloads.
+	ExecutionLogger logging.Logger `json:"-"`
 }
 
 type RunnerExecutionRequest = ProviderInferenceRequest
@@ -285,6 +299,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.WorkflowContext = request.WorkflowContext.Clone()
 	return clone
 }
 
@@ -299,7 +314,9 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.TemporaryFiles = request.TemporaryFiles
+	clone.ExecutionLogger = request.ExecutionLogger
 	return clone
 }
 
@@ -420,6 +437,7 @@ type ExecuteRequest struct {
 type ExecutionCorrelation struct {
 	FactorySessionID string
 	RuntimeID        string
+	GenerationID     string
 	DispatchID       string
 	AttemptID        string
 	RequestID        string
@@ -427,10 +445,18 @@ type ExecutionCorrelation struct {
 }
 
 type ExecutionTarget struct {
-	WorkerName       string
-	WorkerType       string
-	WorkstationName  string
-	RunnerID         string
+	WorkerName      string
+	WorkerType      string
+	WorkstationName string
+	RunnerID        string
+	// ExecutorProvider preserves the authored execution mechanism separately
+	// from Provider, whose ID may be canonicalized to a concrete catalog ID.
+	ExecutorProvider string
+	// Noop accepts a worker dispatch without invoking a provider, model, or
+	// command runner. Runtime sets this only for an authored worker that has no
+	// runtime definition, preserving topology-only factories without retaining
+	// session-specific executor state in Workers.
+	Noop             bool
 	Capabilities     *Capabilities
 	Command          string
 	Args             []string
@@ -465,7 +491,16 @@ type PromptPolicy struct {
 }
 
 type ToolPolicy struct {
-	ExecutionMode                RunnerToolExecutionMode
+	ExecutionMode RunnerToolExecutionMode
+	// AgentLoop runs the attempt through the Workers agent-run harness instead
+	// of one provider attempt. Runtime owns the Factory definitions that decide
+	// it -- an AGENT_RUN workstation staffed by an agent worker -- and carries
+	// the decision in the detached request so Workers never reads a definition
+	// to route.
+	AgentLoop bool
+	// AgentToolPolicy is the authored agent tool policy the harness applies
+	// when AgentLoop is set. An empty value disables tool execution.
+	AgentToolPolicy              string
 	RequiredOptionalCapabilities []RunnerOptionalCapability
 }
 
@@ -475,6 +510,14 @@ type OutputPolicy struct {
 	StopToken                   string
 	DecisionEnvelope            bool
 	GoalRoutingDecisionEnvelope bool
+	// Classifier marks a classifier workstation dispatch. The Runtime-owned
+	// dispatch adapter validates the produced label before route matching so a
+	// malformed classifier output fails distinctly instead of reaching route
+	// matching as an unmatched label.
+	Classifier bool
+	// ScriptClassifier asks the Runtime-owned dispatch adapter to reduce a
+	// script classifier's stdout to its final label before route matching.
+	ScriptClassifier bool
 }
 
 type EnvironmentPolicy struct {
@@ -486,9 +529,13 @@ type EnvironmentPolicy struct {
 }
 
 type WorkspacePolicy struct {
-	Worktree           string
-	WorkingDirectory   string
-	PrepareWorktree    bool
+	Worktree         string
+	WorkingDirectory string
+	PrepareWorktree  bool
+	// RetainWorktree leaves a runtime-owned prepared checkout in place after
+	// the attempt. Stateless callers keep the default cleanup behavior; the
+	// Factory Runtime compatibility path owns its checkout beyond one attempt.
+	RetainWorktree     bool `json:"-"`
 	FactoryDirectory   string
 	CheckoutIdentifier string
 }
@@ -501,16 +548,48 @@ type ExecutionInput struct {
 	Work []WorkInput
 	// Dispatch preserves detached routing and replay facts that the Runtime
 	// must carry through an execution attempt without exposing executor state.
-	Dispatch         work.WorkDispatch
+	Dispatch work.WorkDispatch
+	// RecordingID remains the optional Worker Sessions recording identity. It
+	// is distinct from Correlation.RuntimeID, which identifies the live Runtime.
+	RecordingID      string
 	Invocation       work.InvocationArguments
 	ModelBindings    []ResolvedModelOperationBinding
 	ModelOperation   string
 	PreviousAttempts []AttemptSummary
 	Resume           *ProviderContinuationRef
+	// WorkflowContext is the complete detached context selected for this
+	// attempt. Workers never recovers it from a Factory Session or Runtime.
+	WorkflowContext *Context
+	// MockWorkers carries an optional request-scoped testing override. It is
+	// detached at Execute ingress and is consumed only by command-boundary
+	// adapters; it is never stored on the process Workers root.
+	MockWorkers *MockWorkersConfig
+	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
+	// ports for detached execution, such as Recordings replay. They are never
+	// serialized or retained by the process-scoped Workers service.
+	ProviderOverride      Provider      `json:"-"`
+	CommandRunnerOverride CommandRunner `json:"-"`
+	// PreparedRequestObserver receives the detached request after Workers has
+	// prepared request-scoped resources and before the runner starts. Runtime
+	// uses it to record the effective execution target without moving resource
+	// preparation into the runtime boundary.
+	PreparedRequestObserver func(ExecuteRequest) `json:"-"`
+	// ProgressPublisher carries the Runtime-selected observation sink for this
+	// attempt. It is an execution capability, not retained Workers state.
+	// ExecutionLogger carries the Runtime-selected structured log sink for this
+	// attempt. It is intentionally detached from process-scoped Workers state.
+	ExecutionLogger     logging.Logger      `json:"-"`
+	ProgressPublisher   ProgressPublisher   `json:"-"`
+	ScriptEventRecorder ScriptEventRecorder `json:"-"`
+	// InferenceEventRecorder receives the canonical provider request/response
+	// facts for this detached attempt. It is a request-scoped capability and is
+	// never retained by the process-scoped Workers service.
+	InferenceEventRecorder InferenceEventRecorder `json:"-"`
 }
 
 type WorkInput struct {
 	WorkID       string
+	Name         string
 	WorkTypeID   string
 	RequestID    string
 	Content      []work.WorkContentPart
@@ -577,26 +656,86 @@ type ExecutionMetrics struct {
 }
 
 func (request ExecuteRequest) Validate() error {
-	if strings.TrimSpace(request.Correlation.DispatchID) == "" {
-		return fmt.Errorf("%w: dispatch id is required", ErrInvalidExecuteRequest)
+	if err := request.Correlation.Validate(); err != nil {
+		return err
 	}
-	if strings.TrimSpace(request.Correlation.AttemptID) == "" {
-		return fmt.Errorf("%w: attempt id is required", ErrInvalidExecuteRequest)
+	if err := validateDetachedDispatch(request); err != nil {
+		return err
 	}
-	if strings.TrimSpace(request.Target.RunnerID) == "" &&
-		strings.TrimSpace(request.Target.Provider.ID) == "" &&
-		strings.TrimSpace(request.Target.Provider.Alias) == "" &&
-		strings.TrimSpace(request.Target.Model.Name) == "" {
+	if err := validateWorkflowContext(request); err != nil {
+		return err
+	}
+	if err := validateExecutionTarget(request.Target); err != nil {
+		return err
+	}
+	return validateResumeContinuation(request.Input.Resume)
+}
+
+func validateDetachedDispatch(request ExecuteRequest) error {
+	if dispatchID := strings.TrimSpace(request.Input.Dispatch.DispatchID); dispatchID != "" &&
+		dispatchID != strings.TrimSpace(request.Correlation.DispatchID) {
+		return fmt.Errorf("%w: dispatch identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
+	}
+	if request.Input.Dispatch.Execution.RequestID != "" &&
+		strings.TrimSpace(request.Correlation.RequestID) != "" &&
+		strings.TrimSpace(request.Input.Dispatch.Execution.RequestID) != strings.TrimSpace(request.Correlation.RequestID) {
+		return fmt.Errorf("%w: request identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
+	}
+	if request.Input.Dispatch.Execution.TraceID != "" &&
+		strings.TrimSpace(request.Correlation.TraceID) != "" &&
+		strings.TrimSpace(request.Input.Dispatch.Execution.TraceID) != strings.TrimSpace(request.Correlation.TraceID) {
+		return fmt.Errorf("%w: trace identity conflicts with detached dispatch", ErrInvalidExecuteRequest)
+	}
+	return nil
+}
+
+func validateWorkflowContext(request ExecuteRequest) error {
+	context := request.Input.WorkflowContext
+	if context == nil || strings.TrimSpace(context.SessionID) == "" ||
+		strings.TrimSpace(context.SessionID) == strings.TrimSpace(request.Correlation.FactorySessionID) {
+		return nil
+	}
+	return fmt.Errorf("%w: workflow context session identity conflicts with correlation", ErrInvalidExecuteRequest)
+}
+
+func validateExecutionTarget(target ExecutionTarget) error {
+	if strings.TrimSpace(target.RunnerID) == "" &&
+		strings.TrimSpace(target.Provider.ID) == "" &&
+		strings.TrimSpace(target.Provider.Alias) == "" &&
+		strings.TrimSpace(target.Model.Name) == "" {
 		return fmt.Errorf("%w: runner, provider, or model target is required", ErrInvalidExecuteRequest)
 	}
-	if request.Target.Timeout < 0 {
+	if target.Timeout < 0 {
 		return fmt.Errorf("%w: timeout must not be negative", ErrInvalidExecuteRequest)
 	}
-	if request.Input.Resume != nil &&
-		strings.TrimSpace(request.Input.Resume.Provider) == "" &&
-		strings.TrimSpace(request.Input.Resume.ProviderSessionID) == "" &&
-		strings.TrimSpace(request.Input.Resume.ExternalRef) == "" {
-		return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
+	return nil
+}
+
+func validateResumeContinuation(resume *ProviderContinuationRef) error {
+	if resume == nil || strings.TrimSpace(resume.Provider) != "" ||
+		strings.TrimSpace(resume.ProviderSessionID) != "" || strings.TrimSpace(resume.ExternalRef) != "" {
+		return nil
+	}
+	return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
+}
+
+// Validate checks the complete identity required to attribute one detached
+// attempt to the Factory Session and Runtime that admitted it.
+func (correlation ExecutionCorrelation) Validate() error {
+	required := []struct {
+		name  string
+		value string
+	}{
+		{name: "factory session id", value: correlation.FactorySessionID},
+		{name: "runtime id", value: correlation.RuntimeID},
+		{name: "generation id", value: correlation.GenerationID},
+		{name: "dispatch id", value: correlation.DispatchID},
+		{name: "attempt id", value: correlation.AttemptID},
+	}
+	for _, item := range required {
+		if strings.TrimSpace(item.value) == "" {
+			return fmt.Errorf("%w: %s is required", ErrInvalidExecuteRequest, item.name)
+		}
 	}
 	return nil
 }
@@ -650,6 +789,8 @@ func (input ExecutionInput) Clone() ExecutionInput {
 		resume := *input.Resume
 		clone.Resume = &resume
 	}
+	clone.WorkflowContext = input.WorkflowContext.Clone()
+	clone.MockWorkers = input.MockWorkers.Clone()
 	return clone
 }
 

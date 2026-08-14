@@ -207,7 +207,7 @@ type LoggingCommandRunner struct {
 }
 
 func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	logger := logging.EnsureLogger(r.Logger)
+	logger := commandExecutionLogger(req, r.Logger)
 	runner := r.Runner
 	if runner == nil {
 		return CommandResult{}, errors.New("workers logging command runner is required")
@@ -220,8 +220,9 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 	started := r.Clock.Now()
 	result, err := runner.Run(ctx, req)
 	duration := r.Clock.Now().Sub(started)
-	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
-	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
+	loggedResult := commandResultForLogging(runner, ctx, req, result)
+	logger.Info("command runner: request completed", commandCompletionLogFields(req, loggedResult, duration, commandResultStatus(ctx, loggedResult, err), err)...)
+	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, loggedResult, duration)...)
 	return result, err
 }
 
@@ -233,7 +234,7 @@ func (r LoggingCommandRunner) RunStreaming(
 	req CommandRequest,
 	observer OutputChunkObserver,
 ) (CommandResult, error) {
-	logger := logging.EnsureLogger(r.Logger)
+	logger := commandExecutionLogger(req, r.Logger)
 	if r.Runner == nil {
 		return CommandResult{}, errors.New("workers logging command runner is required")
 	}
@@ -254,8 +255,9 @@ func (r LoggingCommandRunner) RunStreaming(
 		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
 	}
 	duration := r.Clock.Now().Sub(started)
-	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
-	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
+	loggedResult := commandResultForLogging(r.Runner, ctx, req, result)
+	logger.Info("command runner: request completed", commandCompletionLogFields(req, loggedResult, duration, commandResultStatus(ctx, loggedResult, err), err)...)
+	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, loggedResult, duration)...)
 	return result, err
 }
 

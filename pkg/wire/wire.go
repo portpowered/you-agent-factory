@@ -92,7 +92,6 @@ var servicesSet = wire.NewSet(
 	provideOperatorConfigLoader,
 	provideOperatorBackendScopeEnsurer,
 	provideDurableExecutionFactory,
-	provideWorkerExecutionFactory,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,
@@ -220,11 +219,9 @@ var servicesSet = wire.NewSet(
 	provideWorkersWorkstationFileSystem,
 	provideWorkersProviderTemporaryFileSystem,
 	provideAgyPTYAllocator,
-	provideWorkersRuntimeFactory,
 	provideWorkersRuntimeExecutorsFactory,
 	provideProviderInvocationExecutorFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
 	provideFactoryDefinitionsRuntimeRouter,
 	provideFactoryDefinitionsRoot,
@@ -285,6 +282,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 
 var workerServiceSet = wire.NewSet(
 	provideStatelessWorkersService,
+	provideWorkersAgentToolFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
@@ -305,6 +303,10 @@ var statelessWorkersSet = wire.NewSet(
 	provideWorkersProviderTemporaryFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
 	provideStatelessWorkersService,
 )
 

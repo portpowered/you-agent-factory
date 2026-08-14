@@ -140,8 +140,11 @@ func TestCodexWorktreeReleaseRemovesCreatedCheckout(t *testing.T) {
 
 	result, err := service.Execute(context.Background(), workerexecution.ExecuteRequest{
 		Correlation: workerexecution.ExecutionCorrelation{
-			DispatchID: "dispatch-release",
-			AttemptID:  "attempt-release",
+			FactorySessionID: "session-functional-worktree",
+			RuntimeID:        "runtime-functional-worktree",
+			GenerationID:     "generation-functional-worktree",
+			DispatchID:       "dispatch-release",
+			AttemptID:        "attempt-release",
 		},
 		Target: workerexecution.ExecutionTarget{
 			WorkerName: "script-worker",

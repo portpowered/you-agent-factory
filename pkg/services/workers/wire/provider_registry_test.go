@@ -88,7 +88,78 @@ func TestNewProviderRegistryRejectsCanceledContext(t *testing.T) {
 	}
 }
 
+func TestProviderRegistryProjectsCustomCapabilities(t *testing.T) {
+	t.Parallel()
+
+	registry, err := NewProviderRegistry(context.Background(), &customRegistryProvidersFake{})
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() = %v", err)
+	}
+	identities := registry.RunnerIdentities()
+	if len(identities) != 2 || identities[0] != "codex" || identities[1] != "custom-provider" {
+		t.Fatalf("RunnerIdentities() = %v, want sorted built-in and custom providers", identities)
+	}
+	metadata, err := registry.RunnerMetadata("custom")
+	if err != nil {
+		t.Fatalf("RunnerMetadata(custom) = %v", err)
+	}
+	if metadata.ID != "custom-provider" || metadata.DisplayName != "Custom Provider" || len(metadata.Capabilities.Optional) != 3 {
+		t.Fatalf("RunnerMetadata(custom) = %#v, want custom optional capability projection", metadata)
+	}
+	for _, capability := range metadata.Capabilities.Optional {
+		if capability.Status != workers.RunnerOptionalCapabilityStatusSupported {
+			t.Fatalf("custom capability = %#v, want supported", capability)
+		}
+	}
+}
+
+func TestProviderRegistryResolvesAllSelectionSources(t *testing.T) {
+	t.Parallel()
+
+	registry, err := NewProviderRegistry(context.Background(), &customRegistryProvidersFake{})
+	if err != nil {
+		t.Fatalf("NewProviderRegistry() = %v", err)
+	}
+
+	for _, source := range []providers.SelectionSource{
+		providers.SelectionSourceWorkstation,
+		providers.SelectionSourceFactory,
+		providers.SelectionSourceLegacyProvider,
+		providers.SelectionSourceDefault,
+	} {
+		workstation, factory, legacy := "", "", ""
+		switch source {
+		case providers.SelectionSourceWorkstation:
+			workstation = "codex"
+		case providers.SelectionSourceFactory:
+			factory = "openai"
+		case providers.SelectionSourceLegacyProvider:
+			legacy = "codex"
+		}
+		selection, err := registry.ResolveRunnerSelection(workstation, factory, legacy)
+		if err != nil {
+			t.Fatalf("ResolveRunnerSelection(%q) = %v", source, err)
+		}
+		if selection.Source != selectionSource(source) {
+			t.Fatalf("selection source for %q = %q, want %q", source, selection.Source, selectionSource(source))
+		}
+	}
+	if got := runnerIdentity(providers.IDAntigravity); got != workers.RunnerIDAntigravity {
+		t.Fatalf("runnerIdentity(antigravity) = %q, want %q", got, workers.RunnerIDAntigravity)
+	}
+}
+
+func TestNewProviderRegistryRejectsMissingService(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewProviderRegistry(context.Background(), nil); err == nil {
+		t.Fatal("NewProviderRegistry(nil) error = nil, want missing Providers service error")
+	}
+}
+
 type registryProvidersFake struct{}
+
+type customRegistryProvidersFake struct{ registryProvidersFake }
 
 var _ providers.Service = (*registryProvidersFake)(nil)
 
@@ -127,6 +198,29 @@ func (*registryProvidersFake) ListProviders(
 	}}}, nil
 }
 
+func (*customRegistryProvidersFake) ListProviders(
+	context.Context,
+	providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{Providers: []providers.Descriptor{
+		{
+			ID:           providers.IDCodex,
+			DisplayName:  "Codex",
+			Availability: providers.AvailabilitySelectable,
+		},
+		{
+			ID:           providers.ID("custom-provider"),
+			DisplayName:  "Custom Provider",
+			Availability: providers.AvailabilitySelectable,
+			Capabilities: []providers.Capability{
+				providers.CapabilityImageInput,
+				providers.CapabilitySessionResume,
+				providers.CapabilityStructuredOutput,
+			},
+		},
+	}}, nil
+}
+
 func (*registryProvidersFake) GetProvider(
 	_ context.Context,
 	request providers.GetProviderRequest,
@@ -143,6 +237,16 @@ func (*registryProvidersFake) GetProvider(
 		Availability: providers.AvailabilitySelectable,
 		Readiness:    providers.ReadinessReady,
 	}}, nil
+}
+
+func (*customRegistryProvidersFake) ResolveIdentity(
+	_ context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if strings.EqualFold(strings.TrimSpace(request.Identity), "custom") {
+		return providers.ResolveIdentityResult{ID: providers.ID("custom-provider")}, nil
+	}
+	return (&registryProvidersFake{}).ResolveIdentity(context.Background(), request)
 }
 
 func (*registryProvidersFake) ResolveIdentity(

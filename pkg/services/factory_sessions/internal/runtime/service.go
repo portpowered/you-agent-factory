@@ -14,6 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -22,18 +23,19 @@ import (
 // Registration contains the host-independent state needed to register one
 // live Factory Session runtime.
 type Registration struct {
-	SessionID            string
-	FactoryDir           string
-	FolderPath           string
-	ExecutionBaseDir     string
-	Target               factorysessions.TargetRef
-	Handle               any
-	Runtime              *factorysessions.LiveRuntime
-	Default              bool
-	Project              string
-	Select               bool
-	AllocateDefaultID    bool
-	AddEventTypeRecorder func(func(interfaces.FactoryEventType))
+	SessionID               string
+	RuntimeFactorySessionID string
+	FactoryDir              string
+	FolderPath              string
+	ExecutionBaseDir        string
+	Target                  factorysessions.TargetRef
+	Handle                  any
+	Runtime                 *factorysessions.LiveRuntime
+	Default                 bool
+	Project                 string
+	Select                  bool
+	AllocateDefaultID       bool
+	AddEventTypeRecorder    func(func(interfaces.FactoryEventType))
 }
 
 // RegistrationInput contains raw runtime and target paths used to normalize a
@@ -251,6 +253,23 @@ func (s *Service) CloseResponseStreams(session *livesession.LiveSession) {
 	s.responses.Close(livesession.CanonicalID(session))
 }
 
+// RotateResponseStreams retires one runtime's response streams while allowing
+// its replacement to allocate fresh dispatch streams under the same stable
+// Factory Session identity. The response-event store itself remains closed;
+// the replacement registers a new store whose publications continue at the
+// shared Events authority's sequence.
+func (s *Service) RotateResponseStreams(session *livesession.LiveSession) {
+	if s == nil || s.responses == nil || session == nil {
+		return
+	}
+	if s.responseEvents != nil {
+		s.responseEvents.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
+	s.responses.Rotate(livesession.CanonicalID(session))
+}
+
 // Registry exposes the canonical registry to bounded compatibility adapters.
 func (s *Service) Registry() sessionregistry.Service {
 	if s == nil {
@@ -305,6 +324,12 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 	)
 	if session == nil {
 		return nil
+	}
+	if runtimeSessionID := strings.TrimSpace(registration.RuntimeFactorySessionID); runtimeSessionID != "" {
+		session.RuntimeFactorySessionID = runtimeSessionID
+		if s.responseEvents == nil {
+			session.ResponseEvents = responseeventstore.NewSessionResponseEventStore(runtimeSessionID, s.clock, s.eventIDs)
+		}
 	}
 	if s.responseEvents != nil {
 		responseEvents, err := s.responseEvents.NewEventStore(livesession.CanonicalID(session), s.clock)

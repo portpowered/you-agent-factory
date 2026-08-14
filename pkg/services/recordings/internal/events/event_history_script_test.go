@@ -95,6 +95,7 @@ func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicP
 		ID:         "factory-event/agent-run-response/dispatch-agent",
 		DispatchID: "dispatch-agent",
 		EventTime:  eventTime,
+		Tick:       14,
 		Payload: workerexecution.AgentRunResponseEventPayload{
 			AgentRunID:     "dispatch-agent/agent-run/1",
 			Diagnostics:    diagnostics,
@@ -112,6 +113,9 @@ func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicP
 	}
 	if canonical[0].Context.DispatchID == nil || *canonical[0].Context.DispatchID != "dispatch-agent" {
 		t.Fatalf("dispatch ID = %#v, want dispatch-agent", canonical[0].Context.DispatchID)
+	}
+	if canonical[0].Context.Tick != 14 {
+		t.Fatalf("event tick = %d, want 14", canonical[0].Context.Tick)
 	}
 
 	publicEvents := generatedHistoryEvents(t, history)

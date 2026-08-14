@@ -2,21 +2,16 @@ package runtimeopening
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -245,175 +240,6 @@ func NewDurableExecution(
 		Service:         execution,
 		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
 	}, nil
-}
-
-// NewWorkerExecution constructs the Factory Session's own Workers runtime and
-// returns a SessionBuildFactory closure that reaches the same canonical
-// Workers wire construction boundary for every later Factory Session build,
-// with only the final per-build provider command runner, script command
-// runner, and progress publisher supplied explicitly. A nil argument to the
-// returned SessionBuildFactory preserves the resolved value used to
-// construct this Factory Session's own runtime -- the exact instance
-// resolved here, not read back off an already-built RuntimeService. Each
-// runtime the SessionBuildFactory constructs is independent and is reported
-// through registerSessionBuildRuntime so its caller can fold its lifecycle
-// into the Factory Session's own cleanup. registerSessionBuildRuntime reports
-// whether it accepted the registration; when it returns false (the Factory
-// Session's cleanup has already run), the SessionBuildFactory closes the
-// freshly constructed runtime itself instead of returning one nothing will
-// ever close.
-func NewWorkerExecution(
-	runtimeRequest factoryruntime.RuntimeOpeningRequest,
-	workerRequest workers.RuntimeOpeningRequest,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
-	progressPublisher workers.ProgressPublisher,
-	ptyAllocator workers.PTYAllocator,
-	providerOverride workers.Provider,
-	state roles.CurrentRuntimeResolver,
-	modelService models.Service,
-	modelsScope models.RuntimeScopeRef,
-	workService work.Service,
-	factory WorkersRuntimeFactory,
-	acpIntegrations []operatorconfig.ACPIntegration,
-	registerSessionBuildRuntime func(workers.RuntimeService) bool,
-) (workers.RuntimeService, workers.SessionBuildFactory, error) {
-	if factory == nil {
-		return nil, nil, fmt.Errorf("Workers runtime factory is required")
-	}
-	if clock == nil {
-		return nil, nil, fmt.Errorf("Factory Runtime clock is required")
-	}
-	if workService == nil {
-		return nil, nil, fmt.Errorf("Work service is required")
-	}
-	fixed := sessionBuildFixedRuntimeInputs{
-		state:                   state,
-		modelService:            modelService,
-		modelsScope:             modelsScope,
-		providerCommandRunner:   providerCommandRunner,
-		scriptCommandRunner:     scriptCommandRunner,
-		progressPublisher:       progressPublisher,
-		ptyAllocator:            ptyAllocator,
-		logger:                  logger,
-		verbose:                 runtimeRequest.Verbose,
-		runnerID:                workerRequest.RunnerID,
-		worktree:                workerRequest.Worktree,
-		workerReasoningEffort:   workerRequest.WorkerReasoningEffort,
-		skipPermissionsOverride: workerRequest.InvocationSkipPermissionsOverride,
-		providerOverride:        providerOverride,
-		now:                     clock.Now,
-		contentMaterializer:     work.ContentMaterializeFunc(workService.MaterializeContentURL),
-		acpIntegrations:         append([]operatorconfig.ACPIntegration(nil), acpIntegrations...),
-	}
-	base, err := factory(
-		fixed.state,
-		fixed.modelService,
-		fixed.modelsScope,
-		fixed.providerCommandRunner,
-		fixed.scriptCommandRunner,
-		fixed.progressPublisher,
-		fixed.ptyAllocator,
-		fixed.logger,
-		fixed.verbose,
-		fixed.runnerID,
-		fixed.worktree,
-		fixed.workerReasoningEffort,
-		fixed.skipPermissionsOverride,
-		fixed.providerOverride,
-		fixed.now,
-		fixed.contentMaterializer,
-		fixed.acpIntegrations,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	return base, newSessionBuildFactory(fixed, factory, registerSessionBuildRuntime), nil
-}
-
-// sessionBuildFixedRuntimeInputs carries the resolved construction inputs a
-// SessionBuildFactory closure reuses, unchanged, for every later Factory
-// Session build through the same canonical Workers wire construction
-// boundary -- the exact values NewWorkerExecution itself resolved, not
-// values read back off an already-built RuntimeService.
-type sessionBuildFixedRuntimeInputs struct {
-	state                   roles.CurrentRuntimeResolver
-	modelService            models.Service
-	modelsScope             models.RuntimeScopeRef
-	providerCommandRunner   workers.CommandRunner
-	scriptCommandRunner     workers.CommandRunner
-	progressPublisher       workers.ProgressPublisher
-	ptyAllocator            workers.PTYAllocator
-	logger                  *zap.Logger
-	verbose                 bool
-	runnerID                string
-	worktree                string
-	workerReasoningEffort   string
-	skipPermissionsOverride *bool
-	providerOverride        workers.Provider
-	now                     func() time.Time
-	contentMaterializer     work.ContentMaterializer
-	acpIntegrations         []operatorconfig.ACPIntegration
-}
-
-// newSessionBuildFactory returns the SessionBuildFactory closure
-// NewWorkerExecution hands to its caller. A nil per-build argument preserves
-// the matching fixed input instead of falling back to a zero value.
-func newSessionBuildFactory(
-	fixed sessionBuildFixedRuntimeInputs,
-	factory WorkersRuntimeFactory,
-	registerSessionBuildRuntime func(workers.RuntimeService) bool,
-) workers.SessionBuildFactory {
-	return func(
-		buildProviderCommandRunner workers.CommandRunner,
-		buildScriptCommandRunner workers.CommandRunner,
-		buildProgressPublisher workers.ProgressPublisher,
-	) (workers.RuntimeService, error) {
-		resolvedProviderCommandRunner := buildProviderCommandRunner
-		if resolvedProviderCommandRunner == nil {
-			resolvedProviderCommandRunner = fixed.providerCommandRunner
-		}
-		resolvedScriptCommandRunner := buildScriptCommandRunner
-		if resolvedScriptCommandRunner == nil {
-			resolvedScriptCommandRunner = fixed.scriptCommandRunner
-		}
-		resolvedProgressPublisher := buildProgressPublisher
-		if resolvedProgressPublisher == nil {
-			resolvedProgressPublisher = fixed.progressPublisher
-		}
-		built, err := factory(
-			fixed.state,
-			fixed.modelService,
-			fixed.modelsScope,
-			resolvedProviderCommandRunner,
-			resolvedScriptCommandRunner,
-			resolvedProgressPublisher,
-			fixed.ptyAllocator,
-			fixed.logger,
-			fixed.verbose,
-			fixed.runnerID,
-			fixed.worktree,
-			fixed.workerReasoningEffort,
-			fixed.skipPermissionsOverride,
-			fixed.providerOverride,
-			fixed.now,
-			fixed.contentMaterializer,
-			fixed.acpIntegrations,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if registerSessionBuildRuntime != nil && !registerSessionBuildRuntime(built) {
-			closeErr := built.Close(context.Background())
-			return nil, errors.Join(
-				fmt.Errorf("construct Worker runtime services: Factory Session is already closed"),
-				closeErr,
-			)
-		}
-		return built, nil
-	}
 }
 
 func resolveDefinitionPath(

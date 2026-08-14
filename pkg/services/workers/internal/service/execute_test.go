@@ -47,6 +47,101 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	assertSafeCompletedObservations(t, observations)
 }
 
+func TestExecuteNoopAcceptsWithoutRunnerOrObservations(t *testing.T) {
+	t.Parallel()
+
+	var runnerCalls atomic.Int32
+	var observationCalls atomic.Int32
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			return workers.RunnerExecutionResult{Content: "unexpected"}, nil
+		},
+	}, func(context.Context, workers.ExecutionObservation) error {
+		observationCalls.Add(1)
+		return nil
+	})
+
+	request := validExecuteRequest("dispatch-noop", "attempt-noop")
+	request.Target.RunnerID = workers.RunnerIDCodex
+	request.Target.Noop = true
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if result.Correlation != request.Correlation {
+		t.Fatalf("correlation = %#v, want %#v", result.Correlation, request.Correlation)
+	}
+	if len(result.Output.Primary) != 0 {
+		t.Fatalf("output = %#v, want empty output", result.Output)
+	}
+	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
+		t.Fatalf("runner calls = %d, observation calls = %d, want no calls", runnerCalls.Load(), observationCalls.Load())
+	}
+}
+
+func TestExecuteScriptProcessFailureRemainsTerminal(t *testing.T) {
+	t.Parallel()
+
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			return workers.RunnerExecutionResult{}, workers.NewProviderError(
+				workers.WorkFailureTypeInternalServerError,
+				"script process failed",
+				errors.New("exit status 1"),
+			)
+		},
+	}, nil)
+
+	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-script-failure", "attempt-script-failure"))
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		t.Fatalf("result = %#v, want failed result", result)
+	}
+	if result.Failure.Family != workers.WorkFailureFamilyTerminal || result.Failure.RetryHint {
+		t.Fatalf("script failure = %#v, want terminal non-retryable failure", result.Failure)
+	}
+}
+
+func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
+	t.Parallel()
+
+	service, err := executeservice.New(
+		&staticRunners{runner: &stubRunner{}},
+		nil,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(10, 0) },
+		nil,
+		nil,
+		nil,
+		func(string) (map[string]string, error) { return nil, nil },
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	rendered, err := service.RenderPrompt(
+		"{{ .Context.Project }} / {{ .Context.SessionID }}",
+		nil,
+		&workers.Context{ProjectID: "project-1", SessionID: "session-1"},
+	)
+	if err != nil {
+		t.Fatalf("RenderPrompt() error = %v", err)
+	}
+	if rendered != "project-1 / session-1" {
+		t.Fatalf("RenderPrompt() = %q, want detached context rendering", rendered)
+	}
+	var nilService *executeservice.Service
+	if _, err := nilService.RenderPrompt("hello", nil, nil); err == nil {
+		t.Fatal("nil Service RenderPrompt() error = nil, want unavailable service")
+	}
+}
+
 func assertAcceptedResult(
 	t *testing.T,
 	result workers.ExecuteResult,
@@ -58,7 +153,13 @@ func assertAcceptedResult(
 	if result.Outcome != workers.ExecutionOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
 	}
-	if result.Correlation.DispatchID != dispatchID || result.Correlation.AttemptID != attemptID {
+	if result.Correlation.FactorySessionID != "session-1" ||
+		result.Correlation.RuntimeID != "runtime-1" ||
+		result.Correlation.GenerationID != "generation-1" ||
+		result.Correlation.DispatchID != dispatchID ||
+		result.Correlation.AttemptID != attemptID ||
+		result.Correlation.RequestID != "request-1" ||
+		result.Correlation.TraceID != "trace-1" {
 		t.Fatalf("correlation = %#v", result.Correlation)
 	}
 	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != content {
@@ -71,6 +172,14 @@ func assertSafeCompletedObservations(t *testing.T, observations []workers.Execut
 	if len(observations) != 2 {
 		t.Fatalf("observations = %#v, want started and terminal", observations)
 	}
+	assertCompletedObservationShape(t, observations)
+	for _, observation := range observations {
+		assertDetachedObservation(t, observation)
+	}
+}
+
+func assertCompletedObservationShape(t *testing.T, observations []workers.ExecutionObservation) {
+	t.Helper()
 	if observations[0].Kind != workers.ExecutionObservationKindStarted {
 		t.Fatalf("first observation = %#v", observations[0])
 	}
@@ -80,11 +189,20 @@ func assertSafeCompletedObservations(t *testing.T, observations []workers.Execut
 	if observations[1].Sequence != 2 {
 		t.Fatalf("terminal sequence = %d, want 2", observations[1].Sequence)
 	}
-	for _, observation := range observations {
-		for _, value := range observation.Metadata {
-			if value == "raw-secret" || value == "secret-system" || value == "secret-user" {
-				t.Fatalf("unsafe value persisted in observation: %#v", observation)
-			}
+}
+
+func assertDetachedObservation(t *testing.T, observation workers.ExecutionObservation) {
+	t.Helper()
+	if observation.Correlation.FactorySessionID != "session-1" ||
+		observation.Correlation.RuntimeID != "runtime-1" ||
+		observation.Correlation.GenerationID != "generation-1" ||
+		observation.Correlation.RequestID != "request-1" ||
+		observation.Correlation.TraceID != "trace-1" {
+		t.Fatalf("observation correlation = %#v", observation.Correlation)
+	}
+	for _, value := range observation.Metadata {
+		if value == "raw-secret" || value == "secret-system" || value == "secret-user" {
+			t.Fatalf("unsafe value persisted in observation: %#v", observation)
 		}
 	}
 }
@@ -132,6 +250,116 @@ func TestExecuteClonesRequestBeforeRunnerStarts(t *testing.T) {
 	}
 	if got.WorkerType != "writer" {
 		t.Fatalf("runner worker type = %q, want writer", got.WorkerType)
+	}
+}
+
+func TestExecuteForwardsTargetTimeoutToRunner(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan workers.RunnerExecutionRequest, 1)
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(
+			_ context.Context,
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			captured <- request
+			return workers.RunnerExecutionResult{Content: "done"}, nil
+		},
+	}, nil)
+	request := validExecuteRequest("dispatch-timeout", "attempt-timeout")
+	request.Target.Timeout = 8 * time.Minute
+
+	if _, err := service.Execute(context.Background(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := (<-captured).PrintTimeout; got != 8*time.Minute {
+		t.Fatalf("runner PrintTimeout = %s, want 8m", got)
+	}
+}
+
+func TestExecuteIngressDetachesWorkflowContextBeforeRunnerStarts(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan workers.RunnerExecutionRequest, 1)
+	release := make(chan struct{})
+	runner := &stubRunner{
+		execute: func(
+			_ context.Context,
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			snapshot := workers.CloneProviderInferenceRequest(request)
+			request.WorkflowContext.EnvVars["TOKEN"] = "runner-mutated"
+			captured <- snapshot
+			<-release
+			return workers.RunnerExecutionResult{Content: "done"}, nil
+		},
+	}
+	service := mustExecuteService(t, runner, nil)
+	request := validExecuteRequest("dispatch-context", "attempt-context")
+	request.Input.WorkflowContext = &workers.Context{
+		FactoryDirectory: "factory-original",
+		WorkDirectory:    "work-original",
+		EnvVars:          map[string]string{"TOKEN": "original"},
+		ArtifactDir:      "artifacts-original",
+		ProjectID:        "project-original",
+		SessionID:        "session-1",
+	}
+
+	done := make(chan workers.ExecuteResult, 1)
+	go func() {
+		result, err := service.Execute(context.Background(), request)
+		if err != nil {
+			t.Errorf("Execute() error = %v", err)
+		}
+		done <- result
+	}()
+
+	got := <-captured
+	request.Input.WorkflowContext.EnvVars["TOKEN"] = "caller-mutated"
+	close(release)
+	<-done
+
+	if got.WorkflowContext == nil || got.WorkflowContext.EnvVars["TOKEN"] != "original" {
+		t.Fatalf("runner workflow context = %#v, want detached original", got.WorkflowContext)
+	}
+	if request.Input.WorkflowContext.EnvVars["TOKEN"] != "caller-mutated" {
+		t.Fatalf("caller workflow context = %#v, want caller mutation isolated", request.Input.WorkflowContext)
+	}
+}
+
+func TestExecuteRejectsConflictingDetachedIdentityBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	var runnerCalls atomic.Int32
+	var observationCalls atomic.Int32
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			return workers.RunnerExecutionResult{Content: "should-not-run"}, nil
+		},
+	}, func(context.Context, workers.ExecutionObservation) error {
+		observationCalls.Add(1)
+		return nil
+	})
+	request := validExecuteRequest("dispatch-identity", "attempt-identity")
+	request.Input.Dispatch.DispatchID = "different-dispatch"
+
+	_, err := service.Execute(context.Background(), request)
+	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("Execute() error = %v, want ErrInvalidExecuteRequest", err)
+	}
+	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
+		t.Fatalf("invalid request effects = runner %d observations %d, want zero", runnerCalls.Load(), observationCalls.Load())
+	}
+
+	request = validExecuteRequest("dispatch-missing-generation", "attempt-missing-generation")
+	request.Correlation.GenerationID = ""
+	_, err = service.Execute(context.Background(), request)
+	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("missing generation Execute() error = %v, want ErrInvalidExecuteRequest", err)
+	}
+	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
+		t.Fatalf("missing identity effects = runner %d observations %d, want zero", runnerCalls.Load(), observationCalls.Load())
 	}
 }
 
@@ -647,6 +875,7 @@ func validExecuteRequest(dispatchID, attemptID string) workers.ExecuteRequest {
 		Correlation: workers.ExecutionCorrelation{
 			FactorySessionID: "session-1",
 			RuntimeID:        "runtime-1",
+			GenerationID:     "generation-1",
 			DispatchID:       dispatchID,
 			AttemptID:        attemptID,
 			RequestID:        "request-1",

@@ -16,6 +16,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
@@ -81,7 +82,6 @@ type Service struct {
 	resolveRunner                     workers.RunnerSelectionResolver
 	resolveProvider                   workers.ProviderIdentityResolver
 	providerRegistry                  workers.ProviderRegistry
-	agentDispatchUsesRegisteredRunner bool
 }
 
 // New constructs a worker executor service from process-owned factories.
@@ -167,18 +167,6 @@ func (s *Service) WithProviderRegistry(registry workers.ProviderRegistry) *Servi
 	}
 	clone := *s
 	clone.providerRegistry = registry
-	return &clone
-}
-
-// WithAgentRunnerCutover returns a service copy that resolves agent dispatch
-// through the registered parent-private Agent Runner and injected Providers
-// root instead of the superseded provider-factory runner path.
-func (s *Service) WithAgentRunnerCutover(enabled bool) *Service {
-	if s == nil {
-		return nil
-	}
-	clone := *s
-	clone.agentDispatchUsesRegisteredRunner = enabled
 	return &clone
 }
 
@@ -369,8 +357,9 @@ func (s *Service) resolveRegisteredAgentRunner(
 	}
 	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
 	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
-		Providers: s.providers,
-		Publish:   publish,
+		Providers:         s.providers,
+		Publish:           publish,
+		DecisionEnvelopes: s.decisionEnvelopes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct agent runner registry: %w", err)
@@ -408,7 +397,7 @@ func recordProviderRunner(
 	recorder workers.InferenceEventRecorder,
 	clock func() time.Time,
 ) workers.Runner {
-	return runner
+	return workerrecording.NewProviderRunner(runner, recorder, clock)
 }
 
 func (a runnerProviderAdapter) Infer(

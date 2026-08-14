@@ -28,8 +28,11 @@ func TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot(t *testing.T) {
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "functional-stateless-dispatch",
-			AttemptID:  "functional-stateless-attempt",
+			FactorySessionID: "session-functional",
+			RuntimeID:        "runtime-functional",
+			GenerationID:     "generation-functional",
+			DispatchID:       "functional-stateless-dispatch",
+			AttemptID:        "functional-stateless-attempt",
 		},
 		Target: workers.ExecutionTarget{
 			WorkerName: "script-worker",

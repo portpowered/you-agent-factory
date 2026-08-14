@@ -45,7 +45,14 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 	if queueCapacity <= 0 {
 		queueCapacity = DefaultRuntimePoolBindingCapacity
 	}
-	adapter := workerExecutorRequestAdapter{executors: cfg.Executors}
+	service := cfg.Service
+	if cfg.ServiceFactory != nil {
+		service = cfg.ServiceFactory()
+	}
+	adapter := workerExecutorRequestAdapter{
+		executors:       cfg.Executors,
+		requestExecutor: cfg.RequestExecutor,
+	}
 	bindings := assembleWorkstationPoolBindings(cfg.RouteNames, adapter, capacity, queueCapacity)
 	if cfg.ProviderInvocation != nil {
 		// The role kind is workstation, not worker, because every route in this
@@ -64,7 +71,7 @@ func NewWorkstationPoolBoundary(cfg WorkstationPoolBoundaryConfig) WorkstationPo
 		})
 	}
 	return &workstationPoolBoundary{
-		service:  cfg.Service,
+		service:  service,
 		bindings: bindings,
 		async:    cfg.Async,
 	}
@@ -80,7 +87,8 @@ type workstationPoolBoundary struct {
 }
 
 type workerExecutorRequestAdapter struct {
-	executors map[string]WorkerExecutor
+	executors       map[string]WorkerExecutor
+	requestExecutor WorkstationRequestExecutor
 }
 
 func (a workerExecutorRequestAdapter) Execute(
@@ -101,6 +109,13 @@ func (a workerExecutorRequestAdapter) Execute(
 	workerType := request.WorkerType
 	if workerType == "" {
 		workerType = request.Dispatch.WorkerType
+	}
+	// The request executor is the canonical stateless Workers boundary. Legacy
+	// per-worker executors remain available only for callers that do not supply
+	// that boundary; preferring them here would silently bypass request-scoped
+	// selection, logging, replay effects, and progress ownership.
+	if a.requestExecutor != nil {
+		return a.requestExecutor.Execute(ctx, request)
 	}
 	executor := a.executors[workerType]
 	if executor == nil {

@@ -38,8 +38,11 @@ func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 	for _, command := range []string{"script-a", "script-b"} {
 		_, err := fixture.service.Execute(context.Background(), workers.ExecuteRequest{
 			Correlation: workers.ExecutionCorrelation{
-				DispatchID: command,
-				AttemptID:  "attempt-" + command,
+				FactorySessionID: "session-stateless",
+				RuntimeID:        "runtime-stateless",
+				GenerationID:     "generation-stateless",
+				DispatchID:       command,
+				AttemptID:        "attempt-" + command,
 			},
 			Target: workers.ExecutionTarget{
 				WorkerName: "script-worker",
@@ -68,8 +71,11 @@ func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 	for _, model := range []string{"model-a", "model-b"} {
 		_, err := fixture.service.Execute(context.Background(), workers.ExecuteRequest{
 			Correlation: workers.ExecutionCorrelation{
-				DispatchID: model,
-				AttemptID:  "attempt-" + model,
+				FactorySessionID: "session-stateless",
+				RuntimeID:        "runtime-stateless",
+				GenerationID:     "generation-stateless",
+				DispatchID:       model,
+				AttemptID:        "attempt-" + model,
 			},
 			Target: workers.ExecutionTarget{
 				WorkerName: runners.InferenceIdentity,
@@ -98,8 +104,11 @@ func TestNewServiceExecuteNormalizesOutcomeAndOutputContractPolicy(t *testing.T)
 	fixture := newStatelessTestFixture(t)
 	base := workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
-			DispatchID: "dispatch-outcome",
-			AttemptID:  "attempt-outcome",
+			FactorySessionID: "session-stateless",
+			RuntimeID:        "runtime-stateless",
+			GenerationID:     "generation-stateless",
+			DispatchID:       "dispatch-outcome",
+			AttemptID:        "attempt-outcome",
 		},
 		Target: workers.ExecutionTarget{
 			WorkerName: runners.AgentIdentity,
@@ -165,6 +174,73 @@ func TestNewServiceExecuteNormalizesOutcomeAndOutputContractPolicy(t *testing.T)
 	}
 }
 
+func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	override := &statelessProviderOverride{}
+	service, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+		override,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	var events []workers.InferenceEvent
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-override",
+			RuntimeID:        "runtime-override",
+			GenerationID:     "generation-override",
+			DispatchID:       "dispatch-override",
+			AttemptID:        "attempt-override",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: runners.AgentIdentity,
+			RunnerID:   runners.AgentIdentity,
+			Provider:   workers.ProviderReference{ID: string(providers.IDCodex)},
+			Output:     workers.OutputPolicy{StopToken: "<COMPLETE>"},
+			Prompt:     workers.PromptPolicy{UserMessage: "override prompt"},
+		},
+		Input: workers.ExecutionInput{
+			InferenceEventRecorder: func(event workers.InferenceEvent) {
+				events = append(events, event)
+			},
+		},
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if override.calls.Load() != 1 || override.request.Correlation != request.Correlation {
+		t.Fatalf("provider override calls/request = %d/%#v, want one detached request", override.calls.Load(), override.request)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
+		result.Output.Primary[0].Text != "override output\n<COMPLETE>" {
+		t.Fatalf("override result = %#v, want accepted normalized output", result)
+	}
+	if len(events) != 2 || events[0].Request == nil || events[1].Response == nil {
+		t.Fatalf("inference events = %#v, want request and response", events)
+	}
+	if events[0].Request.InferenceRequestID == "" || events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
+		t.Fatalf("inference request correlation = %#v, want matching IDs", events)
+	}
+	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "session-attempt-override" {
+		t.Fatalf("provider session event = %#v, want override session identity", events[1].Response.ProviderSession)
+	}
+}
+
 type statelessTestFixture struct {
 	service  workers.Service
 	provider *statelessTestProviders
@@ -180,8 +256,9 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 	local := &statelessTestLocalInvoker{}
 	service, err := NewService(
 		runners.AgentDependencies{
-			Providers: provider,
-			Publish:   func(workers.ProgressFragment) {},
+			Providers:         provider,
+			Publish:           func(workers.ProgressFragment) {},
+			DecisionEnvelopes: statelessDecisionEnvelopeDouble{},
 		},
 		runners.ScriptConfig{
 			Command:          "fixture-script",
@@ -205,6 +282,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		nil,
 		nil,
 		func() time.Time { return time.Unix(1, 0) },
+		nil,
 		nil,
 		nil,
 		nil,
@@ -260,6 +338,7 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 			); err == nil {
 				t.Fatal("NewService() error = nil, want construction validation error")
 			}
@@ -283,6 +362,7 @@ func TestNewServiceRejectsMissingExecuteClock(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	); err == nil {
 		t.Fatal("NewService() error = nil, want missing Execute clock error")
 	}
@@ -299,8 +379,9 @@ type statelessConstructionInputs struct {
 func newStatelessConstructionInputs() statelessConstructionInputs {
 	return statelessConstructionInputs{
 		agentDependencies: runners.AgentDependencies{
-			Providers: &statelessTestProviders{},
-			Publish:   func(workers.ProgressFragment) {},
+			Providers:         &statelessTestProviders{},
+			Publish:           func(workers.ProgressFragment) {},
+			DecisionEnvelopes: statelessDecisionEnvelopeDouble{},
 		},
 		scriptConfig: runners.ScriptConfig{
 			Command:          "fixture-script",
@@ -338,8 +419,11 @@ func statelessHappyPathCases() []statelessHappyPathCase {
 			name: "script",
 			request: workers.ExecuteRequest{
 				Correlation: workers.ExecutionCorrelation{
-					DispatchID: "dispatch-script",
-					AttemptID:  "attempt-script",
+					FactorySessionID: "session-stateless",
+					RuntimeID:        "runtime-stateless",
+					GenerationID:     "generation-stateless",
+					DispatchID:       "dispatch-script",
+					AttemptID:        "attempt-script",
 				},
 				Target: workers.ExecutionTarget{
 					WorkerName:      "script-worker",
@@ -353,8 +437,11 @@ func statelessHappyPathCases() []statelessHappyPathCase {
 			name: "inference",
 			request: workers.ExecuteRequest{
 				Correlation: workers.ExecutionCorrelation{
-					DispatchID: "dispatch-inference",
-					AttemptID:  "attempt-inference",
+					FactorySessionID: "session-stateless",
+					RuntimeID:        "runtime-stateless",
+					GenerationID:     "generation-stateless",
+					DispatchID:       "dispatch-inference",
+					AttemptID:        "attempt-inference",
 				},
 				Target: workers.ExecutionTarget{
 					WorkerName: runners.InferenceIdentity,
@@ -373,8 +460,11 @@ func statelessHappyPathCases() []statelessHappyPathCase {
 			name: "agent",
 			request: workers.ExecuteRequest{
 				Correlation: workers.ExecutionCorrelation{
-					DispatchID: "dispatch-agent",
-					AttemptID:  "attempt-agent",
+					FactorySessionID: "session-stateless",
+					RuntimeID:        "runtime-stateless",
+					GenerationID:     "generation-stateless",
+					DispatchID:       "dispatch-agent",
+					AttemptID:        "attempt-agent",
 				},
 				Target: workers.ExecutionTarget{
 					WorkerName: runners.AgentIdentity,
@@ -489,6 +579,27 @@ type statelessTestProviders struct {
 	content      string
 }
 
+type statelessProviderOverride struct {
+	calls   atomic.Int32
+	request workers.ProviderInferenceRequest
+}
+
+func (provider *statelessProviderOverride) Infer(
+	_ context.Context,
+	request workers.ProviderInferenceRequest,
+) (workers.InferenceResponse, error) {
+	provider.calls.Add(1)
+	provider.request = request
+	return workers.InferenceResponse{
+		Content: "override output\n<COMPLETE>",
+		ProviderSession: &workers.ProviderSessionMetadata{
+			Provider: "codex",
+			Kind:     "session-id",
+			ID:       "session-attempt-override",
+		},
+	}, nil
+}
+
 func (provider *statelessTestProviders) SetContent(content string) {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
@@ -539,3 +650,57 @@ func (provider *statelessTestProviders) Execute(
 }
 
 var _ providers.Service = (*statelessTestProviders)(nil)
+
+// statelessDecisionEnvelopeDouble stands in for the Factory Definitions owner of
+// decision-envelope interpretation. Composition tests assert that the stateless
+// Workers root consults the injected owner; the envelope grammar itself is owned
+// and tested inside invocation policy, so this double maps only the exact
+// payloads these cases send.
+type statelessDecisionEnvelopeDouble struct{}
+
+func (statelessDecisionEnvelopeDouble) UsesDecisionEnvelopeOutcome(
+	workstation *factorydefinitions.FactoryWorkstationConfig,
+) bool {
+	return workstation != nil &&
+		workstation.OutcomeFormat == factorydefinitions.DecisionEnvelopeOutcomeFormat
+}
+
+func (statelessDecisionEnvelopeDouble) UsesGoalRoutingDecisionEnvelope(
+	*factorydefinitions.FactoryWorkstationConfig,
+) bool {
+	return false
+}
+
+func (statelessDecisionEnvelopeDouble) WorkResultFromDecisionEnvelopeJSONOrFailed(
+	dispatchID string,
+	transitionID string,
+	raw string,
+) workers.WorkResult {
+	result := workers.WorkResult{DispatchID: dispatchID, TransitionID: transitionID}
+	switch strings.TrimSpace(raw) {
+	case `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`:
+		result.Outcome = workers.OutcomeAccepted
+		result.Feedback = "ready"
+		result.Output = "ship"
+	case `{"decision":"CONTINUE","feedback":"add tests","output":"next"}`:
+		result.Outcome = workers.OutcomeContinue
+		result.Feedback = "add tests"
+		result.Output = "next"
+	case `{"decision":"REJECTED","feedback":"not ready","output":"stop"}`:
+		result.Outcome = workers.OutcomeRejected
+		result.Feedback = "not ready"
+		result.Output = "stop"
+	default:
+		result.Outcome = factorydefinitions.MalformedEnvelopeFailureOutcome
+		result.Error = "reviewer decision envelope invalid"
+	}
+	return result
+}
+
+func (double statelessDecisionEnvelopeDouble) WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
+	dispatchID string,
+	transitionID string,
+	raw string,
+) workers.WorkResult {
+	return double.WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw)
+}

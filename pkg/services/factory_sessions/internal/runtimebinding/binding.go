@@ -183,11 +183,12 @@ func Replace(
 			executionBaseDir = runtimeBaseDir
 		}
 	}
-	state.CloseResponseStreams(session)
+	state.RotateResponseStreams(session)
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
-		Target: session.Target,
+		RuntimeFactorySessionID: session.RuntimeFactorySessionID,
+		Target:                  session.Target,
 		Handle: &SessionState{
 			Handle: replacementHandle, Instance: replacement,
 			Spec: preparedSpec,
@@ -205,9 +206,6 @@ func Replace(
 		Select: isActive, AddEventTypeRecorder: replacement.AddEventTypeRecorder,
 	})
 	updated := state.Resolve(session.ID)
-	if updated != nil {
-		updated.RuntimeFactorySessionID = session.RuntimeFactorySessionID
-	}
 	if isActive {
 		runtimeState.SetActive(serviceCtx, session.ID, replacementHandle)
 	}
@@ -506,11 +504,17 @@ func StopSession(
 	sessionID string,
 	stop func(factory.HostedHandle) error,
 ) error {
-	session, err := RequireLiveSession(state, sessionID)
-	if err != nil {
-		return err
+	if state == nil {
+		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
+	}
+	session := state.Resolve(sessionID)
+	if session == nil {
+		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
 	handle := HandleFromSession(session)
+	if handle == nil {
+		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
+	}
 	sessionID = session.ID
 	if active := runtimeState.Active(); active != nil && active.SessionID == sessionID {
 		if successor := NextLiveSession(state, sessionID); successor != nil {

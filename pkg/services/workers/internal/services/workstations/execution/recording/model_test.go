@@ -233,3 +233,62 @@ func TestModelResponseEventIDIsDeterministicForAnOrdinal(t *testing.T) {
 		t.Fatalf("different response ordinals produced the same ID %q", first)
 	}
 }
+
+func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
+	start := time.Unix(400, 0).UTC()
+	var events []workerexecution.InferenceEvent
+	times := []time.Time{start, start.Add(7 * time.Millisecond)}
+	now := func() time.Time {
+		value := times[0]
+		times = times[1:]
+		return value
+	}
+	runner := NewProviderRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{
+				Content: "provider output",
+				ProviderSession: &workerexecution.ProviderSessionMetadata{
+					Provider: "agent",
+					Kind:     "session-id",
+					ID:       "provider-session-1",
+				},
+			}, nil
+		}),
+		func(event workerexecution.InferenceEvent) { events = append(events, event) },
+		now,
+	)
+	request := workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID: "dispatch-provider",
+			Execution:  work.ExecutionMetadata{CurrentTick: 8, RequestID: "request-provider"},
+		},
+		UserMessage: "provider prompt",
+	}
+
+	response, err := runner.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if response.Content != "provider output" {
+		t.Fatalf("response content = %q, want provider output", response.Content)
+	}
+	if len(events) != 2 {
+		t.Fatalf("recorded events = %d, want request and response", len(events))
+	}
+	if events[0].Kind != workerexecution.InferenceEventKindRequest || events[1].Kind != workerexecution.InferenceEventKindResponse {
+		t.Fatalf("event kinds = %q/%q, want request/response", events[0].Kind, events[1].Kind)
+	}
+	if events[0].Request == nil || events[1].Response == nil {
+		t.Fatalf("events = %#v, want request and response payloads", events)
+	}
+	if events[0].Request.InferenceRequestID != "dispatch-provider/inference-request/1" ||
+		events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
+		t.Fatalf("inference request IDs = %q/%q, want matching dispatch correlation", events[0].Request.InferenceRequestID, events[1].Response.InferenceRequestID)
+	}
+	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "provider-session-1" || events[1].Response.ProviderSession.Provider != "cursor" {
+		t.Fatalf("provider session = %#v, want canonical cursor session identity", events[1].Response.ProviderSession)
+	}
+	if events[0].DispatchID != request.Dispatch.DispatchID || events[1].RequestID != request.Dispatch.Execution.RequestID {
+		t.Fatalf("event correlation = %#v/%#v, want dispatch/request IDs", events[0], events[1])
+	}
+}

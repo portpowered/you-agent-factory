@@ -21,6 +21,7 @@ import (
 type Assembly struct {
 	runtimeFactory        *RuntimeFactory
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory
+	workerService         workers.Service
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
@@ -28,14 +29,24 @@ type Assembly struct {
 // the one directly injected per-session Worker Sessions construction path
 // (W4 dispatch cutover); Wire owns composing it over worker_sessions/wire so
 // Factory Runtime never imports that peer service's wire package directly.
-func NewAssembly(runtimeFactory *RuntimeFactory, workerSessionsFactory factoryruntime.WorkerSessionsFactory) (*Assembly, error) {
+func NewAssembly(
+	runtimeFactory *RuntimeFactory,
+	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
+	workerService workers.Service,
+) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
 	}
 	if workerSessionsFactory == nil {
 		return nil, fmt.Errorf("Worker Sessions factory is required")
 	}
-	return &Assembly{runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory}, nil
+	if workerService == nil {
+		return nil, fmt.Errorf("Workers service is required")
+	}
+	return &Assembly{
+		runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory,
+		workerService: workerService,
+	}, nil
 }
 
 // Assemble creates one session-owned runtime from invocation values and the
@@ -77,8 +88,6 @@ func (a *Assembly) Assemble(
 	invocationSkipPermissionsOverride *bool,
 	clock factoryruntime.Clock,
 	baseLogger *zap.Logger,
-	workerExecution workers.RuntimeService,
-	sessionBuildFactory workers.SessionBuildFactory,
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
 	runtimeExecutorsFactory factoryruntime.WorkersRuntimeExecutorsFactory,
 	mockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
@@ -107,6 +116,10 @@ func (a *Assembly) Assemble(
 	if a == nil || a.runtimeFactory == nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
 			fmt.Errorf("Factory Runtime assembly service is required")
+	}
+	if a.workerService == nil {
+		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil,
+			fmt.Errorf("Workers service is required")
 	}
 	builder, err := NewRuntimeBuild(
 		defaultWorkerModelProvider,
@@ -142,9 +155,8 @@ func (a *Assembly) Assemble(
 		clock,
 		baseLogger,
 		a.runtimeFactory,
-		workerExecution,
+		a.workerService,
 		a.workerSessionsFactory,
-		sessionBuildFactory,
 		providerInvocationFactory,
 		runtimeExecutorsFactory,
 		mockCommandRunnerFactory,
@@ -187,6 +199,7 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
 	instance, err := builder.Build(ctx, spec)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
@@ -207,4 +220,15 @@ func (a *Assembly) Assemble(
 		lifecycle,
 		NewRuntimeSidecars(automationService, serviceMode),
 		nil
+}
+
+func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []factorydefinitions.FactoryEvent {
+	if artifact == nil || len(artifact.Events) == 0 {
+		return nil
+	}
+	events := make([]factorydefinitions.FactoryEvent, len(artifact.Events))
+	for index, event := range artifact.Events {
+		events[index] = event.Clone()
+	}
+	return events
 }

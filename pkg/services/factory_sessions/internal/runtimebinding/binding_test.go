@@ -168,6 +168,34 @@ func TestStopSessionSelectsAnotherLiveRuntime(t *testing.T) {
 	}
 }
 
+func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
+	state := newRuntimeBindingState()
+	terminal := registerTestSession(state, "terminal")
+	successor := registerTestSession(state, "successor")
+	terminalHandle := runtimebinding.HandleFromSession(terminal).(*hostedHandleFake)
+	terminalHandle.instance = nil
+	var active runtimebinding.State
+	active.SetActive(context.Background(), terminal.ID, runtimebinding.HandleFromSession(terminal))
+
+	var stopped factory.HostedHandle
+	err := runtimebinding.StopSession(state, &active, terminal.ID, func(handle factory.HostedHandle) error {
+		stopped = handle
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StopSession terminal runtime: %v", err)
+	}
+	if stopped != terminalHandle {
+		t.Fatal("StopSession did not stop the registered terminal handle")
+	}
+	if state.Resolve(terminal.ID) != nil {
+		t.Fatal("terminal session remains registered")
+	}
+	if got := active.Active(); got == nil || got.SessionID != successor.ID {
+		t.Fatalf("active runtime = %#v, want successor session", got)
+	}
+}
+
 func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 	state := newRuntimeBindingState()
 	keep := registerTestSession(state, "keep")
@@ -263,21 +291,51 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		t.Fatal("Replace did not stop the previous runtime")
 	}
 	newHandle := runtimebinding.HandleFromSession(updated)
-	if updated == nil || updated == original || newHandle == nil || newHandle == oldHandle {
+	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
+	assertActiveReplacement(t, &runtimeState, updated, newHandle)
+	newHandle.CancelRun()
+	<-newHandle.RunDoneCh()
+}
+
+func assertReplacementSession(
+	t *testing.T,
+	original *livesession.LiveSession,
+	updated *livesession.LiveSession,
+	oldHandle factory.HostedHandle,
+	newHandle factory.HostedHandle,
+	preparedSpec any,
+) {
+	t.Helper()
+	if updated == nil {
+		t.Fatal("replacement session is nil")
+		return
+	}
+	if updated == original || newHandle == nil || newHandle == oldHandle {
 		t.Fatalf("updated session/runtime = (%p, %p), want replacement", updated, newHandle)
 	}
 	if updated.FactoryDir != "/new" || updated.ExecutionBaseDir != "/old-execution" ||
 		updated.RuntimeFactorySessionID != "runtime-session-1" {
 		t.Fatalf("replacement metadata = %#v", updated)
 	}
+	if updated.ResponseEvents == nil || updated.ResponseEvents.FactorySessionID() != "runtime-session-1" {
+		t.Fatalf("replacement response-event store = %#v, want runtime-session-1", updated.ResponseEvents)
+	}
 	if runtimebinding.PreparedSpecFromSession(updated) != preparedSpec {
 		t.Fatal("replacement did not preserve the prepared runtime specification")
 	}
-	if active := runtimeState.Active(); active == nil || active.SessionID != updated.ID || active.Handle != newHandle {
+}
+
+func assertActiveReplacement(
+	t *testing.T,
+	runtimeState *runtimebinding.State,
+	updated *livesession.LiveSession,
+	newHandle factory.HostedHandle,
+) {
+	t.Helper()
+	active := runtimeState.Active()
+	if active == nil || active.SessionID != updated.ID || active.Handle != newHandle {
 		t.Fatalf("active runtime = %#v, want replacement handle", active)
 	}
-	newHandle.CancelRun()
-	<-newHandle.RunDoneCh()
 }
 
 func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {

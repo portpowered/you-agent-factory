@@ -215,6 +215,41 @@ func TestWorkstationPoolBoundaryBindingsPreserveLegacyConcurrency(t *testing.T) 
 	}
 }
 
+func TestWorkstationPoolBoundaryUsesOnePrivatePoolPerRuntime(t *testing.T) {
+	shared := &poolBoundaryFakeService{}
+	var created []*poolBoundaryFakeService
+	newBoundary := func() WorkstationPoolBoundary {
+		return NewWorkstationPoolBoundary(WorkstationPoolBoundaryConfig{
+			Service: shared,
+			ServiceFactory: func() WorkstationExecutionService {
+				pool := &poolBoundaryFakeService{}
+				created = append(created, pool)
+				return pool
+			},
+			Executors:  map[string]WorkerExecutor{"swe": poolBoundaryTestExecutor{}},
+			RouteNames: []string{"swe"},
+		})
+	}
+
+	first := newBoundary()
+	second := newBoundary()
+	if err := first.Start(context.Background()); err != nil {
+		t.Fatalf("first.Start() error = %v", err)
+	}
+	if err := second.Start(context.Background()); err != nil {
+		t.Fatalf("second.Start() error = %v", err)
+	}
+	if len(created) != 2 || created[0] == created[1] {
+		t.Fatalf("runtime pool instances = %#v, want two distinct instances", created)
+	}
+	if shared.routes != nil {
+		t.Fatalf("shared process pool was mutated during runtime start: %#v", shared.routes)
+	}
+	if len(created[0].routes) != 1 || len(created[1].routes) != 1 {
+		t.Fatalf("private route snapshots = (%d, %d), want one route each", len(created[0].routes), len(created[1].routes))
+	}
+}
+
 type poolBoundaryRequestExecutor struct{}
 
 func (poolBoundaryRequestExecutor) Execute(

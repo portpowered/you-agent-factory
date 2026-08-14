@@ -109,7 +109,18 @@ func (o *operation) InvokeModel(
 	defer func() {
 		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
 	}()
-	result, resultErr = opened.Workers.InvokeModel(lifecycle.runContext, modelName, request)
+	modelInvoker := opened.ModelInvoker
+	if modelInvoker == nil {
+		// Keep lightweight opening fakes and older callers usable while the
+		// opened runtime remains the authoritative model-invocation capability.
+		modelInvoker = runtimeopening.NewRuntimeModelInvoker(runtimeopening.RuntimeModelInvokerConfig{
+			Models: o.modelsRoot, Scope: opened.ModelsScope,
+			Sessions: opened.Sessions, Workers: opened.Workers,
+			RuntimeID: opened.RuntimeID, GenerationID: opened.GenerationID,
+			FactoryDirectory: target.FactoryDir, WorkingDirectory: target.Worktree,
+		})
+	}
+	result, resultErr = modelInvoker.InvokeModel(lifecycle.runContext, modelName, request)
 	return result, resultErr
 }
 

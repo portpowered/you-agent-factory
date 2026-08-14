@@ -28,34 +28,229 @@ func adaptRunnerRequest(
 	identity string,
 	temporaryFiles workers.TemporaryFileSystem,
 ) workers.RunnerExecutionRequest {
+	context := adaptWorkflowContext(request)
+	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
+	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
+
+	return workers.RunnerExecutionRequest{
+		Dispatch:                     adaptDispatch(request, inputTokens),
+		Correlation:                  request.Correlation,
+		WorkerName:                   request.Target.WorkerName,
+		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
+		WorkstationType:              request.Target.WorkstationName,
+		RunnerID:                     runnerIDForRequest(request, identity),
+		ExecutorProvider:             firstNonEmpty(request.Target.ExecutorProvider, providerIdentity(request.Target.Provider)),
+		ModelOperation:               request.Input.ModelOperation,
+		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+		InputTokens:                  workers.InputTokens(inputTokens...),
+		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
+		UserMessage:                  request.Target.Prompt.UserMessage,
+		OutputSchema:                 request.Target.Prompt.OutputSchema,
+		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
+		RequiredOptionalCapabilities: requiredOptionalCapabilities(request, identity),
+		EnvVars:                      context.envVars,
+		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
+		Worktree:                     worktree,
+		WorkingDirectory:             context.workingDirectory,
+		Model:                        request.Target.Model.Name,
+		ModelProvider:                firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
+		ReasoningEffort:              request.Target.Model.ReasoningEffort,
+		ModelLocality:                request.Target.Model.Locality,
+		Command:                      request.Target.Command,
+		Args:                         append([]string(nil), request.Target.Args...),
+		FactoryDirectory:             context.factoryDirectory,
+		OutputContract:               request.Target.Output.Contract,
+		OutputFormat:                 request.Target.Output.Format,
+		StopToken:                    request.Target.Output.StopToken,
+		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
+		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
+		PrintTimeout:                 request.Target.Timeout,
+		SessionID:                    providerSessionID(request),
+		ProjectID:                    context.projectID,
+		WorkflowContext:              context.workflow,
+		SkipPermissions:              request.Target.Permissions.SkipPermissions,
+		TemporaryFiles:               temporaryFiles,
+		ExecutionLogger:              request.Input.ExecutionLogger,
+	}
+}
+
+// requiredOptionalCapabilities reconstructs the runner requirements that the
+// legacy workstation executor derived immediately before provider execution.
+// Detached Execute callers carry the complete request instead of a prepared
+// workstation request, so this normalization must happen before runner
+// resolution as well as when adapting the provider request.
+func requiredOptionalCapabilities(
+	request workers.ExecuteRequest,
+	identity string,
+) []workers.RunnerOptionalCapability {
+	capabilities := append(
+		[]workers.RunnerOptionalCapability(nil),
+		request.Target.Tools.RequiredOptionalCapabilities...,
+	)
+	if identity != runners.AgentIdentity {
+		return capabilities
+	}
+	if strings.TrimSpace(request.Target.Prompt.OutputSchema) != "" {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityStructuredOutput,
+		)
+	}
+	workingDirectory := firstNonEmpty(
+		request.Target.Environment.WorkingDirectory,
+		request.Target.Workspace.WorkingDirectory,
+	)
+	if request.Target.Environment.WorkingDirectorySet && workingDirectory != "" {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityWorkingDirectory,
+		)
+	}
+	if worktreeRequiresRunnerCapability(request, workingDirectory) {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityWorktree,
+		)
+	}
+	if requestHasImageInput(request.Input.Work) {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityImageInput,
+		)
+	}
+	if request.Input.Resume != nil && firstNonEmpty(
+		request.Input.Resume.ProviderSessionID,
+		request.Input.Resume.ExternalRef,
+	) != "" {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilitySessionResume,
+		)
+	}
+	return capabilities
+}
+
+// runnerResolutionCapabilities narrows derived requirements to the ones the
+// selected runner itself owns. The generic agent runner delegates inference to
+// a Provider, so provider-owned capabilities such as image input are decided by
+// the Providers catalog for the resolved provider (see authorizeProviderTarget)
+// rather than by the agent runner's own static metadata. Gating agent selection
+// on them would reject every provider that supports image input.
+func runnerResolutionCapabilities(
+	capabilities []workers.RunnerOptionalCapability,
+	identity string,
+) []workers.RunnerOptionalCapability {
+	if identity != runners.AgentIdentity {
+		return capabilities
+	}
+	resolution := make([]workers.RunnerOptionalCapability, 0, len(capabilities))
+	for _, capability := range capabilities {
+		if providerOwnedRunnerCapability(capability) {
+			continue
+		}
+		resolution = append(resolution, capability)
+	}
+	return resolution
+}
+
+func providerOwnedRunnerCapability(capability workers.RunnerOptionalCapability) bool {
+	return capability == workers.RunnerOptionalCapabilityImageInput
+}
+
+func worktreeRequiresRunnerCapability(
+	request workers.ExecuteRequest,
+	workingDirectory string,
+) bool {
+	if strings.TrimSpace(request.Target.Workspace.Worktree) == "" {
+		return false
+	}
+	return !(workingDirectory != "" &&
+		workers.NormalizeRunnerID(request.Target.RunnerID) == workers.RunnerIDCodex)
+}
+
+func requestHasImageInput(inputs []workers.WorkInput) bool {
+	for _, input := range inputs {
+		for _, part := range input.Content {
+			if part.Type.Normalized() == work.WorkContentPartTypeImage {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func appendRunnerCapabilityIfMissing(
+	capabilities []workers.RunnerOptionalCapability,
+	capability workers.RunnerOptionalCapability,
+) []workers.RunnerOptionalCapability {
+	for _, existing := range capabilities {
+		if existing == capability {
+			return capabilities
+		}
+	}
+	return append(capabilities, capability)
+}
+
+type adaptedWorkflowContext struct {
+	workflow         *workers.Context
+	workingDirectory string
+	factoryDirectory string
+	projectID        string
+	envVars          map[string]string
+}
+
+func runnerIDForRequest(request workers.ExecuteRequest, identity string) string {
 	runnerID := workers.NormalizeRunnerID(request.Target.RunnerID)
 	switch identity {
 	case runners.ScriptIdentity:
-		runnerID = runners.ScriptIdentity
+		return runners.ScriptIdentity
 	case runners.InferenceIdentity:
 		if runnerID == "" {
-			runnerID = runners.InferenceIdentity
+			return runners.InferenceIdentity
 		}
 	default:
+		if provider := providerIdentity(request.Target.Provider); provider != "" {
+			return provider
+		}
 		if runnerID == "" || runnerID == runners.AgentIdentity {
-			runnerID = providerRunnerID(request.Target.Provider)
+			return providerRunnerID(request.Target.Provider)
 		}
 	}
+	return runnerID
+}
 
-	workingDirectory := strings.TrimSpace(request.Target.Environment.WorkingDirectory)
-	if workingDirectory == "" {
-		workingDirectory = strings.TrimSpace(request.Target.Workspace.WorkingDirectory)
+func adaptWorkflowContext(request workers.ExecuteRequest) adaptedWorkflowContext {
+	workflow := request.Input.WorkflowContext.Clone()
+	if workflow == nil {
+		workflow = &workers.Context{}
 	}
-	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
-	inputTokens := inputTokensFromWorkInputs(request.Input.Work)
-	sessionID := ""
-	if request.Input.Resume != nil {
-		sessionID = strings.TrimSpace(request.Input.Resume.ProviderSessionID)
-		if sessionID == "" {
-			sessionID = strings.TrimSpace(request.Input.Resume.ExternalRef)
-		}
+	workingDirectory := firstNonEmpty(
+		request.Target.Environment.WorkingDirectory,
+		request.Target.Workspace.WorkingDirectory,
+		workflow.WorkDirectory,
+	)
+	factoryDirectory := firstNonEmpty(
+		request.Target.FactoryDirectory,
+		request.Target.Workspace.FactoryDirectory,
+		workflow.FactoryDirectory,
+	)
+	projectID := firstNonEmpty(request.Input.Dispatch.ProjectID, workflow.ProjectID)
+	envVars := mergeStringMaps(workflow.EnvVars, request.Target.Environment.Vars)
+	workflow.FactoryDirectory = factoryDirectory
+	workflow.WorkDirectory = workingDirectory
+	workflow.ProjectID = projectID
+	workflow.EnvVars = cloneStringMap(envVars)
+	workflow.SessionID = firstNonEmpty(workflow.SessionID, request.Correlation.FactorySessionID)
+	return adaptedWorkflowContext{
+		workflow:         workflow,
+		workingDirectory: workingDirectory,
+		factoryDirectory: factoryDirectory,
+		projectID:        projectID,
+		envVars:          envVars,
 	}
+}
 
+func adaptDispatch(request workers.ExecuteRequest, inputTokens []workers.Token) work.WorkDispatch {
 	dispatch := work.CloneWorkDispatch(request.Input.Dispatch)
 	if dispatch.DispatchID == "" {
 		dispatch = work.WorkDispatch{
@@ -76,42 +271,17 @@ func adaptRunnerRequest(
 	dispatch.Execution.RequestID = request.Correlation.RequestID
 	dispatch.Execution.TraceID = request.Correlation.TraceID
 	dispatch.Execution.WorkIDs = workIDs(request.Input.Work)
+	return dispatch
+}
 
-	return workers.RunnerExecutionRequest{
-		Dispatch:                     dispatch,
-		WorkerName:                   request.Target.WorkerName,
-		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
-		WorkstationType:              request.Target.WorkstationName,
-		RunnerID:                     runnerID,
-		ExecutorProvider:             providerIdentity(request.Target.Provider),
-		ModelOperation:               request.Input.ModelOperation,
-		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
-		InputTokens:                  workers.InputTokens(inputTokens...),
-		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
-		UserMessage:                  request.Target.Prompt.UserMessage,
-		OutputSchema:                 request.Target.Prompt.OutputSchema,
-		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
-		RequiredOptionalCapabilities: append([]workers.RunnerOptionalCapability(nil), request.Target.Tools.RequiredOptionalCapabilities...),
-		EnvVars:                      cloneStringMap(request.Target.Environment.Vars),
-		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
-		Worktree:                     worktree,
-		WorkingDirectory:             workingDirectory,
-		Model:                        request.Target.Model.Name,
-		ModelProvider:                firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
-		ReasoningEffort:              request.Target.Model.ReasoningEffort,
-		ModelLocality:                request.Target.Model.Locality,
-		Command:                      request.Target.Command,
-		Args:                         append([]string(nil), request.Target.Args...),
-		FactoryDirectory:             firstNonEmpty(request.Target.FactoryDirectory, request.Target.Workspace.FactoryDirectory),
-		OutputContract:               request.Target.Output.Contract,
-		OutputFormat:                 request.Target.Output.Format,
-		StopToken:                    request.Target.Output.StopToken,
-		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
-		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
-		SessionID:                    sessionID,
-		SkipPermissions:              request.Target.Permissions.SkipPermissions,
-		TemporaryFiles:               temporaryFiles,
+func providerSessionID(request workers.ExecuteRequest) string {
+	if request.Input.Resume == nil {
+		return ""
 	}
+	return firstNonEmpty(
+		request.Input.Resume.ProviderSessionID,
+		request.Input.Resume.ExternalRef,
+	)
 }
 
 func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
@@ -121,7 +291,7 @@ func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
 	tokens := make([]workers.Token, 0, len(inputs))
 	for _, input := range inputs {
 		color := workers.Color{
-			Name:       input.WorkID,
+			Name:       firstNonEmpty(input.Name, input.Lineage.OriginRef, input.WorkID),
 			RequestID:  input.RequestID,
 			WorkID:     input.WorkID,
 			WorkTypeID: input.WorkTypeID,
@@ -131,10 +301,28 @@ func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
 			Tags:       cloneStringMap(input.Tags),
 			Relations:  append([]work.Relation(nil), input.Relations...),
 			Content:    work.CloneWorkContentParts(input.Content),
+			Payload:    payloadFromContent(input.Content),
 		}
 		tokens = append(tokens, workers.Token{Color: color})
 	}
 	return tokens
+}
+
+func payloadFromContent(content []work.WorkContentPart) []byte {
+	if len(content) == 0 {
+		return nil
+	}
+	var builder strings.Builder
+	for _, part := range content {
+		if part.Type.Normalized() != work.WorkContentPartTypeText {
+			continue
+		}
+		builder.WriteString(part.Text)
+	}
+	if builder.Len() == 0 {
+		return nil
+	}
+	return []byte(builder.String())
 }
 
 func providerRunnerID(provider workers.ProviderReference) string {
@@ -185,4 +373,18 @@ func cloneStringMap(values map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	merged := cloneStringMap(base)
+	if merged == nil {
+		merged = make(map[string]string, len(override))
+	}
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
 }
