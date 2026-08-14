@@ -188,7 +188,7 @@ func (s *Service) runRunner(
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if s.providerOverride != nil && identity == runners.AgentIdentity &&
-		!workers.UsesNamedProvider(runnerRequest.ExecutorProvider, runnerRequest.ModelProvider) {
+		!workers.UsesACPProvider(request.Target.ExecutorProvider) {
 		result, err := s.providerOverride.Infer(ctx, runnerRequest)
 		return normalizeProviderOverrideResult(result, runnerRequest), err
 	}

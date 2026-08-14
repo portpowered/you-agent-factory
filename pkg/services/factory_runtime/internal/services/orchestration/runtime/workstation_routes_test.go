@@ -113,6 +113,26 @@ func TestFinalizeRuntimeExecutionSelectionCanonicalizesACPProvider(t *testing.T)
 	if selection.providerID != "cursor-acp" {
 		t.Fatalf("providerID = %q, want concrete ACP provider identity", selection.providerID)
 	}
+	if selection.executorProvider != workers.ExecutorProviderACP {
+		t.Fatalf("executorProvider = %q, want ACP protocol marker", selection.executorProvider)
+	}
+}
+
+func TestExecutionTargetFromSelectionCarriesAuthoredExecutorProvider(t *testing.T) {
+	t.Parallel()
+
+	target := executionTargetFromSelection(runtimeExecutionSelection{
+		providerID:       "cursor-acp",
+		executorProvider: workers.ExecutorProviderACP,
+		modelProvider:    "cursor-acp",
+	}, "review", nil)
+
+	if target.ExecutorProvider != workers.ExecutorProviderACP {
+		t.Fatalf("target.ExecutorProvider = %q, want ACP protocol marker", target.ExecutorProvider)
+	}
+	if target.Provider.ID != "cursor-acp" || target.Model.Provider != "cursor-acp" {
+		t.Fatalf("target provider routing = %#v, want concrete ACP identity", target)
+	}
 }
 
 func TestApplyRuntimeWorkerSelectionUsesWorkerBodyAsSystemPrompt(t *testing.T) {
