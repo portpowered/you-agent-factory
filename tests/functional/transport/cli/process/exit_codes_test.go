@@ -19,6 +19,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -194,11 +195,31 @@ func TestBuiltCLIDeclaredCancellationExitCodes(t *testing.T) {
 				scanErr <- scanner.Err()
 			}()
 
-			waitForDashboardURL(t, lines, scanErr, &stderr, 30*time.Second)
+			dashboardURL := waitForDashboardURL(t, lines, scanErr, &stderr, 30*time.Second)
+			if test.name == "continuous run" {
+				assertContinuousRunReady(t, dashboardURL)
+			}
 			interruptBuiltCLIAndAssertExit130(t, command, 15*time.Second)
 			waitForScannerCompletion(t, scanErr, test.name, 5*time.Second)
 			stopped = true
 		})
+	}
+}
+
+// assertContinuousRunReady uses the public runtime status observation after
+// listener binding. The dashboard URL proves only that HTTP is readable; a
+// RUNNING Factory state proves the continuous runtime loop reached its active
+// lifecycle boundary before the process receives SIGINT.
+func assertContinuousRunReady(t testing.TB, dashboardURL string) {
+	t.Helper()
+
+	baseURL, ok := strings.CutSuffix(dashboardURL, "/dashboard/ui")
+	if !ok || baseURL == "" {
+		t.Fatalf("dashboard URL = %q, want /dashboard/ui suffix", dashboardURL)
+	}
+	status := support.GetJSON[factoryapi.StatusResponse](t, baseURL+"/status")
+	if status.FactoryState != "RUNNING" {
+		t.Fatalf("continuous runtime state = %q, want RUNNING; status=%#v", status.FactoryState, status)
 	}
 }
 
