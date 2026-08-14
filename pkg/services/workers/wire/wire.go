@@ -58,6 +58,7 @@ func NewService(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
 	providerOverrides ...workers.Provider,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
@@ -103,6 +104,7 @@ func NewService(
 		worktreeRelease,
 		temporaryFiles,
 		providerOverride,
+		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
 		scriptDependencies.FactoryDocs,
 	)
 	if err != nil {

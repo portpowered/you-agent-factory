@@ -226,6 +226,9 @@ func (s *Service) runRunner(
 		ctx = workerexecution.WithCommandRunnerOverride(ctx, request.Input.CommandRunnerOverride)
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
+	if request.Target.Tools.AgentLoop {
+		return s.runAgentLoop(ctx, request, identity, runnerRequest, providerOverride)
+	}
 	if providerOverride != nil && identity == runners.AgentIdentity &&
 		!usesACPProvider(runnerRequest.ExecutorProvider) {
 		providerRunner := workerrecording.NewProviderRunner(

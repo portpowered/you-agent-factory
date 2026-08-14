@@ -91,6 +91,8 @@ type runtimeExecutionSelection struct {
 	decisionEnvelope            bool
 	goalRoutingDecisionEnvelope bool
 	toolExecutionMode           workers.RunnerToolExecutionMode
+	agentRunHarness             bool
+	agentToolPolicy             string
 	environment                 map[string]string
 	workingDirectory            string
 	workingDirectoryAuthored    bool
@@ -217,6 +219,7 @@ func applyRuntimeDefinitionSelection(
 	if workstationFound && workstation != nil {
 		applyRuntimeWorkstationSelection(cfg, selection, invocation, workstation)
 	}
+	applyRuntimeAgentRunSelection(selection, workstation, worker)
 	applyRuntimeConfigSelection(cfg, selection)
 }
 

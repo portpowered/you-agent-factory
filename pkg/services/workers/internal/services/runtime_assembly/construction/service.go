@@ -82,7 +82,6 @@ type Service struct {
 	resolveRunner                     workers.RunnerSelectionResolver
 	resolveProvider                   workers.ProviderIdentityResolver
 	providerRegistry                  workers.ProviderRegistry
-	agentDispatchUsesRegisteredRunner bool
 }
 
 // New constructs a worker executor service from process-owned factories.
@@ -168,18 +167,6 @@ func (s *Service) WithProviderRegistry(registry workers.ProviderRegistry) *Servi
 	}
 	clone := *s
 	clone.providerRegistry = registry
-	return &clone
-}
-
-// WithAgentRunnerCutover returns a service copy that resolves agent dispatch
-// through the registered parent-private Agent Runner and injected Providers
-// root instead of the superseded provider-factory runner path.
-func (s *Service) WithAgentRunnerCutover(enabled bool) *Service {
-	if s == nil {
-		return nil
-	}
-	clone := *s
-	clone.agentDispatchUsesRegisteredRunner = enabled
 	return &clone
 }
 

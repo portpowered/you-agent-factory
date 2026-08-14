@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
 // Service executes one isolated Workers attempt through the private runner
@@ -25,6 +26,10 @@ type Service struct {
 	worktreeRelease  func(context.Context, workers.FactoryWorktreePreparation) error
 	temporaryFiles   workers.TemporaryFileSystem
 	factoryDocs      workers.FactoryDocsLoader
+	// agentRunHarness runs the agent/tool loop for an attempt whose target
+	// declares Tools.AgentLoop. It is immutable process configuration; the loop
+	// itself keeps no state between Execute calls.
+	agentRunHarness agentrun.HarnessAdapter
 }
 
 // New constructs an inert Execute capability. Construction performs no runner
@@ -50,6 +55,7 @@ func New(
 		worktreeRelease,
 		temporaryFiles,
 		nil,
+		nil,
 		factoryDocs...,
 	)
 }
@@ -68,6 +74,7 @@ func NewWithProviderOverride(
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 	providerOverride workers.Provider,
+	agentRunHarness agentrun.HarnessAdapter,
 	factoryDocs ...workers.FactoryDocsLoader,
 ) (*Service, error) {
 	return newService(
@@ -80,6 +87,7 @@ func NewWithProviderOverride(
 		worktreeRelease,
 		temporaryFiles,
 		providerOverride,
+		agentRunHarness,
 		factoryDocs...,
 	)
 }
@@ -94,6 +102,7 @@ func newService(
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 	providerOverride workers.Provider,
+	agentRunHarness agentrun.HarnessAdapter,
 	factoryDocs ...workers.FactoryDocsLoader,
 ) (*Service, error) {
 	if runnerService == nil {
@@ -117,5 +126,6 @@ func newService(
 		worktreeRelease:  worktreeRelease,
 		temporaryFiles:   temporaryFiles,
 		factoryDocs:      docsLoader,
+		agentRunHarness:  agentRunHarness,
 	}, nil
 }

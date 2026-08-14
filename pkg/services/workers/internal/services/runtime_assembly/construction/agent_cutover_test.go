@@ -17,7 +17,7 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
-func TestWithAgentRunnerCutoverPreservesRunnerSelectionWiring(t *testing.T) {
+func TestWithRunnerSelectionPreservesRunnerSelectionWiring(t *testing.T) {
 	service := New(
 		nil, nil, nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
@@ -25,17 +25,14 @@ func TestWithAgentRunnerCutoverPreservesRunnerSelectionWiring(t *testing.T) {
 		platformfilesystem.Local{},
 	).WithRunnerSelection(func(_, _, _ string) (workers.ResolvedRunnerSelection, error) {
 		return workers.ResolvedRunnerSelection{RunnerID: "codex"}, nil
-	}).WithAgentRunnerCutover(true)
+	})
 
-	if !service.agentDispatchUsesRegisteredRunner {
-		t.Fatal("WithAgentRunnerCutover() did not enable registered agent dispatch")
-	}
 	if service.resolveRunner == nil {
-		t.Fatal("WithAgentRunnerCutover() dropped runner selection wiring")
+		t.Fatal("WithRunnerSelection() dropped runner selection wiring")
 	}
 }
 
-func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T) {
+func TestServiceBuildExposesDispatchAndDirect(t *testing.T) {
 	factory := &cutoverProvidersFake{}
 	scriptFactory, err := workerexecutor.NewScriptFactory(
 		&mockworker.MockWorkerCommandRunner{},
@@ -56,7 +53,7 @@ func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
-	).WithAgentRunnerCutover(true)
+	)
 
 	result, err := service.Build(
 		runtimefixtures.RuntimeConfigLookupFixture{
@@ -87,7 +84,7 @@ func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T
 	}
 }
 
-func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T) {
+func TestServiceBuildWithNilProgressPublisher(t *testing.T) {
 	factory := &cutoverProvidersFake{}
 	service := New(
 		factory,
@@ -99,7 +96,7 @@ func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T)
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
-	).WithAgentRunnerCutover(true)
+	)
 
 	_, err := service.Build(
 		runtimefixtures.RuntimeConfigLookupFixture{
@@ -127,7 +124,7 @@ func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T)
 	}
 }
 
-func TestAgentRunnerProviderOverrideBypassesRegisteredRunner(t *testing.T) {
+func TestAgentRunnerProviderOverrideBuildsRunner(t *testing.T) {
 	service := New(
 		nil,
 		nil,
@@ -138,7 +135,7 @@ func TestAgentRunnerProviderOverrideBypassesRegisteredRunner(t *testing.T) {
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
-	).WithAgentRunnerCutover(true)
+	)
 
 	runner, err := service.agentRunner(
 		runtimefixtures.RuntimeConfigLookupFixture{},

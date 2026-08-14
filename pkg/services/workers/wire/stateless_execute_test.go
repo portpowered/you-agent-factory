@@ -191,6 +191,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 		nil,
 		nil,
 		nil,
+		nil,
 		override,
 	)
 	if err != nil {
@@ -283,6 +284,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -335,6 +337,7 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 			); err == nil {
 				t.Fatal("NewService() error = nil, want construction validation error")
 			}
@@ -352,6 +355,7 @@ func TestNewServiceRejectsMissingExecuteClock(t *testing.T) {
 		input.scriptDependencies,
 		input.inferenceConfig,
 		input.inferenceDependencies,
+		nil,
 		nil,
 		nil,
 		nil,

@@ -282,6 +282,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 
 var workerServiceSet = wire.NewSet(
 	provideStatelessWorkersService,
+	provideWorkersAgentToolFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
@@ -303,6 +304,7 @@ var statelessWorkersSet = wire.NewSet(
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
 	provideStatelessWorkersService,
 )
 

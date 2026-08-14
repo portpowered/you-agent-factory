@@ -65,7 +65,6 @@ type Service struct {
 	operatingSystem                   workers.OperatingSystem
 	providerRegistry                  workers.ProviderRegistry
 	providerRegistryRebinder          ProviderRegistryRebinder
-	agentDispatchUsesRegisteredRunner bool
 }
 
 var _ workers.RuntimeService = (*Service)(nil)

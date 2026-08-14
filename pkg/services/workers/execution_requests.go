@@ -491,7 +491,16 @@ type PromptPolicy struct {
 }
 
 type ToolPolicy struct {
-	ExecutionMode                RunnerToolExecutionMode
+	ExecutionMode RunnerToolExecutionMode
+	// AgentLoop runs the attempt through the Workers agent-run harness instead
+	// of one provider attempt. Runtime owns the Factory definitions that decide
+	// it -- an AGENT_RUN workstation staffed by an agent worker -- and carries
+	// the decision in the detached request so Workers never reads a definition
+	// to route.
+	AgentLoop bool
+	// AgentToolPolicy is the authored agent tool policy the harness applies
+	// when AgentLoop is set. An empty value disables tool execution.
+	AgentToolPolicy              string
 	RequiredOptionalCapabilities []RunnerOptionalCapability
 }
 

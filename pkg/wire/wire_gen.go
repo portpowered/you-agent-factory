@@ -242,7 +242,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v21 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, provider)
+	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, provider, agentToolFileSystem)
 	if err != nil {
 		return nil, err
 	}
@@ -752,7 +753,8 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
 	provider := provideFactoryRuntimeProviderOverride(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider)
+	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider, agentToolFileSystem)
 	if err != nil {
 		return nil, err
 	}
@@ -954,6 +956,7 @@ var factoryDefinitionsServicesSet = wire5.NewSet(
 
 var workerServiceSet = wire5.NewSet(
 	provideStatelessWorkersService,
+	provideWorkersAgentToolFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
@@ -975,6 +978,7 @@ var statelessWorkersSet = wire5.NewSet(
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
 	provideStatelessWorkersService,
 )
 
