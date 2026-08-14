@@ -269,15 +269,31 @@ function FactoryGraphInitializationState({ nodeIds }: { nodeIds: string[] }) {
         continue;
       }
 
-      if (node.internals.handleBounds === undefined) {
+      const width = node.measured?.width ?? node.width ?? node.initialWidth;
+      const height = node.measured?.height ?? node.height ?? node.initialHeight;
+      if (
+        node.internals.handleBounds === undefined ||
+        width === undefined ||
+        height === undefined ||
+        width <= 0 ||
+        height <= 0
+      ) {
         nextMissingNodeIds.push(node.id);
       }
     }
 
     return nextMissingNodeIds.join(",");
   });
+  const shouldRefreshNodeInternalsRef = useRef(false);
+  shouldRefreshNodeInternalsRef.current =
+    missingNodeIds === null || missingNodeIds.length > 0;
 
   useEffect(() => {
+    // Keep measurement state out of the dependencies: updateNodeInternals mutates it.
+    if (!shouldRefreshNodeInternalsRef.current) {
+      return;
+    }
+
     updateNodeInternals(stableNodeIds);
   }, [stableNodeIds, updateNodeInternals]);
 

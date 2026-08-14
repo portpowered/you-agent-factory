@@ -1,28 +1,24 @@
+import {
+  waitForDurableCheckpoint,
+  waitForStableBoundingBox,
+  waitForStableFactoryGraphNodePlacement,
+  waitForStableFactoryGraphViewport,
+} from "../integration/browser-test-harness.mjs";
+
 const GROUP_LABEL = "Planning lane";
+const STABLE_NODE_TEST_ID = "rf__node-workstation:plan";
 
 export async function expectGraphSurfaceBasics(page) {
-  const nodeCount = await page.locator(".react-flow__node").count();
-  if (nodeCount < 2) {
-    throw new Error(
-      `Expected the browser fixture to render multiple graph nodes, found ${nodeCount}.`,
-    );
-  }
+  await waitForStableGraphSurface(page);
 
-  const edgeCount = await page.locator(".react-flow__edge").count();
-  if (edgeCount < 1) {
-    throw new Error(
-      "Expected the browser fixture to render at least one graph edge.",
-    );
-  }
-
-  const controlCount = await page
-    .locator(".react-flow__controls-button")
-    .count();
-  if (controlCount < 3) {
-    throw new Error(
-      `Expected zoom and fit controls in the graph surface, found ${controlCount}.`,
-    );
-  }
+  const nodes = page.locator(".react-flow__node");
+  const edges = page.locator(".react-flow__edge");
+  const controls = page.locator(".react-flow__controls-button");
+  await waitForDurableCheckpoint("factory graph surface basics", {
+    "multiple graph nodes": async () => (await nodes.count()) >= 2,
+    "graph edge": async () => (await edges.count()) >= 1,
+    "graph controls": async () => (await controls.count()) >= 3,
+  });
 }
 
 export async function expectRegionPointerThrough(page, region) {
@@ -39,6 +35,7 @@ export async function expectRegionPointerThrough(page, region) {
 }
 
 export async function expectEditorGraphInteractions(page) {
+  await waitForStableGraphSurface(page);
   const group = page.locator("[data-factory-visual-group]").first();
   await group.waitFor({ state: "visible" });
 
@@ -62,16 +59,16 @@ export async function expectEditorGraphInteractions(page) {
   await expectZoomInsideRegion(page, group);
 
   const edgePoint = await findEdgePointInsideRegion(page, group);
-  const edgeHit = await readHitTarget(page, edgePoint);
-  if (!edgeHit.isEdge) {
-    throw new Error(
-      `The edge inside ${GROUP_LABEL} was not hit-testable at (${edgePoint.x}, ${edgePoint.y}).`,
-    );
-  }
   await page.mouse.click(edgePoint.x, edgePoint.y);
   await page
     .locator("[data-factory-edge-waypoint-controls]")
     .waitFor({ state: "visible" });
+}
+
+async function waitForStableGraphSurface(page) {
+  await page.getByTestId(STABLE_NODE_TEST_ID).waitFor({ state: "visible" });
+  await waitForStableFactoryGraphNodePlacement(page, STABLE_NODE_TEST_ID);
+  await waitForStableFactoryGraphViewport(page);
 }
 
 async function expectSelectionBoxInsideRegion(page, region) {
@@ -115,6 +112,8 @@ async function expectZoomInsideRegion(page, region) {
 }
 
 async function findPointInsideRegion(page, region, { requireCanvas }) {
+  await waitForStableFactoryGraphViewport(page);
+  await waitForStableBoundingBox(region);
   const bounds = await region.boundingBox();
   if (!bounds) {
     throw new Error(
@@ -135,9 +134,12 @@ async function findPointInsideRegion(page, region, { requireCanvas }) {
     height: window.innerHeight,
     width: window.innerWidth,
   }));
-  const canvasBounds = requireCanvas
-    ? await page.locator(".react-flow__pane").boundingBox()
-    : null;
+  let canvasBounds = null;
+  if (requireCanvas) {
+    const canvas = page.locator(".react-flow__pane");
+    await waitForStableBoundingBox(canvas);
+    canvasBounds = await canvas.boundingBox();
+  }
   const candidateBounds = canvasBounds
     ? {
         x: Math.max(bounds.x, canvasBounds.x),
@@ -183,6 +185,8 @@ async function findPointInsideRegion(page, region, { requireCanvas }) {
 }
 
 async function findElementPointInsideRegion(page, region, candidates) {
+  await waitForStableFactoryGraphViewport(page);
+  await waitForStableBoundingBox(region);
   const bounds = await region.boundingBox();
   if (!bounds) {
     throw new Error("Could not measure the visual group region.");
@@ -222,6 +226,8 @@ async function findElementPointInsideRegion(page, region, candidates) {
 }
 
 async function findEdgePointInsideRegion(page, region) {
+  await waitForStableFactoryGraphViewport(page);
+  await waitForStableBoundingBox(region);
   const bounds = await region.boundingBox();
   if (!bounds) {
     throw new Error(
@@ -233,24 +239,26 @@ async function findEdgePointInsideRegion(page, region) {
   const edgeCount = await edges.count();
   for (let index = 0; index < edgeCount; index += 1) {
     const edge = edges.nth(index);
-    const points = await edge.evaluate((element) => {
-      const path = element.querySelector(".react-flow__edge-path");
-      if (!(path instanceof SVGGeometryElement)) {
-        return [];
-      }
-      const transform = path.getScreenCTM();
-      if (!transform) {
-        return [];
-      }
-      const length = path.getTotalLength();
-      return [0.2, 0.4, 0.6, 0.8].map((ratio) => {
-        const local = path.getPointAtLength(length * ratio);
-        return {
-          x: local.x * transform.a + local.y * transform.c + transform.e,
-          y: local.x * transform.b + local.y * transform.d + transform.f,
-        };
-      });
-    });
+    const points = await edge
+      .evaluate((element) => {
+        const path = element.querySelector(".react-flow__edge-path");
+        if (!(path instanceof SVGGeometryElement)) {
+          return [];
+        }
+        const transform = path.getScreenCTM();
+        if (!transform) {
+          return [];
+        }
+        const length = path.getTotalLength();
+        return [0.2, 0.4, 0.6, 0.8].map((ratio) => {
+          const local = path.getPointAtLength(length * ratio);
+          return {
+            x: local.x * transform.a + local.y * transform.c + transform.e,
+            y: local.x * transform.b + local.y * transform.d + transform.f,
+          };
+        });
+      })
+      .catch(() => []);
     for (const point of points) {
       if (
         point.x >= bounds.x &&
@@ -258,12 +266,17 @@ async function findEdgePointInsideRegion(page, region) {
         point.y >= bounds.y &&
         point.y <= bounds.y + bounds.height
       ) {
-        return point;
+        const hit = await readHitTarget(page, point);
+        if (hit.isEdge && !hit.isGroupRegion) {
+          return point;
+        }
       }
     }
   }
 
-  throw new Error(`Could not find a graph edge inside ${GROUP_LABEL}.`);
+  throw new Error(
+    `Could not find a hit-testable graph edge inside ${GROUP_LABEL}.`,
+  );
 }
 
 async function readHitTarget(page, point) {

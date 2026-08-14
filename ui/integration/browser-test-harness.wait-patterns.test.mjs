@@ -37,6 +37,71 @@ describe("browser wait pattern helpers", () => {
     ).rejects.toThrow(/Timed out waiting for durable checkpoint: never-ready/);
   });
 
+  it("waitForDurableCheckpoint accepts a synchronous plain condition", async () => {
+    await waitForDurableCheckpoint("synchronous readiness", () => true, 50, 1);
+  });
+
+  it("waitForDurableCheckpoint resolves named synchronous and asynchronous conditions", async () => {
+    await waitForDurableCheckpoint(
+      "named readiness",
+      {
+        "synchronous condition": () => true,
+        "asynchronous condition": async () => true,
+      },
+      50,
+      1,
+    );
+  });
+
+  it("waitForDurableCheckpoint reports every named condition that returns false", async () => {
+    await expect(
+      waitForDurableCheckpoint(
+        "named readiness",
+        {
+          "selection projection": () => false,
+          "delete control visibility": async () => false,
+        },
+        10,
+        1,
+      ),
+    ).rejects.toThrow(
+      /selection projection \(returned false\).*delete control visibility \(returned false\)/,
+    );
+  });
+
+  it("waitForDurableCheckpoint reports the last named thrown outcome", async () => {
+    await expect(
+      waitForDurableCheckpoint(
+        "named readiness",
+        {
+          "delete control enabled": () => {
+            throw new Error("detached element");
+          },
+        },
+        10,
+        1,
+      ),
+    ).rejects.toThrow(
+      /delete control enabled \(threw: Error: detached element\)/,
+    );
+  });
+
+  it("waitForDurableCheckpoint recovers after a transient named throw", async () => {
+    const condition = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("detached element"))
+      .mockResolvedValue(true);
+
+    await waitForDurableCheckpoint(
+      "recovering readiness",
+      { "delete control enabled": condition },
+      50,
+      1,
+    );
+
+    expect(condition).toHaveBeenCalledTimes(2);
+  });
+
   it("waitForDurableControlEnabled delegates to durable control polling", async () => {
     const locator = {
       isEnabled: vi
@@ -159,6 +224,26 @@ describe("browser wait pattern helpers", () => {
     expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
       name: /^Delete (?:\d+ )?selected graph items?$/,
     });
+  });
+
+  it("waitForFactoryGraphSelectionDeleteButton reports detached graph observations", async () => {
+    const selectedGraphSelection = {
+      isVisible: vi.fn().mockResolvedValue(false),
+    };
+    const batchDeleteButton = {
+      isEnabled: vi.fn().mockRejectedValue(new Error("detached delete button")),
+      isVisible: vi.fn().mockResolvedValue(false),
+    };
+    const toolbar = {
+      getByRole: vi.fn(() => batchDeleteButton),
+      locator: vi.fn(() => selectedGraphSelection),
+    };
+
+    await expect(
+      waitForFactoryGraphSelectionDeleteButton(toolbar, 10),
+    ).rejects.toThrow(
+      /selection projection \(returned false\).*delete control visibility \(returned false\).*delete control enabled \(threw: Error: detached delete button\)/,
+    );
   });
 
   it("waitForDialogHidden waits for dialog role hidden state", async () => {

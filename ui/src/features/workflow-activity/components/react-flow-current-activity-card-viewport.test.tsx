@@ -7,6 +7,8 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 const setViewport = vi.fn().mockResolvedValue(true);
+const graphStore = { nodeLookup: new Map() };
+const mockUpdateNodeInternals = vi.fn();
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -15,8 +17,9 @@ vi.mock("@xyflow/react", async () => {
     ...actual,
     Background: () => <div data-testid="graph-background" />,
     Controls: () => <div data-testid="graph-controls" />,
-    useStore: () => "",
-    useUpdateNodeInternals: () => vi.fn(),
+    useStore: (selector: (state: typeof graphStore) => string) =>
+      selector(graphStore),
+    useUpdateNodeInternals: () => mockUpdateNodeInternals,
     ReactFlow: ({
       className,
       children,
@@ -149,7 +152,43 @@ const DEFAULT_VIEWPORT_MEASUREMENT = {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: viewport coverage keeps related mocked React Flow click paths together.
 describe("CurrentActivityGraphViewport", () => {
   beforeEach(() => {
+    graphStore.nodeLookup.clear();
+    mockUpdateNodeInternals.mockClear();
     setViewport.mockClear();
+  });
+
+  it("exposes selection readiness only after graph handles and dimensions exist", () => {
+    graphStore.nodeLookup.set("worker:writer", {
+      id: "worker:writer",
+      internals: { handleBounds: { source: [], target: [] } },
+      measured: { height: 50, width: 120 },
+    });
+
+    const { container } = renderViewport({
+      nodes: [{ id: "worker:writer", position: { x: 0, y: 0 } }],
+    });
+
+    expect(
+      container.querySelector('[data-factory-graph-selection-ready="true"]'),
+    ).toBeTruthy();
+    expect(mockUpdateNodeInternals).not.toHaveBeenCalled();
+  });
+
+  it("refreshes graph internals while selection dimensions are incomplete", () => {
+    graphStore.nodeLookup.set("worker:writer", {
+      id: "worker:writer",
+      internals: { handleBounds: undefined },
+      measured: { height: 0, width: 0 },
+    });
+
+    const { container } = renderViewport({
+      nodes: [{ id: "worker:writer", position: { x: 0, y: 0 } }],
+    });
+
+    expect(
+      container.querySelector('[data-factory-graph-selection-ready="false"]'),
+    ).toBeTruthy();
+    expect(mockUpdateNodeInternals).toHaveBeenCalledWith(["worker:writer"]);
   });
 
   it("renders hide/show controls in observer mode without editor tools", () => {

@@ -107,10 +107,89 @@ function buildStreamIdentityForSession(session, streamGenerationID) {
   };
 }
 
+function formatDurableCheckpointThrownOutcome(error) {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+
+  return String(error);
+}
+
+function normalizeDurableCheckpointConditions(conditionFn) {
+  if (typeof conditionFn === "function") {
+    return null;
+  }
+
+  if (
+    conditionFn === null ||
+    typeof conditionFn !== "object" ||
+    Array.isArray(conditionFn)
+  ) {
+    throw new TypeError(
+      "Durable checkpoint conditions must be a function or a named condition object",
+    );
+  }
+
+  const namedConditions = Object.entries(conditionFn);
+  if (namedConditions.length === 0) {
+    throw new TypeError("Durable checkpoint named conditions cannot be empty");
+  }
+
+  for (const [name, condition] of namedConditions) {
+    if (typeof condition !== "function") {
+      throw new TypeError(
+        `Durable checkpoint condition must be a function: ${name}`,
+      );
+    }
+  }
+
+  return namedConditions;
+}
+
+async function evaluateNamedDurableCheckpointConditions(namedConditions) {
+  return Promise.all(
+    namedConditions.map(async ([name, condition]) => {
+      try {
+        return {
+          name,
+          ready: Boolean(await condition()),
+          outcome: "returned false",
+        };
+      } catch (error) {
+        return {
+          error: formatDurableCheckpointThrownOutcome(error),
+          name,
+          outcome: "threw",
+          ready: false,
+        };
+      }
+    }),
+  );
+}
+
+function formatNamedDurableCheckpointTimeout(label, outcomes) {
+  const unsatisfiedConditions = outcomes
+    .filter(({ ready }) => !ready)
+    .map(({ error, name, outcome }) => {
+      if (outcome === "threw") {
+        return `${name} (threw: ${error})`;
+      }
+
+      return `${name} (returned false)`;
+    });
+
+  return `Timed out waiting for durable checkpoint: ${label}; unsatisfied conditions: ${unsatisfiedConditions.join(", ")}`;
+}
+
 /**
  * Poll until a durable checkpoint becomes true (API request captured, download
  * hook populated, dialog closed). Prefer this over asserting transient status
  * copy, animation frames, or heading visibility during teardown.
+ *
+ * Existing callers can pass one synchronous or asynchronous boolean function.
+ * Named checkpoints can pass an object whose keys describe synchronous or
+ * asynchronous sub-conditions. Named sub-condition failures are retained for
+ * the next poll and included in the timeout diagnostic.
  */
 export async function waitForDurableCheckpoint(
   label,
@@ -118,13 +197,29 @@ export async function waitForDurableCheckpoint(
   timeoutMs = uiInteractionTimeoutMs,
   intervalMs = 100,
 ) {
+  const namedConditions = normalizeDurableCheckpointConditions(conditionFn);
+  let lastNamedOutcomes = null;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    if (await conditionFn()) {
-      return;
+    if (namedConditions === null) {
+      if (await conditionFn()) {
+        return;
+      }
+    } else {
+      lastNamedOutcomes =
+        await evaluateNamedDurableCheckpointConditions(namedConditions);
+      if (lastNamedOutcomes.every(({ ready }) => ready)) {
+        return;
+      }
     }
     await delay(intervalMs);
+  }
+
+  if (namedConditions !== null) {
+    throw new Error(
+      formatNamedDurableCheckpointTimeout(label, lastNamedOutcomes ?? []),
+    );
   }
 
   throw new Error(`Timed out waiting for durable checkpoint: ${label}`);
@@ -354,10 +449,13 @@ export async function waitForFactoryGraphSelectionDeleteButton(
 
   await waitForDurableCheckpoint(
     "factory graph selection delete control",
-    async () =>
-      (await selectedGraphSelection.isVisible().catch(() => false)) &&
-      (await batchDeleteButton.isVisible().catch(() => false)) &&
-      (await batchDeleteButton.isEnabled().catch(() => false)),
+    {
+      "selection projection": async () =>
+        await selectedGraphSelection.isVisible(),
+      "delete control visibility": async () =>
+        await batchDeleteButton.isVisible(),
+      "delete control enabled": async () => await batchDeleteButton.isEnabled(),
+    },
     timeoutMs,
   );
 
