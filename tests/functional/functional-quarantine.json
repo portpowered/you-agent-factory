@@ -165,11 +165,6 @@
       "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/factory_runtime",
-      "bucket": "ENVIRONMENT-DEPENDENT",
-      "reason": "Linux build constraints leave this functional package without runnable Go test files"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/factory/definition_activation",
       "test": "TestDefinitionActivationGatewayDefaultRootSave",
       "bucket": "ENVIRONMENT-DEPENDENT",
@@ -198,6 +193,11 @@
       "test": "TestPackagedFactoryInvokedByCLICanBeInspectedByAPI",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory_runtime",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/operator_settings",
@@ -375,6 +375,18 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACPWireTranscriptIsOwnerReadableOnly",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACPWritesAWireTranscriptByDefault",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
       "test": "TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
@@ -394,18 +406,6 @@
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
       "test": "TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
-      "bucket": "ENVIRONMENT-DEPENDENT",
-      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
-      "test": "TestServeACPWireTranscriptIsOwnerReadableOnly",
-      "bucket": "ENVIRONMENT-DEPENDENT",
-      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
-      "test": "TestServeACPWritesAWireTranscriptByDefault",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
     },
