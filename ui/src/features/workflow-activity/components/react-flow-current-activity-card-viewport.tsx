@@ -284,14 +284,18 @@ function FactoryGraphInitializationState({ nodeIds }: { nodeIds: string[] }) {
 
     return nextMissingNodeIds.join(",");
   });
+  const shouldRefreshNodeInternalsRef = useRef(false);
+  shouldRefreshNodeInternalsRef.current =
+    missingNodeIds === null || missingNodeIds.length > 0;
 
   useEffect(() => {
-    if (missingNodeIds === null || missingNodeIds.length === 0) {
+    // Keep measurement state out of the dependencies: updateNodeInternals mutates it.
+    if (!shouldRefreshNodeInternalsRef.current) {
       return;
     }
 
     updateNodeInternals(stableNodeIds);
-  }, [missingNodeIds, stableNodeIds, updateNodeInternals]);
+  }, [stableNodeIds, updateNodeInternals]);
 
   return (
     <div
