@@ -22,6 +22,8 @@ export function factoryGraphWorkstationRuntimeRole(runtimeType) {
             return "AGENT";
         case WorkstationType.CLASSIFIER_WORKSTATION:
             return "CLASSIFIER";
+        case WorkstationType.HUMAN_APPROVAL:
+            return "HUMAN_APPROVAL";
         case WorkstationType.INFERENCE_RUN:
         case WorkstationType.MODEL_INVOKE:
             return "INFERENCE";
@@ -111,6 +113,8 @@ function workstationControlRole(runtimeRole, guardedControl) {
         return "UNKNOWN";
     if (runtimeRole === "CLASSIFIER")
         return "CLASSIFIER";
+    if (runtimeRole === "HUMAN_APPROVAL")
+        return "HUMAN_APPROVAL";
     if (runtimeRole !== "LOGICAL_MOVE")
         return "NONE";
     return guardedControl ? "LOOP_BREAKER" : "LOGICAL_ROUTER";

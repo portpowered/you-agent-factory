@@ -1,0 +1,165 @@
+/**
+ * Resolve one composable visual grammar for a semantic Factory node.
+ *
+ * Precedence is explicit: lifecycle status is always retained in `status`;
+ * active flow may elevate a quiet node's `surface`, `icon`, and
+ * `statusTreatment`; validation overlays selection and active-flow emphasis;
+ * selection/focus overlays active-flow emphasis; and muted is returned as an
+ * independent flag so it cannot erase any status.
+ */
+export function resolveFactoryGraphVisualState(input) {
+    const lifecycle = resolveLifecycleRole(input.lifecycle, input.runtimeStatus);
+    const status = statusRoleForLifecycle(lifecycle);
+    const validation = normalizeValidation(input.validation);
+    const selected = input.selected === true;
+    const focused = input.focused === true;
+    const activeFlow = input.activeFlow === true;
+    const muted = input.muted === true;
+    const hasSelectionOrFocus = selected || focused;
+    const activeFlowStatus = status === "quiet" && activeFlow ? "active" : status;
+    let border = status;
+    if (validation !== "none") {
+        border = "validation";
+    }
+    else if (hasSelectionOrFocus) {
+        border = "selection";
+    }
+    else if (status === "quiet" && activeFlow) {
+        border = "active";
+    }
+    let glow = "none";
+    if (validation !== "none") {
+        glow = "validation";
+    }
+    else if (hasSelectionOrFocus) {
+        glow = "selection";
+    }
+    else if (activeFlow || lifecycle === "processing") {
+        glow = "active";
+    }
+    else if (lifecycle === "failed") {
+        glow = "danger";
+    }
+    return {
+        activeFlow,
+        border,
+        emphasis: emphasisFor({
+            activeFlow,
+            hasSelectionOrFocus,
+            lifecycle,
+            status,
+            validation,
+        }),
+        family: input.family,
+        focus: focusRoleFor(selected, focused),
+        glow,
+        icon: activeFlowStatus,
+        lifecycle,
+        muted,
+        selection: selected,
+        status,
+        statusTreatment: statusTreatmentFor(lifecycle, activeFlow),
+        surface: activeFlowStatus,
+        validation,
+    };
+}
+function resolveLifecycleRole(lifecycle, runtimeStatus) {
+    return (lifecycleRoleFromValue(lifecycle) ??
+        lifecycleRoleFromValue(runtimeStatus) ??
+        "unknown");
+}
+function lifecycleRoleFromValue(value) {
+    if (!value || value.trim().length === 0)
+        return undefined;
+    switch (normalizeStatusValue(value)) {
+        case "INITIAL":
+        case "QUEUED":
+        case "PENDING":
+        case "WAITING":
+        case "READY":
+            return "initial";
+        case "PROCESSING":
+        case "ACTIVE":
+        case "RUNNING":
+        case "STARTING":
+        case "IN_PROGRESS":
+            return "processing";
+        case "TERMINAL":
+        case "COMPLETED":
+        case "COMPLETE":
+        case "SUCCESS":
+        case "SUCCEEDED":
+        case "DONE":
+            return "terminal";
+        case "FAILED":
+        case "FAILURE":
+        case "ERROR":
+        case "REJECTED":
+        case "REJECT":
+        case "CANCELED":
+        case "CANCELLED":
+            return "failed";
+        default:
+            return undefined;
+    }
+}
+function normalizeStatusValue(value) {
+    return value
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
+}
+function statusRoleForLifecycle(lifecycle) {
+    switch (lifecycle) {
+        case "initial":
+            return "waiting";
+        case "processing":
+            return "active";
+        case "terminal":
+            return "success";
+        case "failed":
+            return "danger";
+        case "unknown":
+            return "quiet";
+    }
+}
+function statusTreatmentFor(lifecycle, activeFlow) {
+    switch (lifecycle) {
+        case "initial":
+            return "waiting";
+        case "processing":
+            return "processing";
+        case "terminal":
+            return "completed";
+        case "failed":
+            return "failed";
+        case "unknown":
+            return activeFlow ? "processing" : "none";
+    }
+}
+function normalizeValidation(validation) {
+    if (validation === true)
+        return "error";
+    if (validation === false || validation === null || validation === undefined) {
+        return "none";
+    }
+    return validation;
+}
+function focusRoleFor(selected, focused) {
+    if (selected && focused)
+        return "selection-and-keyboard";
+    if (selected)
+        return "selection";
+    if (focused)
+        return "keyboard";
+    return "none";
+}
+function emphasisFor(input) {
+    if (input.validation !== "none")
+        return "attention";
+    if (input.hasSelectionOrFocus)
+        return "selected";
+    if (input.activeFlow || input.lifecycle === "processing")
+        return "strong";
+    return input.status === "quiet" ? "quiet" : "standard";
+}

@@ -1,5 +1,7 @@
 import { type GraphNodeHandle } from "@you-agent-factory/components/graphs";
 import type { ReactNode } from "react";
+import { type FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
+import { type FactoryGraphVisualStateInput } from "./visual-state.js";
 export type FactoryGraphPlaceNodeType = "constraint" | "doc" | "resource" | "statePosition" | "worker" | "workType";
 export type FactoryGraphNodeHandle = GraphNodeHandle;
 export interface FactoryGraphZAxisIncompleteHints {
@@ -11,8 +13,10 @@ export interface FactoryGraphNodeShellProps {
     className?: string;
     handles: FactoryGraphNodeHandle[];
     nodeType: "workstation" | FactoryGraphPlaceNodeType;
+    resizeControls?: FactoryGraphNodeResizeControlsProps;
+    visualState?: Omit<FactoryGraphVisualStateInput, "family">;
     zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
 }
 /** Original semantic Factory node frame, including its typed connection rails. */
-export declare function FactoryGraphNodeShell({ children, className, handles, nodeType, zAxisIncompleteHints, }: FactoryGraphNodeShellProps): import("react/jsx-runtime").JSX.Element;
+export declare function FactoryGraphNodeShell({ children, className, handles, nodeType, resizeControls, visualState: visualStateInput, zAxisIncompleteHints, }: FactoryGraphNodeShellProps): import("react/jsx-runtime").JSX.Element;
 export declare function factoryGraphHandleToneFromId(handleId: string): NonNullable<GraphNodeHandle["tone"]>;

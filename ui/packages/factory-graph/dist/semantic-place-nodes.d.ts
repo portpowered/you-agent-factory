@@ -1,7 +1,8 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
-import { type FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
+import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
 import { type FactoryGraphWorkStateType } from "./work-state-presentation.js";
 export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
     kind: "constraint" | "limit" | "resource" | "work_state" | (string & {});
@@ -10,6 +11,7 @@ export interface FactoryGraphSemanticPlaceRef extends FactoryGraphPlaceRef {
 export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
     activeFlow: boolean;
     activeItemLabels: string[];
+    focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
     kind?: string;
@@ -21,6 +23,7 @@ export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
     tokenCount: number;
     validationError?: boolean;
     validationMessage?: string;
+    resizeControls?: FactoryGraphNodeResizeControlsProps;
 }
 export interface FactoryGraphStatePositionNodeData extends FactoryGraphBasePlaceNodeData {
 }

@@ -2,6 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import { FactoryGraphGroupRegionLayer } from "./group-region-presentation.js";
+import { resolveFactoryGraphNodeDimensions, } from "./node-family.js";
 import { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
 import { projectFactoryGraphWorkstationSemantics, } from "./workstation-semantics.js";
 /**
@@ -19,6 +20,9 @@ export function projectFactoryGraphReplayFlow(source, selectedNodeId) {
         node.id,
         node.position,
     ]));
+    const authoredSizes = new Map((source.factory.layout?.nodes ?? [])
+        .filter((node) => node.size !== undefined)
+        .map((node) => [node.id, node.size]));
     const activeIds = replayActiveNodeIds(source);
     const workstationSemanticsByNodeId = new Map(projectFactoryGraphWorkstationSemantics(source).map((projection) => [
         projection.nodeId,
@@ -29,6 +33,7 @@ export function projectFactoryGraphReplayFlow(source, selectedNodeId) {
         position: positions.get(topologyNode.id) ?? fallbackPosition(index),
         selected: topologyNode.id === selectedNodeId,
         source,
+        authoredDimensions: authoredSizes.get(topologyNode.id),
         workstationProjection: workstationSemanticsByNodeId.get(topologyNode.id),
     }));
     const docs = (source.factory.supportingFiles?.bundledFiles ?? []).flatMap((file, index) => {
@@ -47,6 +52,10 @@ export function projectFactoryGraphReplayFlow(source, selectedNodeId) {
                     targetPath: file.targetPath,
                 },
                 id,
+                ...replayNodeDimensions("doc", [
+                    file.targetPath,
+                    file.targetPath.split("/").at(-1) ?? file.targetPath,
+                ], authoredSizes.get(id)),
                 position: positions.get(id) ?? fallbackPosition(topologyNodes.length + index),
                 type: "doc",
             },
@@ -66,7 +75,10 @@ export function projectFactoryGraphReplayFlow(source, selectedNodeId) {
 }
 function semanticNode(node, input) {
     const handles = node.handles.map(toSemanticHandle);
-    const base = { position: input.position };
+    const base = {
+        ...replayNodeDimensions(node.kind, [node.label], input.authoredDimensions),
+        position: input.position,
+    };
     switch (node.kind) {
         case "worker":
             return {
@@ -162,6 +174,19 @@ function semanticNode(node, input) {
             };
         }
     }
+}
+function replayNodeDimensions(family, content, authoredDimensions) {
+    const dimensions = resolveFactoryGraphNodeDimensions(family, {
+        authoredDimensions,
+        content,
+    }).resolvedDimensions;
+    return {
+        height: dimensions.height,
+        initialHeight: dimensions.height,
+        initialWidth: dimensions.width,
+        measured: { height: dimensions.height, width: dimensions.width },
+        width: dimensions.width,
+    };
 }
 function toSemanticHandle(handle) {
     return {
