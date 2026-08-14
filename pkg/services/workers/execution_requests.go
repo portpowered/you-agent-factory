@@ -437,14 +437,10 @@ type ExecutionCorrelation struct {
 }
 
 type ExecutionTarget struct {
-	WorkerName      string
-	WorkerType      string
-	WorkstationName string
-	RunnerID        string
-	// ExecutorProvider preserves the authored execution mechanism separately
-	// from Provider, whose ID may be canonicalized to a concrete catalog
-	// identity before the attempt starts.
-	ExecutorProvider string
+	WorkerName       string
+	WorkerType       string
+	WorkstationName  string
+	RunnerID         string
 	Capabilities     *Capabilities
 	Command          string
 	Args             []string

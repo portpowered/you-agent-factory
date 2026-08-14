@@ -66,7 +66,6 @@ type runtimeExecutionSelection struct {
 	workerType                  string
 	runnerID                    string
 	providerID                  string
-	executorProvider            string
 	model                       string
 	modelProvider               string
 	modelLocality               string
@@ -135,7 +134,6 @@ func initialRuntimeExecutionSelection(
 		workerType:                  firstRuntimeValue(execution.WorkerType, execution.Dispatch.WorkerType),
 		runnerID:                    strings.TrimSpace(execution.RunnerID),
 		providerID:                  strings.TrimSpace(execution.ExecutorProvider),
-		executorProvider:            strings.TrimSpace(execution.ExecutorProvider),
 		model:                       strings.TrimSpace(execution.Model),
 		modelProvider:               strings.TrimSpace(execution.ModelProvider),
 		reasoningEffort:             strings.TrimSpace(execution.ReasoningEffort),
@@ -192,7 +190,6 @@ func applyRuntimeWorkerSelection(
 	invocation *work.InvocationArguments,
 	worker *interfaces.FactoryWorkerConfig,
 ) {
-	executorProvider := resolveRuntimeInvocationValue(worker.ExecutorProvider, invocation)
 	selection.workerName = firstRuntimeValue(strings.TrimSpace(execution.WorkerName), worker.Name)
 	selection.workerType = firstRuntimeValue(worker.Type, selection.workerType)
 	if body, ok := runtimePromptSourceContent(cfg, worker.Name, true, true); ok {
@@ -203,10 +200,9 @@ func applyRuntimeWorkerSelection(
 			resolveRuntimeInvocationValue(worker.Body, invocation),
 		)
 	}
-	selection.executorProvider = firstRuntimeValue(selection.executorProvider, executorProvider)
 	selection.providerID = firstRuntimeValue(
 		selection.providerID,
-		executorProvider,
+		resolveRuntimeInvocationValue(worker.ExecutorProvider, invocation),
 		resolveRuntimeInvocationValue(worker.Provider, invocation),
 	)
 	selection.model = firstRuntimeValue(
@@ -403,12 +399,9 @@ func finalizeRuntimeExecutionSelection(
 	// concrete Providers catalog identity (for example, cursor-acp). Carry the
 	// concrete identity in the detached target so Workers can authorize it
 	// without asking Providers to resolve the protocol marker itself.
-	if workers.UsesACPProvider(selection.executorProvider) ||
-		workers.UsesACPProvider(selection.providerID) {
-		selection.executorProvider = workers.ExecutorProviderACP
-		if workers.UsesACPProvider(selection.providerID) && strings.TrimSpace(selection.modelProvider) != "" {
-			selection.providerID = strings.TrimSpace(selection.modelProvider)
-		}
+	if strings.EqualFold(strings.TrimSpace(selection.providerID), workers.ExecutorProviderACP) &&
+		strings.TrimSpace(selection.modelProvider) != "" {
+		selection.providerID = strings.TrimSpace(selection.modelProvider)
 	}
 	if selection.providerID == "" {
 		selection.providerID = selection.modelProvider
@@ -480,7 +473,6 @@ func resolveRuntimeSelectionInvocation(
 	selection.workerType = resolveRuntimeInvocationValue(selection.workerType, invocation)
 	selection.runnerID = resolveRuntimeInvocationValue(selection.runnerID, invocation)
 	selection.providerID = resolveRuntimeInvocationValue(selection.providerID, invocation)
-	selection.executorProvider = resolveRuntimeInvocationValue(selection.executorProvider, invocation)
 	selection.model = resolveRuntimeInvocationValue(selection.model, invocation)
 	selection.modelProvider = resolveRuntimeInvocationValue(selection.modelProvider, invocation)
 	selection.modelLocality = resolveRuntimeInvocationValue(selection.modelLocality, invocation)

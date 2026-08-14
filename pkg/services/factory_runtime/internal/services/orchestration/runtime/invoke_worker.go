@@ -482,7 +482,6 @@ func executionTargetFromSelection(
 		WorkerType:       firstRuntimeValue(selection.workerName, selection.workerType),
 		WorkstationName:  workstationName,
 		RunnerID:         selection.runnerID,
-		ExecutorProvider: selection.executorProvider,
 		Capabilities:     cloneRuntimeCapabilities(selection.capabilities),
 		Command:          selection.command,
 		Args:             append([]string(nil), selection.args...),

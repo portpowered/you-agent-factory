@@ -225,62 +225,6 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	}
 }
 
-func TestNewServiceExecuteBypassesOverrideOnlyForACPRequests(t *testing.T) {
-	t.Parallel()
-
-	input := newStatelessConstructionInputs()
-	provider := input.agentDependencies.Providers.(*statelessTestProviders)
-	override := &statelessProviderOverride{}
-	service, err := NewService(
-		input.agentDependencies,
-		input.scriptConfig,
-		input.scriptDependencies,
-		input.inferenceConfig,
-		input.inferenceDependencies,
-		nil,
-		nil,
-		func() time.Time { return time.Unix(1, 0) },
-		nil,
-		nil,
-		nil,
-		override,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	request := workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{
-			FactorySessionID: "session-acp",
-			RuntimeID:        "runtime-acp",
-			GenerationID:     "generation-acp",
-			DispatchID:       "dispatch-acp",
-			AttemptID:        "attempt-acp",
-		},
-		Target: workers.ExecutionTarget{
-			WorkerName:       runners.AgentIdentity,
-			RunnerID:         runners.AgentIdentity,
-			ExecutorProvider: workers.ExecutorProviderACP,
-			Provider:         workers.ProviderReference{ID: "cursor-acp"},
-			Model:            workers.ModelReference{Provider: "cursor-acp"},
-			Prompt:           workers.PromptPolicy{UserMessage: "ACP prompt"},
-		},
-	}
-	result, err := service.Execute(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if override.calls.Load() != 0 {
-		t.Fatalf("provider override calls = %d, want zero for ACP", override.calls.Load())
-	}
-	if provider.executeCalls.Load() != 1 {
-		t.Fatalf("registered provider calls = %d, want one ACP execution", provider.executeCalls.Load())
-	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
-		result.Output.Primary[0].Text != "agent-output" {
-		t.Fatalf("ACP result = %#v, want registered-provider output", result)
-	}
-}
-
 type statelessTestFixture struct {
 	service  workers.Service
 	provider *statelessTestProviders
@@ -641,8 +585,6 @@ func (*statelessTestProviders) ResolveIdentity(
 	switch strings.ToLower(strings.TrimSpace(request.Identity)) {
 	case "codex", "openai":
 		return providers.ResolveIdentityResult{ID: providers.IDCodex}, nil
-	case "cursor-acp":
-		return providers.ResolveIdentityResult{ID: providers.ID("cursor-acp")}, nil
 	default:
 		return providers.ResolveIdentityResult{}, providers.ErrUnknownProvider
 	}
@@ -652,7 +594,7 @@ func (*statelessTestProviders) ValidatePrerequisites(
 	_ context.Context,
 	request providers.ValidatePrerequisitesRequest,
 ) error {
-	if request.ID != providers.IDCodex && request.ID != providers.ID("cursor-acp") {
+	if request.ID != providers.IDCodex {
 		return providers.ErrUnknownProvider
 	}
 	return nil
