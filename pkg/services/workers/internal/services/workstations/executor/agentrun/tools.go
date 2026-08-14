@@ -38,11 +38,41 @@ const agentRunToolsUnsupportedRecoveryAction = "set agentTools.policy to DISABLE
 
 func agentRunToolsUnsupportedError(policy string) error {
 	return fmt.Errorf(
-		"%w: configured policy %q cannot execute structured tool calls; %s",
+		"%w: the model requested a structured tool call under policy %q, but the text-only Workers Runner cannot represent it; %s",
 		ErrAgentRunToolsUnsupported,
 		workerconfig.NormalizeAgentToolPolicy(policy),
 		agentRunToolsUnsupportedRecoveryAction,
 	)
+}
+
+// unsupportedToolExecutor keeps permissive tool policies compatible with
+// text-only runners while rejecting the first structured call that reaches the
+// harness. The Runner contract does not carry ToolCalls, so a normal AGENT_RUN
+// completion never invokes this boundary; a future structured Runner can use
+// the same diagnostic until the contract is explicitly upgraded.
+type unsupportedToolExecutor struct {
+	policy   string
+	recorder *ToolDiagnosticRecorder
+}
+
+func newUnsupportedToolExecutor(policy string, recorder *ToolDiagnosticRecorder) *unsupportedToolExecutor {
+	return &unsupportedToolExecutor{
+		policy:   workerconfig.NormalizeAgentToolPolicy(policy),
+		recorder: recorder,
+	}
+}
+
+func (executor *unsupportedToolExecutor) Execute(_ context.Context, call messages.ToolCall) (messages.ToolCallResponse, error) {
+	if executor != nil && executor.recorder != nil {
+		toolName := strings.TrimSpace(call.Name)
+		executor.recorder.Record(toolName, "start", "")
+		executor.recorder.Record(toolName, "unsupported", "structured_tool_calls_unavailable")
+	}
+	policy := ""
+	if executor != nil {
+		policy = executor.policy
+	}
+	return messages.ToolCallResponse{}, agentRunToolsUnsupportedError(policy)
 }
 
 // ToolDiagnostic records a safe summary for one tool lifecycle event.
@@ -79,6 +109,24 @@ func (recorder *ToolDiagnosticRecorder) Events() []ToolDiagnostic {
 	out := make([]ToolDiagnostic, len(recorder.events))
 	copy(out, recorder.events)
 	return out
+}
+
+func (recorder *ToolDiagnosticRecorder) hasPhaseSince(phase string, start int) bool {
+	if recorder == nil {
+		return false
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start >= len(recorder.events) {
+		return false
+	}
+	for _, event := range recorder.events[start:] {
+		if event.Phase == phase {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizeToolDiagnosticDetail(detail string) string {
