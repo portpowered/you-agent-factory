@@ -10,7 +10,6 @@ import (
 )
 
 const defaultMockWorkerAcceptedOutput = "mock worker accepted"
-const defaultMockWorkerAcceptedAgentOutput = defaultMockWorkerAcceptedOutput + "\nCOMPLETE"
 
 // MockWorkerCommandRunner is the root-contract test seam used to prove that
 // provider command adapters preserve Workers dispatch correlation. Full mock
@@ -115,7 +114,7 @@ func (runner *MockWorkerCommandRunner) runNext(
 }
 
 func mockWorkerAcceptOutput(command string, policy OutputPolicy) string {
-	acceptedOutput := defaultMockWorkerAcceptedAgentOutput
+	acceptedOutput := defaultMockWorkerAcceptedOutput
 	if policy.GoalRoutingDecisionEnvelope {
 		acceptedOutput = marshalMockWorkerJSON(map[string]any{
 			"decision": "accepted",
