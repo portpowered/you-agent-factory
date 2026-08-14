@@ -1,3 +1,7 @@
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 
@@ -82,6 +86,19 @@ export interface EditableFactoryGraphViewModel {
       delta: { x: number; y: number },
       resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
     ) => void;
+    resizeLayoutNode: (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: { x: number; y: number },
+    ) => void;
+    fitLayoutNode: (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: { x: number; y: number },
+    ) => void;
+    resetLayoutNodeSize: (nodeId: string) => void;
     resetLayout: (options?: { recordHistory?: boolean }) => void;
     redoLayout: () => void;
     save: () => Promise<boolean>;

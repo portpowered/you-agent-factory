@@ -2,9 +2,9 @@ import type { components, FactoryDefinition } from "@you-agent-factory/client";
 import type { FactoryGraphSource } from "./source.js";
 type FactoryWorkstation = NonNullable<FactoryDefinition["workstations"]>[number];
 export type FactoryGraphWorkstationRuntimeType = components["schemas"]["WorkstationType"] | "UNKNOWN";
-export type FactoryGraphWorkstationRuntimeRole = "AGENT" | "CLASSIFIER" | "INFERENCE" | "LOGICAL_MOVE" | "POLLER" | "SCRIPT" | "UNKNOWN";
+export type FactoryGraphWorkstationRuntimeRole = "AGENT" | "CLASSIFIER" | "HUMAN_APPROVAL" | "INFERENCE" | "LOGICAL_MOVE" | "POLLER" | "SCRIPT" | "UNKNOWN";
 export type FactoryGraphWorkstationSchedulingBehavior = components["schemas"]["WorkstationKind"] | "UNKNOWN";
-export type FactoryGraphWorkstationControlRole = "CLASSIFIER" | "LOGICAL_ROUTER" | "LOOP_BREAKER" | "NONE" | "UNKNOWN";
+export type FactoryGraphWorkstationControlRole = "CLASSIFIER" | "HUMAN_APPROVAL" | "LOGICAL_ROUTER" | "LOOP_BREAKER" | "NONE" | "UNKNOWN";
 export interface FactoryGraphWorkstationGuardedControl {
     guardType: "VISIT_COUNT";
     limit: {

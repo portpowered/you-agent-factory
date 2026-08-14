@@ -15,7 +15,10 @@ import {
   removeFactoryLayoutEdgeWaypoint,
   setFactoryLayoutEdgeWaypoints,
 } from "../layout/factory-graph-layout-edge-waypoints";
-import { createDefaultFactoryLayout } from "../layout/factory-graph-layout-operations";
+import {
+  createDefaultFactoryLayout,
+  setFactoryLayoutNodeSize,
+} from "../layout/factory-graph-layout-operations";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
@@ -79,6 +82,53 @@ describe("factory graph React Flow projection", () => {
         edge.className?.includes(FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS),
       ),
     ).toBe(true);
+  });
+
+  it("projects authored node sizes into every React Flow dimension field", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout = setFactoryLayoutNodeSize(
+      createDefaultFactoryLayout(),
+      "workstation:draft",
+      { height: 340, width: 420 },
+      { x: 0, y: 0 },
+    );
+
+    const node = projectFactoryGraphToReactFlow({
+      layout,
+      topology,
+    }).nodes.find((candidate) => candidate.id === "workstation:draft");
+
+    expect(node).toMatchObject({
+      height: 340,
+      initialHeight: 340,
+      initialWidth: 420,
+      measured: { height: 340, width: 420 },
+      width: 420,
+    });
+  });
+
+  it("normalizes invalid authored sizes to finite family dimensions", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout = setFactoryLayoutNodeSize(
+      createDefaultFactoryLayout(),
+      "workstation:draft",
+      { height: Number.NaN, width: Number.POSITIVE_INFINITY },
+      { x: 0, y: 0 },
+    );
+
+    const node = projectFactoryGraphToReactFlow({
+      layout,
+      topology,
+    }).nodes.find((candidate) => candidate.id === "workstation:draft");
+
+    expect(Number.isFinite(node?.height)).toBe(true);
+    expect(Number.isFinite(node?.width)).toBe(true);
+    expect(node?.measured?.height).toBe(node?.height);
+    expect(node?.measured?.width).toBe(node?.width);
   });
 
   it("projects human approval output edges onto the stable approval handle", () => {

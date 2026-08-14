@@ -29,7 +29,9 @@ const SURFACE_TONE_CLASS_NAME: Record<FactoryGraphNodeSurfaceTone, string> = {
 };
 
 const NODE_TITLE_CLASS_NAME =
-  "block min-w-0 truncate whitespace-nowrap font-bold leading-tight text-on-surface";
+  "block min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] font-bold leading-tight text-on-surface";
+const NODE_WRAPPED_TEXT_CLASS_NAME =
+  "min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]";
 
 const VISUAL_STATUS_SURFACE_CLASS_NAME: Record<
   FactoryGraphVisualState["surface"],
@@ -99,6 +101,13 @@ export function factoryGraphNodeSurfaceClassName(
 
 export function factoryGraphNodeTitleClassName(className?: string): string {
   return [NODE_TITLE_CLASS_NAME, className].filter(Boolean).join(" ");
+}
+
+/** Safe wrapping shared by semantic labels and their merged metadata surfaces. */
+export function factoryGraphNodeWrappedTextClassName(
+  className?: string,
+): string {
+  return [NODE_WRAPPED_TEXT_CLASS_NAME, className].filter(Boolean).join(" ");
 }
 
 /** Surface and emphasis classes for the package-owned visual-state grammar. */

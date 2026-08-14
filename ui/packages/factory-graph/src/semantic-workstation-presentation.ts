@@ -1,6 +1,9 @@
 import { WorkstationKind } from "@you-agent-factory/client";
 import type { GraphSemanticIconKind } from "./semantic-icon.js";
-import { factoryGraphNodeTitleClassName } from "./semantic-node-style.js";
+import {
+  factoryGraphNodeTitleClassName,
+  factoryGraphNodeWrappedTextClassName,
+} from "./semantic-node-style.js";
 import {
   type FactoryGraphWorkstationGuardedControl,
   type FactoryGraphWorkstationRuntimeRole,
@@ -245,7 +248,7 @@ export function factoryGraphWorkstationTitleClassName(label: string): string {
 
 export function factoryGraphWorkItemLabelClassName(label: string): string {
   return factoryGraphClassNames(
-    "block min-w-0 basis-0 flex-1 truncate whitespace-nowrap leading-tight",
+    factoryGraphNodeWrappedTextClassName("block basis-0 flex-1 leading-tight"),
     label.length > 58
       ? "text-[0.64rem]"
       : label.length > 38

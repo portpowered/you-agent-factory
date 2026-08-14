@@ -1,5 +1,11 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: current activity graph projection helpers remain grouped around shared node and edge fixtures.
-import { resolveFactoryGraphWorkstationSemantics } from "@you-agent-factory/factory-graph";
+import {
+  type FactoryGraphNodeDimensions,
+  type FactoryGraphNodeFamily,
+  type FactoryGraphNodeResizeControlsProps,
+  resolveFactoryGraphNodeDimensions,
+  resolveFactoryGraphWorkstationSemantics,
+} from "@you-agent-factory/factory-graph";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -443,6 +449,64 @@ interface BuildCurrentActivityNodesInput {
   validationTargets?: readonly FactoryValidationTarget[];
 }
 
+function resizeControlsForNode(input: {
+  content: readonly (string | null | undefined)[];
+  family: FactoryGraphNodeFamily;
+  nodeId: string;
+  position: GraphNodePosition;
+  resizeController?: CurrentActivityEditorState["nodeResizeControls"];
+}): FactoryGraphNodeResizeControlsProps | undefined {
+  const controller = input.resizeController;
+  if (!controller?.enabled) {
+    return undefined;
+  }
+
+  const resolution = resolveFactoryGraphNodeDimensions(input.family, {
+    content: input.content,
+  });
+  const target = {
+    family: input.family,
+    nodeId: input.nodeId,
+    position: { x: input.position.x, y: input.position.y },
+  };
+
+  return {
+    allowedAxes: resolution.allowedAxes,
+    bounds: resolution.bounds,
+    fitDimensions: resolution.fittedDimensions,
+    labels: controller.labels,
+    nodeId: input.nodeId,
+    onFitToContent: (dimensions: FactoryGraphNodeDimensions) =>
+      controller.onFitToContent(target, dimensions),
+    onResetSize: () => controller.onResetSize(target),
+    onResizeEnd: (dimensions: FactoryGraphNodeDimensions) =>
+      controller.onResizeEnd(target, dimensions),
+  };
+}
+
+function placeNodeFamily(
+  place: PositionedPlaceNode["place"],
+  factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
+): FactoryGraphNodeFamily {
+  if (place.kind === "work_state") return "work-state";
+  if (place.kind === "resource") return "resource";
+  if (factoryGraphNode?.kind === "worker") return "worker";
+  if (factoryGraphNode?.kind === "work-type") return "work-type";
+  return "constraint";
+}
+
+function placeNodeSizingContent(
+  place: PositionedPlaceNode["place"],
+  factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
+): readonly (string | null | undefined)[] {
+  return [
+    factoryGraphNode?.nodeId,
+    place.type_id,
+    place.state_value,
+    place.place_id,
+  ];
+}
+
 function buildPlaceNodeShell(positionedNode: PositionedPlaceNode) {
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
@@ -497,6 +561,13 @@ function buildPlaceNodeData(
           input.selection.placeId === place.place_id) ||
         (input.selection?.kind === "node" &&
           input.selection.nodeId === factoryGraphNodeId),
+      resizeControls: resizeControlsForNode({
+        content: placeNodeSizingContent(place, factoryGraphNode),
+        family: placeNodeFamily(place, factoryGraphNode),
+        nodeId: factoryGraphNodeId,
+        position: { x: positionedNode.x, y: positionedNode.y },
+        resizeController: input.editor?.nodeResizeControls,
+      }),
       tokenCount:
         input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
       validationError: validationNodeError !== undefined,
@@ -649,6 +720,13 @@ function buildDocNode(
       selectedDoc:
         input.selection?.kind === "doc" &&
         input.selection.targetPath === positionedNode.targetPath,
+      resizeControls: resizeControlsForNode({
+        content: [positionedNode.displayLabel, positionedNode.targetPath],
+        family: "doc",
+        nodeId: positionedNode.nodeId,
+        position: { x: positionedNode.x, y: positionedNode.y },
+        resizeController: input.editor?.nodeResizeControls,
+      }),
       targetPath: positionedNode.targetPath,
     },
     draggable: true,
@@ -667,6 +745,7 @@ function buildDocNode(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: workstation node data keeps runtime, selection, connection, and resize presentation together.
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
@@ -719,6 +798,10 @@ function buildWorkstationNode(
     x: positionedNode.x,
     y: positionedNode.y,
   };
+  const workstationTitle =
+    normalizedWorkstation.workstation_name ||
+    normalizedWorkstation.transition_id ||
+    normalizedWorkstation.node_id;
 
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
@@ -751,6 +834,13 @@ function buildWorkstationNode(
         input.activeGraphHighlights.hasActiveFlow &&
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       now: input.now,
+      resizeControls: resizeControlsForNode({
+        content: [workstationTitle, workstationSemantics?.runtimeType],
+        family: "workstation",
+        nodeId: positionedNode.nodeId,
+        position,
+        resizeController: input.editor?.nodeResizeControls,
+      }),
       ...(wireSelectionHandlers
         ? {
             onSelectWorkID: input.onSelectWorkID,

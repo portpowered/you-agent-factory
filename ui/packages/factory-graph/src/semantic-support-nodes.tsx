@@ -1,7 +1,8 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: support node renderers share one semantic data contract and presentation vocabulary.
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
   type FactoryGraphNodeHandle,
@@ -11,6 +12,7 @@ import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 
@@ -32,6 +34,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectWorker?: (workerName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorker: boolean;
 }
 
@@ -48,6 +51,7 @@ export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectWorkType?: (workTypeName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorkType?: boolean;
   validationError?: boolean;
   validationMessage?: string;
@@ -68,6 +72,7 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectResource?: (resourceName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedResource: boolean;
   tokenCount: number;
 }
@@ -112,10 +117,18 @@ export function FactoryGraphWorkerNodeView({
         label={workerLabel}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
+        <span
+          className={factoryGraphNodeWrappedTextClassName(
+            "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+          )}
+        >
           {workerLabel}
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
+        <strong
+          className={factoryGraphNodeWrappedTextClassName(
+            "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
+          )}
+        >
           {workerName}
         </strong>
       </span>
@@ -134,6 +147,11 @@ export function FactoryGraphWorkerNodeView({
       )}
       handles={data.handles}
       nodeType="worker"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -197,8 +215,12 @@ export function FactoryGraphWorkTypeNodeView({
         label={workTypeLabel}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-          <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
+        <span className="flex min-w-0 items-start gap-1 overflow-hidden">
+          <span
+            className={factoryGraphNodeWrappedTextClassName(
+              "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+            )}
+          >
             {workTypeLabel}
           </span>
           {data.isDefaultWorkType ? (
@@ -212,7 +234,11 @@ export function FactoryGraphWorkTypeNodeView({
             </FactoryGraphNodeBadge>
           ) : null}
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
+        <strong
+          className={factoryGraphNodeWrappedTextClassName(
+            "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
+          )}
+        >
           {name}
         </strong>
       </span>
@@ -232,6 +258,11 @@ export function FactoryGraphWorkTypeNodeView({
       )}
       handles={data.handles}
       nodeType="workType"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -300,6 +331,11 @@ export function FactoryGraphResourceNodeView({
       )}
       handles={data.handles}
       nodeType="resource"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -346,7 +382,7 @@ function FactoryGraphResourceNodeContent({
     <div className="flex min-w-0 w-full flex-col overflow-hidden">
       <span
         aria-label={label}
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-resource-label-zone
         role="img"
       >
@@ -365,7 +401,9 @@ function FactoryGraphResourceNodeContent({
         </span>
         <span className="flex min-w-0 overflow-hidden" title={label}>
           <span
-            className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
+            className={factoryGraphNodeWrappedTextClassName(
+              "block overflow-hidden font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface",
+            )}
             data-resource-name
             title={label}
           >

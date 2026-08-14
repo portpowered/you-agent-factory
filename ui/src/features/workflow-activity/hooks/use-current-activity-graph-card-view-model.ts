@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-
 import { useFactoryGraphVisualGroupEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook";
 import type { FactoryLayoutGroupNodeGeometry } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { pruneFactoryGraphEditorSelectionAfterRemoval } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
@@ -7,12 +6,14 @@ import {
   type FactoryGraphEditorToolbarSelectionState,
   resolveFactoryGraphEditorToolbarSelectionState,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-toolbar-selection";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   type GraphEditorAddNodePlacementViewport,
   resolveInitialPlacementTopLeftForViewport,
   viewportCenterFromPlacementViewport,
 } from "../lib/graph-editor-add-node-placement";
+import type { CurrentActivityNodeResizeController } from "../lib/react-flow-current-activity-card-editor-handles";
 import {
   type CurrentActivityGraphRenderProjection,
   type CurrentActivityGraphViewModelInput,
@@ -42,6 +43,51 @@ export function useCurrentActivityGraphCardViewModel(
   const graphProjection = currentActivityGraphRenderProjection(
     editorGraphProjection,
   );
+  const fitLayoutNode = publicEditor.layoutControls.fitNode;
+  const resetLayoutNodeSize = publicEditor.layoutControls.resetNodeSize;
+  const resizeLayoutNode = publicEditor.layoutControls.resizeNode;
+  const nodeResizeControls = useMemo<CurrentActivityNodeResizeController>(
+    () => ({
+      enabled:
+        publicEditor.editorControls.isEditing &&
+        publicEditor.editorControls.canInteract &&
+        publicEditor.editorControls.activeTool !== "delete",
+      labels: {
+        fitToContent: getFactoryGraphEditorMessages(input.locale)
+          .nodeFitToContentLabel,
+        resetSize: getFactoryGraphEditorMessages(input.locale)
+          .nodeResetSizeLabel,
+      },
+      onFitToContent: (target, dimensions) => {
+        fitLayoutNode(
+          target.nodeId,
+          target.family,
+          dimensions,
+          target.position,
+        );
+      },
+      onResetSize: (target) => {
+        resetLayoutNodeSize(target.nodeId);
+      },
+      onResizeEnd: (target, dimensions) => {
+        resizeLayoutNode(
+          target.nodeId,
+          target.family,
+          dimensions,
+          target.position,
+        );
+      },
+    }),
+    [
+      input.locale,
+      publicEditor.editorControls.activeTool,
+      publicEditor.editorControls.canInteract,
+      publicEditor.editorControls.isEditing,
+      fitLayoutNode,
+      resetLayoutNodeSize,
+      resizeLayoutNode,
+    ],
+  );
   const graph = useCurrentActivityGraphViewModel({
     ...input,
     editor: {
@@ -50,6 +96,7 @@ export function useCurrentActivityGraphCardViewModel(
       editorMode: publicEditor.editorControls.isEditing,
       graphProjection,
       handleConnectionAnchorClick: connectionControls.handleAnchorClick,
+      nodeResizeControls,
       pendingConnectionSource: connectionControls.pendingSource,
       selectedWaypointEdgeId:
         publicEditor.edgeWaypointControls.selectedWaypointEdgeId,

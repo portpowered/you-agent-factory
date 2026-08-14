@@ -1,3 +1,7 @@
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import type { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 import type {
@@ -83,6 +87,19 @@ type BuildCurrentActivityGraphStateValueArgs = {
     delta: { x: number; y: number },
     resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
   ) => void;
+  resizeLayoutNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: { x: number; y: number },
+  ) => void;
+  fitLayoutNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: { x: number; y: number },
+  ) => void;
+  resetLayoutNodeSize: (nodeId: string) => void;
   redoLayout: () => void;
   resetLayout: () => void;
   resetPreferences: () => void;
@@ -217,6 +234,9 @@ function buildCurrentActivityGraphLayoutControls(
     moveEdgeWaypoint: args.moveEdgeWaypoint,
     moveNode: args.moveLayoutNode,
     moveNodesByDelta: args.moveLayoutNodesByDelta,
+    resizeNode: args.resizeLayoutNode,
+    fitNode: args.fitLayoutNode,
+    resetNodeSize: args.resetLayoutNodeSize,
     redo: args.redoLayout,
     removeEdgeWaypoint: args.removeEdgeWaypoint,
     reset: args.resetLayout,

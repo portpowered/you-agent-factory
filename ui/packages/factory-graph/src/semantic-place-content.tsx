@@ -1,6 +1,9 @@
 import type { GraphSemanticIconKind } from "./semantic-icon.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
-import { factoryGraphNodeVisualIconClassName } from "./semantic-node-style.js";
+import {
+  factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
+} from "./semantic-node-style.js";
 import type { FactoryGraphSemanticPlaceRef } from "./semantic-place-nodes.js";
 import type { FactoryGraphVisualState } from "./visual-state.js";
 import {
@@ -50,7 +53,9 @@ export function FactoryGraphPlaceLabelText({
   return (
     <span className="grid min-w-0 gap-px overflow-hidden" title={label}>
       <span
-        className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-surface-subtle"
+        className={factoryGraphNodeWrappedTextClassName(
+          "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-on-surface-subtle",
+        )}
         data-place-work-type={dataPrefix === "place" ? true : undefined}
         data-state-work-type={dataPrefix === "state" ? true : undefined}
         title={parts.workType}
@@ -58,7 +63,9 @@ export function FactoryGraphPlaceLabelText({
         {parts.workType}
       </span>
       <span
-        className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
+        className={factoryGraphNodeWrappedTextClassName(
+          "block overflow-hidden font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface",
+        )}
         data-place-state-value={dataPrefix === "place" ? true : undefined}
         data-state-value={dataPrefix === "state" ? true : undefined}
         title={parts.stateValue}

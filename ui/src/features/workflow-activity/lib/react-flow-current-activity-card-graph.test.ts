@@ -2211,4 +2211,102 @@ describe("current activity graph active item labels", () => {
       "doc:factory/docs/overview.md",
     );
   });
+
+  it("gates selected-node resize controls by editor mode and family axes", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const resizeController = {
+      enabled: true,
+      labels: { fitToContent: "Fit to content", resetSize: "Reset size" },
+      onFitToContent: vi.fn(),
+      onResetSize: vi.fn(),
+      onResizeEnd: vi.fn(),
+    };
+    const editorNodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        graphLayout.edges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        nodeResizeControls: resizeController,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-06-08T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "node", nodeId: "workstation:process" },
+      snapshot,
+    });
+    const workstationControls = (
+      editorNodes.find((node) => node.id === "workstation:process")?.data as
+        | {
+            resizeControls?: {
+              allowedAxes: { height: boolean; width: boolean };
+            };
+          }
+        | undefined
+    )?.resizeControls;
+    const workerControls = (
+      editorNodes.find((node) => node.id === "worker:processor")?.data as
+        | {
+            resizeControls?: {
+              allowedAxes: { height: boolean; width: boolean };
+            };
+          }
+        | undefined
+    )?.resizeControls;
+
+    expect(workstationControls?.allowedAxes).toEqual({
+      height: true,
+      width: true,
+    });
+    expect(workerControls?.allowedAxes).toEqual({
+      height: false,
+      width: true,
+    });
+
+    const observeNodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        graphLayout.edges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-06-08T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+    });
+
+    expect(
+      (
+        observeNodes.find((node) => node.id === "workstation:process")?.data as
+          | { resizeControls?: unknown }
+          | undefined
+      )?.resizeControls,
+    ).toBeUndefined();
+  });
 });

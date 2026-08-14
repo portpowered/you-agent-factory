@@ -6,6 +6,7 @@ import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layou
 import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,
+  factoryLayoutNodeSize,
   moveFactoryLayoutNode,
 } from "../../lib/layout/factory-graph-layout-operations";
 import {
@@ -86,6 +87,105 @@ describe("useFactoryGraphLayoutDraftState movement history", () => {
 
     expect(result.current.canUndoLayout).toBe(false);
     expect(result.current.canRedoLayout).toBe(false);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState node-size history", () => {
+  it("records resize, fit, and reset as atomic commands with exact undo and redo", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-node-size-history",
+      }),
+    );
+
+    act(() => {
+      result.current.resizeNode(
+        "workstation:draft",
+        "workstation",
+        { height: 400, width: 9999 },
+        { x: 40, y: 80 },
+      );
+    });
+
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 400, width: 520 });
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({ x: 40, y: 80 });
+    expect(result.current.canUndoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toBeUndefined();
+    expect(result.current.canRedoLayout).toBe(true);
+
+    act(() => {
+      result.current.redoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 400, width: 520 });
+
+    act(() => {
+      result.current.fitNode(
+        "workstation:draft",
+        "workstation",
+        { height: 260, width: 300 },
+        { x: 40, y: 80 },
+      );
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 260, width: 300 });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 400, width: 520 });
+
+    act(() => {
+      result.current.redoLayout();
+      result.current.resetNodeSize("workstation:draft");
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toBeUndefined();
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 260, width: 300 });
+  });
+
+  it("normalizes invalid resize dimensions before entering pending layout", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-node-size-invalid",
+      }),
+    );
+
+    act(() => {
+      result.current.resizeNode(
+        "worker:writer",
+        "worker",
+        { height: Number.NaN, width: Number.POSITIVE_INFINITY },
+        { x: 10, y: 20 },
+      );
+    });
+
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "worker:writer"),
+    ).toEqual({ height: 58, width: 156 });
   });
 });
 

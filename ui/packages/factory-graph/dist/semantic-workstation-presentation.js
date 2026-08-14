@@ -1,5 +1,5 @@
 import { WorkstationKind } from "@you-agent-factory/client";
-import { factoryGraphNodeTitleClassName } from "./semantic-node-style.js";
+import { factoryGraphNodeTitleClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { factoryGraphWorkstationRuntimeRole, UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS, } from "./workstation-semantics.js";
 /** Render-independent workstation presentation metadata for a graph node. */
 export function factoryGraphWorkstationPresentation(semantics = UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS, locale) {
@@ -18,6 +18,7 @@ function runtimePresentation(runtimeType, locale) {
     const labels = {
         AGENT: chinese ? "代理工作站" : "Agent workstation",
         CLASSIFIER: chinese ? "分类器工作站" : "Classifier workstation",
+        HUMAN_APPROVAL: chinese ? "人工审批工作站" : "Human approval workstation",
         INFERENCE: chinese ? "推理工作站" : "Inference workstation",
         LOGICAL_MOVE: chinese ? "逻辑移动工作站" : "Logical move workstation",
         POLLER: chinese ? "轮询运行工作站" : "Poller-run workstation",
@@ -27,6 +28,7 @@ function runtimePresentation(runtimeType, locale) {
     const iconKinds = {
         AGENT: "workstation",
         CLASSIFIER: "queue",
+        HUMAN_APPROVAL: "constraint",
         INFERENCE: "processing",
         LOGICAL_MOVE: "workstation",
         POLLER: "poller",
@@ -72,6 +74,8 @@ export function factoryGraphWorkstationControlRoleLabel(controlRole, locale) {
         switch (controlRole) {
             case "CLASSIFIER":
                 return "分类器路由";
+            case "HUMAN_APPROVAL":
+                return "人工审批";
             case "LOGICAL_ROUTER":
                 return "逻辑路由";
             case "LOOP_BREAKER":
@@ -85,6 +89,8 @@ export function factoryGraphWorkstationControlRoleLabel(controlRole, locale) {
     switch (controlRole) {
         case "CLASSIFIER":
             return "Classifier route";
+        case "HUMAN_APPROVAL":
+            return "Human approval";
         case "LOGICAL_ROUTER":
             return "Logical router";
         case "LOOP_BREAKER":
@@ -150,7 +156,7 @@ export function factoryGraphWorkstationTitleClassName(label) {
             : "text-[1rem]"));
 }
 export function factoryGraphWorkItemLabelClassName(label) {
-    return factoryGraphClassNames("block min-w-0 basis-0 flex-1 truncate whitespace-nowrap leading-tight", label.length > 58
+    return factoryGraphClassNames(factoryGraphNodeWrappedTextClassName("block basis-0 flex-1 leading-tight"), label.length > 58
         ? "text-[0.64rem]"
         : label.length > 38
             ? "text-[0.68rem]"

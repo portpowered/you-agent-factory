@@ -8,6 +8,10 @@ import {
   factoryGraphNodeFamilyForShellType,
   factoryGraphNodeFamilyRole,
 } from "./node-family.js";
+import {
+  FactoryGraphNodeResizeControls,
+  type FactoryGraphNodeResizeControlsProps,
+} from "./node-resize-controls.js";
 import { factoryGraphNodeVisualStateClassName } from "./semantic-node-style.js";
 import {
   type FactoryGraphVisualStateInput,
@@ -46,6 +50,7 @@ export interface FactoryGraphNodeShellProps {
   className?: string;
   handles: FactoryGraphNodeHandle[];
   nodeType: "workstation" | FactoryGraphPlaceNodeType;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   visualState?: Omit<FactoryGraphVisualStateInput, "family">;
   zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
 }
@@ -56,6 +61,7 @@ export function FactoryGraphNodeShell({
   className = "",
   handles,
   nodeType,
+  resizeControls,
   visualState: visualStateInput,
   zAxisIncompleteHints = null,
 }: FactoryGraphNodeShellProps) {
@@ -102,6 +108,9 @@ export function FactoryGraphNodeShell({
       >
         {children}
       </GraphNodeShell>
+      {resizeControls ? (
+        <FactoryGraphNodeResizeControls {...resizeControls} />
+      ) : null}
       {activeHints
         ? workstationZAxisIncompleteHintSlots().map((slot) => (
             <ZAxisIncompleteHintOrb

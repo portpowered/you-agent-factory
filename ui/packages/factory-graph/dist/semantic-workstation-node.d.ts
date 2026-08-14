@@ -1,4 +1,5 @@
 import type { Node, NodeProps } from "@xyflow/react";
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle, type FactoryGraphZAxisIncompleteHints } from "./semantic-node-shell.js";
 import { type FactoryGraphWorkItemRef, type FactoryGraphWorkstationRef, type FactoryGraphWorkstationPresentation as WorkstationPresentation } from "./semantic-workstation-presentation.js";
 import type { FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
@@ -11,6 +12,7 @@ export interface FactoryGraphActiveExecution {
 export interface FactoryGraphWorkstationNodeData extends Record<string, unknown> {
     active: boolean;
     activeFlow: boolean;
+    focused?: boolean;
     executions: FactoryGraphActiveExecution[];
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
@@ -21,6 +23,7 @@ export interface FactoryGraphWorkstationNodeData extends Record<string, unknown>
     progressOutcomeRouteWorkstation?: unknown;
     selectedWorkID: string | null;
     selectedWorkstation: boolean;
+    resizeControls?: FactoryGraphNodeResizeControlsProps;
     summaryOnly?: boolean;
     workstation: FactoryGraphWorkstationRef;
     workstationSemantics?: FactoryGraphWorkstationSemantics;
@@ -33,7 +36,7 @@ export interface FactoryGraphWorkstationNodeData extends Record<string, unknown>
 }
 export type FactoryGraphWorkstationNode = Node<FactoryGraphWorkstationNodeData, "workstation">;
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
-export declare function FactoryGraphWorkstationNodeView({ data, }: NodeProps<FactoryGraphWorkstationNode>): import("react/jsx-runtime").JSX.Element;
+export declare function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelected, }: NodeProps<FactoryGraphWorkstationNode>): import("react/jsx-runtime").JSX.Element;
 export declare function FactoryGraphWorkstationGuardedControlCard({ locale, presentation, }: {
     locale?: string;
     presentation: WorkstationPresentation;

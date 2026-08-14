@@ -1,6 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
   type FactoryGraphNodeHandle,
@@ -10,6 +10,7 @@ import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import {
   type FactoryGraphVisualState,
@@ -30,6 +31,7 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
   targetPath: string;
   validationError?: boolean;
   muted?: boolean;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
 }
 
 export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
@@ -67,6 +69,11 @@ export function FactoryGraphDocNodeView({
         .join(" ")}
       handles={data.handles}
       nodeType="doc"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -128,11 +135,19 @@ function FactoryGraphDocNodeContent({
           kind="doc"
           label={docLabel}
         />
-        <span className="truncate text-sm font-medium text-on-surface">
+        <span
+          className={factoryGraphNodeWrappedTextClassName(
+            "block text-sm font-medium text-on-surface",
+          )}
+        >
           {displayLabel}
         </span>
       </div>
-      <span className="truncate text-xs text-on-surface-variant">
+      <span
+        className={factoryGraphNodeWrappedTextClassName(
+          "block text-xs text-on-surface-variant",
+        )}
+      >
         {targetPath}
       </span>
     </div>

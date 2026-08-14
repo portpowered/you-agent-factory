@@ -1,9 +1,11 @@
 // @component-test-runner vitest: full ELK graph-layout integration remains on the Vitest compatibility lane.
+// biome-ignore lint/style/noExcessiveLinesPerFile: layout cache coverage keeps related projection cases together.
 import "../../../testing/vitest-dom-capabilities.setup";
 
 import { renderHook, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { setFactoryLayoutNodeSize } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import {
@@ -325,6 +327,89 @@ describe("useCurrentActivityGraphLayout", () => {
     await waitFor(() => {
       expect(replacementBuildLayout).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("projects canonical node-size changes without reloading the cached topology", async () => {
+    const buildLayout: CurrentActivityGraphLayoutBuilder = vi.fn(
+      (factory, hiddenNodeClasses, visibilityPreset) =>
+        buildCurrentActivityGraphLayoutFromFactory(
+          factory,
+          hiddenNodeClasses,
+          visibilityPreset,
+        ),
+    );
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "canonical-node-size-projection",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "draft",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            type: "MODEL_WORKSTATION",
+            worker: "",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+    const initialCanonicalLayout = { schemaVersion: 1 };
+    const authoredCanonicalLayout = setFactoryLayoutNodeSize(
+      initialCanonicalLayout,
+      "workstation:draft",
+      { height: 240, width: 300 },
+      { x: 0, y: 0 },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ canonicalLayout }) =>
+        useCurrentActivityGraphLayoutForFactory(
+          snapshot,
+          snapshot.factory,
+          new Set(),
+          "all",
+          buildLayout,
+          canonicalLayout,
+        ),
+      { initialProps: { canonicalLayout: initialCanonicalLayout } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+    const initialWorkstation = result.current.nodes.find(
+      (node) => node.nodeId === "workstation:draft",
+    );
+    expect(initialWorkstation).toMatchObject({ height: 196, width: 156 });
+    const callsAfterInitialLayout = buildLayout.mock.calls.length;
+
+    rerender({ canonicalLayout: authoredCanonicalLayout });
+
+    expect(result.current.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          height: 240,
+          nodeId: "workstation:draft",
+          width: 300,
+        }),
+      ]),
+    );
+    expect(buildLayout.mock.calls.length).toBe(callsAfterInitialLayout);
   });
 
   it("drops stale resource nodes immediately when factory-change topology removes them", async () => {

@@ -1,6 +1,7 @@
 import {
   type FactoryGraphNodeDimensions,
   factoryGraphNodeFamilyRole,
+  resolveFactoryGraphNodeDimensions,
 } from "@you-agent-factory/factory-graph";
 import {
   buildLayeredGraphLayout,
@@ -47,7 +48,9 @@ export async function buildFactoryGraphEditorLayout(
       toNodeId: edge.targetId,
     })),
     nodes: topology.nodes.map((node) => ({
-      ...FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND[node.kind],
+      ...resolveFactoryGraphNodeDimensions(node.kind, {
+        content: [node.label],
+      }).resolvedDimensions,
       id: node.id,
       nodeId: node.id,
       nodeKind: node.kind,

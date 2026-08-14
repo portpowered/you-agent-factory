@@ -2,6 +2,7 @@
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
 import {
   type FactoryGraphWorkstationSemantics,
+  resolveFactoryGraphNodeDimensions,
   resolveFactoryGraphWorkstationSemantics,
 } from "@you-agent-factory/factory-graph";
 import { workTypeHasDefaultHandling } from "../../../current-factory-definition/lib/work-type-default-handling";
@@ -32,6 +33,10 @@ import {
   resolveFactoryGraphConnectionAnchorContext,
 } from "../editor/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../editor-runtime/factory-graph-editor-runtime";
+import {
+  type FactoryLayout,
+  factoryLayoutNodeSize,
+} from "../layout/factory-graph-layout-operations";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../operations/factory-graph-customer-display";
 import {
   workstationRendersProgressOutcomeHandleValidation,
@@ -123,6 +128,8 @@ export interface ProjectFactoryGraphToReactFlowOptions {
   /** When true, omit edges whose handles are absent from rendered connection anchors. */
   filterEdgesToRenderedHandles?: boolean;
   factoryDefinition?: CanonicalFactoryDefinition | null;
+  /** Authored layout state; React Flow measurements are never read here. */
+  layout?: FactoryLayout | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
   mode?: FactoryGraphReactFlowMode;
@@ -252,6 +259,14 @@ function buildFactoryGraphReactFlowNode(input: {
           ),
         )
       : undefined;
+  const authoredLayout =
+    input.input.layout ?? input.input.factoryDefinition?.layout;
+  const dimensions = resolveFactoryGraphNodeDimensions(input.node.kind, {
+    authoredDimensions: authoredLayout
+      ? factoryLayoutNodeSize(authoredLayout, input.node.id)
+      : undefined,
+    content: [input.node.label],
+  }).resolvedDimensions;
   return {
     className: nodeClassName(input.node.id, input.input),
     data: {
@@ -302,12 +317,17 @@ function buildFactoryGraphReactFlowNode(input: {
       }),
     },
     draggable: true,
+    height: dimensions.height,
     id: input.node.id,
+    initialHeight: dimensions.height,
+    initialWidth: dimensions.width,
+    measured: { height: dimensions.height, width: dimensions.width },
     position: input.input.layoutPositionsByNodeId?.get(input.node.id) ?? {
       x: column * COLUMN_X,
       y: row * ROW_Y,
     },
     type: "factoryEntity",
+    width: dimensions.width,
   } satisfies FactoryGraphReactFlowNode;
 }
 

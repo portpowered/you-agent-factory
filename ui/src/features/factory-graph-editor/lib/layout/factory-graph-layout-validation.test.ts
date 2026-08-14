@@ -11,6 +11,7 @@ import {
   FACTORY_LAYOUT_VALIDATION_CODE,
   factoryLayoutTopologyEdgeIds,
   factoryLayoutTopologyNodeIds,
+  normalizeFactoryLayoutNodeSizesForTopology,
   preparePendingFactoryLayoutForSave,
   projectFactoryLayoutValidationTargets,
   pruneFactoryLayoutEdgesForTopology,
@@ -264,6 +265,48 @@ describe("factory-graph-layout-validation", () => {
     const prepared = preparePendingFactoryLayoutForSave(layout, topology);
 
     expect(prepared.layout.edges).toBeUndefined();
+  });
+
+  it("normalizes invalid and out-of-bounds authored node sizes before save", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout = {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: "workstation:draft",
+          position: { x: 20, y: 40 },
+          size: {
+            height: Number.NaN,
+            width: Number.POSITIVE_INFINITY,
+          },
+        },
+        {
+          id: "worker:writer",
+          position: { x: 280, y: 40 },
+          size: { height: 9999, width: 1 },
+        },
+      ],
+    } satisfies ReturnType<typeof createDefaultFactoryLayout>;
+
+    const normalized = normalizeFactoryLayoutNodeSizesForTopology(
+      layout,
+      topology,
+    );
+
+    expect(normalized.nodes).toEqual([
+      {
+        id: "workstation:draft",
+        position: { x: 20, y: 40 },
+        size: { height: 196, width: 156 },
+      },
+      {
+        id: "worker:writer",
+        position: { x: 280, y: 40 },
+        size: { height: 144, width: 156 },
+      },
+    ]);
   });
 
   it("falls back to generated routing when only invalid waypoint geometry remains", () => {

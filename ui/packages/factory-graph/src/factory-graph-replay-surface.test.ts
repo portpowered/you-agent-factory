@@ -11,8 +11,16 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
         edges: [],
         groups: [],
         nodes: [
-          { id: "worker:alex", position: { x: 40, y: 80 } },
-          { id: "doc:factory/docs/runbook.md", position: { x: 640, y: 120 } },
+          {
+            id: "worker:alex",
+            position: { x: 40, y: 80 },
+            size: { height: 100, width: 260 },
+          },
+          {
+            id: "doc:factory/docs/runbook.md",
+            position: { x: 640, y: 120 },
+            size: { height: 200, width: 360 },
+          },
         ],
         viewport: { x: 12, y: 24, zoom: 0.8 },
       },
@@ -68,21 +76,98 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
   expect(flow.nodes).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
+        height: 100,
+        initialHeight: 100,
+        initialWidth: 260,
         id: "worker:alex",
+        measured: { height: 100, width: 260 },
         position: { x: 40, y: 80 },
         type: "worker",
+        width: 260,
       }),
       expect.objectContaining({
         data: expect.objectContaining({
           selectedDoc: true,
           targetPath: "factory/docs/runbook.md",
         }),
+        height: 200,
+        initialHeight: 200,
+        initialWidth: 360,
         id: "doc:factory/docs/runbook.md",
+        measured: { height: 200, width: 360 },
         position: { x: 640, y: 120 },
         type: "doc",
+        width: 360,
       }),
     ]),
   );
+});
+
+test("keeps authored dimensions when replay advances to a later runtime tick", () => {
+  const source = {
+    factory: {
+      layout: {
+        nodes: [
+          {
+            id: "worker:alex",
+            position: { x: 40, y: 80 },
+            size: { height: 100, width: 260 },
+          },
+        ],
+        schemaVersion: 1,
+      },
+      name: "Runtime update",
+    },
+    runtime: {
+      activity: {
+        activeDispatchOverlays: [],
+        activeWorkstationNodeIds: [],
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+      },
+      load: {
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+        workStateCounts: [],
+      },
+      topology: {
+        connections: [],
+        issues: [],
+        nodes: [
+          {
+            entityId: "alex",
+            handles: [],
+            id: "worker:alex",
+            kind: "worker",
+            label: "Alex",
+          },
+        ],
+        ok: true,
+        selectedTick: 4,
+      },
+    },
+    selectedTick: 4,
+  } satisfies FactoryGraphSource;
+
+  const updatedSource = structuredClone(source);
+  updatedSource.runtime.activity.selectedTick = 5;
+  updatedSource.runtime.load.selectedTick = 5;
+  updatedSource.runtime.topology.selectedTick = 5;
+  updatedSource.selectedTick = 5;
+
+  const node = projectFactoryGraphReplayFlow(updatedSource).nodes.find(
+    (candidate) => candidate.id === "worker:alex",
+  );
+
+  expect(node).toMatchObject({
+    height: 100,
+    initialHeight: 100,
+    initialWidth: 260,
+    measured: { height: 100, width: 260 },
+    width: 260,
+  });
 });
 
 test("projects authored workstation semantics and id-based activity onto the graph node", () => {

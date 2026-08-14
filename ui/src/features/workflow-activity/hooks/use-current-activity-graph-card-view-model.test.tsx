@@ -94,6 +94,9 @@ function graphControllerFixture() {
       moveEdgeWaypoint: vi.fn(),
       removeEdgeWaypoint: vi.fn(),
       removeNodeFromVisualGroup: vi.fn(),
+      resizeNode: vi.fn(),
+      fitNode: vi.fn(),
+      resetNodeSize: vi.fn(),
     },
     leaveControls: {},
     removalControls: {
@@ -183,6 +186,76 @@ describe("useCurrentActivityGraphCardViewModel waypoint state", () => {
     ).toMatchObject({
       selectedWaypointEdgeId: edgeLayoutId,
     });
+  });
+});
+
+describe("useCurrentActivityGraphCardViewModel node resize actions", () => {
+  beforeEach(() => {
+    graphViewModelMock.useCurrentActivityGraphViewModel.mockReset();
+    graphViewModelMock.useCurrentActivityGraphViewModel.mockReturnValue({
+      canonicalLayoutViewport: null,
+      edges: [],
+      graphKey: "graph-key",
+      graphSelection: graphSelectionFixture(),
+      handleNodesChange: vi.fn(),
+      initialFitViewKey: "graph-key",
+      initialFitViewOptions: { padding: 0.18 },
+      nodes: [],
+    });
+  });
+
+  it("routes completed size actions to canonical layout controls", () => {
+    const graphController = graphControllerFixture();
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphCardViewModel({
+        graphController,
+        locale: "en",
+        now: Date.parse("2026-06-10T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        selection: null,
+        snapshot: { factory: undefined } as never,
+      } as never),
+    );
+
+    const resizeControls =
+      graphViewModelMock.useCurrentActivityGraphViewModel.mock.calls[0]?.[0]
+        ?.editor.nodeResizeControls;
+    const target = {
+      family: "workstation" as const,
+      nodeId: "workstation:review",
+      position: { x: 10, y: 20 },
+    };
+    const dimensions = { height: 300, width: 320 };
+
+    expect(resizeControls?.enabled).toBe(true);
+    act(() => {
+      resizeControls?.onResizeEnd(target, dimensions);
+      resizeControls?.onFitToContent(target, dimensions);
+      resizeControls?.onResetSize(target);
+    });
+
+    expect(graphController.layoutControls.resizeNode).toHaveBeenCalledWith(
+      target.nodeId,
+      target.family,
+      dimensions,
+      target.position,
+    );
+    expect(graphController.layoutControls.fitNode).toHaveBeenCalledWith(
+      target.nodeId,
+      target.family,
+      dimensions,
+      target.position,
+    );
+    expect(graphController.layoutControls.resetNodeSize).toHaveBeenCalledWith(
+      target.nodeId,
+    );
+    expect(result.current.editorControls.isEditing).toBe(true);
   });
 });
 

@@ -44,6 +44,8 @@ export function useCurrentActivityGraphFlowProjection({
     layoutFactoryDefinition,
     hiddenNodeClasses,
     visibilityPreset,
+    undefined,
+    computedLayout,
   );
   const canonicalPositions = useMemo(
     () => graphNodePositionsFromCanonicalLayout(graphLayout, computedLayout),

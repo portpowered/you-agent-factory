@@ -360,6 +360,10 @@ export async function runStorybookCI({
       serverExit,
     ]);
     await Promise.race([
+      runCommand(["run", "storybook:factory-graph-node-size-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:header-responsive-check"]),
       serverExit,
     ]);

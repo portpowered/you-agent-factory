@@ -56,6 +56,7 @@ export function useEditableFactoryGraph(
     return projectFactoryGraphToReactFlow({
       factoryDefinition,
       filterEdgesToRenderedHandles: true,
+      layout: layoutDraftState.layout,
       layoutPositionsByNodeId,
       locale: options.locale ?? undefined,
       topology: draftState.graph,
@@ -121,6 +122,9 @@ export function useEditableFactoryGraph(
       removeEdgeWaypoint: layoutDraftState.removeEdgeWaypoint,
       moveLayoutNode: layoutDraftState.moveNode,
       moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
+      resizeLayoutNode: layoutDraftState.resizeNode,
+      fitLayoutNode: layoutDraftState.fitNode,
+      resetLayoutNodeSize: layoutDraftState.resetNodeSize,
       removeNode: mutationActions.removeNode,
       removeSelection: mutationActions.removeSelection,
       resetLayout: layoutDraftState.resetLayout,

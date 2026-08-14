@@ -35,6 +35,7 @@ function factoryWithSupportingFiles(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: layout fixture scenarios stay grouped around one canonical builder.
 describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
   it("includes bundled source files in the canonical factory graph layout", async () => {
     const layout = await buildCurrentActivityGraphLayoutFromFactory(
@@ -93,10 +94,12 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
       nodeKind: "doc",
       targetPath: "factory/docs/guide.md",
-      width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
     });
+    expect(docNode?.width).toBeGreaterThanOrEqual(
+      CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+    );
     expect(layout.width).toBeGreaterThanOrEqual(
-      (docNode?.x ?? 0) + CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+      (docNode?.x ?? 0) + (docNode?.width ?? CURRENT_ACTIVITY_DOC_NODE_WIDTH),
     );
   });
 
@@ -121,8 +124,53 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
       nodeKind: "doc",
       targetPath: "factory/docs/standards/review.md",
-      width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
     });
+    expect(docNode?.width).toBeGreaterThanOrEqual(
+      CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+    );
+  });
+
+  it("uses authored node sizes while keeping invalid saved sizes finite", async () => {
+    const factory = factoryWithSupportingFiles({
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "# Guide" },
+          targetPath: "factory/docs/guide.md",
+          type: "DOC",
+        },
+      ],
+    });
+    const factoryWithLayout: CanonicalFactoryDefinition = {
+      ...factory,
+      layout: {
+        nodes: [
+          {
+            id: "workstation:writer",
+            position: { x: 0, y: 0 },
+            size: { height: 420, width: 320 },
+          },
+          {
+            id: "doc:factory/docs/guide.md",
+            position: { x: 360, y: 0 },
+            size: { height: Number.POSITIVE_INFINITY, width: Number.NaN },
+          },
+        ],
+        schemaVersion: 1,
+      },
+    };
+
+    const layout =
+      await buildCurrentActivityGraphLayoutFromFactory(factoryWithLayout);
+    const workstation = layout.nodes.find(
+      (node) => node.nodeId === "workstation:writer",
+    );
+    const doc = layout.nodes.find(
+      (node) => node.nodeId === "doc:factory/docs/guide.md",
+    );
+
+    expect(workstation).toMatchObject({ height: 420, width: 320 });
+    expect(Number.isFinite(doc?.height)).toBe(true);
+    expect(Number.isFinite(doc?.width)).toBe(true);
   });
 
   it("projects the shipped goal state inventory without the removed execute state", async () => {

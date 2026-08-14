@@ -1,11 +1,8 @@
 import type { Node } from "@xyflow/react";
+import { resolveFactoryGraphNodeDimensions } from "@you-agent-factory/factory-graph";
 import { describe, expect, it } from "vitest";
 
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
-import {
-  CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
-  CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-} from "./current-activity-factory-graph-layout";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
@@ -81,6 +78,9 @@ describe("resolveInitialPlacementTopLeft for docs", () => {
   };
 
   it("centers doc nodes at the viewport when the canvas center is free", () => {
+    const docSize = resolveFactoryGraphNodeDimensions("doc", {
+      content: ["factory/docs/playbook.md"],
+    }).resolvedDimensions;
     const topLeft = resolveInitialPlacementTopLeft({
       draft: docDraft,
       nodes: [],
@@ -88,8 +88,8 @@ describe("resolveInitialPlacementTopLeft for docs", () => {
     });
 
     expect(topLeft).toEqual({
-      x: 640 - CURRENT_ACTIVITY_DOC_NODE_WIDTH / 2,
-      y: 360 - CURRENT_ACTIVITY_DOC_NODE_HEIGHT / 2,
+      x: 640 - docSize.width / 2,
+      y: 360 - docSize.height / 2,
     });
   });
 });
@@ -112,6 +112,28 @@ describe("resolveInitialPlacementTopLeft", () => {
     expect(topLeft).toEqual({
       x: 500 - workerSize.width / 2,
       y: 300 - workerSize.height / 2,
+    });
+  });
+
+  it("uses the fitted draft label size when placing a new node", () => {
+    const draft: FactoryGraphAddEntityDraft = {
+      kind: "worker",
+      model: "gpt",
+      name: "reviewer-with-a-deliberately-long-identifier",
+    };
+    const fittedSize = resolveFactoryGraphNodeDimensions("worker", {
+      content: [draft.name],
+    }).resolvedDimensions;
+
+    const topLeft = resolveInitialPlacementTopLeft({
+      draft,
+      nodes: [],
+      viewportCenter: { x: 500, y: 300 },
+    });
+
+    expect(topLeft).toEqual({
+      x: 500 - fittedSize.width / 2,
+      y: 300 - fittedSize.height / 2,
     });
   });
 
@@ -291,5 +313,19 @@ describe("occupiedRectsFromRenderedNodes", () => {
     ]);
 
     expect(rects).toEqual([{ height: 120, width: 80, x: 40, y: 50 }]);
+  });
+
+  it("uses the rendered fitted size for known node families", () => {
+    const rects = occupiedRectsFromRenderedNodes([
+      {
+        data: { kind: "worker" },
+        height: 58,
+        id: "worker:writer",
+        position: { x: 40, y: 50 },
+        width: 320,
+      },
+    ]);
+
+    expect(rects).toEqual([{ height: 58, width: 320, x: 40, y: 50 }]);
   });
 });

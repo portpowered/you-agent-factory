@@ -5,7 +5,11 @@ import type {
   NodeChange,
   OnSelectionChangeFunc,
 } from "@xyflow/react";
-import { useCallback, useMemo, useState } from "react";
+import {
+  type FactoryGraphNodeDimensions,
+  resolveFactoryGraphNodeResizeDimensions,
+} from "@you-agent-factory/factory-graph";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   DashboardActiveExecution,
@@ -17,13 +21,18 @@ import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
 import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
-import type { GraphLayout } from "../../flowchart/lib/layout";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
   buildGraphEdges,
   initialFocusNodes,
 } from "../lib/react-flow-current-activity-card-edges";
-import type { CurrentActivityEditorState } from "../lib/react-flow-current-activity-card-editor-handles";
+import type {
+  CurrentActivityEditorState,
+  CurrentActivityNodeResizeController,
+  CurrentActivityNodeResizeTarget,
+} from "../lib/react-flow-current-activity-card-editor-handles";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
@@ -46,6 +55,7 @@ const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   string,
   { x: number; y: number }
 >();
+const EMPTY_RESIZE_DIMENSIONS = new Map<string, FactoryGraphNodeDimensions>();
 
 export type CurrentActivityGraphRenderProjection = {
   canonicalLayoutViewport: { x: number; y: number; zoom: number } | null;
@@ -137,6 +147,7 @@ function useCurrentActivityBaseNodes({
           activeTool: editor.activeTool,
           canInteractWithEditor: editor.canInteractWithEditor,
           editorMode: editor.editorMode,
+          nodeResizeControls: editor.nodeResizeControls,
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
           validationTargets: editor.validationTargets,
@@ -159,7 +170,13 @@ function useCurrentActivityBaseNodes({
       activeExecutionsByWorkstationNodeID,
       activeGraphHighlights,
       activeItemLabelsByPlaceId,
-      editor,
+      editor.activeTool,
+      editor.canInteractWithEditor,
+      editor.editorMode,
+      editor.handleConnectionAnchorClick,
+      editor.nodeResizeControls,
+      editor.pendingConnectionSource,
+      editor.validationTargets,
       factoryDefinition,
       graphLayout,
       locale,
@@ -175,6 +192,117 @@ function useCurrentActivityBaseNodes({
       snapshot,
     ],
   );
+}
+
+function useCurrentActivityNodeResizeState(input: {
+  editor: CurrentActivityGraphViewModelEditorInput;
+  graphKey: string;
+  locale?: string;
+}) {
+  const [dimensionsByNodeId, setDimensionsByNodeId] = useState<
+    ReadonlyMap<string, FactoryGraphNodeDimensions>
+  >(new Map());
+
+  const updateDimensions = useCallback(
+    (
+      target: CurrentActivityNodeResizeTarget,
+      dimensions: FactoryGraphNodeDimensions,
+    ) => {
+      const resolvedDimensions = resolveFactoryGraphNodeResizeDimensions(
+        target.family,
+        dimensions,
+      );
+      setDimensionsByNodeId((currentDimensions) => {
+        const nextDimensions = new Map(currentDimensions);
+        nextDimensions.set(target.nodeId, resolvedDimensions);
+        return nextDimensions;
+      });
+    },
+    [],
+  );
+  const resetDimensions = useCallback(
+    (target: CurrentActivityNodeResizeTarget) => {
+      setDimensionsByNodeId((currentDimensions) => {
+        if (!currentDimensions.has(target.nodeId)) {
+          return currentDimensions;
+        }
+
+        const nextDimensions = new Map(currentDimensions);
+        nextDimensions.delete(target.nodeId);
+        return nextDimensions;
+      });
+    },
+    [],
+  );
+  const hostController = input.editor.nodeResizeControls;
+  const localController = useMemo<CurrentActivityNodeResizeController>(
+    () => ({
+      enabled:
+        input.editor.editorMode &&
+        input.editor.canInteractWithEditor &&
+        input.editor.activeTool !== "delete",
+      labels: {
+        fitToContent: getFactoryGraphEditorMessages(input.locale)
+          .nodeFitToContentLabel,
+        resetSize: getFactoryGraphEditorMessages(input.locale)
+          .nodeResetSizeLabel,
+      },
+      onFitToContent: updateDimensions,
+      onResetSize: resetDimensions,
+      onResizeEnd: updateDimensions,
+    }),
+    [
+      input.editor.activeTool,
+      input.editor.canInteractWithEditor,
+      input.editor.editorMode,
+      input.locale,
+      resetDimensions,
+      updateDimensions,
+    ],
+  );
+  const controller = useMemo<CurrentActivityNodeResizeController>(
+    () => ({
+      enabled: hostController?.enabled ?? localController.enabled,
+      labels: hostController?.labels ?? localController.labels,
+      onFitToContent: (target, dimensions) => {
+        if (!hostController) {
+          updateDimensions(target, dimensions);
+        }
+        hostController?.onFitToContent(target, dimensions);
+      },
+      onResetSize: (target) => {
+        if (!hostController) {
+          resetDimensions(target);
+        }
+        hostController?.onResetSize(target);
+      },
+      onResizeEnd: (target, dimensions) => {
+        if (!hostController) {
+          updateDimensions(target, dimensions);
+        }
+        hostController?.onResizeEnd(target, dimensions);
+      },
+    }),
+    [
+      hostController,
+      localController.enabled,
+      localController.labels,
+      resetDimensions,
+      updateDimensions,
+    ],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: graph identity and edit availability intentionally reset presentation-only resize state.
+  useEffect(() => {
+    setDimensionsByNodeId(new Map());
+  }, [input.graphKey, controller.enabled]);
+
+  return {
+    controller,
+    dimensionsByNodeId: hostController
+      ? EMPTY_RESIZE_DIMENSIONS
+      : dimensionsByNodeId,
+  };
 }
 
 function useActiveGraphHighlights({
@@ -200,6 +328,7 @@ function useActiveGraphHighlights({
 function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
   graphSelection: FactoryGraphEditorSelectionController,
+  dimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
 ) {
   const basePositionKey = useMemo(
     () =>
@@ -272,12 +401,25 @@ function useCurrentActivityGraphNodePresentation(
 
   const displayNodes = useMemo(
     () =>
-      baseNodes.map((node) => ({
-        ...node,
-        position: transientPositionsByNodeId.get(node.id) ?? node.position,
-        selected: graphSelection.isNodeSelected(node.id),
-      })),
-    [baseNodes, graphSelection, transientPositionsByNodeId],
+      baseNodes.map(
+        ({
+          initialHeight: _initialHeight,
+          initialWidth: _initialWidth,
+          measured: _measured,
+          ...node
+        }) => ({
+          ...node,
+          ...(dimensionsByNodeId.has(node.id)
+            ? {
+                height: dimensionsByNodeId.get(node.id)?.height,
+                width: dimensionsByNodeId.get(node.id)?.width,
+              }
+            : {}),
+          position: transientPositionsByNodeId.get(node.id) ?? node.position,
+          selected: graphSelection.isNodeSelected(node.id),
+        }),
+      ),
+    [baseNodes, dimensionsByNodeId, graphSelection, transientPositionsByNodeId],
   );
 
   return { displayNodes, handleNodesChange };
@@ -444,11 +586,20 @@ export function useCurrentActivityGraphViewModel({
   });
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
+  const nodeResizeState = useCurrentActivityNodeResizeState({
+    editor,
+    graphKey,
+    locale,
+  });
+  const graphEditor = useMemo(
+    () => ({ ...editor, nodeResizeControls: nodeResizeState.controller }),
+    [editor, nodeResizeState.controller],
+  );
   const baseNodes = useCurrentActivityBaseNodes({
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
-    editor,
+    editor: graphEditor,
     factoryDefinition: displayFactoryDefinition ?? undefined,
     graphLayout: positionedGraphLayout,
     locale,
@@ -464,7 +615,11 @@ export function useCurrentActivityGraphViewModel({
     snapshot,
   });
   const { displayNodes, handleNodesChange } =
-    useCurrentActivityGraphNodePresentation(baseNodes, graphSelection);
+    useCurrentActivityGraphNodePresentation(
+      baseNodes,
+      graphSelection,
+      nodeResizeState.dimensionsByNodeId,
+    );
   const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(
     graphSelection,
     graphSelectionEnabled,

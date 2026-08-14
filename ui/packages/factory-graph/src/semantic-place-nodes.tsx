@@ -1,6 +1,7 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import {
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
@@ -9,6 +10,7 @@ import {
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import {
   FactoryGraphPlaceLabelText,
@@ -45,6 +47,7 @@ export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
   tokenCount: number;
   validationError?: boolean;
   validationMessage?: string;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
 }
 
 export interface FactoryGraphStatePositionNodeData
@@ -132,6 +135,11 @@ function FactoryGraphPlaceNodeView({
       className={classNames("justify-center text-left", className)}
       handles={data.handles}
       nodeType={nodeType}
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -180,7 +188,7 @@ function FactoryGraphStatePositionContent({
   return (
     <>
       <span
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-state-label-zone
       >
         <FactoryGraphPlaceSemanticIcon
@@ -233,7 +241,11 @@ function FactoryGraphStaticPlaceContent({
             place={place}
             visualState={visualState}
           />
-          <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.86rem] font-bold leading-tight">
+          <strong
+            className={factoryGraphNodeWrappedTextClassName(
+              "block font-mono text-[0.86rem] font-bold leading-tight",
+            )}
+          >
             {label}
           </strong>
         </span>
@@ -256,7 +268,7 @@ function FactoryGraphStaticPlaceContent({
     >
       <span
         aria-label={label}
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-place-label-zone
         role="img"
       >
