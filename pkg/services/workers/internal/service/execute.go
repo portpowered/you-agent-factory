@@ -271,7 +271,7 @@ func (s *Service) executeProviderWithRetry(
 		}
 
 		providerErr := workers.NormalizeProviderExecutionError(err)
-		if providerErr == nil || !retryableProviderFailure(providerErr, result) || retryCount >= detachedProviderMaxRetries {
+		if providerErr == nil || !retryableProviderFailure(providerErr) || retryCount >= detachedProviderMaxRetries {
 			return result, err
 		}
 
@@ -288,42 +288,11 @@ func (s *Service) executeProviderWithRetry(
 	}
 }
 
-func retryableProviderFailure(providerErr *workers.ProviderError, result workers.RunnerExecutionResult) bool {
+func retryableProviderFailure(providerErr *workers.ProviderError) bool {
 	if providerErr == nil {
 		return false
 	}
-	if workers.WorkFailureDecisionFromProviderError(providerErr).Retryable {
-		return true
-	}
-	// Providers deliberately keeps an unclassified native process failure
-	// terminal at its public boundary. Once it reaches the detached Workers
-	// retry policy, the native stage is enough to distinguish a failed provider
-	// process from a malformed request or an invalid response. Give that
-	// external effect the same bounded retry budget as other transient provider
-	// failures without changing the customer-facing terminal classification.
-	if providerErr.Type != workers.WorkFailureTypeUnknown || providerErr.Diagnostics == nil {
-		return false
-	}
-	// A native stream that already established a Provider Session has reached
-	// the provider's execution lifecycle. Retrying it would create a second
-	// Worker Session for a terminal process failure rather than recover a
-	// detached invocation that never established provider state.
-	if providerSessionForRetry(providerErr, result) != nil {
-		return false
-	}
-	if strings.EqualFold(
-		strings.TrimSpace(providerErr.Diagnostics.Metadata["failure_stage"]),
-		"native",
-	) {
-		return true
-	}
-	if providerErr.Diagnostics.Provider != nil && strings.EqualFold(
-		strings.TrimSpace(providerErr.Diagnostics.Provider.ResponseMetadata["failure_stage"]),
-		"native",
-	) {
-		return true
-	}
-	return false
+	return workers.WorkFailureDecisionFromProviderError(providerErr).Retryable
 }
 
 func providerSessionForRetry(
