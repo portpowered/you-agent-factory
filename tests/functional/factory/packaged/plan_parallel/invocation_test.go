@@ -371,8 +371,15 @@ func TestPackagedPlanParallelChildFailureFansInWithoutMerge(t *testing.T) {
 	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
 		t.Fatalf("response = %#v, want failed invocation without primary result", response)
 	}
-	if runner.executionCount() != 3 || runner.mergeCount() != 0 {
-		t.Fatalf("executor calls = %d, merge calls = %d; want bounded provider retries and no merge", runner.executionCount(), runner.mergeCount())
+	// A native provider failure that never established a Provider Session is
+	// terminal at the Workers boundary, so the child executes exactly once and
+	// the fan-in still reports failure without merging. This previously
+	// asserted 3: the agent-run harness stringified the typed ProviderError, so
+	// the generic {terminal, internal_server_error} fallback classified a
+	// terminal failure as retryable and requeued the Work twice more. Keep the
+	// comparison exact so an unbounded retry regression still fails here.
+	if runner.executionCount() != 1 || runner.mergeCount() != 0 {
+		t.Fatalf("executor calls = %d, merge calls = %d; want one terminal child attempt and no merge", runner.executionCount(), runner.mergeCount())
 	}
 }
 
