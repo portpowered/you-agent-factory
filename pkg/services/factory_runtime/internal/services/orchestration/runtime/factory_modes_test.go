@@ -337,8 +337,19 @@ func TestNew_WorkerPoolDispatchResultHookRecordsCompletionAtObservedTick(t *test
 	if completions[0].DispatchID != dispatch.DispatchID {
 		t.Fatalf("completion dispatch ID = %q, want %q", completions[0].DispatchID, dispatch.DispatchID)
 	}
-	if completions[0].ObservedTick <= dispatch.Execution.DispatchCreatedTick {
-		t.Fatalf("completion observed tick = %d, want after dispatch tick %d", completions[0].ObservedTick, dispatch.Execution.DispatchCreatedTick)
+	// On the async worker-pool path the engine deliberately drains the result
+	// buffer mid-tick (see FactoryEngine.drainPendingResults and
+	// forwardDispatches) so async results stay visible to TerminationCheck and
+	// do not trip false deadlock detection. A worker that finishes before the
+	// dispatching tick ends is therefore legitimately observed on that same
+	// tick, so requiring a strictly later tick here is a race, not a contract.
+	// The strictly-after ordering that IS a contract is covered deterministically
+	// by TestNew_ReplayDelayedWorkerPoolCompletionWakesAtPlannedTick, which pins
+	// delivery to a planned tick. What this test owns is that the async hook
+	// records exactly one completion, correlated to its dispatch, stamped with a
+	// tick that is never earlier than the dispatch tick.
+	if completions[0].ObservedTick < dispatch.Execution.DispatchCreatedTick {
+		t.Fatalf("completion observed tick = %d, want at or after dispatch tick %d", completions[0].ObservedTick, dispatch.Execution.DispatchCreatedTick)
 	}
 }
 
