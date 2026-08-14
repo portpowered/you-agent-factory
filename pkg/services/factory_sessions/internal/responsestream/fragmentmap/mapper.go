@@ -545,17 +545,17 @@ func semanticProgressRepresentation(kind responseevents.Kind, phase responseeven
 func semanticPhase(value responsestream.EventType) responseevents.Phase {
 	normalized := responsestream.EventType(strings.ToUpper(strings.TrimSpace(string(value))))
 	switch normalized {
-	case responsestream.EventTypeStarted:
+	case responsestream.EventTypeStarted, "START":
 		return responseevents.PhaseStarted
-	case responsestream.EventTypeTextDelta:
+	case responsestream.EventTypeTextDelta, "DELTA":
 		return responseevents.PhaseDelta
-	case responsestream.EventTypeFinalText:
+	case responsestream.EventTypeFinalText, "COMPLETED", "COMPLETE":
 		return responseevents.PhaseCompleted
 	case responsestream.EventTypeFailed:
 		return responseevents.PhaseFailed
-	case responsestream.EventTypeCanceled:
+	case responsestream.EventTypeCanceled, "CANCELLED":
 		return responseevents.PhaseCanceled
-	case responsestream.EventTypeProgress, responsestream.EventTypeUnknown:
+	case responsestream.EventTypeProgress, responsestream.EventTypeUnknown, "UPDATED":
 		return responseevents.PhaseUpdated
 	default:
 		return responseevents.PhaseUpdated
