@@ -20,6 +20,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -385,6 +386,7 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 		platformfilesystem.Local{},
 		nil,
 		platformfilesystem.Local{},
+		statelessDecisionEnvelopeService(t),
 	)
 	if err != nil {
 		t.Fatalf("provideStatelessWorkersService() error = %v", err)
@@ -453,7 +455,7 @@ func TestProvideWorkersWorktreeReleaseReturnsNilForPreparerWithoutRelease(t *tes
 }
 
 func TestProvideStatelessWorkersServiceRejectsMissingClock(t *testing.T) {
-	_, err := provideStatelessWorkersService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := provideStatelessWorkersService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("provideStatelessWorkersService() error = nil, want missing clock error")
 	}
@@ -550,6 +552,7 @@ func newProductionCleanupStatelessService(
 		platformfilesystem.Local{},
 		nil,
 		platformfilesystem.Local{},
+		statelessDecisionEnvelopeService(t),
 	)
 	if err != nil {
 		t.Fatalf("provideStatelessWorkersService() error = %v", err)
@@ -841,4 +844,17 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 	if service == nil {
 		t.Fatal("worker sessions factory() returned nil service")
 	}
+}
+
+// statelessDecisionEnvelopeService resolves the same Factory Definitions
+// decision-envelope owner the composed process injects, so the stateless
+// Workers root under test parses envelopes through the canonical contract.
+func statelessDecisionEnvelopeService(t *testing.T) factorydefinitions.DecisionEnvelopeService {
+	t.Helper()
+
+	ports, err := provideFactoryInvocationPolicyPorts()
+	if err != nil {
+		t.Fatalf("provideFactoryInvocationPolicyPorts() error = %v", err)
+	}
+	return provideDecisionEnvelopeService(ports)
 }

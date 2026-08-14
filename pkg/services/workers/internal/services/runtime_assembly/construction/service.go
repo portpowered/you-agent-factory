@@ -357,8 +357,9 @@ func (s *Service) resolveRegisteredAgentRunner(
 	}
 	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
 	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
-		Providers: s.providers,
-		Publish:   publish,
+		Providers:         s.providers,
+		Publish:           publish,
+		DecisionEnvelopes: s.decisionEnvelopes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct agent runner registry: %w", err)

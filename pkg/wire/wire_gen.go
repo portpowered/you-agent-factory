@@ -243,7 +243,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v21 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, provider, agentToolFileSystem)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, provider, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
 	}
@@ -754,7 +754,12 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
 	provider := provideFactoryRuntimeProviderOverride(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider, agentToolFileSystem)
+	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
+	if err != nil {
+		return nil, err
+	}
+	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
 	}
@@ -979,6 +984,8 @@ var statelessWorkersSet = wire5.NewSet(
 	provideWorkersWorktreeRelease,
 	provideFactoryRuntimeProviderOverride,
 	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
 	provideStatelessWorkersService,
 )
 

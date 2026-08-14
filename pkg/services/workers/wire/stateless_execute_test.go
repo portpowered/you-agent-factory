@@ -256,8 +256,9 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 	local := &statelessTestLocalInvoker{}
 	service, err := NewService(
 		runners.AgentDependencies{
-			Providers: provider,
-			Publish:   func(workers.ProgressFragment) {},
+			Providers:         provider,
+			Publish:           func(workers.ProgressFragment) {},
+			DecisionEnvelopes: statelessDecisionEnvelopeDouble{},
 		},
 		runners.ScriptConfig{
 			Command:          "fixture-script",
@@ -378,8 +379,9 @@ type statelessConstructionInputs struct {
 func newStatelessConstructionInputs() statelessConstructionInputs {
 	return statelessConstructionInputs{
 		agentDependencies: runners.AgentDependencies{
-			Providers: &statelessTestProviders{},
-			Publish:   func(workers.ProgressFragment) {},
+			Providers:         &statelessTestProviders{},
+			Publish:           func(workers.ProgressFragment) {},
+			DecisionEnvelopes: statelessDecisionEnvelopeDouble{},
 		},
 		scriptConfig: runners.ScriptConfig{
 			Command:          "fixture-script",
@@ -648,3 +650,57 @@ func (provider *statelessTestProviders) Execute(
 }
 
 var _ providers.Service = (*statelessTestProviders)(nil)
+
+// statelessDecisionEnvelopeDouble stands in for the Factory Definitions owner of
+// decision-envelope interpretation. Composition tests assert that the stateless
+// Workers root consults the injected owner; the envelope grammar itself is owned
+// and tested inside invocation policy, so this double maps only the exact
+// payloads these cases send.
+type statelessDecisionEnvelopeDouble struct{}
+
+func (statelessDecisionEnvelopeDouble) UsesDecisionEnvelopeOutcome(
+	workstation *factorydefinitions.FactoryWorkstationConfig,
+) bool {
+	return workstation != nil &&
+		workstation.OutcomeFormat == factorydefinitions.DecisionEnvelopeOutcomeFormat
+}
+
+func (statelessDecisionEnvelopeDouble) UsesGoalRoutingDecisionEnvelope(
+	*factorydefinitions.FactoryWorkstationConfig,
+) bool {
+	return false
+}
+
+func (statelessDecisionEnvelopeDouble) WorkResultFromDecisionEnvelopeJSONOrFailed(
+	dispatchID string,
+	transitionID string,
+	raw string,
+) workers.WorkResult {
+	result := workers.WorkResult{DispatchID: dispatchID, TransitionID: transitionID}
+	switch strings.TrimSpace(raw) {
+	case `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`:
+		result.Outcome = workers.OutcomeAccepted
+		result.Feedback = "ready"
+		result.Output = "ship"
+	case `{"decision":"CONTINUE","feedback":"add tests","output":"next"}`:
+		result.Outcome = workers.OutcomeContinue
+		result.Feedback = "add tests"
+		result.Output = "next"
+	case `{"decision":"REJECTED","feedback":"not ready","output":"stop"}`:
+		result.Outcome = workers.OutcomeRejected
+		result.Feedback = "not ready"
+		result.Output = "stop"
+	default:
+		result.Outcome = factorydefinitions.MalformedEnvelopeFailureOutcome
+		result.Error = "reviewer decision envelope invalid"
+	}
+	return result
+}
+
+func (double statelessDecisionEnvelopeDouble) WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
+	dispatchID string,
+	transitionID string,
+	raw string,
+) workers.WorkResult {
+	return double.WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw)
+}

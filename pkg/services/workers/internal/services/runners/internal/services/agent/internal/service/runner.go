@@ -2,15 +2,13 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
@@ -19,6 +17,11 @@ import (
 type service struct {
 	providers providers.Service
 	publish   workers.ProgressPublisher
+	// decisionEnvelopes is the injected Factory Definitions owner of decision
+	// envelope interpretation. Workers never parses the envelope itself: the
+	// contract, its vocabulary, and its malformed-envelope failure shape all
+	// belong to invocation policy.
+	decisionEnvelopes interfaces.DecisionEnvelopeService
 }
 
 // progressIdentity keeps the detached correlation emitted by Execute separate
@@ -42,11 +45,13 @@ func progressIdentityForRequest(request workers.RunnerExecutionRequest) progress
 
 var _ agent.Service = (*service)(nil)
 
-// New validates and captures the singular Providers root and Workers-owned
-// observation edge without starting an attempt or constructing another graph.
+// New validates and captures the singular Providers root, the Workers-owned
+// observation edge, and the injected decision-envelope owner without starting
+// an attempt or constructing another graph.
 func New(
 	providersService providers.Service,
 	publish workers.ProgressPublisher,
+	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (agent.Service, error) {
 	if providersService == nil {
 		return nil, misconfigured("agent Providers service is required", nil)
@@ -54,7 +59,22 @@ func New(
 	if publish == nil {
 		return nil, misconfigured("agent progress publisher is required", nil)
 	}
-	return &service{providers: providersService, publish: publish}, nil
+	return &service{
+		providers:         providersService,
+		publish:           publish,
+		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
+	}, nil
+}
+
+func firstDecisionEnvelopeService(
+	services []interfaces.DecisionEnvelopeService,
+) interfaces.DecisionEnvelopeService {
+	for _, service := range services {
+		if service != nil {
+			return service
+		}
+	}
+	return nil
 }
 
 // Execute snapshots one common Runner request and delegates exactly one
@@ -134,7 +154,7 @@ func (s *service) execute(
 			ID:       request.SessionID,
 		}
 	}
-	response, err = normalizeAgentResponse(response, request)
+	response, err = s.normalizeAgentResponse(response, request)
 	if err != nil {
 		return response, err
 	}
@@ -154,22 +174,16 @@ func (s *service) execute(
 	return response, nil
 }
 
-type decisionEnvelope struct {
-	Decision string `json:"decision"`
-	Feedback string `json:"feedback"`
-	Output   string `json:"output,omitempty"`
-	// RecordedOutputWork mirrors the canonical envelope contract. Dropping it
-	// here would let a reviewer's recorded work bypass Runtime validation and
-	// materialization entirely.
-	RecordedOutputWork []work.FactoryWorkItem `json:"recorded_output_work,omitempty"`
-}
-
-func normalizeAgentResponse(
+func (s *service) normalizeAgentResponse(
 	response workers.RunnerExecutionResult,
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
-	if request.DecisionEnvelope || strings.EqualFold(strings.TrimSpace(request.OutputFormat), "decision-envelope") {
-		return normalizeDecisionEnvelope(response, request)
+	if request.DecisionEnvelope ||
+		strings.EqualFold(
+			strings.TrimSpace(request.OutputFormat),
+			interfaces.DecisionEnvelopeOutcomeFormat,
+		) {
+		return s.normalizeDecisionEnvelope(response, request)
 	}
 	if strings.TrimSpace(request.StopToken) == "" {
 		return response, nil
@@ -178,56 +192,112 @@ func normalizeAgentResponse(
 	return response, nil
 }
 
-func normalizeDecisionEnvelope(
+// normalizeDecisionEnvelope delegates every envelope decision to the injected
+// Factory Definitions owner and copies its canonical WorkResult onto the runner
+// result. A malformed envelope keeps its canonical failure outcome and
+// completion-validation diagnostics, and is surfaced as a terminal runner error
+// so an agent loop stops instead of replaying an unreadable turn.
+func (s *service) normalizeDecisionEnvelope(
 	response workers.RunnerExecutionResult,
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
-	var envelope decisionEnvelope
-	if err := json.Unmarshal([]byte(strings.TrimSpace(response.Content)), &envelope); err != nil {
-		return response, workers.NewProviderError(
-			workers.WorkFailureTypePermanentBadRequest,
-			"reviewer decision envelope is invalid",
-			err,
+	if s.decisionEnvelopes == nil {
+		return response, misconfigured(
+			"agent decision-envelope service is required for decision-envelope output",
+			nil,
 		)
 	}
-	decision := strings.ToUpper(strings.TrimSpace(envelope.Decision))
-	if request.GoalRoutingDecisionEnvelope {
-		classification, err := normalizeGoalDecision(decision)
-		if err != nil {
-			return response, workers.NewProviderError(
-				workers.WorkFailureTypePermanentBadRequest,
-				"goal decision envelope is invalid",
-				err,
-			)
-		}
-		response.Outcome = workers.OutcomeAccepted
-		response.Classification = classification
-	} else {
-		switch workers.WorkOutcome(decision) {
-		case workers.OutcomeAccepted, workers.OutcomeContinue, workers.OutcomeRejected:
-			response.Outcome = workers.WorkOutcome(decision)
-		default:
-			return response, workers.NewProviderError(
-				workers.WorkFailureTypePermanentBadRequest,
-				"reviewer decision envelope has an unsupported decision",
-				fmt.Errorf("decision %q", envelope.Decision),
-			)
-		}
+	raw := response.Content
+	result := s.decisionEnvelopeWorkResult(request, raw)
+	response.Outcome = result.Outcome
+	response.Feedback = strings.TrimSpace(result.Feedback)
+	response.Classification = result.SelectedClassificationLabel
+	response.RecordedOutputWork = result.RecordedOutputWork
+	response.Diagnostics = mergeDecisionEnvelopeDiagnostics(response.Diagnostics, result.Diagnostics)
+	if strings.TrimSpace(result.Error) != "" {
+		// The unreadable response stays on Content so operators still see what
+		// the worker actually produced.
+		return response, malformedDecisionEnvelopeError(result, response)
 	}
-	response.Content = strings.TrimSpace(envelope.Output)
-	response.Feedback = strings.TrimSpace(envelope.Feedback)
-	response.RecordedOutputWork = envelope.RecordedOutputWork
+	response.Content = strings.TrimSpace(result.Output)
 	return response, nil
 }
 
-func normalizeGoalDecision(decision string) (string, error) {
-	classification := strings.ToLower(strings.ReplaceAll(decision, "-", "_"))
-	switch classification {
-	case "accepted", "needs_changes", "tests_failed", "needs_human", "blocked", "interrupted", "failed":
-		return classification, nil
-	default:
-		return "", fmt.Errorf("decision %q", decision)
+func (s *service) decisionEnvelopeWorkResult(
+	request workers.RunnerExecutionRequest,
+	raw string,
+) workers.WorkResult {
+	if request.GoalRoutingDecisionEnvelope {
+		return s.decisionEnvelopes.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
+			request.Dispatch.DispatchID,
+			request.Dispatch.TransitionID,
+			raw,
+		)
 	}
+	return s.decisionEnvelopes.WorkResultFromDecisionEnvelopeJSONOrFailed(
+		request.Dispatch.DispatchID,
+		request.Dispatch.TransitionID,
+		raw,
+	)
+}
+
+// malformedDecisionEnvelopeError preserves the failure classification the
+// decision-envelope owner assigned instead of restating it as a Workers-local
+// bad-request decision.
+func malformedDecisionEnvelopeError(
+	result workers.WorkResult,
+	response workers.RunnerExecutionResult,
+) error {
+	failureType := workers.WorkFailureTypeUnknown
+	if result.FailureMetadata != nil && strings.TrimSpace(string(result.FailureMetadata.Type)) != "" {
+		failureType = result.FailureMetadata.Type
+	}
+	normalized := workers.NewProviderError(
+		failureType,
+		boundedFailureMessage(result.Error),
+		nil,
+	)
+	normalized.ProviderSession = workers.CloneProviderSessionMetadata(response.ProviderSession)
+	normalized.Diagnostics = workers.CloneWorkDiagnostics(response.Diagnostics)
+	return normalized
+}
+
+// mergeDecisionEnvelopeDiagnostics layers the owner's failure facts over the
+// provider diagnostics the attempt already produced, so the provider identity,
+// duration, and response metadata survive alongside the envelope verdict.
+func mergeDecisionEnvelopeDiagnostics(
+	base *workers.WorkDiagnostics,
+	envelope *workers.WorkDiagnostics,
+) *workers.WorkDiagnostics {
+	if envelope == nil {
+		return base
+	}
+	merged := workers.CloneWorkDiagnostics(base)
+	if merged == nil {
+		return workers.CloneWorkDiagnostics(envelope)
+	}
+	overlay := workers.CloneWorkDiagnostics(envelope)
+	if overlay.Provider != nil {
+		if merged.Provider == nil {
+			merged.Provider = overlay.Provider
+		} else {
+			if merged.Provider.ResponseMetadata == nil {
+				merged.Provider.ResponseMetadata = make(map[string]string, len(overlay.Provider.ResponseMetadata))
+			}
+			for key, value := range overlay.Provider.ResponseMetadata {
+				merged.Provider.ResponseMetadata[key] = value
+			}
+		}
+	}
+	if overlay.Metadata != nil {
+		if merged.Metadata == nil {
+			merged.Metadata = make(map[string]string, len(overlay.Metadata))
+		}
+		for key, value := range overlay.Metadata {
+			merged.Metadata[key] = value
+		}
+	}
+	return merged
 }
 
 func evaluateAgentOutcome(content, stopToken string) workers.WorkOutcome {

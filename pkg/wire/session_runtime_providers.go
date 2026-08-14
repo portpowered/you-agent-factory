@@ -780,6 +780,7 @@ func provideStatelessWorkersService(
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	providerOverride workers.Provider,
 	agentToolFileSystem workers.AgentToolFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.Service, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("construct stateless Workers: clock is required")
@@ -798,6 +799,10 @@ func provideStatelessWorkersService(
 		workerswire.AgentDependencies{
 			Providers: providersService,
 			Publish:   func(workers.ProgressFragment) {},
+			// Decision-envelope interpretation belongs to Factory Definitions.
+			// The detached Execute path routes envelope output through this
+			// injected owner instead of re-implementing the contract.
+			DecisionEnvelopes: decisionEnvelopes,
 		},
 		workerswire.ScriptConfig{RequestSelected: true},
 		workerswire.ScriptDependencies{

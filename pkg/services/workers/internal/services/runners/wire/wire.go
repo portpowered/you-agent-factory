@@ -86,6 +86,7 @@ func NewAgentRegistry(
 	implementation, err := agentwire.NewService(
 		dependencies.Providers,
 		dependencies.Publish,
+		dependencies.DecisionEnvelopes,
 	)
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.AgentIdentity,

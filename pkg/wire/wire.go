@@ -305,6 +305,8 @@ var statelessWorkersSet = wire.NewSet(
 	provideWorkersWorktreeRelease,
 	provideFactoryRuntimeProviderOverride,
 	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
 	provideStatelessWorkersService,
 )
 

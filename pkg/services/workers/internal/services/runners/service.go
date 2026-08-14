@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -105,6 +106,10 @@ type InferenceDependencies struct {
 type AgentDependencies struct {
 	Providers providers.Service
 	Publish   workers.ProgressPublisher
+	// DecisionEnvelopes is the Factory Definitions owner of decision-envelope
+	// interpretation. An Agent Runner that receives decision-envelope output
+	// without it fails the attempt rather than parsing the envelope itself.
+	DecisionEnvelopes interfaces.DecisionEnvelopeService
 }
 
 // MockConfig is the private registry construction input for one configured
