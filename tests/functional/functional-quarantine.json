@@ -1,0 +1,585 @@
+{
+  "version": 1,
+  "suite": "functional",
+  "entries": [
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/acceptance",
+      "test": "TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/acceptance",
+      "test": "TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/acceptance",
+      "test": "TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/acceptance",
+      "test": "TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/acceptance",
+      "test": "TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPSessionAnswersEachTurnWithThatTurnsOwnResult",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPWorkerChildStreamSurvivesRetainedReplay",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestFactoryBuilderGreetsOnAVagueFirstACPTurn",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestJavaScriptFactoryChildrenAreVisibleAsWorkers",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestOneACPWorkerDeliversEveryUpdateAsChildContent",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestPackagedFactoriesCompleteOneACPPromptTurn",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestPackagedPlanParallelCompletesOneACPPromptTurn",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestTwoACPWorkersKeepChildStreamsAttributed",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestFactoryBuilderIsListedAndNamedHelpResolvesWithoutExecution",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory_runtime",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory/definition_activation",
+      "test": "TestDefinitionActivationGatewayDefaultRootSave",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory/definition_activation",
+      "test": "TestDefinitionActivationGatewaySaveAndNamedSwap",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory/definition_activation",
+      "test": "TestDefinitionActivationGatewayUpsertReplaceAndSwitch",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory/packaged/cross",
+      "test": "TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory/packaged/cross",
+      "test": "TestPackagedFactoryInvokedByCLICanBeInspectedByAPI",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/operator_settings",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/product/packaged_factory_portability",
+      "test": "TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/provider_sessions/rollout",
+      "test": "TestLargeRolloutNeverFailsWithoutCause",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ScriptHelper",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/agy",
+      "test": "TestAgyLiveSmoke",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "requires YOU_AGY_LIVE_SMOKE=1 and live AGY credentials"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/contract",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/mock_workers",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/observability",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/script",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/recordings",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestDashboard_EngineStateSnapshot_EndToEnd",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api/factory_transformation",
+      "test": "TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api/factory_transformation",
+      "test": "TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/realclient",
+      "test": "TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACPWireTranscriptIsOwnerReadableOnly",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio",
+      "test": "TestServeACPWritesAWireTranscriptByDefault",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIFactoryFlattenExpandPreservesMeaning",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIFactoryInitValidateAndQuery",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIFactoryReplaceCurrentChangesSessionFactory",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunCleanInvocationStdoutRemainsPipeable",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunFactoryWritesPrimaryResultFromStdin",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunFailureWritesNoSuccessPayloadToStdout",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunInvalidFactoryReturnsValidationFailure",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunNamedFactory",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIRunRejectsConflictingPositionalAndStdinInput",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLISubmitBackendErrorPreservesPublicMessage",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLISubmitBatchFile",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLISubmitBatchInlineJSON",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLISubmitUnavailableServer",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIWorkListAndShowReflectSubmittedWork",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/commands",
+      "test": "TestCLIWorkMoveChangesState",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/cli/output",
+      "test": "TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/recovery",
+      "test": "TestAPIInvalidMoveReturnsConflictWithoutMutation",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/recovery",
+      "test": "TestAPIMoveWorkResumesRecoverableFlow",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/recovery",
+      "test": "TestFailedCascadeCanBeRecoveredByPublicWorkMove",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/recovery",
+      "test": "TestTerminalFailedWorkCannotBeRedispatchedIllegally",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/submission",
+      "test": "TestAPIPOSTSubmitAndQueryWork",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/submission",
+      "test": "TestCLIWorkTypeNameReachesLiveAPIHandler",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/submission",
+      "test": "TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work/transports/cli/submit/batch_contract",
+      "test": "TestCLISubmitBatchSuccessHumanAndJSONShapes",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/workers/inference",
+      "test": "TestProviderSuccessWaitsForProcessAndStreamClosure",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/workers/inference",
+      "test": "TestProviderTimeoutTerminatesChildProcessTree",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "go test -short skips this slow functional test; full functional execution is a separate opt-in tier"
+    }
+  ]
+}

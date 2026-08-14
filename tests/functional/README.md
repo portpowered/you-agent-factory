@@ -9,7 +9,7 @@
 - Ordinary unit and package-integration lane: `make test-unit`
 - Stress lane: `make test-stress`
 - Release-package lane: `make test-release`
-- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
+- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first, discovers the complete package/test population with `go test -list`, subtracts only `functional-quarantine.json`, and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
 - Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `functional-timing-summary.json`, `coverage.out`, and `command.log` on success and failure when present. The timing artifact is produced by that same full `./tests/functional/...` run and reports discovered/observed package counts, every observed top-level test outcome, elapsed time, and concise failure-reason diagnostics; it does not use a one-test allow-list. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
 - Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
@@ -65,6 +65,15 @@ Provider test destinations are test packages rather than measured backend
 packages, so adding an empty destination does not create a package-minimum
 manifest entry. Its scenarios still contribute to the shared backend profile
 as soon as tests are added there.
+
+The required functional coverage gate is subtractive. Its versioned manifest is
+`tests/functional/functional-quarantine.json`; each entry names a discovered
+package or an exact top-level test, an `ENVIRONMENT-DEPENDENT` or `GENUINELY
+FAILING` bucket, and a reason. Genuine failures must also name a follow-up.
+Package-plus-test entries become package-specific `-run` selectors, while
+package entries remove the whole package. Duplicate, malformed, stale, or
+overlapping selectors fail closed before the instrumented run, so a new
+functional package or test is selected automatically without a manifest edit.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains
