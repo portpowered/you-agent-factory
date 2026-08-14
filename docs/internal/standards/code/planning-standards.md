@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, may, 27
+last modified: 2026, august, 14
 doc-id: STD-018
 ---
 
@@ -22,6 +22,10 @@ Every contributor or agent who creates or updates a PRD, `prd.json`, or work-sto
 - Complex frontend plans **MUST** identify canonical state, operation/service boundaries, projection boundaries, and the evidence that proves each layer.
 - Frontend plans **SHOULD** prefer existing shared UI primitives and concise action/copy patterns unless a new reusable primitive is justified.
 - Avoid bundling unrelated cleanup, opportunistic refactors, or broad topology changes into a behavior-focused lane.
+- Structural change such as a refactor, migration, extraction, or removal **MUST** be decomposed into steps that each merge on their own and each leave `main` releasable.
+- Replacing an existing path **SHOULD** follow a strangler shape: introduce the new path, migrate callers in reviewable batches, then delete the old path in a dedicated final step.
+- When coverage of the behavior being restructured is insufficient, characterization tests **MUST** land first as their own step, before the structure changes.
+- Bundle changes only when they must merge together, never because they happen to touch the same file.
 - Call out quality gates directly when the work touches backend, frontend, contracts, or generated artifacts.
 - Every implementation plan **MUST** state that delivery loops through required
   CI, blocking review feedback, conflict resolution, and actual PR merge before
@@ -42,6 +46,10 @@ Before a PRD or story breakdown is accepted, reviewers **SHOULD** confirm:
 - The plan names the right verification surfaces such as unit, integration, functional, contract, UI, or stress coverage where relevant.
 - Complex frontend plans distinguish canonical data from projected UI-library state and name the operations that mutate canonical state.
 - The plan does not widen into unrelated cleanup, broad rewrites, or inventory work unless the customer ask explicitly requires it.
+- Structural change is broken into steps that each merge independently, and no step depends on a later one to restore behavior it breaks.
+- Replacement work names the canonical path, the caller migration batches, and the step that deletes the old path.
+- The plan states measured coverage of the behavior being restructured, and adds characterization tests as an earlier step when that coverage is insufficient.
+- Stories are separable in review, revert, and scheduling, and shared surfaces name an owning lane.
 - The work respects repository architecture and dependency boundaries.
 
 ## Regulations
@@ -81,7 +89,63 @@ Rules:
 - Separate stories **SHOULD** be used when behaviors are independently valuable, independently reviewable, or carry different risk.
 - Opportunistic cleanups, naming sweeps, or broad debt removal **MUST NOT** be attached unless they are required for the target behavior.
 
-### 3. Make Acceptance Criteria Reviewable
+### 3. Decompose Structural Change Into Independently Mergeable Steps
+
+Refactors, migrations, extractions, removals, and renames **MUST** be planned as a sequence of steps that each land on their own. A structural change that is only correct once every part of it is finished **MUST NOT** be planned as a single work item.
+
+A plan is too large and **SHOULD** be split before implementation starts when any of these is true:
+
+- No step in it can be merged without the others.
+- It cannot be described without listing several distinct behaviors it must preserve.
+- Reverting it would revert unrelated behavior.
+- A reviewer cannot hold the before and after shapes in mind at the same time.
+
+Rules:
+
+- Each step **MUST** leave `main` releasable with every existing behavior intact.
+- Each step **MUST** be correct on its own. A step **MUST NOT** depend on a later step to restore behavior it breaks.
+- Steps **SHOULD** be ordered so the riskiest structural move is the smallest and most isolated one.
+- A plan **MUST NOT** contain a step whose purpose is to repair fallout from an earlier step. Fallout is evidence the decomposition was wrong, not a work item.
+- The plan **SHOULD** state how many steps it expects and what each one delivers, so an implementation that stalls or expands is visible early rather than at review.
+
+### 4. Prefer Strangler-Style Replacement Over In-Place Rewrites
+
+When a plan replaces an existing implementation, path, or boundary, it **SHOULD** introduce the replacement alongside the original and migrate to it incrementally rather than rewriting in place.
+
+Rules:
+
+- The plan **SHOULD** be shaped as: introduce the new path, migrate callers in reviewable batches, then delete the old path in a final dedicated step.
+- Introducing a new path and deleting the old one **MUST NOT** be planned as a single step when callers exist outside the changed package.
+- While both paths exist, the plan **MUST** name which one is canonical so implementers do not add callers to the path being retired.
+- The deletion step **MUST** be planned explicitly. A migration with no scheduled removal leaves two live paths and **MUST NOT** be described as complete.
+- When a temporary adapter, shim, or compatibility layer is required, the plan **MUST** name what removes it and in which step.
+- If a change genuinely cannot be staged behind a parallel path, the plan **MUST** say so and justify it rather than leaving that choice implicit.
+
+### 5. Establish Behavioral Coverage Before Changing Structure
+
+A plan **MUST NOT** depend on tests written after a restructure when existing coverage is insufficient to detect a regression in the behavior being restructured.
+
+Rules:
+
+- The plan **MUST** state the current coverage of the affected behavior and how that was measured.
+- When coverage is insufficient, the plan **MUST** add characterization tests that pin the existing behavior as an earlier, separate step, merged before the structural change begins.
+- Characterization tests **MUST** describe behavior as it is today, including behavior that looks wrong. Correcting that behavior is separate work with its own story and its own acceptance criteria.
+- Structural steps **SHOULD** be reviewable as changes that leave the test suite untouched. A structural step that also rewrites many test expectations **SHOULD** be replanned as a behavior change.
+- When a step does change what a test asserts, the plan or the change **MUST** state which assertions changed and why that change was intended, so a silently relaxed contract is not mistaken for a passing refactor.
+
+### 6. Prefer Clean Boundaries Over Coupled Work
+
+Plans **SHOULD** separate work along real boundaries rather than bundling changes because they happen to touch the same code at the same time.
+
+Rules:
+
+- Stories **SHOULD** be separable in review, in revert, and in scheduling. Two changes that must merge together **SHOULD** be one story; two that need not **SHOULD NOT** be.
+- A plan **MUST NOT** couple an unrelated behavior change to a structural step because the structural step already touches the file.
+- When a step requires a new abstraction, the plan **MUST** state what that abstraction hides and which callers depend on it, so review can judge whether it earns its place.
+- New abstractions **SHOULD** be introduced with the behavior that needs them, not ahead of it in a speculative enabling story.
+- When several lanes will touch one surface, the plan **MUST** name the owning lane for shared changes so the same fix is not implemented independently in each.
+
+### 7. Make Acceptance Criteria Reviewable
 
 Acceptance criteria **MUST** be specific enough that a reviewer or implementing agent can tell when the story is done.
 
@@ -93,7 +157,7 @@ Rules:
 - Criteria **MUST** avoid ambiguous language such as "clean up," "improve," or "fix" without naming the observable result.
 - Quality gates such as `Tests pass`, `Typecheck passes`, generated-artifact verification, or lint checks **SHOULD** appear when relevant, but they **MUST NOT** be the only acceptance criteria.
 
-### 4. Reflect Repository Standards in the Plan
+### 8. Reflect Repository Standards in the Plan
 
 Planning **MUST** encode the expectations that downstream implementation and review will enforce.
 
@@ -105,7 +169,7 @@ Rules:
 - When a change touches generated artifacts or public contracts, the plan **MUST** call out contract alignment and generated-output expectations explicitly.
 - AI-authored plans **MUST** be written with the expectation of extra implementation and review scrutiny.
 
-### 5. Plan Complex Frontend Data Boundaries
+### 9. Plan Complex Frontend Data Boundaries
 
 Complex frontend plans **MUST** define source-of-truth and projection boundaries before implementation starts.
 
@@ -118,7 +182,7 @@ Rules:
 - Plans **SHOULD** call out replacement or removal expectations for old compatibility paths when a new canonical path is introduced.
 - Frontend UI plans **SHOULD** name existing shared primitives to reuse for standard actions, dialogs, popovers, form controls, tables, shells, and status treatments. New bespoke controls should be justified as reusable primitives.
 
-### 6. Prefer Dependency-Aware Sequencing
+### 10. Prefer Dependency-Aware Sequencing
 
 Stories **MUST** be ordered so implementation can proceed without unnecessary blocking or churn.
 
@@ -129,7 +193,7 @@ Rules:
 - The plan **SHOULD NOT** force reviewers to approve speculative later work before the core behavior is defined.
 - If a story is purely enabling, it **MUST** be narrowly justified and kept smaller than the dependent behavior stories where possible.
 
-### 7. Prove Behavior with the Right Evidence
+### 11. Prove Behavior with the Right Evidence
 
 Plans **MUST** name the evidence needed to trust the change.
 
@@ -143,7 +207,7 @@ Rules:
 - Plans **SHOULD NOT** rely on mounted component tests as the only proof for domain mutations that can be tested as pure operations.
 - Plans involving third-party UI libraries **SHOULD** prove both the pure projected state and at least one user interaction path where the library dispatches the expected operation.
 
-### 8. Keep Planning Output Clean and Actionable
+### 12. Keep Planning Output Clean and Actionable
 
 Planning artifacts **MUST** remain implementation-ready and reviewer-friendly.
 
@@ -154,7 +218,7 @@ Rules:
 - Notes **SHOULD NOT** become a dumping ground for speculative implementation detail.
 - Plans **MUST NOT** require hidden context that exists only in the original chat when the artifact could state it directly.
 
-### 9. Make Merge the Delivery Boundary
+### 13. Make Merge the Delivery Boundary
 
 Implementation plans **MUST** make the end-to-end delivery condition explicit.
 
@@ -184,6 +248,9 @@ Before handing a plan to implementation, authors **SHOULD** confirm:
 - Complex frontend plans identify canonical state, operations, projections, component wiring, and old-path cleanup where applicable.
 - UI plans reuse shared primitives or justify new reusable primitives.
 - Scope stays narrow and avoids unrelated cleanup.
+- Structural change is decomposed into independently mergeable steps, with the expected step count and each step's deliverable stated.
+- Replacement work is staged behind a parallel path, or the plan justifies why it cannot be.
+- Characterization tests for insufficiently covered behavior are scheduled before the structural steps that depend on them.
 - Story order supports incremental implementation and review.
 - The plan explicitly continues through terminal green CI, resolved blocking
   feedback and conflicts, and verified PR merge.
