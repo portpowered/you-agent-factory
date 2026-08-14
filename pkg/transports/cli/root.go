@@ -732,7 +732,7 @@ func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaul
 	intent := startupcli.RunIntent{
 		DefaultInvocation:     defaultInvocation,
 		Continuous:            cfg.Continuously,
-		APIEnabled:            (defaultInvocation || cfg.WithServer || cfg.Port > 0) && cfg.Port > 0,
+		APIEnabled:            (defaultInvocation || cfg.WithServer) && cfg.Port > 0,
 		DashboardEnabled:      (defaultInvocation || cfg.WithSite) && cfg.Port > 0,
 		WorkerSidecarsEnabled: true,
 	}

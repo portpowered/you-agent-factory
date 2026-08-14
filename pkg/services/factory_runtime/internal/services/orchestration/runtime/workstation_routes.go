@@ -73,6 +73,7 @@ type runtimeExecutionSelection struct {
 	reasoningEffort             string
 	modelOperation              string
 	modelBindings               []workers.ResolvedModelOperationBinding
+	classifier                  bool
 	scriptClassifier            bool
 	capabilities                *workers.Capabilities
 	command                     string
@@ -353,6 +354,7 @@ func applyRuntimeWorkstationSelection(
 		selection.modelOperation,
 		resolveRuntimeInvocationValue(workstation.Operation, invocation),
 	)
+	selection.classifier = workstation.Type == interfaces.WorkstationTypeClassify
 	selection.scriptClassifier = workstation.Type == interfaces.WorkstationTypeClassify &&
 		selection.workerType == interfaces.WorkerTypeScript
 	selection.outputFormat = firstRuntimeValue(

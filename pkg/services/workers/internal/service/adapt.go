@@ -130,6 +130,33 @@ func requiredOptionalCapabilities(
 	return capabilities
 }
 
+// runnerResolutionCapabilities narrows derived requirements to the ones the
+// selected runner itself owns. The generic agent runner delegates inference to
+// a Provider, so provider-owned capabilities such as image input are decided by
+// the Providers catalog for the resolved provider (see authorizeProviderTarget)
+// rather than by the agent runner's own static metadata. Gating agent selection
+// on them would reject every provider that supports image input.
+func runnerResolutionCapabilities(
+	capabilities []workers.RunnerOptionalCapability,
+	identity string,
+) []workers.RunnerOptionalCapability {
+	if identity != runners.AgentIdentity {
+		return capabilities
+	}
+	resolution := make([]workers.RunnerOptionalCapability, 0, len(capabilities))
+	for _, capability := range capabilities {
+		if providerOwnedRunnerCapability(capability) {
+			continue
+		}
+		resolution = append(resolution, capability)
+	}
+	return resolution
+}
+
+func providerOwnedRunnerCapability(capability workers.RunnerOptionalCapability) bool {
+	return capability == workers.RunnerOptionalCapabilityImageInput
+}
+
 func worktreeRequiresRunnerCapability(
 	request workers.ExecuteRequest,
 	workingDirectory string,

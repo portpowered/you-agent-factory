@@ -501,6 +501,11 @@ type OutputPolicy struct {
 	StopToken                   string
 	DecisionEnvelope            bool
 	GoalRoutingDecisionEnvelope bool
+	// Classifier marks a classifier workstation dispatch. The Runtime-owned
+	// dispatch adapter validates the produced label before route matching so a
+	// malformed classifier output fails distinctly instead of reaching route
+	// matching as an unmatched label.
+	Classifier bool
 	// ScriptClassifier asks the Runtime-owned dispatch adapter to reduce a
 	// script classifier's stdout to its final label before route matching.
 	ScriptClassifier bool

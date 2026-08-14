@@ -2,9 +2,11 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -247,26 +249,78 @@ func runtimeWorkflowContext(cfg *runtimeConfig, sessionID string, supplied *work
 	return &workers.Context{SessionID: strings.TrimSpace(sessionID)}
 }
 
+const classifierFailureRawOutputLimit = 160
+
 func normalizeScriptClassifierResult(
 	target workers.ExecutionTarget,
 	result workers.ExecuteResult,
 ) workers.ExecuteResult {
-	if !target.Output.ScriptClassifier || strings.TrimSpace(target.RunnerID) != "script" ||
-		result.Outcome != workers.ExecutionOutcomeAccepted {
+	// A script classifier is a classifier; either signal selects this policy.
+	if !target.Output.Classifier && !target.Output.ScriptClassifier {
 		return result
 	}
-	output := strings.TrimSpace(primaryOutputText(result.Output.Primary))
-	if output == "" {
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
 		return result
 	}
-	lines := strings.Split(output, "\n")
-	label := strings.TrimSpace(lines[len(lines)-1])
+	raw := primaryOutputText(result.Output.Primary)
+	output := strings.TrimSpace(raw)
+	// A script classifier writes its label on the final stdout line. Every other
+	// classifier worker is expected to produce the bare label as its response.
+	if target.Output.ScriptClassifier && strings.TrimSpace(target.RunnerID) == "script" {
+		if output == "" {
+			return result
+		}
+		lines := strings.Split(output, "\n")
+		output = strings.TrimSpace(lines[len(lines)-1])
+	}
+	label, err := normalizeClassifierLabel(output)
+	if err != nil {
+		message := classifierOutputErrorDetail(raw, err)
+		result.Outcome = workers.ExecutionOutcomeFailed
+		result.Output.Classification = ""
+		result.Failure = &workers.ExecutionFailure{
+			Family:  workers.WorkFailureFamilyTerminal,
+			Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+			Message: message,
+			Detail: &workers.FailureDetail{
+				Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Message: message,
+			},
+		}
+		return result
+	}
 	result.Output.Primary = []work.WorkContentPart{{
 		Type: work.WorkContentPartTypeText,
 		Text: label,
 	}}
 	result.Output.Classification = label
 	return result
+}
+
+// normalizeClassifierLabel mirrors the classifier contract enforced by the
+// Workers workstation executor: a classifier must emit a bare routing label,
+// never a structured payload.
+func normalizeClassifierLabel(output string) (string, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return "", errors.New("empty label")
+	}
+	if json.Valid([]byte(trimmed)) {
+		return "", errors.New("expected plain string label")
+	}
+	return trimmed, nil
+}
+
+func classifierOutputErrorDetail(rawOutput string, err error) string {
+	detail := "classifier output invalid: " + err.Error()
+	trimmed := strings.TrimSpace(rawOutput)
+	if trimmed == "" {
+		return detail
+	}
+	if len(trimmed) > classifierFailureRawOutputLimit {
+		trimmed = trimmed[:classifierFailureRawOutputLimit] + "..."
+	}
+	return detail + " (raw output: " + strconv.Quote(trimmed) + ")"
 }
 
 func normalizeDetachedExecutionResult(

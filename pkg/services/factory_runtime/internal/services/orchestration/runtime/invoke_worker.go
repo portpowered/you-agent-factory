@@ -477,6 +477,7 @@ func executionTargetFromSelection(
 			Contract:                    selection.outputContract,
 			DecisionEnvelope:            selection.decisionEnvelope,
 			GoalRoutingDecisionEnvelope: selection.goalRoutingDecisionEnvelope,
+			Classifier:                  selection.classifier,
 			ScriptClassifier:            selection.scriptClassifier,
 		},
 		Timeout: selection.timeout,

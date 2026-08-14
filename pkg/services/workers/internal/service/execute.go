@@ -97,8 +97,11 @@ func (s *Service) prepareAttempt(
 	// Selection is validated before the attempt starts so missing/unknown
 	// identities remain pre-start errors. Resolve performs no execution effect.
 	if _, err := s.runners.Resolve(runners.ResolutionRequest{
-		Identity:             identity,
-		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
+		Identity: identity,
+		RequiredCapabilities: runnerResolutionCapabilities(
+			request.Target.Tools.RequiredOptionalCapabilities,
+			identity,
+		),
 	}); err != nil {
 		return "", fmt.Errorf(
 			"%w: resolve runner %q: %v",
@@ -231,10 +234,10 @@ func (s *Service) runRunner(
 			s.clock,
 		)
 		return s.executeProviderWithRetry(ctx, runnerRequest, func(
-			request workers.RunnerExecutionRequest,
+			attempt workers.RunnerExecutionRequest,
 		) (workers.RunnerExecutionResult, error) {
-			result, err := providerRunner.Execute(ctx, request)
-			return normalizeProviderOverrideResult(result, request), err
+			result, err := providerRunner.Execute(ctx, attempt)
+			return normalizeProviderOverrideResult(result, attempt), err
 		})
 	}
 	if identity != runners.AgentIdentity {
@@ -245,20 +248,29 @@ func (s *Service) runRunner(
 		})
 	}
 	return s.executeProviderWithRetry(ctx, runnerRequest, func(
-		request workers.RunnerExecutionRequest,
+		attempt workers.RunnerExecutionRequest,
 	) (workers.RunnerExecutionResult, error) {
 		return s.runners.Execute(ctx, runners.ExecuteRequest{
-			Identity:             identity,
-			RequiredCapabilities: request.RequiredOptionalCapabilities,
-			Attempt:              request,
+			Identity: identity,
+			RequiredCapabilities: runnerResolutionCapabilities(
+				attempt.RequiredOptionalCapabilities,
+				identity,
+			),
+			Attempt: attempt,
 		})
 	})
 }
 
-// executeProviderWithRetry preserves the legacy provider-attempt policy at the
+// executeProviderWithRetry preserves the provider-attempt policy at the
 // stateless Workers boundary. Runtime still owns Work-level attempts; this
-// loop only retries retryable provider failures and carries the exact opaque
-// Provider Session into the next provider call.
+// loop only retries provider failures that the shared failure classifier
+// declares retryable, and carries the exact opaque Provider Session into the
+// next provider call.
+//
+// The classifier is the single authority for retryability. A provider process
+// that failed or exited non-zero without a retryable classification is a
+// terminal external effect: retrying it burns the Work's attempt budget and
+// re-runs a real provider command that already reported a definitive failure.
 func (s *Service) executeProviderWithRetry(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
