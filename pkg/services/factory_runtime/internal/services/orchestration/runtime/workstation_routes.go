@@ -64,6 +64,7 @@ func runtimeWorkstationRouteNames(
 type runtimeExecutionSelection struct {
 	workerName                  string
 	workerType                  string
+	noop                        bool
 	runnerID                    string
 	providerID                  string
 	model                       string
@@ -172,8 +173,16 @@ func applyRuntimeDefinitionSelection(
 	worker, workerFound := lookup.Worker(selection.workerName)
 	workstation, workstationFound := lookup.Workstation(strings.TrimSpace(request.WorkstationName))
 	if !workerFound && workstationFound {
-		worker, workerFound = lookup.Worker(resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation))
+		workstationWorkerName := resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation)
+		if selection.workerName == "" {
+			selection.workerName = strings.TrimSpace(workstationWorkerName)
+		}
+		worker, workerFound = lookup.Worker(workstationWorkerName)
 	}
+	selection.noop = missingRuntimeWorkerDefinition(workerFound, worker) &&
+		selection.workerName != "" &&
+		selection.providerID == "" && selection.model == "" &&
+		selection.modelProvider == "" && selection.command == ""
 	if workerFound && worker != nil {
 		applyRuntimeWorkerSelection(cfg, selection, request.Execution, invocation, worker)
 	}
@@ -181,6 +190,13 @@ func applyRuntimeDefinitionSelection(
 		applyRuntimeWorkstationSelection(cfg, selection, invocation, workstation)
 	}
 	applyRuntimeConfigSelection(cfg, selection)
+}
+
+func missingRuntimeWorkerDefinition(
+	workerFound bool,
+	worker *interfaces.FactoryWorkerConfig,
+) bool {
+	return !workerFound || worker == nil || strings.TrimSpace(worker.Type) == ""
 }
 
 func applyRuntimeWorkerSelection(

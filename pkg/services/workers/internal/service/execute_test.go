@@ -47,6 +47,42 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	assertSafeCompletedObservations(t, observations)
 }
 
+func TestExecuteNoopAcceptsWithoutRunnerOrObservations(t *testing.T) {
+	t.Parallel()
+
+	var runnerCalls atomic.Int32
+	var observationCalls atomic.Int32
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			return workers.RunnerExecutionResult{Content: "unexpected"}, nil
+		},
+	}, func(context.Context, workers.ExecutionObservation) error {
+		observationCalls.Add(1)
+		return nil
+	})
+
+	request := validExecuteRequest("dispatch-noop", "attempt-noop")
+	request.Target.RunnerID = workers.RunnerIDCodex
+	request.Target.Noop = true
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if result.Correlation != request.Correlation {
+		t.Fatalf("correlation = %#v, want %#v", result.Correlation, request.Correlation)
+	}
+	if len(result.Output.Primary) != 0 {
+		t.Fatalf("output = %#v, want empty output", result.Output)
+	}
+	if runnerCalls.Load() != 0 || observationCalls.Load() != 0 {
+		t.Fatalf("runner calls = %d, observation calls = %d, want no calls", runnerCalls.Load(), observationCalls.Load())
+	}
+}
+
 func TestExecuteScriptProcessFailureRemainsTerminal(t *testing.T) {
 	t.Parallel()
 

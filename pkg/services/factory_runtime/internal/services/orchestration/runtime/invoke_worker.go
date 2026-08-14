@@ -482,6 +482,7 @@ func executionTargetFromSelection(
 		WorkerType:       firstRuntimeValue(selection.workerName, selection.workerType),
 		WorkstationName:  workstationName,
 		RunnerID:         selection.runnerID,
+		Noop:             selection.noop,
 		Capabilities:     cloneRuntimeCapabilities(selection.capabilities),
 		Command:          selection.command,
 		Args:             append([]string(nil), selection.args...),

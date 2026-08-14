@@ -44,6 +44,35 @@ func TestRuntimeWorkstationRouteNamesIncludeWorkerAndWorkstationKeys(t *testing.
 	}
 }
 
+func TestRuntimeExecutionSelectionMarksTopologyOnlyWorkerAsNoop(t *testing.T) {
+	lookup := runtimefixtures.RuntimeConfigLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"step-one": {
+				Name:           "step-one",
+				WorkerTypeName: "worker-a",
+			},
+		},
+	}
+	selection := resolveRuntimeExecutionSelection(
+		&runtimeConfig{runtimeConfig: lookup},
+		workers.WorkstationDispatchRequest{
+			WorkstationName: "step-one",
+			Execution: workers.WorkstationExecutionRequest{
+				WorkerType: "worker-a",
+			},
+		},
+		nil,
+		nil,
+	)
+
+	if !selection.noop {
+		t.Fatalf("selection = %#v, want topology-only no-op", selection)
+	}
+	if selection.workerName != "worker-a" || selection.runnerID != workers.RunnerIDCodex {
+		t.Fatalf("selection identity = %#v, want worker-a with default codex runner", selection)
+	}
+}
+
 func TestApplyRuntimeWorkstationSelectionMarksGoalRoutingEnvelope(t *testing.T) {
 	selection := runtimeExecutionSelection{}
 	applyRuntimeWorkstationSelection(nil, &selection, nil, &interfaces.FactoryWorkstationConfig{

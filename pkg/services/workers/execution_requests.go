@@ -437,10 +437,15 @@ type ExecutionCorrelation struct {
 }
 
 type ExecutionTarget struct {
-	WorkerName       string
-	WorkerType       string
-	WorkstationName  string
-	RunnerID         string
+	WorkerName      string
+	WorkerType      string
+	WorkstationName string
+	RunnerID        string
+	// Noop accepts a worker dispatch without invoking a provider, model, or
+	// command runner. Runtime sets this only for an authored worker that has no
+	// runtime definition, preserving topology-only factories without retaining
+	// session-specific executor state in Workers.
+	Noop             bool
 	Capabilities     *Capabilities
 	Command          string
 	Args             []string

@@ -40,6 +40,12 @@ func (s *Service) Execute(
 		return workers.ExecuteResult{}, err
 	}
 	correlation := request.Correlation
+	if request.Target.Noop {
+		return workers.ExecuteResult{
+			Correlation: correlation,
+			Outcome:     workers.ExecutionOutcomeAccepted,
+		}, nil
+	}
 
 	cleanup := newCleanupRegistry()
 	temporaryFiles := newTrackedTemporaryFiles(s.temporaryFiles)
