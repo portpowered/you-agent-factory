@@ -23,6 +23,7 @@ var btrcACPEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
 	factoryapi.FactoryEventTypeModelRequest,
 	factoryapi.FactoryEventTypeModelResponse,
+	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
 }
 

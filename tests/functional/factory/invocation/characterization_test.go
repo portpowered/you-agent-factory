@@ -33,6 +33,7 @@ var btrcOneShotEventOrder = []interfaces.FactoryEventType{
 	interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
 	interfaces.FactoryEventTypeModelRequest,
 	interfaces.FactoryEventTypeModelResponse,
+	interfaces.FactoryEventTypeAgentRunResponse,
 	interfaces.FactoryEventTypeDispatchResponse,
 	interfaces.FactoryEventTypeFactoryStateResponse,
 	interfaces.FactoryEventTypeRunResponse,
