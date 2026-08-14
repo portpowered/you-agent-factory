@@ -16,7 +16,10 @@ import {
   DASHBOARD_REGRESSION_SESSION_IDS,
 } from "../../../components/dashboard/fixtures";
 import { bunVi as vi } from "../../../testing/bun/vi-compat";
-import { resetDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import {
+  resetDashboardSessionStore,
+  useDashboardSessionStore,
+} from "../../dashboard/state/dashboardSessionStore";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
@@ -125,6 +128,87 @@ describe("DashboardSessionTabs canonical reconciliation", () => {
     await act(async () => {
       rendered.unmount();
       queryClient.clear();
+    });
+  });
+
+  it("keeps selection and focus aligned when reconciliation removes the active tab", async () => {
+    const fixture = createDashboardRegressionFixture();
+    vi.stubGlobal("fetch", fixture.fetch);
+    const queryClient = createQueryClient();
+
+    renderWithQueryClient(queryClient);
+    await waitFor(() => {
+      expect(fixture.state().pendingSessionListIDs).toContain("initial");
+    });
+    await act(async () => {
+      fixture.sessionLists.resolve("initial");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "secondary" })).toBeTruthy();
+    });
+
+    const secondaryTab = screen.getByRole("tab", { name: "secondary" });
+    fireEvent.click(secondaryTab);
+    await waitFor(() => {
+      expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+        DASHBOARD_REGRESSION_SESSION_IDS.secondary,
+      );
+      expect(document.activeElement).toBe(secondaryTab);
+    });
+
+    fixture.sessionLists.enqueueFetch("refreshed");
+    let refreshedRefresh!: Promise<void>;
+    await act(async () => {
+      refreshedRefresh = queryClient.refetchQueries({
+        queryKey: FACTORY_SESSIONS_QUERY_KEY,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(fixture.state().pendingSessionListIDs).toContain("refreshed");
+    });
+    await act(async () => {
+      fixture.sessionLists.resolve("refreshed");
+      await refreshedRefresh;
+    });
+
+    const defaultTab = await screen.findByRole("tab", {
+      name: "dashboard-regression",
+    });
+    const createdTab = screen.getByRole("tab", { name: "created" });
+    await waitFor(() => {
+      expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+        DASHBOARD_REGRESSION_SESSION_IDS.default,
+      );
+      expect(defaultTab.getAttribute("aria-selected")).toBe("true");
+      expect(defaultTab.getAttribute("tabindex")).toBe("0");
+      expect(createdTab.getAttribute("aria-selected")).toBe("false");
+      expect(createdTab.getAttribute("tabindex")).toBe("-1");
+      expect(document.activeElement).toBe(defaultTab);
+    });
+
+    fireEvent.keyDown(defaultTab, { key: "End" });
+    await waitFor(() => {
+      expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+        DASHBOARD_REGRESSION_SESSION_IDS.created,
+      );
+      expect(createdTab.getAttribute("aria-selected")).toBe("true");
+      expect(createdTab.getAttribute("tabindex")).toBe("0");
+      expect(defaultTab.getAttribute("aria-selected")).toBe("false");
+      expect(defaultTab.getAttribute("tabindex")).toBe("-1");
+      expect(document.activeElement).toBe(createdTab);
+    });
+
+    fireEvent.keyDown(createdTab, { key: "Home" });
+    await waitFor(() => {
+      expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+        DASHBOARD_REGRESSION_SESSION_IDS.default,
+      );
+      expect(defaultTab.getAttribute("aria-selected")).toBe("true");
+      expect(defaultTab.getAttribute("tabindex")).toBe("0");
+      expect(createdTab.getAttribute("aria-selected")).toBe("false");
+      expect(createdTab.getAttribute("tabindex")).toBe("-1");
+      expect(document.activeElement).toBe(defaultTab);
     });
   });
 
