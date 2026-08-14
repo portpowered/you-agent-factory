@@ -139,3 +139,32 @@ The exact command for each row is the per-row command pattern above with the
 row's full test identity and package substituted verbatim. The authoritative
 CI source remains run `31831258532`, job `94867390893`; local replays classify
 parent-versus-tip behavior and do not replace that source failure set.
+
+## Quarantine mapping
+
+The 21 confirmed pre-existing failure rows map to 12 top-level selectors
+because the quarantine schema intentionally matches top-level Go tests. A
+parent selector covers its independently recorded nested subtests; no broader
+package selector is used. Every entry below is `GENUINELY FAILING`, names the
+observed failure, and records reproduction at both `ed502b781` and
+`db7379d47` in `tests/functional/functional-quarantine.json`.
+
+| Package | Quarantined top-level selector | Evidence rows | Observed failure | Owning area |
+| --- | --- | --- | --- | --- |
+| `tests/functional/chat_sessions/root_composition` | `TestACPWorkerChildStreamSurvivesRetainedReplay` | 4 | `CANONICAL_EVENT_PUBLISH_FAILED`: `UPDATED` is invalid for `RUN`/`MESSAGE` progress phases | Chat Sessions / ACP stream publication |
+| `tests/functional/chat_sessions/root_composition` | `TestTwoACPWorkersKeepChildStreamsAttributed` | 14 | `CANONICAL_EVENT_PUBLISH_FAILED`: `UPDATED` is invalid for `RUN`/`MESSAGE` progress phases | Chat Sessions / ACP stream publication |
+| `tests/functional/cli/named_invocation` | `TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution` | 15–17 | `RUN_INVOCATION_FAILED`: provider `${executorProvider}` is unknown | CLI named invocation / provider selection |
+| `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput` | 18 | `RUN_INVOCATION_FAILED`: provider `${executorProvider}` is unknown | CLI named invocation / provider selection |
+| `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs` | 19–20 | `INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT`: `mode` is unknown for `@you/goal` | CLI named invocation / compatibility inputs |
+| `tests/functional/product/packaged_factory_portability` | `TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity` | 23 | Process API server readiness timeout and missing invocation input during shutdown | Packaged factory portability / bootstrap |
+| `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | 24 | Same-machine rejection/process failure and worker-session start failure | Providers / mock-worker startup |
+| `tests/functional/providers` | `TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers` | 25–27 | Process API server readiness timeout in model and script worker variants | Providers / command-runner worker readiness |
+| `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | 29 | `/events` replay failed with `unexpected EOF` | Runtime API / event replay framing |
+| `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | 30 | Provider sessions were absent from events; `sess-world-view-success` was missing | Runtime API / provider-session projection |
+| `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | 31 | Canonical event order stopped before the expected dispatch/inference sequence | Runtime API / inference event emission |
+| `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases` | 32–36 | Runtime-config type mismatch and retired-alias cases returned no boundary error | Runtime API / runtime-config alignment |
+
+The 14 ambiguous/non-reproduced rows (1–3, 5–13, 21, and 28) and the one
+setup-incomparable Windows row (22) remain unquarantined. No failure that
+passed at `ed502b781` and failed at `db7379d47`, or otherwise indicated a
+tip-only regression, was found.
