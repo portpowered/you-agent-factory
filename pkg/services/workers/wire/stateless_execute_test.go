@@ -241,6 +241,73 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	}
 }
 
+func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	override := &statelessProviderOverride{
+		content: `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
+	}
+	service, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+		override,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-goal",
+			RuntimeID:        "runtime-goal",
+			GenerationID:     "generation-goal",
+			DispatchID:       "dispatch-goal",
+			AttemptID:        "attempt-goal",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName:      runners.AgentIdentity,
+			WorkstationName: "execute-goal",
+			RunnerID:        runners.AgentIdentity,
+			Provider:        workers.ProviderReference{ID: string(providers.IDCodex)},
+			Prompt:          workers.PromptPolicy{UserMessage: "complete this goal"},
+			Tools: workers.ToolPolicy{
+				AgentLoop: true,
+			},
+			Output: workers.OutputPolicy{
+				Format:                      factorydefinitions.DecisionEnvelopeOutcomeFormat,
+				DecisionEnvelope:            true,
+				GoalRoutingDecisionEnvelope: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, failure = %#v, want ACCEPTED", result.Outcome, result.Failure)
+	}
+	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != "ship" {
+		t.Fatalf("output = %#v, want the decision-envelope primary output", result.Output)
+	}
+	if result.Output.Feedback != "ready" || result.Output.Classification != "accepted" {
+		t.Fatalf("output metadata = %#v, want feedback and goal classification", result.Output)
+	}
+	if override.calls.Load() != 1 {
+		t.Fatalf("provider override calls = %d, want one detached AGENT_RUN attempt", override.calls.Load())
+	}
+}
+
 type statelessTestFixture struct {
 	service  workers.Service
 	provider *statelessTestProviders
@@ -582,6 +649,7 @@ type statelessTestProviders struct {
 type statelessProviderOverride struct {
 	calls   atomic.Int32
 	request workers.ProviderInferenceRequest
+	content string
 }
 
 func (provider *statelessProviderOverride) Infer(
@@ -590,8 +658,12 @@ func (provider *statelessProviderOverride) Infer(
 ) (workers.InferenceResponse, error) {
 	provider.calls.Add(1)
 	provider.request = request
+	content := provider.content
+	if content == "" {
+		content = "override output\n<COMPLETE>"
+	}
 	return workers.InferenceResponse{
-		Content: "override output\n<COMPLETE>",
+		Content: content,
 		ProviderSession: &workers.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session-id",
@@ -702,5 +774,9 @@ func (double statelessDecisionEnvelopeDouble) WorkResultFromGoalRoutingDecisionE
 	transitionID string,
 	raw string,
 ) workers.WorkResult {
-	return double.WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw)
+	result := double.WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw)
+	if result.Outcome == workers.OutcomeAccepted {
+		result.SelectedClassificationLabel = "accepted"
+	}
+	return result
 }

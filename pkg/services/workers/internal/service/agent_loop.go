@@ -54,11 +54,14 @@ func (s *Service) agentLoopRunner(
 ) workers.Runner {
 	if providerOverride != nil && identity == runners.AgentIdentity &&
 		!usesACPProvider(request.Target.ExecutorProvider) {
-		return workerrecording.NewProviderRunner(
-			workerexecutor.RunnerFromProvider(providerOverride),
-			request.Input.InferenceEventRecorder,
-			s.clock,
-		)
+		return agentLoopProviderOverrideRunner{
+			runner: workerrecording.NewProviderRunner(
+				workerexecutor.RunnerFromProvider(providerOverride),
+				request.Input.InferenceEventRecorder,
+				s.clock,
+			),
+			decisionEnvelopes: s.decisionEnvelopes,
+		}
 	}
 	return agentLoopRunnerFunc(func(
 		turnCtx context.Context,
