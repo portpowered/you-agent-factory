@@ -115,6 +115,47 @@ func TestMapFragment_ProgressResponseTypesUseCanonicalMessagePhases(t *testing.T
 	}
 }
 
+func TestMapFragment_ProgressFragmentsUseLegalKindPhasePairs(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		kind      string
+		wantKind  responseevents.Kind
+		wantPhase responseevents.Phase
+	}{
+		{name: "message content", kind: "message", wantKind: responseevents.KindMessage, wantPhase: responseevents.PhaseDelta},
+		{name: "reasoning content", kind: "reasoning", wantKind: responseevents.KindReasoning, wantPhase: responseevents.PhaseDelta},
+		{name: "tool content", kind: "tool", wantKind: responseevents.KindTool, wantPhase: responseevents.PhaseDelta},
+		{name: "run lifecycle", kind: "run", wantKind: responseevents.KindProgress, wantPhase: responseevents.PhaseUpdated},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{
+				FactorySessionID: "session-progress",
+				RunID:            "run-progress",
+			}, responsestream.Event{
+				Kind:     responsestream.EventKindProgressFragment,
+				Type:     responsestream.EventTypeProgress,
+				Payload:  "incremental content",
+				Metadata: map[string]string{"kind": tc.kind, "item_id": "tool-call-1"},
+			})
+			if err != nil {
+				t.Fatalf("MapFragment() error = %v", err)
+			}
+			if len(events) != 1 || events[0].Kind != tc.wantKind || events[0].Phase != tc.wantPhase {
+				t.Fatalf("mapped event = %#v, want %s/%s", events, tc.wantKind, tc.wantPhase)
+			}
+			if err := responseevents.ValidateEvent(events[0]); err != nil {
+				t.Fatalf("ValidateEvent() error = %v", err)
+			}
+		})
+	}
+}
+
 func TestMapFragment_UsesExplicitProviderWithoutSessionReference(t *testing.T) {
 	t.Parallel()
 

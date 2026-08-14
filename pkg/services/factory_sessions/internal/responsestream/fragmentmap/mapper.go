@@ -485,6 +485,9 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 	phase := semanticPhase(fragment.Type)
 	switch kind {
 	case "run":
+		if phase == responseevents.PhaseUpdated {
+			return responseevents.KindProgress, phase, progressPayloadFromFragment(fragment)
+		}
 		return responseevents.KindRun, phase, responseevents.RunPayload{Status: strings.ToLower(string(phase))}
 	case "session":
 		payload := responseevents.SessionPayload{Status: strings.ToLower(string(phase))}
@@ -494,6 +497,7 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 		}
 		return responseevents.KindSession, phase, payload
 	case "message":
+		phase = contentProgressPhase(phase)
 		if phase == responseevents.PhaseDelta {
 			return responseevents.KindMessage, phase, responseevents.MessageDeltaPayload{ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: fragment.Payload}
 		}
@@ -503,16 +507,24 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 			Partial:       strings.EqualFold(strings.TrimSpace(metadata["partial"]), "true"),
 		}
 	case "reasoning":
+		phase = contentProgressPhase(phase)
 		payload := responseevents.ReasoningPayload{Summary: fragment.Payload}
 		if phase == responseevents.PhaseDelta {
 			payload, payload.SummaryDelta = responseevents.ReasoningPayload{}, fragment.Payload
 		}
 		return responseevents.KindReasoning, phase, payload
 	case "tool":
+		phase = contentProgressPhase(phase)
 		toolID := strings.TrimSpace(metadata["item_id"])
 		name := strings.TrimSpace(fragment.Payload)
 		if name == "" {
 			name = "ACP tool"
+		}
+		if phase == responseevents.PhaseDelta {
+			return responseevents.KindTool, phase, responseevents.ToolDeltaPayload{
+				ToolCallID:  toolID,
+				OutputDelta: fragment.Payload,
+			}
 		}
 		payload := responseevents.ToolPayload{ToolCallID: toolID, ToolName: name, Status: metadata["status"]}
 		if raw := json.RawMessage(metadata["raw_input"]); json.Valid(raw) {
@@ -533,6 +545,13 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 	default:
 		return responseevents.KindProgress, responseevents.PhaseUpdated, progressPayloadFromFragment(fragment)
 	}
+}
+
+func contentProgressPhase(phase responseevents.Phase) responseevents.Phase {
+	if phase == responseevents.PhaseUpdated {
+		return responseevents.PhaseDelta
+	}
+	return phase
 }
 
 func semanticProgressRepresentation(kind responseevents.Kind, phase responseevents.Phase) responseevents.Representation {
