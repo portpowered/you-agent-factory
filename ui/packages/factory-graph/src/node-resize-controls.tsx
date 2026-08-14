@@ -114,13 +114,17 @@ export function FactoryGraphNodeResizeControls({
       <div
         className="pointer-events-auto absolute -top-11 right-0 z-40 flex gap-1 rounded-lg border border-outline bg-surface-container-high p-1 shadow-af-panel"
         data-factory-graph-node-resize-actions
-        onPointerDown={(event) => event.stopPropagation()}
       >
         {onFitToContent ? (
           <Button
             aria-label={labels.fitToContent}
             className="nodrag nopan min-h-8 rounded-md px-2 py-1 text-[0.68rem]"
-            onClick={handleFitToContent}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleFitToContent();
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
             size="sm"
             tone="outline"
           >
@@ -131,7 +135,12 @@ export function FactoryGraphNodeResizeControls({
           <Button
             aria-label={labels.resetSize}
             className="nodrag nopan min-h-8 rounded-md px-2 py-1 text-[0.68rem]"
-            onClick={handleResetSize}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleResetSize();
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
             size="sm"
             tone="outline"
           >

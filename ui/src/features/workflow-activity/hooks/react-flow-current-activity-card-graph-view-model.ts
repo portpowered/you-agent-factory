@@ -170,7 +170,13 @@ function useCurrentActivityBaseNodes({
       activeExecutionsByWorkstationNodeID,
       activeGraphHighlights,
       activeItemLabelsByPlaceId,
-      editor,
+      editor.activeTool,
+      editor.canInteractWithEditor,
+      editor.editorMode,
+      editor.handleConnectionAnchorClick,
+      editor.nodeResizeControls,
+      editor.pendingConnectionSource,
+      editor.validationTargets,
       factoryDefinition,
       graphLayout,
       locale,
@@ -259,15 +265,21 @@ function useCurrentActivityNodeResizeState(input: {
       enabled: hostController?.enabled ?? localController.enabled,
       labels: hostController?.labels ?? localController.labels,
       onFitToContent: (target, dimensions) => {
-        updateDimensions(target, dimensions);
+        if (!hostController) {
+          updateDimensions(target, dimensions);
+        }
         hostController?.onFitToContent(target, dimensions);
       },
       onResetSize: (target) => {
-        resetDimensions(target);
+        if (!hostController) {
+          resetDimensions(target);
+        }
         hostController?.onResetSize(target);
       },
       onResizeEnd: (target, dimensions) => {
-        updateDimensions(target, dimensions);
+        if (!hostController) {
+          updateDimensions(target, dimensions);
+        }
         hostController?.onResizeEnd(target, dimensions);
       },
     }),

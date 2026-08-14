@@ -12,6 +12,7 @@ const storybookUrl = `http://${host}:${port}`;
 const storyId =
   "factory-graph-editor-visual-groups--editor-save-reload-workflow";
 const workstationId = "workstation:plan";
+const browserCheckTimeoutMs = 60_000;
 
 const server = await ensureStorybookServer({ host, port: Number(port) });
 const browser = await chromium.launch();
@@ -20,7 +21,7 @@ try {
   const page = await browser.newPage({
     viewport: { height: 900, width: 1440 },
   });
-  page.setDefaultTimeout(60_000);
+  page.setDefaultTimeout(browserCheckTimeoutMs);
 
   await page.goto(storyUrl(storybookUrl, storyId), {
     timeout: 90_000,
@@ -201,10 +202,18 @@ try {
 }
 
 async function workstationButton(page) {
-  const button = page.getByRole("button", {
+  const node = page.locator(`.react-flow__node[data-id="${workstationId}"]`);
+  await node.waitFor({
+    state: "visible",
+    timeout: browserCheckTimeoutMs,
+  });
+  const button = node.getByRole("button", {
     name: "Select Plan workstation",
   });
-  await button.waitFor({ state: "visible" });
+  await button.waitFor({
+    state: "visible",
+    timeout: browserCheckTimeoutMs,
+  });
   return button;
 }
 
@@ -214,10 +223,15 @@ async function selectWorkstation(page) {
     await button.click();
   }
   await page.waitForFunction(
-    (node) => node.getAttribute("aria-pressed") === "true",
-    await button.elementHandle(),
+    (id) =>
+      document
+        .querySelector(`.react-flow__node[data-id="${id}"]`)
+        ?.querySelector('button[aria-label="Select Plan workstation"]')
+        ?.getAttribute("aria-pressed") === "true",
+    workstationId,
+    { timeout: browserCheckTimeoutMs },
   );
-  return button;
+  return workstationButton(page);
 }
 
 async function nodeDimensions(button) {
@@ -252,11 +266,15 @@ async function attachedEdgeIds(page) {
 }
 
 async function waitForAttachedEdges(page, nodeId) {
-  await page.waitForFunction((id) => {
-    return Array.from(document.querySelectorAll(".react-flow__edge")).some(
-      (edge) => edge.getAttribute("data-id")?.includes(id),
-    );
-  }, nodeId);
+  await page.waitForFunction(
+    (id) => {
+      return Array.from(document.querySelectorAll(".react-flow__edge")).some(
+        (edge) => edge.getAttribute("data-id")?.includes(id),
+      );
+    },
+    nodeId,
+    { timeout: browserCheckTimeoutMs },
+  );
 }
 
 function assertDimensionsMatchSaved(actual, saved) {

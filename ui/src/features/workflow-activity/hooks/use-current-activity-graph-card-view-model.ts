@@ -43,6 +43,9 @@ export function useCurrentActivityGraphCardViewModel(
   const graphProjection = currentActivityGraphRenderProjection(
     editorGraphProjection,
   );
+  const fitLayoutNode = publicEditor.layoutControls.fitNode;
+  const resetLayoutNodeSize = publicEditor.layoutControls.resetNodeSize;
+  const resizeLayoutNode = publicEditor.layoutControls.resizeNode;
   const nodeResizeControls = useMemo<CurrentActivityNodeResizeController>(
     () => ({
       enabled:
@@ -56,7 +59,7 @@ export function useCurrentActivityGraphCardViewModel(
           .nodeResetSizeLabel,
       },
       onFitToContent: (target, dimensions) => {
-        publicEditor.layoutControls.fitNode(
+        fitLayoutNode(
           target.nodeId,
           target.family,
           dimensions,
@@ -64,10 +67,10 @@ export function useCurrentActivityGraphCardViewModel(
         );
       },
       onResetSize: (target) => {
-        publicEditor.layoutControls.resetNodeSize(target.nodeId);
+        resetLayoutNodeSize(target.nodeId);
       },
       onResizeEnd: (target, dimensions) => {
-        publicEditor.layoutControls.resizeNode(
+        resizeLayoutNode(
           target.nodeId,
           target.family,
           dimensions,
@@ -80,7 +83,9 @@ export function useCurrentActivityGraphCardViewModel(
       publicEditor.editorControls.activeTool,
       publicEditor.editorControls.canInteract,
       publicEditor.editorControls.isEditing,
-      publicEditor.layoutControls,
+      fitLayoutNode,
+      resetLayoutNodeSize,
+      resizeLayoutNode,
     ],
   );
   const graph = useCurrentActivityGraphViewModel({

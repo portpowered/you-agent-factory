@@ -50,10 +50,6 @@ export function useCurrentActivityGraphLayoutForFactory(
     factoryOverride === undefined ? snapshot.factory : factoryOverride;
   const hiddenClassesKey = [...hiddenNodeClasses].sort().join(",");
   const builderCacheKey = getGraphLayoutBuilderCacheKey(buildLayout);
-  const canonicalNodeSizesKey = useMemo(
-    () => factoryLayoutNodeSizesKey(canonicalLayout),
-    [canonicalLayout],
-  );
   const layoutSource = useMemo(
     () =>
       factory
@@ -73,9 +69,9 @@ export function useCurrentActivityGraphLayoutForFactory(
     [factory, hiddenClassesKey, visibilityPreset],
   );
 
-  return useWorkflowTopologyAsyncCache({
+  const topologyLayout = useWorkflowTopologyAsyncCache({
     cache: GRAPH_LAYOUT_CACHE,
-    dependencies: [buildLayout, canonicalNodeSizesKey, layoutSource],
+    dependencies: [buildLayout, layoutSource],
     fallbackValue: EMPTY_GRAPH_LAYOUT,
     initialValue: EMPTY_GRAPH_LAYOUT,
     loadLayout: () =>
@@ -86,30 +82,22 @@ export function useCurrentActivityGraphLayoutForFactory(
             layoutSource.visibilityPreset,
           )
         : Promise.resolve(EMPTY_GRAPH_LAYOUT),
-    mapResolvedLayout: (layout) => {
-      if (layoutSource.kind !== "factory") {
-        return layout;
-      }
-
-      return applyFactoryLayoutNodeSizesToGraphLayout({
-        canonicalLayout:
-          canonicalLayout ?? factoryLayoutFromDefinition(layoutSource.factory),
-        factory: layoutSource.factory,
-        graphLayout: layout,
-      });
-    },
+    mapResolvedLayout: (layout) => layout,
     topologyKey: `${layoutSource.key}|builder:${builderCacheKey}`,
   });
-}
 
-function factoryLayoutNodeSizesKey(layout: FactoryLayout | undefined): string {
-  return (layout?.nodes ?? [])
-    .map(
-      (node) =>
-        `${node.id}:${node.size?.width ?? ""}x${node.size?.height ?? ""}`,
-    )
-    .sort()
-    .join("|");
+  return useMemo(() => {
+    if (layoutSource.kind !== "factory") {
+      return topologyLayout;
+    }
+
+    return applyFactoryLayoutNodeSizesToGraphLayout({
+      canonicalLayout:
+        canonicalLayout ?? factoryLayoutFromDefinition(layoutSource.factory),
+      factory: layoutSource.factory,
+      graphLayout: topologyLayout,
+    });
+  }, [canonicalLayout, layoutSource, topologyLayout]);
 }
 
 function getGraphLayoutBuilderCacheKey(

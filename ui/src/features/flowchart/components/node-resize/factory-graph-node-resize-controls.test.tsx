@@ -56,6 +56,7 @@ function resizeProps(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the shared resize control interaction cases together.
 describe("Factory graph node resize controls", () => {
   beforeEach(() => {
     updateNodeInternals.mockClear();
@@ -159,6 +160,31 @@ describe("Factory graph node resize controls", () => {
     } finally {
       globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     }
+  });
+
+  it("keeps resize actions from bubbling into the enclosing node", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn();
+
+    const body = document.body;
+    const bodyClickListener = () => onClick();
+    const bodyKeyDownListener = () => onKeyDown();
+    body.addEventListener("click", bodyClickListener);
+    body.addEventListener("keydown", bodyKeyDownListener);
+
+    render(<FactoryGraphNodeResizeControls {...resizeProps()} />);
+
+    const fit = screen.getByRole("button", { name: "Fit to content" });
+    await user.click(fit);
+    fit.focus();
+    await user.keyboard("{Enter}");
+
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+
+    body.removeEventListener("click", bodyClickListener);
+    body.removeEventListener("keydown", bodyKeyDownListener);
   });
 
   it("does not expose controls when the selected-node host is read-only", () => {
