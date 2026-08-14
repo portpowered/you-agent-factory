@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -194,9 +196,20 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 // Factory Events in chronological order with public control operation kinds.
 func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	support.WriteAgentConfig(
+		t,
+		factoryDir,
+		"mock-worker",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("buffered task accepted COMPLETE"),
+	})
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
+		FactoryDir: factoryDir,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
 	defer server.Stop(t)
 
