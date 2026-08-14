@@ -370,7 +370,14 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	}
 
 	close(provider.releaseBlocked)
-	terminalEvent := waitForLiveCapacityJavaScriptTerminal(t, responseStream, 2)
+	terminalEvent := waitForLiveCapacityJavaScriptTerminal(
+		t,
+		responseStream,
+		server.URL(),
+		started.SessionId,
+		provider,
+		2,
+	)
 	if terminalEvent.FactorySessionId != started.SessionId {
 		t.Fatalf(
 			"JavaScript terminal response event session = %q, want %q",
@@ -382,8 +389,12 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	if terminal.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("JavaScript durable session status = %q, want SUCCEEDED", terminal.Status)
 	}
-	if provider.callCount() != 2 || provider.peakActive() != 2 {
-		t.Fatalf("JavaScript provider calls=%d peakActive=%d, want exactly two calls with two concurrent effects", provider.callCount(), provider.peakActive())
+	providerState := provider.snapshot()
+	if providerState.calls != 2 || providerState.completed != 2 || providerState.active != 0 || providerState.peak != 2 {
+		t.Fatalf(
+			"JavaScript provider state = %#v, want exactly two calls, two completions, no active effects, and peakActive=2",
+			providerState,
+		)
 	}
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
@@ -485,12 +496,26 @@ func readLiveCapacityDurableSession(
 func waitForLiveCapacityJavaScriptTerminal(
 	t *testing.T,
 	stream *support.FactoryResponseEventStream,
+	serverURL, sessionID string,
+	provider *liveCapacityJavaScriptProviderRunner,
 	wantRuns int,
 ) factoryapi.FactoryResponseEvent {
 	t.Helper()
 	completedRuns := 0
+	frames := make([]factoryapi.FactoryResponseEvent, 0, wantRuns)
 	for {
-		event := stream.NextFrame(liveCapacityTestTimeout).Event
+		result := stream.TryNextFrameResult(liveCapacityTestTimeout)
+		if result.Outcome != support.FactoryResponseEventStreamOutcomeFrame {
+			t.Fatalf(
+				"JavaScript workflow response stream ended before %d completed RUN events: %s; delivered frames=%s; lifecycle=%s",
+				wantRuns,
+				result.Diagnostic(),
+				summarizeLiveCapacityResponseEvents(frames),
+				liveCapacityJavaScriptLifecycleEvidence(serverURL, sessionID, provider),
+			)
+		}
+		event := result.Frame.Event
+		frames = append(frames, event)
 		switch event.Kind {
 		case factoryapi.FactoryResponseEventKindRun:
 			if event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
@@ -512,6 +537,106 @@ func waitForLiveCapacityJavaScriptTerminal(
 			}
 		}
 	}
+}
+
+func summarizeLiveCapacityResponseEvents(events []factoryapi.FactoryResponseEvent) string {
+	if len(events) == 0 {
+		return "none"
+	}
+	summaries := make([]string, 0, len(events))
+	for _, event := range events {
+		summaries = append(
+			summaries,
+			fmt.Sprintf("sequence=%d kind=%s phase=%s run=%q", event.Sequence, event.Kind, event.Phase, event.RunId),
+		)
+	}
+	return strings.Join(summaries, "; ")
+}
+
+func liveCapacityJavaScriptLifecycleEvidence(
+	serverURL, sessionID string,
+	provider *liveCapacityJavaScriptProviderRunner,
+) string {
+	providerState := provider.snapshot()
+	sessionResponse, sessionErr := readLiveCapacityLifecycleJSON[factoryapi.FactorySessionGetResponse](
+		serverURL,
+		"/factory-sessions/"+sessionID,
+	)
+	sessionEvidence := fmt.Sprintf("error=%v", sessionErr)
+	if sessionErr == nil {
+		session, err := sessionResponse.AsFactorySessionDurableReadModel()
+		if err != nil {
+			sessionEvidence = fmt.Sprintf("decode-error=%v", err)
+		} else {
+			phase := ""
+			if session.Phase != nil {
+				phase = *session.Phase
+			}
+			sessionEvidence = fmt.Sprintf(
+				"status=%s phase=%q progress=%#v",
+				session.Status,
+				phase,
+				session.Progress,
+			)
+		}
+	}
+
+	dispatches, dispatchErr := readLiveCapacityLifecycleJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		serverURL,
+		"/factory-sessions/"+sessionID+"/dispatches",
+	)
+	dispatchEvidence := fmt.Sprintf("error=%v", dispatchErr)
+	if dispatchErr == nil {
+		statuses := make([]string, 0, len(dispatches.Dispatches))
+		for _, dispatch := range dispatches.Dispatches {
+			label := support.StringPointerValue(dispatch.Label)
+			if label == "" {
+				label = dispatch.Id
+			}
+			statuses = append(statuses, fmt.Sprintf("%s=%s", label, dispatch.Status))
+		}
+		dispatchEvidence = fmt.Sprintf("count=%d statuses=%s", len(statuses), strings.Join(statuses, ","))
+	}
+
+	return fmt.Sprintf(
+		"session={%s}; dispatches={%s}; provider={calls=%d completed=%d active=%d peak=%d}",
+		sessionEvidence,
+		dispatchEvidence,
+		providerState.calls,
+		providerState.completed,
+		providerState.active,
+		providerState.peak,
+	)
+}
+
+func readLiveCapacityLifecycleJSON[T any](serverURL, path string) (T, error) {
+	var value T
+	request, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		strings.TrimSuffix(serverURL, "/")+path,
+		nil,
+	)
+	if err != nil {
+		return value, err
+	}
+	client := http.Client{Timeout: time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return value, err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return value, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return value, fmt.Errorf("HTTP status=%d body=%s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if err := json.Unmarshal(body, &value); err != nil {
+		return value, err
+	}
+	return value, nil
 }
 
 func writeLiveCapacityJavaScriptGlobalConfig(t *testing.T) string {
@@ -761,6 +886,7 @@ func scaffoldLiveCapacityFactory(t *testing.T, capacity int) string {
 type liveCapacityJavaScriptProviderRunner struct {
 	mu             sync.Mutex
 	calls          int
+	completed      int
 	active         int
 	peak           int
 	started        chan int
@@ -787,6 +913,7 @@ func (p *liveCapacityJavaScriptProviderRunner) Run(ctx context.Context, request 
 	defer func() {
 		p.mu.Lock()
 		p.active--
+		p.completed++
 		p.mu.Unlock()
 	}()
 	if call <= 2 {
@@ -821,16 +948,22 @@ func (p *liveCapacityJavaScriptProviderRunner) waitForCall(t *testing.T, want in
 	}
 }
 
-func (p *liveCapacityJavaScriptProviderRunner) callCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.calls
+type liveCapacityJavaScriptProviderState struct {
+	calls     int
+	completed int
+	active    int
+	peak      int
 }
 
-func (p *liveCapacityJavaScriptProviderRunner) peakActive() int {
+func (p *liveCapacityJavaScriptProviderRunner) snapshot() liveCapacityJavaScriptProviderState {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.peak
+	return liveCapacityJavaScriptProviderState{
+		calls:     p.calls,
+		completed: p.completed,
+		active:    p.active,
+		peak:      p.peak,
+	}
 }
 
 type liveCapacityBarrierRunner struct {

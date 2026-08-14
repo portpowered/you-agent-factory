@@ -265,11 +265,19 @@ func (s *FactoryResponseEventStream) TryNextFrameResult(
 			nil,
 		)
 	case <-s.done:
-		return s.terminalResult(time.Since(started))
+		return s.terminalOrBufferedResult(time.Since(started))
 	case <-timer.C:
+		if frame, ok := s.tryReadFrame(); ok {
+			return s.waitResult(
+				FactoryResponseEventStreamOutcomeFrame,
+				frame,
+				time.Since(started),
+				nil,
+			)
+		}
 		select {
 		case <-s.done:
-			return s.terminalResult(time.Since(started))
+			return s.terminalOrBufferedResult(time.Since(started))
 		default:
 			return s.waitResult(
 				FactoryResponseEventStreamOutcomeTimeout,
@@ -279,6 +287,31 @@ func (s *FactoryResponseEventStream) TryNextFrameResult(
 			)
 		}
 	}
+}
+
+func (s *FactoryResponseEventStream) tryReadFrame() (FactoryResponseEventFrame, bool) {
+	select {
+	case frame := <-s.events:
+		return frame, true
+	default:
+		return FactoryResponseEventFrame{}, false
+	}
+}
+
+func (s *FactoryResponseEventStream) terminalOrBufferedResult(
+	waited time.Duration,
+) FactoryResponseEventStreamWaitResult {
+	// The reader enqueues frames before publishing terminal state. Drain one
+	// queued frame before observing EOF so completion cannot hide delivered data.
+	if frame, ok := s.tryReadFrame(); ok {
+		return s.waitResult(
+			FactoryResponseEventStreamOutcomeFrame,
+			frame,
+			waited,
+			nil,
+		)
+	}
+	return s.terminalResult(waited)
 }
 
 // TryNextFrame retains the original quiet-period and closed-stream contract:

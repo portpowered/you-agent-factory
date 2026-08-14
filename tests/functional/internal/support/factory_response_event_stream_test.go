@@ -65,6 +65,31 @@ func TestFactoryResponseEventStreamWaitResultReportsEOF(t *testing.T) {
 	}
 }
 
+func TestFactoryResponseEventStreamWaitResultDrainsBufferedFramesBeforeEOF(t *testing.T) {
+	stream := &FactoryResponseEventStream{
+		t:               t,
+		done:            make(chan struct{}),
+		events:          make(chan FactoryResponseEventFrame, 2),
+		statusCode:      http.StatusOK,
+		terminalOutcome: FactoryResponseEventStreamOutcomeEOF,
+		frameCount:      2,
+	}
+	stream.events <- FactoryResponseEventFrame{SSEID: "1"}
+	stream.events <- FactoryResponseEventFrame{SSEID: "2"}
+	close(stream.done)
+
+	for _, wantID := range []string{"1", "2"} {
+		result := stream.TryNextFrameResult(time.Second)
+		if result.Outcome != FactoryResponseEventStreamOutcomeFrame || result.Frame.SSEID != wantID {
+			t.Fatalf("buffered wait %q = %#v, want frame %q", wantID, result, wantID)
+		}
+	}
+	terminal := stream.TryNextFrameResult(time.Second)
+	if terminal.Outcome != FactoryResponseEventStreamOutcomeEOF {
+		t.Fatalf("terminal wait = %q, want EOF: %s", terminal.Outcome, terminal.Diagnostic())
+	}
+}
+
 func TestFactoryResponseEventStreamWaitResultReportsTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeResponseEventStreamHeaders(w)
