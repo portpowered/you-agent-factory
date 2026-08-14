@@ -12,8 +12,12 @@ export async function verifyDashboardSessionSwitching(
     page.getByRole("button", { name: /Beta Story/ }),
     "Beta session active work item",
   );
-  const betaSelected = await betaTab.getAttribute("aria-selected");
-  if (betaSelected !== "true") {
+  try {
+    await expectVisible(
+      page.getByRole("tab", { name: "beta", selected: true }),
+      "Beta session tab selection",
+    );
+  } catch {
     throw new Error("Beta session tab was not selected after switching.");
   }
 
