@@ -86,6 +86,12 @@ func assembleRuntimeProducts(
 		FactorySessions: factorySessionGateway, LiveControl: factorySessionGateway,
 		Work:   workService,
 		Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
+		ModelInvoker: NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+			Models: modelsBind.Root, Scope: modelsBind.Scope,
+			Sessions: factorySessionGateway, Workers: workerService,
+			RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
+			FactoryDirectory: directory, WorkingDirectory: directory,
+		}),
 		Workers: workerService, ProviderSessions: providerSessions,
 		WorkerSessions: workerSessions,
 		WorkerPrompts:  workerPrompts, Logger: resources.Logger,
@@ -100,9 +106,16 @@ func assembleRuntimeProducts(
 		},
 		invocation: roles.OpenedInvocationRuntime{
 			Workers: workerService, Sessions: factorySessionGateway,
+			ModelInvoker: NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+				Models: modelsBind.Root, Scope: modelsBind.Scope,
+				Sessions: factorySessionGateway, Workers: workerService,
+				RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
+				FactoryDirectory: directory, WorkingDirectory: directory,
+			}),
 			Invoker: sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,
-			ModelsScope:    modelsBind.Scope,
+			ModelsScope: modelsBind.Scope,
+			RuntimeID:   runtimeInstanceID, GenerationID: startup.StreamGeneration(),
 			CloseArtifacts: closeResources,
 		},
 		execution: roles.OpenedExecutionRuntime{

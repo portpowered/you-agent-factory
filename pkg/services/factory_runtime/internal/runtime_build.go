@@ -13,6 +13,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
+	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -34,6 +35,41 @@ type runtimeWorkersServiceWithProgress struct {
 
 func (service runtimeWorkersServiceWithProgress) RuntimeProgressPublisher() workers.ProgressPublisher {
 	return service.publisher
+}
+
+func (service runtimeWorkersServiceWithProgress) RuntimeOwnsModelEventRecording() bool {
+	owner, ok := service.Service.(interface {
+		RuntimeOwnsModelEventRecording() bool
+	})
+	return ok && owner.RuntimeOwnsModelEventRecording()
+}
+
+func (service runtimeWorkersServiceWithProgress) RenderPrompt(
+	template string,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+) (string, error) {
+	renderer, ok := service.Service.(runtime.PromptRenderer)
+	if !ok {
+		return "", fmt.Errorf("render Worker prompt: renderer is unavailable")
+	}
+	return renderer.RenderPrompt(template, tokens, workflowContext)
+}
+
+func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
+	workingDirectory string,
+	environment map[string]string,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	worktree string,
+) (*workers.ResolvedTemplateFields, error) {
+	resolver, ok := service.Service.(runtime.TemplateFieldResolver)
+	if !ok {
+		return nil, fmt.Errorf("resolve Worker template fields: resolver is unavailable")
+	}
+	return resolver.ResolveTemplateFields(
+		workingDirectory, environment, tokens, workflowContext, worktree,
+	)
 }
 
 type runtimeOpeningWithFlush struct {

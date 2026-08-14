@@ -161,10 +161,13 @@ type RuntimeHTTPServices struct {
 	// FactorySessions, narrowed for clients that only manage live sessions.
 	// The broad root remains available here for stream, reconnect, invocation,
 	// durable, and inspection consumers that need excluded operations.
-	LiveControl      LiveControlService
-	Work             work.Service
-	Models           models.Service
-	ModelsScope      models.RuntimeScopeRef
+	LiveControl LiveControlService
+	Work        work.Service
+	Models      models.Service
+	ModelsScope models.RuntimeScopeRef
+	// ModelInvoker is the opened-runtime model path. The process Workers root
+	// intentionally does not retain Factory Session or Models scope state.
+	ModelInvoker     workers.ModelInvoker
 	Workers          workers.Service
 	ProviderSessions providersessions.Service
 	WorkerSessions   workersessions.ObservationService
