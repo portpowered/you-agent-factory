@@ -31,6 +31,25 @@ blocking PR conversation feedback is explicitly addressed, merge conflicts are
 resolved, and the PR is merged. A PR that is merely opened, green, approved, or
 ready to merge is not complete.
 
+That contract belongs to the lane as a whole, and the `Delivery Loop` section
+must attribute its two halves to the two stages that actually own them:
+
+- The **implementation stage** finishes when it has pushed its final head, the
+  PR is open, CI has started, and all blocking review feedback is addressed.
+- The **review stage** owns driving CI to terminal-and-passing and owns the
+  merge itself.
+
+Never phrase an acceptance criterion so that the implementation stage owns
+"CI is green" or "the PR is merged". The implementer cannot merge, so a
+criterion worded that way makes it wait on an outcome it does not control: it
+re-runs CI for hours and commits progress notes about the run it is watching.
+Each such commit creates a new head, which invalidates the very run it just
+recorded, and the loop restarts. This has cost tens of agent-hours on a single
+lane.
+
+For the same reason, every plan must state that evidence about a CI run goes in
+a PR comment and never in a commit.
+
 When the ask touches backend, plan for clear package ownership, explicit state,
 isolated side effects, aligned contracts, and direct verification at the right
 test layer.
