@@ -6,6 +6,7 @@ import {
   factoryGraphNodeFamilyForShellType,
   factoryGraphNodeFamilyRole,
   resolveFactoryGraphNodeDimensions,
+  resolveFactoryGraphNodeResizeDimensions,
 } from "./node-family.js";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: family sizing cases share one pure contract matrix.
@@ -199,5 +200,27 @@ describe("Factory graph node family roles", () => {
     expect(resolution.resolvedDimensions.width).toBe(300);
     expect(resolution.resolvedDimensions.height).toBe(200);
     expect(resolution.fittedDimensions.height).toBeLessThan(200);
+  });
+
+  it("normalizes interactive resize requests to the family's allowed axes", () => {
+    expect(
+      resolveFactoryGraphNodeResizeDimensions("resource", {
+        height: 220,
+        width: 9999,
+      }),
+    ).toEqual({
+      height: factoryGraphNodeFamilyRole("resource").defaultDimensions.height,
+      width: factoryGraphNodeFamilyRole("resource").maximumDimensions.width,
+    });
+    expect(
+      resolveFactoryGraphNodeResizeDimensions("workstation", {
+        height: 9999,
+        width: 1,
+      }),
+    ).toEqual({
+      height:
+        factoryGraphNodeFamilyRole("workstation").maximumDimensions.height,
+      width: factoryGraphNodeFamilyRole("workstation").minimumDimensions.width,
+    });
   });
 });

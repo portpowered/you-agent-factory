@@ -1,6 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
   type FactoryGraphNodeHandle,
@@ -31,6 +31,7 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
   targetPath: string;
   validationError?: boolean;
   muted?: boolean;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
 }
 
 export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
@@ -68,6 +69,11 @@ export function FactoryGraphDocNodeView({
         .join(" ")}
       handles={data.handles}
       nodeType="doc"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,

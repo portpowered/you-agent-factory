@@ -1,3 +1,9 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: editor handle and resize contracts remain colocated with the shared graph interaction mapping.
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+  FactoryGraphNodeResizeLabels,
+} from "@you-agent-factory/factory-graph";
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import {
@@ -39,9 +45,30 @@ export interface CurrentActivityEditorState {
   activeTool: "add" | "connect" | "delete" | null;
   canInteractWithEditor: boolean;
   editorMode: boolean;
+  nodeResizeControls?: CurrentActivityNodeResizeController;
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   validationTargets?: readonly FactoryValidationTarget[];
+}
+
+export interface CurrentActivityNodeResizeTarget {
+  family: FactoryGraphNodeFamily;
+  nodeId: string;
+  position: { x: number; y: number };
+}
+
+export interface CurrentActivityNodeResizeController {
+  enabled: boolean;
+  labels: FactoryGraphNodeResizeLabels;
+  onFitToContent: (
+    target: CurrentActivityNodeResizeTarget,
+    dimensions: FactoryGraphNodeDimensions,
+  ) => void;
+  onResetSize: (target: CurrentActivityNodeResizeTarget) => void;
+  onResizeEnd: (
+    target: CurrentActivityNodeResizeTarget,
+    dimensions: FactoryGraphNodeDimensions,
+  ) => void;
 }
 
 /** Graph node header selection competes with delete-tool onNodeClick when wired. */

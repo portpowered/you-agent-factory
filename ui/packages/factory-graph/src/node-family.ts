@@ -224,6 +224,26 @@ export function fitFactoryGraphNodeDimensions(
     .fittedDimensions;
 }
 
+/** Normalize an interactive resize request to the family's safe geometry. */
+export function resolveFactoryGraphNodeResizeDimensions(
+  family: FactoryGraphNodeFamily,
+  requestedDimensions: FactoryGraphNodeDimensions,
+): FactoryGraphNodeDimensions {
+  const resolution = resolveFactoryGraphNodeDimensions(family, {
+    authoredDimensions: requestedDimensions,
+  });
+  const role = factoryGraphNodeFamilyRole(family);
+
+  return {
+    height: role.allowedAxes.height
+      ? resolution.resolvedDimensions.height
+      : resolution.fittedDimensions.height,
+    width: role.allowedAxes.width
+      ? resolution.resolvedDimensions.width
+      : resolution.fittedDimensions.width,
+  };
+}
+
 function normalizeDimensionRequest(
   request:
     | FactoryGraphNodeDimensionResolutionOptions

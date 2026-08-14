@@ -1,7 +1,8 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: support node renderers share one semantic data contract and presentation vocabulary.
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
   type FactoryGraphNodeHandle,
@@ -33,6 +34,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectWorker?: (workerName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorker: boolean;
 }
 
@@ -49,6 +51,7 @@ export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectWorkType?: (workTypeName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorkType?: boolean;
   validationError?: boolean;
   validationMessage?: string;
@@ -69,6 +72,7 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectResource?: (resourceName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedResource: boolean;
   tokenCount: number;
 }
@@ -143,6 +147,11 @@ export function FactoryGraphWorkerNodeView({
       )}
       handles={data.handles}
       nodeType="worker"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -249,6 +258,11 @@ export function FactoryGraphWorkTypeNodeView({
       )}
       handles={data.handles}
       nodeType="workType"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
@@ -317,6 +331,11 @@ export function FactoryGraphResourceNodeView({
       )}
       handles={data.handles}
       nodeType="resource"
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,

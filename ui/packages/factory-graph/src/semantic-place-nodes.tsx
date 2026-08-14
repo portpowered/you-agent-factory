@@ -1,6 +1,7 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import {
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
@@ -46,6 +47,7 @@ export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
   tokenCount: number;
   validationError?: boolean;
   validationMessage?: string;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
 }
 
 export interface FactoryGraphStatePositionNodeData
@@ -133,6 +135,11 @@ function FactoryGraphPlaceNodeView({
       className={classNames("justify-center text-left", className)}
       handles={data.handles}
       nodeType={nodeType}
+      resizeControls={
+        data.resizeControls
+          ? { ...data.resizeControls, isVisible: selected }
+          : undefined
+      }
       visualState={{
         activeFlow: data.activeFlow,
         focused: data.focused,
