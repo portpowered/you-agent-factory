@@ -23,6 +23,7 @@ export interface ViewportCenterPlacementInput {
   maxAttempts?: number;
   occupiedRects: readonly AxisAlignedRect[];
   paddingGap?: number;
+  viewportBounds?: AxisAlignedRect;
   viewportCenter: FlowPoint;
 }
 
@@ -122,6 +123,46 @@ function collidesWithOccupied(
   );
 }
 
+function fitsWithinViewportBounds(
+  candidateRect: AxisAlignedRect,
+  viewportBounds: AxisAlignedRect | undefined,
+): boolean {
+  if (!viewportBounds) {
+    return true;
+  }
+
+  return (
+    candidateRect.x >= viewportBounds.x &&
+    candidateRect.y >= viewportBounds.y &&
+    candidateRect.x + candidateRect.width <=
+      viewportBounds.x + viewportBounds.width &&
+    candidateRect.y + candidateRect.height <=
+      viewportBounds.y + viewportBounds.height
+  );
+}
+
+function clampCenterToViewportBounds(
+  center: FlowPoint,
+  candidateSize: NodePlacementSize,
+  viewportBounds: AxisAlignedRect | undefined,
+): FlowPoint {
+  if (!viewportBounds) {
+    return center;
+  }
+
+  const minimumX = viewportBounds.x + candidateSize.width / 2;
+  const minimumY = viewportBounds.y + candidateSize.height / 2;
+  const maximumX =
+    viewportBounds.x + viewportBounds.width - candidateSize.width / 2;
+  const maximumY =
+    viewportBounds.y + viewportBounds.height - candidateSize.height / 2;
+
+  return {
+    x: Math.min(maximumX, Math.max(minimumX, center.x)),
+    y: Math.min(maximumY, Math.max(minimumY, center.y)),
+  };
+}
+
 function distanceSquared(from: FlowPoint, to: FlowPoint): number {
   const deltaX = from.x - to.x;
   const deltaY = from.y - to.y;
@@ -177,15 +218,42 @@ export function resolveViewportCenterNodePlacement(
     input.occupiedRects,
     paddingGap,
   );
+  const centerFitsViewport = fitsWithinViewportBounds(
+    centerRect,
+    input.viewportBounds,
+  );
 
   let attemptsUsed = 1;
-  if (!collidesAtCenter) {
+  if (!collidesAtCenter && centerFitsViewport) {
     return {
       attemptsUsed,
       center: input.viewportCenter,
       collidesAtCenter: false,
       exhaustedSearch: false,
     };
+  }
+
+  if (!collidesAtCenter && !centerFitsViewport) {
+    const boundedCenter = clampCenterToViewportBounds(
+      input.viewportCenter,
+      input.candidateSize,
+      input.viewportBounds,
+    );
+    const boundedRect = axisAlignedRectFromCenter(
+      boundedCenter,
+      input.candidateSize,
+    );
+    if (
+      fitsWithinViewportBounds(boundedRect, input.viewportBounds) &&
+      !collidesWithOccupied(boundedRect, input.occupiedRects, paddingGap)
+    ) {
+      return {
+        attemptsUsed,
+        center: boundedCenter,
+        collidesAtCenter: false,
+        exhaustedSearch: false,
+      };
+    }
   }
 
   let bestCenter: FlowPoint | undefined;
@@ -211,6 +279,9 @@ export function resolveViewportCenterNodePlacement(
     if (collidesWithOccupied(candidateRect, input.occupiedRects, paddingGap)) {
       continue;
     }
+    if (!fitsWithinViewportBounds(candidateRect, input.viewportBounds)) {
+      continue;
+    }
 
     const candidateDistance = distanceSquared(
       input.viewportCenter,
@@ -226,15 +297,19 @@ export function resolveViewportCenterNodePlacement(
     return {
       attemptsUsed,
       center: bestCenter,
-      collidesAtCenter: true,
+      collidesAtCenter,
       exhaustedSearch: false,
     };
   }
 
   return {
     attemptsUsed,
-    center: input.viewportCenter,
-    collidesAtCenter: true,
+    center: clampCenterToViewportBounds(
+      input.viewportCenter,
+      input.candidateSize,
+      input.viewportBounds,
+    ),
+    collidesAtCenter,
     exhaustedSearch: true,
   };
 }
