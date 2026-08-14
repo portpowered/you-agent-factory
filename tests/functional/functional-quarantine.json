@@ -3,6 +3,41 @@
   "suite": "functional",
   "entries": [
     {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPWorkerChildStreamSurvivesRetainedReplay",
+      "bucket": "GENUINELY FAILING",
+      "reason": "CANONICAL_EVENT_PUBLISH_FAILED: UPDATED is invalid for RUN/MESSAGE progress phases; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Fix the invalid progress publication and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestTwoACPWorkersKeepChildStreamsAttributed",
+      "bucket": "GENUINELY FAILING",
+      "reason": "CANONICAL_EVENT_PUBLISH_FAILED: UPDATED is invalid for RUN/MESSAGE progress phases; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Fix the invalid progress publication and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution",
+      "bucket": "GENUINELY FAILING",
+      "reason": "RUN_INVOCATION_FAILED: provider ${executorProvider} is unknown in the empty effective-signature flow; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair provider selection for the empty effective-signature flow and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput",
+      "bucket": "GENUINELY FAILING",
+      "reason": "RUN_INVOCATION_FAILED: provider ${executorProvider} is unknown for named and explicit factory selection; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair provider selection for named and explicit factories and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
+      "test": "TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs",
+      "bucket": "GENUINELY FAILING",
+      "reason": "INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT: unknown named argument mode for @you/goal in the compatibility-input flow; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair compatibility-input handling and remove this entry after the exact selector passes"
+    },
+    {
       "package": "github.com/portpowered/infinite-you/tests/functional/factory_runtime",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "Linux build constraints leave this functional package without runnable Go test files"
@@ -11,6 +46,27 @@
       "package": "github.com/portpowered/infinite-you/tests/functional/operator_settings",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/product/packaged_factory_portability",
+      "test": "TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity",
+      "bucket": "GENUINELY FAILING",
+      "reason": "Timed out waiting for the process API server and reported missing invocation input during shutdown; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair bootstrap portability readiness and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials",
+      "bucket": "GENUINELY FAILING",
+      "reason": "Same-machine rejection/process failure reproduced, with the authoritative run also failing worker-session start; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair mock-worker startup and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
+      "test": "TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers",
+      "bucket": "GENUINELY FAILING",
+      "reason": "Timed out waiting for the process API server in the model and script worker variants; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair command-runner worker readiness and remove this entry after the exact selector passes"
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/providers/agy",
@@ -42,6 +98,34 @@
       "package": "github.com/portpowered/infinite-you/tests/functional/recordings",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline",
+      "bucket": "GENUINELY FAILING",
+      "reason": "/events replay failed with unexpected EOF; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair event replay framing and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestDashboard_EngineStateSnapshot_EndToEnd",
+      "bucket": "GENUINELY FAILING",
+      "reason": "Provider sessions were absent from events and sess-world-view-success was missing; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair provider-session event projection and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact",
+      "bucket": "GENUINELY FAILING",
+      "reason": "Event order stopped before dispatch-created/inference-request/inference-response/dispatch-completed; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair canonical inference event emission and remove this entry after the exact selector passes"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
+      "test": "TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases",
+      "bucket": "GENUINELY FAILING",
+      "reason": "Runtime-config alignment failed: cron-worker was AGENT_WORKER instead of INFERENCE_WORKER and retired-alias cases returned nil instead of a boundary error; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Repair runtime-config alignment and retired-alias rejection, then remove this entry after the exact selector passes"
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock",
