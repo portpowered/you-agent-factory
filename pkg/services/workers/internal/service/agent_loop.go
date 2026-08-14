@@ -36,9 +36,10 @@ func (s *Service) runAgentLoop(
 		s.agentRunHarness,
 		s.agentLoopRunner(request, identity, providerOverride),
 		agentrun.DetachedRequest{
-			Attempt:          runnerRequest,
-			ToolPolicy:       request.Target.Tools.AgentToolPolicy,
-			WorkingDirectory: runnerRequest.WorkingDirectory,
+			Attempt:           runnerRequest,
+			ProgressPublisher: request.Input.ProgressPublisher,
+			ToolPolicy:        request.Target.Tools.AgentToolPolicy,
+			WorkingDirectory:  runnerRequest.WorkingDirectory,
 		},
 	)
 }

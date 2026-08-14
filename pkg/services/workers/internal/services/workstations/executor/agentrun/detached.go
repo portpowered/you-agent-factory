@@ -18,6 +18,9 @@ import (
 type DetachedRequest struct {
 	// Attempt is the resolved provider request that every harness turn runs.
 	Attempt workerexecution.RunnerExecutionRequest
+	// ProgressPublisher receives the request-scoped canonical final-message
+	// observation after a successful harness run.
+	ProgressPublisher workerexecution.ProgressPublisher
 	// ToolPolicy is the authored agent tool policy applied to the loop. An
 	// unset policy disables tool execution.
 	ToolPolicy string
@@ -61,8 +64,11 @@ func ExecuteDetached(
 	// applied. Only a loop that ended without reaching the runner falls back to
 	// the harness text.
 	result, executed := observed.snapshot()
+	finalContent := harnessResult.FinalText
 	if !executed {
 		result.Content = harnessResult.FinalText
+	} else {
+		finalContent = result.Content
 	}
 	result.Diagnostics = mergeAgentRunDiagnostics(
 		agentRunDiagnostics(toolDiagnosticsMetadata(request.ToolPolicy, recorder)),
@@ -71,6 +77,11 @@ func ExecuteDetached(
 	if err != nil {
 		return result, err
 	}
+	publishAgentFinalMessage(
+		request.ProgressPublisher,
+		request.Attempt.Dispatch.DispatchID,
+		finalContent,
+	)
 	return result, nil
 }
 

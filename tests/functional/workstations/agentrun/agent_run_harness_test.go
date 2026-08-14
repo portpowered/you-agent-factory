@@ -20,6 +20,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -83,7 +84,7 @@ func TestAgentRunWorkstationDispatchExecutesAgentRunHarness(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"request":"probe the agent-run harness"}`))
 
 	runner := newAgentRunProbeRunner()
-	session, _, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+	session, _, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t, dir, serviceedges.Edges{ProviderCommandRunner: runner}, 40*time.Second,
 	)
 	if session.Runtime.Progress.Categories.Terminal != 1 ||
@@ -110,6 +111,44 @@ func TestAgentRunWorkstationDispatchExecutesAgentRunHarness(t *testing.T) {
 			len(requests), prompt, agentRunHarnessConversationPrefix,
 		)
 	}
+	assertAgentRunFinalResponseEvent(t, responseEvents, "I must read the probe file first.")
+}
+
+func assertAgentRunFinalResponseEvent(
+	t *testing.T,
+	events []factoryapi.FactoryResponseEvent,
+	wantText string,
+) {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Kind != factoryapi.FactoryResponseEventKindMessage ||
+			event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+			continue
+		}
+		if event.Provenance.Provider != "agent-run" ||
+			event.Provenance.NativeEventType != "agent_final_response" ||
+			event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliveryNativeFinal ||
+			event.Provenance.Fidelity != factoryapi.FactoryResponseEventProvenanceFidelityFinalOnly ||
+			event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
+			continue
+		}
+		payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
+		if err != nil {
+			t.Fatalf("decode AGENT_RUN final response event payload: %v", err)
+		}
+		for _, block := range payload.ContentBlocks {
+			text, err := block.AsFactoryResponseEventTextContentBlock()
+			if err == nil && strings.Contains(text.Text, wantText) {
+				return
+			}
+		}
+	}
+	t.Fatalf(
+		"AGENT_RUN final response event not found in public response stream: want provider=agent-run nativeType=agent_final_response text=%q, events=%#v",
+		wantText,
+		events,
+	)
 }
 
 type agentRunProbeRunner struct {

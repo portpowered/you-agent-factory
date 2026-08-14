@@ -167,7 +167,18 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 }
 
 func (executor *AgentRunExecutor) publishFinalMessage(dispatchID string, content string) {
-	if executor == nil || executor.progress == nil || strings.TrimSpace(content) == "" {
+	if executor == nil {
+		return
+	}
+	publishAgentFinalMessage(executor.progress, dispatchID, content)
+}
+
+func publishAgentFinalMessage(
+	publisher workerexecution.ProgressPublisher,
+	dispatchID string,
+	content string,
+) {
+	if publisher == nil || strings.TrimSpace(content) == "" {
 		return
 	}
 	payload, err := json.Marshal(workerexecution.MessagePayload{
@@ -194,7 +205,7 @@ func (executor *AgentRunExecutor) publishFinalMessage(dispatchID string, content
 		},
 		Payload: payload,
 	}
-	executor.progress(workerexecution.CanonicalDraftFragment(dispatchID, draft))
+	publisher(workerexecution.CanonicalDraftFragment(dispatchID, draft))
 }
 
 func firstDecisionEnvelopeService(
