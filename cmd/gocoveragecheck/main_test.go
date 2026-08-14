@@ -81,19 +81,22 @@ func TestCoverageTestJobs(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		cfg  config
-		want int
+		name     string
+		cfg      config
+		targetOS string
+		want     int
 	}{
-		{name: "unit serializes coverage writers", cfg: config{suite: "unit"}, want: defaultCoverageJobs},
-		{name: "functional serializes coverage writers", cfg: config{suite: "functional"}, want: defaultCoverageJobs},
-		{name: "explicit override", cfg: config{suite: "functional", jobs: 1}, want: 1},
+		{name: "unit defaults to one Windows coverage builder", cfg: config{suite: "unit"}, targetOS: "windows", want: 1},
+		{name: "empty suite defaults to one Windows unit builder", cfg: config{}, targetOS: "windows", want: 1},
+		{name: "functional keeps the shared Windows default", cfg: config{suite: "functional"}, targetOS: "windows", want: defaultCoverageJobs},
+		{name: "non-Windows keeps the shared unit default", cfg: config{suite: "unit"}, targetOS: "linux", want: defaultCoverageJobs},
+		{name: "explicit override", cfg: config{suite: "unit", jobs: 2}, targetOS: "windows", want: 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tc.cfg.testJobs(); got != tc.want {
-				t.Fatalf("config.testJobs() = %d, want %d", got, tc.want)
+			if got := tc.cfg.testJobs(tc.targetOS); got != tc.want {
+				t.Fatalf("config.testJobs(%q) = %d, want %d", tc.targetOS, got, tc.want)
 			}
 		})
 	}
