@@ -169,14 +169,20 @@ function flowPositionsMatchWithinTolerance(
   right,
   tolerance = flowPositionTolerancePx,
 ) {
-  if (!left || !right) {
+  const distance = flowPositionDistance(left, right);
+  if (distance === null) {
     return false;
   }
 
-  return (
-    Math.abs(left.x - right.x) <= tolerance &&
-    Math.abs(left.y - right.y) <= tolerance
-  );
+  return distance <= tolerance;
+}
+
+function flowPositionDistance(left, right) {
+  if (!left || !right) {
+    return null;
+  }
+
+  return Math.max(Math.abs(left.x - right.x), Math.abs(left.y - right.y));
 }
 
 function boundingBoxesOverlap(left, right) {
@@ -420,8 +426,7 @@ async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
   if (
     initialFlowPosition &&
     mouseFlowPosition &&
-    (Math.abs(mouseFlowPosition.x - initialFlowPosition.x) > 8 ||
-      Math.abs(mouseFlowPosition.y - initialFlowPosition.y) > 8)
+    !flowPositionsMatchWithinTolerance(initialFlowPosition, mouseFlowPosition)
   ) {
     return;
   }
@@ -744,13 +749,17 @@ describe.concurrent("factory graph editor node placement browser integration", (
               }
 
               const movedOnScreen =
-                Math.abs(nextScreenPosition.x - initialScreenPosition.x) > 8 ||
-                Math.abs(nextScreenPosition.y - initialScreenPosition.y) > 8;
+                Math.abs(nextScreenPosition.x - initialScreenPosition.x) >
+                  flowPositionTolerancePx ||
+                Math.abs(nextScreenPosition.y - initialScreenPosition.y) >
+                  flowPositionTolerancePx;
               const movedInFlow =
                 initialFlowPosition &&
                 nextFlowPosition &&
-                (Math.abs(nextFlowPosition.x - initialFlowPosition.x) > 8 ||
-                  Math.abs(nextFlowPosition.y - initialFlowPosition.y) > 8);
+                !flowPositionsMatchWithinTolerance(
+                  initialFlowPosition,
+                  nextFlowPosition,
+                );
 
               return movedOnScreen || movedInFlow
                 ? { flow: nextFlowPosition, screen: nextScreenPosition }
@@ -792,22 +801,25 @@ describe.concurrent("factory graph editor node placement browser integration", (
             persistedFlowPositionTolerancePx,
           ),
         ).toBe(true);
-        const dragChangedFlowPosition =
-          initialFlowPosition &&
-          draggedFlowPosition &&
-          !flowPositionsMatchWithinTolerance(
+        const dragDistancePx = flowPositionDistance(
+          initialFlowPosition,
+          draggedFlowPosition,
+        );
+        const persistedMovementLowerBoundPx =
+          dragDistancePx === null
+            ? null
+            : dragDistancePx - persistedFlowPositionTolerancePx;
+        if (
+          persistedMovementLowerBoundPx !== null &&
+          persistedMovementLowerBoundPx > 0
+        ) {
+          const persistedDistancePx = flowPositionDistance(
             initialFlowPosition,
-            draggedFlowPosition,
-            8,
+            persistedPosition,
           );
-        if (dragChangedFlowPosition) {
-          expect(
-            flowPositionsMatchWithinTolerance(
-              initialFlowPosition,
-              persistedPosition,
-              40,
-            ),
-          ).toBe(false);
+          expect(persistedDistancePx).toBeGreaterThanOrEqual(
+            persistedMovementLowerBoundPx,
+          );
         }
 
         expectNoBrowserErrors(
