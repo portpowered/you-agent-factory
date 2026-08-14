@@ -5,15 +5,90 @@ import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,
   factoryLayoutNodePosition,
+  factoryLayoutNodeSize,
+  fitFactoryLayoutNode,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
+  resetFactoryLayoutNodeSize,
+  resizeFactoryLayoutNode,
   resolveProjectedLayoutPositions,
   updateFactoryLayoutViewport,
 } from "./factory-graph-layout-operations";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: layout operation cases share one canonical graph fixture vocabulary.
 describe("factory graph layout operations", () => {
+  it("normalizes node sizes by family while preserving unrelated layout data", () => {
+    const layout = {
+      schemaVersion: 1,
+      edges: [{ id: "edge-1", waypoints: [{ x: 8, y: 12 }] }],
+      nodes: [
+        {
+          id: "workstation:draft",
+          locked: true,
+          position: { x: 40, y: 80 },
+          size: { height: 240, width: 240 },
+        },
+      ],
+    } satisfies ReturnType<typeof createDefaultFactoryLayout>;
+
+    const resized = resizeFactoryLayoutNode(
+      layout,
+      "workstation:draft",
+      "workstation",
+      { height: 400, width: 9999 },
+      { x: 40, y: 80 },
+    );
+
+    expect(factoryLayoutNodeSize(resized, "workstation:draft")).toEqual({
+      height: 400,
+      width: 520,
+    });
+    expect(resized.nodes?.[0]).toMatchObject({
+      id: "workstation:draft",
+      locked: true,
+      position: { x: 40, y: 80 },
+    });
+    expect(resized.edges).toEqual(layout.edges);
+
+    const reset = resetFactoryLayoutNodeSize(resized, "workstation:draft");
+    expect(factoryLayoutNodeSize(reset, "workstation:draft")).toBeUndefined();
+    expect(reset.nodes?.[0]).toMatchObject({
+      id: "workstation:draft",
+      locked: true,
+      position: { x: 40, y: 80 },
+    });
+  });
+
+  it("fits long content and normalizes invalid resize requests", () => {
+    const layout = createDefaultFactoryLayout();
+    const fitted = fitFactoryLayoutNode(
+      layout,
+      "worker:writer",
+      "worker",
+      "a-long-unbroken-worker-identifier-that-needs-safe-fitting",
+      { x: 10, y: 20 },
+    );
+
+    expect(factoryLayoutNodeSize(fitted, "worker:writer")).toEqual({
+      height: 58,
+      width: 360,
+    });
+
+    const invalid = resizeFactoryLayoutNode(
+      fitted,
+      "worker:writer",
+      "worker",
+      { height: Number.NaN, width: Number.POSITIVE_INFINITY },
+      { x: 10, y: 20 },
+    );
+
+    expect(factoryLayoutNodeSize(invalid, "worker:writer")).toEqual({
+      height: 58,
+      width: 156,
+    });
+  });
+
   it("moves one node into canonical layout.nodes", () => {
     const layout = createDefaultFactoryLayout();
 

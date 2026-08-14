@@ -1,4 +1,8 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: coordinates layout draft session state with typed undo history and visual groups.
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CurrentFactoryDocument } from "../../lib/draft/factory-graph-draft-types";
@@ -17,6 +21,8 @@ import {
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
+  resetFactoryLayoutNodeSize,
+  resizeFactoryLayoutNode,
   updateFactoryLayoutViewport,
 } from "../../lib/layout/factory-graph-layout-operations";
 import {
@@ -26,8 +32,11 @@ import {
   createMoveFactoryLayoutNodesCommand,
   createMoveFactoryLayoutVisualGroupCommand,
   createResetFactoryLayoutCommand,
+  createResetFactoryLayoutNodeSizeCommand,
+  createResizeFactoryLayoutNodeCommand,
   createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutGroupCommand,
+  createUpdateFactoryLayoutNodeSizeCommand,
   createUpdateFactoryLayoutViewportCommand,
   type FactoryLayoutCommand,
 } from "../../lib/layout/history/factory-graph-layout-commands";
@@ -78,6 +87,19 @@ export interface FactoryGraphLayoutDraftDerivedState {
     position: FactoryLayoutPoint,
   ) => void;
   removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
+  resizeNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: FactoryLayoutPoint,
+  ) => void;
+  fitNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: FactoryLayoutPoint,
+  ) => void;
+  resetNodeSize: (nodeId: string) => void;
   moveNode: (nodeId: string, position: FactoryLayoutPoint) => void;
   moveNodesByDelta: (
     nodeIds: readonly string[],
@@ -328,6 +350,76 @@ export function useFactoryGraphLayoutDraftState(
           to: position,
         }),
         layout: moveFactoryLayoutNode(currentLayout, nodeId, position),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
+  const resizeNode = useCallback(
+    (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: FactoryLayoutPoint,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createResizeFactoryLayoutNodeCommand({
+          family,
+          layout: currentLayout,
+          nodeId,
+          position,
+          requestedDimensions: dimensions,
+        }),
+        layout: resizeFactoryLayoutNode(
+          currentLayout,
+          nodeId,
+          family,
+          dimensions,
+          position,
+        ),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
+  const fitNode = useCallback(
+    (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: FactoryLayoutPoint,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = resizeFactoryLayoutNode(
+          currentLayout,
+          nodeId,
+          family,
+          dimensions,
+          position,
+        );
+        const nextSize = nextLayout.nodes?.find(
+          (node) => node.id === nodeId,
+        )?.size;
+
+        return {
+          command: createUpdateFactoryLayoutNodeSizeCommand({
+            layout: currentLayout,
+            nodeId,
+            position,
+            to: nextSize ?? null,
+          }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const resetNodeSize = useCallback(
+    (nodeId: string) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createResetFactoryLayoutNodeSizeCommand({
+          layout: currentLayout,
+          nodeId,
+        }),
+        layout: resetFactoryLayoutNodeSize(currentLayout, nodeId),
       }));
     },
     [commitLayoutUpdate],
@@ -700,6 +792,9 @@ export function useFactoryGraphLayoutDraftState(
     layoutDirty,
     moveEdgeWaypoint,
     removeEdgeWaypoint,
+    resizeNode,
+    fitNode,
+    resetNodeSize,
     moveNode,
     moveNodesByDelta,
     pruneLayoutHistoryForNodeIds,

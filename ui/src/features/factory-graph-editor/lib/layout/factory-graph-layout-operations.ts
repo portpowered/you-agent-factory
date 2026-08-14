@@ -1,3 +1,10 @@
+import {
+  type FactoryGraphNodeDimensions,
+  type FactoryGraphNodeFamily,
+  type FactoryGraphNodeSizingContent,
+  fitFactoryGraphNodeDimensions,
+  resolveFactoryGraphNodeResizeDimensions,
+} from "@you-agent-factory/factory-graph";
 import type { components } from "../../../../api/generated/openapi";
 import type { CanonicalFactoryDefinition } from "../draft/factory-graph-draft-types";
 
@@ -12,6 +19,8 @@ export type FactoryLayoutPoint = FactoryLayout["nodes"] extends
     : { x: number; y: number }
   : { x: number; y: number };
 export type FactoryLayoutViewport = NonNullable<FactoryLayout["viewport"]>;
+export type FactoryLayoutNode = NonNullable<FactoryLayout["nodes"]>[number];
+export type FactoryLayoutNodeSize = NonNullable<FactoryLayoutNode["size"]>;
 
 export const FACTORY_LAYOUT_SCHEMA_VERSION = 1;
 
@@ -46,6 +55,117 @@ export function factoryLayoutNodePosition(
   }
 
   return { x, y };
+}
+
+export function factoryLayoutNodeSize(
+  layout: FactoryLayout,
+  nodeId: string,
+): FactoryLayoutNodeSize | undefined {
+  const node = layout.nodes?.find((entry) => entry.id === nodeId);
+  if (!node?.size) {
+    return undefined;
+  }
+
+  return {
+    height: node.size.height,
+    width: node.size.width,
+  };
+}
+
+/** Set one node's authored size while preserving every other layout field. */
+export function setFactoryLayoutNodeSize(
+  layout: FactoryLayout,
+  nodeId: string,
+  size: FactoryLayoutNodeSize,
+  position?: FactoryLayoutPoint,
+): FactoryLayout {
+  const nodes = [...(layout.nodes ?? [])];
+  const existingIndex = nodes.findIndex((entry) => entry.id === nodeId);
+  const existingNode = existingIndex >= 0 ? nodes[existingIndex] : undefined;
+  if (!existingNode && !isFiniteFactoryLayoutPoint(position)) {
+    return layout;
+  }
+
+  const nextNode: FactoryLayoutNode = existingNode
+    ? {
+        ...existingNode,
+        size: { height: size.height, width: size.width },
+      }
+    : {
+        id: nodeId,
+        position: { x: position?.x ?? 0, y: position?.y ?? 0 },
+        size: { height: size.height, width: size.width },
+      };
+
+  if (existingIndex >= 0) {
+    nodes[existingIndex] = nextNode;
+  } else {
+    nodes.push(nextNode);
+  }
+
+  return {
+    ...layout,
+    nodes,
+    schemaVersion: layout.schemaVersion ?? FACTORY_LAYOUT_SCHEMA_VERSION,
+  };
+}
+
+/** Remove one node's authored size and leave its position and metadata intact. */
+export function resetFactoryLayoutNodeSize(
+  layout: FactoryLayout,
+  nodeId: string,
+): FactoryLayout {
+  const existingIndex = (layout.nodes ?? []).findIndex(
+    (entry) => entry.id === nodeId,
+  );
+  if (existingIndex < 0 || layout.nodes?.[existingIndex]?.size === undefined) {
+    return layout;
+  }
+
+  const nodes = [...(layout.nodes ?? [])];
+  const { size: _size, ...nodeWithoutSize } = nodes[existingIndex];
+  nodes[existingIndex] = nodeWithoutSize;
+  return { ...layout, nodes };
+}
+
+/** Normalize an interactive resize request through the package family policy. */
+export function resizeFactoryLayoutNode(
+  layout: FactoryLayout,
+  nodeId: string,
+  family: FactoryGraphNodeFamily,
+  requestedDimensions: FactoryGraphNodeDimensions,
+  position?: FactoryLayoutPoint,
+): FactoryLayout {
+  return setFactoryLayoutNodeSize(
+    layout,
+    nodeId,
+    resolveFactoryGraphNodeResizeDimensions(family, requestedDimensions),
+    position,
+  );
+}
+
+/** Store deterministic fitted dimensions as the node's authored override. */
+export function fitFactoryLayoutNode(
+  layout: FactoryLayout,
+  nodeId: string,
+  family: FactoryGraphNodeFamily,
+  content: FactoryGraphNodeSizingContent,
+  position?: FactoryLayoutPoint,
+): FactoryLayout {
+  return setFactoryLayoutNodeSize(
+    layout,
+    nodeId,
+    fitFactoryGraphNodeDimensions(family, content),
+    position,
+  );
+}
+
+function isFiniteFactoryLayoutPoint(
+  point: FactoryLayoutPoint | undefined,
+): point is FactoryLayoutPoint {
+  return (
+    point !== undefined && Number.isFinite(point.x) && Number.isFinite(point.y)
+  );
 }
 
 export function moveFactoryLayoutNode(
