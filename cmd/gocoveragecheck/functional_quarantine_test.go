@@ -46,6 +46,9 @@ func TestFunctionalCoverageSelectionSubtractsOnlyDeclaredSelectors(t *testing.T)
 	if selection.PackageExcludedTestCount != 1 {
 		t.Fatalf("PackageExcludedTestCount = %d, want 1", selection.PackageExcludedTestCount)
 	}
+	if selection.TestExcludedPackageCount != 0 {
+		t.Fatalf("TestExcludedPackageCount = %d, want 0", selection.TestExcludedPackageCount)
+	}
 	if selection.SelectedPackageCount != 2 || selection.SelectedTestCount != 2 {
 		t.Fatalf("selected counts = packages:%d tests:%d, want 2/2", selection.SelectedPackageCount, selection.SelectedTestCount)
 	}

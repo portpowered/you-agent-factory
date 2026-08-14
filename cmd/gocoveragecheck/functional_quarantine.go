@@ -46,6 +46,7 @@ type functionalCoverageSelection struct {
 	QuarantinedPackageCount  int
 	QuarantinedTestSelectors int
 	PackageExcludedTestCount int
+	TestExcludedPackageCount int
 	SelectedPackageCount     int
 	SelectedTestCount        int
 }
@@ -292,6 +293,7 @@ func buildFunctionalCoverageSelection(manifest functionalQuarantine, inventory f
 			selectedTests = append(selectedTests, testName)
 		}
 		if len(inventory.Tests[packagePath]) > 0 && len(selectedTests) == 0 {
+			selection.TestExcludedPackageCount++
 			continue
 		}
 		pattern := ""

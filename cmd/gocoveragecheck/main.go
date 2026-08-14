@@ -349,12 +349,13 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 		functionalSelection = &selection
 		fmt.Fprintf(
 			stdoutWriter,
-			"Functional gate: discovered-packages=%d discovered-tests=%d quarantined-packages=%d quarantined-test-selectors=%d package-excluded-tests=%d selected-packages=%d selected-tests=%d selection=subtractive quarantine=%s\n",
+			"Functional gate: discovered-packages=%d discovered-tests=%d quarantined-packages=%d quarantined-test-selectors=%d package-excluded-tests=%d test-excluded-packages=%d selected-packages=%d selected-tests=%d selection=subtractive quarantine=%s\n",
 			len(selection.Inventory.Packages),
 			functionalTestCount(selection.Inventory),
 			selection.QuarantinedPackageCount,
 			selection.QuarantinedTestSelectors,
 			selection.PackageExcludedTestCount,
+			selection.TestExcludedPackageCount,
 			selection.SelectedPackageCount,
 			selection.SelectedTestCount,
 			filepath.ToSlash(cfg.functionalQuarantine),
