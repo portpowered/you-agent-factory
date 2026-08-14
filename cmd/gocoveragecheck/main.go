@@ -79,31 +79,32 @@ var (
 )
 
 type config struct {
-	covermode           string
-	coverpkg            string
-	jobs                int
-	generateManifest    string
-	updateManifest      string
-	updateProfiles      string
-	packageManifest     string
-	varianceProfiles    string
-	varianceOutput      string
-	varianceCommit      string
-	varianceJobs        int
-	varianceAnnotations string
-	jsonOutput          string
-	timingOutput        string
-	min                 float64
-	packageBaseline     string
-	packageMin          float64
-	packageFloorEpsilon float64
-	packages            string
-	profile             string
-	short               bool
-	suite               string
-	stream              bool
-	timeout             time.Duration
-	totalOnly           bool
+	covermode            string
+	coverpkg             string
+	functionalQuarantine string
+	jobs                 int
+	generateManifest     string
+	updateManifest       string
+	updateProfiles       string
+	packageManifest      string
+	varianceProfiles     string
+	varianceOutput       string
+	varianceCommit       string
+	varianceJobs         int
+	varianceAnnotations  string
+	jsonOutput           string
+	timingOutput         string
+	min                  float64
+	packageBaseline      string
+	packageMin           float64
+	packageFloorEpsilon  float64
+	packages             string
+	profile              string
+	short                bool
+	suite                string
+	stream               bool
+	timeout              time.Duration
+	totalOnly            bool
 }
 
 type coverageResult struct {
@@ -195,6 +196,7 @@ func parseConfig() config {
 	var cfg config
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
+	flag.StringVar(&cfg.functionalQuarantine, "functional-quarantine", "", "strict functional quarantine JSON manifest; discovers and subtracts its package/test selectors")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to 2")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "update an existing package-minimum manifest from a complete compatible profile sample set")
@@ -237,6 +239,9 @@ func validateConfig(cfg config) error {
 	}
 	if strings.TrimSpace(cfg.updateManifest) != "" && strings.TrimSpace(cfg.updateProfiles) == "" {
 		return errors.New("configure go coverage manifest update: -update-manifest requires -update-profiles with at least five compatible profiles")
+	}
+	if strings.TrimSpace(cfg.functionalQuarantine) != "" && cfg.suite != "functional" {
+		return fmt.Errorf("configure functional quarantine: -functional-quarantine requires -suite functional (got %q)", cfg.suite)
 	}
 	if strings.TrimSpace(cfg.updateProfiles) != "" && strings.TrimSpace(cfg.updateManifest) == "" {
 		return errors.New("configure go coverage manifest update: -update-profiles requires -update-manifest")
@@ -324,6 +329,15 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	if err != nil {
 		return coverageResult{}, err
 	}
+	var functionalSelection *functionalCoverageSelection
+	if strings.TrimSpace(cfg.functionalQuarantine) != "" {
+		selection, selectedPackages, selectionErr := prepareFunctionalCoverageRun(cfg, testPackages, targetOS, repoRoot)
+		if selectionErr != nil {
+			return coverageResult{}, selectionErr
+		}
+		functionalSelection = &selection
+		testPackages = selectedPackages
+	}
 	coverPackageArgument := strings.Join(coverPackages, ",")
 	if targetOS == "windows" && strings.TrimSpace(cfg.coverpkg) == "" {
 		// A fully expanded backend package list exceeds Windows' command-line
@@ -349,8 +363,14 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	)
 
 	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS)
-	if err := runGoTestCoverageLane(cfg, coverageTestArgs, testPackages, profilePath, repoRoot, coverPackages, targetOS, "run go test coverage lane", testPackageArgs); err != nil {
-		return coverageResult{}, err
+	var runErr error
+	if functionalSelection == nil {
+		runErr = runGoTestCoverageLane(cfg, coverageTestArgs, testPackages, profilePath, repoRoot, coverPackages, targetOS, "run go test coverage lane", testPackageArgs)
+	} else {
+		runErr = runGoTestCoverageLaneWithSelection(cfg, coverageTestArgs, testPackages, profilePath, repoRoot, coverPackages, targetOS, "run go test coverage lane", *functionalSelection)
+	}
+	if runErr != nil {
+		return coverageResult{}, runErr
 	}
 	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
 		return coverageResult{}, err

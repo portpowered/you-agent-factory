@@ -58,6 +58,11 @@ GO_UNIT_COVERAGE_MIN ?= $(GO_COVERAGE_MIN)
 GO_FUNCTIONAL_COVERAGE_MIN ?= 33.1
 GO_UNIT_COVERAGE_MANIFEST ?= docs/internal/baselines/go-unit-coverage-package-minimums.json
 GO_FUNCTIONAL_COVERAGE_MANIFEST ?= docs/internal/baselines/go-functional-coverage-package-minimums.json
+FUNCTIONAL_QUARANTINE ?= tests/functional/functional-quarantine.json
+FUNCTIONAL_TEST_TIER ?= pr-short
+FUNCTIONAL_TEST_TRIGGER ?= local
+FUNCTIONAL_TEST_BUDGET ?= 35m
+FUNCTIONAL_SHORT ?= true
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
@@ -425,10 +430,12 @@ test-functional-fresh:
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
-# functional-test-viz runs the boundary check, then the required fresh short
-# functional coverage lane exactly once (profile + gocoveragecheck -json-output), then the
-# FND-004 Markdown catalog generator. Artifacts land under
-# .artifacts/functional-test-viz/.
+# functional-test-viz runs the boundary check, then the configured fresh
+# functional coverage tier exactly once (profile + gocoveragecheck
+# -json-output), then the FND-004 Markdown catalog generator. Artifacts land
+# under .artifacts/functional-test-viz/. The Linux CI wrapper enforces the
+# tier's FUNCTIONAL_TEST_BUDGET around this target and leaves the artifact root
+# intact when the budget or a later step fails.
 #
 # Fail-closed composition: each recipe line must succeed before the next runs.
 # Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering
@@ -604,7 +611,8 @@ test-unit-coverage:
 # non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
-	$(GO) run ./cmd/gocoveragecheck -suite functional -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),)
+	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
+	$(GO) run ./cmd/gocoveragecheck -suite functional -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/inference -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)

@@ -9,9 +9,9 @@
 - Ordinary unit and package-integration lane: `make test-unit`
 - Stress lane: `make test-stress`
 - Release-package lane: `make test-release`
-- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
+- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first, discovers the complete package/test population with `go test -list`, subtracts only `functional-quarantine.json`, and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
-- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`, and `command.log` on success and failure when present. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
+- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `functional-timing-summary.json`, `coverage.out`, and `command.log` on success and failure when present. The timing artifact is produced by that same full `./tests/functional/...` run and reports discovered/observed package counts, every observed top-level test outcome, elapsed time, and concise failure-reason diagnostics; it does not use a one-test allow-list. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
 - Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Real local-inference lane: `make long-tests`
@@ -46,7 +46,7 @@ results on unchanged local runs. Use `make test-functional-fresh` when the
 result must come from a new execution, including CI-equivalent evidence and
 flake investigation. The functional coverage lane is authoritative and does
 not use the cache: `cmd/gocoveragecheck` passes `-count=1` together with its
-coverage profile, timing, and short-mode flags, then retains the existing
+coverage profile, timing, and configured tier's `-short` flag, then retains the existing
 coverage-floor and package-manifest checks.
 
 The coverage lanes intentionally use separate profiles. The
@@ -65,6 +65,34 @@ Provider test destinations are test packages rather than measured backend
 packages, so adding an empty destination does not create a package-minimum
 manifest entry. Its scenarios still contribute to the shared backend profile
 as soon as tests are added there.
+
+The required functional coverage gate is subtractive. Its versioned manifest is
+`tests/functional/functional-quarantine.json`; each entry names a discovered
+package or an exact top-level test, an `ENVIRONMENT-DEPENDENT` or `GENUINELY
+FAILING` bucket, and a reason. Genuine failures must also name a follow-up.
+Package-plus-test entries become package-specific `-run` selectors, while
+package entries remove the whole package. Duplicate, malformed, stale, or
+overlapping selectors fail closed before the instrumented run, so a new
+functional package or test is selected automatically without a manifest edit.
+Before the selected green run, CI executes every quarantine entry independently
+with `go test -json`: environment-dependent entries must still emit `skip`, and
+genuine-failure entries must still emit `fail`. A passing entry fails the gate
+with an instruction to remove or narrow the quarantine; missing terminal events,
+unexpected outcomes, and subprocess errors fail closed and remain visible in
+the ratchet diagnostics.
+
+The required pull-request tier is `pr-short`: it runs the complete discovered
+tree with `-short`, subtracts only the true environment quarantine, and reports
+tests skipped by `testing.Short()` as `deferred-short-tests`. Those deferred
+tests are not quarantine entries. A push to `main` selects the explicit
+`merge-full` tier, runs the same subtractive selection with `-short=false`, and
+has a 75-minute runner budget (the pull-request `pr-short` tier has a 35-minute
+budget) so the deferred behavior executes after merge.
+The Linux job allows an additional five minutes for always-run summary and
+artifact-upload steps after a tier timeout. The runner fails on budget expiry,
+preserves its command log and any partial inventory/timing/quarantine output,
+and reports each tier's trigger, budget, selection rule, and quarantine path.
+Set `FUNCTIONAL_SHORT=false` locally to exercise the full tier.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains

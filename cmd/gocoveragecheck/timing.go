@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -23,12 +21,15 @@ const (
 	timingOutcomeSkip = "skip"
 )
 
+const maxTimingFailureReasonLength = 240
+
 // goTestTimingEvent mirrors the subset of the `go test -json` TestEvent
 // schema needed for package-level timing. Package-level terminal events carry
 // an empty Test field.
 type goTestTimingEvent struct {
 	Action  string  `json:"Action"`
 	Elapsed float64 `json:"Elapsed"`
+	Output  string  `json:"Output"`
 	Package string  `json:"Package"`
 	Test    string  `json:"Test"`
 }
@@ -39,6 +40,19 @@ type functionalPackageTimingJSON struct {
 	Package string  `json:"package"`
 	Seconds float64 `json:"seconds"`
 	Outcome string  `json:"outcome"`
+	Reason  string  `json:"reason,omitempty"`
+}
+
+// functionalTestTimingJSON is one top-level Go test's elapsed duration and
+// terminal outcome from the same go test -json run as the package timings.
+// Subtests are intentionally excluded so selectors can be mapped directly to
+// the top-level tests that contributors see in the functional inventory.
+type functionalTestTimingJSON struct {
+	Package string  `json:"package"`
+	Test    string  `json:"test"`
+	Seconds float64 `json:"seconds"`
+	Outcome string  `json:"outcome"`
+	Reason  string  `json:"reason,omitempty"`
 }
 
 // functionalTimingSummaryJSON is the machine-readable timing summary owned by
@@ -53,8 +67,14 @@ type functionalTimingSummaryJSON struct {
 	Complete                 bool                          `json:"complete"`
 	WallSeconds              float64                       `json:"wallSeconds"`
 	PackageElapsedSecondsSum float64                       `json:"packageElapsedSecondsSum"`
+	ExpectedPackageCount     int                           `json:"expectedPackageCount"`
 	PackageCount             int                           `json:"packageCount"`
+	TestCount                int                           `json:"testCount"`
+	TestPassCount            int                           `json:"testPassCount"`
+	TestFailCount            int                           `json:"testFailCount"`
+	TestSkipCount            int                           `json:"testSkipCount"`
 	Packages                 []functionalPackageTimingJSON `json:"packages"`
+	Tests                    []functionalTestTimingJSON    `json:"tests"`
 }
 
 // buildFunctionalTimingSummary parses newline-delimited `go test -json`
@@ -66,61 +86,21 @@ type functionalTimingSummaryJSON struct {
 // aborting capture, so partial diagnostics from a crashed or truncated run
 // stay inspectable.
 func buildFunctionalTimingSummary(jsonOutput string, expectedPackages []string, wallSeconds float64) functionalTimingSummaryJSON {
-	outcomes := make(map[string]functionalPackageTimingJSON, len(expectedPackages))
-	complete := true
-
-	scanner := bufio.NewScanner(strings.NewReader(jsonOutput))
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var event goTestTimingEvent
-		if err := json.Unmarshal(line, &event); err != nil {
-			complete = false
-			continue
-		}
-		if event.Test != "" || strings.TrimSpace(event.Package) == "" {
-			continue
-		}
-		switch event.Action {
-		case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
-		default:
-			continue
-		}
-		if math.IsNaN(event.Elapsed) || math.IsInf(event.Elapsed, 0) || event.Elapsed < 0 {
-			complete = false
-			continue
-		}
-		if _, exists := outcomes[event.Package]; exists {
-			complete = false
-			continue
-		}
-		outcomes[event.Package] = functionalPackageTimingJSON{
-			Package: event.Package,
-			Seconds: event.Elapsed,
-			Outcome: event.Action,
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		complete = false
-	}
-
-	packages := make([]functionalPackageTimingJSON, 0, len(expectedPackages))
-	sum := 0.0
-	for _, importPath := range expectedPackages {
-		entry, ok := outcomes[importPath]
-		if !ok {
-			complete = false
-			continue
-		}
-		packages = append(packages, entry)
-		sum += entry.Seconds
-	}
+	parsed := parseFunctionalTimingEvents(jsonOutput, expectedPackages)
+	complete := parsed.complete
+	packages, sum := collectFunctionalPackageTimings(parsed.packageOutcomes, expectedPackages, &complete)
 	slices.SortFunc(packages, func(left, right functionalPackageTimingJSON) int {
 		return strings.Compare(left.Package, right.Package)
 	})
+	tests := collectFunctionalTestTimings(parsed.testOutcomes, parsed.failureReasons)
+	slices.SortFunc(tests, func(left, right functionalTestTimingJSON) int {
+		if result := strings.Compare(left.Package, right.Package); result != 0 {
+			return result
+		}
+		return strings.Compare(left.Test, right.Test)
+	})
+
+	testPassCount, testFailCount, testSkipCount := countTimingTestOutcomes(tests)
 
 	if wallSeconds < 0 || math.IsNaN(wallSeconds) || math.IsInf(wallSeconds, 0) {
 		wallSeconds = 0
@@ -132,9 +112,110 @@ func buildFunctionalTimingSummary(jsonOutput string, expectedPackages []string, 
 		Complete:                 complete,
 		WallSeconds:              roundTimingSeconds(wallSeconds),
 		PackageElapsedSecondsSum: roundTimingSeconds(sum),
+		ExpectedPackageCount:     len(expectedPackages),
 		PackageCount:             len(packages),
+		TestCount:                len(tests),
+		TestPassCount:            testPassCount,
+		TestFailCount:            testFailCount,
+		TestSkipCount:            testSkipCount,
 		Packages:                 packages,
+		Tests:                    tests,
 	}
+}
+
+func collectFunctionalPackageTimings(outcomes map[string]functionalPackageTimingJSON, expectedPackages []string, complete *bool) ([]functionalPackageTimingJSON, float64) {
+	packages := make([]functionalPackageTimingJSON, 0, len(expectedPackages))
+	sum := 0.0
+	for _, importPath := range expectedPackages {
+		entry, ok := outcomes[importPath]
+		if !ok {
+			*complete = false
+			continue
+		}
+		packages = append(packages, entry)
+		sum += entry.Seconds
+	}
+	return packages, sum
+}
+
+func collectFunctionalTestTimings(outcomes map[string]functionalTestTimingJSON, failureReasons map[string]string) []functionalTestTimingJSON {
+	tests := make([]functionalTestTimingJSON, 0, len(outcomes))
+	for _, entry := range outcomes {
+		if entry.Reason == "" {
+			entry.Reason = failureReasons[timingEventKey(entry.Package, entry.Test)]
+		}
+		tests = append(tests, entry)
+	}
+	return tests
+}
+
+func timingEventKey(importPath, testName string) string {
+	return importPath + "\x00" + testName
+}
+
+func firstTimingFailureReason(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "=== RUN") || strings.HasPrefix(line, "=== PAUSE") || strings.HasPrefix(line, "=== CONT") {
+			continue
+		}
+		if len(line) > maxTimingFailureReasonLength {
+			return line[:maxTimingFailureReasonLength] + "..."
+		}
+		return line
+	}
+	return ""
+}
+
+func countTimingTestOutcomes(tests []functionalTestTimingJSON) (pass, fail, skip int) {
+	for _, test := range tests {
+		switch test.Outcome {
+		case timingOutcomePass:
+			pass++
+		case timingOutcomeFail:
+			fail++
+		case timingOutcomeSkip:
+			skip++
+		}
+	}
+	return pass, fail, skip
+}
+
+func writeFunctionalTimingInventorySummary(summary functionalTimingSummaryJSON, short bool) {
+	packagePassCount, packageFailCount, packageSkipCount := 0, 0, 0
+	for _, pkg := range summary.Packages {
+		switch pkg.Outcome {
+		case timingOutcomePass:
+			packagePassCount++
+		case timingOutcomeFail:
+			packageFailCount++
+		case timingOutcomeSkip:
+			packageSkipCount++
+		}
+	}
+	deferredShortTests := 0
+	if short {
+		// The short tier deliberately leaves tests guarded by testing.Short in
+		// the discovered selection. Their skip outcomes are deferred work, not
+		// quarantine: the complete merge tier runs them with -short=false.
+		deferredShortTests = summary.TestSkipCount
+	}
+	fmt.Fprintf(
+		stdoutWriter,
+		"Functional suite inventory: discovered-packages=%d observed-packages=%d (pass=%d fail=%d skip=%d) top-level-tests=%d (pass=%d fail=%d skip=%d) deferred-short-tests=%d wall=%.3fs complete=%t\n",
+		summary.ExpectedPackageCount,
+		summary.PackageCount,
+		packagePassCount,
+		packageFailCount,
+		packageSkipCount,
+		summary.TestCount,
+		summary.TestPassCount,
+		summary.TestFailCount,
+		summary.TestSkipCount,
+		deferredShortTests,
+		summary.WallSeconds,
+		summary.Complete,
+	)
 }
 
 func roundTimingSeconds(seconds float64) float64 {

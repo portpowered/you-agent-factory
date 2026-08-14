@@ -48,6 +48,45 @@ func TestDecodeFunctionalTimingSummaryAcceptsGocoveragecheckShape(t *testing.T) 
 	}
 }
 
+func TestDecodeFunctionalTimingSummaryAcceptsTopLevelTestOutcomes(t *testing.T) {
+	t.Parallel()
+
+	const raw = `{
+  "version": 1,
+  "complete": true,
+  "wallSeconds": 2.25,
+  "packageElapsedSecondsSum": 2.25,
+  "expectedPackageCount": 1,
+  "packageCount": 1,
+  "testCount": 3,
+  "testPassCount": 1,
+  "testFailCount": 1,
+  "testSkipCount": 1,
+  "packages": [
+    {"package": "github.com/portpowered/infinite-you/tests/functional/inventory", "seconds": 2.25, "outcome": "fail", "reason": "package failed"}
+  ],
+  "tests": [
+    {"package": "github.com/portpowered/infinite-you/tests/functional/inventory", "test": "TestBroken", "seconds": 1.0, "outcome": "fail", "reason": "assertion failed"},
+    {"package": "github.com/portpowered/infinite-you/tests/functional/inventory", "test": "TestGreen", "seconds": 1.25, "outcome": "pass"},
+    {"package": "github.com/portpowered/infinite-you/tests/functional/inventory", "test": "TestSkipped", "seconds": 0.0, "outcome": "skip"}
+  ]
+}
+`
+	summary, err := functionaltestviz.DecodeFunctionalTimingSummary([]byte(raw))
+	if err != nil {
+		t.Fatalf("DecodeFunctionalTimingSummary() error = %v", err)
+	}
+	if summary.ExpectedPackageCount != 1 || summary.TestCount != 3 {
+		t.Fatalf("counts = expected packages %d, observed tests %d, want 1/3", summary.ExpectedPackageCount, summary.TestCount)
+	}
+	if summary.TestPassCount != 1 || summary.TestFailCount != 1 || summary.TestSkipCount != 1 {
+		t.Fatalf("test outcome counts = %d/%d/%d, want 1/1/1", summary.TestPassCount, summary.TestFailCount, summary.TestSkipCount)
+	}
+	if len(summary.Tests) != 3 || summary.Tests[0].Reason != "assertion failed" {
+		t.Fatalf("tests = %+v, want decoded outcomes and reason", summary.Tests)
+	}
+}
+
 func TestDecodeFunctionalTimingSummaryAcceptsIncompleteWithoutError(t *testing.T) {
 	t.Parallel()
 

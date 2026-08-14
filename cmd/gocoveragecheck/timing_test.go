@@ -68,6 +68,48 @@ func TestBuildFunctionalTimingSummarySuccessfulMultiPackageCapture(t *testing.T)
 	}
 }
 
+func TestBuildFunctionalTimingSummaryCapturesTopLevelOutcomesAndReasons(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/tests/functional/inventory"
+	jsonOutput := strings.Join([]string{
+		goTestEventLine(t, goTestTimingEvent{Action: "output", Package: pkg, Test: "TestBroken", Output: "=== RUN   TestBroken\n"}),
+		goTestEventLine(t, goTestTimingEvent{Action: "output", Package: pkg, Test: "TestBroken", Output: "expected completion marker\n"}),
+		goTestEventLine(t, goTestTimingEvent{Action: "fail", Package: pkg, Test: "TestBroken", Elapsed: 0.25}),
+		goTestEventLine(t, goTestTimingEvent{Action: "skip", Package: pkg, Test: "TestSkipped", Elapsed: 0}),
+		goTestEventLine(t, goTestTimingEvent{Action: "pass", Package: pkg, Test: "TestGreen", Elapsed: 0.5}),
+		goTestEventLine(t, goTestTimingEvent{Action: "fail", Package: pkg, Elapsed: 0.75}),
+		"",
+	}, "\n")
+
+	summary := buildFunctionalTimingSummary(jsonOutput, []string{pkg}, 0.75)
+
+	if !summary.Complete {
+		t.Fatalf("Complete = false, want true, summary = %+v", summary)
+	}
+	if summary.ExpectedPackageCount != 1 || summary.PackageCount != 1 {
+		t.Fatalf("package counts = %d/%d, want discovered=1 observed=1", summary.ExpectedPackageCount, summary.PackageCount)
+	}
+	if summary.TestCount != 3 || summary.TestPassCount != 1 || summary.TestFailCount != 1 || summary.TestSkipCount != 1 {
+		t.Fatalf("test counts = %d (pass=%d fail=%d skip=%d), want 3 (1/1/1)", summary.TestCount, summary.TestPassCount, summary.TestFailCount, summary.TestSkipCount)
+	}
+	if len(summary.Tests) != 3 {
+		t.Fatalf("Tests = %+v, want three top-level outcomes", summary.Tests)
+	}
+	var broken functionalTestTimingJSON
+	for _, test := range summary.Tests {
+		if test.Test == "TestBroken" {
+			broken = test
+		}
+	}
+	if broken.Outcome != timingOutcomeFail || broken.Seconds != 0.25 || broken.Reason != "expected completion marker" {
+		t.Fatalf("broken test = %+v, want fail/0.25/reason", broken)
+	}
+	if summary.Packages[0].Outcome != timingOutcomeFail {
+		t.Fatalf("package outcome = %+v, want fail", summary.Packages[0])
+	}
+}
+
 func TestBuildFunctionalTimingSummaryConcurrentDurationSemantics(t *testing.T) {
 	t.Parallel()
 
@@ -212,7 +254,8 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 
 	timingPath := filepath.Join(t.TempDir(), "functional-timing-summary.json")
 	_, err := run(config{
-		min: 0,
+		min:   0,
+		suite: "functional",
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -246,6 +289,36 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 	}
 	if summary.Packages[0].Outcome != timingOutcomePass {
 		t.Fatalf("Packages[0].Outcome = %q, want pass", summary.Packages[0].Outcome)
+	}
+	if !strings.Contains(stdout.String(), "Functional suite inventory: discovered-packages=1 observed-packages=1") ||
+		!strings.Contains(stdout.String(), "top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0") {
+		t.Fatalf("stdout = %q, want full functional inventory summary", stdout.String())
+	}
+}
+
+func TestWriteFunctionalTimingInventorySummaryReportsShortDeferredTests(t *testing.T) {
+	originalStdout := stdoutWriter
+	defer func() { stdoutWriter = originalStdout }()
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	summary := functionalTimingSummaryJSON{
+		ExpectedPackageCount: 1,
+		PackageCount:         1,
+		TestCount:            4,
+		TestPassCount:        1,
+		TestSkipCount:        3,
+	}
+
+	writeFunctionalTimingInventorySummary(summary, true)
+	if !strings.Contains(stdout.String(), "deferred-short-tests=3") {
+		t.Fatalf("short-tier summary = %q, want deferred-short-tests=3", stdout.String())
+	}
+
+	stdout.Reset()
+	writeFunctionalTimingInventorySummary(summary, false)
+	if !strings.Contains(stdout.String(), "deferred-short-tests=0") {
+		t.Fatalf("full-tier summary = %q, want deferred-short-tests=0", stdout.String())
 	}
 }
 
@@ -301,6 +374,7 @@ func TestRunPreservesTimingForFailedPackageWhileKeepingLaneFailed(t *testing.T) 
 	timingPath := filepath.Join(t.TempDir(), "functional-timing-summary.json")
 	_, err := run(config{
 		min:          0,
+		suite:        "functional",
 		coverpkg:     modulePath + "/pkg/config",
 		packages:     modulePath + "/pkg/config",
 		profile:      filepath.Join(t.TempDir(), "coverage.out"),
@@ -329,6 +403,9 @@ func TestRunPreservesTimingForFailedPackageWhileKeepingLaneFailed(t *testing.T) 
 	}
 	if len(summary.Packages) != 1 || summary.Packages[0].Outcome != timingOutcomeFail || summary.Packages[0].Seconds != 0.4 {
 		t.Fatalf("Packages = %+v, want one failed package retained with elapsed 0.4", summary.Packages)
+	}
+	if !strings.Contains(stdout.String(), "top-level-tests=1 (pass=0 fail=1 skip=0)") {
+		t.Fatalf("stdout = %q, want failed top-level test inventory", stdout.String())
 	}
 }
 

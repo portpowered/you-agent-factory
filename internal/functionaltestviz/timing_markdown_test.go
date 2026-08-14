@@ -15,10 +15,20 @@ func TestRenderFunctionalTimingMarkdownCompleteSummary(t *testing.T) {
 		Complete:                 true,
 		WallSeconds:              5.0,
 		PackageElapsedSecondsSum: 7.0,
+		ExpectedPackageCount:     2,
 		PackageCount:             2,
+		TestCount:                3,
+		TestPassCount:            1,
+		TestFailCount:            1,
+		TestSkipCount:            1,
 		Packages: []functionaltestviz.FunctionalPackageTiming{
 			{Package: "github.com/portpowered/infinite-you/tests/functional/beta", Seconds: 4.0, Outcome: "pass"},
 			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Seconds: 3.0, Outcome: "fail"},
+		},
+		Tests: []functionaltestviz.FunctionalTestTiming{
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Test: "TestBroken", Seconds: 3.0, Outcome: "fail", Reason: "assertion failed"},
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Test: "TestGreen", Seconds: 0.0, Outcome: "pass"},
+			{Package: "github.com/portpowered/infinite-you/tests/functional/alpha", Test: "TestSkipped", Seconds: 0.0, Outcome: "skip"},
 		},
 	}
 
@@ -42,6 +52,15 @@ func TestRenderFunctionalTimingMarkdownCompleteSummary(t *testing.T) {
 	}
 	if !strings.Contains(first, "- Package count: 2\n") {
 		t.Fatalf("package count missing:\n%s", first)
+	}
+	if !strings.Contains(first, "- Discovered functional packages: 2\n") ||
+		!strings.Contains(first, "- Top-level tests with observed outcomes: 3\n") ||
+		!strings.Contains(first, "- Top-level test outcomes: pass=1, fail=1, skip=1\n") {
+		t.Fatalf("top-level inventory counts missing:\n%s", first)
+	}
+	if !strings.Contains(first, "### Failed top-level tests") ||
+		!strings.Contains(first, "| `github.com/portpowered/infinite-you/tests/functional/alpha` | `TestBroken` | 3.000 | assertion failed |") {
+		t.Fatalf("failed top-level test diagnostics missing:\n%s", first)
 	}
 
 	alphaIdx := strings.Index(first, "| `github.com/portpowered/infinite-you/tests/functional/alpha` |")

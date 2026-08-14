@@ -24,6 +24,18 @@ type FunctionalPackageTiming struct {
 	Package string  `json:"package"`
 	Seconds float64 `json:"seconds"`
 	Outcome string  `json:"outcome"`
+	Reason  string  `json:"reason,omitempty"`
+}
+
+// FunctionalTestTiming is one top-level functional test's observed outcome
+// from the same go test -json run as the package timings. Subtests are not
+// included because quarantine and inventory selectors target top-level tests.
+type FunctionalTestTiming struct {
+	Package string  `json:"package"`
+	Test    string  `json:"test"`
+	Seconds float64 `json:"seconds"`
+	Outcome string  `json:"outcome"`
+	Reason  string  `json:"reason,omitempty"`
 }
 
 // FunctionalTimingSummary mirrors the machine-readable functional-timing
@@ -38,8 +50,18 @@ type FunctionalTimingSummary struct {
 	Complete                 bool                      `json:"complete"`
 	WallSeconds              float64                   `json:"wallSeconds"`
 	PackageElapsedSecondsSum float64                   `json:"packageElapsedSecondsSum"`
+	ExpectedPackageCount     int                       `json:"expectedPackageCount"`
 	PackageCount             int                       `json:"packageCount"`
+	TestCount                int                       `json:"testCount"`
+	TestPassCount            int                       `json:"testPassCount"`
+	TestFailCount            int                       `json:"testFailCount"`
+	TestSkipCount            int                       `json:"testSkipCount"`
 	Packages                 []FunctionalPackageTiming `json:"packages"`
+	Tests                    []FunctionalTestTiming    `json:"tests"`
+	// InventoryTestCount is populated by the catalog renderer from the source
+	// inventory. It is deliberately not decoded from the run artifact because
+	// source inventory and observed execution are different facts.
+	InventoryTestCount int `json:"-"`
 }
 
 // LoadFunctionalTimingSummary reads and decodes a functional-timing-summary
@@ -68,8 +90,9 @@ func LoadFunctionalTimingSummary(path string) (FunctionalTimingSummary, error) {
 // DecodeFunctionalTimingSummary decodes functional-timing-summary JSON bytes.
 // It fails closed on structurally corrupt documents (malformed JSON,
 // unsupported schema version, negative/non-finite durations, duplicate or
-// unidentified packages, or a packageCount that disagrees with the packages
-// array) but accepts complete=false as a legitimate partial-capture state.
+// unidentified packages/tests, duplicate entries, or counts that disagree
+// with their arrays) but accepts complete=false as a legitimate partial-capture
+// state. Older version-1 artifacts may omit the additive test fields.
 func DecodeFunctionalTimingSummary(data []byte) (FunctionalTimingSummary, error) {
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return FunctionalTimingSummary{}, fmt.Errorf("functional-timing-summary JSON is empty")
@@ -105,6 +128,29 @@ func validateFunctionalTimingSummary(summary FunctionalTimingSummary) error {
 			len(summary.Packages),
 		)
 	}
+	if summary.ExpectedPackageCount != 0 && summary.ExpectedPackageCount < summary.PackageCount {
+		return fmt.Errorf(
+			"functional-timing-summary JSON expectedPackageCount (%d) is smaller than observed packageCount (%d)",
+			summary.ExpectedPackageCount,
+			summary.PackageCount,
+		)
+	}
+	if summary.TestCount != 0 && summary.TestCount != len(summary.Tests) {
+		return fmt.Errorf(
+			"functional-timing-summary JSON testCount (%d) disagrees with tests array length (%d)",
+			summary.TestCount,
+			len(summary.Tests),
+		)
+	}
+	if summary.TestCount != 0 && summary.TestPassCount+summary.TestFailCount+summary.TestSkipCount != summary.TestCount {
+		return fmt.Errorf(
+			"functional-timing-summary JSON test outcome counts (%d/%d/%d) disagree with testCount (%d)",
+			summary.TestPassCount,
+			summary.TestFailCount,
+			summary.TestSkipCount,
+			summary.TestCount,
+		)
+	}
 
 	seen := make(map[string]struct{}, len(summary.Packages))
 	for i, pkg := range summary.Packages {
@@ -122,6 +168,26 @@ func validateFunctionalTimingSummary(summary FunctionalTimingSummary) error {
 		case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
 		default:
 			return fmt.Errorf("functional-timing-summary JSON packages[%d] (%s) has invalid outcome %q", i, pkg.Package, pkg.Outcome)
+		}
+	}
+
+	seenTests := make(map[string]struct{}, len(summary.Tests))
+	for i, test := range summary.Tests {
+		if strings.TrimSpace(test.Package) == "" || strings.TrimSpace(test.Test) == "" {
+			return fmt.Errorf("functional-timing-summary JSON tests[%d] missing package or test identity", i)
+		}
+		key := test.Package + "\x00" + test.Test
+		if _, exists := seenTests[key]; exists {
+			return fmt.Errorf("functional-timing-summary JSON tests[%d] (%s::%s) is a duplicate test entry", i, test.Package, test.Test)
+		}
+		seenTests[key] = struct{}{}
+		if err := validateTimingSeconds(fmt.Sprintf("tests[%d] (%s::%s) seconds", i, test.Package, test.Test), test.Seconds); err != nil {
+			return err
+		}
+		switch test.Outcome {
+		case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
+		default:
+			return fmt.Errorf("functional-timing-summary JSON tests[%d] (%s::%s) has invalid outcome %q", i, test.Package, test.Test, test.Outcome)
 		}
 	}
 	return nil

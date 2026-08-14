@@ -286,6 +286,20 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	if err != nil {
 		return err
 	}
+	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix)
+}
+
+func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, selection functionalCoverageSelection) error {
+	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
+	plan, err := buildFunctionalCoverageInvocationPlan(commonArgs, selection.Groups, profilePath, timingEnabled, targetOS)
+	if err != nil {
+		return err
+	}
+	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix)
+}
+
+func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string) error {
+	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
 	configureCoverageInvocationStreaming(&plan, cfg.stream)
 
 	started := time.Now()
@@ -319,6 +333,9 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	if timingEnabled {
 		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
 		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+		if timingWriteErr == nil && cfg.suite == "functional" {
+			writeFunctionalTimingInventorySummary(summary, cfg.short)
+		}
 	}
 
 	var mergeErr error
@@ -331,6 +348,53 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	}
 
 	return errors.Join(laneErr, timingWriteErr, mergeErr, plan.cleanup())
+}
+
+func buildFunctionalCoverageInvocationPlan(commonArgs []string, groups []coverageRunGroup, profilePath string, timingEnabled bool, targetOS string) (coverageInvocationPlan, error) {
+	if len(groups) == 0 {
+		return coverageInvocationPlan{}, errors.New("prepare functional coverage lane: no selected run groups")
+	}
+	if len(groups) == 1 {
+		args := appendCoverageRunPattern(commonArgs, groups[0].RunPattern)
+		return buildCoverageInvocationPlan(args, groups[0].Packages, profilePath, timingEnabled, targetOS)
+	}
+
+	groupDir, err := os.MkdirTemp("", "gocoveragecheck-functional-groups-*")
+	if err != nil {
+		return coverageInvocationPlan{}, fmt.Errorf("create functional coverage group directory: %w", err)
+	}
+	cleanups := []func() error{func() error { return os.RemoveAll(groupDir) }}
+	plan := coverageInvocationPlan{}
+	for index, group := range groups {
+		groupProfile := filepath.Join(groupDir, fmt.Sprintf("coverage-%06d.out", index))
+		args := appendCoverageRunPattern(commonArgs, group.RunPattern)
+		groupPlan, groupErr := buildCoverageInvocationPlan(args, group.Packages, groupProfile, timingEnabled, targetOS)
+		if groupErr != nil {
+			for _, cleanup := range cleanups {
+				groupErr = errors.Join(groupErr, cleanup())
+			}
+			return coverageInvocationPlan{}, groupErr
+		}
+		plan.invocations = append(plan.invocations, groupPlan.invocations...)
+		plan.profilePaths = append(plan.profilePaths, groupPlan.profilePaths...)
+		cleanups = append(cleanups, groupPlan.cleanup)
+	}
+	plan.cleanup = func() error {
+		var cleanupErr error
+		for _, cleanup := range cleanups {
+			cleanupErr = errors.Join(cleanupErr, cleanup())
+		}
+		return cleanupErr
+	}
+	return plan, nil
+}
+
+func appendCoverageRunPattern(commonArgs []string, pattern string) []string {
+	if strings.TrimSpace(pattern) == "" {
+		return append([]string(nil), commonArgs...)
+	}
+	args := append([]string(nil), commonArgs...)
+	return append(args, "-run="+pattern)
 }
 
 func availableBatchCoverageProfiles(profilePaths []string, succeeded []bool) ([]string, error) {
