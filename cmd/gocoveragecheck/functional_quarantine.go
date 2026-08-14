@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -80,6 +81,41 @@ func resolveFunctionalCoverageSelection(path string, packages []string, timeout 
 		return functionalCoverageSelection{}, functionalQuarantine{}, err
 	}
 	return selection, manifest, nil
+}
+
+func prepareFunctionalCoverageRun(cfg config, packages []string, targetOS string, repoRoot string) (functionalCoverageSelection, []string, error) {
+	quarantinePath := cfg.functionalQuarantine
+	if !filepath.IsAbs(quarantinePath) {
+		quarantinePath = filepath.Join(repoRoot, quarantinePath)
+	}
+	selection, manifest, err := resolveFunctionalCoverageSelection(
+		quarantinePath,
+		packages,
+		cfg.timeout,
+		cfg.short,
+		cfg.testJobs(targetOS),
+		repoRoot,
+	)
+	if err != nil {
+		return functionalCoverageSelection{}, nil, err
+	}
+	fmt.Fprintf(
+		stdoutWriter,
+		"Functional gate: discovered-packages=%d discovered-tests=%d quarantined-packages=%d quarantined-test-selectors=%d package-excluded-tests=%d test-excluded-packages=%d selected-packages=%d selected-tests=%d selection=subtractive quarantine=%s\n",
+		len(selection.Inventory.Packages),
+		functionalTestCount(selection.Inventory),
+		selection.QuarantinedPackageCount,
+		selection.QuarantinedTestSelectors,
+		selection.PackageExcludedTestCount,
+		selection.TestExcludedPackageCount,
+		selection.SelectedPackageCount,
+		selection.SelectedTestCount,
+		filepath.ToSlash(cfg.functionalQuarantine),
+	)
+	if err := runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot); err != nil {
+		return functionalCoverageSelection{}, nil, err
+	}
+	return selection, selectedFunctionalPackages(selection), nil
 }
 
 const (

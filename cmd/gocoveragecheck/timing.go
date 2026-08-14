@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -88,99 +86,13 @@ type functionalTimingSummaryJSON struct {
 // aborting capture, so partial diagnostics from a crashed or truncated run
 // stay inspectable.
 func buildFunctionalTimingSummary(jsonOutput string, expectedPackages []string, wallSeconds float64) functionalTimingSummaryJSON {
-	packageOutcomes := make(map[string]functionalPackageTimingJSON, len(expectedPackages))
-	testOutcomes := make(map[string]functionalTestTimingJSON)
-	failureReasons := make(map[string]string)
-	complete := true
-
-	scanner := bufio.NewScanner(strings.NewReader(jsonOutput))
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var event goTestTimingEvent
-		if err := json.Unmarshal(line, &event); err != nil {
-			complete = false
-			continue
-		}
-		if strings.TrimSpace(event.Package) == "" {
-			continue
-		}
-		if event.Output != "" {
-			key := timingEventKey(event.Package, event.Test)
-			if reason := firstTimingFailureReason(event.Output); reason != "" && failureReasons[key] == "" {
-				failureReasons[key] = reason
-			}
-		}
-		switch event.Action {
-		case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
-		default:
-			continue
-		}
-		if math.IsNaN(event.Elapsed) || math.IsInf(event.Elapsed, 0) || event.Elapsed < 0 {
-			complete = false
-			continue
-		}
-		if event.Test != "" {
-			// A slash identifies a Go subtest. The parent top-level test is
-			// emitted separately and is the selector we need to inventory.
-			if strings.Contains(event.Test, "/") {
-				continue
-			}
-			key := timingEventKey(event.Package, event.Test)
-			if _, exists := testOutcomes[key]; exists {
-				complete = false
-				continue
-			}
-			testOutcomes[key] = functionalTestTimingJSON{
-				Package: event.Package,
-				Test:    event.Test,
-				Seconds: event.Elapsed,
-				Outcome: event.Action,
-				Reason:  failureReasons[key],
-			}
-			continue
-		}
-		if _, exists := packageOutcomes[event.Package]; exists {
-			complete = false
-			continue
-		}
-		key := timingEventKey(event.Package, "")
-		packageOutcomes[event.Package] = functionalPackageTimingJSON{
-			Package: event.Package,
-			Seconds: event.Elapsed,
-			Outcome: event.Action,
-			Reason:  failureReasons[key],
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		complete = false
-	}
-
-	packages := make([]functionalPackageTimingJSON, 0, len(expectedPackages))
-	sum := 0.0
-	for _, importPath := range expectedPackages {
-		entry, ok := packageOutcomes[importPath]
-		if !ok {
-			complete = false
-			continue
-		}
-		packages = append(packages, entry)
-		sum += entry.Seconds
-	}
+	parsed := parseFunctionalTimingEvents(jsonOutput, expectedPackages)
+	complete := parsed.complete
+	packages, sum := collectFunctionalPackageTimings(parsed.packageOutcomes, expectedPackages, &complete)
 	slices.SortFunc(packages, func(left, right functionalPackageTimingJSON) int {
 		return strings.Compare(left.Package, right.Package)
 	})
-
-	tests := make([]functionalTestTimingJSON, 0, len(testOutcomes))
-	for _, entry := range testOutcomes {
-		if entry.Reason == "" {
-			entry.Reason = failureReasons[timingEventKey(entry.Package, entry.Test)]
-		}
-		tests = append(tests, entry)
-	}
+	tests := collectFunctionalTestTimings(parsed.testOutcomes, parsed.failureReasons)
 	slices.SortFunc(tests, func(left, right functionalTestTimingJSON) int {
 		if result := strings.Compare(left.Package, right.Package); result != 0 {
 			return result
@@ -209,6 +121,32 @@ func buildFunctionalTimingSummary(jsonOutput string, expectedPackages []string, 
 		Packages:                 packages,
 		Tests:                    tests,
 	}
+}
+
+func collectFunctionalPackageTimings(outcomes map[string]functionalPackageTimingJSON, expectedPackages []string, complete *bool) ([]functionalPackageTimingJSON, float64) {
+	packages := make([]functionalPackageTimingJSON, 0, len(expectedPackages))
+	sum := 0.0
+	for _, importPath := range expectedPackages {
+		entry, ok := outcomes[importPath]
+		if !ok {
+			*complete = false
+			continue
+		}
+		packages = append(packages, entry)
+		sum += entry.Seconds
+	}
+	return packages, sum
+}
+
+func collectFunctionalTestTimings(outcomes map[string]functionalTestTimingJSON, failureReasons map[string]string) []functionalTestTimingJSON {
+	tests := make([]functionalTestTimingJSON, 0, len(outcomes))
+	for _, entry := range outcomes {
+		if entry.Reason == "" {
+			entry.Reason = failureReasons[timingEventKey(entry.Package, entry.Test)]
+		}
+		tests = append(tests, entry)
+	}
+	return tests
 }
 
 func timingEventKey(importPath, testName string) string {

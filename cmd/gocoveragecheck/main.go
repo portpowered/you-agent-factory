@@ -331,39 +331,12 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 	}
 	var functionalSelection *functionalCoverageSelection
 	if strings.TrimSpace(cfg.functionalQuarantine) != "" {
-		quarantinePath := cfg.functionalQuarantine
-		if !filepath.IsAbs(quarantinePath) {
-			quarantinePath = filepath.Join(repoRoot, quarantinePath)
-		}
-		selection, manifest, selectionErr := resolveFunctionalCoverageSelection(
-			quarantinePath,
-			testPackages,
-			cfg.timeout,
-			cfg.short,
-			cfg.testJobs(targetOS),
-			repoRoot,
-		)
+		selection, selectedPackages, selectionErr := prepareFunctionalCoverageRun(cfg, testPackages, targetOS, repoRoot)
 		if selectionErr != nil {
 			return coverageResult{}, selectionErr
 		}
 		functionalSelection = &selection
-		fmt.Fprintf(
-			stdoutWriter,
-			"Functional gate: discovered-packages=%d discovered-tests=%d quarantined-packages=%d quarantined-test-selectors=%d package-excluded-tests=%d test-excluded-packages=%d selected-packages=%d selected-tests=%d selection=subtractive quarantine=%s\n",
-			len(selection.Inventory.Packages),
-			functionalTestCount(selection.Inventory),
-			selection.QuarantinedPackageCount,
-			selection.QuarantinedTestSelectors,
-			selection.PackageExcludedTestCount,
-			selection.TestExcludedPackageCount,
-			selection.SelectedPackageCount,
-			selection.SelectedTestCount,
-			filepath.ToSlash(cfg.functionalQuarantine),
-		)
-		if err := runFunctionalQuarantineRatchet(manifest, cfg.timeout, cfg.short, repoRoot); err != nil {
-			return coverageResult{}, err
-		}
-		testPackages = selectedFunctionalPackages(selection)
+		testPackages = selectedPackages
 	}
 	coverPackageArgument := strings.Join(coverPackages, ",")
 	if targetOS == "windows" && strings.TrimSpace(cfg.coverpkg) == "" {
