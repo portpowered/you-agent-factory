@@ -14,13 +14,23 @@ export function FactoryGraphNodeResizeControls({ allowedAxes, bounds, fitDimensi
         onResizeEnd?.({ height: dimensions.height, width: dimensions.width });
         refreshNodeInternals();
     }, [onResizeEnd, refreshNodeInternals]);
+    const refreshNodeInternalsAfterCommit = useCallback(() => {
+        if (!nodeId) {
+            return;
+        }
+        if (typeof requestAnimationFrame !== "function") {
+            updateNodeInternals(nodeId);
+            return;
+        }
+        requestAnimationFrame(() => updateNodeInternals(nodeId));
+    }, [nodeId, updateNodeInternals]);
     const handleFitToContent = useCallback(() => {
         if (!onFitToContent) {
             return;
         }
-        const dimensions = fitDimensions;
-        requestAnimationFrame(() => onFitToContent(dimensions));
-    }, [fitDimensions, onFitToContent]);
+        onFitToContent(fitDimensions);
+        refreshNodeInternalsAfterCommit();
+    }, [fitDimensions, onFitToContent, refreshNodeInternalsAfterCommit]);
     const handleResetSize = useCallback(() => {
         onResetSize?.();
         refreshNodeInternals();
