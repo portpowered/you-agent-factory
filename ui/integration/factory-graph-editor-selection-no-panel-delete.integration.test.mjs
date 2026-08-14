@@ -10,6 +10,9 @@ import {
   selectLabeledComboboxOption,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForFactoryGraphSelectionDeleteButton,
+  waitForFactoryGraphSelectionReady,
+  waitForStableBoundingBox,
 } from "./browser-test-harness.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
@@ -189,7 +192,7 @@ async function assertNoPanelTopologyDeleteInCurrentSelection(page) {
 }
 
 async function marqueeSelectGraphNode(page, nodeLocator) {
-  const nodeBox = await nodeLocator.boundingBox();
+  const nodeBox = await waitForStableBoundingBox(nodeLocator);
   if (!nodeBox) {
     throw new Error(
       "Expected graph node to have a bounding box for marquee selection.",
@@ -355,14 +358,20 @@ describe.concurrent("factory graph editor selection panel delete browser integra
         const spareGraphNode = browserPage.page.getByTestId(
           "rf__node-worker:spare",
         );
+        await waitForFactoryGraphSelectionReady(browserPage.page);
         await marqueeSelectGraphNode(browserPage.page, spareGraphNode);
 
-        const batchDeleteButton = toolbar.getByRole("button", {
-          name: "Delete selected graph item",
-        });
+        const batchDeleteButton =
+          await waitForFactoryGraphSelectionDeleteButton(toolbar);
         await batchDeleteButton.scrollIntoViewIfNeeded();
         expect(await batchDeleteButton.isDisabled()).toBe(false);
-        await batchDeleteButton.click();
+        await batchDeleteButton.focus();
+        expect(
+          await batchDeleteButton.evaluate(
+            (button) => button === document.activeElement,
+          ),
+        ).toBe(true);
+        await batchDeleteButton.press("Enter");
 
         await expect
           .poll(

@@ -15,6 +15,8 @@ vi.mock("@xyflow/react", async () => {
     ...actual,
     Background: () => <div data-testid="graph-background" />,
     Controls: () => <div data-testid="graph-controls" />,
+    useStore: () => "",
+    useUpdateNodeInternals: () => vi.fn(),
     ReactFlow: ({
       className,
       children,

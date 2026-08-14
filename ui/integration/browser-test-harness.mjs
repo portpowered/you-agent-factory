@@ -145,6 +145,87 @@ export async function waitForDurableControlEnabled(
   );
 }
 
+function boundingBoxesEqual(left, right) {
+  return (
+    left !== null &&
+    right !== null &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
+/** Wait until a browser element reports the same geometry on two observations. */
+export async function waitForStableBoundingBox(
+  locator,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+) {
+  let previousBox = null;
+  let stableBox = null;
+
+  await waitForDurableCheckpoint(
+    "stable bounding box",
+    async () => {
+      const nextBox = await locator.boundingBox().catch(() => null);
+      const stable = boundingBoxesEqual(previousBox, nextBox);
+      previousBox = nextBox;
+
+      if (!stable) {
+        return false;
+      }
+
+      stableBox = nextBox;
+      return true;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+
+  return stableBox;
+}
+
+/** Wait until React Flow has measured every graph node for selection gestures. */
+export async function waitForFactoryGraphSelectionReady(
+  page,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  const readinessMarker = page.locator(
+    '[data-factory-graph-selection-ready="true"]',
+  );
+
+  await waitForDurableCheckpoint(
+    "factory graph selection readiness",
+    async () => (await readinessMarker.count()) > 0,
+    timeoutMs,
+  );
+}
+
+/** Wait for the graph selection projection and its enabled batch-delete action. */
+export async function waitForFactoryGraphSelectionDeleteButton(
+  toolbar,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  const selectedGraphSelection = toolbar.locator(
+    '[data-toolbar-graph-selection="single"], [data-toolbar-graph-selection="multi"]',
+  );
+  const batchDeleteButton = toolbar.getByRole("button", {
+    name: /^Delete (?:\d+ )?selected graph items?$/,
+  });
+
+  await waitForDurableCheckpoint(
+    "factory graph selection delete control",
+    async () =>
+      (await selectedGraphSelection.isVisible().catch(() => false)) &&
+      (await batchDeleteButton.isVisible().catch(() => false)) &&
+      (await batchDeleteButton.isEnabled().catch(() => false)),
+    timeoutMs,
+  );
+
+  return batchDeleteButton;
+}
+
 /**
  * Wait for a Radix/dialog surface to close using dialog role state instead of
  * heading copy that may unmount asynchronously.
