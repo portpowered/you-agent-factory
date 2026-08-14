@@ -853,7 +853,7 @@ func buildContinuationSession(value *workers.ProviderContinuationRef) *providers
 	}
 	return &providers.SessionRef{
 		Provider: providers.ID(strings.TrimSpace(value.Provider)),
-		Kind:     "session",
+		Kind:     providers.SessionIDKind,
 		ID:       strings.TrimSpace(value.ProviderSessionID),
 	}
 }

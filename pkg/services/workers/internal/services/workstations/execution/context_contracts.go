@@ -19,6 +19,7 @@ var ResolveProjectID = workers.ResolveProjectID
 type mockWorkersConfigKey struct{}
 type mockWorkerOutputPolicyKey struct{}
 type progressPublisherKey struct{}
+type scriptEventRecorderKey struct{}
 
 // WithMockWorkersConfig attaches a cloned, request-scoped mock override to a
 // detached Workers execution. The process-scoped Workers service retains no
@@ -72,6 +73,27 @@ func ProgressPublisherFromContext(ctx context.Context, fallback workers.Progress
 	if ctx != nil {
 		if publisher, ok := ctx.Value(progressPublisherKey{}).(workers.ProgressPublisher); ok && publisher != nil {
 			return publisher
+		}
+	}
+	return fallback
+}
+
+// WithScriptEventRecorder attaches a request-scoped script event sink to one
+// detached execution. The process-scoped Workers service retains no Factory
+// Session or recording state.
+func WithScriptEventRecorder(ctx context.Context, recorder workers.ScriptEventRecorder) context.Context {
+	if ctx == nil || recorder == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, scriptEventRecorderKey{}, recorder)
+}
+
+// ScriptEventRecorderFromContext resolves the request-scoped sink, falling
+// back to the construction-time recorder used by direct runner callers.
+func ScriptEventRecorderFromContext(ctx context.Context, fallback workers.ScriptEventRecorder) workers.ScriptEventRecorder {
+	if ctx != nil {
+		if recorder, ok := ctx.Value(scriptEventRecorderKey{}).(workers.ScriptEventRecorder); ok && recorder != nil {
+			return recorder
 		}
 	}
 	return fallback

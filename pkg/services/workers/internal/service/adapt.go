@@ -47,7 +47,7 @@ func adaptRunnerRequest(
 		UserMessage:                  request.Target.Prompt.UserMessage,
 		OutputSchema:                 request.Target.Prompt.OutputSchema,
 		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
-		RequiredOptionalCapabilities: append([]workers.RunnerOptionalCapability(nil), request.Target.Tools.RequiredOptionalCapabilities...),
+		RequiredOptionalCapabilities: requiredOptionalCapabilities(request, identity),
 		EnvVars:                      context.envVars,
 		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
 		Worktree:                     worktree,
@@ -73,6 +73,96 @@ func adaptRunnerRequest(
 	}
 }
 
+// requiredOptionalCapabilities reconstructs the runner requirements that the
+// legacy workstation executor derived immediately before provider execution.
+// Detached Execute callers carry the complete request instead of a prepared
+// workstation request, so this normalization must happen before runner
+// resolution as well as when adapting the provider request.
+func requiredOptionalCapabilities(
+	request workers.ExecuteRequest,
+	identity string,
+) []workers.RunnerOptionalCapability {
+	capabilities := append(
+		[]workers.RunnerOptionalCapability(nil),
+		request.Target.Tools.RequiredOptionalCapabilities...,
+	)
+	if identity != runners.AgentIdentity {
+		return capabilities
+	}
+	if strings.TrimSpace(request.Target.Prompt.OutputSchema) != "" {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityStructuredOutput,
+		)
+	}
+	workingDirectory := firstNonEmpty(
+		request.Target.Environment.WorkingDirectory,
+		request.Target.Workspace.WorkingDirectory,
+	)
+	if request.Target.Environment.WorkingDirectorySet && workingDirectory != "" {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityWorkingDirectory,
+		)
+	}
+	if worktreeRequiresRunnerCapability(request, workingDirectory) {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityWorktree,
+		)
+	}
+	if requestHasImageInput(request.Input.Work) {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilityImageInput,
+		)
+	}
+	if request.Input.Resume != nil && firstNonEmpty(
+		request.Input.Resume.ProviderSessionID,
+		request.Input.Resume.ExternalRef,
+	) != "" {
+		capabilities = appendRunnerCapabilityIfMissing(
+			capabilities,
+			workers.RunnerOptionalCapabilitySessionResume,
+		)
+	}
+	return capabilities
+}
+
+func worktreeRequiresRunnerCapability(
+	request workers.ExecuteRequest,
+	workingDirectory string,
+) bool {
+	if strings.TrimSpace(request.Target.Workspace.Worktree) == "" {
+		return false
+	}
+	return !(workingDirectory != "" &&
+		workers.NormalizeRunnerID(request.Target.RunnerID) == workers.RunnerIDCodex)
+}
+
+func requestHasImageInput(inputs []workers.WorkInput) bool {
+	for _, input := range inputs {
+		for _, part := range input.Content {
+			if part.Type.Normalized() == work.WorkContentPartTypeImage {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func appendRunnerCapabilityIfMissing(
+	capabilities []workers.RunnerOptionalCapability,
+	capability workers.RunnerOptionalCapability,
+) []workers.RunnerOptionalCapability {
+	for _, existing := range capabilities {
+		if existing == capability {
+			return capabilities
+		}
+	}
+	return append(capabilities, capability)
+}
+
 type adaptedWorkflowContext struct {
 	workflow         *workers.Context
 	workingDirectory string
@@ -91,6 +181,9 @@ func runnerIDForRequest(request workers.ExecuteRequest, identity string) string 
 			return runners.InferenceIdentity
 		}
 	default:
+		if provider := providerIdentity(request.Target.Provider); provider != "" {
+			return provider
+		}
 		if runnerID == "" || runnerID == runners.AgentIdentity {
 			return providerRunnerID(request.Target.Provider)
 		}

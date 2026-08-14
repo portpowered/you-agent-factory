@@ -1840,8 +1840,11 @@ func TestPrepareDetachedModelRecordingRecordsDetachedRequestAndResponse(t *testi
 			Text: "model output",
 		}}},
 		Continuation: &workers.ProviderContinuationRef{Provider: "provider-1", ProviderSessionID: "session-1"},
-		Diagnostics:  &workers.SafeDiagnostics{Metadata: map[string]string{"source": "test"}},
-		Metrics:      workers.ExecutionMetrics{Duration: 1500 * time.Millisecond},
+		Diagnostics: &workers.SafeDiagnostics{Provider: &workers.SafeProviderDiagnostic{
+			Provider:         "agy",
+			ResponseMetadata: map[string]string{"input_tokens": "3"},
+		}},
+		Metrics: workers.ExecutionMetrics{Duration: 1500 * time.Millisecond},
 	}, nil)
 	if !previousTerminalCalled {
 		t.Fatal("previous terminal hook was not called")
@@ -1926,8 +1929,45 @@ func assertDetachedModelResponseContent(t *testing.T, response *workers.ModelRes
 	if response.Bindings == nil || len(*response.Bindings) != 1 || (*response.Bindings)[0].Slot != "summary" {
 		t.Fatalf("recorded response bindings = %#v, want detached bindings", response.Bindings)
 	}
-	if len(response.Diagnostics) == 0 || !strings.Contains(string(response.Diagnostics), "source") {
-		t.Fatalf("recorded response diagnostics = %s, want safe diagnostics", response.Diagnostics)
+	diagnostics, err := workers.SafeWorkDiagnosticsFromEventPayload(response.Diagnostics)
+	if err != nil {
+		t.Fatalf("decode recorded response diagnostics: %v", err)
+	}
+	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata["input_tokens"] != "3" {
+		t.Fatalf("recorded response diagnostics = %#v, want public provider metadata", diagnostics)
+	}
+}
+
+func TestRuntimeModelResponseRecordingPreservesProviderSuccessForOutputContractFailure(t *testing.T) {
+	t.Parallel()
+
+	ledger := &modelRecordingLedger{ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{}}
+	cfg := &runtimeConfig{
+		executeService: modelRecordingExecuteService{owns: true},
+		eventHistory:   ledger,
+		clock:          testRuntimeClock{},
+	}
+	recordDetachedModelResponse(cfg, modelRecordingRequest(), workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypePermanentBadRequest,
+			Message: "output contract failed",
+		},
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "provider response",
+		}}},
+	}, nil)
+
+	if len(ledger.events) != 1 || ledger.events[0].Response == nil {
+		t.Fatalf("recorded events = %#v, want one model response", ledger.events)
+	}
+	response := ledger.events[0].Response
+	if response.Outcome != workers.InferenceOutcomeSucceeded {
+		t.Fatalf("provider response outcome = %q, want SUCCEEDED", response.Outcome)
+	}
+	if response.OutputContent == nil || len(*response.OutputContent) != 1 || (*response.OutputContent)[0].Text != "provider response" {
+		t.Fatalf("provider response output = %#v, want raw provider response", response.OutputContent)
 	}
 }
 
@@ -1964,7 +2004,7 @@ func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks
 		t.Fatalf("failure events = %#v, want three responses", ledger.events)
 	}
 	assertModelFailureEvents(t, ledger.events)
-	if got := providerSessionFromExecuteResult(workers.ExecuteResult{
+	if got := providerSessionFromExecuteResult(request, workers.ExecuteResult{
 		Continuation: &workers.ProviderContinuationRef{Provider: "provider-2", ExternalRef: "external-2"},
 	}); got == nil || got.ID != "external-2" || got.Provider != "provider-2" {
 		t.Fatalf("external continuation session = %#v, want external reference", got)
@@ -2054,11 +2094,21 @@ func assertModelOptionalHelpers(t *testing.T) {
 	if cloned == nil || len(*cloned) != 1 || (*cloned)[0].Slot != "slot" {
 		t.Fatalf("resolvedModelBindings() = %#v, want cloned bindings", cloned)
 	}
-	if providerSessionFromExecuteResult(workers.ExecuteResult{}) != nil {
+	assertModelProviderSessionFallbacks(t)
+}
+
+func assertModelProviderSessionFallbacks(t *testing.T) {
+	t.Helper()
+	request := modelRecordingRequest()
+	if providerSessionFromExecuteResult(request, workers.ExecuteResult{}) != nil {
 		t.Fatal("empty continuation returned a provider session")
 	}
-	if providerSessionFromExecuteResult(workers.ExecuteResult{Continuation: &workers.ProviderContinuationRef{}}) != nil {
+	if providerSessionFromExecuteResult(request, workers.ExecuteResult{Continuation: &workers.ProviderContinuationRef{}}) != nil {
 		t.Fatal("empty provider continuation returned a provider session")
+	}
+	request.Target.Provider.ID = "agent"
+	if got := providerSessionFromExecuteResult(request, workers.ExecuteResult{}); got == nil || got.Provider != "cursor" || got.ID != "" {
+		t.Fatalf("provider fallback = %#v, want canonical provider identity without a fabricated session id", got)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -692,260 +691,243 @@ func cloneRuntimeCapabilities(value *workers.Capabilities) *workers.Capabilities
 	return &clone
 }
 
-const (
-	unsafeExpectedArtifactPattern = "<invalid>"
-	unrenderableExpectedArtifact  = "<unrenderable>"
-)
-
-func verifyExpectedArtifactsForDispatch(
+func resolveRuntimeWorkstationDefinition(
 	cfg *runtimeConfig,
-	request workers.ExecuteRequest,
-	result workers.ExecuteResult,
-) workers.ExecuteResult {
-	if result.Outcome != workers.ExecutionOutcomeAccepted {
-		return result
+	lookup interfaces.RuntimeDefinitionLookup,
+	request workers.WorkstationDispatchRequest,
+	invocation *work.InvocationArguments,
+) (*interfaces.FactoryWorkstationConfig, bool, error) {
+	workstation, found := lookup.Workstation(strings.TrimSpace(request.WorkstationName))
+	if !found || workstation == nil {
+		return workstation, found, nil
 	}
-	declarations := expectedArtifactDeclarationsForDispatch(cfg, request.Input.Dispatch)
-	if len(declarations) == 0 {
-		return result
+	interpolated, err := interpolateRuntimeWorkstationConfig(cfg, workstation, invocation)
+	return interpolated, found, err
+}
+
+// orderedRuntimeWorkDispatchTokens preserves the authored workstation input
+// order for detached execution. The scheduler intentionally records observed
+// child tokens before the consumed parent token; prompt templates and model
+// operation bindings, however, address inputs by the workstation's declared
+// slots. The legacy workstation executor made this ordering adjustment before
+// it built its request, so the shared Workers execution path must do the same.
+func orderedRuntimeWorkDispatchTokens(
+	cfg *runtimeConfig,
+	request workers.WorkstationDispatchRequest,
+	invocation *work.InvocationArguments,
+) ([]workers.Token, error) {
+	tokens := workers.WorkDispatchInputTokens(request.Execution.Dispatch)
+	if len(tokens) < 2 {
+		return tokens, nil
 	}
-	verification := verifyRuntimeExpectedArtifactDeclarations(
-		request.Target.Environment.WorkingDirectory,
-		request.Input.Dispatch,
-		declarations,
-		cfg.expectedArtifactFileSystem,
+	lookup, ok := runtimeDefinitionLookup(cfg)
+	if !ok {
+		return tokens, nil
+	}
+	workstation, found, err := resolveRuntimeWorkstationDefinition(
+		cfg,
+		lookup,
+		request,
+		invocation,
 	)
-	if verification == nil || len(verification.Entries) == 0 {
-		return result
-	}
-	message := expectedArtifactVerificationMessage(verification)
-	result.Outcome = workers.ExecutionOutcomeFailed
-	result.ArtifactVerification = verification
-	result.Failure = &workers.ExecutionFailure{
-		Family:  workers.WorkFailureFamilyTerminal,
-		Type:    workers.WorkFailureTypeExpectedArtifactsUnsatisfied,
-		Message: message,
-		Detail: &workers.FailureDetail{
-			Reason:  workers.WorkFailureTypeExpectedArtifactsUnsatisfied,
-			Message: message,
-		},
-	}
-	return result
-}
-
-func expectedArtifactDeclarationsForDispatch(
-	cfg *runtimeConfig,
-	dispatch work.WorkDispatch,
-) []work.ExpectedArtifactDeclaration {
-	if cfg == nil || cfg.net == nil {
-		return nil
-	}
-	var declarations []work.ExpectedArtifactDeclaration
-	seen := make(map[work.ExpectedArtifactDeclaration]struct{})
-	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
-		workType := cfg.net.WorkTypes[token.Color.WorkTypeID]
-		if workType == nil {
-			continue
-		}
-		for _, declaration := range workType.ExpectedArtifacts {
-			if _, exists := seen[declaration]; exists {
-				continue
-			}
-			seen[declaration] = struct{}{}
-			declarations = append(declarations, declaration)
-		}
-	}
-	if transition := cfg.net.Transitions[dispatch.TransitionID]; transition != nil {
-		for _, declaration := range transition.ExpectedArtifacts {
-			if _, exists := seen[declaration]; exists {
-				continue
-			}
-			seen[declaration] = struct{}{}
-			declarations = append(declarations, declaration)
-		}
-	}
-	return declarations
-}
-
-func verifyRuntimeExpectedArtifactDeclarations(
-	workspace string,
-	dispatch work.WorkDispatch,
-	declarations []work.ExpectedArtifactDeclaration,
-	fileSystem expectedArtifactFileSystem,
-) *workers.ExpectedArtifactVerification {
-	workspace = strings.TrimSpace(workspace)
-	context := dispatch.ExpectedArtifactContext
-	if context == nil {
-		context = &work.ExpectedArtifactTemplateContext{}
-	}
-	entries := make([]workers.ExpectedArtifactVerificationEntry, 0, len(declarations))
-	for index, declaration := range declarations {
-		pattern, err := context.Render(declaration.Pattern, nil)
-		if err != nil {
-			entries = append(entries, runtimeExpectedArtifactFailureEntry(
-				index, declaration.Name, unrenderableExpectedArtifact,
-				workers.ExpectedArtifactVerificationReasonMissing,
-			))
-			continue
-		}
-		pattern, safe := safeRuntimeExpectedArtifactPattern(pattern)
-		if !safe {
-			entries = append(entries, runtimeExpectedArtifactFailureEntry(
-				index, declaration.Name, unsafeExpectedArtifactPattern,
-				workers.ExpectedArtifactVerificationReasonMissing,
-			))
-			continue
-		}
-		reason, satisfied := runtimeExpectedArtifactStatus(
-			workspace, pattern, declaration.NonEmpty, fileSystem,
-		)
-		if !satisfied {
-			entries = append(entries, runtimeExpectedArtifactFailureEntry(index, declaration.Name, pattern, reason))
-		}
-	}
-	if len(entries) == 0 {
-		return nil
-	}
-	return &workers.ExpectedArtifactVerification{
-		Code:    workers.WorkFailureTypeExpectedArtifactsUnsatisfied,
-		Entries: entries,
-	}
-}
-
-func runtimeExpectedArtifactFailureEntry(
-	declarationIndex int,
-	name string,
-	pattern string,
-	reason workers.ExpectedArtifactVerificationReason,
-) workers.ExpectedArtifactVerificationEntry {
-	return workers.ExpectedArtifactVerificationEntry{
-		DeclarationIndex: declarationIndex + 1,
-		Name:             strings.TrimSpace(name),
-		Pattern:          pattern,
-		Reason:           reason,
-	}
-}
-
-func safeRuntimeExpectedArtifactPattern(value string) (string, bool) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return "", false
-	}
-	portable := filepath.ToSlash(trimmed)
-	if pathpkg.IsAbs(portable) || strings.HasPrefix(portable, "/") {
-		return "", false
-	}
-	if len(portable) >= 2 && portable[1] == ':' && isASCIIAlphaRuntime(portable[0]) {
-		return "", false
-	}
-	for _, segment := range strings.Split(portable, "/") {
-		if segment == ".." {
-			return "", false
-		}
-	}
-	if _, err := pathpkg.Match(portable, ""); err != nil {
-		return "", false
-	}
-	return portable, true
-}
-
-func runtimeExpectedArtifactStatus(
-	workspace string,
-	pattern string,
-	nonEmpty bool,
-	fileSystem expectedArtifactFileSystem,
-) (workers.ExpectedArtifactVerificationReason, bool) {
-	if fileSystem == nil || workspace == "" {
-		return workers.ExpectedArtifactVerificationReasonMissing, false
-	}
-	if !strings.ContainsAny(pattern, "*?[") {
-		return runtimeExpectedArtifactLiteralStatus(workspace, pattern, nonEmpty, fileSystem)
-	}
-	return runtimeExpectedArtifactGlobStatus(workspace, pattern, nonEmpty, fileSystem)
-}
-
-func runtimeExpectedArtifactLiteralStatus(
-	workspace string,
-	pattern string,
-	nonEmpty bool,
-	fileSystem expectedArtifactFileSystem,
-) (workers.ExpectedArtifactVerificationReason, bool) {
-	candidate := filepath.Join(workspace, filepath.FromSlash(pattern))
-	if !runtimeExpectedArtifactPathWithinWorkspace(workspace, candidate, fileSystem) {
-		return workers.ExpectedArtifactVerificationReasonMissing, false
-	}
-	info, err := fileSystem.Stat(candidate)
-	if err != nil || info == nil || !info.Mode().IsRegular() {
-		return workers.ExpectedArtifactVerificationReasonMissing, false
-	}
-	if nonEmpty && info.Size() == 0 {
-		return workers.ExpectedArtifactVerificationReasonEmpty, false
-	}
-	return "", true
-}
-
-func runtimeExpectedArtifactGlobStatus(
-	workspace string,
-	pattern string,
-	nonEmpty bool,
-	fileSystem expectedArtifactFileSystem,
-) (workers.ExpectedArtifactVerificationReason, bool) {
-	matches, err := fileSystem.Glob(filepath.Join(workspace, filepath.FromSlash(pattern)))
 	if err != nil {
-		return workers.ExpectedArtifactVerificationReasonMissing, false
+		return nil, fmt.Errorf("resolve workstation input order: %w", err)
 	}
-	sort.Strings(matches)
-	regularFiles := 0
-	for _, match := range matches {
-		if !runtimeExpectedArtifactPathWithinWorkspace(workspace, match, fileSystem) {
+	if !found || workstation == nil {
+		return tokens, nil
+	}
+
+	byPlace := make(map[string][]int)
+	for index, token := range tokens {
+		byPlace[token.PlaceID] = append(byPlace[token.PlaceID], index)
+	}
+	ordered := make([]workers.Token, 0, len(tokens))
+	used := make([]bool, len(tokens))
+	appendPlaceTokens := func(placeID string) {
+		for _, index := range byPlace[placeID] {
+			used[index] = true
+			ordered = append(ordered, tokens[index])
+		}
+	}
+	for _, input := range workstation.Inputs {
+		appendPlaceTokens(fmt.Sprintf("%s:%s", input.WorkTypeName, input.StateName))
+	}
+	for _, resource := range workstation.Resources {
+		appendPlaceTokens(fmt.Sprintf("%s:%s", resource.Name, interfaces.ResourceStateAvailable))
+	}
+	for index, token := range tokens {
+		if used[index] {
 			continue
 		}
-		info, statErr := fileSystem.Stat(match)
-		if statErr != nil || info == nil || !info.Mode().IsRegular() {
-			continue
-		}
-		regularFiles++
-		if nonEmpty && info.Size() == 0 {
-			return workers.ExpectedArtifactVerificationReasonEmpty, false
-		}
+		ordered = append(ordered, token)
 	}
-	if regularFiles == 0 {
-		return workers.ExpectedArtifactVerificationReasonMissing, false
-	}
-	return "", true
+	return ordered, nil
 }
 
-func runtimeExpectedArtifactPathWithinWorkspace(
-	workspace string,
-	candidate string,
-	fileSystem expectedArtifactFileSystem,
+func resolveRuntimeWorkerDefinition(
+	lookup interfaces.RuntimeDefinitionLookup,
+	selection *runtimeExecutionSelection,
+	workstation *interfaces.FactoryWorkstationConfig,
+	invocation *work.InvocationArguments,
+) (*interfaces.FactoryWorkerConfig, bool) {
+	worker, found := lookup.Worker(selection.workerName)
+	if found || workstation == nil {
+		return worker, found
+	}
+	workstationWorkerName := resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation)
+	if selection.workerName == "" {
+		selection.workerName = strings.TrimSpace(workstationWorkerName)
+	}
+	return lookup.Worker(workstationWorkerName)
+}
+
+func runtimeSelectionIsTopologyNoop(
+	selection *runtimeExecutionSelection,
+	workerFound bool,
+	worker *interfaces.FactoryWorkerConfig,
 ) bool {
-	resolvedWorkspace, err := fileSystem.EvalSymlinks(workspace)
-	if err != nil {
+	if !missingRuntimeWorkerDefinition(workerFound, worker) || selection.workerName == "" {
 		return false
 	}
-	resolvedCandidate, err := fileSystem.EvalSymlinks(candidate)
-	if err != nil {
-		return false
-	}
-	relative, err := filepath.Rel(filepath.Clean(resolvedWorkspace), filepath.Clean(resolvedCandidate))
-	if err != nil || filepath.IsAbs(relative) {
-		return false
-	}
-	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+	return selection.providerID == "" && selection.model == "" &&
+		selection.modelProvider == "" && selection.command == ""
 }
 
-func expectedArtifactVerificationMessage(verification *workers.ExpectedArtifactVerification) string {
-	if verification == nil || len(verification.Entries) == 0 {
-		return string(workers.WorkFailureTypeExpectedArtifactsUnsatisfied)
+func interpolateRuntimeWorkerConfig(
+	cfg *runtimeConfig,
+	worker *interfaces.FactoryWorkerConfig,
+	invocation *work.InvocationArguments,
+) (*interfaces.FactoryWorkerConfig, error) {
+	if worker == nil || cfg == nil || cfg.invocationInterpolation == nil {
+		return worker, nil
 	}
-	details := make([]string, 0, len(verification.Entries))
-	for _, entry := range verification.Entries {
-		details = append(details, fmt.Sprintf("%s=%s (%s)", entry.Name, entry.Pattern, entry.Reason))
+	interpolated, err := cfg.invocationInterpolation.InterpolateWorkerConfig(
+		*worker,
+		invocation,
+		cfg.invocationFileReader,
+	)
+	if err != nil {
+		return nil, err
 	}
-	return fmt.Sprintf("%s: %s", verification.Code, strings.Join(details, "; "))
+	return &interpolated, nil
 }
 
-func isASCIIAlphaRuntime(value byte) bool {
-	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+func interpolateRuntimeWorkstationConfig(
+	cfg *runtimeConfig,
+	workstation *interfaces.FactoryWorkstationConfig,
+	invocation *work.InvocationArguments,
+) (*interfaces.FactoryWorkstationConfig, error) {
+	if workstation == nil || cfg == nil || cfg.invocationInterpolation == nil {
+		return workstation, nil
+	}
+	interpolated, err := cfg.invocationInterpolation.InterpolateWorkstationConfig(
+		*workstation,
+		invocation,
+		cfg.invocationFileReader,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &interpolated, nil
+}
+
+func renderRuntimePrompt(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	inputs []workers.WorkInput,
+	invocation *work.InvocationArguments,
+) error {
+	if selection == nil {
+		return nil
+	}
+	if selection.interpolationError != nil {
+		return selection.interpolationError
+	}
+	if err := interpolateRuntimePromptTemplate(cfg, selection, invocation); err != nil {
+		return err
+	}
+	if err := renderRuntimePromptMessage(cfg, selection, tokens, workflowContext, inputs); err != nil {
+		return err
+	}
+	return resolveRuntimeTemplateFields(cfg, selection, tokens, workflowContext)
+}
+
+func interpolateRuntimePromptTemplate(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	invocation *work.InvocationArguments,
+) error {
+	if cfg == nil || cfg.invocationInterpolation == nil ||
+		selection.promptTemplate == "" || selection.promptTemplateInterpolated {
+		return nil
+	}
+	interpolated, err := cfg.invocationInterpolation.InterpolateWorkstationConfig(
+		interfaces.FactoryWorkstationConfig{PromptTemplate: selection.promptTemplate},
+		invocation,
+		cfg.invocationFileReader,
+	)
+	if err != nil {
+		return fmt.Errorf("interpolate workstation prompt: %w", err)
+	}
+	selection.promptTemplate = interpolated.PromptTemplate
+	selection.promptTemplateInterpolated = true
+	return nil
+}
+
+func renderRuntimePromptMessage(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	inputs []workers.WorkInput,
+) error {
+	if selection.userMessage != "" || selection.promptTemplate == "" {
+		return nil
+	}
+	if cfg == nil || cfg.promptRenderer == nil {
+		// Legacy test and adapter callers may not provide the optional renderer.
+		// Preserve their detached execution behavior by using the same payload
+		// fallback as an empty authored prompt.
+		selection.userMessage = workInputMessage(inputs)
+		return nil
+	}
+	rendered, err := cfg.promptRenderer.RenderPrompt(
+		selection.promptTemplate,
+		tokens,
+		workflowContext,
+	)
+	if err != nil {
+		return fmt.Errorf("render workstation prompt: %w", err)
+	}
+	selection.userMessage = rendered
+	return nil
+}
+
+func resolveRuntimeTemplateFields(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+) error {
+	if cfg == nil || cfg.templateFieldResolver == nil {
+		return nil
+	}
+	resolved, err := cfg.templateFieldResolver.ResolveTemplateFields(
+		selection.workingDirectory,
+		selection.environment,
+		tokens,
+		workflowContext,
+		selection.worktree,
+	)
+	if err != nil {
+		return fmt.Errorf("resolve workstation execution fields: %w", err)
+	}
+	if resolved != nil {
+		selection.workingDirectory = resolved.WorkingDirectory
+		selection.worktree = resolved.Worktree
+		selection.environment = cloneRuntimeStringMap(resolved.Env)
+	}
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -39,6 +40,10 @@ func (s *Service) Execute(
 	if err := request.Validate(); err != nil {
 		return workers.ExecuteResult{}, err
 	}
+	if !request.Target.Environment.SkipProcessInheritance &&
+		len(request.Target.Environment.ProcessEnvironment) == 0 {
+		request.Target.Environment.ProcessEnvironment = os.Environ()
+	}
 	correlation := request.Correlation
 	if request.Target.Noop {
 		return workers.ExecuteResult{
@@ -72,6 +77,7 @@ func (s *Service) prepareAttempt(
 		return "", contextErr
 	}
 	identity := resolveRunnerIdentity(request.Target)
+	request.Target.Tools.RequiredOptionalCapabilities = requiredOptionalCapabilities(*request, identity)
 	if err := s.authorizeProviderTarget(ctx, request, identity); err != nil {
 		return "", err
 	}
@@ -191,6 +197,9 @@ func (s *Service) runRunner(
 	}
 	if request.Input.ProgressPublisher != nil {
 		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
+	}
+	if request.Input.ScriptEventRecorder != nil {
+		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if s.providerOverride != nil && identity == runners.AgentIdentity {

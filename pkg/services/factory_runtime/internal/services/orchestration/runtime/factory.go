@@ -940,6 +940,30 @@ func lifecycleControlStatusFromWorldState(worldState *interfaces.FactoryWorldSta
 	return ""
 }
 
+// SetProgressPublisher installs the Runtime-owned observation bridge.
+func (f *factoryImpl) SetProgressPublisher(publisher workers.ProgressPublisher) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.progressPublisher = publisher
+}
+
+// SetMockWorkersConfig installs a cloned request-scoped testing override.
+func (f *factoryImpl) SetMockWorkersConfig(config *workers.MockWorkersConfig) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.mockWorkersConfig = config.Clone()
+}
+
+// SetPromptSourceReader installs the read-only prompt-source filesystem edge.
+func (f *factoryImpl) SetPromptSourceReader(reader func(string) ([]byte, error)) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.promptSourceReader = reader
+}
+
 // schedulerAdapter adapts factory.TransitionScheduler to scheduler.Scheduler.
 type schedulerAdapter struct {
 	inner scheduler.Scheduler

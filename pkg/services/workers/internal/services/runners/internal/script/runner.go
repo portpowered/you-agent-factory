@@ -108,6 +108,7 @@ func (r *runner) Execute(
 ) (workers.RunnerExecutionResult, error) {
 	effective := *r
 	effective.publish = workerexecution.ProgressPublisherFromContext(ctx, r.publish)
+	effective.record = workerexecution.ScriptEventRecorderFromContext(ctx, r.record)
 	return effective.execute(ctx, request)
 }
 

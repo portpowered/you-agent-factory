@@ -10,15 +10,14 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// startThroughStatelessWorkers is the Runtime-owned WSE-B dispatch edge. The
-// legacy workstation request is used only as an internal compatibility input
-// while Runtime projects it into the detached Execute contract. No executor,
-// runner, pool, or binding is passed to Workers.
+// startThroughStatelessWorkers is the Runtime-owned WSE-B dispatch edge; the
+// compatibility request is projected into the detached Execute contract.
 func startThroughStatelessWorkers(
 	ctx context.Context,
 	cfg *runtimeConfig,
@@ -363,17 +362,23 @@ func executeRequestFromWorkstationRequest(
 	dispatch := execution.Dispatch
 	workstationName := firstRuntimeValue(request.WorkstationName, dispatch.WorkstationName)
 	request.WorkstationName = workstationName
-	inputs, invocation, attemptNumber := workInputsFromDispatch(dispatch)
+	tokens := workers.WorkDispatchInputTokens(dispatch)
+	_, invocation, _ := workInputsFromTokens(tokens, dispatch)
 	correlation, err := executionCorrelationFromDispatch(cfg, execution, dispatch)
 	if err != nil {
 		return workers.ExecuteRequest{}, err
 	}
+	orderedTokens, err := orderedRuntimeWorkDispatchTokens(cfg, request, &invocation)
+	if err != nil {
+		return workers.ExecuteRequest{}, err
+	}
+	inputs, invocation, attemptNumber := workInputsFromTokens(orderedTokens, dispatch)
 	selection := resolveRuntimeExecutionSelection(cfg, request, inputs, &invocation)
 	workflowContext := runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext)
 	if err := renderRuntimePrompt(
 		cfg,
 		&selection,
-		workers.WorkDispatchInputTokens(dispatch),
+		orderedTokens,
 		workflowContext,
 		inputs,
 		&invocation,
@@ -386,19 +391,31 @@ func executeRequestFromWorkstationRequest(
 			selection, workstationName, execution.ProcessEnvironment,
 		),
 		Input: workers.ExecutionInput{
-			Work:              inputs,
-			Dispatch:          work.CloneWorkDispatch(dispatch),
-			RecordingID:       execution.RecordingID,
-			Invocation:        invocation,
-			ModelBindings:     workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
-			ModelOperation:    firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
-			Resume:            continuationFromLegacySession(execution.ResumeSession),
-			WorkflowContext:   workflowContext,
-			MockWorkers:       cfg.mockWorkersConfig.Clone(),
-			ProgressPublisher: cfg.progressPublisher,
+			Work:                inputs,
+			Dispatch:            work.CloneWorkDispatch(dispatch),
+			RecordingID:         execution.RecordingID,
+			Invocation:          invocation,
+			ModelBindings:       workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelOperation:      firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
+			Resume:              continuationFromLegacySession(execution.ResumeSession),
+			WorkflowContext:     workflowContext,
+			MockWorkers:         cfg.mockWorkersConfig.Clone(),
+			ProgressPublisher:   cfg.progressPublisher,
+			ScriptEventRecorder: runtimeScriptEventRecorder(cfg),
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
+}
+
+func runtimeScriptEventRecorder(cfg *runtimeConfig) workers.ScriptEventRecorder {
+	if cfg == nil || cfg.eventHistory == nil {
+		return nil
+	}
+	recorder, ok := cfg.eventHistory.(recordings.WorkerEventRecorder)
+	if !ok || recorder == nil {
+		return nil
+	}
+	return recorder.RecordScriptEvent
 }
 
 func executionCorrelationFromDispatch(
@@ -529,7 +546,10 @@ func executionTargetFromSelection(
 }
 
 func workInputsFromDispatch(dispatch work.WorkDispatch) ([]workers.WorkInput, work.InvocationArguments, int) {
-	tokens := workers.WorkDispatchInputTokens(dispatch)
+	return workInputsFromTokens(workers.WorkDispatchInputTokens(dispatch), dispatch)
+}
+
+func workInputsFromTokens(tokens []workers.Token, dispatch work.WorkDispatch) ([]workers.WorkInput, work.InvocationArguments, int) {
 	inputs := make([]workers.WorkInput, 0, len(tokens))
 	invocation := work.InvocationArguments{}
 	attemptNumber := 1

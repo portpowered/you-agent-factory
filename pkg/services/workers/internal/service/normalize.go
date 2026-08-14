@@ -23,7 +23,7 @@ func (s *Service) normalizeResult(
 ) workers.ExecuteResult {
 	result := baseExecuteResult(correlation, request, runnerResult, duration)
 	if runErr == nil {
-		result, runErr = normalizeSuccessfulResult(result, request, runnerResult)
+		result, runErr = s.normalizeSuccessfulResult(result, request, runnerResult)
 	}
 	if runErr == nil {
 		return result
@@ -45,7 +45,7 @@ func baseExecuteResult(
 	}
 }
 
-func normalizeSuccessfulResult(
+func (s *Service) normalizeSuccessfulResult(
 	result workers.ExecuteResult,
 	request workers.ExecuteRequest,
 	runnerResult workers.RunnerExecutionResult,
@@ -55,7 +55,24 @@ func normalizeSuccessfulResult(
 	switch result.Outcome {
 	case workers.ExecutionOutcomeFailed:
 		return result, errors.New("runner returned failed outcome")
+	case workers.ExecutionOutcomeRejected:
+		if s != nil && s.providerOverride != nil && resolveRunnerIdentity(request.Target) == runners.AgentIdentity {
+			message, _ := workerexecutor.CompletionValidationFailure(runnerResult)
+			return result, workers.NewProviderError(workers.WorkFailureTypeUnknown, message, nil)
+		}
 	case workers.ExecutionOutcomeAccepted:
+		if schema := strings.TrimSpace(request.Target.Prompt.OutputSchema); schema != "" {
+			structured, err := workerexecutor.ParseOutputAgainstSchema(runnerResult.Content, schema)
+			if err != nil {
+				return result, workers.NewProviderError(
+					workers.WorkFailureTypePermanentBadRequest,
+					"structured output schema violation: "+err.Error(),
+					nil,
+				)
+			}
+			result.StructuredResult = structured
+			result.StructuredResultPresent = true
+		}
 		if err := workerexecutor.ValidateOutputContract(runnerResult.Content, request.Target.Output.Contract); err != nil {
 			return result, workers.NewProviderError(
 				workers.WorkFailureTypePermanentBadRequest,

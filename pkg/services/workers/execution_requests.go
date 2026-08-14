@@ -537,7 +537,8 @@ type ExecutionInput struct {
 	MockWorkers *MockWorkersConfig
 	// ProgressPublisher carries the Runtime-selected observation sink for this
 	// attempt. It is an execution capability, not retained Workers state.
-	ProgressPublisher ProgressPublisher `json:"-"`
+	ProgressPublisher   ProgressPublisher   `json:"-"`
+	ScriptEventRecorder ScriptEventRecorder `json:"-"`
 }
 
 type WorkInput struct {
