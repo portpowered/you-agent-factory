@@ -12,7 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -458,6 +460,285 @@ func TestIsLogicalWorkstationDispatchUsesRuntimeDefinitionLookup(t *testing.T) {
 	}
 }
 
+func TestOrderedRuntimeWorkDispatchTokensUsesAuthoredInputAndResourceOrder(t *testing.T) {
+	t.Parallel()
+
+	token := func(id, place string) workers.Token {
+		return workers.Token{ID: id, PlaceID: place}
+	}
+	dispatch := work.WorkDispatch{InputTokens: workers.InputTokens(
+		token("unmatched", "other:state"),
+		token("resource", "gpu:available"),
+		token("input", "task:ready"),
+	)}
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "invoke",
+		Execution:       workers.WorkstationExecutionRequest{Dispatch: dispatch},
+	}
+	workstation := &interfaces.FactoryWorkstationConfig{
+		Type: interfaces.WorkstationTypeInference,
+		Inputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "ready",
+		}},
+		Resources: []interfaces.ResourceConfig{{Name: "gpu"}},
+	}
+	cfg := &runtimeConfig{runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{"invoke": workstation},
+	}}
+
+	ordered, err := orderedRuntimeWorkDispatchTokens(cfg, request, nil)
+	if err != nil {
+		t.Fatalf("orderedRuntimeWorkDispatchTokens() error = %v", err)
+	}
+	if len(ordered) != 3 || ordered[0].ID != "input" || ordered[1].ID != "resource" || ordered[2].ID != "unmatched" {
+		t.Fatalf("ordered tokens = %#v, want input/resource/unmatched order", ordered)
+	}
+
+	unchangedCases := []struct {
+		name string
+		cfg  *runtimeConfig
+		req  workers.WorkstationDispatchRequest
+	}{
+		{name: "short dispatch", cfg: cfg, req: workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{InputTokens: workers.InputTokens(token("only", "task:ready"))}}}},
+		{name: "missing lookup", cfg: nil, req: request},
+		{name: "missing workstation", cfg: &runtimeConfig{runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{}}, req: request},
+	}
+	for _, test := range unchangedCases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			got, err := orderedRuntimeWorkDispatchTokens(test.cfg, test.req, nil)
+			if err != nil {
+				t.Fatalf("orderedRuntimeWorkDispatchTokens() error = %v", err)
+			}
+			want := workers.WorkDispatchInputTokens(test.req.Execution.Dispatch)
+			if len(got) != len(want) {
+				t.Fatalf("ordered tokens = %#v, want unchanged length %d", got, len(want))
+			}
+			for index := range want {
+				if got[index].ID != want[index].ID {
+					t.Fatalf("ordered token %d = %#v, want unchanged token %#v", index, got[index], want[index])
+				}
+			}
+		})
+	}
+}
+
+func TestAttemptLifecycleAllowsExplicitRetryAfterTerminal(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	})
+	lifecycle := newAttemptLifecycle(service, func() string { return "generated-attempt" }, 1)
+	terminal := func(_ context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, err error) {
+		if err != nil || result.Outcome != workers.ExecutionOutcomeAccepted {
+			t.Errorf("terminal callback = result %#v, error %v; want accepted result", result, err)
+		}
+	}
+
+	if err := lifecycle.start(context.Background(), attemptTestRequest("dispatch-retry", "attempt-1"), false, terminal); err != nil {
+		t.Fatalf("start(first) error = %v", err)
+	}
+	if err := lifecycle.startRetry(context.Background(), attemptTestRequest("dispatch-retry", "attempt-2"), false, terminal); err != nil {
+		t.Fatalf("startRetry(second) error = %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("Execute calls = %d, want two attempts", calls)
+	}
+	if got, ok := lifecycle.terminalAttemptID("dispatch-retry"); !ok || got != "attempt-2" {
+		t.Fatalf("terminal attempt = %q, %v; want attempt-2, true", got, ok)
+	}
+}
+
+func TestFailedWorkstationDispatchResultPreservesDispatchFailureIdentity(t *testing.T) {
+	t.Parallel()
+
+	dispatchErr := errors.New("provider failed")
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "station",
+		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID:   "dispatch-failed",
+			TransitionID: "transition-failed",
+		}},
+	}
+	result, err := failedWorkstationDispatchResult(request, dispatchErr)
+	if !errors.Is(err, dispatchErr) {
+		t.Fatalf("failedWorkstationDispatchResult() error = %v, want original error", err)
+	}
+	if result.DispatchID != "dispatch-failed" || result.WorkstationName != "station" ||
+		result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed ||
+		result.Result.DispatchID != "dispatch-failed" || result.Result.TransitionID != "transition-failed" ||
+		result.Result.Outcome != workers.OutcomeFailed || result.Result.Error != dispatchErr.Error() {
+		t.Fatalf("failed dispatch result = %#v, want dispatch failure identity", result)
+	}
+}
+
+func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.T) {
+	t.Parallel()
+
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"mode": {Values: []string{"fast"}},
+	}}
+	dispatch := work.WorkDispatch{
+		TransitionID: "transition-inputs",
+		InputTokens: workers.InputTokens(
+			workers.Token{ID: "resource", Color: workers.Color{DataType: workers.DataTypeResource}},
+			workers.Token{
+				ID: "legacy",
+				Color: workers.Color{
+					DataType:            workers.DataTypeWork,
+					WorkID:              "work-legacy",
+					WorkTypeID:          "task",
+					RequestID:           "request-legacy",
+					Payload:             []byte("legacy payload"),
+					Tags:                map[string]string{"source": "legacy"},
+					InvocationArguments: invocation,
+				},
+				History: workers.History{
+					TotalVisits: map[string]int{"transition-inputs": 2},
+					FailureLog:  []workers.Failure{{Error: "last failure"}},
+				},
+			},
+			workers.Token{
+				ID: "content",
+				Color: workers.Color{
+					DataType:   workers.DataTypeWork,
+					WorkID:     "work-content",
+					WorkTypeID: "review",
+					Content: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
+						Text: "content body",
+					}},
+				},
+				History: workers.History{TotalVisits: map[string]int{"transition-inputs": 4}},
+			},
+		),
+	}
+
+	inputs, gotInvocation, attempt := workInputsFromDispatch(dispatch)
+	if len(inputs) != 2 || attempt != 5 {
+		t.Fatalf("work inputs = %#v, attempt = %d; want two inputs and attempt 5", inputs, attempt)
+	}
+	if gotInvocation.Arguments["mode"].Values[0] != "fast" {
+		t.Fatalf("invocation arguments = %#v, want cloned mode argument", gotInvocation)
+	}
+	if inputs[0].WorkID != "work-legacy" || inputs[0].Content[0].Text != "legacy payload" ||
+		inputs[0].AttemptFacts.AttemptNumber != 3 || inputs[0].AttemptFacts.LastFailure != "last failure" ||
+		inputs[0].Tags["source"] != "legacy" {
+		t.Fatalf("legacy input = %#v, want payload fallback and attempt facts", inputs[0])
+	}
+	if inputs[1].WorkID != "work-content" || inputs[1].Content[0].Text != "content body" || inputs[1].AttemptFacts.AttemptNumber != 5 {
+		t.Fatalf("content input = %#v, want content and attempt facts", inputs[1])
+	}
+}
+
+func TestDetachedResultMaterializationMapsTerminalOutcomes(t *testing.T) {
+	t.Parallel()
+
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "review",
+		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID:   "dispatch-outcomes",
+			TransitionID: "transition-outcomes",
+		}},
+	}
+	tests := []struct {
+		name          string
+		outcome       workers.ExecutionOutcome
+		executeErr    error
+		wantTerminal  workers.WorkstationDispatchTerminalOutcome
+		wantWork      workers.WorkOutcome
+		wantErrorText string
+	}{
+		{name: "accepted", outcome: workers.ExecutionOutcomeAccepted, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCompleted, wantWork: workers.OutcomeAccepted},
+		{name: "continue", outcome: workers.ExecutionOutcomeContinue, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCompleted, wantWork: workers.OutcomeContinue},
+		{name: "rejected", outcome: workers.ExecutionOutcomeRejected, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCompleted, wantWork: workers.OutcomeRejected},
+		{name: "canceled", outcome: workers.ExecutionOutcomeCanceled, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCanceled, wantWork: workers.OutcomeFailed, wantErrorText: workers.ErrWorkstationDispatchCanceled.Error()},
+		{name: "unknown", outcome: workers.ExecutionOutcome("unexpected"), wantTerminal: workers.WorkstationDispatchTerminalOutcomeFailed, wantWork: workers.OutcomeFailed},
+		{name: "execution error", outcome: workers.ExecutionOutcomeAccepted, executeErr: errors.New("transport failed"), wantTerminal: workers.WorkstationDispatchTerminalOutcomeFailed, wantWork: workers.OutcomeFailed, wantErrorText: "transport failed"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			result, err := workstationDispatchResultFromExecute(request, workers.ExecuteResult{Outcome: test.outcome}, test.executeErr)
+			if !errors.Is(err, test.executeErr) {
+				t.Fatalf("workstationDispatchResultFromExecute() error = %v, want %v", err, test.executeErr)
+			}
+			if result.TerminalOutcome != test.wantTerminal || result.Result.Outcome != test.wantWork {
+				t.Fatalf("result = %#v, want terminal %q and Work outcome %q", result, test.wantTerminal, test.wantWork)
+			}
+			if test.wantErrorText != "" && result.Result.Error != test.wantErrorText {
+				t.Fatalf("result error = %q, want %q", result.Result.Error, test.wantErrorText)
+			}
+		})
+	}
+}
+
+func TestProviderSessionFromContinuationUsesAvailableIdentity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		continuation *workers.ProviderContinuationRef
+		wantNil      bool
+		wantProvider string
+		wantID       string
+	}{
+		{name: "nil", wantNil: true},
+		{name: "session ID", continuation: &workers.ProviderContinuationRef{Provider: "codex", ProviderSessionID: "session-1"}, wantProvider: "codex", wantID: "session-1"},
+		{name: "external reference", continuation: &workers.ProviderContinuationRef{Provider: "codex", ExternalRef: "external-1"}, wantProvider: "codex", wantID: "external-1"},
+		{name: "provider only", continuation: &workers.ProviderContinuationRef{Provider: "codex"}, wantProvider: "codex"},
+		{name: "empty", continuation: &workers.ProviderContinuationRef{}, wantNil: true},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			got := providerSessionFromContinuation(test.continuation)
+			if test.wantNil {
+				if got != nil {
+					t.Fatalf("providerSessionFromContinuation() = %#v, want nil", got)
+				}
+				return
+			}
+			if got == nil || got.Provider != test.wantProvider || got.ID != test.wantID {
+				t.Fatalf("providerSessionFromContinuation() = %#v, want provider %q and ID %q", got, test.wantProvider, test.wantID)
+			}
+		})
+	}
+}
+
+func TestMapDispatchPlanningErrorPreservesPublicBoundaryTypes(t *testing.T) {
+	t.Parallel()
+
+	plain := errors.New("plain planning error")
+	tests := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "duplicate", err: dispatchplanning.ErrDuplicateDispatchIntent, want: factory.ErrDuplicateDispatchIntent},
+		{name: "unknown correlation", err: dispatchplanning.ErrUnknownDispatchCorrelation, want: factory.ErrUnknownDispatchCorrelation},
+		{name: "invalid result", err: dispatchplanning.ErrInvalidDispatchResultBoundary, want: factory.ErrInvalidDispatchResultBoundary},
+		{name: "invalid decision", err: dispatchplanning.ErrInvalidRunnableDecision, want: factory.ErrInvalidDispatchResultBoundary},
+		{name: "unrelated", err: plain, want: plain},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			got := mapDispatchPlanningError(test.err)
+			if !errors.Is(got, test.want) {
+				t.Fatalf("mapDispatchPlanningError(%v) = %v, want %v", test.err, got, test.want)
+			}
+			if test.name == "unrelated" && got != test.err {
+				t.Fatalf("unrelated error = %v, want original error identity", got)
+			}
+		})
+	}
+}
+
 type runtimePromptRendererFunc func(string, []workers.Token, *workers.Context) (string, error)
 
 func (renderer runtimePromptRendererFunc) RenderPrompt(
@@ -604,6 +885,26 @@ func TestSafeRuntimeExpectedArtifactPatternRejectsHostEscapes(t *testing.T) {
 	}
 	if normalized, ok := safeRuntimeExpectedArtifactPattern("reports/*.md"); !ok || normalized != "reports/*.md" {
 		t.Fatalf("safeRuntimeExpectedArtifactPattern(valid) = %q, %t", normalized, ok)
+	}
+}
+
+func TestPathExistsUsesTheInjectedArtifactFilesystem(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	existing := filepath.Join(workspace, "existing.txt")
+	if err := os.WriteFile(existing, []byte("content"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	fileSystem := platformfilesystem.Local{}
+	if pathExists(existing, fileSystem) != true {
+		t.Fatal("pathExists(existing) = false, want true")
+	}
+	if pathExists(filepath.Join(workspace, "missing.txt"), fileSystem) {
+		t.Fatal("pathExists(missing) = true, want false")
+	}
+	if pathExists(existing, nil) {
+		t.Fatal("pathExists(existing, nil filesystem) = true, want false")
 	}
 }
 
