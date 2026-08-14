@@ -10,7 +10,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -411,17 +410,6 @@ func executeRequestFromWorkstationRequest(
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
-}
-
-func runtimeScriptEventRecorder(cfg *runtimeConfig) workers.ScriptEventRecorder {
-	if cfg == nil || cfg.eventHistory == nil {
-		return nil
-	}
-	recorder, ok := cfg.eventHistory.(recordings.WorkerEventRecorder)
-	if !ok || recorder == nil {
-		return nil
-	}
-	return recorder.RecordScriptEvent
 }
 
 func executionCorrelationFromDispatch(
@@ -950,14 +938,6 @@ func providerInvocationExecutionRequest(
 			WorkingDirectory: strings.TrimSpace(req.WorkingDirectory),
 		},
 	}
-}
-
-func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
 }
 
 // invokeWorkerResultFrom narrows one Worker Sessions outcome onto the caller

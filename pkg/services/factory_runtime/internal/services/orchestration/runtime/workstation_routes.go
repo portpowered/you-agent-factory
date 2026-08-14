@@ -313,25 +313,6 @@ func applyRuntimeWorkerSelection(
 	return nil
 }
 
-func interpolateRuntimeWorkerPrompt(
-	cfg *runtimeConfig,
-	body string,
-	invocation *work.InvocationArguments,
-) (string, error) {
-	if cfg == nil || cfg.invocationInterpolation == nil {
-		return body, nil
-	}
-	interpolated, err := cfg.invocationInterpolation.InterpolateWorkerConfig(
-		interfaces.FactoryWorkerConfig{Body: body},
-		invocation,
-		cfg.invocationFileReader,
-	)
-	if err != nil {
-		return "", err
-	}
-	return interpolated.Body, nil
-}
-
 func applyRuntimeWorkstationSelection(
 	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
