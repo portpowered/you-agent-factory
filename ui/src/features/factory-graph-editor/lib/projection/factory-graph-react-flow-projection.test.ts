@@ -95,9 +95,10 @@ describe("factory graph React Flow projection", () => {
       { x: 0, y: 0 },
     );
 
-    const node = projectFactoryGraphToReactFlow({ layout, topology }).nodes.find(
-      (candidate) => candidate.id === "workstation:draft",
-    );
+    const node = projectFactoryGraphToReactFlow({
+      layout,
+      topology,
+    }).nodes.find((candidate) => candidate.id === "workstation:draft");
 
     expect(node).toMatchObject({
       height: 340,
@@ -119,12 +120,13 @@ describe("factory graph React Flow projection", () => {
       { x: 0, y: 0 },
     );
 
-    const node = projectFactoryGraphToReactFlow({ layout, topology }).nodes.find(
-      (candidate) => candidate.id === "workstation:draft",
-    );
+    const node = projectFactoryGraphToReactFlow({
+      layout,
+      topology,
+    }).nodes.find((candidate) => candidate.id === "workstation:draft");
 
-    expect(node?.height).toBeFinite();
-    expect(node?.width).toBeFinite();
+    expect(Number.isFinite(node?.height)).toBe(true);
+    expect(Number.isFinite(node?.width)).toBe(true);
     expect(node?.measured?.height).toBe(node?.height);
     expect(node?.measured?.width).toBe(node?.width);
   });

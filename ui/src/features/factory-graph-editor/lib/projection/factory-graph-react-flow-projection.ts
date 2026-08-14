@@ -34,8 +34,8 @@ import {
 } from "../editor/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../editor-runtime/factory-graph-editor-runtime";
 import {
-  factoryLayoutNodeSize,
   type FactoryLayout,
+  factoryLayoutNodeSize,
 } from "../layout/factory-graph-layout-operations";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../operations/factory-graph-customer-display";
 import {
@@ -259,7 +259,8 @@ function buildFactoryGraphReactFlowNode(input: {
           ),
         )
       : undefined;
-  const authoredLayout = input.input.layout ?? input.input.factoryDefinition?.layout;
+  const authoredLayout =
+    input.input.layout ?? input.input.factoryDefinition?.layout;
   const dimensions = resolveFactoryGraphNodeDimensions(input.node.kind, {
     authoredDimensions: authoredLayout
       ? factoryLayoutNodeSize(authoredLayout, input.node.id)

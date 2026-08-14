@@ -1,19 +1,18 @@
-import { resolveFactoryGraphNodeDimensions } from "@you-agent-factory/factory-graph";
 import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import type { components } from "../../../../api/generated/openapi";
-import type {
-  FactoryGraphNode,
-  FactoryGraphTopology,
-} from "../draft/factory-graph-draft-types";
+import type { FactoryGraphTopology } from "../draft/factory-graph-draft-types";
 import {
   type FactoryLayoutEdge,
   factoryLayoutEdgeWaypoints,
   isValidFactoryLayoutPoint,
 } from "./factory-graph-layout-edge-waypoints";
+import { normalizeFactoryLayoutNodeSizesForTopology } from "./factory-graph-layout-node-size-validation";
 import {
   FACTORY_LAYOUT_SCHEMA_VERSION,
   type FactoryLayout,
 } from "./factory-graph-layout-operations";
+
+export { normalizeFactoryLayoutNodeSizesForTopology } from "./factory-graph-layout-node-size-validation";
 
 type FactoryLayoutGroup = NonNullable<
   components["schemas"]["Factory"]["layout"]
@@ -315,55 +314,6 @@ export function resolveFactoryLayoutEdgeWaypointsForRendering(
   return factoryLayoutEdgeWaypoints(layout, edgeId);
 }
 
-/** Normalize authored node sizes before they enter the persisted Factory layout. */
-export function normalizeFactoryLayoutNodeSizesForTopology(
-  layout: FactoryLayout,
-  topology: FactoryGraphTopology,
-): FactoryLayout {
-  const topologyNodesById = new Map(
-    topology.nodes.map((node) => [node.id, node]),
-  );
-  let didChange = false;
-  const nodes = (layout.nodes ?? []).map((node) => {
-    if (node.size === undefined) {
-      return node;
-    }
-
-    const topologyNode = topologyNodesById.get(node.id);
-    if (!topologyNode) {
-      if (isFinitePositiveLayoutNodeSize(node.size)) {
-        return node;
-      }
-
-      didChange = true;
-      const { size: _size, ...nodeWithoutSize } = node;
-      return nodeWithoutSize;
-    }
-
-    const normalizedSize = resolveFactoryGraphNodeDimensions(
-      topologyNode.kind,
-      {
-        authoredDimensions: node.size,
-        content: sizingContentForFactoryGraphNode(topologyNode),
-      },
-    ).resolvedDimensions;
-    if (
-      normalizedSize.width === node.size.width &&
-      normalizedSize.height === node.size.height
-    ) {
-      return node;
-    }
-
-    didChange = true;
-    return {
-      ...node,
-      size: normalizedSize,
-    };
-  });
-
-  return didChange ? { ...layout, nodes } : layout;
-}
-
 export function projectFactoryLayoutValidationTargets(
   layout: FactoryLayout,
   topology: FactoryGraphTopology,
@@ -397,30 +347,6 @@ export function preparePendingFactoryLayoutForSave(
   return {
     layout: normalizedLayout,
   };
-}
-
-function sizingContentForFactoryGraphNode(
-  node: FactoryGraphNode,
-): readonly string[] {
-  if (node.key.kind === "doc") {
-    return [node.label, node.key.name];
-  }
-  if (node.key.kind === "work-state") {
-    return [node.label, node.key.workTypeName, node.key.stateName];
-  }
-  return [node.label];
-}
-
-function isFinitePositiveLayoutNodeSize(size: {
-  height: number;
-  width: number;
-}): boolean {
-  return (
-    Number.isFinite(size.width) &&
-    Number.isFinite(size.height) &&
-    size.width > 0 &&
-    size.height > 0
-  );
 }
 
 function toFactoryValidationTarget(

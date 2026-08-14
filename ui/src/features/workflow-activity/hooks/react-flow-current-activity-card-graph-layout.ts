@@ -4,8 +4,8 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
-  factoryLayoutFromDefinition,
   type FactoryLayout,
+  factoryLayoutFromDefinition,
 } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { GraphLayout } from "../../flowchart/lib/layout";

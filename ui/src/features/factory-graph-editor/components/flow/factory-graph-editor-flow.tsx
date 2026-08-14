@@ -27,10 +27,10 @@ import type {
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "../../lib/draft/factory-graph-draft-types";
-import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import type { FactoryGraphConnectionEndpoint } from "../../lib/editor/factory-graph-editor-connections";
 import { createFactoryGraphWorkstationResolver } from "../../lib/editor/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../../lib/editor-runtime/factory-graph-editor-runtime";
+import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,

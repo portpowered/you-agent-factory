@@ -35,6 +35,7 @@ function factoryWithSupportingFiles(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: layout fixture scenarios stay grouped around one canonical builder.
 describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
   it("includes bundled source files in the canonical factory graph layout", async () => {
     const layout = await buildCurrentActivityGraphLayoutFromFactory(
@@ -158,9 +159,8 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       },
     };
 
-    const layout = await buildCurrentActivityGraphLayoutFromFactory(
-      factoryWithLayout,
-    );
+    const layout =
+      await buildCurrentActivityGraphLayoutFromFactory(factoryWithLayout);
     const workstation = layout.nodes.find(
       (node) => node.nodeId === "workstation:writer",
     );
@@ -169,8 +169,8 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
     );
 
     expect(workstation).toMatchObject({ height: 420, width: 320 });
-    expect(doc?.height).toBeFinite();
-    expect(doc?.width).toBeFinite();
+    expect(Number.isFinite(doc?.height)).toBe(true);
+    expect(Number.isFinite(doc?.width)).toBe(true);
   });
 
   it("projects the shipped goal state inventory without the removed execute state", async () => {

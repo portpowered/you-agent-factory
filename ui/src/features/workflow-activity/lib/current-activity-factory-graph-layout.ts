@@ -22,15 +22,15 @@ import {
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import {
+  type FactoryLayout,
+  factoryLayoutFromDefinition,
+  factoryLayoutNodeSize,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import {
-  factoryLayoutFromDefinition,
-  factoryLayoutNodeSize,
-  type FactoryLayout,
-} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
 import {
@@ -330,9 +330,7 @@ export function applyFactoryLayoutNodeSizesToGraphLayout(input: {
   };
 }
 
-function familyForPositionedNode(
-  node: PositionedNode,
-): FactoryGraphNodeFamily {
+function familyForPositionedNode(node: PositionedNode): FactoryGraphNodeFamily {
   switch (node.nodeKind) {
     case "doc":
       return "doc";
