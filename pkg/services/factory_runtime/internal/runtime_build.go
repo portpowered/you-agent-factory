@@ -57,13 +57,23 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	}
 	if commandRunner != nil {
 		// Session build specs may carry a raw injected command edge (or a
-		// mock wrapper around one). Preserve the runtime's command diagnostics
-		// when that edge replaces the stateless service's construction runner.
-		// Existing logging runners already consult the request-scoped logger.
-		switch commandRunner.(type) {
-		case workers.LoggingCommandRunner, *workers.LoggingCommandRunner:
-		default:
-			if request.Input.ExecutionLogger != nil && service.clock != nil {
+		// process-scoped logging runner). Clone logging runners before binding
+		// the opened Runtime's sink so concurrent sessions never mutate shared
+		// command-runner state.
+		if request.Input.ExecutionLogger != nil && service.clock != nil {
+			switch typed := commandRunner.(type) {
+			case workers.LoggingCommandRunner:
+				typed.Logger = request.Input.ExecutionLogger
+				typed.Clock = service.clock
+				commandRunner = typed
+			case *workers.LoggingCommandRunner:
+				if typed != nil {
+					clone := *typed
+					clone.Logger = request.Input.ExecutionLogger
+					clone.Clock = service.clock
+					commandRunner = &clone
+				}
+			default:
 				commandRunner = workers.CommandRunnerWithLogging(
 					commandRunner,
 					request.Input.ExecutionLogger,

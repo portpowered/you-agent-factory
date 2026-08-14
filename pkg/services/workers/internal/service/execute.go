@@ -220,9 +220,6 @@ func (s *Service) runRunner(
 	if request.Input.CommandRunnerOverride != nil {
 		ctx = workerexecution.WithCommandRunnerOverride(ctx, request.Input.CommandRunnerOverride)
 	}
-	if request.Input.ExecutionLogger != nil {
-		ctx = workers.WithExecutionLogger(ctx, request.Input.ExecutionLogger)
-	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if providerOverride != nil && identity == runners.AgentIdentity &&
 		!usesACPProvider(runnerRequest.ExecutorProvider) {
