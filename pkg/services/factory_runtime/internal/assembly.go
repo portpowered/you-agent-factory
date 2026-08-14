@@ -199,6 +199,7 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
 	instance, err := builder.Build(ctx, spec)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
@@ -219,4 +220,15 @@ func (a *Assembly) Assemble(
 		lifecycle,
 		NewRuntimeSidecars(automationService, serviceMode),
 		nil
+}
+
+func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []factorydefinitions.FactoryEvent {
+	if artifact == nil || len(artifact.Events) == 0 {
+		return nil
+	}
+	events := make([]factorydefinitions.FactoryEvent, len(artifact.Events))
+	for index, event := range artifact.Events {
+		events[index] = event.Clone()
+	}
+	return events
 }

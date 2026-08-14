@@ -20,6 +20,7 @@ type mockWorkersConfigKey struct{}
 type mockWorkerOutputPolicyKey struct{}
 type progressPublisherKey struct{}
 type scriptEventRecorderKey struct{}
+type commandRunnerOverrideKey struct{}
 
 // WithMockWorkersConfig attaches a cloned, request-scoped mock override to a
 // detached Workers execution. The process-scoped Workers service retains no
@@ -94,6 +95,27 @@ func ScriptEventRecorderFromContext(ctx context.Context, fallback workers.Script
 	if ctx != nil {
 		if recorder, ok := ctx.Value(scriptEventRecorderKey{}).(workers.ScriptEventRecorder); ok && recorder != nil {
 			return recorder
+		}
+	}
+	return fallback
+}
+
+// WithCommandRunnerOverride attaches a runtime-scoped command effect to one
+// detached execution. The override is consumed by the Script Runner only and
+// does not mutate the process-scoped runner registry.
+func WithCommandRunnerOverride(ctx context.Context, runner workers.CommandRunner) context.Context {
+	if ctx == nil || runner == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, commandRunnerOverrideKey{}, runner)
+}
+
+// CommandRunnerOverrideFromContext resolves the optional runtime-scoped
+// command effect, falling back to the construction-time runner.
+func CommandRunnerOverrideFromContext(ctx context.Context, fallback workers.CommandRunner) workers.CommandRunner {
+	if ctx != nil {
+		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(workers.CommandRunner); ok && runner != nil {
+			return runner
 		}
 	}
 	return fallback

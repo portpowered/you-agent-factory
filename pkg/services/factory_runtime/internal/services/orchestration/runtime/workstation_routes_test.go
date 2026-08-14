@@ -157,7 +157,7 @@ func TestFinalizeRuntimeExecutionSelectionUsesProviderRunner(t *testing.T) {
 				model:         "model",
 				workerType:    interfaces.WorkerTypeModel,
 			}
-			finalizeRuntimeExecutionSelection(&selection, nil)
+			finalizeRuntimeExecutionSelection(nil, &selection, nil)
 			if selection.runnerID != test.wantRunner {
 				t.Fatalf("runnerID = %q, want %q; selection = %#v", selection.runnerID, test.wantRunner, selection)
 			}
@@ -173,7 +173,7 @@ func TestFinalizeRuntimeExecutionSelectionCanonicalizesACPProvider(t *testing.T)
 		workerType:    interfaces.WorkerTypeModel,
 	}
 
-	finalizeRuntimeExecutionSelection(&selection, nil)
+	finalizeRuntimeExecutionSelection(nil, &selection, nil)
 
 	if selection.providerID != "cursor-acp" || selection.runnerID != "cursor-acp" {
 		t.Fatalf("selection = %#v, want concrete ACP provider and runner", selection)
@@ -188,7 +188,7 @@ func TestFinalizeRuntimeExecutionSelectionCanonicalizesScriptWrapProvider(t *tes
 		workerType:    interfaces.WorkerTypeModel,
 	}
 
-	finalizeRuntimeExecutionSelection(&selection, nil)
+	finalizeRuntimeExecutionSelection(nil, &selection, nil)
 
 	if selection.providerID != "codex" || selection.runnerID != workers.RunnerIDCodex {
 		t.Fatalf("selection = %#v, want canonical codex provider and runner", selection)

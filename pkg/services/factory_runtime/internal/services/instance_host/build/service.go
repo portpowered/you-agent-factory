@@ -173,6 +173,7 @@ func (s *Service) BuildSpec(
 		ProviderOverride:      providerOverrideForMode(s.providerOverride, replayProvider),
 		ProviderCommandRunner: providerCommandRunnerForMode(s.mockWorkersConfig, s.providerCommandRunner, loadedFactoryCfg, s.newMockCommandRunner),
 		CommandRunnerOverride: commandRunnerOverrideForMode(s.mockWorkersConfig, s.scriptCommandRunner, loadedFactoryCfg, replayCommandRunner, s.newMockCommandRunner),
+		ReplayCommandRunner:   replayCommandRunner,
 		SubmissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
 		CompletionPlanner:     completionPlanner,
 		PetriMutationRecorder: s.petriMutationRecorder,

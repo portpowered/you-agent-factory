@@ -132,16 +132,18 @@ func provideConfiguredProvidersService(
 	}
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(workersRunner)
-		options = append(options, providerswire.WithWorkersCommandRunner(contextualRunner))
-		return newConfiguredProvidersService(options, contextualRunner)
+		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
+		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
 			workers.AdaptCommandRunner(edges.ProviderCommandRunner),
 		)
+		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithWorkersCommandRunner(contextualRunner))
-		return newConfiguredProvidersService(options, contextualRunner)
+		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
@@ -150,9 +152,21 @@ func provideConfiguredProvidersService(
 	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
 		workers.AdaptCommandRunner(commandRunner),
 	)
+	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithWorkersCommandRunner(contextualRunner))
-	return newConfiguredProvidersService(options, contextualRunner)
+	options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+	return newConfiguredProvidersService(options, loggedRunner)
+}
+
+func providerCommandRunnerWithLogging(
+	edges serviceedges.Edges,
+	runner workers.CommandRunner,
+) workers.CommandRunner {
+	return workers.LoggingCommandRunner{
+		Runner: runner,
+		Logger: logging.NoopLogger{},
+		Clock:  effectiveProviderCommandClock(edges),
+	}
 }
 
 func effectiveProviderCommandClock(edges serviceedges.Edges) workers.Clock {
@@ -773,12 +787,12 @@ func provideStatelessWorkersService(
 	if err != nil {
 		return nil, fmt.Errorf("construct stateless Workers: %w", err)
 	}
+	scriptRunnerWithMocks := workerswire.NewContextualMockWorkerCommandRunner(scriptCommandRunner)
 	scriptRunner := workers.LoggingCommandRunner{
-		Runner: scriptCommandRunner,
+		Runner: scriptRunnerWithMocks,
 		Logger: logging.NoopLogger{},
 		Clock:  workers.ClockFunc(clock.Now),
 	}
-	scriptRunnerWithMocks := workerswire.NewContextualMockWorkerCommandRunner(scriptRunner)
 	return workerswire.NewService(
 		workerswire.AgentDependencies{
 			Providers: providersService,
@@ -786,7 +800,7 @@ func provideStatelessWorkersService(
 		},
 		workerswire.ScriptConfig{RequestSelected: true},
 		workerswire.ScriptDependencies{
-			CommandRunner: scriptRunnerWithMocks,
+			CommandRunner: scriptRunner,
 			FactoryDocs:   factoryDocs,
 			Now:           clock.Now,
 			Publish:       func(workers.ProgressFragment) {},

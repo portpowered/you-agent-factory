@@ -1819,19 +1819,20 @@ func TestPrepareDetachedModelRecordingRecordsDetachedRequestAndResponse(t *testi
 		clock:          testRuntimeClock{},
 	}
 	request := modelRecordingRequest()
-	prepared := prepareDetachedModelRecording(cfg, func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	prepared := prepareDetachedModelRecording(cfg, func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		previousCalled = true
 		return func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {
 			previousTerminalCalled = true
 		}, nil
 	})
-	terminal, err := prepared(context.Background(), request)
+	terminal, err := prepared(context.Background(), &request)
 	if err != nil {
 		t.Fatalf("prepared() error = %v", err)
 	}
 	if !previousCalled {
 		t.Fatal("previous preparation was not called")
 	}
+	request.Input.PreparedRequestObserver(request)
 	assertDetachedModelRequestEvent(t, ledger.events)
 	terminal(context.Background(), request, workers.ExecuteResult{
 		Outcome: workers.ExecutionOutcomeAccepted,
@@ -2116,12 +2117,13 @@ func TestPrepareDetachedModelRecordingPreservesDisabledAndPreviousErrors(t *test
 	t.Parallel()
 
 	previousCalled := false
-	previous := func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	previous := func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		previousCalled = true
 		return nil, nil
 	}
 	prepared := prepareDetachedModelRecording(nil, previous)
-	if _, err := prepared(context.Background(), modelRecordingRequest()); err != nil {
+	disabledRequest := modelRecordingRequest()
+	if _, err := prepared(context.Background(), &disabledRequest); err != nil {
 		t.Fatalf("disabled preparation error = %v", err)
 	}
 	if !previousCalled {
@@ -2134,10 +2136,11 @@ func TestPrepareDetachedModelRecordingPreservesDisabledAndPreviousErrors(t *test
 		clock:          testRuntimeClock{},
 	}
 	wantErr := errors.New("previous preparation failed")
-	prepared = prepareDetachedModelRecording(cfg, func(context.Context, workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	prepared = prepareDetachedModelRecording(cfg, func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		return nil, wantErr
 	})
-	if _, err := prepared(context.Background(), modelRecordingRequest()); !errors.Is(err, wantErr) {
+	failedPreparationRequest := modelRecordingRequest()
+	if _, err := prepared(context.Background(), &failedPreparationRequest); !errors.Is(err, wantErr) {
 		t.Fatalf("previous preparation error = %v, want %v", err, wantErr)
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -29,6 +30,14 @@ func startThroughStatelessWorkers(
 	request = runtimeRecordingRequest(cfg, request)
 	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
 	if err != nil {
+		if isRuntimePromptRenderError(err) {
+			dispatchErr := fmt.Errorf("prompt render failed: %w", err)
+			result, resultErr := failedWorkstationDispatchResult(request, dispatchErr)
+			if accept != nil {
+				accept(context.Background(), request, result, resultErr)
+			}
+			return nil
+		}
 		return err
 	}
 	// Petri dispatches are single-attempt at this boundary. Keep their
@@ -197,7 +206,7 @@ func startStatelessAttemptWithRequestMode(
 				result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 				recordDetachedAgentRunResponse(cfg, executeRequest, result, executeErr)
 				dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-					request,
+					workstationDispatchRequestForResult(request, executeRequest),
 					result,
 					executeErr,
 				)
@@ -215,7 +224,7 @@ func startStatelessAttemptWithRequestMode(
 			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			recordDetachedAgentRunResponse(cfg, executeRequest, result, executeErr)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-				request,
+				workstationDispatchRequestForResult(request, executeRequest),
 				result,
 				executeErr,
 			)
@@ -294,7 +303,7 @@ func runtimeAttemptPreparation(
 	if !ok || recorder == nil {
 		return nil
 	}
-	return func(ctx context.Context, _ workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	return func(ctx context.Context, _ *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		sessionID := runtimeWorkerSessionID(cfg, request, executeRequest, allowRetry)
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
@@ -310,7 +319,7 @@ func runtimeAttemptPreparation(
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-				request,
+				workstationDispatchRequestForResult(request, executeRequest),
 				result,
 				executeErr,
 			)
@@ -375,6 +384,9 @@ func executeRequestFromWorkstationRequest(
 	}
 	inputs, invocation, attemptNumber := workInputsFromTokens(orderedTokens, dispatch)
 	selection := resolveRuntimeExecutionSelection(cfg, request, orderedTokens, inputs, &invocation)
+	if err := validateRuntimeExecutionSelection(selection); err != nil {
+		return workers.ExecuteRequest{}, err
+	}
 	workflowContext := runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext)
 	if err := renderRuntimePrompt(
 		cfg,
@@ -407,6 +419,7 @@ func executeRequestFromWorkstationRequest(
 			MockWorkers:         cfg.mockWorkersConfig.Clone(),
 			ProgressPublisher:   cfg.progressPublisher,
 			ScriptEventRecorder: runtimeScriptEventRecorder(cfg),
+			ExecutionLogger:     cfg.logger,
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
@@ -485,6 +498,16 @@ func executionTargetFromSelection(
 	workstationName string,
 	processEnvironment []string,
 ) workers.ExecutionTarget {
+	prepareFactoryWorktree := strings.TrimSpace(selection.worktree) != "" &&
+		!selection.workingDirectoryAuthored &&
+		strings.EqualFold(strings.TrimSpace(selection.modelProvider), string(modelprovider.ProviderCodex))
+	workingDirectory := selection.workingDirectory
+	if prepareFactoryWorktree {
+		// Workers prepares the checkout before adapting the runner request. Keep
+		// the preflight default out of the target so preparation can promote the
+		// checkout path to both the environment and workspace working directory.
+		workingDirectory = ""
+	}
 	return workers.ExecutionTarget{
 		WorkerName: selection.workerName,
 		// WorkerType is the authored worker identity carried into command
@@ -528,13 +551,16 @@ func executionTargetFromSelection(
 		Environment: workers.EnvironmentPolicy{
 			Vars:                selection.environment,
 			ProcessEnvironment:  append([]string(nil), processEnvironment...),
-			WorkingDirectory:    selection.workingDirectory,
+			WorkingDirectory:    workingDirectory,
 			WorkingDirectorySet: selection.workingDirectoryAuthored,
 		},
 		Workspace: workers.WorkspacePolicy{
-			Worktree:         selection.worktree,
-			WorkingDirectory: selection.workingDirectory,
-			FactoryDirectory: selection.factoryDirectory,
+			Worktree:           selection.worktree,
+			WorkingDirectory:   workingDirectory,
+			PrepareWorktree:    prepareFactoryWorktree,
+			RetainWorktree:     prepareFactoryWorktree,
+			FactoryDirectory:   selection.factoryDirectory,
+			CheckoutIdentifier: selection.worktree,
 		},
 		Permissions: workers.PermissionPolicy{SkipPermissions: selection.skipPermissions},
 	}

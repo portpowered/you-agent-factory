@@ -347,6 +347,14 @@ func workstationDispatchResultFromExecute(
 	}, executeErr
 }
 
+func workstationDispatchRequestForResult(
+	request workers.WorkstationDispatchRequest,
+	executeRequest workers.ExecuteRequest,
+) workers.WorkstationDispatchRequest {
+	request.Execution.RunnerID = strings.TrimSpace(executeRequest.Target.RunnerID)
+	return request
+}
+
 // shouldPropagateFailureMetadata preserves the script workstation boundary:
 // ordinary process failures are terminal Work results without retry metadata,
 // while timeout and missing-executable failures retain their explicit
@@ -581,7 +589,7 @@ func prepareDetachedModelRecording(cfg *runtimeConfig, previous attemptPreparati
 	if !runtimeModelRecordingEnabled(cfg) {
 		return previous
 	}
-	return func(ctx context.Context, request workers.ExecuteRequest) (attemptTerminalFunc, error) {
+	return func(ctx context.Context, request *workers.ExecuteRequest) (attemptTerminalFunc, error) {
 		var previousTerminal attemptTerminalFunc
 		var err error
 		if previous != nil {
@@ -590,7 +598,9 @@ func prepareDetachedModelRecording(cfg *runtimeConfig, previous attemptPreparati
 				return nil, err
 			}
 		}
-		recordDetachedModelRequest(cfg, request)
+		request.Input.PreparedRequestObserver = func(prepared workers.ExecuteRequest) {
+			recordDetachedModelRequest(cfg, prepared)
+		}
 		return func(terminalContext context.Context, terminalRequest workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 			recordDetachedModelResponse(cfg, terminalRequest, result, executeErr)
 			if previousTerminal != nil {

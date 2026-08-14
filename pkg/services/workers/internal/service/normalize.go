@@ -121,11 +121,34 @@ func normalizeFailedResult(
 	case errors.Is(runErr, context.DeadlineExceeded):
 		return timeoutResult(result, runErr)
 	default:
-		return normalizeScriptFailure(
-			genericFailureResult(result, request, runnerResult, runErr),
-			request,
-		)
+		result = genericFailureResult(result, request, runnerResult, runErr)
+		if request.Input.MockWorkers != nil {
+			result = prefixMockProviderFailure(result, runErr)
+		}
+		return normalizeScriptFailure(result, request)
 	}
+}
+
+func prefixMockProviderFailure(
+	result workers.ExecuteResult,
+	runErr error,
+) workers.ExecuteResult {
+	if result.Failure == nil || strings.TrimSpace(result.Failure.Message) == "" {
+		return result
+	}
+	var providerErr *workers.ProviderError
+	if !errors.As(runErr, &providerErr) || providerErr == nil {
+		return result
+	}
+	prefix := strings.TrimSpace(providerErr.Error()) + ": "
+	if strings.HasPrefix(result.Failure.Message, prefix) {
+		return result
+	}
+	result.Failure.Message = prefix + result.Failure.Message
+	if result.Failure.Detail != nil {
+		result.Failure.Detail.Message = result.Failure.Message
+	}
+	return result
 }
 
 // normalizeScriptFailure preserves the established workstation boundary for

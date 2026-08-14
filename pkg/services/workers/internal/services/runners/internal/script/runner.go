@@ -107,9 +107,41 @@ func (r *runner) Execute(
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
 	effective := *r
+	if override := workerexecution.CommandRunnerOverrideFromContext(ctx, nil); override != nil {
+		if streaming, ok := override.(streamingCommandRunner); ok {
+			effective.commandRunner = streaming
+		} else {
+			effective.commandRunner = commandRunnerWithStreamingFallback{runner: override}
+		}
+	}
 	effective.publish = workerexecution.ProgressPublisherFromContext(ctx, r.publish)
 	effective.record = workerexecution.ScriptEventRecorderFromContext(ctx, r.record)
 	return effective.execute(ctx, request)
+}
+
+// commandRunnerWithStreamingFallback adapts a replay or test command effect
+// that only exposes the root CommandRunner contract to the Script Runner's
+// streaming boundary. One complete chunk preserves the same observable
+// output and lets the effect remain policy-free.
+type commandRunnerWithStreamingFallback struct {
+	runner workers.CommandRunner
+}
+
+func (runner commandRunnerWithStreamingFallback) RunStreaming(
+	ctx context.Context,
+	request workers.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, request)
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if len(result.Stderr) > 0 {
+			observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	return result, err
 }
 
 func (r *runner) execute(

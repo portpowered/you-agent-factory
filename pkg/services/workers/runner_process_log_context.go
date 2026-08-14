@@ -77,6 +77,50 @@ type contextualLogger struct {
 	fields []any
 }
 
+type executionLoggerContextKey struct{}
+
+// WithExecutionLogger attaches the runtime-scoped command log sink to one
+// detached execution. Process-scoped runners may use it without retaining a
+// Factory Session or Runtime reference.
+func WithExecutionLogger(ctx context.Context, logger logging.Logger) context.Context {
+	if ctx == nil || logger == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, executionLoggerContextKey{}, logger)
+}
+
+// ExecutionLoggerFromContext returns the optional runtime-scoped command log
+// sink attached to an execution context.
+func ExecutionLoggerFromContext(ctx context.Context) logging.Logger {
+	if ctx == nil {
+		return nil
+	}
+	logger, _ := ctx.Value(executionLoggerContextKey{}).(logging.Logger)
+	return logger
+}
+
+func commandExecutionLogger(ctx context.Context, logger logging.Logger) logging.Logger {
+	if runtimeLogger := ExecutionLoggerFromContext(ctx); runtimeLogger != nil {
+		return logging.EnsureLogger(runtimeLogger)
+	}
+	return logging.EnsureLogger(logger)
+}
+
+func commandResultForLogging(
+	runner CommandRunner,
+	ctx context.Context,
+	request CommandRequest,
+	result CommandResult,
+) CommandResult {
+	projector, ok := runner.(interface {
+		CommandResultForLogging(context.Context, CommandRequest, CommandResult) CommandResult
+	})
+	if !ok {
+		return result
+	}
+	return projector.CommandResultForLogging(ctx, request, result)
+}
+
 func commandContextLogger(logger logging.Logger, req CommandRequest) logging.Logger {
 	fields := workLogFields(req.Execution, "dispatch_id", req.DispatchID)
 	if req.WorkerType != "" {

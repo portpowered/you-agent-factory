@@ -21,6 +21,35 @@ type expectedArtifactFileSystem interface {
 	EvalSymlinks(string) (string, error)
 }
 
+type runtimePromptRenderError struct {
+	cause error
+}
+
+func (err *runtimePromptRenderError) Error() string {
+	if err == nil || err.cause == nil {
+		return "runtime prompt rendering failed"
+	}
+	return err.cause.Error()
+}
+
+func (err *runtimePromptRenderError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func wrapRuntimePromptRenderError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var existing *runtimePromptRenderError
+	if errors.As(err, &existing) {
+		return err
+	}
+	return &runtimePromptRenderError{cause: err}
+}
+
 func expectedArtifactFileSystemFrom(value any) expectedArtifactFileSystem {
 	fileSystem, _ := value.(expectedArtifactFileSystem)
 	return fileSystem
@@ -124,9 +153,9 @@ func resolveRuntimeExecutionSelection(
 		selection.factoryDirectory = strings.TrimSpace(cfg.workflowContext.FactoryDirectory)
 	}
 	if cfg != nil {
-		finalizeRuntimeExecutionSelection(&selection, inputs, cfg.expectedArtifactFileSystem)
+		finalizeRuntimeExecutionSelection(cfg, &selection, inputs, cfg.expectedArtifactFileSystem)
 	} else {
-		finalizeRuntimeExecutionSelection(&selection, inputs)
+		finalizeRuntimeExecutionSelection(nil, &selection, inputs)
 	}
 	return selection
 }
@@ -461,6 +490,7 @@ func applyRuntimeConfigSelection(
 }
 
 func finalizeRuntimeExecutionSelection(
+	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
 	inputs []workers.WorkInput,
 	fileSystems ...expectedArtifactFileSystem,
@@ -496,7 +526,7 @@ func finalizeRuntimeExecutionSelection(
 		selection.modelProvider = selection.providerID
 	}
 	finalizeRuntimeRunnerSelection(selection)
-	finalizeRuntimeWorkspaceSelection(selection, fileSystem)
+	finalizeRuntimeWorkspaceSelection(cfg, selection, fileSystem)
 	if selection.userMessage == "" && selection.promptTemplate == "" {
 		selection.userMessage = workInputMessage(inputs)
 	}
@@ -526,6 +556,14 @@ func finalizeRuntimeRunnerSelection(selection *runtimeExecutionSelection) {
 		selection.providerID == "" && selection.model == "" {
 		selection.runnerID = "script"
 	}
+	if strings.EqualFold(strings.TrimSpace(selection.workerType), interfaces.WorkerTypeScript) &&
+		strings.TrimSpace(selection.command) != "" &&
+		selection.providerID == "" && selection.model == "" {
+		// SCRIPT_WORKER is an execution contract, not a model-provider alias.
+		// A factory-level runner default must not redirect its command through
+		// the agent/provider path.
+		selection.runnerID = "script"
+	}
 	if selection.runnerID == "" && selection.model != "" &&
 		selection.workerType != interfaces.WorkerTypeInference {
 		// MODEL_WORKER is the provider-backed agent route. Resolve its runner
@@ -540,16 +578,34 @@ func finalizeRuntimeRunnerSelection(selection *runtimeExecutionSelection) {
 	}
 }
 
+func validateRuntimeExecutionSelection(selection runtimeExecutionSelection) error {
+	if strings.EqualFold(strings.TrimSpace(selection.runnerID), "script") &&
+		strings.TrimSpace(selection.command) == "" {
+		return fmt.Errorf("construct script worker: misconfigured: script command is required")
+	}
+	return nil
+}
+
 func finalizeRuntimeWorkspaceSelection(
+	cfg *runtimeConfig,
 	selection *runtimeExecutionSelection,
 	fileSystem expectedArtifactFileSystem,
 ) {
+	baseDirectory := strings.TrimSpace(selection.factoryDirectory)
+	if cfg != nil {
+		if runtimeLookup, ok := cfg.runtimeConfig.(interfaces.RuntimeConfigLookup); ok && runtimeLookup != nil {
+			baseDirectory = firstRuntimeValue(
+				strings.TrimSpace(runtimeLookup.RuntimeBaseDir()),
+				baseDirectory,
+			)
+		}
+	}
 	if selection.workingDirectory == "" {
 		// Detached execution must carry the same default workspace that the
 		// legacy workstation executor derived from RuntimeConfig.
-		selection.workingDirectory = selection.factoryDirectory
+		selection.workingDirectory = baseDirectory
 	}
-	selection.workingDirectory = resolveRuntimePath(selection.factoryDirectory, selection.workingDirectory, fileSystem)
+	selection.workingDirectory = resolveRuntimePath(baseDirectory, selection.workingDirectory, fileSystem)
 }
 
 func resolveRuntimeSelectionInvocation(
@@ -660,6 +716,9 @@ func resolveRuntimePath(baseDir, value string, fileSystem expectedArtifactFileSy
 		return filepath.Clean(normalized)
 	}
 	if portableRuntimeRootedPath(value) && strings.TrimSpace(baseDir) != "" {
+		return filepath.Clean(filepath.Join(baseDir, normalized))
+	}
+	if fileSystem != nil && strings.TrimSpace(baseDir) != "" && !filepath.IsAbs(normalized) {
 		return filepath.Clean(filepath.Join(baseDir, normalized))
 	}
 	return filepath.Clean(normalized)
@@ -898,15 +957,15 @@ func renderRuntimePrompt(
 		return nil
 	}
 	if selection.interpolationError != nil {
-		return selection.interpolationError
+		return wrapRuntimePromptRenderError(selection.interpolationError)
 	}
 	if err := interpolateRuntimePromptTemplate(cfg, selection, invocation); err != nil {
-		return err
+		return wrapRuntimePromptRenderError(err)
 	}
 	if err := renderRuntimePromptMessage(cfg, selection, tokens, workflowContext, inputs); err != nil {
-		return err
+		return wrapRuntimePromptRenderError(err)
 	}
-	return resolveRuntimeTemplateFields(cfg, selection, tokens, workflowContext)
+	return wrapRuntimePromptRenderError(resolveRuntimeTemplateFields(cfg, selection, tokens, workflowContext))
 }
 
 func interpolateRuntimePromptTemplate(

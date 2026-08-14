@@ -233,6 +233,9 @@ func (f *RuntimeFactory) Build(
 	if !ok || loaded == nil {
 		return nil, fmt.Errorf("loaded Factory source is required for Recordings runtime scope")
 	}
+	if err := validateConfiguredRuntimeWorkers(loadedFactoryCfg); err != nil {
+		return nil, err
+	}
 	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
 		Topology:         net,
 		Definitions:      loadedFactoryCfg,
@@ -342,6 +345,25 @@ func (f *RuntimeFactory) Build(
 	return bundle, nil
 }
 
+func validateConfiguredRuntimeWorkers(loaded factory.LoadedConfig) error {
+	if loaded == nil || loaded.FactoryConfig() == nil {
+		return fmt.Errorf("factory config is required")
+	}
+	for _, configured := range loaded.FactoryConfig().Workers {
+		definition, ok := loaded.Worker(configured.Name)
+		if !ok || definition == nil {
+			continue
+		}
+		if interfaces.IsScriptWorkerType(definition.Type) && strings.TrimSpace(definition.Command) == "" {
+			return fmt.Errorf(
+				"construct script worker %q: misconfigured: script command is required",
+				configured.Name,
+			)
+		}
+	}
+	return nil
+}
+
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func assembleRuntimeBundle(
@@ -395,6 +417,11 @@ func assembleRuntimeBundle(
 ) (*factoryhost.Bundle, error) {
 	if workerExecutors == nil {
 		workerExecutors = make(map[string]workers.WorkerExecutor)
+	}
+	if loggerBinder, ok := directWorkstationExecutor.(interface {
+		SetRuntimeLogger(factory.Logger)
+	}); ok {
+		loggerBinder.SetRuntimeLogger(structuredLogger)
 	}
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),

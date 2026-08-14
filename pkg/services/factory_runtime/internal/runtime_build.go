@@ -30,11 +30,50 @@ type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFa
 
 type runtimeWorkersServiceWithProgress struct {
 	workers.Service
-	publisher workers.ProgressPublisher
+	publisher             workers.ProgressPublisher
+	providerOverride      workers.Provider
+	commandRunnerOverride workers.CommandRunner
+	replayCommandRunner   workers.CommandRunner
+	clock                 workers.Clock
 }
 
 func (service runtimeWorkersServiceWithProgress) RuntimeProgressPublisher() workers.ProgressPublisher {
 	return service.publisher
+}
+
+// Execute carries runtime-local effect substitutions into the shared Workers
+// boundary. Replay uses these detached ports to reproduce provider and script
+// outcomes without mutating the process-scoped Workers service.
+func (service runtimeWorkersServiceWithProgress) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if service.providerOverride != nil {
+		request.Input.ProviderOverride = service.providerOverride
+	}
+	commandRunner := service.commandRunnerOverride
+	if service.replayCommandRunner != nil {
+		commandRunner = service.replayCommandRunner
+	}
+	if commandRunner != nil {
+		// Session build specs may carry a raw injected command edge (or a
+		// mock wrapper around one). Preserve the runtime's command diagnostics
+		// when that edge replaces the stateless service's construction runner.
+		// Existing logging runners already consult the request-scoped logger.
+		switch commandRunner.(type) {
+		case workers.LoggingCommandRunner, *workers.LoggingCommandRunner:
+		default:
+			if request.Input.ExecutionLogger != nil && service.clock != nil {
+				commandRunner = workers.CommandRunnerWithLogging(
+					commandRunner,
+					request.Input.ExecutionLogger,
+					service.clock,
+				)
+			}
+		}
+		request.Input.CommandRunnerOverride = commandRunner
+	}
+	return service.Service.Execute(ctx, request)
 }
 
 func (service runtimeWorkersServiceWithProgress) RuntimeOwnsModelEventRecording() bool {
@@ -274,8 +313,12 @@ func buildBundle(
 		return nil, err
 	}
 	workerServiceWithProgress := workers.Service(runtimeWorkersServiceWithProgress{
-		Service:   workerExecution,
-		publisher: providerSessionProgress.Publish,
+		Service:               workerExecution,
+		publisher:             providerSessionProgress.Publish,
+		providerOverride:      spec.ProviderOverride,
+		commandRunnerOverride: spec.CommandRunnerOverride,
+		replayCommandRunner:   spec.ReplayCommandRunner,
+		clock:                 spec.Clock,
 	})
 	workerOptions := makeWorkerOptionsLoader(workerExecution, runtimeExecutorsFactory, spec, factoryRunnerID, verbose, skipRunnerPrerequisiteValidation, invocationSkipPermissionsOverride, providerSessionProgress.Publish, runtimeFactory.loggerFactory)
 
@@ -322,6 +365,11 @@ func buildBundle(
 	)
 	if err != nil {
 		return nil, err
+	}
+	if setter, ok := bundle.Factory.(interface {
+		SetReplayEvents([]factorydefinitions.FactoryEvent)
+	}); ok {
+		setter.SetReplayEvents(spec.ReplayEvents)
 	}
 	setBundleProgressPublisher(bundle, providerSessionProgress.Publish)
 	return bundle, nil

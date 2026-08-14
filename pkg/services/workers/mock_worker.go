@@ -55,6 +55,36 @@ func (runner *MockWorkerCommandRunner) Run(
 	))}, nil
 }
 
+// CommandResultForLogging preserves the configured process exit code in
+// diagnostics when a Codex mock encodes its terminal failure in turn.failed
+// output and therefore returns a successful process result to the adapter.
+func (runner *MockWorkerCommandRunner) CommandResultForLogging(
+	_ context.Context,
+	request CommandRequest,
+	result CommandResult,
+) CommandResult {
+	if runner == nil || runner.Config == nil {
+		return result
+	}
+	for _, candidate := range runner.Config.MockWorkers {
+		if candidate.WorkerName != "" && candidate.WorkerName != request.WorkerType {
+			continue
+		}
+		if candidate.WorkstationName != "" && candidate.WorkstationName != request.WorkstationName {
+			continue
+		}
+		if candidate.RunType != MockWorkerRunTypeReject ||
+			strings.TrimSpace(request.Command) != "codex" ||
+			candidate.RejectConfig == nil || candidate.RejectConfig.ExitCode == nil ||
+			*candidate.RejectConfig.ExitCode == 0 {
+			return result
+		}
+		result.ExitCode = *candidate.RejectConfig.ExitCode
+		return result
+	}
+	return result
+}
+
 func (runner *MockWorkerCommandRunner) runScript(
 	ctx context.Context,
 	request CommandRequest,

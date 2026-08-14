@@ -110,11 +110,15 @@ func (a workerExecutorRequestAdapter) Execute(
 	if workerType == "" {
 		workerType = request.Dispatch.WorkerType
 	}
+	// The request executor is the canonical stateless Workers boundary. Legacy
+	// per-worker executors remain available only for callers that do not supply
+	// that boundary; preferring them here would silently bypass request-scoped
+	// selection, logging, replay effects, and progress ownership.
+	if a.requestExecutor != nil {
+		return a.requestExecutor.Execute(ctx, request)
+	}
 	executor := a.executors[workerType]
 	if executor == nil {
-		if a.requestExecutor != nil {
-			return a.requestExecutor.Execute(ctx, request)
-		}
 		return WorkResult{}, fmt.Errorf(
 			"no executor registered for worker type %q",
 			workerType,

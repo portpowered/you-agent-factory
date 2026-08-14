@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -507,9 +508,13 @@ type EnvironmentPolicy struct {
 }
 
 type WorkspacePolicy struct {
-	Worktree           string
-	WorkingDirectory   string
-	PrepareWorktree    bool
+	Worktree         string
+	WorkingDirectory string
+	PrepareWorktree  bool
+	// RetainWorktree leaves a runtime-owned prepared checkout in place after
+	// the attempt. Stateless callers keep the default cleanup behavior; the
+	// Factory Runtime compatibility path owns its checkout beyond one attempt.
+	RetainWorktree     bool `json:"-"`
 	FactoryDirectory   string
 	CheckoutIdentifier string
 }
@@ -538,8 +543,21 @@ type ExecutionInput struct {
 	// detached at Execute ingress and is consumed only by command-boundary
 	// adapters; it is never stored on the process Workers root.
 	MockWorkers *MockWorkersConfig
+	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
+	// ports for detached execution, such as Recordings replay. They are never
+	// serialized or retained by the process-scoped Workers service.
+	ProviderOverride      Provider      `json:"-"`
+	CommandRunnerOverride CommandRunner `json:"-"`
+	// PreparedRequestObserver receives the detached request after Workers has
+	// prepared request-scoped resources and before the runner starts. Runtime
+	// uses it to record the effective execution target without moving resource
+	// preparation into the runtime boundary.
+	PreparedRequestObserver func(ExecuteRequest) `json:"-"`
 	// ProgressPublisher carries the Runtime-selected observation sink for this
 	// attempt. It is an execution capability, not retained Workers state.
+	// ExecutionLogger carries the Runtime-selected structured log sink for this
+	// attempt. It is intentionally detached from process-scoped Workers state.
+	ExecutionLogger     logging.Logger      `json:"-"`
 	ProgressPublisher   ProgressPublisher   `json:"-"`
 	ScriptEventRecorder ScriptEventRecorder `json:"-"`
 }

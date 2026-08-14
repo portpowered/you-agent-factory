@@ -57,7 +57,7 @@ func NewWorkstationRequestExecutor(
 	if config.Service == nil {
 		return nil
 	}
-	return workstationRequestExecutor{
+	return &workstationRequestExecutor{
 		service: config.Service,
 		cfg: &runtimeConfig{
 			executeService:             config.Service,
@@ -87,6 +87,21 @@ type workstationRequestExecutor struct {
 	sessionID string
 }
 
+// SetRuntimeLogger binds the opened Runtime's log sink to this compatibility
+// adapter. The adapter itself remains detached; only the per-attempt logger
+// capability crosses into the process-scoped Workers request.
+func (executor *workstationRequestExecutor) SetRuntimeLogger(logger factory.Logger) {
+	if executor == nil || executor.cfg == nil {
+		return
+	}
+	executor.cfg.logger = logger
+}
+
+func isRuntimePromptRenderError(err error) bool {
+	var promptErr *runtimePromptRenderError
+	return errors.As(err, &promptErr)
+}
+
 func (executor workstationRequestExecutor) Execute(
 	ctx context.Context,
 	request workers.WorkstationExecutionRequest,
@@ -109,17 +124,22 @@ func (executor workstationRequestExecutor) Execute(
 	}
 	executeRequest, err := executeRequestFromWorkstationRequest(executor.cfg, workstationRequest)
 	if err != nil {
-		return workers.WorkResult{
+		result := workers.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
 			TransitionID: request.Dispatch.TransitionID,
 			Outcome:      workers.OutcomeFailed,
 			Error:        err.Error(),
-		}, err
+		}
+		if isRuntimePromptRenderError(err) {
+			result.Error = "prompt render failed: " + err.Error()
+			return result, nil
+		}
+		return result, err
 	}
 	result, executeErr := executor.service.Execute(ctx, executeRequest)
 	result = normalizeDetachedExecutionResult(executor.cfg, executeRequest, result)
 	dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
-		workstationRequest,
+		workstationDispatchRequestForResult(workstationRequest, executeRequest),
 		result,
 		executeErr,
 	)
@@ -294,6 +314,7 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 		f.cfg.worldStateProjector,
 		f.clock,
 		f.cfg.providerSessions,
+		f.cfg.replayEvents,
 		f.cfg.recordingID,
 		workerRecordingReader,
 		sessionIDFromFactoryConfig(f.cfg),
@@ -310,6 +331,7 @@ type recordedWorkerSessionObservation struct {
 	projector        factory.WorldStateProjector
 	clock            factory.Clock
 	providerSessions providersessions.Service
+	replayEvents     []interfaces.FactoryEvent
 	recordingID      string
 	recordingReader  recordings.WorkerRecordingReader
 	factorySessionID string
@@ -355,6 +377,19 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 		result = append(result, observation)
 	}
 	return result, knownWork, nil
+}
+
+func (s *recordedWorkerSessionObservation) canonicalEvents() []interfaces.FactoryEvent {
+	if s == nil {
+		return nil
+	}
+	if len(s.replayEvents) > 0 {
+		return cloneAndSortFactoryEvents(s.replayEvents)
+	}
+	if s.ledger == nil {
+		return nil
+	}
+	return s.ledger.CanonicalEvents()
 }
 
 func latestFactoryEventTick(events []interfaces.FactoryEvent) int {
@@ -503,7 +538,7 @@ func newRecordedWorkerSessionObservation(
 	clock factory.Clock,
 	providerSessions providersessions.Service,
 ) workersessions.Service {
-	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, "", nil)
+	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, nil, "", nil)
 }
 
 func (s *recordedWorkerSessionObservation) ListObservations(
@@ -520,7 +555,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return s.listLive(ctx, req)
 	}
 
-	events := s.ledger.CanonicalEvents()
+	events := s.canonicalEvents()
 	recorded, knownWork, err := s.projectRecorded(ctx, events, req.WorkID)
 	if err != nil {
 		return workersessions.ListObservationsResult{}, err
@@ -975,6 +1010,7 @@ func newRecordedWorkerSessionObservationWithRecording(
 	projector factory.WorldStateProjector,
 	clock factory.Clock,
 	providerSessions providersessions.Service,
+	replayEvents []interfaces.FactoryEvent,
 	recordingID string,
 	recordingReader recordings.WorkerRecordingReader,
 	factorySessionIDs ...string,
@@ -985,7 +1021,7 @@ func newRecordedWorkerSessionObservationWithRecording(
 	}
 	return &recordedWorkerSessionObservation{
 		Service: live, ledger: ledger, projector: projector, clock: clock,
-		providerSessions: providerSessions, recordingID: strings.TrimSpace(recordingID),
+		providerSessions: providerSessions, replayEvents: cloneAndSortFactoryEvents(replayEvents), recordingID: strings.TrimSpace(recordingID),
 		recordingReader: recordingReader, factorySessionID: factorySessionID,
 	}
 }

@@ -58,6 +58,18 @@ func (runner contextualMockWorkerCommandRunner) RunStreaming(
 	return result, err
 }
 
+func (runner contextualMockWorkerCommandRunner) CommandResultForLogging(
+	ctx context.Context,
+	request workers.CommandRequest,
+	result workers.CommandResult,
+) workers.CommandResult {
+	config := workerexecution.MockWorkersConfigFromContext(ctx)
+	if config == nil {
+		return result
+	}
+	return (&workers.MockWorkerCommandRunner{Config: config}).CommandResultForLogging(ctx, request, result)
+}
+
 func (runner contextualMockWorkerCommandRunner) runNext(
 	ctx context.Context,
 	request workers.CommandRequest,

@@ -67,6 +67,9 @@ func (s *Service) Execute(
 	if err != nil {
 		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, err)
 	}
+	if request.Input.PreparedRequestObserver != nil {
+		request.Input.PreparedRequestObserver(request)
+	}
 	return s.executeStarted(ctx, request, identity, correlation, cleanup, temporaryFiles)
 }
 
@@ -191,12 +194,16 @@ func (s *Service) runRunner(
 	identity string,
 	temporaryFiles workers.TemporaryFileSystem,
 ) (runnerResult workers.RunnerExecutionResult, runErr error) {
+	providerOverride := request.Input.ProviderOverride
+	if providerOverride == nil {
+		providerOverride = s.providerOverride
+	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			runErr = panicFailure(
 				recovered,
 				debug.Stack(),
-				s.providerOverride != nil && identity == runners.AgentIdentity,
+				providerOverride != nil && identity == runners.AgentIdentity,
 			)
 		}
 	}()
@@ -210,13 +217,19 @@ func (s *Service) runRunner(
 	if request.Input.ScriptEventRecorder != nil {
 		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
 	}
+	if request.Input.CommandRunnerOverride != nil {
+		ctx = workerexecution.WithCommandRunnerOverride(ctx, request.Input.CommandRunnerOverride)
+	}
+	if request.Input.ExecutionLogger != nil {
+		ctx = workers.WithExecutionLogger(ctx, request.Input.ExecutionLogger)
+	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
-	if s.providerOverride != nil && identity == runners.AgentIdentity &&
+	if providerOverride != nil && identity == runners.AgentIdentity &&
 		!usesACPProvider(runnerRequest.ExecutorProvider) {
 		return s.executeProviderWithRetry(ctx, runnerRequest, func(
 			request workers.RunnerExecutionRequest,
 		) (workers.RunnerExecutionResult, error) {
-			result, err := s.providerOverride.Infer(ctx, request)
+			result, err := providerOverride.Infer(ctx, request)
 			return normalizeProviderOverrideResult(result, request), err
 		})
 	}
@@ -254,8 +267,7 @@ func (s *Service) executeProviderWithRetry(
 		}
 
 		providerErr := workers.NormalizeProviderExecutionError(err)
-		decision := workers.WorkFailureDecisionFromProviderError(providerErr)
-		if providerErr == nil || !decision.Retryable || retryCount >= detachedProviderMaxRetries {
+		if providerErr == nil || !retryableProviderFailure(providerErr, result) || retryCount >= detachedProviderMaxRetries {
 			return result, err
 		}
 
@@ -270,6 +282,44 @@ func (s *Service) executeProviderWithRetry(
 			return result, err
 		}
 	}
+}
+
+func retryableProviderFailure(providerErr *workers.ProviderError, result workers.RunnerExecutionResult) bool {
+	if providerErr == nil {
+		return false
+	}
+	if workers.WorkFailureDecisionFromProviderError(providerErr).Retryable {
+		return true
+	}
+	// Providers deliberately keeps an unclassified native process failure
+	// terminal at its public boundary. Once it reaches the detached Workers
+	// retry policy, the native stage is enough to distinguish a failed provider
+	// process from a malformed request or an invalid response. Give that
+	// external effect the same bounded retry budget as other transient provider
+	// failures without changing the customer-facing terminal classification.
+	if providerErr.Type != workers.WorkFailureTypeUnknown || providerErr.Diagnostics == nil {
+		return false
+	}
+	// A native stream that already established a Provider Session has reached
+	// the provider's execution lifecycle. Retrying it would create a second
+	// Worker Session for a terminal process failure rather than recover a
+	// detached invocation that never established provider state.
+	if providerSessionForRetry(providerErr, result) != nil {
+		return false
+	}
+	if strings.EqualFold(
+		strings.TrimSpace(providerErr.Diagnostics.Metadata["failure_stage"]),
+		"native",
+	) {
+		return true
+	}
+	if providerErr.Diagnostics.Provider != nil && strings.EqualFold(
+		strings.TrimSpace(providerErr.Diagnostics.Provider.ResponseMetadata["failure_stage"]),
+		"native",
+	) {
+		return true
+	}
+	return false
 }
 
 func providerSessionForRetry(
@@ -335,7 +385,6 @@ func (s *Service) prepareWorkspace(
 		return fmt.Errorf("%w: prepare worktree: %v", workers.ErrInvalidExecuteRequest, err)
 	}
 	if path := strings.TrimSpace(preparation.CheckoutPath); path != "" {
-		request.Target.Workspace.Worktree = path
 		if strings.TrimSpace(request.Target.Workspace.WorkingDirectory) == "" {
 			request.Target.Workspace.WorkingDirectory = path
 		}
@@ -343,7 +392,7 @@ func (s *Service) prepareWorkspace(
 			request.Target.Environment.WorkingDirectory = path
 			request.Target.Environment.WorkingDirectorySet = true
 		}
-		if !preparation.Reused {
+		if !preparation.Reused && !workspace.RetainWorktree {
 			preparation := preparation
 			cleanup.add(func() error {
 				return s.worktreeRelease(context.WithoutCancel(ctx), preparation)
