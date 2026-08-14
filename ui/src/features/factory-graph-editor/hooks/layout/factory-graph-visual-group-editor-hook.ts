@@ -9,6 +9,7 @@ import { isValidFactoryLayoutGroupBounds } from "../../lib/layout/factory-graph-
 import {
   type FactoryLayoutGroupCanvasNodeOption,
   type FactoryLayoutGroupColorToken,
+  type FactoryLayoutGroupNodeGeometry,
   factoryLayoutGroupById,
   factoryLayoutGroupContainsNode,
   factoryLayoutGroups,
@@ -34,9 +35,19 @@ export function useFactoryGraphVisualGroupEditor(input: {
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   canInteractWithEditor: boolean;
   canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
-  createVisualGroup: (center: FactoryLayoutPoint) => { id: string } | null;
+  createVisualGroup: (
+    center: FactoryLayoutPoint,
+    options?: {
+      nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+      nodeIds?: readonly string[];
+    },
+  ) => { id: string } | null;
   deleteVisualGroup: (groupId: string) => void;
   editorMode: boolean;
+  fitVisualGroup?: (
+    groupId: string,
+    nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+  ) => void;
   layout: FactoryLayout;
   locale?: string | null;
   moveVisualGroupByDelta: (
@@ -54,6 +65,8 @@ export function useFactoryGraphVisualGroupEditor(input: {
     groupId: string,
     color: FactoryLayoutGroupColorToken,
   ) => void;
+  nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+  selectedNodeIds?: readonly string[];
   resolveViewportCenter: () => FactoryLayoutPoint | null;
 }) {
   const messages = getFactoryGraphEditorMessages(input.locale);
@@ -80,12 +93,29 @@ export function useFactoryGraphVisualGroupEditor(input: {
     if (!center) {
       return null;
     }
-    const createdGroup = input.createVisualGroup(center);
+    const selectedNodeIds = input.selectedNodeIds ?? [];
+    const createdGroup = input.createVisualGroup(
+      center,
+      selectedNodeIds.length > 0
+        ? {
+            nodeGeometryById: input.nodeGeometryById,
+            nodeIds: selectedNodeIds,
+          }
+        : undefined,
+    );
     if (createdGroup) {
       setSelectedGroupId(createdGroup.id);
     }
     return createdGroup;
   }, [canEditVisualGroups, input]);
+
+  const handleFitSelectedGroup = useCallback(() => {
+    if (!selectedGroupId || !canEditVisualGroups || !input.fitVisualGroup) {
+      return;
+    }
+
+    input.fitVisualGroup(selectedGroupId, input.nodeGeometryById ?? new Map());
+  }, [canEditVisualGroups, input, selectedGroupId]);
 
   const handleSelectVisualGroup = useCallback(
     (groupId: string) => {
@@ -201,8 +231,10 @@ export function useFactoryGraphVisualGroupEditor(input: {
     clearSelectedVisualGroup,
     groups,
     groupAriaLabel: messages.visualGroupAriaLabel,
+    groupOutlineAriaLabel: messages.visualGroupOutlineAriaLabel,
     handleCreateVisualGroup,
     handleDeleteSelectedGroup,
+    handleFitSelectedGroup,
     handleMoveVisualGroup,
     handleRenameSelectedGroup,
     handleResizeVisualGroup,
@@ -218,6 +250,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             colorLabel: messages.visualGroupColorLabel,
             colorOptionLabel: messages.visualGroupColorOptionLabel,
             deleteGroupLabel: messages.visualGroupDeleteLabel,
+            fitGroupLabel: messages.visualGroupFitLabel,
             boundsError: selectedGroupBoundsError,
             emptyLabelError: messages.visualGroupEmptyLabelError,
             group: selectedGroup,
@@ -230,6 +263,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             membershipStaleNodeLabel:
               messages.visualGroupMembershipStaleNodeLabel,
             onDeleteGroup: handleDeleteSelectedGroup,
+            onFitGroup: handleFitSelectedGroup,
             onRenameGroup: handleRenameSelectedGroup,
             onSetGroupColor: handleSetSelectedGroupColor,
             onToggleNodeMembership: handleToggleSelectedGroupNodeMembership,

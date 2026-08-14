@@ -353,6 +353,13 @@ export async function runStorybookCI({
       serverExit,
     ]);
     await Promise.race([
+      runCommand([
+        "run",
+        "storybook:factory-graph-visual-group-save-browser-check",
+      ]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:header-responsive-check"]),
       serverExit,
     ]);

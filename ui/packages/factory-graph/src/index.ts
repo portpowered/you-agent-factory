@@ -20,6 +20,22 @@ export {
   resolveFactoryGraphNodeDimensions,
 } from "./node-family.js";
 export {
+  FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS,
+  type FactoryGraphGroupRegionBounds,
+  type FactoryGraphGroupRegionColorStyle,
+  type FactoryGraphGroupRegionColorToken,
+  type FactoryGraphGroupRegionInput,
+  FactoryGraphGroupRegionLayer,
+  type FactoryGraphGroupRegionLayerProps,
+  type FactoryGraphGroupRegionResolvedColor,
+  type FactoryGraphGroupRegionView,
+  factoryGraphGroupRegionColorStyle,
+  isValidFactoryGraphGroupRegionBounds,
+  projectFactoryGraphGroupRegionBounds,
+  projectFactoryGraphGroupRegions,
+  resolveFactoryGraphGroupRegionColor,
+} from "./group-region-presentation.js";
+export {
   type FactoryGraphDocNode,
   type FactoryGraphDocNodeData,
   FactoryGraphDocNodeView,

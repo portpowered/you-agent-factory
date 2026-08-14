@@ -16,6 +16,7 @@ export function FactoryGraphVisualGroupControls({
   colorLabel,
   colorOptionLabel,
   deleteGroupLabel,
+  fitGroupLabel,
   boundsError,
   emptyLabelError,
   group,
@@ -26,6 +27,7 @@ export function FactoryGraphVisualGroupControls({
   membershipNodeLabel,
   membershipStaleNodeLabel,
   onDeleteGroup,
+  onFitGroup,
   onRenameGroup,
   onSetGroupColor,
   onToggleNodeMembership,
@@ -36,6 +38,7 @@ export function FactoryGraphVisualGroupControls({
   colorLabel: string;
   colorOptionLabel: (token: FactoryLayoutGroupColorToken) => string;
   deleteGroupLabel: string;
+  fitGroupLabel?: string;
   boundsError: string | null;
   emptyLabelError: string;
   group: FactoryLayoutGroup;
@@ -46,6 +49,7 @@ export function FactoryGraphVisualGroupControls({
   membershipNodeLabel: (label: string) => string;
   membershipStaleNodeLabel: (nodeId: string) => string;
   onDeleteGroup: () => void;
+  onFitGroup?: () => void;
   onRenameGroup: (label: string) => void;
   onSetGroupColor: (color: FactoryLayoutGroupColorToken) => void;
   onToggleNodeMembership: (nodeId: string, selected: boolean) => void;
@@ -57,7 +61,7 @@ export function FactoryGraphVisualGroupControls({
   const labelError = trimmedLabel.length === 0 ? emptyLabelError : null;
   const selectedColor = isApprovedFactoryLayoutGroupColor(group.color)
     ? group.color
-    : "primary";
+    : "neutral";
 
   return (
     <section
@@ -96,6 +100,17 @@ export function FactoryGraphVisualGroupControls({
           <p className="m-0 text-xs text-on-error-container" role="alert">
             {boundsError}
           </p>
+        ) : null}
+        {fitGroupLabel && onFitGroup ? (
+          <DashboardActionButton
+            className="w-full"
+            data-factory-visual-group-fit=""
+            onClick={onFitGroup}
+            tone="outline"
+            type="button"
+          >
+            {fitGroupLabel}
+          </DashboardActionButton>
         ) : null}
       </div>
       <fieldset className="mt-3 grid gap-2 border-0 p-0">

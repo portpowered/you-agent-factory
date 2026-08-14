@@ -225,6 +225,7 @@ export function useCurrentActivityGraphState(
     undoLayout: editableGraph.actions.undoLayout,
     updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
     createVisualGroup: editableGraph.actions.createVisualGroup,
+    fitVisualGroup: editableGraph.actions.fitVisualGroup,
     renameVisualGroup: editableGraph.actions.renameVisualGroup,
     setVisualGroupColor: editableGraph.actions.setVisualGroupColor,
     addNodeToVisualGroup: editableGraph.actions.addNodeToVisualGroup,

@@ -49,6 +49,9 @@ import {
   defaultFactoryLayoutGroupBounds,
   type FactoryLayoutGroup,
   type FactoryLayoutGroupColorToken,
+  type FactoryLayoutGroupNodeGeometry,
+  fitFactoryLayoutGroup,
+  fitFactoryLayoutGroupBounds,
   moveFactoryLayoutGroupByDelta,
   removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
@@ -87,7 +90,17 @@ export interface FactoryGraphLayoutDraftDerivedState {
   resetLayout: (options?: { recordHistory?: boolean }) => void;
   undoLayout: () => void;
   updateViewport: (viewport: FactoryLayoutViewport) => void;
-  createVisualGroup: (center: FactoryLayoutPoint) => FactoryLayoutGroup | null;
+  createVisualGroup: (
+    center: FactoryLayoutPoint,
+    options?: {
+      nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+      nodeIds?: readonly string[];
+    },
+  ) => FactoryLayoutGroup | null;
+  fitVisualGroup: (
+    groupId: string,
+    nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+  ) => void;
   renameVisualGroup: (groupId: string, label: string) => void;
   setVisualGroupColor: (
     groupId: string,
@@ -432,14 +445,29 @@ export function useFactoryGraphLayoutDraftState(
     [],
   );
   const createVisualGroup = useCallback(
-    (center: FactoryLayoutPoint): FactoryLayoutGroup | null => {
+    (
+      center: FactoryLayoutPoint,
+      options?: {
+        nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+        nodeIds?: readonly string[];
+      },
+    ): FactoryLayoutGroup | null => {
       let createdGroup: FactoryLayoutGroup | null = null;
       commitLayoutUpdate(({ currentLayout }) => {
         const groupId = createFactoryLayoutGroupId(currentLayout);
+        const nodeIds = [...new Set(options?.nodeIds ?? [])];
+        const fittedBounds =
+          nodeIds.length > 0 && options?.nodeGeometryById
+            ? fitFactoryLayoutGroupBounds({
+                nodeGeometryById: options.nodeGeometryById,
+                nodeIds,
+              })
+            : null;
         const group = createFactoryLayoutGroup({
-          bounds: defaultFactoryLayoutGroupBounds(center),
+          bounds: fittedBounds ?? defaultFactoryLayoutGroupBounds(center),
           id: groupId,
           layout: currentLayout,
+          nodeIds,
         });
         createdGroup = group;
         const nextLayout = addFactoryLayoutGroup(currentLayout, group);
@@ -449,6 +477,35 @@ export function useFactoryGraphLayoutDraftState(
         };
       });
       return createdGroup;
+    },
+    [commitLayoutUpdate],
+  );
+  const fitVisualGroup = useCallback(
+    (
+      groupId: string,
+      nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = fitFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          nodeGeometryById,
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
     },
     [commitLayoutUpdate],
   );
@@ -652,6 +709,7 @@ export function useFactoryGraphLayoutDraftState(
     undoLayout,
     updateViewport,
     createVisualGroup,
+    fitVisualGroup,
     renameVisualGroup,
     setVisualGroupColor,
     addNodeToVisualGroup,

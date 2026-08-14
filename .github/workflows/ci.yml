@@ -167,7 +167,18 @@ jobs:
       - uses: ./.github/actions/setup-ui-browser
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: make ui-storybook-integration-test
+      - name: Run Storybook integration and browser checks
+        run: make ui-storybook-integration-test
+        env:
+          AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/factory-graph-visual-group
+      - name: Upload visual group browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-graph-visual-group-browser-evidence
+          path: .artifacts/factory-graph-visual-group
+          if-no-files-found: warn
+          retention-days: 14
 
   backend-coverage:
     name: Backend ${{ matrix.label }} Coverage

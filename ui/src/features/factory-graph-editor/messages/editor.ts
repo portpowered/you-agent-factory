@@ -94,9 +94,13 @@ export interface FactoryGraphEditorMessages {
   edgeWaypointSourceLabel: string;
   edgeWaypointTargetLabel: string;
   visualGroupAriaLabel: (group: { id: string; label?: string }) => string;
+  visualGroupOutlineAriaLabel: (
+    group: { id: string; label?: string },
+    edge: "top" | "right" | "bottom" | "left",
+  ) => string;
   visualGroupColorLabel: string;
   visualGroupColorOptionLabel: (
-    token: "primary" | "info" | "success" | "warning" | "outline",
+    token: "neutral" | "primary" | "info" | "success" | "warning" | "danger",
   ) => string;
   visualGroupEmptyLabelError: string;
   visualGroupInvalidBoundsError: string;
@@ -107,6 +111,7 @@ export interface FactoryGraphEditorMessages {
   visualGroupMembershipStaleNodeLabel: (nodeId: string) => string;
   visualGroupSelectedLabel: string;
   visualGroupDeleteLabel: string;
+  visualGroupFitLabel: string;
   visualGroupResizeHandleLabel: (corner: "ne" | "nw" | "se" | "sw") => string;
   toolbarCreateGroupDescription: string;
   toolbarCreateGroupLabel: string;
@@ -719,6 +724,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         group.label?.trim()
           ? `Visual group ${group.label.trim()}`
           : `Visual group ${group.id}`,
+      visualGroupOutlineAriaLabel: (group, edge) =>
+        `${group.label?.trim() ? `Visual group ${group.label.trim()}` : `Visual group ${group.id}`} outline ${edge}`,
       visualGroupColorLabel: "Group color",
       visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
       visualGroupEmptyLabelError: "Enter a group label.",
@@ -734,6 +741,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `Saved member ${nodeId} is no longer on the canvas.`,
       visualGroupSelectedLabel: "Selected visual group",
       visualGroupDeleteLabel: "Delete group",
+      visualGroupFitLabel: "Fit to members",
       visualGroupResizeHandleLabel: (corner) =>
         `Resize group from ${corner} corner`,
       toolbarCreateGroupDescription: "Create a labeled background group",
@@ -1170,6 +1178,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         group.label?.trim()
           ? `视觉分组 ${group.label.trim()}`
           : `视觉分组 ${group.id}`,
+      visualGroupOutlineAriaLabel: (group, edge) =>
+        `${group.label?.trim() ? `视觉分组 ${group.label.trim()}` : `视觉分组 ${group.id}`} 边框 ${edge}`,
       visualGroupColorLabel: "分组颜色",
       visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
       visualGroupEmptyLabelError: "请输入分组标签。",
@@ -1183,6 +1193,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `已保存的成员 ${nodeId} 已不在画布上。`,
       visualGroupSelectedLabel: "已选视觉分组",
       visualGroupDeleteLabel: "删除分组",
+      visualGroupFitLabel: "适配成员",
       visualGroupResizeHandleLabel: (corner) => `从 ${corner} 角调整分组大小`,
       toolbarCreateGroupDescription: "创建带标签的背景分组",
       toolbarCreateGroupLabel: "创建分组",

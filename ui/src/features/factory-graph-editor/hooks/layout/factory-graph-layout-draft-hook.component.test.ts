@@ -574,6 +574,103 @@ describe("useFactoryGraphLayoutDraftState visual group save reload", () => {
   });
 });
 
+describe("useFactoryGraphLayoutDraftState visual group fitting", () => {
+  it("creates a fitted group from the selected node geometry in one history step", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-group-fit-create",
+      }),
+    );
+    const nodeGeometryById = new Map([
+      [
+        "workstation:draft",
+        { height: 40, position: { x: 100, y: 120 }, width: 80 },
+      ],
+      [
+        "worker:writer",
+        { height: 60, position: { x: 280, y: 200 }, width: 120 },
+      ],
+    ]);
+
+    act(() => {
+      result.current.createVisualGroup(
+        { x: 0, y: 0 },
+        {
+          nodeGeometryById,
+          nodeIds: ["workstation:draft", "worker:writer"],
+        },
+      );
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1"),
+    ).toMatchObject({
+      bounds: { height: 204, width: 364, x: 68, y: 88 },
+      nodeIds: ["workstation:draft", "worker:writer"],
+    });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toBe(
+      undefined,
+    );
+
+    act(() => {
+      result.current.redoLayout();
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 204, width: 364, x: 68, y: 88 });
+  });
+
+  it("fits an existing group, ignores stale members, and supports undo and redo", () => {
+    const layoutDocument = {
+      ...baseFactoryDefinition,
+      layout: addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+        bounds: { height: 200, width: 300, x: 10, y: 20 },
+        id: "group-1",
+        label: "Review",
+        nodeIds: ["workstation:draft", "legacy-node"],
+      }),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: layoutDocument,
+        factoryDocumentScopeKey: "session-group-fit-existing",
+      }),
+    );
+    const nodeGeometryById = new Map([
+      [
+        "workstation:draft",
+        { height: 40, position: { x: 100, y: 120 }, width: 80 },
+      ],
+    ]);
+
+    act(() => {
+      result.current.fitVisualGroup("group-1", nodeGeometryById);
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 104, width: 144, x: 68, y: 88 });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 200, width: 300, x: 10, y: 20 });
+
+    act(() => {
+      result.current.redoLayout();
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 104, width: 144, x: 68, y: 88 });
+  });
+});
+
 describe("useFactoryGraphLayoutDraftState visual group membership", () => {
   it("records group membership changes with undo and redo", () => {
     const layoutDocument = {

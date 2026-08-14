@@ -1,4 +1,5 @@
 export { FactoryGraphReplaySurface, projectFactoryGraphReplayFlow, } from "./factory-graph-replay-surface.js";
+export { FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS, FactoryGraphGroupRegionLayer, factoryGraphGroupRegionColorStyle, isValidFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegions, resolveFactoryGraphGroupRegionColor, } from "./group-region-presentation.js";
 export { FactoryGraphDocNodeView, } from "./semantic-doc-node.js";
 export { GRAPH_SEMANTIC_ICON_KINDS, GraphSemanticIcon, graphSemanticIconLabel, } from "./semantic-icon.js";
 export { FactoryGraphNodeShell, factoryGraphHandleToneFromId, } from "./semantic-node-shell.js";

@@ -79,6 +79,13 @@ const sharedReactAliases = [
     replacement: path.join(factoryReplayPackageRoot, "index.ts"),
   },
   {
+    find: "@you-agent-factory/factory-graph/group-regions",
+    replacement: path.join(
+      factoryGraphPackageRoot,
+      "group-region-presentation.tsx",
+    ),
+  },
+  {
     find: "@you-agent-factory/factory-graph",
     replacement: path.join(factoryGraphPackageRoot, "index.ts"),
   },

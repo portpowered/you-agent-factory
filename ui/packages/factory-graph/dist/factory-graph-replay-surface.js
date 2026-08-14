@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
+import { FactoryGraphGroupRegionLayer } from "./group-region-presentation.js";
 import { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
 import { projectFactoryGraphWorkstationSemantics, } from "./workstation-semantics.js";
 /**
@@ -10,7 +11,7 @@ import { projectFactoryGraphWorkstationSemantics, } from "./workstation-semantic
  */
 export function FactoryGraphReplaySurface({ className, onSelectNode, selectedNodeId, source, }) {
     const flow = projectFactoryGraphReplayFlow(source, selectedNodeId);
-    return (_jsx(GraphViewportSurface, { className: className, "data-factory-graph-replay": true, children: _jsxs(ReactFlow, { defaultViewport: source.factory.layout?.viewport, edges: flow.edges, edgesFocusable: false, fitView: true, fitViewOptions: { padding: 0.12 }, minZoom: 0.25, nodes: flow.nodes, nodesConnectable: false, nodesDraggable: false, nodeTypes: FACTORY_GRAPH_NODE_TYPES, onNodeClick: (_event, node) => onSelectNode?.(node.id), proOptions: { hideAttribution: true }, children: [_jsx(Background, {}), _jsx(Controls, { showInteractive: false })] }) }));
+    return (_jsx(GraphViewportSurface, { className: className, "data-factory-graph-replay": true, children: _jsxs(ReactFlow, { defaultViewport: source.factory.layout?.viewport, edges: flow.edges, edgesFocusable: false, fitView: true, fitViewOptions: { padding: 0.12 }, minZoom: 0.25, nodes: flow.nodes, nodesConnectable: false, nodesDraggable: false, nodeTypes: FACTORY_GRAPH_NODE_TYPES, onNodeClick: (_event, node) => onSelectNode?.(node.id), proOptions: { hideAttribution: true }, children: [_jsx(FactoryGraphGroupRegionLayer, { groups: source.factory.layout?.groups }), _jsx(Background, {}), _jsx(Controls, { showInteractive: false })] }) }));
 }
 /** Project replay data into the original Factory semantic node family. */
 export function projectFactoryGraphReplayFlow(source, selectedNodeId) {

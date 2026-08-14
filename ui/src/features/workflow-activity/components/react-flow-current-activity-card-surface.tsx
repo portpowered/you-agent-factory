@@ -259,6 +259,7 @@ function CurrentActivityGraphSurfaceContent({
         }
         visualGroupControls={visualGroupControls.visualGroupControls}
         visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
+        visualGroupOutlineAriaLabel={visualGroupControls.groupOutlineAriaLabel}
         visualGroups={visualGroupControls.groups}
         saveControls={controller.saveControls}
         saveDisabledReason={controller.status.saveBlockedReason}

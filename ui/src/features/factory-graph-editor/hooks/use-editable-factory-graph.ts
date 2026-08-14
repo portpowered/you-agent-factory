@@ -129,6 +129,7 @@ export function useEditableFactoryGraph(
       undoLayout: layoutDraftState.undoLayout,
       updateLayoutViewport: layoutDraftState.updateViewport,
       createVisualGroup: layoutDraftState.createVisualGroup,
+      fitVisualGroup: layoutDraftState.fitVisualGroup,
       renameVisualGroup: layoutDraftState.renameVisualGroup,
       setVisualGroupColor: layoutDraftState.setVisualGroupColor,
       addNodeToVisualGroup: layoutDraftState.addNodeToVisualGroup,

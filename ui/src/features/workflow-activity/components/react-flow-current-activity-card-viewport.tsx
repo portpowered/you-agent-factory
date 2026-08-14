@@ -14,6 +14,7 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
+import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph/group-regions";
 import {
   type ComponentProps,
   type KeyboardEvent,
@@ -335,6 +336,7 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId = null,
   selectedWaypointEdgeId = null,
   visualGroupAriaLabel,
+  visualGroupOutlineAriaLabel,
   visualGroupCanEdit = false,
   visualGroupControls = null,
   visualGroupResizeHandleAriaLabel,
@@ -396,6 +398,10 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId?: string | null;
   selectedWaypointEdgeId?: string | null;
   visualGroupAriaLabel?: (group: FactoryLayoutGroup) => string;
+  visualGroupOutlineAriaLabel?: (
+    group: FactoryLayoutGroup,
+    edge: "top" | "right" | "bottom" | "left",
+  ) => string;
   visualGroupCanEdit?: boolean;
   visualGroupResizeHandleAriaLabel?: (
     corner: "ne" | "nw" | "se" | "sw",
@@ -771,6 +777,12 @@ export function CurrentActivityGraphViewport({
               proOptions={{ hideAttribution: true }}
             >
               <DashboardGraphBackground key="factory-graph-background" />
+              {!editorControls.isEditing && visualGroups.length > 0 ? (
+                <FactoryGraphGroupRegionLayer
+                  groups={visualGroups}
+                  key="factory-graph-group-regions"
+                />
+              ) : null}
               {editorControls.isEditing &&
               visualGroups.length > 0 &&
               onSelectVisualGroup &&
@@ -779,6 +791,7 @@ export function CurrentActivityGraphViewport({
                   key="factory-graph-visual-groups"
                   canEdit={visualGroupCanEdit}
                   groupAriaLabel={visualGroupAriaLabel}
+                  groupOutlineAriaLabel={visualGroupOutlineAriaLabel}
                   groups={visualGroups}
                   onMoveGroup={onMoveVisualGroup}
                   onResizeGroup={onResizeVisualGroup}

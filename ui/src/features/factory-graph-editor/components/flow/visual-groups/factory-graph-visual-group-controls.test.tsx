@@ -106,15 +106,23 @@ describe("FactoryGraphVisualGroupControls", () => {
       />,
     );
 
+    expect(
+      screen.getAllByRole("button", { name: /Use .* group color/ }),
+    ).toHaveLength(6);
     await user.click(
       screen.getByRole("button", { name: "Use success group color" }),
     );
     expect(onSetGroupColor).toHaveBeenCalledWith("success");
+    await user.click(
+      screen.getByRole("button", { name: "Use danger group color" }),
+    );
+    expect(onSetGroupColor).toHaveBeenLastCalledWith("danger");
   });
 
   it("invokes delete when the delete group action is activated", async () => {
     const user = userEvent.setup();
     const onDeleteGroup = vi.fn();
+    const onFitGroup = vi.fn();
 
     render(
       <FactoryGraphVisualGroupControls
@@ -123,6 +131,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         colorOptionLabel={(token) => `Use ${token} group color`}
         boundsError={null}
         deleteGroupLabel="Delete group"
+        fitGroupLabel="Fit to members"
         emptyLabelError="Enter a group label."
         group={{
           bounds: { height: 120, width: 200, x: 0, y: 0 },
@@ -139,6 +148,7 @@ describe("FactoryGraphVisualGroupControls", () => {
           `Saved member ${nodeId} is no longer on the canvas.`
         }
         onDeleteGroup={onDeleteGroup}
+        onFitGroup={onFitGroup}
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
@@ -147,6 +157,8 @@ describe("FactoryGraphVisualGroupControls", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "Fit to members" }));
+    expect(onFitGroup).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Delete group" }));
     expect(onDeleteGroup).toHaveBeenCalledTimes(1);
   });
@@ -262,7 +274,7 @@ describe("FactoryGraphVisualGroupControls", () => {
     await user.click(labelField);
   });
 
-  it("unchecks a member and falls back to the primary color token", async () => {
+  it("unchecks a member and falls back to the neutral color token", async () => {
     const user = userEvent.setup();
     const onToggleNodeMembership = vi.fn();
 
@@ -299,7 +311,7 @@ describe("FactoryGraphVisualGroupControls", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Use primary group color" }),
+      screen.getByRole("button", { name: "Use neutral group color" }),
     ).toHaveAttribute("aria-pressed", "true");
 
     await user.click(

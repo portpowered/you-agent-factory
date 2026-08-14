@@ -1,9 +1,9 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: visual-group layer interaction cases share one React Flow rendering harness.
 import "../../../../../testing/vitest-dom-capabilities.setup";
 
+import { describe, expect, it, mock } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
-import { describe, expect, it, mock } from "bun:test";
 import type { ComponentProps, CSSProperties } from "react";
 
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
@@ -54,6 +54,9 @@ function renderVisualGroupLayer(
           <FactoryGraphVisualGroupLayer
             canEdit
             groupAriaLabel={(group) => group.label ?? group.id}
+            groupOutlineAriaLabel={(group, edge) =>
+              `${group.label ?? group.id} outline ${edge}`
+            }
             groups={[sampleGroup]}
             onSelectGroup={onSelectGroup}
             resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
@@ -82,7 +85,7 @@ describe("FactoryGraphVisualGroupLayer", () => {
     expect(screen.getByText("group-1")).toBeInTheDocument();
   });
 
-  it("ignores non-action keyboard events on the group body", () => {
+  it("ignores non-action keyboard events on the group label affordance", () => {
     const { onSelectGroup } = renderVisualGroupLayer();
     const groupBody = screen.getByRole("button", { name: "Review" });
 
@@ -98,7 +101,7 @@ describe("FactoryGraphVisualGroupLayer", () => {
       selectedGroupId: "group-1",
     });
 
-    expect(screen.getByText("Review")).toBeInTheDocument();
+    expect(screen.getByTitle("Review")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -108,7 +111,22 @@ describe("FactoryGraphVisualGroupLayer", () => {
     ).toBeInTheDocument();
   });
 
-  it("selects a group when Enter or Space is pressed on the group body", () => {
+  it("keeps the decorative interior transparent and targets only label or outline affordances", () => {
+    renderVisualGroupLayer();
+
+    const body = document.querySelector('[data-factory-visual-group-body=""]');
+    const label = screen.getByRole("button", { name: "Review" });
+    const outline = screen.getByRole("button", {
+      name: "Review outline top",
+    });
+
+    expect(body).toHaveClass("pointer-events-none");
+    expect(body).not.toHaveAttribute("role");
+    expect(label).toHaveClass("pointer-events-auto");
+    expect(outline).toHaveClass("pointer-events-auto");
+  });
+
+  it("selects a group when Enter or Space is pressed on the group label affordance", () => {
     const { onSelectGroup } = renderVisualGroupLayer({ selectedGroupId: null });
     const groupBody = screen.getByRole("button", { name: "Review" });
 
@@ -119,6 +137,79 @@ describe("FactoryGraphVisualGroupLayer", () => {
     onSelectGroup.mockClear();
     fireEvent.keyDown(groupBody, { key: " " });
     expect(onSelectGroup).toHaveBeenCalledWith("group-1");
+  });
+
+  it("moves from the label with keyboard arrows and resizes from a focused handle", () => {
+    const onMoveGroup = vi.fn();
+    const onResizeGroup = vi.fn();
+
+    renderVisualGroupLayer({
+      onMoveGroup,
+      onResizeGroup,
+      selectedGroupId: "group-1",
+    });
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Review" }), {
+      key: "ArrowRight",
+    });
+    expect(onMoveGroup).toHaveBeenCalledWith(
+      "group-1",
+      { x: 16, y: 0 },
+      expect.any(Map),
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Resize se" }), {
+      key: "ArrowDown",
+    });
+    expect(onResizeGroup).toHaveBeenCalledWith("group-1", {
+      height: 136,
+      width: 200,
+      x: 40,
+      y: 60,
+    });
+  });
+
+  it("moves from the outline with keyboard arrows and pointer dragging", () => {
+    const onMoveGroup = vi.fn();
+
+    renderVisualGroupLayer({
+      onMoveGroup,
+      selectedGroupId: "group-1",
+    });
+
+    const outline = screen.getByRole("button", {
+      name: "Review outline right",
+    });
+    fireEvent.keyDown(outline, { key: "ArrowLeft" });
+    expect(onMoveGroup).toHaveBeenCalledWith(
+      "group-1",
+      { x: -16, y: 0 },
+      expect.any(Map),
+    );
+
+    onMoveGroup.mockClear();
+    enablePointerCapture(outline);
+    fireEvent.pointerDown(outline, {
+      clientX: 240,
+      clientY: 120,
+      pointerId: 4,
+    });
+    fireEvent.pointerMove(outline, {
+      clientX: 280,
+      clientY: 150,
+      pointerId: 4,
+    });
+    fireEvent.pointerUp(outline, {
+      clientX: 280,
+      clientY: 150,
+      pointerId: 4,
+    });
+
+    expect(onMoveGroup).toHaveBeenCalledWith(
+      "group-1",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+      expect.any(Map),
+    );
   });
 
   it("renders nothing when there are no groups", () => {
@@ -133,6 +224,9 @@ describe("FactoryGraphVisualGroupLayer", () => {
             <FactoryGraphVisualGroupLayer
               canEdit
               groupAriaLabel={(group) => group.label ?? group.id}
+              groupOutlineAriaLabel={(group, edge) =>
+                `${group.label ?? group.id} outline ${edge}`
+              }
               groups={[]}
               onSelectGroup={vi.fn()}
               resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
@@ -189,6 +283,9 @@ describe("FactoryGraphVisualGroupLayer", () => {
             <FactoryGraphVisualGroupLayer
               canEdit
               groupAriaLabel={(group) => group.label ?? group.id}
+              groupOutlineAriaLabel={(group, edge) =>
+                `${group.label ?? group.id} outline ${edge}`
+              }
               groups={[
                 {
                   ...sampleGroup,
@@ -444,6 +541,9 @@ describe("FactoryGraphVisualGroupLayer", () => {
             <FactoryGraphVisualGroupLayer
               canEdit
               groupAriaLabel={(group) => group.label ?? group.id}
+              groupOutlineAriaLabel={(group, edge) =>
+                `${group.label ?? group.id} outline ${edge}`
+              }
               groups={[
                 {
                   ...sampleGroup,

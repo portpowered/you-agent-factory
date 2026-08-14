@@ -312,4 +312,92 @@ describe("useEditableFactoryGraph", () => {
       });
     });
   });
+
+  it("keeps visual group edits retryable when the first save fails", async () => {
+    const saveAsync = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("API unavailable"))
+      .mockImplementation(async ({ factory }) => ({
+        ...factory,
+        version: {
+          logical: "9",
+          physical: "2026-05-24T15:52:00Z",
+        },
+      }));
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ saveAsync }),
+    );
+    hookState.draftState.pendingFactoryDefinition = null;
+
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument,
+      factoryDocumentScopeKey: "session-graph",
+    });
+
+    act(() => {
+      result.current.actions.createVisualGroup(
+        { x: 200, y: 150 },
+        {
+          nodeGeometryById: new Map([
+            [
+              "workstation:draft",
+              {
+                height: 120,
+                position: { x: 80, y: 100 },
+                width: 220,
+              },
+            ],
+          ]),
+          nodeIds: ["workstation:draft"],
+        },
+      );
+    });
+
+    const createdGroup = result.current.layoutDraftState.layout.groups?.[0];
+    expect(createdGroup).toMatchObject({
+      nodeIds: ["workstation:draft"],
+    });
+    expect(result.current.pendingState.layoutDirty).toBe(true);
+
+    let didSave = true;
+    await act(async () => {
+      didSave = await result.current.actions.save();
+    });
+
+    expect(didSave).toBe(false);
+    expect(result.current.pendingState.layoutDirty).toBe(true);
+    expect(result.current.layoutDraftState.layout.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: createdGroup?.id,
+          nodeIds: ["workstation:draft"],
+        }),
+      ]),
+    );
+    expect(saveMutation.saveAsync).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(result.current.saveState.documentSave).toEqual({
+        errorMessage: "API unavailable",
+        status: "error",
+      });
+    });
+
+    await act(async () => {
+      didSave = await result.current.actions.save();
+    });
+
+    expect(didSave).toBe(true);
+    expect(saveMutation.saveAsync).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(result.current.pendingState.layoutDirty).toBe(false);
+    });
+    expect(result.current.layoutDraftState.layout.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: createdGroup?.id,
+          nodeIds: ["workstation:draft"],
+        }),
+      ]),
+    );
+  });
 });
