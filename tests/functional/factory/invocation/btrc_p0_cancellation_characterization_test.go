@@ -101,7 +101,6 @@ var btrcOneShotCanceledEventOrders = [][]interfaces.FactoryEventType{
 		interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
 		interfaces.FactoryEventTypeModelRequest,
 		interfaces.FactoryEventTypeModelResponse,
-		interfaces.FactoryEventTypeAgentRunResponse,
 		interfaces.FactoryEventTypeFactoryStateResponse,
 		interfaces.FactoryEventTypeRunResponse,
 		interfaces.FactoryEventTypeSessionResultUpdated,
@@ -118,7 +117,6 @@ var btrcOneShotCanceledEventOrders = [][]interfaces.FactoryEventType{
 		interfaces.FactoryEventTypeModelRequest,
 		interfaces.FactoryEventTypeFactoryStateResponse,
 		interfaces.FactoryEventTypeModelResponse,
-		interfaces.FactoryEventTypeAgentRunResponse,
 		interfaces.FactoryEventTypeRunResponse,
 		interfaces.FactoryEventTypeSessionResultUpdated,
 		interfaces.FactoryEventTypeSessionCompleted,
@@ -127,14 +125,19 @@ var btrcOneShotCanceledEventOrders = [][]interfaces.FactoryEventType{
 
 func assertBTRCOneShotCanceledEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 	t.Helper()
-	types := make([]interfaces.FactoryEventType, len(events))
+	types := make([]interfaces.FactoryEventType, 0, len(events))
 	for index, event := range events {
-		types[index] = event.Type
 		if event.Context.Sequence != index {
 			t.Fatalf("canceled event[%d] sequence = %d, want %d", index, event.Context.Sequence, index)
 		}
 		if strings.TrimSpace(event.Id) == "" {
 			t.Fatalf("canceled event[%d] id is empty", index)
+		}
+		// Agent-run responses are emitted only if cancellation loses the race
+		// with the detached run. Exclude that optional observation so this
+		// characterization asserts the deterministic lifecycle ordering.
+		if event.Type != interfaces.FactoryEventTypeAgentRunResponse {
+			types = append(types, event.Type)
 		}
 	}
 	for _, want := range btrcOneShotCanceledEventOrders {

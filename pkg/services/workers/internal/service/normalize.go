@@ -58,7 +58,7 @@ func (s *Service) normalizeSuccessfulResult(
 	case workers.ExecutionOutcomeRejected:
 		if s != nil && s.providerOverride != nil &&
 			resolveRunnerIdentity(request.Target) == runners.AgentIdentity &&
-			!workers.UsesACPProvider(request.Target.ExecutorProvider) &&
+			!usesACPProvider(request.Target.ExecutorProvider) &&
 			!hasProviderCompletionEvidence(runnerResult) {
 			message, _ := workerexecutor.CompletionValidationFailure(runnerResult)
 			return result, workers.NewProviderError(workers.WorkFailureTypeUnknown, message, nil)
@@ -85,6 +85,10 @@ func (s *Service) normalizeSuccessfulResult(
 		}
 	}
 	return result, nil
+}
+
+func usesACPProvider(executorProvider string) bool {
+	return strings.EqualFold(strings.TrimSpace(executorProvider), workers.ExecutorProviderACP)
 }
 
 func hasProviderCompletionEvidence(result workers.RunnerExecutionResult) bool {

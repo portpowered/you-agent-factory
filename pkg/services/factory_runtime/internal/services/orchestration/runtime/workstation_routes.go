@@ -478,8 +478,8 @@ func finalizeRuntimeExecutionSelection(
 	// Detached Workers authorizes Target.Provider.ID before it reaches the
 	// agent runner, so carry the concrete model-provider identity across this
 	// boundary and use it for runner selection as well.
-	if workers.UsesACPProvider(selection.executorProvider) ||
-		workers.UsesACPProvider(selection.providerID) {
+	if isACPProviderMarker(selection.executorProvider) ||
+		isACPProviderMarker(selection.providerID) {
 		selection.executorProvider = workers.ExecutorProviderACP
 		if identity, err := workers.RunnerIdentityForWorker(
 			selection.providerID,
@@ -504,6 +504,10 @@ func finalizeRuntimeExecutionSelection(
 		selection.toolExecutionMode = workers.RunnerToolExecutionModeDisabled
 	}
 	selection.environment = mergeRuntimeStringMaps(nil, selection.environment)
+}
+
+func isACPProviderMarker(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), workers.ExecutorProviderACP)
 }
 
 func firstExpectedArtifactFileSystem(values []expectedArtifactFileSystem) expectedArtifactFileSystem {

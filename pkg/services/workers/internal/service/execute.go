@@ -212,7 +212,7 @@ func (s *Service) runRunner(
 	}
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if s.providerOverride != nil && identity == runners.AgentIdentity &&
-		!workers.UsesACPProvider(runnerRequest.ExecutorProvider) {
+		!usesACPProvider(runnerRequest.ExecutorProvider) {
 		return s.executeProviderWithRetry(ctx, runnerRequest, func(
 			request workers.RunnerExecutionRequest,
 		) (workers.RunnerExecutionResult, error) {
