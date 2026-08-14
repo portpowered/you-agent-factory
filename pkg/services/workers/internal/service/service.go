@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -30,6 +31,9 @@ type Service struct {
 	// declares Tools.AgentLoop. It is immutable process configuration; the loop
 	// itself keeps no state between Execute calls.
 	agentRunHarness agentrun.HarnessAdapter
+	// decisionEnvelopes is the Factory Definitions owner used when a detached
+	// provider override replaces the registered Agent runner.
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService
 }
 
 // New constructs an inert Execute capability. Construction performs no runner
@@ -56,6 +60,7 @@ func New(
 		temporaryFiles,
 		nil,
 		nil,
+		nil,
 		factoryDocs...,
 	)
 }
@@ -75,6 +80,7 @@ func NewWithProviderOverride(
 	temporaryFiles workers.TemporaryFileSystem,
 	providerOverride workers.Provider,
 	agentRunHarness agentrun.HarnessAdapter,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	factoryDocs ...workers.FactoryDocsLoader,
 ) (*Service, error) {
 	return newService(
@@ -88,6 +94,7 @@ func NewWithProviderOverride(
 		temporaryFiles,
 		providerOverride,
 		agentRunHarness,
+		decisionEnvelopes,
 		factoryDocs...,
 	)
 }
@@ -103,6 +110,7 @@ func newService(
 	temporaryFiles workers.TemporaryFileSystem,
 	providerOverride workers.Provider,
 	agentRunHarness agentrun.HarnessAdapter,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	factoryDocs ...workers.FactoryDocsLoader,
 ) (*Service, error) {
 	if runnerService == nil {
@@ -116,16 +124,17 @@ func newService(
 		docsLoader = factoryDocs[0]
 	}
 	return &Service{
-		runners:          runnerService,
-		providers:        providersService,
-		providerOverride: providerOverride,
-		observe:          observe,
-		logger:           logging.EnsureLogger(logger),
-		clock:            clock,
-		worktree:         worktree,
-		worktreeRelease:  worktreeRelease,
-		temporaryFiles:   temporaryFiles,
-		factoryDocs:      docsLoader,
-		agentRunHarness:  agentRunHarness,
+		runners:           runnerService,
+		providers:         providersService,
+		providerOverride:  providerOverride,
+		observe:           observe,
+		logger:            logging.EnsureLogger(logger),
+		clock:             clock,
+		worktree:          worktree,
+		worktreeRelease:   worktreeRelease,
+		temporaryFiles:    temporaryFiles,
+		factoryDocs:       docsLoader,
+		agentRunHarness:   agentRunHarness,
+		decisionEnvelopes: decisionEnvelopes,
 	}, nil
 }

@@ -105,6 +105,7 @@ func NewService(
 		temporaryFiles,
 		providerOverride,
 		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
+		agentDependencies.DecisionEnvelopes,
 		scriptDependencies.FactoryDocs,
 	)
 	if err != nil {
