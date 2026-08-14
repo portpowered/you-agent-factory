@@ -13,6 +13,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
@@ -146,6 +147,85 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 		t.Fatalf("command context = %#v, want detached workflow context", captured)
 	}
 	assertEnv(t, captured.Env, "RUNTIME", "detached-env")
+}
+
+func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
+	t.Run("non-streaming override preserves output and correlation", func(t *testing.T) {
+		constructionRunner := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("construction")}}
+		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
+		request := validRequest()
+		request.Correlation = workers.ExecutionCorrelation{
+			FactorySessionID: "session-detached",
+			RuntimeID:        "runtime-detached",
+			GenerationID:     "generation-detached",
+			DispatchID:       "dispatch-detached",
+			AttemptID:        "attempt-detached",
+		}
+		override := nonStreamingCommandRunner{result: workers.CommandResult{
+			Stdout: []byte("override stdout"),
+			Stderr: []byte("override stderr"),
+		}}
+		var fragments []workers.ProgressFragment
+		var events []workers.ScriptEvent
+		ctx := workerexecution.WithCommandRunnerOverride(t.Context(), override)
+		ctx = workerexecution.WithProgressPublisher(ctx, func(fragment workers.ProgressFragment) {
+			fragments = append(fragments, fragment)
+		})
+		ctx = workerexecution.WithScriptEventRecorder(ctx, func(event workers.ScriptEvent) {
+			events = append(events, event)
+		})
+
+		result, err := scriptRunner.Execute(ctx, request)
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if result.Content != "override stdout" {
+			t.Fatalf("result content = %q, want override output", result.Content)
+		}
+		if constructionRunner.Calls() != 0 {
+			t.Fatalf("construction command calls = %d, want request override only", constructionRunner.Calls())
+		}
+		if len(fragments) != 2 || fragments[0].Payload != "override stdout" || fragments[1].Payload != "override stderr" {
+			t.Fatalf("request-scoped progress = %#v, want stdout and stderr chunks", fragments)
+		}
+		for _, fragment := range fragments {
+			if fragment.Correlation != request.Correlation {
+				t.Fatalf("progress correlation = %#v, want %#v", fragment.Correlation, request.Correlation)
+			}
+		}
+		if len(events) != 2 {
+			t.Fatalf("request-scoped script events = %d, want request and response", len(events))
+		}
+	})
+
+	t.Run("streaming override keeps streaming boundary", func(t *testing.T) {
+		constructionRunner := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("construction")}}
+		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
+		override := &streamingCommandEdge{
+			chunks: []outputChunk{{stream: platformprocess.OutputStreamStdout, payload: "streamed"}},
+			result: workers.CommandResult{Stdout: []byte("streamed")},
+		}
+		ctx := workerexecution.WithCommandRunnerOverride(t.Context(), override)
+		result, err := scriptRunner.Execute(ctx, validRequest())
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if result.Content != "streamed" || constructionRunner.Calls() != 0 {
+			t.Fatalf("streaming override result/calls = %q/%d, want streamed/0", result.Content, constructionRunner.Calls())
+		}
+	})
+}
+
+func TestCommandRunnerWithStreamingFallbackPreservesResultWithoutObserver(t *testing.T) {
+	want := workers.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr"), ExitCode: 3}
+	runner := commandRunnerWithStreamingFallback{runner: nonStreamingCommandRunner{result: want}}
+	got, err := runner.RunStreaming(context.Background(), workers.CommandRequest{}, nil)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RunStreaming() result = %#v, want %#v", got, want)
+	}
 }
 
 func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {

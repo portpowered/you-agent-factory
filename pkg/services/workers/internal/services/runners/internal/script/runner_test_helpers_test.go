@@ -134,13 +134,16 @@ func (clock *sequenceClock) Now() time.Time {
 	return value
 }
 
-type nonStreamingCommandRunner struct{}
+type nonStreamingCommandRunner struct {
+	result workers.CommandResult
+	err    error
+}
 
-func (nonStreamingCommandRunner) Run(
+func (runner nonStreamingCommandRunner) Run(
 	context.Context,
 	workers.CommandRequest,
 ) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	return runner.result, runner.err
 }
 
 type captureCommandRunner struct {
