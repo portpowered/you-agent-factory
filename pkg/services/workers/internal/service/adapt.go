@@ -263,7 +263,7 @@ func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {
 	tokens := make([]workers.Token, 0, len(inputs))
 	for _, input := range inputs {
 		color := workers.Color{
-			Name:       firstNonEmpty(input.Lineage.OriginRef, input.WorkID),
+			Name:       firstNonEmpty(input.Name, input.Lineage.OriginRef, input.WorkID),
 			RequestID:  input.RequestID,
 			WorkID:     input.WorkID,
 			WorkTypeID: input.WorkTypeID,

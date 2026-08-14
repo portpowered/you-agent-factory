@@ -546,6 +546,7 @@ type ExecutionInput struct {
 
 type WorkInput struct {
 	WorkID       string
+	Name         string
 	WorkTypeID   string
 	RequestID    string
 	Content      []work.WorkContentPart

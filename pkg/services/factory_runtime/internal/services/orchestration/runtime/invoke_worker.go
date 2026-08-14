@@ -577,6 +577,7 @@ func workInputsFromTokens(tokens []workers.Token, dispatch work.WorkDispatch) ([
 		}
 		inputs = append(inputs, workers.WorkInput{
 			WorkID:     token.Color.WorkID,
+			Name:       token.Color.Name,
 			WorkTypeID: token.Color.WorkTypeID,
 			RequestID:  token.Color.RequestID,
 			Content:    content,

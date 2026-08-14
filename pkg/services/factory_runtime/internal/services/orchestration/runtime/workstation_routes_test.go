@@ -605,6 +605,7 @@ func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.
 			workers.Token{
 				ID: "content",
 				Color: workers.Color{
+					Name:       "content display name",
 					DataType:   workers.DataTypeWork,
 					WorkID:     "work-content",
 					WorkTypeID: "review",
@@ -630,8 +631,8 @@ func TestWorkInputsFromDispatchFiltersResourcesAndBuildsAttemptFacts(t *testing.
 		inputs[0].Tags["source"] != "legacy" {
 		t.Fatalf("legacy input = %#v, want payload fallback and attempt facts", inputs[0])
 	}
-	if inputs[1].WorkID != "work-content" || inputs[1].Content[0].Text != "content body" || inputs[1].AttemptFacts.AttemptNumber != 5 {
-		t.Fatalf("content input = %#v, want content and attempt facts", inputs[1])
+	if inputs[1].WorkID != "work-content" || inputs[1].Name != "content display name" || inputs[1].Content[0].Text != "content body" || inputs[1].AttemptFacts.AttemptNumber != 5 {
+		t.Fatalf("content input = %#v, want name, content, and attempt facts", inputs[1])
 	}
 }
 
