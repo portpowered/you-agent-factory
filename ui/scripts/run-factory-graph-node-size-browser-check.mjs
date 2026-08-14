@@ -43,6 +43,7 @@ try {
     state: "visible",
   });
   const selectedButton = await selectWorkstation(page);
+  await waitForAttachedEdges(page, workstationId);
 
   const resizeActions = page.locator(
     "[data-factory-graph-node-resize-actions]",
@@ -248,6 +249,14 @@ async function attachedEdgeIds(page) {
           .filter((edgeId) => edgeId?.includes(nodeId)),
       workstationId,
     );
+}
+
+async function waitForAttachedEdges(page, nodeId) {
+  await page.waitForFunction((id) => {
+    return Array.from(document.querySelectorAll(".react-flow__edge")).some(
+      (edge) => edge.getAttribute("data-id")?.includes(id),
+    );
+  }, nodeId);
 }
 
 function assertDimensionsMatchSaved(actual, saved) {

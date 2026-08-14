@@ -50,6 +50,10 @@ export function useCurrentActivityGraphLayoutForFactory(
     factoryOverride === undefined ? snapshot.factory : factoryOverride;
   const hiddenClassesKey = [...hiddenNodeClasses].sort().join(",");
   const builderCacheKey = getGraphLayoutBuilderCacheKey(buildLayout);
+  const canonicalNodeSizesKey = useMemo(
+    () => factoryLayoutNodeSizesKey(canonicalLayout),
+    [canonicalLayout],
+  );
   const layoutSource = useMemo(
     () =>
       factory
@@ -71,7 +75,7 @@ export function useCurrentActivityGraphLayoutForFactory(
 
   return useWorkflowTopologyAsyncCache({
     cache: GRAPH_LAYOUT_CACHE,
-    dependencies: [buildLayout, canonicalLayout, layoutSource],
+    dependencies: [buildLayout, canonicalNodeSizesKey, layoutSource],
     fallbackValue: EMPTY_GRAPH_LAYOUT,
     initialValue: EMPTY_GRAPH_LAYOUT,
     loadLayout: () =>
@@ -96,6 +100,16 @@ export function useCurrentActivityGraphLayoutForFactory(
     },
     topologyKey: `${layoutSource.key}|builder:${builderCacheKey}`,
   });
+}
+
+function factoryLayoutNodeSizesKey(layout: FactoryLayout | undefined): string {
+  return (layout?.nodes ?? [])
+    .map(
+      (node) =>
+        `${node.id}:${node.size?.width ?? ""}x${node.size?.height ?? ""}`,
+    )
+    .sort()
+    .join("|");
 }
 
 function getGraphLayoutBuilderCacheKey(

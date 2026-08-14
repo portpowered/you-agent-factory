@@ -135,15 +135,39 @@ async function findPointInsideRegion(page, region, { requireCanvas }) {
     height: window.innerHeight,
     width: window.innerWidth,
   }));
+  const canvasBounds = requireCanvas
+    ? await page.locator(".react-flow__pane").boundingBox()
+    : null;
+  const candidateBounds = canvasBounds
+    ? {
+        x: Math.max(bounds.x, canvasBounds.x),
+        y: Math.max(bounds.y, canvasBounds.y),
+        width:
+          Math.min(
+            bounds.x + bounds.width,
+            canvasBounds.x + canvasBounds.width,
+          ) - Math.max(bounds.x, canvasBounds.x),
+        height:
+          Math.min(
+            bounds.y + bounds.height,
+            canvasBounds.y + canvasBounds.height,
+          ) - Math.max(bounds.y, canvasBounds.y),
+      }
+    : bounds;
+  if (candidateBounds.width <= 0 || candidateBounds.height <= 0) {
+    throw new Error(
+      `Could not find a visible canvas portion inside ${GROUP_LABEL}.`,
+    );
+  }
   for (const [xRatio, yRatio] of candidates) {
     const point = {
-      x: bounds.x + bounds.width * xRatio,
-      y: bounds.y + bounds.height * yRatio,
+      x: candidateBounds.x + candidateBounds.width * xRatio,
+      y: candidateBounds.y + candidateBounds.height * yRatio,
     };
     const hit = await readHitTarget(page, point);
     if (
       !hit.isGroupRegion &&
-      (!requireCanvas || hit.isCanvas) &&
+      (!requireCanvas || (hit.isCanvas && !hit.isEdge && !hit.isNode)) &&
       point.x >= 0 &&
       point.y >= 0 &&
       point.x <= viewport.width &&
@@ -248,6 +272,7 @@ async function readHitTarget(page, point) {
     return {
       isCanvas: Boolean(target?.closest(".react-flow__pane")),
       isEdge: Boolean(target?.closest(".react-flow__edge")),
+      isNode: Boolean(target?.closest(".react-flow__node")),
       isGroupRegion: Boolean(
         target?.closest(
           "[data-factory-visual-group], [data-factory-graph-group-region]",
