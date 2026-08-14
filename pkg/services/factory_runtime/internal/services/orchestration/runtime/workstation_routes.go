@@ -72,6 +72,7 @@ type runtimeExecutionSelection struct {
 	modelLocality               string
 	reasoningEffort             string
 	modelOperation              string
+	modelBindings               []workers.ResolvedModelOperationBinding
 	scriptClassifier            bool
 	capabilities                *workers.Capabilities
 	command                     string
@@ -110,13 +111,14 @@ type runtimeTemplateFieldResolver interface {
 func resolveRuntimeExecutionSelection(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,
+	inputTokens []workers.Token,
 	inputs []workers.WorkInput,
 	invocation *work.InvocationArguments,
 ) runtimeExecutionSelection {
 	selection := initialRuntimeExecutionSelection(request.Execution)
 	resolveRuntimeSelectionInvocation(&selection, invocation)
 	if lookup, ok := runtimeDefinitionLookup(cfg); ok {
-		applyRuntimeDefinitionSelection(cfg, lookup, request, invocation, &selection)
+		applyRuntimeDefinitionSelection(cfg, lookup, request, inputTokens, invocation, &selection)
 	}
 	if selection.factoryDirectory == "" && cfg != nil && cfg.workflowContext != nil {
 		selection.factoryDirectory = strings.TrimSpace(cfg.workflowContext.FactoryDirectory)
@@ -167,6 +169,7 @@ func applyRuntimeDefinitionSelection(
 	cfg *runtimeConfig,
 	lookup interfaces.RuntimeDefinitionLookup,
 	request workers.WorkstationDispatchRequest,
+	inputTokens []workers.Token,
 	invocation *work.InvocationArguments,
 	selection *runtimeExecutionSelection,
 ) {
@@ -196,12 +199,48 @@ func applyRuntimeDefinitionSelection(
 			selection.interpolationError = fmt.Errorf("interpolate worker definition: %w", err)
 			return
 		}
-		applyRuntimeWorkerSelection(cfg, selection, request.Execution, invocation, interpolated)
+		restoreRuntimeWorkerFallbacks(worker, interpolated, invocation)
+		if err := applyRuntimeWorkerSelection(cfg, selection, request.Execution, invocation, interpolated); err != nil {
+			selection.interpolationError = fmt.Errorf("interpolate worker prompt: %w", err)
+			return
+		}
+		if workstationFound && workstation != nil {
+			bindings, err := resolveRuntimeModelOperationBindings(workstation, interpolated, inputTokens)
+			if err != nil {
+				selection.interpolationError = fmt.Errorf("resolve model operation bindings: %w", err)
+				return
+			}
+			selection.modelBindings = bindings
+		}
 	}
 	if workstationFound && workstation != nil {
 		applyRuntimeWorkstationSelection(cfg, selection, invocation, workstation)
 	}
 	applyRuntimeConfigSelection(cfg, selection)
+}
+
+func restoreRuntimeWorkerFallbacks(
+	authored *interfaces.FactoryWorkerConfig,
+	interpolated *interfaces.FactoryWorkerConfig,
+	invocation *work.InvocationArguments,
+) {
+	if authored == nil || interpolated == nil {
+		return
+	}
+	if strings.TrimSpace(interpolated.Model) == "" {
+		interpolated.Model = resolveRuntimeWorkerValue(
+			authored.Model,
+			invocation,
+			interpolated.RuntimeDefaultModel,
+		)
+	}
+	if strings.TrimSpace(interpolated.ModelProvider) == "" {
+		interpolated.ModelProvider = resolveRuntimeWorkerValue(
+			authored.ModelProvider,
+			invocation,
+			interpolated.RuntimeDefaultModelProvider,
+		)
+	}
 }
 
 func missingRuntimeWorkerDefinition(
@@ -217,11 +256,15 @@ func applyRuntimeWorkerSelection(
 	execution workers.WorkstationExecutionRequest,
 	invocation *work.InvocationArguments,
 	worker *interfaces.FactoryWorkerConfig,
-) {
+) error {
 	selection.workerName = firstRuntimeValue(strings.TrimSpace(execution.WorkerName), worker.Name)
 	selection.workerType = firstRuntimeValue(worker.Type, selection.workerType)
 	if body, ok := runtimePromptSourceContent(cfg, worker.Name, true, true); ok {
-		selection.systemPrompt = body
+		interpolated, err := interpolateRuntimeWorkerPrompt(cfg, body, invocation)
+		if err != nil {
+			return err
+		}
+		selection.systemPrompt = interpolated
 	} else {
 		selection.systemPrompt = firstRuntimeValue(
 			selection.systemPrompt,
@@ -267,6 +310,26 @@ func applyRuntimeWorkerSelection(
 		!strings.EqualFold(worker.AgentTools.Policy, "DISABLED") {
 		selection.toolExecutionMode = workers.RunnerToolExecutionModeRequired
 	}
+	return nil
+}
+
+func interpolateRuntimeWorkerPrompt(
+	cfg *runtimeConfig,
+	body string,
+	invocation *work.InvocationArguments,
+) (string, error) {
+	if cfg == nil || cfg.invocationInterpolation == nil {
+		return body, nil
+	}
+	interpolated, err := cfg.invocationInterpolation.InterpolateWorkerConfig(
+		interfaces.FactoryWorkerConfig{Body: body},
+		invocation,
+		cfg.invocationFileReader,
+	)
+	if err != nil {
+		return "", err
+	}
+	return interpolated.Body, nil
 }
 
 func applyRuntimeWorkstationSelection(

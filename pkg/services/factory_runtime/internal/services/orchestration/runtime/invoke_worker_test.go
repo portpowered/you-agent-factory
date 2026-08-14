@@ -538,6 +538,7 @@ func TestRuntimeExecutionSelectionMergesAuthoredWorkerWorkstationAndFactoryDefau
 	selection := resolveRuntimeExecutionSelection(
 		&runtimeConfig{runtimeConfig: lookup},
 		request,
+		nil,
 		[]workers.WorkInput{{Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input message",
@@ -576,7 +577,7 @@ func TestRuntimeExecutionSelectionResolvesInvocationWorkerDefaults(t *testing.T)
 		"executorModel":    {Values: []string{""}},
 	}}
 	selection := resolveRuntimeExecutionSelection(
-		&runtimeConfig{runtimeConfig: lookup}, request, nil, invocation,
+		&runtimeConfig{runtimeConfig: lookup}, request, nil, nil, invocation,
 	)
 	if selection.providerID != "operator-provider" || selection.modelProvider != "operator-provider" ||
 		selection.model != "operator-model" || selection.runnerID != workers.RunnerIDCodex {
@@ -586,7 +587,7 @@ func TestRuntimeExecutionSelectionResolvesInvocationWorkerDefaults(t *testing.T)
 	invocation.Arguments["executorProvider"] = work.InvocationArgument{Values: []string{"explicit-provider"}}
 	invocation.Arguments["executorModel"] = work.InvocationArgument{Values: []string{"explicit-model"}}
 	selection = resolveRuntimeExecutionSelection(
-		&runtimeConfig{runtimeConfig: lookup}, request, nil, invocation,
+		&runtimeConfig{runtimeConfig: lookup}, request, nil, nil, invocation,
 	)
 	if selection.providerID != "explicit-provider" || selection.modelProvider != "explicit-provider" ||
 		selection.model != "explicit-model" {

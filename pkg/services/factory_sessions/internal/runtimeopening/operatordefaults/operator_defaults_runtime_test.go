@@ -74,6 +74,45 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 	}
 }
 
+func TestApplyOperatorDefaultsToLoadedConfigKeepsInvocationFallbacks(t *testing.T) {
+	loaded := newOperatorDefaultsRuntimeFixture(t, map[string]any{
+		"invocationSignature": map[string]any{
+			"parameters": []map[string]any{{"name": "provider"}, {"name": "model"}},
+		},
+		"workers": []map[string]any{{
+			"name":          "executor",
+			"type":          "AGENT_WORKER",
+			"modelProvider": "${provider}",
+			"model":         "${model}",
+		}},
+	})
+
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "CODEX",
+		WorkerModel:         "gpt-5-codex",
+	}); err != nil {
+		t.Fatalf("ApplyOperatorDefaultsToLoadedConfig: %v", err)
+	}
+
+	worker, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected executor worker")
+	}
+	if worker.ModelProvider != "${provider}" || worker.Model != "${model}" {
+		t.Fatalf("authored worker selection = %#v, want invocation placeholders preserved", worker)
+	}
+	if worker.RuntimeDefaultModelProvider != string(modelprovider.ProviderCodex) ||
+		worker.RuntimeDefaultModel != "gpt-5-codex" {
+		t.Fatalf(
+			"runtime defaults = provider %q/model %q, want %q/%q",
+			worker.RuntimeDefaultModelProvider,
+			worker.RuntimeDefaultModel,
+			modelprovider.ProviderCodex,
+			"gpt-5-codex",
+		)
+	}
+}
+
 func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *testing.T) {
 	factoryDir := t.TempDir()
 	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, &interfaces.FactoryConfig{

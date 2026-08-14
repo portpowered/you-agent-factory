@@ -33,9 +33,20 @@ func (invocationInterpolationTestService) ValidateInvocationInterpolation(
 
 func (invocationInterpolationTestService) InterpolateWorkerConfig(
 	worker interfaces.FactoryWorkerConfig,
-	_ *work.InvocationArguments,
+	invocation *work.InvocationArguments,
 	_ interfaces.FileReader,
 ) (interfaces.FactoryWorkerConfig, error) {
+	if invocation != nil {
+		for name, argument := range invocation.Arguments {
+			if len(argument.Values) == 1 {
+				worker.Body = strings.ReplaceAll(
+					worker.Body,
+					"${"+name+"}",
+					argument.Values[0],
+				)
+			}
+		}
+	}
 	return worker, nil
 }
 
@@ -97,6 +108,7 @@ func TestRuntimeExecutionSelectionMarksTopologyOnlyWorkerAsNoop(t *testing.T) {
 				WorkerType: "worker-a",
 			},
 		},
+		nil,
 		nil,
 		nil,
 	)
@@ -191,6 +203,39 @@ func TestApplyRuntimeWorkerSelectionUsesWorkerBodyAsSystemPrompt(t *testing.T) {
 
 	if selection.systemPrompt != "worker system prompt" {
 		t.Fatalf("systemPrompt = %q, want worker body", selection.systemPrompt)
+	}
+}
+
+func TestApplyRuntimeWorkerSelectionInterpolatesRefreshedWorkerPrompt(t *testing.T) {
+	lookup := runtimePromptSourceLookupFixture{
+		RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{},
+		worker:                         interfaces.PromptSource{Path: "worker.md"},
+	}
+	cfg := &runtimeConfig{
+		runtimeConfig:           lookup,
+		invocationInterpolation: invocationInterpolationTestService{},
+		promptSourceReader: func(path string) ([]byte, error) {
+			if path != "worker.md" {
+				return nil, errors.New("missing source")
+			}
+			return []byte("---\nrole: worker\n---\nReasoning effort: ${effort}\nbody"), nil
+		},
+	}
+	selection := runtimeExecutionSelection{}
+	err := applyRuntimeWorkerSelection(
+		cfg,
+		&selection,
+		workers.WorkstationExecutionRequest{},
+		&work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+			"effort": {Values: []string{"low"}},
+		}},
+		&interfaces.FactoryWorkerConfig{Name: "worker", Type: interfaces.WorkerTypeModel},
+	)
+	if err != nil {
+		t.Fatalf("applyRuntimeWorkerSelection() error = %v", err)
+	}
+	if selection.systemPrompt != "Reasoning effort: low\nbody" {
+		t.Fatalf("systemPrompt = %q, want interpolated refreshed prompt", selection.systemPrompt)
 	}
 }
 

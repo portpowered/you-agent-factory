@@ -25,7 +25,6 @@ func ApplyToLoadedConfig(loaded interfaces.MutableLoadedFactorySource, defaults 
 		return err
 	}
 	defaultModel := strings.TrimSpace(defaults.WorkerModel)
-
 	return loaded.MutateWorkers(func(worker *interfaces.FactoryWorkerConfig) error {
 		return applyOperatorDefaultsToWorker(worker, defaultProvider, defaultModel)
 	})
@@ -89,6 +88,16 @@ func applyOperatorDefaultsToWorker(worker *interfaces.FactoryWorkerConfig, defau
 	if worker == nil || !isModelWorkerType(worker.Type) {
 		return nil
 	}
+	// Keep defaults alongside invocation placeholders. The authored expression
+	// must remain intact until invocation arguments are available, while the
+	// Runtime selection boundary still needs a fallback when the invocation
+	// parameter is omitted.
+	if _, ok := exactInvocationParameter(worker.ModelProvider); ok {
+		worker.RuntimeDefaultModelProvider = defaultProvider
+	}
+	if _, ok := exactInvocationParameter(worker.Model); ok {
+		worker.RuntimeDefaultModel = defaultModel
+	}
 	if strings.TrimSpace(worker.ModelProvider) == "" && defaultProvider != "" {
 		worker.ModelProvider = defaultProvider
 	}
@@ -96,6 +105,14 @@ func applyOperatorDefaultsToWorker(worker *interfaces.FactoryWorkerConfig, defau
 		worker.Model = defaultModel
 	}
 	return nil
+}
+
+func exactInvocationParameter(value string) (string, bool) {
+	match := exactInvocationInterpolationPattern.FindStringSubmatch(strings.TrimSpace(value))
+	if len(match) != 2 {
+		return "", false
+	}
+	return strings.TrimSpace(match[1]), true
 }
 
 func isModelWorkerType(workerType string) bool {

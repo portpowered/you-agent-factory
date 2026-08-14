@@ -196,6 +196,7 @@ func startStatelessAttemptWithRequestMode(
 			async,
 			func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 				result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
+				recordDetachedAgentRunResponse(cfg, executeRequest, result, executeErr)
 				dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 					request,
 					result,
@@ -213,6 +214,7 @@ func startStatelessAttemptWithRequestMode(
 		async,
 		func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
+			recordDetachedAgentRunResponse(cfg, executeRequest, result, executeErr)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 				request,
 				result,
@@ -373,7 +375,7 @@ func executeRequestFromWorkstationRequest(
 		return workers.ExecuteRequest{}, err
 	}
 	inputs, invocation, attemptNumber := workInputsFromTokens(orderedTokens, dispatch)
-	selection := resolveRuntimeExecutionSelection(cfg, request, inputs, &invocation)
+	selection := resolveRuntimeExecutionSelection(cfg, request, orderedTokens, inputs, &invocation)
 	workflowContext := runtimeWorkflowContext(cfg, correlation.FactorySessionID, execution.WorkflowContext)
 	if err := renderRuntimePrompt(
 		cfg,
@@ -385,6 +387,10 @@ func executeRequestFromWorkstationRequest(
 	); err != nil {
 		return workers.ExecuteRequest{}, err
 	}
+	modelBindings := workers.CloneResolvedModelOperationBindings(selection.modelBindings)
+	if len(modelBindings) == 0 {
+		modelBindings = workers.CloneResolvedModelOperationBindings(execution.ModelBindings)
+	}
 	return workers.ExecuteRequest{
 		Correlation: correlation,
 		Target: executionTargetFromSelection(
@@ -395,7 +401,7 @@ func executeRequestFromWorkstationRequest(
 			Dispatch:            work.CloneWorkDispatch(dispatch),
 			RecordingID:         execution.RecordingID,
 			Invocation:          invocation,
-			ModelBindings:       workers.CloneResolvedModelOperationBindings(execution.ModelBindings),
+			ModelBindings:       modelBindings,
 			ModelOperation:      firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
 			Resume:              continuationFromLegacySession(execution.ResumeSession),
 			WorkflowContext:     workflowContext,
