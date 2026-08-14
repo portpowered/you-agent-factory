@@ -13,6 +13,11 @@ import {
   waitForDialogHidden,
   waitForDurableCheckpoint,
   waitForDurableControlEnabled,
+  waitForFactoryGraphSelectionDeleteButton,
+  waitForFactoryGraphSelectionReady,
+  waitForStableBoundingBox,
+  waitForStableFactoryGraphNodePlacement,
+  waitForStableFactoryGraphViewport,
 } from "./browser-test-harness.mjs";
 
 describe("browser wait pattern helpers", () => {
@@ -43,6 +48,117 @@ describe("browser wait pattern helpers", () => {
     await waitForDurableControlEnabled(locator, uiInteractionTimeoutMs);
 
     expect(locator.isEnabled).toHaveBeenCalledTimes(2);
+  });
+
+  it("waitForStableBoundingBox observes two matching geometry samples", async () => {
+    const stableBox = { height: 40, width: 80, x: 12, y: 24 };
+    const locator = {
+      boundingBox: vi
+        .fn()
+        .mockResolvedValueOnce({ ...stableBox, x: 8 })
+        .mockResolvedValue(stableBox),
+    };
+
+    await expect(waitForStableBoundingBox(locator, 500, 1)).resolves.toEqual(
+      stableBox,
+    );
+    expect(locator.boundingBox).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("factory graph wait helpers", () => {
+  it("waitForStableFactoryGraphViewport observes two matching transforms", async () => {
+    const flowViewport = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce("matrix(1, 0, 0, 1, 0, 0)")
+        .mockResolvedValue("matrix(1, 0, 0, 1, 20, -12)"),
+    };
+    const page = {
+      locator: vi.fn(() => flowViewport),
+    };
+
+    await expect(waitForStableFactoryGraphViewport(page, 500, 1)).resolves.toBe(
+      "matrix(1, 0, 0, 1, 20, -12)",
+    );
+    expect(page.locator).toHaveBeenCalledWith(
+      "[data-current-activity-flow] .react-flow__viewport",
+    );
+    expect(flowViewport.evaluate).toHaveBeenCalledTimes(3);
+  });
+
+  it("waitForStableFactoryGraphNodePlacement observes settled geometry and transforms", async () => {
+    const sample = {
+      node: { height: 120, width: 180, x: 420, y: 260 },
+      nodeTransform: "translate(420px, 260px)",
+      viewport: { height: 720, width: 1280, x: 0, y: 0 },
+      viewportTransform: "matrix(1, 0, 0, 1, -80, 40)",
+    };
+    const page = {
+      evaluate: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ...sample,
+          node: { ...sample.node, x: 1200 },
+        })
+        .mockResolvedValue(sample),
+    };
+
+    await expect(
+      waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-workstation:review",
+        500,
+        1,
+      ),
+    ).resolves.toEqual(sample);
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      "rf__node-workstation:review",
+    );
+    expect(page.evaluate).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("browser wait pattern helpers", () => {
+  it("waitForFactoryGraphSelectionReady waits for measured graph internals", async () => {
+    const readinessMarker = {
+      count: vi.fn().mockResolvedValueOnce(0).mockResolvedValue(1),
+    };
+    const page = {
+      locator: vi.fn(() => readinessMarker),
+    };
+
+    await waitForFactoryGraphSelectionReady(page, 500);
+
+    expect(page.locator).toHaveBeenCalledWith(
+      '[data-factory-graph-selection-ready="true"]',
+    );
+    expect(readinessMarker.count).toHaveBeenCalledTimes(2);
+  });
+
+  it("waitForFactoryGraphSelectionDeleteButton waits for the selected enabled control", async () => {
+    const selectedGraphSelection = {
+      isVisible: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+    };
+    const batchDeleteButton = {
+      isEnabled: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+      isVisible: vi.fn().mockResolvedValue(true),
+    };
+    const toolbar = {
+      getByRole: vi.fn(() => batchDeleteButton),
+      locator: vi.fn(() => selectedGraphSelection),
+    };
+
+    await expect(
+      waitForFactoryGraphSelectionDeleteButton(toolbar, 500),
+    ).resolves.toBe(batchDeleteButton);
+    expect(toolbar.locator).toHaveBeenCalledWith(
+      '[data-toolbar-graph-selection="single"], [data-toolbar-graph-selection="multi"]',
+    );
+    expect(toolbar.getByRole).toHaveBeenCalledWith("button", {
+      name: /^Delete (?:\d+ )?selected graph items?$/,
+    });
   });
 
   it("waitForDialogHidden waits for dialog role hidden state", async () => {
@@ -88,7 +204,9 @@ describe("browser wait pattern helpers", () => {
       expect,
     );
   });
+});
 
+describe("browser harness server", () => {
   it("serves sync preflight responses with the required identity set", async () => {
     const server = await startFactoryApiServer({
       apiPort: 3921,

@@ -12,6 +12,8 @@ import {
   type OnSelectionChangeFunc,
   ReactFlow,
   type ReactFlowInstance,
+  useStore,
+  useUpdateNodeInternals,
   type XYPosition,
 } from "@xyflow/react";
 import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph/group-regions";
@@ -21,6 +23,7 @@ import {
   type MutableRefObject,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
 } from "react";
 import {
@@ -241,6 +244,52 @@ function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
     nodes,
     edge.source,
   )}->${factoryGraphNodeIdForRenderedNode(nodes, edge.target)}`;
+}
+
+/**
+ * React Flow treats an unmeasured node as intersecting every marquee. Refresh
+ * the disposable projection's internals after controlled nodes mount, then
+ * expose the actual measurement state for browser interaction synchronization.
+ */
+function FactoryGraphInitializationState({ nodeIds }: { nodeIds: string[] }) {
+  const updateNodeInternals = useUpdateNodeInternals();
+  const nodeIdKey = nodeIds.join(",");
+  const stableNodeIds = useMemo(
+    () => (nodeIdKey === "" ? [] : nodeIdKey.split(",")),
+    [nodeIdKey],
+  );
+  const missingNodeIds = useStore((state) => {
+    if (state.nodeLookup.size === 0) {
+      return null;
+    }
+
+    const nextMissingNodeIds: string[] = [];
+    for (const node of state.nodeLookup.values()) {
+      if (node.hidden) {
+        continue;
+      }
+
+      if (node.internals.handleBounds === undefined) {
+        nextMissingNodeIds.push(node.id);
+      }
+    }
+
+    return nextMissingNodeIds.join(",");
+  });
+
+  useEffect(() => {
+    updateNodeInternals(stableNodeIds);
+  }, [stableNodeIds, updateNodeInternals]);
+
+  return (
+    <div
+      aria-hidden="true"
+      data-factory-graph-selection-ready={String(
+        missingNodeIds !== null && missingNodeIds.length === 0,
+      )}
+      style={{ display: "none" }}
+    />
+  );
 }
 
 type CurrentActivityGraphViewportAddControls = {
@@ -776,6 +825,10 @@ export function CurrentActivityGraphViewport({
               }}
               proOptions={{ hideAttribution: true }}
             >
+              <FactoryGraphInitializationState
+                key="factory-graph-initialization"
+                nodeIds={nodes.map((node) => node.id)}
+              />
               <DashboardGraphBackground key="factory-graph-background" />
               {!editorControls.isEditing && visualGroups.length > 0 ? (
                 <FactoryGraphGroupRegionLayer

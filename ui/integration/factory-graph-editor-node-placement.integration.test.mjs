@@ -12,6 +12,8 @@ import {
   selectLabeledComboboxOption,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForStableFactoryGraphNodePlacement,
+  waitForStableFactoryGraphViewport,
 } from "./browser-test-harness.mjs";
 import { waitForDashboardReady } from "./factory-name-preservation-browser-helpers.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
@@ -498,19 +500,17 @@ describe.concurrent("factory graph editor node placement browser integration", (
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await panGraphViewport(browserPage.page, -220, 160);
+        await waitForStableFactoryGraphViewport(browserPage.page);
 
         await addWorkstation(browserPage.page, toolbar, {
           body: "Review the drafted story.",
           name: "review",
         });
 
-        const workstationNode = browserPage.page.getByTestId(
+        await waitForStableFactoryGraphNodePlacement(
+          browserPage.page,
           "rf__node-workstation:review",
         );
-        await workstationNode.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
 
         const viewportMetrics = await viewportScreenMetrics(browserPage.page);
         const addedWorkstationCenter = await nodeScreenCenter(
@@ -563,26 +563,20 @@ describe.concurrent("factory graph editor node placement browser integration", (
         const toolbar = await enterGraphEditor(browserPage.page);
         await addWorker(browserPage.page, toolbar, { name: "center-anchor" });
 
-        const anchorNode = browserPage.page.getByTestId(
+        await waitForStableFactoryGraphNodePlacement(
+          browserPage.page,
           "rf__node-worker:center-anchor",
         );
-        await anchorNode.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
 
         await addWorkstation(browserPage.page, toolbar, {
           body: "Review the drafted story.",
           name: "review",
         });
 
-        const workstationNode = browserPage.page.getByTestId(
+        await waitForStableFactoryGraphNodePlacement(
+          browserPage.page,
           "rf__node-workstation:review",
         );
-        await workstationNode.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
 
         const anchorBox = await nodeBoundingBox(
           browserPage.page,
@@ -631,6 +625,7 @@ describe.concurrent("factory graph editor node placement browser integration", (
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await panGraphViewport(browserPage.page, -180, 140);
+        await waitForStableFactoryGraphViewport(browserPage.page);
 
         await addWorkstation(browserPage.page, toolbar, {
           body: "Review the drafted story.",
@@ -638,9 +633,10 @@ describe.concurrent("factory graph editor node placement browser integration", (
         });
 
         const workstationTestId = "rf__node-workstation:review";
-        await browserPage.page
-          .getByTestId(workstationTestId)
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await waitForStableFactoryGraphNodePlacement(
+          browserPage.page,
+          workstationTestId,
+        );
 
         const positionBeforeSave = await readNodeFlowPosition(
           browserPage.page,

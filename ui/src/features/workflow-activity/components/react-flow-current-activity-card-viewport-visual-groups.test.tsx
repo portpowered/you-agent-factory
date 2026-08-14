@@ -63,6 +63,7 @@ vi.mock(
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -85,7 +86,11 @@ vi.mock("@xyflow/react", async () => {
         });
       }, [onInit]);
 
-      return <div data-testid="mock-react-flow">{children}</div>;
+      return (
+        <ReactFlowProvider>
+          <div data-testid="mock-react-flow">{children}</div>
+        </ReactFlowProvider>
+      );
     },
   };
 });
