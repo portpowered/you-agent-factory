@@ -40,6 +40,7 @@ type RuntimeFactory struct {
 	workPropagation           interfaces.WorkPropagationPolicyService
 	workService               work.Service
 	decisionEnvelopes         interfaces.DecisionEnvelopeService
+	invocationInterpolation   interfaces.InvocationInterpolationService
 	baseLogger                *zap.Logger
 	loggerFactory             factory.RuntimeLoggerFactory
 	runtimeLogs               factory.RuntimeLogOwner
@@ -60,6 +61,7 @@ func NewRuntimeFactory(
 	workPropagation interfaces.WorkPropagationPolicyService,
 	workService work.Service,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
 	baseLogger *zap.Logger,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogOwner,
@@ -79,6 +81,7 @@ func NewRuntimeFactory(
 		workPropagation:           workPropagation,
 		workService:               workService,
 		decisionEnvelopes:         decisionEnvelopes,
+		invocationInterpolation:   invocationInterpolation,
 		baseLogger:                baseLogger,
 		loggerFactory:             loggerFactory,
 		runtimeLogs:               runtimeLogs,
@@ -290,6 +293,7 @@ func (f *RuntimeFactory) Build(
 		f.inputFiles,
 		f.inputDirectoryWalker,
 		f.decisionEnvelopes,
+		f.invocationInterpolation,
 	)
 	if err != nil {
 		return nil, err
@@ -346,6 +350,7 @@ func assembleRuntimeBundle(
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
 ) (*factoryhost.Bundle, error) {
 	if workerExecutors == nil {
 		workerExecutors = make(map[string]workers.WorkerExecutor)
@@ -397,6 +402,8 @@ func assembleRuntimeBundle(
 		statelessService,
 		workerSessions,
 		loadedFactoryCfg,
+		invocationInterpolation,
+		invocationFileReader(inputFiles),
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,
 		structuredLogger,
@@ -445,6 +452,13 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
+}
+
+func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {
+	if inputFiles == nil {
+		return nil
+	}
+	return inputFiles.ReadFile
 }
 
 // workerRecordingIdentity keeps the Worker source-native recording identity

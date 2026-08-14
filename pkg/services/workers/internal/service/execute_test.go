@@ -253,6 +253,30 @@ func TestExecuteClonesRequestBeforeRunnerStarts(t *testing.T) {
 	}
 }
 
+func TestExecuteForwardsTargetTimeoutToRunner(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan workers.RunnerExecutionRequest, 1)
+	service := mustExecuteService(t, &stubRunner{
+		execute: func(
+			_ context.Context,
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			captured <- request
+			return workers.RunnerExecutionResult{Content: "done"}, nil
+		},
+	}, nil)
+	request := validExecuteRequest("dispatch-timeout", "attempt-timeout")
+	request.Target.Timeout = 8 * time.Minute
+
+	if _, err := service.Execute(context.Background(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := (<-captured).PrintTimeout; got != 8*time.Minute {
+		t.Fatalf("runner PrintTimeout = %s, want 8m", got)
+	}
+}
+
 func TestExecuteIngressDetachesWorkflowContextBeforeRunnerStarts(t *testing.T) {
 	t.Parallel()
 

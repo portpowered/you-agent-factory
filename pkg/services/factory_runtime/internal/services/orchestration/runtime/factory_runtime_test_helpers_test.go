@@ -89,7 +89,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		cfg.net, cfg.scheduler, &testStatelessExecutionService{
 			service:   workerService,
 			executors: cfg.workerExecutors,
-		}, workerSessionsService, cfg.runtimeConfig,
+		}, workerSessionsService, cfg.runtimeConfig, nil, nil,
 		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,

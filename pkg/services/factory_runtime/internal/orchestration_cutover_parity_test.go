@@ -167,7 +167,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	}
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
+		nil, nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
 		nil, testRuntimePoolBoundaryFactory,

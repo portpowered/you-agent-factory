@@ -80,6 +80,8 @@ type runtimeExecutionSelection struct {
 	systemPrompt                string
 	promptTemplate              string
 	userMessage                 string
+	promptTemplateInterpolated  bool
+	interpolationError          error
 	outputSchema                string
 	outputContract              string
 	outputFormat                string
@@ -170,21 +172,30 @@ func applyRuntimeDefinitionSelection(
 	if selection.workerName == "" {
 		selection.workerName = selection.workerType
 	}
-	worker, workerFound := lookup.Worker(selection.workerName)
-	workstation, workstationFound := lookup.Workstation(strings.TrimSpace(request.WorkstationName))
-	if !workerFound && workstationFound {
-		workstationWorkerName := resolveRuntimeInvocationValue(workstation.WorkerTypeName, invocation)
-		if selection.workerName == "" {
-			selection.workerName = strings.TrimSpace(workstationWorkerName)
-		}
-		worker, workerFound = lookup.Worker(workstationWorkerName)
+	workstation, workstationFound, err := resolveRuntimeWorkstationDefinition(
+		cfg,
+		lookup,
+		request,
+		invocation,
+	)
+	if err != nil {
+		selection.interpolationError = fmt.Errorf("interpolate workstation definition: %w", err)
+		return
 	}
-	selection.noop = missingRuntimeWorkerDefinition(workerFound, worker) &&
-		selection.workerName != "" &&
-		selection.providerID == "" && selection.model == "" &&
-		selection.modelProvider == "" && selection.command == ""
+	worker, workerFound := resolveRuntimeWorkerDefinition(
+		lookup,
+		selection,
+		workstation,
+		invocation,
+	)
+	selection.noop = runtimeSelectionIsTopologyNoop(selection, workerFound, worker)
 	if workerFound && worker != nil {
-		applyRuntimeWorkerSelection(cfg, selection, request.Execution, invocation, worker)
+		interpolated, err := interpolateRuntimeWorkerConfig(cfg, worker, invocation)
+		if err != nil {
+			selection.interpolationError = fmt.Errorf("interpolate worker definition: %w", err)
+			return
+		}
+		applyRuntimeWorkerSelection(cfg, selection, request.Execution, invocation, interpolated)
 	}
 	if workstationFound && workstation != nil {
 		applyRuntimeWorkstationSelection(cfg, selection, invocation, workstation)
@@ -272,11 +283,16 @@ func applyRuntimeWorkstationSelection(
 	if prompt, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
 		selection.promptTemplate = prompt
 		selection.userMessage = ""
+		selection.promptTemplateInterpolated = false
 	} else {
+		usedExistingPrompt := strings.TrimSpace(selection.promptTemplate) != ""
 		selection.promptTemplate = firstRuntimeValue(
 			selection.promptTemplate,
 			resolveRuntimeInvocationValue(workstation.PromptTemplate, invocation),
 		)
+		selection.promptTemplateInterpolated = !usedExistingPrompt &&
+			cfg != nil && cfg.invocationInterpolation != nil &&
+			strings.TrimSpace(workstation.PromptTemplate) != ""
 	}
 	selection.outputSchema = firstRuntimeValue(
 		selection.outputSchema,
@@ -579,55 +595,6 @@ func runtimeInvocationParameter(value string) (string, bool) {
 	}
 	name := strings.TrimSpace(trimmed[2 : len(trimmed)-1])
 	return name, name != ""
-}
-
-func renderRuntimePrompt(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	tokens []workers.Token,
-	workflowContext *workers.Context,
-	inputs []workers.WorkInput,
-) error {
-	if selection == nil {
-		return nil
-	}
-	if selection.userMessage == "" && selection.promptTemplate != "" {
-		if cfg == nil || cfg.promptRenderer == nil {
-			// Legacy test and adapter callers may not provide the optional renderer.
-			// Preserve their detached execution behavior by using the same payload
-			// fallback as an empty authored prompt.
-			selection.userMessage = workInputMessage(inputs)
-		} else {
-			rendered, err := cfg.promptRenderer.RenderPrompt(
-				selection.promptTemplate,
-				tokens,
-				workflowContext,
-			)
-			if err != nil {
-				return fmt.Errorf("render workstation prompt: %w", err)
-			}
-			selection.userMessage = rendered
-		}
-	}
-	if cfg == nil || cfg.templateFieldResolver == nil {
-		return nil
-	}
-	resolved, err := cfg.templateFieldResolver.ResolveTemplateFields(
-		selection.workingDirectory,
-		selection.environment,
-		tokens,
-		workflowContext,
-		selection.worktree,
-	)
-	if err != nil {
-		return fmt.Errorf("resolve workstation execution fields: %w", err)
-	}
-	if resolved != nil {
-		selection.workingDirectory = resolved.WorkingDirectory
-		selection.worktree = resolved.Worktree
-		selection.environment = cloneRuntimeStringMap(resolved.Env)
-	}
-	return nil
 }
 
 func resolveRuntimePath(baseDir, value string, fileSystem expectedArtifactFileSystem) string {

@@ -376,6 +376,7 @@ func executeRequestFromWorkstationRequest(
 		workers.WorkDispatchInputTokens(dispatch),
 		workflowContext,
 		inputs,
+		&invocation,
 	); err != nil {
 		return workers.ExecuteRequest{}, err
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,41 @@ import (
 )
 
 type routeNamesTestExecutor struct{}
+
+type invocationInterpolationTestService struct{}
+
+func (invocationInterpolationTestService) ValidateInvocationInterpolation(
+	*interfaces.FactoryConfig,
+	*work.InvocationArguments,
+	interfaces.FileReader,
+) error {
+	return nil
+}
+
+func (invocationInterpolationTestService) InterpolateWorkerConfig(
+	worker interfaces.FactoryWorkerConfig,
+	_ *work.InvocationArguments,
+	_ interfaces.FileReader,
+) (interfaces.FactoryWorkerConfig, error) {
+	return worker, nil
+}
+
+func (invocationInterpolationTestService) InterpolateWorkstationConfig(
+	workstation interfaces.FactoryWorkstationConfig,
+	invocation *work.InvocationArguments,
+	_ interfaces.FileReader,
+) (interfaces.FactoryWorkstationConfig, error) {
+	for name, argument := range invocation.Arguments {
+		if len(argument.Values) == 1 {
+			workstation.PromptTemplate = strings.ReplaceAll(
+				workstation.PromptTemplate,
+				"${"+name+"}",
+				argument.Values[0],
+			)
+		}
+	}
+	return workstation, nil
+}
 
 func (routeNamesTestExecutor) Execute(context.Context, work.WorkDispatch) (workerexecution.WorkResult, error) {
 	return workerexecution.WorkResult{}, nil
@@ -251,7 +287,7 @@ func TestRenderRuntimePromptAndTemplateFieldsUsesDetachedCapabilities(t *testing
 		}),
 		templateFieldResolver: fieldResolver,
 	}
-	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil); err != nil {
+	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, nil); err != nil {
 		t.Fatalf("renderRuntimePrompt() error = %v", err)
 	}
 	if selection.userMessage != "rendered prompt" || selection.workingDirectory != "resolved-workdir" ||
@@ -264,8 +300,40 @@ func TestRenderRuntimePromptAndTemplateFieldsUsesDetachedCapabilities(t *testing
 			return "", errors.New("prompt failed")
 		}),
 	}
-	if err := renderRuntimePrompt(badRenderer, &runtimeExecutionSelection{promptTemplate: "bad"}, nil, nil, nil); err == nil {
+	if err := renderRuntimePrompt(badRenderer, &runtimeExecutionSelection{promptTemplate: "bad"}, nil, nil, nil, nil); err == nil {
 		t.Fatal("renderRuntimePrompt() error = nil, want prompt rendering error")
+	}
+}
+
+func TestRenderRuntimePromptInterpolatesInvocationArguments(t *testing.T) {
+	t.Parallel()
+
+	cfg := &runtimeConfig{
+		invocationInterpolation: invocationInterpolationTestService{},
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			_ []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			if prompt != "clip=/tmp/clip.mp4\nshot=hero" {
+				t.Fatalf("prompt = %q, want interpolated invocation values", prompt)
+			}
+			return prompt, nil
+		}),
+	}
+	selection := &runtimeExecutionSelection{
+		promptTemplate: "clip=${clipPath}\nshot=${shotSpecification}",
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"clipPath":          {Values: []string{"/tmp/clip.mp4"}},
+		"shotSpecification": {Values: []string{"hero"}},
+	}}
+
+	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, invocation); err != nil {
+		t.Fatalf("renderRuntimePrompt() error = %v", err)
+	}
+	if selection.userMessage != "clip=/tmp/clip.mp4\nshot=hero" {
+		t.Fatalf("userMessage = %q, want interpolated invocation values", selection.userMessage)
 	}
 }
 

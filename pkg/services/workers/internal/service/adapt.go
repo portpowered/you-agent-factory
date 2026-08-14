@@ -64,6 +64,7 @@ func adaptRunnerRequest(
 		StopToken:                    request.Target.Output.StopToken,
 		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
 		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
+		PrintTimeout:                 request.Target.Timeout,
 		SessionID:                    providerSessionID(request),
 		ProjectID:                    context.projectID,
 		WorkflowContext:              context.workflow,
