@@ -124,7 +124,7 @@ sleep 2
 	log := string(logBody)
 	for _, expected := range []string{
 		"tier=pr-short trigger=pull_request short=true budget=0.1s selection=subtractive",
-		"inventory: discovered-packages=147 observed-packages=12",
+		"inventory: deliberately broken assertion for gate evidence",
 		"quarantine: selector=./tests/functional/example bucket=ENVIRONMENT-DEPENDENT observed=skip",
 		"tier timed out after budget=0.1s",
 		"partial diagnostics retained",
