@@ -430,10 +430,12 @@ test-functional-fresh:
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
-# functional-test-viz runs the boundary check, then the required fresh short
-# functional coverage lane exactly once (profile + gocoveragecheck -json-output), then the
-# FND-004 Markdown catalog generator. Artifacts land under
-# .artifacts/functional-test-viz/.
+# functional-test-viz runs the boundary check, then the configured fresh
+# functional coverage tier exactly once (profile + gocoveragecheck
+# -json-output), then the FND-004 Markdown catalog generator. Artifacts land
+# under .artifacts/functional-test-viz/. The Linux CI wrapper enforces the
+# tier's FUNCTIONAL_TEST_BUDGET around this target and leaves the artifact root
+# intact when the budget or a later step fails.
 #
 # Fail-closed composition: each recipe line must succeed before the next runs.
 # Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering

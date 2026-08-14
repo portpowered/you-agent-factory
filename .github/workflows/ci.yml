@@ -185,7 +185,10 @@ jobs:
     needs: classify
     if: always() && needs.classify.outputs.run_backend != 'false'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event_name == 'push' && 75 || 35 }}
+    # The functional runner enforces 35m for pull requests and 75m on pushes
+    # to main. Keep five minutes of job-level grace so always-run summary and
+    # artifact-upload steps can preserve partial diagnostics after a timeout.
+    timeout-minutes: ${{ github.event_name == 'push' && 80 || 40 }}
     env:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
     strategy:

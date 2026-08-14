@@ -86,9 +86,13 @@ tree with `-short`, subtracts only the true environment quarantine, and reports
 tests skipped by `testing.Short()` as `deferred-short-tests`. Those deferred
 tests are not quarantine entries. A push to `main` selects the explicit
 `merge-full` tier, runs the same subtractive selection with `-short=false`, and
-has a 75-minute job budget so the deferred behavior executes after merge. The
-CI output names each tier's trigger, budget, selection rule, and quarantine
-path. Set `FUNCTIONAL_SHORT=false` locally to exercise the full tier.
+has a 75-minute runner budget (the pull-request `pr-short` tier has a 35-minute
+budget) so the deferred behavior executes after merge.
+The Linux job allows an additional five minutes for always-run summary and
+artifact-upload steps after a tier timeout. The runner fails on budget expiry,
+preserves its command log and any partial inventory/timing/quarantine output,
+and reports each tier's trigger, budget, selection rule, and quarantine path.
+Set `FUNCTIONAL_SHORT=false` locally to exercise the full tier.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains
