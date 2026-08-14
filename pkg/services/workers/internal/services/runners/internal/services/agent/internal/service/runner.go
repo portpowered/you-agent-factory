@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
@@ -157,6 +158,10 @@ type decisionEnvelope struct {
 	Decision string `json:"decision"`
 	Feedback string `json:"feedback"`
 	Output   string `json:"output,omitempty"`
+	// RecordedOutputWork mirrors the canonical envelope contract. Dropping it
+	// here would let a reviewer's recorded work bypass Runtime validation and
+	// materialization entirely.
+	RecordedOutputWork []work.FactoryWorkItem `json:"recorded_output_work,omitempty"`
 }
 
 func normalizeAgentResponse(
@@ -211,6 +216,7 @@ func normalizeDecisionEnvelope(
 	}
 	response.Content = strings.TrimSpace(envelope.Output)
 	response.Feedback = strings.TrimSpace(envelope.Feedback)
+	response.RecordedOutputWork = envelope.RecordedOutputWork
 	return response, nil
 }
 

@@ -268,6 +268,10 @@ func proposedOutputFromRunnerResult(result workers.RunnerExecutionResult) worker
 	output := proposedOutputFromContent(result.Content)
 	output.Feedback = result.Feedback
 	output.Classification = result.Classification
+	// Decision-envelope reviewers record work on the envelope. The detached
+	// path must propose it just as the workstation executor did, so Runtime
+	// keeps validating and materializing those items.
+	output.ProposedWork = workers.ProposedWorkFromFactoryWorkItems(result.RecordedOutputWork)
 	return output
 }
 

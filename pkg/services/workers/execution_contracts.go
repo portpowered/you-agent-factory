@@ -23,12 +23,16 @@ type WorkerState struct {
 
 // InferenceResponse is returned by a provider after model inference.
 type InferenceResponse struct {
-	Content         string                   `json:"content"`
-	Outcome         WorkOutcome              `json:"outcome,omitempty"`
-	Feedback        string                   `json:"feedback,omitempty"`
-	Classification  string                   `json:"classification,omitempty"`
-	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics     *WorkDiagnostics         `json:"diagnostics,omitempty"`
+	Content        string      `json:"content"`
+	Outcome        WorkOutcome `json:"outcome,omitempty"`
+	Feedback       string      `json:"feedback,omitempty"`
+	Classification string      `json:"classification,omitempty"`
+	// RecordedOutputWork carries work a decision-envelope reviewer recorded on
+	// its envelope. Runtime validates and materializes these items, so a runner
+	// that parses an envelope must surface them instead of dropping them.
+	RecordedOutputWork []work.FactoryWorkItem   `json:"recorded_output_work,omitempty"`
+	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Diagnostics        *WorkDiagnostics         `json:"diagnostics,omitempty"`
 }
 
 // InferenceEventKind identifies which provider-boundary fact was observed.
