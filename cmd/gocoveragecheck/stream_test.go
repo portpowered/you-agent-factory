@@ -22,6 +22,19 @@ const (
 	streamChildStderrTwo = "stderr child chunk two\n"
 )
 
+type streamChildTestCase struct {
+	name       string
+	stream     bool
+	exitCode   int
+	wantStream bool
+}
+
+type streamCommandResult struct {
+	stdout string
+	stderr string
+	err    error
+}
+
 func TestCommandRunnerStreamsCoverageChildOutputWithoutChangingCapturedBytes(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalExecCommand := execCommand
@@ -30,12 +43,7 @@ func TestCommandRunnerStreamsCoverageChildOutputWithoutChangingCapturedBytes(t *
 		execCommand = originalExecCommand
 	})
 
-	tests := []struct {
-		name       string
-		stream     bool
-		exitCode   int
-		wantStream bool
-	}{
+	tests := []streamChildTestCase{
 		{name: "buffered success", exitCode: 0},
 		{name: "streamed success", stream: true, exitCode: 0, wantStream: true},
 		{name: "buffered failure", exitCode: 7},
@@ -43,96 +51,111 @@ func TestCommandRunnerStreamsCoverageChildOutputWithoutChangingCapturedBytes(t *
 	}
 	for _, tc := range tests {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			releaseReader, releaseWriter := io.Pipe()
-			t.Cleanup(func() { _ = releaseWriter.Close() })
-			execCommand = func(string, ...string) *exec.Cmd {
-				cmd := exec.Command(os.Args[0], "-test.run=TestGocoveragecheckStreamChildProcess", "--")
-				cmd.Stdin = releaseReader
-				return cmd
-			}
-			commandRunner = originalCommandRunner
+		t.Run(tc.name, func(t *testing.T) { runStreamChildCase(t, originalCommandRunner, tc) })
+	}
+}
 
-			stdoutSink := newStreamCapture(streamChildStdoutOne + streamChildStdoutTwo)
-			stderrSink := newStreamCapture(streamChildStderrOne + streamChildStderrTwo)
-			invocation := commandInvocation{
-				name: "coverage-test-child",
-				env: append(os.Environ(),
-					streamChildEnv+"=1",
-					streamChildExitEnv+"="+strconv.Itoa(tc.exitCode),
-				),
-			}
-			if tc.stream {
-				invocation.stdoutWriter = stdoutSink
-				invocation.stderrWriter = stderrSink
-			}
+func runStreamChildCase(t *testing.T, runner commandRunnerFunc, tc streamChildTestCase) {
+	stdoutSink := newStreamCapture(streamChildStdoutOne + streamChildStdoutTwo)
+	stderrSink := newStreamCapture(streamChildStderrOne + streamChildStderrTwo)
+	resultCh, releaseWriter := startStreamChild(t, runner, tc, stdoutSink, stderrSink)
+	if tc.wantStream {
+		assertStreamVisibleBeforeCompletion(t, resultCh, stdoutSink, stderrSink)
+	}
+	if _, err := releaseWriter.Write([]byte{1}); err != nil {
+		t.Fatalf("release child: %v", err)
+	}
+	if err := releaseWriter.Close(); err != nil {
+		t.Fatalf("close child release: %v", err)
+	}
+	result := waitForStreamChild(t, resultCh)
+	assertStreamChildResult(t, tc, result, stdoutSink, stderrSink)
+}
 
-			type commandResult struct {
-				stdout string
-				stderr string
-				err    error
-			}
-			resultCh := make(chan commandResult, 1)
-			go func() {
-				stdout, stderr, err := runCommand(invocation)
-				resultCh <- commandResult{stdout: stdout, stderr: stderr, err: err}
-			}()
+func startStreamChild(t *testing.T, runner commandRunnerFunc, tc streamChildTestCase, stdoutSink *streamCapture, stderrSink *streamCapture) (<-chan streamCommandResult, *io.PipeWriter) {
+	t.Helper()
+	releaseReader, releaseWriter := io.Pipe()
+	t.Cleanup(func() { _ = releaseWriter.Close() })
+	execCommand = func(string, ...string) *exec.Cmd {
+		cmd := exec.Command(os.Args[0], "-test.run=TestGocoveragecheckStreamChildProcess", "--")
+		cmd.Stdin = releaseReader
+		return cmd
+	}
+	commandRunner = runner
+	invocation := commandInvocation{
+		name: "coverage-test-child",
+		env: append(os.Environ(),
+			streamChildEnv+"=1",
+			streamChildExitEnv+"="+strconv.Itoa(tc.exitCode),
+		),
+	}
+	if tc.stream {
+		invocation.stdoutWriter = stdoutSink
+		invocation.stderrWriter = stderrSink
+	}
+	resultCh := make(chan streamCommandResult, 1)
+	go func() {
+		stdout, stderr, err := runCommand(invocation)
+		resultCh <- streamCommandResult{stdout: stdout, stderr: stderr, err: err}
+	}()
+	return resultCh, releaseWriter
+}
 
-			if tc.wantStream {
-				waitForStreamCapture(t, stdoutSink.complete)
-				waitForStreamCapture(t, stderrSink.complete)
-				if got := stdoutSink.String(); got != streamChildStdoutOne+streamChildStdoutTwo {
-					t.Fatalf("streamed stdout before child completion = %q, want first two chunks", got)
-				}
-				if got := stderrSink.String(); got != streamChildStderrOne+streamChildStderrTwo {
-					t.Fatalf("streamed stderr before child completion = %q, want first two chunks", got)
-				}
-				select {
-				case result := <-resultCh:
-					t.Fatalf("child completed before release: %+v", result)
-				default:
-				}
-			}
-			if _, err := releaseWriter.Write([]byte{1}); err != nil {
-				t.Fatalf("release child: %v", err)
-			}
-			if err := releaseWriter.Close(); err != nil {
-				t.Fatalf("close child release: %v", err)
-			}
+func assertStreamVisibleBeforeCompletion(t *testing.T, resultCh <-chan streamCommandResult, stdoutSink *streamCapture, stderrSink *streamCapture) {
+	t.Helper()
+	waitForStreamCapture(t, stdoutSink.complete)
+	waitForStreamCapture(t, stderrSink.complete)
+	if got := stdoutSink.String(); got != streamChildStdoutOne+streamChildStdoutTwo {
+		t.Fatalf("streamed stdout before child completion = %q, want first two chunks", got)
+	}
+	if got := stderrSink.String(); got != streamChildStderrOne+streamChildStderrTwo {
+		t.Fatalf("streamed stderr before child completion = %q, want first two chunks", got)
+	}
+	select {
+	case result := <-resultCh:
+		t.Fatalf("child completed before release: %+v", result)
+	default:
+	}
+}
 
-			var result commandResult
-			select {
-			case result = <-resultCh:
-			case <-time.After(5 * time.Second):
-				t.Fatal("timed out waiting for coverage child")
-			}
-			wantStdout := streamChildStdoutOne + streamChildStdoutTwo
-			wantStderr := streamChildStderrOne + streamChildStderrTwo
-			if result.stdout != wantStdout || result.stderr != wantStderr {
-				t.Fatalf("captured child output = (%q, %q), want byte-identical (%q, %q)", result.stdout, result.stderr, wantStdout, wantStderr)
-			}
-			if tc.exitCode == 0 && result.err != nil {
-				t.Fatalf("runCommand() error = %v, want nil", result.err)
-			}
-			if tc.exitCode != 0 && (result.err == nil || !strings.Contains(result.err.Error(), "exit status "+strconv.Itoa(tc.exitCode))) {
-				t.Fatalf("runCommand() error = %v, want exit status %d", result.err, tc.exitCode)
-			}
-			if tc.wantStream {
-				if got := stdoutSink.String(); got != wantStdout {
-					t.Fatalf("streamed stdout after child completion = %q, want %q", got, wantStdout)
-				}
-				if got := stderrSink.String(); got != wantStderr {
-					t.Fatalf("streamed stderr after child completion = %q, want %q", got, wantStderr)
-				}
-			} else {
-				if got := stdoutSink.String(); got != "" {
-					t.Fatalf("buffered stdout sink = %q, want no child bytes", got)
-				}
-				if got := stderrSink.String(); got != "" {
-					t.Fatalf("buffered stderr sink = %q, want no child bytes", got)
-				}
-			}
-		})
+func waitForStreamChild(t *testing.T, resultCh <-chan streamCommandResult) streamCommandResult {
+	t.Helper()
+	select {
+	case result := <-resultCh:
+		return result
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for coverage child")
+		return streamCommandResult{}
+	}
+}
+
+func assertStreamChildResult(t *testing.T, tc streamChildTestCase, result streamCommandResult, stdoutSink *streamCapture, stderrSink *streamCapture) {
+	t.Helper()
+	wantStdout := streamChildStdoutOne + streamChildStdoutTwo
+	wantStderr := streamChildStderrOne + streamChildStderrTwo
+	if result.stdout != wantStdout || result.stderr != wantStderr {
+		t.Fatalf("captured child output = (%q, %q), want byte-identical (%q, %q)", result.stdout, result.stderr, wantStdout, wantStderr)
+	}
+	if tc.exitCode == 0 && result.err != nil {
+		t.Fatalf("runCommand() error = %v, want nil", result.err)
+	}
+	if tc.exitCode != 0 && (result.err == nil || !strings.Contains(result.err.Error(), "exit status "+strconv.Itoa(tc.exitCode))) {
+		t.Fatalf("runCommand() error = %v, want exit status %d", result.err, tc.exitCode)
+	}
+	if tc.wantStream {
+		if got := stdoutSink.String(); got != wantStdout {
+			t.Fatalf("streamed stdout after child completion = %q, want %q", got, wantStdout)
+		}
+		if got := stderrSink.String(); got != wantStderr {
+			t.Fatalf("streamed stderr after child completion = %q, want %q", got, wantStderr)
+		}
+		return
+	}
+	if got := stdoutSink.String(); got != "" {
+		t.Fatalf("buffered stdout sink = %q, want no child bytes", got)
+	}
+	if got := stderrSink.String(); got != "" {
+		t.Fatalf("buffered stderr sink = %q, want no child bytes", got)
 	}
 }
 
@@ -230,10 +253,10 @@ func (w *streamCapture) String() string {
 	return w.data.String()
 }
 
-func waitForStreamCapture(t *testing.T, written <-chan struct{}) {
+func waitForStreamCapture(t *testing.T, complete <-chan struct{}) {
 	t.Helper()
 	select {
-	case <-written:
+	case <-complete:
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for streamed child output")
 	}
