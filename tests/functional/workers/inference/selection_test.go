@@ -1,7 +1,9 @@
 package inference_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +12,13 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
+	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -291,4 +297,84 @@ func externalProviderManifest(t *testing.T, identity, alias string) inference.Ma
 	}
 	manifest.MaximumResponseFidelityCapabilities = inference.ResponseFidelityCapabilities{}
 	return manifest
+}
+
+// TestWorkersWireRejectsInvalidInferenceRunner proves that public Workers
+// composition rejects an invalid runner registration before publishing a
+// partially usable root. The error comes from the live runner registry path,
+// not from a source-only or private implementation assertion.
+func TestWorkersWireRejectsInvalidInferenceRunner(t *testing.T) {
+	providersRoot, err := inference.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+
+	root, err := workerswire.NewService(
+		workerswire.AgentDependencies{
+			Providers: providersRoot,
+			Publish:   func(workers.ProgressFragment) {},
+		},
+		workerswire.ScriptConfig{Command: "script"},
+		workerswire.ScriptDependencies{
+			CommandRunner: runnerCompositionCommandRunner{},
+			FactoryDocs: func(string) (map[string]string, error) {
+				return nil, nil
+			},
+			Now:     func() time.Time { return time.Unix(0, 0) },
+			Publish: func(workers.ProgressFragment) {},
+			Record:  func(workers.ScriptEvent) {},
+		},
+		workerswire.InferenceConfig{
+			Worker: models.LocalWorker{
+				Name:          "invalid-local-worker",
+				Type:          models.RuntimeWorkerTypeInference,
+				ModelLocality: models.RuntimeModelLocalityLocal,
+			},
+		},
+		workerswire.InferenceDependencies{
+			Models: runnerCompositionModels{},
+		},
+		nil,
+		platformlogging.NoopLogger{},
+		func() time.Time { return time.Unix(0, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if root != nil {
+		t.Fatalf("workerswire.NewService() root = %#v, want nil after invalid registration", root)
+	}
+	if err == nil || !errors.Is(err, workers.ErrInvalidRunnerRegistration) {
+		t.Fatalf(
+			"workerswire.NewService() error = %v, want invalid runner registration",
+			err,
+		)
+	}
+}
+
+type runnerCompositionCommandRunner struct{}
+
+func (runnerCompositionCommandRunner) Run(
+	context.Context,
+	workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
+
+func (runnerCompositionCommandRunner) RunStreaming(
+	context.Context,
+	workers.CommandRequest,
+	workers.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
+
+type runnerCompositionModels struct{}
+
+func (runnerCompositionModels) InvokeLocal(
+	context.Context,
+	models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	return models.LocalInvocationResult{}, nil
 }

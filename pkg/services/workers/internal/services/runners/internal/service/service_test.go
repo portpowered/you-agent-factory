@@ -16,6 +16,15 @@ type runnerSpy struct {
 	calls int
 }
 
+type valueRunner struct{}
+
+func (valueRunner) Execute(
+	context.Context,
+	workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return workers.RunnerExecutionResult{Content: "value runner"}, nil
+}
+
 func (runner *runnerSpy) Execute(
 	context.Context,
 	workers.RunnerExecutionRequest,
@@ -121,6 +130,29 @@ func TestNewAcceptsPromptOnlyRunnerMetadata(t *testing.T) {
 			"Resolve() baseline = %#v, want prompt-only metadata",
 			binding.Metadata.Capabilities.Baseline,
 		)
+	}
+}
+
+func TestNewAcceptsNonPointerRunnerImplementations(t *testing.T) {
+	registry, err := New([]runners.Registration{
+		registration(workers.RunnerIDCodex, "Codex", valueRunner{}),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := registry.Execute(context.Background(), runners.ExecuteRequest{
+		Identity: workers.RunnerIDCodex,
+		Attempt: workers.RunnerExecutionRequest{
+			RunnerID:    workers.RunnerIDCodex,
+			UserMessage: "run",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "value runner" {
+		t.Fatalf("Execute() content = %q, want value runner", result.Content)
 	}
 }
 
