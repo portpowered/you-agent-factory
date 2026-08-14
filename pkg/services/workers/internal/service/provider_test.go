@@ -10,25 +10,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
-func TestAuthorizeProviderTargetValidatesAndDetachesProviderSelection(t *testing.T) {
+type authorizeProviderTargetTestCase struct {
+	name                 string
+	service              *Service
+	identity             string
+	request              workers.ExecuteRequest
+	wantErr              error
+	resolveResult        providers.ResolveIdentityResult
+	resolveErr           error
+	validateErr          error
+	getErr               error
+	providerCapabilities []providers.Capability
+	wantProvider         string
+	wantResumeProvider   string
+	wantRunner           string
+	wantAlias            string
+}
+
+func TestAuthorizeProviderTargetValidatesProviderRequests(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name                 string
-		service              *Service
-		identity             string
-		request              workers.ExecuteRequest
-		wantErr              error
-		resolveResult        providers.ResolveIdentityResult
-		resolveErr           error
-		validateErr          error
-		getErr               error
-		providerCapabilities []providers.Capability
-		wantProvider         string
-		wantResumeProvider   string
-		wantRunner           string
-		wantAlias            string
-	}{
+	runAuthorizeProviderTargetCases(t, []authorizeProviderTargetTestCase{
 		{
 			name:       "non agent does not require providers",
 			identity:   "script",
@@ -75,6 +77,13 @@ func TestAuthorizeProviderTargetValidatesAndDetachesProviderSelection(t *testing
 			}},
 			wantErr: workers.ErrInvalidExecuteRequest,
 		},
+	})
+}
+
+func TestAuthorizeProviderTargetDetachesProviderSelection(t *testing.T) {
+	t.Parallel()
+
+	runAuthorizeProviderTargetCases(t, []authorizeProviderTargetTestCase{
 		{
 			name:     "antigravity skips catalog capability validation",
 			identity: runners.AgentIdentity,
@@ -125,7 +134,7 @@ func TestAuthorizeProviderTargetValidatesAndDetachesProviderSelection(t *testing
 			name:     "resume provider supplies identity and authored runner remains",
 			identity: runners.AgentIdentity,
 			request: func() workers.ExecuteRequest {
-				request := workers.ExecuteRequest{
+				return workers.ExecuteRequest{
 					Target: workers.ExecutionTarget{
 						RunnerID: runners.AgentIdentity,
 					},
@@ -134,7 +143,6 @@ func TestAuthorizeProviderTargetValidatesAndDetachesProviderSelection(t *testing
 						ProviderSessionID: "session-3",
 					}},
 				}
-				return request
 			}(),
 			service: &Service{providers: &providerAuthorizationFake{
 				resolveResult: providers.ResolveIdentityResult{ID: providers.IDClaude},
@@ -159,8 +167,11 @@ func TestAuthorizeProviderTargetValidatesAndDetachesProviderSelection(t *testing
 			wantRunner:   "custom-agent",
 			wantAlias:    "",
 		},
-	}
+	})
+}
 
+func runAuthorizeProviderTargetCases(t *testing.T, tests []authorizeProviderTargetTestCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			request := test.request
