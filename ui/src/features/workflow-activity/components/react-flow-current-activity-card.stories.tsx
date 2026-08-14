@@ -122,11 +122,19 @@ function snapshotWithActiveWorkItemCount(count: number): DashboardSnapshot {
 
 function snapshotWithLongWorkstationName(): DashboardSnapshot {
   const snapshot = snapshotWithActiveWorkItemCount(0);
+  const longWorkstationName =
+    "Review Requests With A Deliberately Long Workstation Title";
   const reviewWorkstation = snapshot.topology.workstation_nodes_by_id.review;
 
   if (reviewWorkstation) {
-    reviewWorkstation.workstation_name =
-      "Review Requests With A Deliberately Long Workstation Title";
+    reviewWorkstation.workstation_name = longWorkstationName;
+  }
+
+  const factoryReviewWorkstation = snapshot.factory?.workstations?.find(
+    (workstation) => workstation.id === "review",
+  );
+  if (factoryReviewWorkstation) {
+    factoryReviewWorkstation.name = longWorkstationName;
   }
 
   return snapshot;
@@ -271,6 +279,18 @@ function workstationShell(button: HTMLElement): HTMLElement {
 function expectFixedWorkstationDimensions(node: HTMLElement): void {
   expect(node.getAttribute("style")).toContain("width: 156px");
   expect(node.getAttribute("style")).toContain("height: 196px");
+}
+
+function expectFittedWorkstationDimensions(node: HTMLElement): void {
+  const style = node.getAttribute("style") ?? "";
+  const width = Number.parseFloat(
+    style.match(/width: ([\d.]+)px/u)?.[1] ?? "0",
+  );
+  const height = Number.parseFloat(
+    style.match(/height: ([\d.]+)px/u)?.[1] ?? "0",
+  );
+  expect(width).toBeGreaterThan(156);
+  expect(height).toBeGreaterThanOrEqual(196);
 }
 
 function expectNoImplementationLabels(canvasElement: HTMLElement): void {
@@ -747,13 +767,13 @@ export const WorkstationLongName = {
     });
     const label = longNameButton.querySelector("[data-workstation-title]");
 
-    expectFixedWorkstationDimensions(workstationNode(longNameButton));
+    expectFittedWorkstationDimensions(workstationNode(longNameButton));
     await expect(longNameButton).toHaveAttribute(
       "title",
       "Review Requests With A Deliberately Long Workstation Title",
     );
-    expect(label?.className).toContain("truncate");
-    expect(label?.className).toContain("whitespace-nowrap");
+    expect(label?.className).toContain("whitespace-normal");
+    expect(label?.className).toContain("[overflow-wrap:anywhere]");
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -856,7 +876,7 @@ export const WorkstationLongWorkItemLabel = {
 
     expectFixedWorkstationDimensions(workstationNode(reviewButton));
     expect(longWorkButton.className).toContain("overflow-hidden");
-    expect(workLabel?.className).toContain("truncate");
+    expect(workLabel?.className).toContain("break-words");
     expect(durationLabel?.textContent).toBe("4s");
     await userEvent.click(longWorkButton);
     await expect(longWorkButton).toHaveAttribute("aria-pressed", "true");

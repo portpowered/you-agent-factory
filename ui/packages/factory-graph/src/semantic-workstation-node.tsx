@@ -11,6 +11,7 @@ import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
 import {
@@ -170,7 +171,7 @@ function Summary({
         aria-pressed={
           data.onSelectWorkstation ? visualState.selection : undefined
         }
-        className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+        className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
         data-selected-workstation={visualState.selection ? "true" : undefined}
         disabled={data.onSelectWorkstation === undefined}
         onClick={
@@ -235,7 +236,7 @@ function ActiveContent({
         <GraphNodeButton
           aria-label={selectWorkstationLabel(title, data.locale)}
           aria-pressed={visualState.selection}
-          className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+          className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorkstation?.(data.workstation.node_id);
@@ -246,7 +247,7 @@ function ActiveContent({
         </GraphNodeButton>
       ) : (
         <div
-          className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+          className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
           title={title}
         >
           {header}
@@ -377,7 +378,9 @@ function Header({
       <span
         className={
           compact
-            ? "block min-w-0 truncate whitespace-nowrap font-mono text-[0.74rem] font-bold leading-tight text-on-surface"
+            ? factoryGraphNodeWrappedTextClassName(
+                "block font-mono text-[0.74rem] font-bold leading-tight text-on-surface",
+              )
             : workstationTitleClassName(title)
         }
         data-workstation-title
@@ -385,7 +388,9 @@ function Header({
         {title}
       </span>
       <span
-        className="min-w-0 truncate text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"
+        className={factoryGraphNodeWrappedTextClassName(
+          "text-[0.62rem] font-semibold leading-tight text-on-surface-subtle",
+        )}
         data-workstation-runtime-label
         title={presentation.label}
       >
@@ -393,7 +398,9 @@ function Header({
       </span>
       {presentation.schedulingLabel ? (
         <span
-          className="min-w-0 shrink-0 truncate rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"
+          className={factoryGraphNodeWrappedTextClassName(
+            "shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle",
+          )}
           data-workstation-scheduling-label
           title={presentation.schedulingLabel}
         >
@@ -427,7 +434,9 @@ export function FactoryGraphWorkstationGuardedControlCard({
       data-workstation-control-role={presentation.controlRole}
     >
       <span
-        className="truncate font-semibold uppercase tracking-[0.06em]"
+        className={factoryGraphNodeWrappedTextClassName(
+          "font-semibold uppercase tracking-[0.06em]",
+        )}
         data-workstation-control-role-label
       >
         {roleLabel}
@@ -438,7 +447,7 @@ export function FactoryGraphWorkstationGuardedControlCard({
             {factoryGraphWorkstationGuardTargetLabel(locale)}
           </dt>
           <dd
-            className="m-0 truncate font-mono"
+            className={factoryGraphNodeWrappedTextClassName("m-0 font-mono")}
             data-workstation-guard-target
             title={control.targetWorkstation}
           >
@@ -450,7 +459,7 @@ export function FactoryGraphWorkstationGuardedControlCard({
             {factoryGraphWorkstationGuardLimitLabel(locale)}
           </dt>
           <dd
-            className="m-0 truncate font-mono"
+            className={factoryGraphNodeWrappedTextClassName("m-0 font-mono")}
             data-workstation-guard-limit
             title={factoryGraphWorkstationGuardLimitValue(control)}
           >

@@ -93,10 +93,12 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
       nodeKind: "doc",
       targetPath: "factory/docs/guide.md",
-      width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
     });
+    expect(docNode?.width).toBeGreaterThanOrEqual(
+      CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+    );
     expect(layout.width).toBeGreaterThanOrEqual(
-      (docNode?.x ?? 0) + CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+      (docNode?.x ?? 0) + (docNode?.width ?? CURRENT_ACTIVITY_DOC_NODE_WIDTH),
     );
   });
 
@@ -121,8 +123,10 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
       nodeKind: "doc",
       targetPath: "factory/docs/standards/review.md",
-      width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
     });
+    expect(docNode?.width).toBeGreaterThanOrEqual(
+      CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+    );
   });
 
   it("projects the shipped goal state inventory without the removed execute state", async () => {

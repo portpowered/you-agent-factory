@@ -2,6 +2,7 @@ import { Background, Controls, type Edge, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
 import { FactoryGraphGroupRegionLayer } from "./group-region-presentation.js";
+import { resolveFactoryGraphNodeDimensions } from "./node-family.js";
 import type { FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 import {
   FACTORY_GRAPH_NODE_TYPES,
@@ -107,6 +108,10 @@ export function projectFactoryGraphReplayFlow(
             targetPath: file.targetPath,
           },
           id,
+          ...replayNodeDimensions("doc", [
+            file.targetPath,
+            file.targetPath.split("/").at(-1) ?? file.targetPath,
+          ]),
           position:
             positions.get(id) ?? fallbackPosition(topologyNodes.length + index),
           type: "doc" as const,
@@ -140,7 +145,10 @@ function semanticNode(
   },
 ): FactoryGraphNode {
   const handles = node.handles.map(toSemanticHandle);
-  const base = { position: input.position };
+  const base = {
+    ...replayNodeDimensions(node.kind, [node.label]),
+    position: input.position,
+  };
   switch (node.kind) {
     case "worker":
       return {
@@ -237,6 +245,22 @@ function semanticNode(
       };
     }
   }
+}
+
+function replayNodeDimensions(
+  family: Parameters<typeof resolveFactoryGraphNodeDimensions>[0],
+  content: string[],
+) {
+  const dimensions = resolveFactoryGraphNodeDimensions(family, {
+    content,
+  }).resolvedDimensions;
+  return {
+    height: dimensions.height,
+    initialHeight: dimensions.height,
+    initialWidth: dimensions.width,
+    measured: { height: dimensions.height, width: dimensions.width },
+    width: dimensions.width,
+  };
 }
 
 function toSemanticHandle(

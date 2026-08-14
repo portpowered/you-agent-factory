@@ -1,5 +1,8 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: this projection keeps canonical factory graph mapping rules together.
-import { factoryGraphNodeFamilyRole } from "@you-agent-factory/factory-graph";
+import {
+  factoryGraphNodeFamilyRole,
+  resolveFactoryGraphNodeDimensions,
+} from "@you-agent-factory/factory-graph";
 import type {
   DashboardEdgeOutcomeKind,
   DashboardPlaceKind,
@@ -269,7 +272,14 @@ function nodeKindForFactoryGraphNode(
 }
 
 function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
-  return factoryGraphNodeFamilyRole(node.kind).defaultDimensions;
+  const content =
+    node.kind === "doc" && node.key.kind === "doc"
+      ? [node.label, node.key.name]
+      : node.kind === "work-state" && node.key.kind === "work-state"
+        ? [node.label, node.key.workTypeName, node.key.stateName]
+        : [node.label];
+  return resolveFactoryGraphNodeDimensions(node.kind, { content })
+    .resolvedDimensions;
 }
 
 function seedNodeFromFactoryGraphNode(

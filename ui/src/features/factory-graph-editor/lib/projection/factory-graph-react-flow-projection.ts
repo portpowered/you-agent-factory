@@ -2,6 +2,7 @@
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
 import {
   type FactoryGraphWorkstationSemantics,
+  resolveFactoryGraphNodeDimensions,
   resolveFactoryGraphWorkstationSemantics,
 } from "@you-agent-factory/factory-graph";
 import { workTypeHasDefaultHandling } from "../../../current-factory-definition/lib/work-type-default-handling";
@@ -252,6 +253,9 @@ function buildFactoryGraphReactFlowNode(input: {
           ),
         )
       : undefined;
+  const dimensions = resolveFactoryGraphNodeDimensions(input.node.kind, {
+    content: [input.node.label],
+  }).resolvedDimensions;
   return {
     className: nodeClassName(input.node.id, input.input),
     data: {
@@ -302,12 +306,17 @@ function buildFactoryGraphReactFlowNode(input: {
       }),
     },
     draggable: true,
+    height: dimensions.height,
     id: input.node.id,
+    initialHeight: dimensions.height,
+    initialWidth: dimensions.width,
+    measured: { height: dimensions.height, width: dimensions.width },
     position: input.input.layoutPositionsByNodeId?.get(input.node.id) ?? {
       x: column * COLUMN_X,
       y: row * ROW_Y,
     },
     type: "factoryEntity",
+    width: dimensions.width,
   } satisfies FactoryGraphReactFlowNode;
 }
 

@@ -7,16 +7,21 @@ export {
 export {
   FACTORY_GRAPH_NODE_FAMILIES,
   FACTORY_GRAPH_NODE_FAMILY_ROLES,
+  type FactoryGraphNodeDimensionBounds,
   type FactoryGraphNodeDimensionResolution,
+  type FactoryGraphNodeDimensionResolutionOptions,
   type FactoryGraphNodeDimensionSource,
   type FactoryGraphNodeDimensions,
   type FactoryGraphNodeFamily,
   type FactoryGraphNodeFamilyRole,
+  type FactoryGraphNodeResizeAxes,
   type FactoryGraphNodeShape,
   type FactoryGraphNodeShellType,
+  type FactoryGraphNodeSizingContent,
   factoryGraphNodeFamilyDimensions,
   factoryGraphNodeFamilyForShellType,
   factoryGraphNodeFamilyRole,
+  fitFactoryGraphNodeDimensions,
   resolveFactoryGraphNodeDimensions,
 } from "./node-family.js";
 export {
@@ -65,6 +70,7 @@ export {
   factoryGraphNodeVisualIconClassName,
   factoryGraphNodeVisualStateClassName,
   factoryGraphNodeVisualStatusSurfaceClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 export {
   FACTORY_GRAPH_NODE_TYPES,

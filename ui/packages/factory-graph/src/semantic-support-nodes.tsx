@@ -11,6 +11,7 @@ import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 
@@ -112,10 +113,18 @@ export function FactoryGraphWorkerNodeView({
         label={workerLabel}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
+        <span
+          className={factoryGraphNodeWrappedTextClassName(
+            "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+          )}
+        >
           {workerLabel}
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
+        <strong
+          className={factoryGraphNodeWrappedTextClassName(
+            "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
+          )}
+        >
           {workerName}
         </strong>
       </span>
@@ -197,8 +206,12 @@ export function FactoryGraphWorkTypeNodeView({
         label={workTypeLabel}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-          <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
+        <span className="flex min-w-0 items-start gap-1 overflow-hidden">
+          <span
+            className={factoryGraphNodeWrappedTextClassName(
+              "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+            )}
+          >
             {workTypeLabel}
           </span>
           {data.isDefaultWorkType ? (
@@ -212,7 +225,11 @@ export function FactoryGraphWorkTypeNodeView({
             </FactoryGraphNodeBadge>
           ) : null}
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
+        <strong
+          className={factoryGraphNodeWrappedTextClassName(
+            "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
+          )}
+        >
           {name}
         </strong>
       </span>
@@ -346,7 +363,7 @@ function FactoryGraphResourceNodeContent({
     <div className="flex min-w-0 w-full flex-col overflow-hidden">
       <span
         aria-label={label}
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-resource-label-zone
         role="img"
       >
@@ -365,7 +382,9 @@ function FactoryGraphResourceNodeContent({
         </span>
         <span className="flex min-w-0 overflow-hidden" title={label}>
           <span
-            className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
+            className={factoryGraphNodeWrappedTextClassName(
+              "block overflow-hidden font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface",
+            )}
             data-resource-name
             title={label}
           >

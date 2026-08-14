@@ -3,6 +3,7 @@ import {
   FactoryGraphWorkstationGuardedControlCard,
   factoryGraphNodeFamilyForShellType,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
   factoryGraphWorkstationPresentation,
   resolveFactoryGraphVisualState,
 } from "@you-agent-factory/factory-graph";
@@ -225,7 +226,7 @@ function FactoryGraphEditorNodeContent({
 }) {
   return (
     <div className="grid h-full min-w-0 content-start gap-2.5">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span
             className="flex min-h-5 shrink-0 items-center"
@@ -244,7 +245,10 @@ function FactoryGraphEditorNodeContent({
               label={semanticIconLabel}
             />
           </span>
-          <ActivityGraphNodeBadge weight="label">
+          <ActivityGraphNodeBadge
+            className={factoryGraphNodeWrappedTextClassName()}
+            weight="label"
+          >
             {semanticIconLabel}
           </ActivityGraphNodeBadge>
         </div>
@@ -362,7 +366,7 @@ function FactoryGraphEditorWorkerNodeView({
       zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
       <div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden">
-        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        <div className="flex min-w-0 flex-wrap items-start gap-1.5 overflow-hidden">
           <span
             className="flex shrink-0 items-center"
             data-factory-entity-semantic-icon
@@ -378,12 +382,16 @@ function FactoryGraphEditorWorkerNodeView({
             />
           </span>
           <div className="grid min-w-0 gap-px overflow-hidden">
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
+            <span
+              className={factoryGraphNodeWrappedTextClassName(
+                "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+              )}
+            >
               {data.kindLabel}
             </span>
             <p
               className={cn(
-                "m-0 min-w-0 truncate",
+                "m-0 min-w-0",
                 activityGraphNodeTitleClassName("font-mono text-[0.8rem]"),
               )}
               data-factory-entity-title

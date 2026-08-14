@@ -9,6 +9,7 @@ import {
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import {
   FactoryGraphPlaceLabelText,
@@ -180,7 +181,7 @@ function FactoryGraphStatePositionContent({
   return (
     <>
       <span
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-state-label-zone
       >
         <FactoryGraphPlaceSemanticIcon
@@ -233,7 +234,11 @@ function FactoryGraphStaticPlaceContent({
             place={place}
             visualState={visualState}
           />
-          <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.86rem] font-bold leading-tight">
+          <strong
+            className={factoryGraphNodeWrappedTextClassName(
+              "block font-mono text-[0.86rem] font-bold leading-tight",
+            )}
+          >
             {label}
           </strong>
         </span>
@@ -256,7 +261,7 @@ function FactoryGraphStaticPlaceContent({
     >
       <span
         aria-label={label}
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-place-label-zone
         role="img"
       >

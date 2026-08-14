@@ -10,6 +10,7 @@ import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import {
   type FactoryGraphVisualState,
@@ -128,11 +129,19 @@ function FactoryGraphDocNodeContent({
           kind="doc"
           label={docLabel}
         />
-        <span className="truncate text-sm font-medium text-on-surface">
+        <span
+          className={factoryGraphNodeWrappedTextClassName(
+            "block text-sm font-medium text-on-surface",
+          )}
+        >
           {displayLabel}
         </span>
       </div>
-      <span className="truncate text-xs text-on-surface-variant">
+      <span
+        className={factoryGraphNodeWrappedTextClassName(
+          "block text-xs text-on-surface-variant",
+        )}
+      >
         {targetPath}
       </span>
     </div>
