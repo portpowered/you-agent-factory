@@ -176,6 +176,7 @@ type AgentRunResponseEvent struct {
 	ID         string
 	DispatchID string
 	EventTime  time.Time
+	Tick       int
 	Payload    AgentRunResponseEventPayload
 }
 

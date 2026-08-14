@@ -898,6 +898,7 @@ func recordDetachedAgentRunResponse(
 		ID:         fmt.Sprintf("factory-event/agent-run-response/%s", dispatchID),
 		DispatchID: dispatchID,
 		EventTime:  eventTime,
+		Tick:       detachedExecutionTick(request.Input.Dispatch.Execution),
 		Payload: workers.AgentRunResponseEventPayload{
 			AgentRunID:     fmt.Sprintf("%s/agent-run/1", dispatchID),
 			Diagnostics:    diagnostics,
@@ -905,6 +906,13 @@ func recordDetachedAgentRunResponse(
 			Outcome:        string(outcome),
 		},
 	})
+}
+
+func detachedExecutionTick(metadata work.ExecutionMetadata) int {
+	if metadata.CurrentTick != 0 {
+		return metadata.CurrentTick
+	}
+	return metadata.DispatchCreatedTick
 }
 
 func runtimeRequestUsesAgentRun(cfg *runtimeConfig, request workers.ExecuteRequest) bool {

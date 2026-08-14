@@ -532,6 +532,9 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	}
 	request := workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-1"},
+		Input: workers.ExecutionInput{Dispatch: work.WorkDispatch{
+			Execution: work.ExecutionMetadata{CurrentTick: 9},
+		}},
 		Target: workers.ExecutionTarget{
 			WorkstationName: "agent",
 			Prompt: workers.PromptPolicy{
@@ -557,6 +560,7 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	event := ledger.event
 	if event.ID != "factory-event/agent-run-response/dispatch-1" ||
 		event.DispatchID != "dispatch-1" ||
+		event.Tick != 9 ||
 		event.Payload.AgentRunID != "dispatch-1/agent-run/1" ||
 		event.Payload.Outcome != string(workers.ExecutionOutcomeAccepted) ||
 		event.Payload.DurationMillis != 1250 {

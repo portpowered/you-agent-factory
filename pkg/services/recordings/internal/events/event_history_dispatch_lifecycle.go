@@ -807,6 +807,7 @@ func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRun
 		interfaces.FactoryEventTypeAgentRunResponse,
 		event.ID,
 		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       event.Tick,
 			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
 			DispatchID: stringPtr(event.DispatchID),
 		}),
