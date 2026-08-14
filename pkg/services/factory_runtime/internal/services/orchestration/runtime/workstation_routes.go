@@ -395,14 +395,6 @@ func finalizeRuntimeExecutionSelection(
 	if strings.EqualFold(strings.TrimSpace(selection.providerID), "script_wrap") {
 		selection.providerID = strings.TrimSpace(selection.modelProvider)
 	}
-	// ACP is the authored execution mechanism, while modelProvider names the
-	// concrete Providers catalog identity (for example, cursor-acp). Carry the
-	// concrete identity in the detached target so Workers can authorize it
-	// without asking Providers to resolve the protocol marker itself.
-	if strings.EqualFold(strings.TrimSpace(selection.providerID), workers.ExecutorProviderACP) &&
-		strings.TrimSpace(selection.modelProvider) != "" {
-		selection.providerID = strings.TrimSpace(selection.modelProvider)
-	}
 	if selection.providerID == "" {
 		selection.providerID = selection.modelProvider
 	}

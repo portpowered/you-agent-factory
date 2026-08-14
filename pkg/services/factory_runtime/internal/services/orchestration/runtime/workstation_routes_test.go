@@ -100,21 +100,6 @@ func TestFinalizeRuntimeExecutionSelectionCanonicalizesScriptWrapProvider(t *tes
 	}
 }
 
-func TestFinalizeRuntimeExecutionSelectionCanonicalizesACPProvider(t *testing.T) {
-	selection := runtimeExecutionSelection{
-		providerID:    workers.ExecutorProviderACP,
-		modelProvider: "cursor-acp",
-		model:         "test-model",
-		workerType:    interfaces.WorkerTypeModel,
-	}
-
-	finalizeRuntimeExecutionSelection(&selection, nil)
-
-	if selection.providerID != "cursor-acp" {
-		t.Fatalf("providerID = %q, want concrete ACP provider identity", selection.providerID)
-	}
-}
-
 func TestApplyRuntimeWorkerSelectionUsesWorkerBodyAsSystemPrompt(t *testing.T) {
 	selection := runtimeExecutionSelection{}
 	applyRuntimeWorkerSelection(nil, &selection, workers.WorkstationExecutionRequest{}, nil, &interfaces.FactoryWorkerConfig{
