@@ -424,6 +424,34 @@ func TestLibraryHarnessAdapter_EnabledToolsRegistersExecutor(t *testing.T) {
 	}
 }
 
+func TestToolsConfiguredTextOnlyRunnerMakesOneProviderInference(t *testing.T) {
+	t.Parallel()
+
+	runner := &sequenceRunner{response: "done"}
+	adapter := NewLibraryHarnessAdapter(localToolFileSystem{})
+	result, err := adapter.Execute(context.Background(), HarnessInput{
+		UserMessage:  "inspect the workspace",
+		Inferencer:   newRunnerInferencer(runner, workerexecution.ProviderInferenceRequest{}),
+		ToolPolicy:   interfaces.AgentToolPolicyReadOnly,
+		WorkingDir:   t.TempDir(),
+		ToolRecorder: NewToolDiagnosticRecorder(),
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.FinalText != "done" {
+		t.Fatalf("FinalText = %q, want done", result.FinalText)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("provider inference count = %d, want baseline 1", runner.calls)
+	}
+	for _, message := range result.Messages {
+		if len(message.ToolCalls) > 0 {
+			t.Fatalf("messages = %#v, want no structured tool call from text-only Runner", result.Messages)
+		}
+	}
+}
+
 func TestLibraryHarnessAdapter_EnabledToolsRequireFileSystem(t *testing.T) {
 	t.Parallel()
 
