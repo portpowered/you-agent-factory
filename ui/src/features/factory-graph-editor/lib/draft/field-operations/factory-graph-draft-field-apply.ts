@@ -1,7 +1,7 @@
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeFieldUpdate,
-} from "./factory-graph-draft-types";
+} from "../factory-graph-draft-types";
 
 export function applyFactoryGraphNodeFieldChanges(
   factoryDefinition: CanonicalFactoryDefinition,

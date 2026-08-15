@@ -1,5 +1,4 @@
 import { isFactoryBundledDocTargetPath } from "../../../workflow-activity/lib/factory-bundled-docs";
-import { applyFactoryGraphNodeFieldChanges } from "./factory-graph-draft-field-apply";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -13,6 +12,7 @@ import type {
 } from "./factory-graph-draft-types";
 import { buildEdge, edgeChangeId } from "./factory-graph-draft-types";
 import { validateFactoryGraphDraftStructural } from "./factory-graph-draft-validation";
+import { applyFactoryGraphNodeFieldChanges } from "./field-operations/factory-graph-draft-field-apply";
 
 const DEFAULT_RESOURCE_REQUIREMENT_CAPACITY = 1;
 

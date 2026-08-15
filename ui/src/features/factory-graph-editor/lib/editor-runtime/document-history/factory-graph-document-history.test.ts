@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../draft/factory-graph-draft-types";
 import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,
-} from "../layout/factory-graph-layout-operations";
+} from "../../layout/factory-graph-layout-operations";
 import {
   canRedoFactoryGraphDocumentHistory,
   canUndoFactoryGraphDocumentHistory,

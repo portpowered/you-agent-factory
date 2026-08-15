@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-import type { FactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
+import type { FactoryGraphDraft } from "../../lib/draft/factory-graph-draft-types";
 import {
   canRedoFactoryGraphDocumentHistory,
   canUndoFactoryGraphDocumentHistory,
@@ -12,8 +12,8 @@ import {
   redoFactoryGraphDocumentHistory,
   resetFactoryGraphDocumentHistory,
   undoFactoryGraphDocumentHistory,
-} from "../lib/editor-runtime/factory-graph-document-history";
-import type { FactoryLayout } from "../lib/layout/factory-graph-layout-operations";
+} from "../../lib/editor-runtime/document-history/factory-graph-document-history";
+import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 
 export function useFactoryGraphDocumentHistory(
   initialSnapshot: FactoryGraphDocumentSnapshot,

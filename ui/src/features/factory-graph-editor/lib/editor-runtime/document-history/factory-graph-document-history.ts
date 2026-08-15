@@ -1,5 +1,5 @@
-import type { FactoryGraphDraft } from "../draft/factory-graph-draft-types";
-import type { FactoryLayout } from "../layout/factory-graph-layout-operations";
+import type { FactoryGraphDraft } from "../../draft/factory-graph-draft-types";
+import type { FactoryLayout } from "../../layout/factory-graph-layout-operations";
 
 export interface FactoryGraphDocumentSnapshot {
   draft: FactoryGraphDraft;

@@ -26,13 +26,13 @@ import {
   removeFactoryGraphSelection,
 } from "../lib/operations/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import { useFactoryGraphDocumentHistory } from "./history/use-factory-graph-document-history";
 import { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 import { useEditableFactoryGraphSaveController } from "./use-editable-factory-graph-save-controller";
 import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "./use-editable-factory-graph-types";
-import { useFactoryGraphDocumentHistory } from "./use-factory-graph-document-history";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes draft, layout, projection, and save controllers for the editor.
 export function useEditableFactoryGraph(
