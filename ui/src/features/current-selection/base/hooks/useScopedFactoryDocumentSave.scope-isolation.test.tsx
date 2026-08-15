@@ -186,6 +186,68 @@ describe("useScopedFactoryDocumentSave scope isolation for dirty drafts", () => 
 });
 
 describe("useScopedFactoryDocumentSave scope isolation during in-flight save", () => {
+  it("completes an in-flight save across a default alias remap", async () => {
+    const pendingSave = mockPendingFactoryDocumentSave();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(pendingSave.saveMutation as never);
+    const onSaved = vi.fn();
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: DEFAULT_FACTORY_SESSION_ID },
+        wrapper: createScopedFactoryDocumentSaveQueryClientWrapper(),
+      },
+    );
+
+    const request: ScopedFactoryDocumentSaveRequest = {
+      ...defaultScopedFactoryDocumentSaveRequest,
+      onSaved,
+      scopeKey: DEFAULT_FACTORY_SESSION_ID,
+    };
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveState).toEqual({ status: "confirming" });
+
+    let savePromise: Promise<void> | undefined;
+    await act(async () => {
+      savePromise = result.current.confirmSave(request);
+      await Promise.resolve();
+    });
+
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    rerender({ scopeKey: "runtime-default-session" });
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    pendingSave.deferred.resolve({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [],
+      workstations: [],
+    });
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "success" });
+    });
+    expect(result.current.saveState).not.toEqual({ status: "confirming" });
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
   it("does not apply success state or onSaved when scopeKey changes during an in-flight save", async () => {
     const pendingSave = mockPendingFactoryDocumentSave();
     vi.spyOn(

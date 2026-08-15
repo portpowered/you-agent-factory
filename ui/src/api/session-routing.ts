@@ -27,6 +27,20 @@ export function isDefaultToRuntimeSessionAliasRemap(
   );
 }
 
+/** True when two session keys identify the same logical document scope. */
+export function areFactorySessionIDsEquivalent(
+  previousSessionID: string | null | undefined,
+  sessionID: string | null | undefined,
+): boolean {
+  return (
+    previousSessionID === sessionID ||
+    isDefaultToRuntimeSessionAliasRemap(
+      previousSessionID ?? null,
+      sessionID ?? null,
+    )
+  );
+}
+
 export function currentFactorySessionPath(
   sessionID: string | null | undefined,
 ): string {
