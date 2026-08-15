@@ -16,8 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestExecutionServiceAndHelperNormalization(t *testing.T) {

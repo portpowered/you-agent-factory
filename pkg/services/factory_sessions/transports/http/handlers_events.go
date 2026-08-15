@@ -484,7 +484,7 @@ func (s *Server) getEvents(
 	}
 
 	for _, event := range stream.History {
-		if err := s.writeSSEDataJSON(w, event); err != nil {
+		if err := s.writeFactoryEventSSE(w, event); err != nil {
 			s.logger.Debug("write historical factory event failed", zap.Error(err))
 			return
 		}
@@ -499,13 +499,21 @@ func (s *Server) getEvents(
 			if !ok {
 				return
 			}
-			if err := s.writeSSEDataJSON(w, event); err != nil {
+			if err := s.writeFactoryEventSSE(w, event); err != nil {
 				s.logger.Debug("write live factory event failed", zap.Error(err))
 				return
 			}
 			flusher.Flush()
 		}
 	}
+}
+
+func (s *Server) writeFactoryEventSSE(w http.ResponseWriter, event interfaces.FactoryEvent) error {
+	apiEvent, err := apisurface.FactoryEventToAPI(event)
+	if err != nil {
+		return err
+	}
+	return s.writeSSEDataJSON(w, apiEvent)
 }
 
 // StreamFactoryEvents writes one canonical Factory Event subscription as SSE.
