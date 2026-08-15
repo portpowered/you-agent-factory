@@ -551,6 +551,13 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 	case WorkstationTypeInvoke:
 		return WorkstationTypeInference
 	case WorkstationTypeModel:
+		if workertaxonomy.IsScheduledLegacyModelPair(
+			workstationType,
+			workerType,
+			workertaxonomy.WorkstationKind(kind),
+		) {
+			return WorkstationTypeModel
+		}
 		if PermissivePublicFactoryWorkerType(workerType) == WorkerTypeScript {
 			return WorkstationTypeScript
 		}

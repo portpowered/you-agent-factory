@@ -89,6 +89,9 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 	case WorkstationTypeInvoke:
 		return WorkstationTypeInference
 	case WorkstationTypeModel:
+		if IsScheduledLegacyModelPair(workstationType, workerType, kind) {
+			return WorkstationTypeModel
+		}
 		if PermissiveWorkerType(workerType) == WorkerTypeScript {
 			return WorkstationTypeScript
 		}
@@ -104,6 +107,23 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 		return strings.TrimSpace(workstationType)
 	default:
 		return PermissiveWorkstationType(workstationType)
+	}
+}
+
+// IsScheduledLegacyModelPair identifies the legacy model worker/workstation
+// pair whose inference behavior is selected by its scheduling kind. Keep the
+// pair as MODEL_WORKSTATION for public projection so a legacy MODEL_WORKER can
+// continue to project to INFERENCE_WORKER without rewriting the authored alias.
+func IsScheduledLegacyModelPair(workstationType, workerType string, kind WorkstationKind) bool {
+	if strings.TrimSpace(workstationType) != WorkstationTypeModel ||
+		PermissiveWorkerType(workerType) != WorkerTypeInference {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(string(kind))) {
+	case WorkstationKindRepeater, WorkstationKindCron:
+		return true
+	default:
+		return false
 	}
 }
 
