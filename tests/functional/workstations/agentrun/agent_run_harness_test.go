@@ -1,12 +1,6 @@
-// Package agentrun holds the functional probe that proves whether a Petri
-// dispatch to an AGENT_RUN workstation still reaches the agent-run harness.
-//
-// The probe deliberately asserts on *provider interaction* rather than on
-// emitted Factory Events. Runtime synthesizes agent-run response events on the
-// detached dispatch path (recordDetachedAgentRunResponse in
-// pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go),
-// so every event-shape assertion passes whether or not the harness ran. Only
-// the bytes that reach the provider process can tell the two worlds apart.
+// Package agentrun holds the functional probe that proves a Petri dispatch to
+// an AGENT_RUN workstation reaches the agent-run harness and publishes one
+// interpretable final response event.
 package agentrun
 
 import (
@@ -41,44 +35,9 @@ const agentRunProbeBody = "AGENT_RUN_PROBE_BODY read probe.txt and report the co
 // WorkstationBehaviorRouter into the agent-run harness, instead of collapsing
 // into one raw provider call on the stateless-workers execute path.
 //
-// Measured provider turn counts (deterministic, 3 runs each):
-//
-//	merge-base a1603f0c3 : 1 provider invocation, prompt "User: AGENT_RUN_PROBE_BODY ..."
-//	HEAD       ab963343d : 1 provider invocation, prompt "AGENT_RUN_PROBE_BODY ..."
-//
-// The harness never drove a second turn at either revision: agentrun's
-// runnerInferencer returns messages.InferenceResult{Message: ...} and never
-// populates InferenceResult.ToolCalls, so a text-only command runner can never
-// make the agent loop dispatch a tool and take another turn. The turn count is
-// therefore not the regression; the lost harness is. This assertion fails at
-// HEAD and passes at the merge base.
-//
-// Dispatch chain at the merge base (captured with runtime/debug.PrintStack):
-//
-//	runtime.startThroughStatelessWorkers
-//	  -> attemptLifecycle.startWithPreparation -> executeSafely
-//	  -> factory_runtime/internal.workstationExecuteAdapter.executeThroughBoundary
-//	  -> workers.workstationPoolBoundary.Publish
-//	  -> workstations/internal/service.Pool.DispatchWithAdmission
-//	  -> executor.WorkstationExecutor.executeInnerWorker
-//	  -> executor.WorkstationBehaviorRouter.Execute
-//	  -> agentrun.AgentRunExecutor.Execute (agent loop + tool policy)
-//
-// Dispatch chain at HEAD: the same publisher now resolves cfg.executeService to
-// the stateless Workers service, which never consults the workstation type:
-//
-//	runtime.startThroughStatelessWorkers
-//	  -> attemptLifecycle.startWithPreparation -> executeSafely
-//	  -> workers/internal/service.Service.Execute
-//	  -> workers/internal/service.Service.runRunner
-//	  -> runners.Execute(Identity: runners.AgentIdentity)   (execute.go:253)
-//
-// The switch is the branch reordering in
-// pkg/services/factory_runtime/internal/runtime_build.go
-// executeServiceFromWorkstation: the runtimeExecuteService type assertion
-// (line 598) now precedes the `boundary != nil` branch (line 601), so the
-// workstation pool boundary that reaches WorkstationBehaviorRouter is no
-// longer selected for Petri dispatch.
+// The provider prompt assertion proves the dispatch reached the harness; the
+// response-event assertion below proves the completion publication was neither
+// lost nor duplicated and retained its structured public provenance.
 func TestAgentRunWorkstationDispatchExecutesAgentRunHarness(t *testing.T) {
 	dir := support.ScaffoldFactory(t, agentRunProbeFactoryConfig())
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"request":"probe the agent-run harness"}`))
@@ -121,6 +80,8 @@ func assertAgentRunFinalResponseEvent(
 ) {
 	t.Helper()
 
+	matchingEvents := 0
+	foundText := false
 	for _, event := range events {
 		if event.Kind != factoryapi.FactoryResponseEventKindMessage ||
 			event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
@@ -133,6 +94,7 @@ func assertAgentRunFinalResponseEvent(
 			event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
 			continue
 		}
+		matchingEvents++
 		payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
 		if err != nil {
 			t.Fatalf("decode AGENT_RUN final response event payload: %v", err)
@@ -140,12 +102,23 @@ func assertAgentRunFinalResponseEvent(
 		for _, block := range payload.ContentBlocks {
 			text, err := block.AsFactoryResponseEventTextContentBlock()
 			if err == nil && strings.Contains(text.Text, wantText) {
-				return
+				foundText = true
+				break
 			}
 		}
 	}
+	if matchingEvents != 1 {
+		t.Fatalf(
+			"AGENT_RUN final response event count = %d, want exactly one interpretable terminal event; events=%#v",
+			matchingEvents,
+			events,
+		)
+	}
+	if foundText {
+		return
+	}
 	t.Fatalf(
-		"AGENT_RUN final response event not found in public response stream: want provider=agent-run nativeType=agent_final_response text=%q, events=%#v",
+		"AGENT_RUN final response event lost its expected structured text: want provider=agent-run nativeType=agent_final_response text=%q, events=%#v",
 		wantText,
 		events,
 	)

@@ -111,6 +111,50 @@ func TestRunnerRecordsDistinctResponseIDsAcrossRetryOutcomes(t *testing.T) {
 	assertRetryRecording(t, events)
 }
 
+func TestRunnerResponsePreservesMultipartStructuredContentIncludingAudio(t *testing.T) {
+	want := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "spoken answer"},
+		{
+			Type:        work.WorkContentPartTypeAudio,
+			URL:         "file:///tmp/spoken-answer.wav",
+			ContentType: "audio/wav",
+			ArtifactID:  "artifact-audio-1",
+			Metadata:    map[string]any{"voice": "alloy"},
+		},
+		{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"durationMs":1200}`)},
+	}
+	raw, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal structured model output: %v", err)
+	}
+
+	var events []workerexecution.ModelEvent
+	runner := NewRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{Content: string(raw)}, nil
+		}),
+		nil,
+		&workerconfig.FactoryWorkerConfig{Name: "worker", Model: "model"},
+		func(event workerexecution.ModelEvent) { events = append(events, event) },
+		func() time.Time { return time.Unix(500, 0).UTC() },
+	)
+
+	if _, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-structured"},
+	}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(events) != 2 || events[1].Response == nil {
+		t.Fatalf("events = %#v, want one request and one response", events)
+	}
+	if events[1].Response.OutputContent == nil {
+		t.Fatal("MODEL_RESPONSE output content is nil, want the multipart structured result")
+	}
+	if !reflect.DeepEqual(*events[1].Response.OutputContent, want) {
+		t.Fatalf("MODEL_RESPONSE output content = %#v, want %#v", *events[1].Response.OutputContent, want)
+	}
+}
+
 func executeRetryPair(t *testing.T, runner workerexecution.Runner, request workerexecution.RunnerExecutionRequest) {
 	t.Helper()
 	if _, err := runner.Execute(context.Background(), request); err == nil {
