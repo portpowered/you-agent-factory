@@ -61,45 +61,70 @@ func (runner hostObservingRunner) Run(ctx context.Context) error {
 
 	select {
 	case result := <-readyResult:
-		if result.err == nil {
-			runner.onReady(result.binding)
-			return <-runResult
-		}
-		err := <-runResult
-		if err == nil && !errors.Is(result.err, context.Canceled) {
-			err = result.err
-		}
-		return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
+		return runner.finishAfterReadinessResult(ctx, result, runResult)
 	case err := <-runResult:
-		var readinessErr error
-		select {
-		case result := <-readyResult:
-			if result.err == nil {
-				runner.onReady(result.binding)
-				cancelReady()
-				return err
-			}
-			readinessErr = result.err
-		default:
-		}
-		cancelReady()
-		if readinessErr == nil && runner.runtimeHostReadinessConfigured() {
-			result := <-readyResult
-			if result.err == nil {
-				runner.onReady(result.binding)
-			} else {
-				readinessErr = result.err
-			}
-		}
-		if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
-			err = readinessErr
-		}
-		return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
+		return runner.finishAfterRunResult(ctx, err, readyResult, cancelReady)
 	case <-ctx.Done():
 		cancelReady()
 		// Let the managed lifecycle normalize ordinary cancellation after it
 		// has stopped and joined its components.
 		return <-runResult
+	}
+}
+
+func (runner hostObservingRunner) finishAfterReadinessResult(
+	ctx context.Context,
+	result runtimeHostResult,
+	runResult <-chan error,
+) error {
+	if result.err == nil {
+		runner.onReady(result.binding)
+		return <-runResult
+	}
+	err := <-runResult
+	if err == nil && !errors.Is(result.err, context.Canceled) {
+		err = result.err
+	}
+	return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
+}
+
+func (runner hostObservingRunner) finishAfterRunResult(
+	ctx context.Context,
+	err error,
+	readyResult <-chan runtimeHostResult,
+	cancelReady context.CancelFunc,
+) error {
+	readinessErr := runner.observeReadyResult(err, readyResult, cancelReady)
+	if readinessErr == nil && runner.runtimeHostReadinessConfigured() {
+		result := <-readyResult
+		if result.err == nil {
+			runner.onReady(result.binding)
+		} else {
+			readinessErr = result.err
+		}
+	}
+	if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
+		err = readinessErr
+	}
+	return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
+}
+
+func (runner hostObservingRunner) observeReadyResult(
+	err error,
+	readyResult <-chan runtimeHostResult,
+	cancelReady context.CancelFunc,
+) error {
+	select {
+	case result := <-readyResult:
+		if result.err == nil {
+			runner.onReady(result.binding)
+			cancelReady()
+			return err
+		}
+		return result.err
+	default:
+		cancelReady()
+		return nil
 	}
 }
 
