@@ -39,7 +39,7 @@ function assertSourceEntrypoints(tsconfig) {
     }
 
     throw new Error(
-      `[factory-graph-components-runtime] ${specifier} must resolve to ${expected[0]} in the package-local tsconfig; found ${JSON.stringify(paths[specifier]) ?? "missing"}.`,
+      `[factory-graph-components-runtime] ${specifier} must resolve to ${expected[0]} in the package-local tsconfig; found ${JSON.stringify(paths[specifier]) ?? "missing"}. 0 pass; focused Bun test was not started.`,
     );
   }
 }
