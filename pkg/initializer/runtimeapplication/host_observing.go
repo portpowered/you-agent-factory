@@ -98,6 +98,19 @@ func (runner hostObservingRunner) finishAfterRunResult(
 	if readinessObserved {
 		return err
 	}
+	if err == nil && readinessErr == nil && runner.runtimeHostReadinessConfigured() {
+		// The managed run can publish readiness immediately before returning,
+		// while the observer goroutine has not delivered that result yet. Wait
+		// for the one result still owned by this observer; a successful result
+		// is never read twice because observeReadyResult reported whether it
+		// consumed it above.
+		result := <-readyResult
+		if result.err == nil {
+			runner.onReady(result.binding)
+		} else {
+			readinessErr = result.err
+		}
+	}
 	if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
 		err = readinessErr
 	}
