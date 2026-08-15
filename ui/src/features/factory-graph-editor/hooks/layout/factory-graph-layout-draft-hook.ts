@@ -155,6 +155,11 @@ interface LayoutDraftStoreState {
 interface UseFactoryGraphLayoutDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   factoryDocumentScopeKey?: string | null;
+  /**
+   * Compatibility bridge for the parent editor's unified document history.
+   * The layout command history below remains available to direct layout-hook
+   * consumers until its callers can be removed mechanically.
+   */
   onCommit?: (input: {
     nextLayout: FactoryLayout;
     previousLayout: FactoryLayout;

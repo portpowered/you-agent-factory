@@ -63,6 +63,15 @@ export function useEditableFactoryGraph(
   useEffect(() => {
     documentHistory.reconcile(currentDocumentSnapshot);
   }, [currentDocumentSnapshot, documentHistory.reconcile]);
+  const rebaseDocumentHistoryToSavedFactory = useCallback(
+    (savedFactory: CanonicalFactoryDefinition) => {
+      documentHistory.reset({
+        draft: createEmptyFactoryGraphDraft(),
+        layout: factoryLayoutFromDefinition(savedFactory),
+      });
+    },
+    [documentHistory],
+  );
   const baseFactoryDefinition =
     draftState.latestDocument ?? draftState.baseDocument ?? null;
   const graphState = useEditableFactoryGraphState({
@@ -106,6 +115,7 @@ export function useEditableFactoryGraph(
     factoryDocumentScopeKey: options.factoryDocumentScopeKey ?? null,
     layoutDraftState,
     locale: options.locale,
+    onDocumentSaved: rebaseDocumentHistoryToSavedFactory,
     setBlockedOperation,
   });
   const mutationActions = useEditableFactoryGraphMutationActions({
@@ -142,12 +152,12 @@ export function useEditableFactoryGraph(
       layoutDraftState.resetLayout(resetOptions);
       if (resetOptions?.recordHistory === false) {
         documentHistory.reset({
-          draft: documentHistory.present.draft,
+          draft: draftState.draft,
           layout: layoutDraftState.baseLayout,
         });
       }
     },
-    [documentHistory, layoutDraftState],
+    [documentHistory, draftState.draft, layoutDraftState],
   );
   const discard = useCallback(() => {
     documentHistory.reset({
