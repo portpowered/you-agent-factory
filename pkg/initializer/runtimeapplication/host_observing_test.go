@@ -323,6 +323,66 @@ func TestHostObservingRunnerPreservesFailureAfterReadiness(t *testing.T) {
 	}
 }
 
+func TestHostObservingRunnerHandlesBufferedReadinessWhenRunCompletesFirst(t *testing.T) {
+	tests := []struct {
+		name   string
+		runErr error
+	}{
+		{name: "successful run", runErr: nil},
+		{name: "failed run", runErr: errors.New("runtime stopped after binding")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			readyResult := make(chan runtimeHostResult, 1)
+			expected := initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 7437}
+			readyResult <- runtimeHostResult{binding: expected}
+			observed := make(chan initializer.RuntimeHostBinding, 1)
+			runner := hostObservingRunner{
+				runner: &hostReadinessRunner{readinessConfigured: true},
+				onReady: func(binding initializer.RuntimeHostBinding) {
+					observed <- binding
+				},
+			}
+			completed := make(chan error, 1)
+			go func() {
+				completed <- runner.finishAfterRunResult(
+					context.Background(),
+					tt.runErr,
+					readyResult,
+					func() {},
+				)
+			}()
+
+			select {
+			case err := <-completed:
+				if tt.runErr == nil {
+					if err != nil {
+						t.Fatalf("finishAfterRunResult() = %v, want nil", err)
+					}
+					break
+				}
+				if !errors.Is(err, tt.runErr) {
+					t.Fatalf("finishAfterRunResult() = %v, want %v", err, tt.runErr)
+				}
+				var startupErr *initializer.RuntimeHostStartupError
+				if errors.As(err, &startupErr) {
+					t.Fatalf("post-readiness error = %v, must not be RuntimeHostStartupError", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("finishAfterRunResult() blocked after consuming buffered readiness")
+			}
+			select {
+			case binding := <-observed:
+				if binding != expected {
+					t.Fatalf("observed binding = %#v, want %#v", binding, expected)
+				}
+			default:
+				t.Fatal("buffered readiness was not observed")
+			}
+		})
+	}
+}
+
 func TestHostObservingRunnerClassifiesPreReadinessCompletionFailure(t *testing.T) {
 	cause := errors.New("completion transport failed before binding")
 	runner := WithRuntimeHostObserver(

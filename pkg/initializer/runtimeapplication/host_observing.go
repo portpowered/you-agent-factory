@@ -94,14 +94,9 @@ func (runner hostObservingRunner) finishAfterRunResult(
 	readyResult <-chan runtimeHostResult,
 	cancelReady context.CancelFunc,
 ) error {
-	readinessErr := runner.observeReadyResult(err, readyResult, cancelReady)
-	if readinessErr == nil && runner.runtimeHostReadinessConfigured() {
-		result := <-readyResult
-		if result.err == nil {
-			runner.onReady(result.binding)
-		} else {
-			readinessErr = result.err
-		}
+	readinessObserved, readinessErr := runner.observeReadyResult(readyResult, cancelReady)
+	if readinessObserved {
+		return err
 	}
 	if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
 		err = readinessErr
@@ -110,21 +105,20 @@ func (runner hostObservingRunner) finishAfterRunResult(
 }
 
 func (runner hostObservingRunner) observeReadyResult(
-	err error,
 	readyResult <-chan runtimeHostResult,
 	cancelReady context.CancelFunc,
-) error {
+) (bool, error) {
 	select {
 	case result := <-readyResult:
 		if result.err == nil {
 			runner.onReady(result.binding)
 			cancelReady()
-			return err
+			return true, nil
 		}
-		return result.err
+		return false, result.err
 	default:
 		cancelReady()
-		return nil
+		return false, nil
 	}
 }
 
