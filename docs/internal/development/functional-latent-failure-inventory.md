@@ -19,8 +19,10 @@ later updates to this file.
   ```
 
 The raw structured reconciliation is 44 `fail` events: 36 named test events
-and 8 package-summary events. The named events produce 36 distinct
-package/test pairs across 8 packages. Nested subtests remain separate rows;
+and 8 package-summary events. The named events initially produced 36 distinct
+package/test pairs across 8 packages. This lane's alignment selector has since
+passed; its parent and four nested rows were removed from the active inventory,
+leaving 31 distinct package/test pairs. Nested subtests remain separate rows;
 their slash-delimited identities are preserved exactly as emitted. The
 quarantine schema currently accepts only top-level test selectors, so later
 quarantine entries must use the corresponding top-level name while retaining
@@ -61,13 +63,8 @@ these nested identities as evidence.
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` |
-| `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases` |
-| `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/canonical_split_factory_stays_aligned_across_flatten_replay_and_execution` |
-| `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/split_worker_frontmatter_rejects_retired_model_provider_alias` |
-| `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/split_workstation_frontmatter_rejects_retired_cron_trigger_at_start_alias` |
-| `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/split_workstation_frontmatter_rejects_retired_runtime_type_alias` |
 
-**Authoritative count: 36 distinct package/test pairs.**
+**Active inventory count: 31 distinct package/test pairs.**
 
 ## Parent-versus-tip comparison
 
@@ -86,15 +83,16 @@ environment, and command shape. The full push-tier behavior was selected with
 The comparison table's package column is module-relative; its full import path
 is `github.com/portpowered/infinite-you/` followed by the displayed value.
 
-The two passes had identical classifications: 21 failures at both commits, 14
-passes at both commits, and one setup-incomparable skip at both commits. There
-was no test that failed at `ed502b781` and passed at `db7379d47`; no genuine
-tip-only regression was found. The 21 same-machine failures are confirmed
-pre-existing candidates for the next quarantine story. The 14 CI failures that
-passed when isolated on both commits remain ambiguous/non-reproduced and must
-not be quarantined. The observability row is setup-incomparable because its
-Linux-only test files are not runnable on this Windows machine and must not be
-quarantined from this comparison.
+The two historical passes had identical classifications: 21 failures at both
+commits, 14 passes at both commits, and one setup-incomparable skip at both
+commits. There was no test that failed at `ed502b781` and passed at
+`db7379d47`; no genuine tip-only regression was found. This lane repaired five
+alignment rows that had failed in that historical comparison, leaving 16
+same-machine failures as confirmed pre-existing candidates for the next
+quarantine story. The 14 CI failures that passed when isolated on both commits
+remain ambiguous/non-reproduced and must not be quarantined. The observability
+row is setup-incomparable because its Linux-only test files are not runnable on
+this Windows machine and must not be quarantined from this comparison.
 
 | # | Package | Test identity | `ed502b781` | `db7379d47` | Verdict | Failure or comparison evidence |
 | ---: | --- | --- | --- | --- | --- | --- |
@@ -129,11 +127,6 @@ quarantined from this comparison.
 | 29 | `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | FAIL (22.50s) | FAIL (4.33s) | CONFIRMED PRE-EXISTING | `/events` replay failed with `unexpected EOF` at both commits. |
 | 30 | `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | FAIL (7.01s) | FAIL (3.99s) | CONFIRMED PRE-EXISTING | Provider sessions were absent from events; `sess-world-view-success` was missing at both commits. |
 | 31 | `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | FAIL (5.34s) | FAIL (4.61s) | CONFIRMED PRE-EXISTING | Event order stopped before the expected dispatch-created/inference-request/inference-response/dispatch-completed sequence at both commits. |
-| 32 | `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases` | FAIL (4.18s) | FAIL (5.49s) | CONFIRMED PRE-EXISTING | Parent alignment failure reproduced at both commits. |
-| 33 | `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/canonical_split_factory_stays_aligned_across_flatten_replay_and_execution` | FAIL (3.96s) | FAIL (3.12s) | CONFIRMED PRE-EXISTING | Observed `cron-worker` type `AGENT_WORKER`, expected `INFERENCE_WORKER`, at both commits. |
-| 34 | `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/split_worker_frontmatter_rejects_retired_model_provider_alias` | FAIL (2.94s) | FAIL (3.20s) | CONFIRMED PRE-EXISTING | Expected a runtime-config alignment boundary error but got nil at both commits. |
-| 35 | `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/split_workstation_frontmatter_rejects_retired_cron_trigger_at_start_alias` | FAIL (3.06s) | FAIL (3.21s) | CONFIRMED PRE-EXISTING | Expected a runtime-config alignment boundary error but got nil at both commits. |
-| 36 | `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/split_workstation_frontmatter_rejects_retired_runtime_type_alias` | FAIL (3.13s) | FAIL (3.16s) | CONFIRMED PRE-EXISTING | Expected a runtime-config alignment boundary error but got nil at both commits. |
 
 The exact command for each row is the per-row command pattern above with the
 row's full test identity and package substituted verbatim. The authoritative
@@ -142,7 +135,7 @@ parent-versus-tip behavior and do not replace that source failure set.
 
 ## Quarantine mapping
 
-The 21 confirmed pre-existing failure rows map to 12 top-level selectors
+The remaining 16 confirmed pre-existing failure rows map to 11 top-level selectors
 because the quarantine schema intentionally matches top-level Go tests. A
 parent selector covers its independently recorded nested subtests; no broader
 package selector is used. Every entry below is `GENUINELY FAILING`, names the
@@ -162,9 +155,12 @@ observed failure, and records reproduction at both `ed502b781` and
 | `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | 29 | `/events` replay failed with `unexpected EOF` | Runtime API / event replay framing |
 | `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | 30 | Provider sessions were absent from events; `sess-world-view-success` was missing | Runtime API / provider-session projection |
 | `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | 31 | Canonical event order stopped before the expected dispatch/inference sequence | Runtime API / inference event emission |
-| `tests/functional/runtime_api` | `TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases` | 32–36 | Runtime-config type mismatch and retired-alias cases returned no boundary error | Runtime API / runtime-config alignment |
 
 The 14 ambiguous/non-reproduced rows (1–3, 5–13, 21, and 28) and the one
 setup-incomparable Windows row (22) remain unquarantined. No failure that
 passed at `ed502b781` and failed at `db7379d47`, or otherwise indicated a
 tip-only regression, was found.
+
+The runtime-config alignment selector changed from observed-fail to
+observed-pass. Its quarantine entry and the five corresponding inventory rows
+were removed after the exact selector passed.

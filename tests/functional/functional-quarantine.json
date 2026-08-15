@@ -65,13 +65,6 @@
       "followUp": "Repair event replay framing and remove this entry after the exact selector passes"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
-      "test": "TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases",
-      "bucket": "GENUINELY FAILING",
-      "reason": "Runtime-config alignment failed: cron-worker was AGENT_WORKER instead of INFERENCE_WORKER and retired-alias cases returned nil instead of a boundary error; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair runtime-config alignment and retired-alias rejection, then remove this entry after the exact selector passes"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "Linux build constraints leave this functional package without runnable Go test files"
