@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -118,6 +120,81 @@ func TestRunSuccessReportsUnambiguousResult(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("success stderr = %q", stderr.String())
+	}
+}
+
+func TestRunContinuesAfterEarlyFailureAndWritesCompleteJSONReport(t *testing.T) {
+	original := executeTarget
+	t.Cleanup(func() { executeTarget = original })
+	var started []string
+	executeTarget = func(_, target string, stdout, _ io.Writer) error {
+		started = append(started, target)
+		fmt.Fprintf(stdout, "diagnostic:%s\n", target)
+		if target == "first" {
+			fmt.Fprintln(stdout, "LINT_VIOLATION_COUNT: 1")
+			return errors.New("controlled failure")
+		}
+		return nil
+	}
+
+	reportPath := filepath.Join(t.TempDir(), "backend-lint.json")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-report-file", reportPath, "-jobs", "1", "first", "second", "third"}, &stdout, &stderr); code == 0 {
+		t.Fatalf("run() exit code = 0, want failed target; stdout = %q", stdout.String())
+	}
+	if !slices.Equal(started, []string{"first", "second", "third"}) {
+		t.Fatalf("targets started = %v, want the runner to continue after first failure", started)
+	}
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	var report lintReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("decode report: %v; data = %s", err, data)
+	}
+	if report.Version != 1 || report.Jobs != 1 || len(report.Targets) != 3 {
+		t.Fatalf("report metadata = %+v, want version 1, jobs 1, and three targets", report)
+	}
+	for index, target := range report.Targets {
+		if target.DurationMillis < 0 {
+			t.Fatalf("target %q duration = %d, want a reported wall time", target.Name, target.DurationMillis)
+		}
+		if target.Name != started[index] {
+			t.Fatalf("report target[%d] = %q, want execution order %q", index, target.Name, started[index])
+		}
+	}
+	if report.Targets[0].Status != "fail" || report.Targets[0].Error != "controlled failure" {
+		t.Fatalf("first target report = %+v", report.Targets[0])
+	}
+	if report.Targets[0].ViolationCount == nil || *report.Targets[0].ViolationCount != 1 || report.Targets[0].ViolationCountSource != "checker-marker" {
+		t.Fatalf("first target violation count = %+v, want checker marker count 1", report.Targets[0])
+	}
+	for _, target := range report.Targets[1:] {
+		if target.Status != "pass" || target.ViolationCount == nil || *target.ViolationCount != 0 || target.ViolationCountSource != "successful-check" {
+			t.Fatalf("successful target report = %+v, want pass with zero violations", target)
+		}
+	}
+}
+
+func TestCheckerViolationCountRequiresOneNonnegativeMachineReadableMarker(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		text  string
+		count int
+		valid bool
+	}{
+		{name: "valid", text: "diagnostic\nLINT_VIOLATION_COUNT: 4\n", count: 4, valid: true},
+		{name: "missing", text: "diagnostic\n", valid: false},
+		{name: "duplicate", text: "LINT_VIOLATION_COUNT: 1\nLINT_VIOLATION_COUNT: 1\n", valid: false},
+		{name: "negative", text: "LINT_VIOLATION_COUNT: -1\n", valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			count, ok := checkerViolationCount(test.text)
+			if ok != test.valid || (ok && count != test.count) {
+				t.Fatalf("checkerViolationCount(%q) = (%d, %v), want (%d, %v)", test.text, count, ok, test.count, test.valid)
+			}
+		})
 	}
 }
 

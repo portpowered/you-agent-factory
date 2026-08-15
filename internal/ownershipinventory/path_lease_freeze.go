@@ -67,6 +67,28 @@ type PathLeaseFreezeReport struct {
 	ManifestError             string
 }
 
+// ViolationCount returns the number of independently reported path-lease
+// findings represented by this validation report.
+func (r PathLeaseFreezeReport) ViolationCount() int {
+	count := len(r.MissingPackets) + len(r.EmptyExclusivePathPackets) + len(r.PortfolioHoldConflicts)
+	if r.InvalidFormatVersion {
+		count++
+	}
+	if r.MissingSourceInventory {
+		count++
+	}
+	if r.UnstablePacketSort {
+		count++
+	}
+	if r.OverlappingActiveLeases {
+		count++
+	}
+	if r.ManifestError != "" {
+		count++
+	}
+	return count
+}
+
 // OK reports whether path-lease freeze validation found no defects.
 func (r PathLeaseFreezeReport) OK() bool {
 	return len(r.MissingPackets) == 0 &&
@@ -281,5 +303,3 @@ func freezePathPrefix(prefix, path string) bool {
 	remainder := path[len(prefix):]
 	return strings.HasPrefix(remainder, "/")
 }
-
-

@@ -11,6 +11,7 @@ const laneNames = [
 	"README",
 	"Frontend",
 	"Backend",
+	"Backend Lint",
 	"UI Backend Integration",
 	"API Package",
 	"Packaged Factories Package",
@@ -67,6 +68,24 @@ test("a selected lane that is skipped, missing, or failed fails closed", () => {
 
 		assert.equal(evaluation.ok, false, `result ${result || "missing"} must fail`);
 		assert.match(evaluation.failures[0], /Docs Reference was selected/);
+	}
+});
+
+test("required Backend Lint fails the policy when its hosted job is skipped", () => {
+	for (const result of ["skipped", "cancelled", "timed_out", "failure"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					...laneNames.filter((name) => name !== "Backend Lint").map((name) => lane(name)),
+					lane("Backend Lint", true, result, {
+						reason: "The canonical lint inventory is required on every pull request.",
+					}),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `${result} must fail the required policy lane`);
+		assert.ok(evaluation.failures.some((failure) => /Backend Lint was selected/.test(failure)));
 	}
 });
 

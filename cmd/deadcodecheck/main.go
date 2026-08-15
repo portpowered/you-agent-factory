@@ -56,7 +56,9 @@ func run(_ []string, stdout io.Writer, stderr io.Writer) int {
 	baseline := normalizeReport(string(baselineBytes))
 	if baseline != actual {
 		fmt.Fprintf(stderr, "deadcode baseline drift detected; review %s and update %s when intentional\n", currentPath, baselinePath)
-		fmt.Fprintf(stderr, "baseline findings: %d, current findings: %d\n", countFindings(baseline), countFindings(actual))
+		currentFindings := countFindings(actual)
+		fmt.Fprintf(stderr, "baseline findings: %d, current findings: %d\n", countFindings(baseline), currentFindings)
+		fmt.Fprintf(stderr, "LINT_VIOLATION_COUNT: %d\n", currentFindings)
 		return 1
 	}
 

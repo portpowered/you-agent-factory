@@ -265,6 +265,119 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  backend-lint:
+    name: Backend Lint
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      LINT_REPORT_FILE: .artifacts/backend-lint/report.json
+      LINT_LOG_FILE: .artifacts/backend-lint/lint.log
+      LINT_COMMENT_FILE: .artifacts/backend-lint/comment.md
+      BACKEND_LINT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Verify Backend Lint event selection
+        env:
+          BACKEND_LINT_EVENT_NAME: ${{ github.event_name }}
+          BACKEND_LINT_REF: ${{ github.ref }}
+          BACKEND_LINT_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          BACKEND_LINT_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { selectBackendLint } from './scripts/ci/backend-lint-workflow.mjs';
+          const selection = selectBackendLint({
+            eventName: process.env.BACKEND_LINT_EVENT_NAME,
+            ref: process.env.BACKEND_LINT_REF,
+            pullRequestHeadSha: process.env.BACKEND_LINT_PR_HEAD_SHA,
+            sha: process.env.BACKEND_LINT_SHA,
+          });
+          if (!selection.selected || !selection.headSha) {
+            throw new Error(`Backend Lint was not selected for its hosted event: ${JSON.stringify(selection)}`);
+          }
+          console.log(`Backend Lint selected at ${selection.headSha}`);
+          NODE
+      - name: Install UI dependencies for canonical UI lint targets
+        if: always()
+        run: make ui-deps
+      - name: Run complete canonical Backend Lint inventory
+        id: run-backend-lint
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          mkdir -p .artifacts/backend-lint
+          make LINT_REPORT_FILE="$LINT_REPORT_FILE" lint 2>&1 | tee "$LINT_LOG_FILE"
+          status=${PIPESTATUS[0]}
+          printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Render Backend Lint summary and gate
+        if: always()
+        run: >-
+          node scripts/ci/backend-lint-report.mjs
+          --report "$LINT_REPORT_FILE"
+          --log "$LINT_LOG_FILE"
+          --summary "$GITHUB_STEP_SUMMARY"
+          --comment "$LINT_COMMENT_FILE"
+      - name: Upload complete Backend Lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-lint-diagnostics
+          path: |
+            .artifacts/backend-lint/report.json
+            .artifacts/backend-lint/lint.log
+            .artifacts/backend-lint/comment.md
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Publish Backend Lint inventory to the pull request
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          BACKEND_LINT_COMMENT_FILE: ${{ env.LINT_COMMENT_FILE }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const { upsertBackendLintComment } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/ci/backend-lint-workflow.mjs`);
+            const body = fs.readFileSync(process.env.BACKEND_LINT_COMMENT_FILE, 'utf8');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const publication = upsertBackendLintComment(comments, body);
+            if (publication.action === 'update') {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: publication.commentId,
+                body: publication.body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: publication.body,
+              });
+            }
+
   ui-backend-integration:
     name: UI Backend Integration
     needs: classify
@@ -330,7 +443,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, development-package]
+    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -372,6 +485,9 @@ jobs:
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result }}
+          RUN_BACKEND_LINT: "true"
+          BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
+          BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
           UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
           PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
           API_RESULT: ${{ needs.development-package.outputs.api_package_result }}
