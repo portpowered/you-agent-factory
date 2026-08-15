@@ -18,7 +18,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -280,7 +279,7 @@ func (provider *packagedTTSFakeProvider) Infer(
 	}, nil
 }
 
-var _ providercontract.Provider = (*packagedTTSFakeProvider)(nil)
+var _ workerexecution.Provider = (*packagedTTSFakeProvider)(nil)
 
 type packagedTTSFailingFakeProvider struct {
 	mu          sync.Mutex
@@ -320,7 +319,7 @@ func (provider *packagedTTSFailingFakeProvider) Infer(
 	return workerexecution.InferenceResponse{}, errors.New(provider.failMessage)
 }
 
-var _ providercontract.Provider = (*packagedTTSFailingFakeProvider)(nil)
+var _ workerexecution.Provider = (*packagedTTSFailingFakeProvider)(nil)
 
 // overwritePackagedTTSFactoryWithProviderFakeTopology keeps the installed
 // @you/tts layout but replaces authored topology with a cloud-backed inference

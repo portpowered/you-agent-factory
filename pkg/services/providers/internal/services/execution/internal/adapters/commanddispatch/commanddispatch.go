@@ -2,20 +2,17 @@ package commanddispatch
 
 import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 )
 
-// WorkersCommand returns a Workers subprocess request with dispatch
-// correlation preserved for mock-worker interception and provider logging.
-// The attempt's command log sink travels with the request so a process-scoped
-// command runner logs into the caller's log for this attempt only.
-func WorkersCommand(
+// Request returns a Providers subprocess request with attempt correlation
+// preserved for composition-owned effect adapters.
+func Request(
 	request providers.ExecuteRequest,
-	command workers.CommandRequest,
-) workers.CommandRequest {
-	command.DispatchID = request.AttemptID
+	command providerservice.CommandRequest,
+) providerservice.CommandRequest {
+	command.AttemptID = request.AttemptID
 	command.WorkerType = request.WorkerType
 	command.WorkstationName = request.WorkstationName
-	command.ExecutionLogger = request.ExecutionLogger
 	return command
 }

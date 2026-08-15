@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -289,7 +288,7 @@ func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmoke
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
+	provider workerexecution.Provider,
 ) (*stdioMCPClient, func()) {
 	t.Helper()
 

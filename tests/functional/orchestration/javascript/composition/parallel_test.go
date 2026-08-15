@@ -16,7 +16,6 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -692,7 +691,7 @@ func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest)
 	return message
 }
 
-var _ workerprovider.Provider = (*gatedParallelChildProvider)(nil)
+var _ workerexecution.Provider = (*gatedParallelChildProvider)(nil)
 
 type labelGatedParallelChildProvider struct {
 	mu              sync.Mutex
@@ -765,7 +764,7 @@ func (p *labelGatedParallelChildProvider) Infer(
 	}, nil
 }
 
-var _ workerprovider.Provider = (*labelGatedParallelChildProvider)(nil)
+var _ workerexecution.Provider = (*labelGatedParallelChildProvider)(nil)
 
 type partialFailureParallelChildProvider struct{}
 
@@ -791,4 +790,4 @@ func (p *partialFailureParallelChildProvider) Infer(
 	}, nil
 }
 
-var _ workerprovider.Provider = (*partialFailureParallelChildProvider)(nil)
+var _ workerexecution.Provider = (*partialFailureParallelChildProvider)(nil)

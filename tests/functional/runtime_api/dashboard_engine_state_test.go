@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -207,4 +206,4 @@ func (p *functionalWorldViewProvider) respond(response workerexecution.Inference
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
 
-var _ workerprovider.Provider = (*functionalWorldViewProvider)(nil)
+var _ workerexecution.Provider = (*functionalWorldViewProvider)(nil)

@@ -12,11 +12,11 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ExecutableDependencies are policy-free host effects used to resolve the
@@ -123,7 +123,7 @@ func buildPTYLaunch(
 	if err := agypty.ValidateArgv(argv); err != nil {
 		return ptyLaunch{}, err
 	}
-	command := commanddispatch.WorkersCommand(request.ExecuteRequest, workers.CommandRequest{
+	command := commanddispatch.Request(request.ExecuteRequest, providerservice.CommandRequest{
 		Command: argv[0],
 		Args:    argv[1:],
 		Env: commandenv.Build(
@@ -132,9 +132,6 @@ func buildPTYLaunch(
 		),
 		WorkDir: workDir,
 	})
-	if len(request.InputTokens) > 0 {
-		command.InputTokens = append([]any(nil), request.InputTokens...)
-	}
 	return ptyLaunch{
 		launch: agypty.ProcessLaunch{
 			Executable: command.Command,

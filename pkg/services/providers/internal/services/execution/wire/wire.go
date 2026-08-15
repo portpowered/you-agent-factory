@@ -9,6 +9,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -17,12 +18,11 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewAgyPTYAllocator constructs the Providers-owned PTY implementation behind
 // the Workers root allocation port.
-func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (workers.PTYAllocator, error) {
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (providerservice.PTYAllocator, error) {
 	return agypty.NewAllocator(host, clock)
 }
 
@@ -75,7 +75,17 @@ func BuiltInRegistrations(dependencies ...executionservice.BuiltInDependencies) 
 func BuiltInDependenciesFromRunner(
 	runner platformprocess.CommandRunner,
 ) executionservice.BuiltInDependencies {
-	return BuiltInDependenciesFromWorkersRunner(workers.AdaptCommandRunner(runner))
+	return BuiltInDependenciesFromCommandRunner(AdaptPlatformCommandRunner(runner))
+}
+
+// BuiltInDependenciesFromWorkersRunner is a compatibility entry point for
+// older composition tests. The provider package accepts the edge opaquely and
+// projects its named request/result fields at this boundary.
+func BuiltInDependenciesFromWorkersRunner(
+	runner any,
+	platform ...BuiltInRunnerPlatformDependencies,
+) executionservice.BuiltInDependencies {
+	return BuiltInDependenciesFromCommandRunner(providerservice.AdaptCommandRunner(runner), platform...)
 }
 
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
@@ -87,17 +97,17 @@ type AgyPTYPlatformDependencies struct {
 }
 
 // BuiltInRunnerPlatformDependencies carries optional platform facts for
-// built-in adapter effects constructed from the Workers subprocess runner.
+// built-in adapter effects constructed from the Providers subprocess effect.
 type BuiltInRunnerPlatformDependencies struct {
-	AgyCommandRunner workers.CommandRunner
-	AgyCommandClock  workers.Clock
+	AgyCommandRunner providerservice.CommandRunner
+	AgyCommandClock  platformclock.Source
 	AgyPTY           AgyPTYPlatformDependencies
 }
 
-// BuiltInDependenciesFromWorkersRunner constructs built-in adapter effects
-// from the shared Workers subprocess runner.
-func BuiltInDependenciesFromWorkersRunner(
-	runner workers.CommandRunner,
+// BuiltInDependenciesFromCommandRunner constructs built-in adapter effects
+// from the shared Providers subprocess effect.
+func BuiltInDependenciesFromCommandRunner(
+	runner providerservice.CommandRunner,
 	platform ...BuiltInRunnerPlatformDependencies,
 ) executionservice.BuiltInDependencies {
 	var deps BuiltInRunnerPlatformDependencies
@@ -112,15 +122,100 @@ func BuiltInDependenciesFromWorkersRunner(
 		},
 	})
 	if deps.AgyCommandRunner != nil {
-		commandClock := deps.AgyCommandClock
-		if commandClock == nil {
-			commandClock = platformclock.Real{}
+		clock := deps.AgyCommandClock
+		if clock == nil {
+			clock = platformclock.Real{}
 		}
-		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, commandClock)
+		antigravity = agyadapter.NewCommandEffect(deps.AgyCommandRunner, clock)
 	}
 	return executionservice.BuiltInDependencies{
 		Antigravity: antigravity,
 		Codex:       codexadapter.NewCommandEffect(runner),
 		Claude:      claudeadapter.NewCommandEffect(runner),
 	}
+}
+
+// AdaptPlatformCommandRunner projects the policy-free platform process edge
+// into the Providers-owned execution effect contract.
+func AdaptPlatformCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
+	if runner == nil {
+		return nil
+	}
+	return platformCommandRunner{runner: runner}
+}
+
+type platformCommandRunner struct {
+	runner platformprocess.CommandRunner
+}
+
+func (runner platformCommandRunner) Run(
+	ctx context.Context,
+	request providerservice.CommandRequest,
+) (providerservice.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: request.Command,
+		Args:    request.Args,
+		Stdin:   request.Stdin,
+		Env:     request.Env,
+		WorkDir: request.WorkDir,
+	})
+	return providerservice.CommandResult{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	}, err
+}
+
+func (runner platformCommandRunner) RunStreaming(
+	ctx context.Context,
+	request providerservice.CommandRequest,
+	observer providerservice.OutputChunkObserver,
+) (providerservice.CommandResult, error) {
+	platformRequest := platformprocess.CommandRequest{
+		Command: request.Command,
+		Args:    request.Args,
+		Stdin:   request.Stdin,
+		Env:     request.Env,
+		WorkDir: request.WorkDir,
+	}
+	streaming, ok := runner.runner.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	})
+	if !ok {
+		result, err := runner.Run(ctx, request)
+		if observerErr := publishCompleteOutput(observer, result.Stdout, result.Stderr); err == nil {
+			err = observerErr
+		}
+		return result, err
+	}
+	var observerErr error
+	result, err := streaming.RunStreaming(ctx, platformRequest, func(stream string, chunk []byte) {
+		if observerErr != nil || observer == nil {
+			return
+		}
+		observerErr = observer(stream, chunk)
+	})
+	if err == nil {
+		err = observerErr
+	}
+	return providerservice.CommandResult{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	}, err
+}
+
+func publishCompleteOutput(observer providerservice.OutputChunkObserver, stdout, stderr []byte) error {
+	if observer == nil {
+		return nil
+	}
+	if len(stdout) > 0 {
+		if err := observer(providerservice.OutputStreamStdout, append([]byte(nil), stdout...)); err != nil {
+			return err
+		}
+	}
+	if len(stderr) > 0 {
+		return observer(providerservice.OutputStreamStderr, append([]byte(nil), stderr...))
+	}
+	return nil
 }

@@ -195,7 +195,7 @@ type Edges struct {
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
 	ModelPullMetricsRecorder         interface{ RecordModelPullMetric(PullMetric) }
-	ProviderOverride                 providercontract.Provider
+	ProviderOverride                 workers.Provider
 	providercontract.ProviderRegistrations
 	ProviderCatalogCapabilityOverrides []providercontract.CatalogCapabilityOverride
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree

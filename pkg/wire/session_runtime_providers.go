@@ -133,7 +133,7 @@ func provideConfiguredProvidersService(
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(workersRunner)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		options = append(options, providerswire.WithCommandEffectRunner(providerCommandEffect(loggedRunner)))
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
@@ -142,7 +142,7 @@ func provideConfiguredProvidersService(
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		options = append(options, providerswire.WithCommandEffectRunner(providerCommandEffect(loggedRunner)))
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
@@ -154,7 +154,7 @@ func provideConfiguredProvidersService(
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+	options = append(options, providerswire.WithCommandEffectRunner(providerCommandEffect(loggedRunner)))
 	return newConfiguredProvidersService(options, loggedRunner)
 }
 
@@ -944,7 +944,7 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 }
 
 func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
-	allocator, err := provideAgyPTYAllocator(edges)
+	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {
 		return providerswire.AgyPTYPlatformDependencies{}, err
 	}

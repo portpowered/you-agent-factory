@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -277,7 +276,7 @@ func traceAwareReviewResponse(content string) workerexecution.InferenceResponse 
 	}
 }
 
-var _ workerprovider.Provider = (*traceAwareReviewInferenceProvider)(nil)
+var _ workerexecution.Provider = (*traceAwareReviewInferenceProvider)(nil)
 
 type seedIdea struct {
 	traceID string

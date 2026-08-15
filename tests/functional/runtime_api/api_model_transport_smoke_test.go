@@ -15,7 +15,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -343,4 +342,4 @@ func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenc
 	return calls
 }
 
-var _ providercontract.Provider = (*modelTransportSmokeProvider)(nil)
+var _ workerexecution.Provider = (*modelTransportSmokeProvider)(nil)

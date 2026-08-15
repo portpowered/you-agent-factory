@@ -11,13 +11,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
-
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-// Provider is retained here as a construction-edge alias for the Workers
-// provider override accepted by the root process boundary.
-type Provider = workers.Provider
 
 type Identity string
 type Capability string

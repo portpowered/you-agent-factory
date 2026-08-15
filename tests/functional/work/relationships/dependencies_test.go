@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -672,7 +671,7 @@ func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEve
 func startDependencyFactory(
 	t *testing.T,
 	dir string,
-	provider workerprovider.Provider,
+	provider workerexecution.Provider,
 ) (baseURL string, daemon *support.ProcessCommand) {
 	t.Helper()
 
@@ -853,7 +852,7 @@ type fanInSecondFinisherGateProvider struct {
 	starterCalls          int
 }
 
-var _ workerprovider.Provider = (*fanInSecondFinisherGateProvider)(nil)
+var _ workerexecution.Provider = (*fanInSecondFinisherGateProvider)(nil)
 
 func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
 	return &fanInSecondFinisherGateProvider{

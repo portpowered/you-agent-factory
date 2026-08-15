@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -22,7 +23,7 @@ func newConfiguredProvidersService(
 	options []providerswire.Option,
 	agyRunner workers.CommandRunner,
 ) (providers.Service, error) {
-	options = append(options, providerswire.WithAgyCommandRunner(agyRunner))
+	options = append(options, providerswire.WithAgyCommandRunner(providerCommandEffect(agyRunner)))
 	return providerswire.NewService(options...)
 }
 
@@ -50,4 +51,162 @@ func provideRuntimeProviderBindings(
 		return reboundRegistry, reboundProviders, registryErr
 	})
 	return runtimeRegistry, runtimeProviders, rebinder, nil
+}
+
+// providerCommandEffect projects the request-scoped Workers command edge into
+// the Providers-owned process effect. The projection lives in the application
+// composition root because Workers still owns mock-worker and command-log
+// policy while Providers owns the adapter-facing effect vocabulary.
+func providerCommandEffect(runner workers.CommandRunner) providerswire.CommandRunner {
+	if runner == nil {
+		return nil
+	}
+	return providerCommandRunner{runner: runner}
+}
+
+type providerCommandRunner struct {
+	runner workers.CommandRunner
+}
+
+func (runner providerCommandRunner) Run(
+	ctx context.Context,
+	request providerswire.CommandRequest,
+) (providerswire.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, workers.CommandRequest{
+		Command:         request.Command,
+		Args:            append([]string(nil), request.Args...),
+		Stdin:           append([]byte(nil), request.Stdin...),
+		Env:             append([]string(nil), request.Env...),
+		WorkDir:         request.WorkDir,
+		DispatchID:      request.AttemptID,
+		WorkerType:      request.WorkerType,
+		WorkstationName: request.WorkstationName,
+	})
+	return providerswire.CommandResult{
+		Stdout:   append([]byte(nil), result.Stdout...),
+		Stderr:   append([]byte(nil), result.Stderr...),
+		ExitCode: result.ExitCode,
+	}, err
+}
+
+func (runner providerCommandRunner) RunStreaming(
+	ctx context.Context,
+	request providerswire.CommandRequest,
+	observer providerswire.OutputChunkObserver,
+) (providerswire.CommandResult, error) {
+	workerRequest := workers.CommandRequest{
+		Command:         request.Command,
+		Args:            append([]string(nil), request.Args...),
+		Stdin:           append([]byte(nil), request.Stdin...),
+		Env:             append([]string(nil), request.Env...),
+		WorkDir:         request.WorkDir,
+		DispatchID:      request.AttemptID,
+		WorkerType:      request.WorkerType,
+		WorkstationName: request.WorkstationName,
+	}
+	streaming, ok := runner.runner.(interface {
+		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
+	})
+	if !ok {
+		result, err := runner.runner.Run(ctx, workerRequest)
+		if observerErr := publishProviderCommandOutput(observer, result.Stdout, result.Stderr); err == nil {
+			err = observerErr
+		}
+		return providerCommandResult(result), err
+	}
+	var observerErr error
+	result, err := streaming.RunStreaming(ctx, workerRequest, func(stream string, chunk []byte) {
+		if observerErr != nil || observer == nil {
+			return
+		}
+		observerErr = observer(stream, append([]byte(nil), chunk...))
+	})
+	if err == nil {
+		err = observerErr
+	}
+	return providerCommandResult(result), err
+}
+
+func providerCommandResult(result workers.CommandResult) providerswire.CommandResult {
+	return providerswire.CommandResult{
+		Stdout:   append([]byte(nil), result.Stdout...),
+		Stderr:   append([]byte(nil), result.Stderr...),
+		ExitCode: result.ExitCode,
+	}
+}
+
+func publishProviderCommandOutput(
+	observer providerswire.OutputChunkObserver,
+	stdout []byte,
+	stderr []byte,
+) error {
+	if observer == nil {
+		return nil
+	}
+	if len(stdout) > 0 {
+		if err := observer(providerswire.OutputStreamStdout, append([]byte(nil), stdout...)); err != nil {
+			return err
+		}
+	}
+	if len(stderr) > 0 {
+		return observer(providerswire.OutputStreamStderr, append([]byte(nil), stderr...))
+	}
+	return nil
+}
+
+// providerPTYAllocator projects the Providers-owned PTY effect into the
+// legacy Workers consumer boundary. It is a composition-only bridge; neither
+// provider adapters nor the Providers root depend on Workers PTY contracts.
+func providerPTYAllocator(allocator providerswire.PTYAllocator) workers.PTYAllocator {
+	if allocator == nil {
+		return nil
+	}
+	return providerPTYAllocatorAdapter{allocator: allocator}
+}
+
+type providerPTYAllocatorAdapter struct {
+	allocator providerswire.PTYAllocator
+}
+
+func (adapter providerPTYAllocatorAdapter) Allocate(
+	ctx context.Context,
+	launch workers.PTYProcessLaunch,
+	config workers.PTYSessionConfig,
+) (workers.PTYSession, error) {
+	session, err := adapter.allocator.Allocate(ctx, providerswire.PTYProcessLaunch{
+		Executable: launch.Executable,
+		Argv:       append([]string(nil), launch.Argv...),
+		WorkDir:    launch.WorkDir,
+		Env:        append([]string(nil), launch.Env...),
+	}, providerswire.PTYSessionConfig{
+		MaxCaptureBytes: config.MaxCaptureBytes,
+		IdleTimeout:     config.IdleTimeout,
+		HardTimeout:     config.HardTimeout,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, errors.New("provider PTY allocator returned a nil session")
+	}
+	return providerPTYSessionAdapter{session: session}, nil
+}
+
+type providerPTYSessionAdapter struct {
+	session providerswire.PTYSession
+}
+
+func (adapter providerPTYSessionAdapter) Run(ctx context.Context) (workers.PTYSessionResult, error) {
+	result, err := adapter.session.Run(ctx)
+	return workers.PTYSessionResult{
+		ExitCode:    result.ExitCode,
+		RawBytes:    append([]byte(nil), result.RawBytes...),
+		CleanedText: result.CleanedText,
+		TimedOut:    result.TimedOut,
+		CapacityHit: result.CapacityHit,
+	}, err
+}
+
+func (adapter providerPTYSessionAdapter) Close() error {
+	return adapter.session.Close()
 }
