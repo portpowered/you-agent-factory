@@ -250,8 +250,10 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
       result.current.nodes.find(
         (node) => node.id === "work-state:story:queued",
       );
+    const initialMeasured = workStateNode()?.measured;
 
     expect(workStateNode()?.position).toEqual({ x: 120, y: 80 });
+    expect(initialMeasured).toEqual({ height: 120, width: 140 });
 
     act(() => {
       result.current.handleNodesChange([
@@ -268,6 +270,7 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
     });
 
     expect(workStateNode()).toMatchObject({
+      measured: initialMeasured,
       position: { x: 999, y: 999 },
       selected: true,
     });

@@ -405,19 +405,22 @@ function useCurrentActivityGraphNodePresentation(
         ({
           initialHeight: _initialHeight,
           initialWidth: _initialWidth,
-          measured: _measured,
           ...node
-        }) => ({
-          ...node,
-          ...(dimensionsByNodeId.has(node.id)
-            ? {
-                height: dimensionsByNodeId.get(node.id)?.height,
-                width: dimensionsByNodeId.get(node.id)?.width,
-              }
-            : {}),
-          position: transientPositionsByNodeId.get(node.id) ?? node.position,
-          selected: graphSelection.isNodeSelected(node.id),
-        }),
+        }) => {
+          const resizedDimensions = dimensionsByNodeId.get(node.id);
+          return {
+            ...node,
+            ...(resizedDimensions
+              ? {
+                  height: resizedDimensions.height,
+                  measured: resizedDimensions,
+                  width: resizedDimensions.width,
+                }
+              : {}),
+            position: transientPositionsByNodeId.get(node.id) ?? node.position,
+            selected: graphSelection.isNodeSelected(node.id),
+          };
+        },
       ),
     [baseNodes, dimensionsByNodeId, graphSelection, transientPositionsByNodeId],
   );
