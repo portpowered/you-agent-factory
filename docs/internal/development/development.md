@@ -153,8 +153,14 @@ unit command enumerates only
 specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
 `contracts/`, and the Go UI embed package is intentionally outside unit
 discovery. `make test-lane-audit` verifies that every required Go test package
-has one primary owner. Unit package concurrency defaults to 32 and remains
-overridable with `UNIT_DEFAULT_JOBS`. The fast unit lane schedules only packages
+has one primary owner. Unit, functional, and lint package concurrency defaults
+to the bounded `GO_LANE_BUDGET`: `max(2, logical CPUs /
+YOU_EXPECTED_CONCURRENT_LANES)`, with the divisor defaulting to 4. The
+`UNIT_DEFAULT_JOBS`, `FUNCTIONAL_DEFAULT_JOBS`, and `LINT_JOBS` variables remain
+independently overridable. Direct `cmd/unitlane` execution applies the same
+host/divisor policy (with `YOU_LOGICAL_CPUS` available for controlled probes),
+while an explicit `-jobs` value remains authoritative and still clamps to one
+when below one. The fast unit lane schedules only packages
 that contain Go tests and disables `go test`'s duplicate implicit vet pass;
 `make lint` and the required PR verification tier continue to run `go vet ./...`.
 The normal `make test` loop retains Go's content-addressed test cache, so

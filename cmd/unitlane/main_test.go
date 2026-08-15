@@ -239,11 +239,94 @@ func writeTestPackageFile(t *testing.T, root, relativeDir string) {
 
 func TestParseConfigDefaultsToShortMode(t *testing.T) {
 	restoreArgsFlagsAndCommand(t)
+	t.Setenv(logicalCPUsEnv, "24")
+	t.Setenv(expectedConcurrentLanesEnv, "4")
 	os.Args = []string{"unitlane"}
 	flag.CommandLine = flag.NewFlagSet("unitlane", flag.ContinueOnError)
 
 	got := parseConfig()
-	if got != (config{count: 0, jobs: 32, root: "./pkg/...", short: true, timeout: 5 * time.Minute, vet: false, timingOutput: ""}) {
-		t.Fatalf("parseConfig() = %+v, expected count: %v, jobs: %v", got, 0, 32)
+	if got != (config{count: 0, jobs: 6, root: "./pkg/...", short: true, timeout: 5 * time.Minute, vet: false, timingOutput: ""}) {
+		t.Fatalf("parseConfig() = %+v, expected count: %v, jobs: %v", got, 0, 6)
+	}
+}
+
+func TestBoundedUnitLaneJobs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		logicalCPUs   int
+		expectedLanes string
+		want          int
+	}{
+		{name: "24 CPUs divided across four lanes", logicalCPUs: 24, expectedLanes: "4", want: 6},
+		{name: "four CPUs keep the floor", logicalCPUs: 4, expectedLanes: "4", want: 2},
+		{name: "CPU detection failure uses the floor", logicalCPUs: 0, expectedLanes: "4", want: 2},
+		{name: "invalid divisor uses the floor", logicalCPUs: 24, expectedLanes: "invalid", want: 2},
+		{name: "zero divisor uses the floor", logicalCPUs: 24, expectedLanes: "0", want: 2},
+		{name: "valid divisor override wins", logicalCPUs: 24, expectedLanes: "6", want: 4},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := boundedUnitLaneJobs(test.logicalCPUs, test.expectedLanes); got != test.want {
+				t.Fatalf("boundedUnitLaneJobs(%d, %q) = %d, want %d", test.logicalCPUs, test.expectedLanes, got, test.want)
+			}
+		})
+	}
+}
+
+func TestUnitLaneDefaultReadsControlledHostInputs(t *testing.T) {
+	restoreArgsFlagsAndCommand(t)
+	t.Setenv(logicalCPUsEnv, "24")
+	t.Setenv(expectedConcurrentLanesEnv, "4")
+
+	if got := defaultUnitLaneJobs(); got != 6 {
+		t.Fatalf("defaultUnitLaneJobs() = %d, want 6", got)
+	}
+}
+
+func TestUnitLaneDefaultUsesFourLaneDivisorWhenUnset(t *testing.T) {
+	restoreArgsFlagsAndCommand(t)
+	t.Setenv(logicalCPUsEnv, "24")
+	original, wasSet := os.LookupEnv(expectedConcurrentLanesEnv)
+	if err := os.Unsetenv(expectedConcurrentLanesEnv); err != nil {
+		t.Fatalf("unset %s: %v", expectedConcurrentLanesEnv, err)
+	}
+	t.Cleanup(func() {
+		if wasSet {
+			_ = os.Setenv(expectedConcurrentLanesEnv, original)
+			return
+		}
+		_ = os.Unsetenv(expectedConcurrentLanesEnv)
+	})
+
+	if got := defaultUnitLaneJobs(); got != 6 {
+		t.Fatalf("defaultUnitLaneJobs() with unset divisor = %d, want 6", got)
+	}
+}
+
+func TestParseConfigExplicitJobsRemainAuthoritative(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{name: "positive override", args: []string{"unitlane", "-jobs=9"}, want: 9},
+		{name: "existing minimum clamp", args: []string{"unitlane", "-jobs=0"}, want: 1},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			restoreArgsFlagsAndCommand(t)
+			t.Setenv(logicalCPUsEnv, "24")
+			t.Setenv(expectedConcurrentLanesEnv, "4")
+			os.Args = test.args
+			flag.CommandLine = flag.NewFlagSet("unitlane", flag.ContinueOnError)
+
+			if got := parseConfig().jobs; got != test.want {
+				t.Fatalf("parseConfig().jobs = %d, want %d", got, test.want)
+			}
+		})
 	}
 }
