@@ -511,7 +511,7 @@ export function CurrentActivityGraphViewport({
   const touchPanePanProps = useFactoryGraphTouchPanePan(activeFlowInstanceRef);
   const isValidConnection = buildCurrentActivityIsValidConnection({
     activeTool: editorControls.activeTool,
-    editorMode: editorControls.isEditing,
+    editorMode: editorControls.isEditing && editorControls.canInteract,
     nodes,
   });
   const measuredGraphViewport =
@@ -520,7 +520,8 @@ export function CurrentActivityGraphViewport({
   const canonicalLayoutViewport = layoutControls.canonicalViewport ?? null;
   const shouldFitView = canonicalLayoutViewport == null;
   const skipNextViewportMoveEndRef = useRef(false);
-  const canPersistLayoutChanges = layoutControls.canMoveLayout;
+  const canEditGraph = editorControls.isEditing && editorControls.canInteract;
+  const canPersistLayoutChanges = canEditGraph && layoutControls.canMoveLayout;
   const moveLayoutNode = canPersistLayoutChanges
     ? layoutControls.moveNode
     : undefined;
@@ -533,7 +534,7 @@ export function CurrentActivityGraphViewport({
   const updatePlacementViewport = addControls.updatePlacementViewport;
   const reportPlacementViewport = useCallback(
     (viewport: { x: number; y: number; zoom: number }) => {
-      if (!graphViewport.ready) {
+      if (!canEditGraph || !graphViewport.ready) {
         return;
       }
 
@@ -547,6 +548,7 @@ export function CurrentActivityGraphViewport({
       graphViewport.height,
       graphViewport.ready,
       graphViewport.width,
+      canEditGraph,
       updatePlacementViewport,
     ],
   );
@@ -570,6 +572,10 @@ export function CurrentActivityGraphViewport({
   }, [activeFlowInstanceRef, canonicalLayoutViewport, reportPlacementViewport]);
   const handleConnect = useCallback(
     (connection: Connection) => {
+      if (!canEditGraph) {
+        return;
+      }
+
       onConnect?.({
         ...connection,
         source: connection.source
@@ -580,7 +586,17 @@ export function CurrentActivityGraphViewport({
           : connection.target,
       });
     },
-    [nodes, onConnect],
+    [canEditGraph, nodes, onConnect],
+  );
+  const handleAuthorizedNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      if (!canEditGraph) {
+        return;
+      }
+
+      handleNodesChange(changes);
+    },
+    [canEditGraph, handleNodesChange],
   );
   const handleEditorCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
@@ -590,7 +606,7 @@ export function CurrentActivityGraphViewport({
       }
 
       if (
-        !editorControls.isEditing ||
+        !canEditGraph ||
         !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)
       ) {
         return;
@@ -625,9 +641,9 @@ export function CurrentActivityGraphViewport({
     },
     [
       canDeleteGraphSelection,
+      canEditGraph,
       clearGraphSelection,
       deleteGraphSelection,
-      editorControls.isEditing,
       layoutControls,
     ],
   );
@@ -703,8 +719,7 @@ export function CurrentActivityGraphViewport({
               nodes={nodes}
               edgesFocusable={editorControls.isEditing}
               nodesConnectable={
-                editorControls.isEditing &&
-                editorControls.activeTool !== "delete"
+                canEditGraph && editorControls.activeTool !== "delete"
               }
               onConnect={handleConnect}
               onInit={(instance) => {
@@ -713,24 +728,21 @@ export function CurrentActivityGraphViewport({
               }}
               onError={handleCurrentActivityReactFlowError}
               onEdgeClick={(_event, edge) => {
-                if (
-                  editorControls.isEditing &&
-                  editorControls.activeTool === "delete"
-                ) {
+                if (canEditGraph && editorControls.activeTool === "delete") {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
                   );
                   return;
                 }
 
-                if (editorControls.isEditing) {
+                if (canEditGraph) {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
                   );
                 }
               }}
               onEdgeDoubleClick={(event, edge) => {
-                if (!editorControls.isEditing || !onEditorEdgeDoubleClick) {
+                if (!canEditGraph || !onEditorEdgeDoubleClick) {
                   return;
                 }
 
@@ -747,28 +759,31 @@ export function CurrentActivityGraphViewport({
                   }),
                 );
               }}
-              nodesDraggable={true}
+              nodesDraggable={canPersistLayoutChanges}
               onNodeClick={(_, node) => {
-                if (
-                  editorControls.isEditing &&
-                  editorControls.activeTool === "delete"
-                ) {
+                if (canEditGraph && editorControls.activeTool === "delete") {
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
                 }
               }}
               onMoveEnd={(_, viewport) => {
-                reportPlacementViewport(viewport);
                 if (skipNextViewportMoveEndRef.current) {
                   skipNextViewportMoveEndRef.current = false;
                   return;
                 }
 
-                updateLayoutViewport?.(viewport);
+                if (!canEditGraph) {
+                  return;
+                }
+
+                reportPlacementViewport(viewport);
+                if (canPersistLayoutChanges) {
+                  updateLayoutViewport?.(viewport);
+                }
               }}
               onNodeDragStart={(_, node) => {
-                if (!editorControls.isEditing) {
+                if (!canPersistLayoutChanges) {
                   return;
                 }
 
@@ -797,6 +812,11 @@ export function CurrentActivityGraphViewport({
                 };
               }}
               onNodeDragStop={(_, node) => {
+                if (!canPersistLayoutChanges) {
+                  dragSessionRef.current = null;
+                  return;
+                }
+
                 const factoryGraphNodeId = (
                   node.data as { factoryGraphNodeId?: string } | undefined
                 )?.factoryGraphNodeId;
@@ -830,7 +850,7 @@ export function CurrentActivityGraphViewport({
                 }
               }}
               onEdgesChange={handleEdgesChange}
-              onNodesChange={handleNodesChange}
+              onNodesChange={handleAuthorizedNodesChange}
               onPaneClick={() => {
                 if (editorControls.activeTool !== "delete") {
                   clearGraphSelection?.();
