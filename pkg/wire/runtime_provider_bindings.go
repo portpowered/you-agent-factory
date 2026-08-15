@@ -23,7 +23,7 @@ func newConfiguredProvidersService(
 	options []providerswire.Option,
 	agyRunner workers.CommandRunner,
 ) (providers.Service, error) {
-	options = append(options, providerswire.WithAgyCommandRunner(providerCommandEffect(agyRunner)))
+	options = append(options, providerswire.WithAgyCommandRunner(agyRunner))
 	return providerswire.NewService(options...)
 }
 
@@ -46,111 +46,6 @@ func provideRuntimeProviderBindings(
 		return reboundProviders, nil
 	})
 	return runtimeProviders, runtimeProviders, rebinder, nil
-}
-
-// providerCommandEffect projects the request-scoped Workers command edge into
-// the Providers-owned process effect. The projection lives in the application
-// composition root because Workers still owns mock-worker and command-log
-// policy while Providers owns the adapter-facing effect vocabulary.
-func providerCommandEffect(runner workers.CommandRunner) providerswire.CommandRunner {
-	if runner == nil {
-		return nil
-	}
-	return providerCommandRunner{runner: runner}
-}
-
-type providerCommandRunner struct {
-	runner workers.CommandRunner
-}
-
-func (runner providerCommandRunner) Run(
-	ctx context.Context,
-	request providerswire.CommandRequest,
-) (providerswire.CommandResult, error) {
-	result, err := runner.runner.Run(ctx, workers.CommandRequest{
-		Command:         request.Command,
-		Args:            append([]string(nil), request.Args...),
-		Stdin:           append([]byte(nil), request.Stdin...),
-		Env:             append([]string(nil), request.Env...),
-		WorkDir:         request.WorkDir,
-		DispatchID:      request.AttemptID,
-		WorkerType:      request.WorkerType,
-		WorkstationName: request.WorkstationName,
-		Execution:       request.Execution,
-		ExecutionLogger: request.ExecutionLogger,
-	})
-	return providerswire.CommandResult{
-		Stdout:   append([]byte(nil), result.Stdout...),
-		Stderr:   append([]byte(nil), result.Stderr...),
-		ExitCode: result.ExitCode,
-	}, err
-}
-
-func (runner providerCommandRunner) RunStreaming(
-	ctx context.Context,
-	request providerswire.CommandRequest,
-	observer providerswire.OutputChunkObserver,
-) (providerswire.CommandResult, error) {
-	workerRequest := workers.CommandRequest{
-		Command:         request.Command,
-		Args:            append([]string(nil), request.Args...),
-		Stdin:           append([]byte(nil), request.Stdin...),
-		Env:             append([]string(nil), request.Env...),
-		WorkDir:         request.WorkDir,
-		DispatchID:      request.AttemptID,
-		WorkerType:      request.WorkerType,
-		WorkstationName: request.WorkstationName,
-		Execution:       request.Execution,
-		ExecutionLogger: request.ExecutionLogger,
-	}
-	streaming, ok := runner.runner.(interface {
-		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
-	})
-	if !ok {
-		result, err := runner.runner.Run(ctx, workerRequest)
-		if observerErr := publishProviderCommandOutput(observer, result.Stdout, result.Stderr); err == nil {
-			err = observerErr
-		}
-		return providerCommandResult(result), err
-	}
-	var observerErr error
-	result, err := streaming.RunStreaming(ctx, workerRequest, func(stream string, chunk []byte) {
-		if observerErr != nil || observer == nil {
-			return
-		}
-		observerErr = observer(stream, append([]byte(nil), chunk...))
-	})
-	if err == nil {
-		err = observerErr
-	}
-	return providerCommandResult(result), err
-}
-
-func providerCommandResult(result workers.CommandResult) providerswire.CommandResult {
-	return providerswire.CommandResult{
-		Stdout:   append([]byte(nil), result.Stdout...),
-		Stderr:   append([]byte(nil), result.Stderr...),
-		ExitCode: result.ExitCode,
-	}
-}
-
-func publishProviderCommandOutput(
-	observer providerswire.OutputChunkObserver,
-	stdout []byte,
-	stderr []byte,
-) error {
-	if observer == nil {
-		return nil
-	}
-	if len(stdout) > 0 {
-		if err := observer(providerswire.OutputStreamStdout, append([]byte(nil), stdout...)); err != nil {
-			return err
-		}
-	}
-	if len(stderr) > 0 {
-		return observer(providerswire.OutputStreamStderr, append([]byte(nil), stderr...))
-	}
-	return nil
 }
 
 // providerPTYAllocator projects the Providers-owned PTY effect into the
