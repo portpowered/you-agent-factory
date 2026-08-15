@@ -356,13 +356,16 @@ export async function waitForStableFactoryGraphNodePlacement(
   nodeTestId,
   timeoutMs = uiInteractionTimeoutMs,
   intervalMs = 100,
+  onObservation,
 ) {
   let previousSample = null;
   let stableSample = null;
+  let pollCount = 0;
 
   await waitForDurableCheckpoint(
     `factory graph node placement: ${nodeTestId}`,
     async () => {
+      pollCount += 1;
       const nextSample = await page
         .evaluate((testId) => {
           const target = [...document.querySelectorAll("[data-testid]")].find(
@@ -399,13 +402,18 @@ export async function waitForStableFactoryGraphNodePlacement(
         }, nodeTestId)
         .catch(() => null);
       const stable = graphNodePlacementSamplesEqual(previousSample, nextSample);
+      const withinViewport = Boolean(
+        nextSample && graphNodePlacementIsWithinViewport(nextSample),
+      );
+      onObservation?.({
+        nextSample,
+        pollCount,
+        stable,
+        withinViewport,
+      });
       previousSample = nextSample;
 
-      if (
-        !stable ||
-        !nextSample ||
-        !graphNodePlacementIsWithinViewport(nextSample)
-      ) {
+      if (!stable || !nextSample || !withinViewport) {
         return false;
       }
 
