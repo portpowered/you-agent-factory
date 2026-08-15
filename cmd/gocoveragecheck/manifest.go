@@ -344,8 +344,14 @@ func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals
 			continue
 		}
 		diagnostic := fmt.Sprintf(
-			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points",
-			entry.Package, manifest.Lane, minimum.String(), actualPercent, actualPercent-expectedPercent,
+			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points covered=%d/%d statements",
+			entry.Package,
+			manifest.Lane,
+			minimum.String(),
+			actualPercent,
+			actualPercent-expectedPercent,
+			actual.coveredStatements,
+			actual.totalStatements,
 		)
 		if uncovered := formatUncoveredCoverageBlocks(coverageBlocks, entry.Package); uncovered != "" {
 			diagnostic += "; " + uncovered

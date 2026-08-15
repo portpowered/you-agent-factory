@@ -252,10 +252,12 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 				t.Fatalf("regression failures = %v, want two", failures)
 			}
 			if !strings.Contains(failures[0], "package="+alpha+" lane="+lane+" expected-minimum=80.00% actual=79.0000% delta=-1.0000") ||
+				!strings.Contains(failures[0], "covered=79/100 statements") ||
 				!strings.Contains(failures[0], "-update-manifest minimums.json") {
 				t.Fatalf("first regression = %q, want complete actionable diagnostic", failures[0])
 			}
-			if !strings.Contains(failures[1], "package="+beta+" lane="+lane+" expected-minimum=75.00% actual=74.0000% delta=-1.0000") {
+			if !strings.Contains(failures[1], "package="+beta+" lane="+lane+" expected-minimum=75.00% actual=74.0000% delta=-1.0000") ||
+				!strings.Contains(failures[1], "covered=74/100 statements") {
 				t.Fatalf("second regression = %q, want complete diagnostic", failures[1])
 			}
 			if !slices.IsSorted(failures) {
@@ -486,6 +488,9 @@ func TestCheckCoverageManifestAppliesRawStatementEpsilon(t *testing.T) {
 			if !strings.Contains(warnings[0], "package="+importPath+" lane=unit expected-minimum=80.00% actual=79.7500%") ||
 				!strings.Contains(warnings[0], "epsilon=0.2500 percentage-points") {
 				t.Fatalf("warning = %q, want package, lane, floor, actual, and epsilon", warnings[0])
+			}
+			if strings.Contains(warnings[0], "covered=") {
+				t.Fatalf("warning = %q, did not expect exact statement counts", warnings[0])
 			}
 			if !strings.Contains(warnings[0], "warning") || strings.Contains(warnings[0], "update-manifest") {
 				t.Fatalf("warning = %q, did not expect update remediation", warnings[0])
