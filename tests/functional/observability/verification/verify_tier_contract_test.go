@@ -133,45 +133,50 @@ fi
 	}
 }
 
-// TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites prove verify-fast invokes only short owned suites in order.
+// TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites prove verify-fast selects only short owned suites in order.
 func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
+	executionSentinel := filepath.Join(t.TempDir(), "verify-fast-suite-executed")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"typecheck":             "@printf '%s\\n' 'stub:typecheck'\n",
 		"mcp-contract-check":    "@printf '%s\\n' 'stub:mcp-contract-check'\n",
 		"ui-test":               "@printf '%s\\n' 'stub:ui-test'\n",
-		"test":                  "@printf '%s\\n' 'stub:test'\n",
+		"test":                  fmt.Sprintf("@printf '%%s\\n' 'stub:test'\n@printf '%%s\\n' 'selected-suite-executed' > %q\n", executionSentinel),
+		"test-unit":             fmt.Sprintf("@printf '%%s\\n' 'simulated-unit-failure'\n@printf '%%s\\n' 'unit-suite-executed' > %q\n@exit 73\n", executionSentinel),
 		"ui-install-playwright": "@printf '%s\\n' 'unexpected:ui-install-playwright'\n\t@exit 99\n",
 		"ui-integration-test":   "@printf '%s\\n' 'unexpected:ui-integration-test'\n\t@exit 99\n",
 		"test-functional-long":  "@printf '%s\\n' 'unexpected:test-functional-long'\n\t@exit 99\n",
 		"long-tests":            "@printf '%s\\n' 'unexpected:long-tests'\n\t@exit 99\n",
 	})
 
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	output, err := runMakefileTargetDryRun(repoRoot, makefilePath, "verify-fast")
 	if err != nil {
-		t.Fatalf("run verify-fast wrapper: %v\n%s", err, output)
+		t.Fatalf("dry-run verify-fast wrapper: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(executionSentinel); !os.IsNotExist(err) {
+		t.Fatalf("dry-run verify-fast executed a suite recipe; sentinel error = %v\n%s", err, output)
 	}
 
 	assertOutputOrder(t, output,
 		"Running fast verification tier: typecheck + MCP contract boundary + short UI/unit suite + short Go suite",
 		"==> dashboard typecheck [make typecheck]",
-		"stub:typecheck",
+		"typecheck ||",
 		"==> MCP contract boundary [make mcp-contract-check]",
-		"stub:mcp-contract-check",
+		"mcp-contract-check ||",
 		"==> short UI/unit suite [make ui-test]",
-		"stub:ui-test",
+		"ui-test ||",
 		"==> short Go suite [make test]",
-		"stub:test",
+		"test ||",
 	)
 
 	for _, unwanted := range []string{
-		"unexpected:ui-install-playwright",
-		"unexpected:ui-integration-test",
-		"unexpected:test-functional-long",
-		"unexpected:long-tests",
+		"[make ui-install-playwright]",
+		"[make ui-integration-test]",
+		"[make test-functional-long]",
+		"[make long-tests]",
 	} {
 		if strings.Contains(output, unwanted) {
-			t.Fatalf("verify-fast unexpectedly ran %q:\n%s", unwanted, output)
+			t.Fatalf("verify-fast unexpectedly selected %q:\n%s", unwanted, output)
 		}
 	}
 }

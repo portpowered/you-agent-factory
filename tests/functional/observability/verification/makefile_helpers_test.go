@@ -41,6 +41,10 @@ func runMakefileTarget(repoRoot, makefilePath, target string) (string, error) {
 	return runMakefileTargetWithArgs(repoRoot, makefilePath, target)
 }
 
+func runMakefileTargetDryRun(repoRoot, makefilePath, target string) (string, error) {
+	return runMakefileTargetWithArgs(repoRoot, makefilePath, "-n", target)
+}
+
 func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...string) (string, error) {
 	makePath, err := exec.LookPath("make")
 	if err != nil {
