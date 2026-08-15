@@ -5,6 +5,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Project maps a legacy engine snapshot into the published plain observation
@@ -24,7 +25,7 @@ func Project(
 	full := factory.Observation{
 		Status: observationStatusFromRuntime(snap.RuntimeStatus),
 		Progress: factory.ObservationProgress{
-			InFlightDispatchCount: snap.InFlightCount,
+			InFlightDispatchCount: projectCurrentlyInFlightDispatchCount(snap),
 			TickCount:             snap.TickCount,
 			TotalWorkCount:        status.TotalTokens,
 			WorkCategories: factory.ObservationWorkCategories{
@@ -34,7 +35,7 @@ func Project(
 				Terminal:   status.Categories.Terminal,
 			},
 		},
-		InFlightDispatches: projectInFlightDispatches(snap.Dispatches),
+		InFlightDispatches: projectInFlightDispatches(snap.Dispatches, snap.Results, snap.DispatchHistory),
 		Results:            projectResultViews(snap.DispatchHistory),
 		Resources:          projectResourceViews(snap, status.Resources),
 		Health: factory.ObservationHealth{
@@ -90,15 +91,70 @@ func observationStatusFromRuntime(status interfaces.RuntimeStatus) factory.Obser
 	}
 }
 
+func projectCurrentlyInFlightDispatchCount(snap *legacysnapshot.Snapshot) int {
+	return factory.ProjectCurrentlyInFlightDispatchCount(
+		snap.InFlightCount,
+		activeDispatchIDs(snap.Dispatches),
+		observedTerminalDispatchIDs(snap.Results, snap.DispatchHistory),
+	)
+}
+
+func activeDispatchIDs(dispatches map[string]*interfaces.DispatchEntry) map[string]struct{} {
+	ids := make(map[string]struct{}, len(dispatches))
+	for mapKey, entry := range dispatches {
+		if entry == nil {
+			continue
+		}
+		dispatchID := entry.DispatchID
+		if dispatchID == "" {
+			dispatchID = mapKey
+		}
+		ids[dispatchID] = struct{}{}
+	}
+	return ids
+}
+
+func observedTerminalDispatchIDs(
+	results []workerexecution.WorkResult,
+	history []interfaces.CompletedDispatch,
+) []string {
+	ids := make([]string, 0, len(results)+len(history))
+	for _, result := range results {
+		if result.DispatchID != "" {
+			ids = append(ids, result.DispatchID)
+		}
+	}
+	for _, completed := range history {
+		if completed.DispatchID != "" {
+			ids = append(ids, completed.DispatchID)
+		}
+	}
+	return ids
+}
+
 func projectInFlightDispatches(
 	dispatches map[string]*interfaces.DispatchEntry,
+	results []workerexecution.WorkResult,
+	history []interfaces.CompletedDispatch,
 ) []factory.ObservationDispatchSummary {
 	if len(dispatches) == 0 {
 		return nil
 	}
+	completedIDs := observedTerminalDispatchIDs(results, history)
+	completed := make(map[string]struct{}, len(completedIDs))
+	for _, dispatchID := range completedIDs {
+		completed[dispatchID] = struct{}{}
+	}
 	out := make([]factory.ObservationDispatchSummary, 0, len(dispatches))
-	for _, entry := range dispatches {
+	for mapKey, entry := range dispatches {
 		if entry == nil {
+			continue
+		}
+		dispatchID := entry.DispatchID
+		if dispatchID == "" {
+			dispatchID = mapKey
+		}
+		if _, done := completed[dispatchID]; done {
 			continue
 		}
 		workIDs := make([]string, 0, len(entry.ConsumedTokens))
@@ -108,7 +164,7 @@ func projectInFlightDispatches(
 			}
 		}
 		out = append(out, factory.ObservationDispatchSummary{
-			DispatchID:      entry.DispatchID,
+			DispatchID:      dispatchID,
 			WorkIDs:         workIDs,
 			WorkstationName: entry.WorkstationName,
 			Status:          "IN_FLIGHT",

@@ -741,6 +741,60 @@ func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *
 	}
 }
 
+func TestProjectRuntimeContract_SnapshotProgressExcludesObservedDispatchResponse(t *testing.T) {
+	now := time.Date(2026, 8, 14, 17, 0, 0, 0, time.UTC)
+	snapshot := &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusActive,
+		FactoryState:  "RUNNING",
+		InFlightCount: 1,
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-throttled": {
+				DispatchID: "dispatch-throttled",
+			},
+		},
+		Results: []workerexecution.WorkResult{{
+			DispatchID: "dispatch-throttled",
+			Outcome:    workerexecution.OutcomeFailed,
+		}},
+		Marking: factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{
+			"work-throttled": {
+				ID:      "work-throttled",
+				PlaceID: "task:init",
+				Color: factoryruntime.RuntimeTokenColor{
+					WorkID:     "work-throttled",
+					WorkTypeID: "task",
+				},
+			},
+		}},
+		Topology: &factoryruntime.Net{
+			Places: map[string]*factoryruntime.PetriPlace{
+				"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+			},
+			WorkTypes: map[string]*factoryruntime.WorkType{
+				"task": {
+					ID: "task",
+					States: []factoryruntime.StateDefinition{{
+						Value:    "init",
+						Category: factoryruntime.StateCategoryInitial,
+					}},
+				},
+			},
+		},
+	}
+
+	runtime := sessionprojection.ProjectRuntimeContract(ProjectionContext{
+		FactoryCfg: &interfaces.FactoryConfig{Name: "legacy-petri"},
+		Snapshot:   snapshot,
+		Now:        now,
+	})
+	if runtime.Progress.InFlightCount != 0 {
+		t.Fatalf("snapshot in-flight count = %d, want 0 after observed response", runtime.Progress.InFlightCount)
+	}
+	if runtime.Progress.Categories.Initial != 1 {
+		t.Fatalf("initial Work category = %d, want 1 while retryable Work remains", runtime.Progress.Categories.Initial)
+	}
+}
+
 func TestSessionResponse_JavaScriptRuntimeOmitsDispatchesAndPreservesArtifacts(t *testing.T) {
 	now := time.Date(2026, 6, 8, 16, 5, 0, 0, time.UTC)
 	session := SessionResponse(ProjectionContext{

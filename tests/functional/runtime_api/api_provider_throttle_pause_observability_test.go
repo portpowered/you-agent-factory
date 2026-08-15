@@ -42,6 +42,10 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 				support.HasWorkAtCustomerState(listed, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
 		},
 	)
+	// The predicate reads Work through the canonical event projection. Refresh
+	// the aggregate session after that event-backed condition so the assertion
+	// compares public progress and Work state from the same observation window.
+	isolatedSession = support.GetDefaultSession(t, fixture.server.URL())
 
 	if isolatedSession.Runtime.Progress.InFlightCount != 0 {
 		listed := support.ListDefaultSessionWork(t, fixture.server.URL())

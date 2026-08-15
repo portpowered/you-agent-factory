@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
@@ -158,6 +159,34 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 	}
 	if result != nil && result.ShouldTerminate {
 		t.Fatal("should not terminate while work is still in flight")
+	}
+}
+
+func TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement(t *testing.T) {
+	n := buildTerminationNet()
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		InFlightCount: 1,
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-throttled": {DispatchID: "dispatch-throttled"},
+		},
+		Results: []workerexecution.WorkResult{{
+			DispatchID: "dispatch-throttled",
+			Outcome:    workerexecution.OutcomeFailed,
+		}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":     {ID: "tok1", PlaceID: "wt:done", Color: factorytoken.Color{WorkID: "w1"}},
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		}),
+	}
+
+	result, err := tc.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil && result.ShouldTerminate {
+		t.Fatal("should not terminate before the observed dispatch is retired")
 	}
 }
 

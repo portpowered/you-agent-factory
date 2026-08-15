@@ -89,6 +89,19 @@ func TestProject_FullProjectionOmitsNilDispatch(t *testing.T) {
 	}
 }
 
+func TestProject_ExcludesObservedDispatchResponseFromInFlightProjection(t *testing.T) {
+	snapshot := sampleRootObservationSnapshot()
+	snapshot.DispatchHistory = append(snapshot.DispatchHistory, interfaces.CompletedDispatch{DispatchID: "d1"})
+
+	full := Project(snapshot, factory.ObservationScopeFull)
+	if full.Progress.InFlightDispatchCount != 0 {
+		t.Fatalf("progress in-flight count = %d, want 0 after observed response", full.Progress.InFlightDispatchCount)
+	}
+	if len(full.InFlightDispatches) != 0 {
+		t.Fatalf("in-flight dispatches = %#v, want observed response excluded", full.InFlightDispatches)
+	}
+}
+
 func TestProject_ScopeFilters(t *testing.T) {
 	snap := sampleRootObservationSnapshot()
 
