@@ -2,6 +2,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   baseFactoryDefinition,
@@ -150,6 +151,7 @@ function renderGraphViewModelWithLayout(
     >;
     renderedLayout?: FactoryLayout;
     selectedWaypointEdgeId?: string | null;
+    snapshot?: DashboardSnapshot;
     visibleGraphEdges?: GraphLayout["edges"];
   } = {},
 ) {
@@ -172,9 +174,9 @@ function renderGraphViewModelWithLayout(
     validationTargets: [],
     ...options.editor,
   };
-  const snapshot = {
+  const snapshot = options.snapshot ?? {
     ...structuredClone(singleNodeDashboardSnapshot),
-    factory: baseFactoryDefinition,
+    factory: structuredClone(baseFactoryDefinition),
     runtime: {
       ...singleNodeDashboardSnapshot.runtime,
       in_flight_dispatch_count: 0,
@@ -183,7 +185,13 @@ function renderGraphViewModelWithLayout(
   const noop = vi.fn();
 
   return renderHook(
-    ({ currentGraphLayout }: { currentGraphLayout: GraphLayout }) =>
+    ({
+      currentGraphLayout,
+      currentSnapshot,
+    }: {
+      currentGraphLayout: GraphLayout;
+      currentSnapshot?: DashboardSnapshot;
+    }) =>
       useCurrentActivityGraphViewModel({
         editor: {
           ...editor,
@@ -202,10 +210,85 @@ function renderGraphViewModelWithLayout(
         onSelectWorkType: noop,
         onSelectWorkstation: noop,
         selection: null,
-        snapshot,
+        snapshot: currentSnapshot ?? snapshot,
       }),
-    { initialProps: { currentGraphLayout: graphLayout } },
+    {
+      initialProps: {
+        currentGraphLayout: graphLayout,
+        currentSnapshot: snapshot,
+      },
+    },
   );
+}
+
+function snapshotWithGraphOverlay(
+  input: {
+    activeWorkItemCount?: number;
+    completedWorkCount?: number;
+    failedWorkCount?: number;
+  } = {},
+): DashboardSnapshot {
+  const activeWorkItemCount = input.activeWorkItemCount ?? 0;
+  const completedWorkCount = input.completedWorkCount ?? 0;
+  const failedWorkCount = input.failedWorkCount ?? 0;
+  const snapshot = structuredClone(singleNodeDashboardSnapshot);
+  const activeWorkItems = Array.from(
+    { length: activeWorkItemCount },
+    (_, index) => ({
+      display_name: `Active story ${index + 1}`,
+      trace_id: `trace-active-story-${index + 1}`,
+      work_id: `work-active-story-${index + 1}`,
+      work_type_id: "story",
+    }),
+  );
+
+  snapshot.factory = structuredClone(baseFactoryDefinition);
+  snapshot.factory_state = activeWorkItemCount > 0 ? "RUNNING" : "IDLE";
+  snapshot.runtime = {
+    ...snapshot.runtime,
+    active_dispatch_ids: activeWorkItemCount > 0 ? ["dispatch-review"] : [],
+    active_executions_by_dispatch_id:
+      activeWorkItemCount > 0
+        ? {
+            "dispatch-review": {
+              consumed_tokens: [
+                {
+                  created_at: "2026-08-14T12:00:00Z",
+                  entered_at: "2026-08-14T12:00:00Z",
+                  place_id: "story:queued",
+                  token_id: "token-story-queued",
+                  work_id: "work-active-story-1",
+                  work_type_id: "story",
+                },
+              ],
+              dispatch_id: "dispatch-review",
+              started_at: "2026-08-14T12:00:00Z",
+              transition_id: "review",
+              workstation_name: "Review",
+              workstation_node_id: "review",
+              work_items: activeWorkItems,
+            },
+          }
+        : {},
+    current_work_items_by_place_id: {
+      ...(snapshot.runtime.current_work_items_by_place_id ?? {}),
+      "story:queued": activeWorkItems,
+    },
+    in_flight_dispatch_count: activeWorkItemCount,
+    place_token_counts: {
+      ...(snapshot.runtime.place_token_counts ?? {}),
+      "story:blocked": failedWorkCount,
+      "story:done": completedWorkCount,
+      "story:queued": activeWorkItemCount,
+    },
+    session: {
+      ...snapshot.runtime.session,
+      completed_count: completedWorkCount,
+      failed_count: failedWorkCount,
+    },
+  };
+
+  return snapshot;
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: node position and selection contract cases stay together.
@@ -290,6 +373,235 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
       position: { x: 132, y: 96 },
       selected: true,
     });
+  });
+
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one mounted graph is intentionally exercised across every live overlay transition.
+  it("keeps one mounted graph stable through live lifecycle and Work-count overlays", () => {
+    const graphLayout: GraphLayout = {
+      edges: [
+        {
+          canonicalEdgeId:
+            "workstation-output:workstation:review->work-state:story:done",
+          edgeId:
+            "workstation-output:workstation:review->work-state:story:done",
+          fromNodeId: "workstation:review",
+          label: "done",
+          labelX: 0,
+          labelY: 0,
+          outcomeKind: "accepted",
+          path: "",
+          sourcePlaceKind: undefined,
+          stateCategory: "TERMINAL",
+          targetPlaceKind: "work_state",
+          toNodeId: "work-state:story:done",
+        },
+      ],
+      height: 640,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "work-state:story:queued",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:queued",
+            state_category: "INITIAL",
+            state_value: "queued",
+            type_id: "story",
+          },
+          row: 0,
+          width: 240,
+          x: 120,
+          y: 80,
+        },
+        {
+          column: 1,
+          height: 260,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 320,
+          workstationNodeId: "review",
+          x: 420,
+          y: 80,
+        },
+        {
+          column: 2,
+          height: 120,
+          nodeId: "work-state:story:done",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:done",
+            state_category: "TERMINAL",
+            state_value: "done",
+            type_id: "story",
+          },
+          row: 0,
+          width: 240,
+          x: 840,
+          y: 80,
+        },
+        {
+          column: 2,
+          height: 120,
+          nodeId: "work-state:story:blocked",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:blocked",
+            state_category: "FAILED",
+            state_value: "blocked",
+            type_id: "story",
+          },
+          row: 1,
+          width: 240,
+          x: 840,
+          y: 280,
+        },
+      ],
+      width: 1200,
+    };
+    const visibleGraphEdges = graphLayout.edges;
+    const { rerender, result } = renderGraphViewModelWithLayout(graphLayout, {
+      snapshot: snapshotWithGraphOverlay(),
+      visibleGraphEdges,
+    });
+    const initialNodeState = new Map(
+      result.current.nodes.map((node) => [
+        node.id,
+        {
+          handles: (
+            node.data as { handles?: Array<{ id: string }> }
+          ).handles?.map((handle) => handle.id),
+          height: node.height,
+          initialHeight: node.initialHeight,
+          initialWidth: node.initialWidth,
+          measured: node.measured,
+          position: node.position,
+          width: node.width,
+        },
+      ]),
+    );
+    const initialEdgeEndpoints = result.current.edges.map((edge) => ({
+      source: edge.source,
+      sourceHandle: edge.sourceHandle,
+      target: edge.target,
+      targetHandle: edge.targetHandle,
+    }));
+
+    act(() => {
+      result.current.handleGraphSelectionChange({
+        edges: [],
+        nodes: [{ id: "workstation:review" }],
+      });
+    });
+
+    const overlaySnapshots = [
+      {
+        activeWorkItemCount: 1,
+        snapshot: snapshotWithGraphOverlay({ activeWorkItemCount: 1 }),
+      },
+      {
+        activeWorkItemCount: 3,
+        snapshot: snapshotWithGraphOverlay({ activeWorkItemCount: 3 }),
+      },
+      {
+        activeWorkItemCount: 4,
+        snapshot: snapshotWithGraphOverlay({ activeWorkItemCount: 4 }),
+      },
+      {
+        activeWorkItemCount: 25,
+        snapshot: snapshotWithGraphOverlay({ activeWorkItemCount: 25 }),
+      },
+      {
+        activeWorkItemCount: 0,
+        snapshot: snapshotWithGraphOverlay({ completedWorkCount: 4 }),
+      },
+      {
+        activeWorkItemCount: 0,
+        snapshot: snapshotWithGraphOverlay({ failedWorkCount: 1 }),
+      },
+    ];
+
+    for (const overlay of overlaySnapshots) {
+      rerender({
+        currentGraphLayout: graphLayout,
+        currentSnapshot: overlay.snapshot,
+      });
+
+      expect(result.current.nodes.map((node) => node.id)).toEqual([
+        ...initialNodeState.keys(),
+      ]);
+      for (const node of result.current.nodes) {
+        const initial = initialNodeState.get(node.id);
+        expect(initial).toBeDefined();
+        expect(node).toMatchObject({
+          height: initial?.height,
+          initialHeight: initial?.initialHeight,
+          initialWidth: initial?.initialWidth,
+          measured: initial?.measured,
+          position: initial?.position,
+          selected: node.id === "workstation:review",
+          width: initial?.width,
+        });
+        expect(
+          (node.data as { handles?: Array<{ id: string }> }).handles?.map(
+            (handle) => handle.id,
+          ),
+        ).toEqual(initial?.handles);
+      }
+      const queuedNode = result.current.nodes.find(
+        (node) => node.id === "work-state:story:queued",
+      );
+      const doneNode = result.current.nodes.find(
+        (node) => node.id === "work-state:story:done",
+      );
+      const blockedNode = result.current.nodes.find(
+        (node) => node.id === "work-state:story:blocked",
+      );
+      const workstationData = result.current.nodes.find(
+        (node) => node.id === "workstation:review",
+      )?.data as {
+        executions?: Array<{ work_items?: unknown[] }>;
+      };
+
+      expect(queuedNode?.data).toMatchObject({
+        tokenCount: overlay.activeWorkItemCount,
+      });
+      expect(doneNode?.data).toMatchObject({
+        tokenCount:
+          overlay.snapshot.runtime.place_token_counts?.["story:done"] ?? 0,
+      });
+      expect(blockedNode?.data).toMatchObject({
+        tokenCount:
+          overlay.snapshot.runtime.place_token_counts?.["story:blocked"] ?? 0,
+      });
+      expect(
+        workstationData.executions?.flatMap(
+          (execution) => execution.work_items ?? [],
+        ).length ?? 0,
+      ).toBe(overlay.activeWorkItemCount);
+      expect(
+        result.current.edges.map((edge) => ({
+          source: edge.source,
+          sourceHandle: edge.sourceHandle,
+          target: edge.target,
+          targetHandle: edge.targetHandle,
+        })),
+      ).toEqual(initialEdgeEndpoints);
+    }
+
+    expect(
+      result.current.nodes.find((node) => node.id === "work-state:story:done")
+        ?.data,
+    ).toMatchObject({ tokenCount: 0 });
+    expect(
+      result.current.nodes.find(
+        (node) => node.id === "work-state:story:blocked",
+      )?.data,
+    ).toMatchObject({ tokenCount: 1 });
   });
 
   it("keeps React Flow dimension events disposable instead of treating them as authored layout", () => {
