@@ -39,6 +39,18 @@ func (err *coverageTestFailureError) Unwrap() error {
 	return err.err
 }
 
+func writeCoverageTestFailureWarning(err error) {
+	var testFailureErr *coverageTestFailureError
+	if !errors.As(err, &testFailureErr) {
+		return
+	}
+	if testFailureErr.failedTestCountKnown {
+		fmt.Fprintf(stderrWriter, "coverage not evaluated: %d failed tests observed; package floors were NOT checked because the coverage test run failed\n", testFailureErr.failedTestCount)
+		return
+	}
+	fmt.Fprintln(stderrWriter, "coverage not evaluated: package floors were NOT checked because the coverage test run failed; failed-test count unavailable")
+}
+
 func buildCoverageTestArgs(commonArgs []string, profilePath string, timingEnabled bool, testPackages []string) []string {
 	args := append([]string(nil), commonArgs...)
 	args = append(args, fmt.Sprintf("-coverprofile=%s", profilePath))
