@@ -4,14 +4,9 @@ import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/typ
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import type {
   TerminalWorkItem,
-  TerminalWorkStatus,
+  TerminalWorkSelection,
 } from "./terminal-work-card";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
-
-const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
-  "border-af-danger-border bg-error-container text-on-error";
-const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
-  "border-outline-variant bg-surface-container-low text-on-surface";
 
 const failedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-repair-failed",
@@ -70,17 +65,23 @@ function expectNoAccentSelectedTreatment(className: string) {
 }
 
 function SelectableTerminalWorkStory() {
-  const [selectedItem, setSelectedItem] = useState<{
-    label: string;
-    status: TerminalWorkStatus;
-  } | null>({ label: "Failed Story", status: "failed" });
+  const [selectedItem, setSelectedItem] =
+    useState<TerminalWorkSelection | null>({
+      status: "failed",
+      traceWorkID: "work-failed-story",
+    });
 
   return (
     <CompletedFailedWorkstationCard
       completedItems={completedItems}
       failedItems={failedItems}
       onSelectItem={(status, item) =>
-        setSelectedItem({ label: item.label, status })
+        setSelectedItem({
+          dispatchID: item.dispatchID,
+          status,
+          traceWorkID: item.traceWorkID,
+          workItem: item.workItem,
+        })
       }
       selectedItem={selectedItem}
       widgetId="terminal-work-story"
@@ -118,7 +119,9 @@ export const MixedOutcomes = {
     const terminalScope = within(terminalWork);
 
     await expect(
-      await terminalScope.findByRole("button", { name: "Failed Story" }),
+      await terminalScope.findByRole("button", {
+        name: messages.selectWorkItemLabel("Failed Story"),
+      }),
     ).toBeVisible();
 
     const completedToggle = (
@@ -129,28 +132,25 @@ export const MixedOutcomes = {
     await userEvent.click(completedToggle);
     await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
     expect(
-      terminalScope.queryByRole("button", { name: "Done Story" }),
+      terminalScope.queryByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
     ).toBeNull();
 
     await userEvent.click(completedToggle);
     const doneStory = await terminalScope.findByRole("button", {
-      name: "Done Story",
+      name: messages.selectWorkItemLabel("Done Story"),
     });
     await expect(doneStory).toBeVisible();
-    await userEvent.click(doneStory);
-    await expect(doneStory).toHaveAttribute("data-selected", "true");
+    doneStory.focus();
+    await userEvent.keyboard("{Enter}");
     await expect(doneStory).toHaveAttribute("aria-pressed", "true");
-    expect(doneStory.className).toContain(
-      STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
-    );
+    await expect(doneStory).toHaveTextContent(messages.selectedWorkItemAction);
     expectNoAccentSelectedTreatment(doneStory.className);
 
     const failedStory = await terminalScope.findByRole("button", {
-      name: "Failed Story",
+      name: messages.selectWorkItemLabel("Failed Story"),
     });
-    expect(failedStory.className).toContain(
-      STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-    );
     await expect(failedStory).toHaveAttribute("aria-pressed", "false");
     expectNoAccentSelectedTreatment(failedStory.className);
   },

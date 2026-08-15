@@ -72,8 +72,8 @@ function selectionHistoryTerminalDetailKey(
 
   return [
     terminalWorkDetail.status,
-    terminalWorkDetail.traceWorkID,
-    terminalWorkDetail.label,
+    terminalWorkDetail.dispatchID ?? "",
+    terminalWorkDetail.workItem?.work_id ?? terminalWorkDetail.traceWorkID,
     terminalWorkDetail.failureReason ?? "",
     terminalWorkDetail.failureMessage ?? "",
   ].join(":");

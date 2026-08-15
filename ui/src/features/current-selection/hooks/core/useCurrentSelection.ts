@@ -41,9 +41,12 @@ import {
 export interface CurrentSelectionState {
   canRedoSelection: boolean;
   canUndoSelection: boolean;
+  canceledWorkItems?: TerminalWorkItem[];
   completedWorkItems: TerminalWorkItem[];
   currentFactoryDefinition?: CurrentFactoryDocument | null;
   failedWorkItems: TerminalWorkItem[];
+  terminatedWorkItems?: TerminalWorkItem[];
+  unknownWorkItems?: TerminalWorkItem[];
   openTerminalWorkDetail: (
     status: TerminalWorkStatus,
     item: TerminalWorkItem,
@@ -174,10 +177,9 @@ export function useCurrentSelection({
   });
 
   useTerminalWorkDetailCleanup({
-    completedWorkLabels: derived.completedWorkLabels,
-    failedWorkLabels: derived.failedWorkLabels,
     replacePresent: store.replacePresent,
     selection,
+    terminalWorkItems: terminalWorkItemsForCleanup(derived),
     terminalWorkDetail,
   });
 
@@ -194,9 +196,12 @@ export function useCurrentSelection({
   return {
     canRedoSelection: store.canRedoSelection,
     canUndoSelection: store.canUndoSelection,
+    canceledWorkItems: derived.canceledWorkItems,
     completedWorkItems: derived.completedWorkItems,
     currentFactoryDefinition: derived.currentFactoryDefinition,
     failedWorkItems: derived.failedWorkItems,
+    terminatedWorkItems: derived.terminatedWorkItems,
+    unknownWorkItems: derived.unknownWorkItems,
     openTerminalWorkDetail: actions.openTerminalWorkDetail,
     redoSelection: store.redoSelection,
     selectedNode: derived.selectedNode,
@@ -246,4 +251,16 @@ export function useCurrentSelection({
     terminalWorkDetail,
     undoSelection: store.undoSelection,
   };
+}
+
+function terminalWorkItemsForCleanup(
+  derived: ReturnType<typeof useCurrentSelectionDerivedState>,
+): TerminalWorkItem[] {
+  return [
+    ...(derived.canceledWorkItems ?? []),
+    ...derived.completedWorkItems,
+    ...derived.failedWorkItems,
+    ...(derived.terminatedWorkItems ?? []),
+    ...(derived.unknownWorkItems ?? []),
+  ];
 }

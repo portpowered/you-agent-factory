@@ -1,6 +1,7 @@
 import "../../../testing/vitest-dom-capabilities.setup";
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
@@ -19,7 +20,7 @@ const failedAttempt: DashboardProviderSessionAttempt = {
 };
 
 describe("CompletedFailedWorkstationCard", () => {
-  it("renders exactly two expandable outcome rows with completed and failed items", () => {
+  it("renders distinct expandable outcome rows with canonical work identity", () => {
     const onSelectItem = vi.fn();
     const messages = getTerminalWorkMessages("en");
 
@@ -41,7 +42,7 @@ describe("CompletedFailedWorkstationCard", () => {
     );
 
     const rows = document.querySelectorAll("[data-terminal-work-status]");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(5);
     const completedHeading = screen.getByRole("heading", {
       name: messages.rowTitle("completed"),
     });
@@ -78,7 +79,7 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("completed"),
         })
         .getAttribute("class"),
-    ).toContain("text-on-info");
+    ).toContain("text-on-success-container");
     expect(
       within(failedTitle as HTMLElement)
         .getByRole("img", { name: messages.iconLabel("failed") })
@@ -156,6 +157,124 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(screen.getByText("Failed at Repair")).toBeTruthy();
     expect(screen.queryByText(/session_id/i)).toBeNull();
     expect(screen.queryByText(/codex/i)).toBeNull();
+  });
+
+  it("keeps duplicate display labels independently selectable by canonical Work ID", () => {
+    const messages = getTerminalWorkMessages("en");
+    const items = [
+      {
+        dispatchID: "dispatch-duplicate-one",
+        label: "Duplicate Story",
+        traceWorkID: "work-duplicate-one",
+      },
+      {
+        dispatchID: "dispatch-duplicate-two",
+        label: "Duplicate Story",
+        traceWorkID: "work-duplicate-two",
+      },
+    ];
+
+    function DuplicateLabelSelection() {
+      const [selectedItem, setSelectedItem] = useState<{
+        dispatchID?: string;
+        status: "completed";
+        traceWorkID: string;
+      } | null>(null);
+
+      return (
+        <CompletedFailedWorkstationCard
+          completedItems={items}
+          failedItems={[]}
+          onSelectItem={(status, item) =>
+            setSelectedItem({
+              dispatchID: item.dispatchID,
+              status,
+              traceWorkID: item.traceWorkID,
+            })
+          }
+          selectedItem={selectedItem}
+        />
+      );
+    }
+
+    render(<DuplicateLabelSelection />);
+
+    const duplicateActions = screen.getAllByRole("button", {
+      name: messages.selectWorkItemLabel("Duplicate Story"),
+    });
+    expect(duplicateActions).toHaveLength(2);
+    expect(screen.getByText("Work ID: work-duplicate-one")).toBeTruthy();
+    expect(screen.getByText("Work ID: work-duplicate-two")).toBeTruthy();
+
+    fireEvent.click(duplicateActions[1] as HTMLElement);
+
+    expect(
+      (duplicateActions[0] as HTMLElement).getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      screen
+        .getAllByRole("button", {
+          name: messages.selectWorkItemLabel("Duplicate Story"),
+        })[1]
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("renders canceled, terminated, and unknown outcomes as distinct statuses", () => {
+    const messages = getTerminalWorkMessages("en");
+
+    render(
+      <CompletedFailedWorkstationCard
+        canceledItems={[
+          { label: "Canceled Story", traceWorkID: "work-canceled" },
+        ]}
+        completedItems={[]}
+        failedItems={[{ label: "Failed Story", traceWorkID: "work-failed" }]}
+        onSelectItem={vi.fn()}
+        terminatedItems={[
+          { label: "Terminated Story", traceWorkID: "work-terminated" },
+        ]}
+        unknownItems={[{ label: "Unknown Story", traceWorkID: "work-unknown" }]}
+      />,
+    );
+
+    for (const status of [
+      "failed",
+      "canceled",
+      "terminated",
+      "unknown",
+    ] as const) {
+      const row = document.querySelector(
+        `[data-terminal-work-status="${status}"]`,
+      );
+      expect(row).toBeTruthy();
+      expect(
+        within(row as HTMLElement).getByRole("heading", {
+          name: messages.rowTitle(status),
+        }),
+      ).toBeTruthy();
+      expect(
+        within(row as HTMLElement).getByRole("status", {
+          name: messages.rowTitle(status),
+        }),
+      ).toBeTruthy();
+    }
+
+    expect(
+      document.querySelector(
+        '[data-terminal-work-status="canceled"] [data-graph-semantic-icon="processing"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      document.querySelector(
+        '[data-terminal-work-status="terminated"] [data-graph-semantic-icon="limit"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      document.querySelector(
+        '[data-terminal-work-status="unknown"] [data-graph-semantic-icon="queue"]',
+      ),
+    ).toBeTruthy();
   });
 
   it("collapses each row independently without hiding the other row heading", () => {
@@ -264,12 +383,12 @@ describe("CompletedFailedWorkstationCard", () => {
     const completedToggles = screen.getAllByRole("button", {
       name: messages.disclosureLabel(true),
     });
-    expect(completedToggles).toHaveLength(4);
+    expect(completedToggles).toHaveLength(10);
 
     expect(completedToggles[0]?.getAttribute("aria-controls")).toBe(
       "terminal-work::one-completed-items",
     );
-    expect(completedToggles[2]?.getAttribute("aria-controls")).toBe(
+    expect(completedToggles[5]?.getAttribute("aria-controls")).toBe(
       "terminal-work::two-completed-items",
     );
 
@@ -312,7 +431,10 @@ describe("CompletedFailedWorkstationCard", () => {
           { label: "Failed Story", traceWorkID: "work-failed-story" },
         ]}
         onSelectItem={vi.fn()}
-        selectedItem={{ label: "Failed Story", status: "failed" }}
+        selectedItem={{
+          status: "failed",
+          traceWorkID: "work-failed-story",
+        }}
       />,
     );
 
@@ -329,7 +451,7 @@ describe("CompletedFailedWorkstationCard", () => {
       { selected: false, text: messages.openWorkItemAction },
     );
     expect(
-      screen.getByText(messages.selectedWorkItemLabel("Failed Story")),
+      screen.getByText(messages.selectedWorkItemLabel("work-failed-story")),
     ).toBeTruthy();
   });
 
@@ -344,7 +466,10 @@ describe("CompletedFailedWorkstationCard", () => {
           { label: "Failed Story", traceWorkID: "work-failed-story" },
         ]}
         onSelectItem={vi.fn()}
-        selectedItem={{ label: "Done Story", status: "completed" }}
+        selectedItem={{
+          status: "completed",
+          traceWorkID: "work-done-story",
+        }}
       />,
     );
 
@@ -364,7 +489,10 @@ describe("CompletedFailedWorkstationCard", () => {
           { label: "Failed Story", traceWorkID: "work-failed-story" },
         ]}
         onSelectItem={vi.fn()}
-        selectedItem={{ label: "Failed Story", status: "failed" }}
+        selectedItem={{
+          status: "failed",
+          traceWorkID: "work-failed-story",
+        }}
       />,
     );
 

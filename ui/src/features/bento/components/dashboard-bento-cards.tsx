@@ -338,12 +338,15 @@ function buildDuplicateCapableWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <TerminalWorkWidget
+            canceledItems={currentSelection.canceledWorkItems ?? []}
             completedItems={currentSelection.completedWorkItems}
             failedItems={currentSelection.failedWorkItems}
             headerAction={headerAction}
             locale={locale}
             onSelectItem={currentSelection.openTerminalWorkDetail}
             selectedItem={currentSelection.terminalWorkDetail}
+            terminatedItems={currentSelection.terminatedWorkItems ?? []}
+            unknownItems={currentSelection.unknownWorkItems ?? []}
             widgetId={layoutItem.id}
           />
         ),

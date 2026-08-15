@@ -6,7 +6,7 @@ const BENTO_CARD_NAMES = [
   "Submit work",
   "Work outcome chart",
   "Trace drill-down",
-  "Completed and failed work",
+  "Terminal work outcomes",
   "Add widget",
 ];
 
@@ -114,10 +114,26 @@ export async function verifyBentoCardCatalogResponsive({
   );
   await expectVisible(page.getByText("trace-active-story"), "Trace ID value");
   await expectVisible(page.getByText("Transcript"), "Provider transcript tab");
-  await expectVisible(
-    page.getByRole("button", { name: "Failed Story" }),
-    "Terminal work failed item",
-  );
+  const terminalWork = page.getByRole("article", {
+    name: "Terminal work outcomes",
+  });
+  for (const status of ["Completed", "Failed", "Canceled", "Terminated", "Unknown"]) {
+    const statusRegion = terminalWork.getByRole("region", { name: status });
+    await expectVisible(statusRegion, `Terminal work ${status} region`);
+    await expectVisible(
+      statusRegion.getByRole("status", { name: status }),
+      `Terminal work ${status} status`,
+    );
+  }
+  const failedWorkButton = terminalWork.getByRole("button", {
+    name: "Failed Story",
+  });
+  await expectVisible(failedWorkButton, "Terminal work failed item");
+  await expectFocusable(failedWorkButton, "Terminal work failed item");
+  await failedWorkButton.press("Enter");
+  if ((await failedWorkButton.getAttribute("aria-pressed")) !== "true") {
+    throw new Error("Terminal work failed item did not retain keyboard selection.");
+  }
 
   const addWidgetButton = page
     .getByRole("article", { name: "Add widget" })

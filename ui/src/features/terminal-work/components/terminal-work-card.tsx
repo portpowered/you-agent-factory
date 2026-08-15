@@ -1,6 +1,6 @@
+import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
-import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
 import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
@@ -12,12 +12,24 @@ import {
   type GraphSemanticIconKind,
 } from "../../flowchart/components/graph-semantic-icon";
 import { StandardExpandableSection } from "../../standard-card-components/components/standard-expandable-section";
-import type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
+import {
+  TERMINAL_WORK_STATUSES,
+  type TerminalWorkItem,
+  type TerminalWorkSelection,
+  type TerminalWorkStatus,
+  terminalWorkIdentity,
+  terminalWorkSelectionMatches,
+} from "../lib/types";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 
-export type { TerminalWorkItem, TerminalWorkStatus } from "../lib/types";
+export type {
+  TerminalWorkItem,
+  TerminalWorkSelection,
+  TerminalWorkStatus,
+} from "../lib/types";
 
 export interface CompletedFailedWorkstationCardProps {
+  canceledItems?: TerminalWorkItem[];
   className?: string;
   completedItems: TerminalWorkItem[];
   failedItems: TerminalWorkItem[];
@@ -26,8 +38,10 @@ export interface CompletedFailedWorkstationCardProps {
   onMove?: (widgetId: "terminal-work", direction: "left" | "right") => void;
   onSelectItem: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
   order?: number;
-  selectedItem?: { label: string; status: TerminalWorkStatus } | null;
+  selectedItem?: TerminalWorkSelection | null;
+  terminatedItems?: TerminalWorkItem[];
   title?: string;
+  unknownItems?: TerminalWorkItem[];
   widgetId?: string;
 }
 
@@ -39,7 +53,7 @@ interface TerminalWorkRowProps {
   items: TerminalWorkItem[];
   messages: ReturnType<typeof getTerminalWorkMessages>;
   onSelectItem: (item: TerminalWorkItem) => void;
-  selectedLabel?: string;
+  selectedItem?: TerminalWorkSelection | null;
   status: TerminalWorkStatus;
   summary: (status: TerminalWorkStatus, workstation: string) => string;
   title: string;
@@ -53,14 +67,53 @@ const TERMINAL_BUTTON_META_CLASS = "leading-snug text-current";
 function terminalStatusIconKind(
   status: TerminalWorkStatus,
 ): GraphSemanticIconKind {
-  return status === "failed" ? "failed" : "terminal";
+  switch (status) {
+    case "completed":
+      return "terminal";
+    case "failed":
+      return "failed";
+    case "canceled":
+      return "processing";
+    case "terminated":
+      return "limit";
+    case "unknown":
+      return "queue";
+  }
 }
 
 function terminalStatusIconClassName(status: TerminalWorkStatus): string {
-  return status === "failed" ? "text-on-error" : "text-on-info";
+  switch (status) {
+    case "completed":
+      return "text-on-success-container";
+    case "failed":
+      return "text-on-error";
+    case "canceled":
+      return "text-on-warning-container";
+    case "terminated":
+      return "text-on-surface-variant";
+    case "unknown":
+      return "text-on-info-container";
+  }
+}
+
+function terminalStatusTone(
+  status: TerminalWorkStatus,
+): "danger" | "info" | "neutral" | "success" | "warning" {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "canceled":
+      return "warning";
+    case "terminated":
+    case "unknown":
+      return "neutral";
+  }
 }
 
 export function CompletedFailedWorkstationCard({
+  canceledItems = [],
   className = "",
   completedItems,
   failedItems,
@@ -68,11 +121,20 @@ export function CompletedFailedWorkstationCard({
   locale,
   onSelectItem,
   selectedItem = null,
+  terminatedItems = [],
   title,
+  unknownItems = [],
   widgetId = "terminal-work",
 }: CompletedFailedWorkstationCardProps) {
   const messages = getTerminalWorkMessages(locale);
   const resolvedTitle = title ?? messages.cardTitle;
+  const itemsByStatus: Record<TerminalWorkStatus, TerminalWorkItem[]> = {
+    canceled: canceledItems,
+    completed: completedItems,
+    failed: failedItems,
+    terminated: terminatedItems,
+    unknown: unknownItems,
+  };
 
   return (
     <DashboardWidgetFrame
@@ -83,42 +145,26 @@ export function CompletedFailedWorkstationCard({
     >
       <fieldset className="grid gap-3">
         <legend className="sr-only">{messages.legendLabel}</legend>
-        <TerminalWorkRow
-          emptyMessage={messages.emptyState("completed")}
-          fallbackMessage={messages.sessionSummaryFallback("completed")}
-          iconLabel={messages.iconLabel("completed")}
-          itemCountLabel={messages.itemCountLabel(completedItems.length)}
-          items={completedItems}
-          messages={messages}
-          onSelectItem={(item) => onSelectItem("completed", item)}
-          selectedLabel={
-            selectedItem?.status === "completed"
-              ? selectedItem.label
-              : undefined
-          }
-          toggleLabel={messages.disclosureLabel}
-          status="completed"
-          summary={messages.summary}
-          title={messages.rowTitle("completed")}
-          widgetId={widgetId}
-        />
-        <TerminalWorkRow
-          emptyMessage={messages.emptyState("failed")}
-          fallbackMessage={messages.sessionSummaryFallback("failed")}
-          iconLabel={messages.iconLabel("failed")}
-          itemCountLabel={messages.itemCountLabel(failedItems.length)}
-          items={failedItems}
-          messages={messages}
-          onSelectItem={(item) => onSelectItem("failed", item)}
-          selectedLabel={
-            selectedItem?.status === "failed" ? selectedItem.label : undefined
-          }
-          toggleLabel={messages.disclosureLabel}
-          status="failed"
-          summary={messages.summary}
-          title={messages.rowTitle("failed")}
-          widgetId={widgetId}
-        />
+        {TERMINAL_WORK_STATUSES.map((status) => (
+          <TerminalWorkRow
+            emptyMessage={messages.emptyState(status)}
+            fallbackMessage={messages.sessionSummaryFallback(status)}
+            iconLabel={messages.iconLabel(status)}
+            itemCountLabel={messages.itemCountLabel(
+              itemsByStatus[status].length,
+            )}
+            items={itemsByStatus[status]}
+            key={status}
+            messages={messages}
+            onSelectItem={(item) => onSelectItem(status, item)}
+            selectedItem={selectedItem}
+            status={status}
+            summary={messages.summary}
+            title={messages.rowTitle(status)}
+            toggleLabel={messages.disclosureLabel}
+            widgetId={widgetId}
+          />
+        ))}
       </fieldset>
     </DashboardWidgetFrame>
   );
@@ -132,7 +178,7 @@ function TerminalWorkRow({
   items,
   messages,
   onSelectItem,
-  selectedLabel,
+  selectedItem,
   status,
   summary,
   title,
@@ -174,10 +220,14 @@ function TerminalWorkRow({
             <TerminalWorkListItem
               fallbackMessage={fallbackMessage}
               item={item}
-              key={`${status}-${item.label}`}
+              key={terminalWorkIdentity(item)}
               messages={messages}
               onClick={() => onSelectItem(item)}
-              selected={selectedLabel === item.label}
+              selected={terminalWorkSelectionMatches(
+                item,
+                selectedItem,
+                status,
+              )}
               selectionActionLabel={messages.selectWorkItemLabel(item.label)}
               status={status}
               summary={summary}
@@ -212,6 +262,8 @@ function TerminalWorkListItem({
   status,
   summary,
 }: TerminalWorkListItemProps) {
+  const workID = item.workItem?.work_id ?? item.traceWorkID;
+
   return (
     <WorkstationDispatchRow
       actions={
@@ -228,17 +280,25 @@ function TerminalWorkListItem({
       }
       status={
         <CurrentSelectionExecutionPill
-          tone={status === "failed" ? "danger" : "success"}
+          aria-label={messages.rowTitle(status)}
+          role="status"
+          tone={terminalStatusTone(status)}
         >
           {messages.rowTitle(status)}
         </CurrentSelectionExecutionPill>
       }
       supportingContent={
         <div className="grid gap-1">
+          <CurrentSelectionSupportingText
+            className={TERMINAL_BUTTON_META_CLASS}
+            tone="status"
+          >
+            {messages.workIDLabel(workID)}
+          </CurrentSelectionSupportingText>
           {renderTerminalWorkContext(item, fallbackMessage, summary, status)}
           {selected ? (
             <CurrentSelectionSupportingText tone="status">
-              {messages.selectedWorkItemLabel(item.label)}
+              {messages.selectedWorkItemLabel(workID)}
             </CurrentSelectionSupportingText>
           ) : null}
         </div>
