@@ -430,8 +430,10 @@ function formatGraphNodePlacementViewportViolation(
 }
 
 /**
- * Wait until a graph node's DOM geometry and both React Flow transforms settle
- * while its center is inside the visible graph viewport.
+ * Wait until a graph node's DOM geometry and both React Flow transforms settle.
+ * Viewport visibility is required by default, but callers that are proving a
+ * saved flow position can opt into geometry-only settlement when camera
+ * framing is an independent shared-layout concern.
  */
 export async function waitForStableFactoryGraphNodePlacement(
   page,
@@ -439,6 +441,7 @@ export async function waitForStableFactoryGraphNodePlacement(
   timeoutMs = uiInteractionTimeoutMs,
   intervalMs = 100,
   onObservation,
+  { requireViewportVisibility = true } = {},
 ) {
   let previousSample = null;
   let stableSample = null;
@@ -491,6 +494,7 @@ export async function waitForStableFactoryGraphNodePlacement(
         nextSample && graphNodePlacementIsWithinViewport(nextSample),
       );
       const terminalDiagnostic =
+        requireViewportVisibility &&
         stableSampleCount >= settledGraphNodePlacementSampleCount &&
         viewportViolation
           ? formatGraphNodePlacementViewportViolation(
@@ -515,7 +519,11 @@ export async function waitForStableFactoryGraphNodePlacement(
         throw new Error(terminalDiagnostic);
       }
 
-      if (!stable || !nextSample || !withinViewport) {
+      if (
+        !stable ||
+        !nextSample ||
+        (requireViewportVisibility && !withinViewport)
+      ) {
         return false;
       }
 

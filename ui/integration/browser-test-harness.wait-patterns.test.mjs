@@ -183,6 +183,37 @@ describe("factory graph wait helpers", () => {
     );
     expect(page.evaluate).toHaveBeenCalledTimes(3);
   });
+
+  it("can settle a saved flow position without requiring camera framing", async () => {
+    const sample = {
+      node: { height: 80, width: 20, x: 120, y: 400.57 },
+      nodeTransform: "translate(120px, 400.57px)",
+      viewport: { height: 408.31, width: 500, x: 0, y: 0 },
+      viewportTransform: "matrix(1, 0, 0, 1, 0, 0)",
+    };
+    const observations = [];
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(sample),
+    };
+
+    await expect(
+      waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-resource:extra-gpu",
+        500,
+        1,
+        (observation) => observations.push(observation),
+        { requireViewportVisibility: false },
+      ),
+    ).resolves.toEqual(sample);
+    expect(page.evaluate).toHaveBeenCalledTimes(2);
+    expect(observations.at(-1)).toMatchObject({
+      stable: true,
+      stableSampleCount: 2,
+      terminalDiagnostic: null,
+      withinViewport: false,
+    });
+  });
 });
 
 describe("settled graph node placement wait helper", () => {
