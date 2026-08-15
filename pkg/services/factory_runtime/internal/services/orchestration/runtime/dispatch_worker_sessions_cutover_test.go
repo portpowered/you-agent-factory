@@ -337,7 +337,7 @@ func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *tes
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-recorded-stream"
 	dispatchID := "dispatch-recorded-stream"
-	providerMetadata := &workers.ProviderSessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-recorded"}
+	providerMetadata := &providers.SessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-recorded"}
 	events := []interfaces.FactoryEvent{
 		{
 			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base, DispatchID: stringPointerForRecordedTest(dispatchID), WorkIDs: stringSliceForRecordedTest([]string{workID})},
@@ -396,7 +396,7 @@ func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndPreservesHis
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-recorded-race"
 	dispatchID := "dispatch-recorded-race"
-	providerMetadata := &workers.ProviderSessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-race"}
+	providerMetadata := &providers.SessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-race"}
 	targetEvent := func(sequence int, id string, eventType interfaces.FactoryEventType) interfaces.FactoryEvent {
 		return interfaces.FactoryEvent{
 			Context: interfaces.FactoryEventContext{
@@ -792,7 +792,7 @@ func TestRecordedProviderMetadataBranches(t *testing.T) {
 	if stringPointerValue(&value) != value || stringPointerValue(nil) != "" || len(pointerStringSlice(&[]string{"a"})) != 1 || pointerStringSlice(nil) != nil {
 		t.Fatal("recorded pointer helpers returned incorrect values")
 	}
-	provider := workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "session-1"}
+	provider := providers.SessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "session-1"}
 	if ref := providerSessionRef(provider); ref.Provider != providers.IDCodex || ref.ID != provider.ID || cloneProviderMetadata(&provider) == nil || cloneProviderMetadata(nil) != nil {
 		t.Fatal("provider metadata helpers returned incorrect values")
 	}

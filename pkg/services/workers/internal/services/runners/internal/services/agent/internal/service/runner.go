@@ -109,7 +109,7 @@ func (s *service) execute(
 			s.publishTerminalFailure(
 				identity,
 				normalizedErr,
-				response.ProviderSession,
+				response.Continuation,
 				resumeReference,
 				"",
 				provider,
@@ -122,13 +122,13 @@ func (s *service) execute(
 			s.publishFailureProgress(
 				identity,
 				failure,
-				response.ProviderSession,
+				response.Continuation,
 				provider,
 			)
 			s.publishTerminalFailure(
 				identity,
 				normalizedErr,
-				response.ProviderSession,
+				response.Continuation,
 				failure.SessionRef,
 				failure.Message,
 				provider,
@@ -141,36 +141,35 @@ func (s *service) execute(
 	}
 	result = result.Clone()
 	response := runnerResult(result, providerIDForRequest(request))
-	if response.ProviderSession == nil && resumeReference != nil {
-		reference := resumeReference.Clone()
-		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
-			Kind:     reference.Kind,
-			ID:       reference.ID,
-		}
+	if request.Continuation != nil {
+		response.Continuation = cloneContinuation(request.Continuation)
 	}
-	if response.ProviderSession == nil && strings.TrimSpace(request.SessionID) != "" {
-		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(providerIDForRequest(request).String()),
+	if response.Continuation == nil && resumeReference != nil {
+		continuation := resumeReference.ContinuationRef()
+		response.Continuation = &continuation
+	}
+	if response.Continuation == nil && strings.TrimSpace(request.SessionID) != "" {
+		continuation := (providers.SessionRef{
+			Provider: providerIDForRequest(request),
 			Kind:     providers.SessionIDKind,
 			ID:       request.SessionID,
-		}
+		}).ContinuationRef()
+		response.Continuation = &continuation
 	}
 	response, err = s.normalizeAgentResponse(response, request)
 	if err != nil {
 		return response, err
 	}
-	s.publishProgress(identity, result, response.ProviderSession, provider)
+	s.publishProgress(identity, result, response.Continuation, provider)
 	if !hasTerminalRunProgress(result.Diagnostics) {
 		s.publish(workers.ProgressFragment{
-			Correlation:              identity.correlation,
-			DispatchID:               identity.dispatchID,
-			Kind:                     workers.CompletedFragmentKind,
-			Type:                     "COMPLETED",
-			Provider:                 provider,
-			ProviderSessionReference: workers.CloneProviderSessionReference(result.SessionRef),
-			ProviderSessionRef:       workers.CloneProviderSessionMetadata(response.ProviderSession),
-			ExternalEventType:        "STREAM_COMPLETED",
+			Correlation:       identity.correlation,
+			DispatchID:        identity.dispatchID,
+			Kind:              workers.CompletedFragmentKind,
+			Type:              "COMPLETED",
+			Provider:          provider,
+			Continuation:      continuationFromSessionRef(result.SessionRef),
+			ExternalEventType: "STREAM_COMPLETED",
 		})
 	}
 	return response, nil
@@ -259,7 +258,7 @@ func malformedDecisionEnvelopeError(
 		boundedFailureMessage(result.Error),
 		nil,
 	)
-	normalized.ProviderSession = workers.CloneProviderSessionMetadata(response.ProviderSession)
+	normalized.Continuation = cloneContinuation(response.Continuation)
 	normalized.Diagnostics = workers.CloneWorkDiagnostics(response.Diagnostics)
 	return normalized
 }
@@ -328,7 +327,7 @@ func hasTerminalRunProgress(diagnostics *providers.ExecuteDiagnostics) bool {
 func (s *service) publishTerminalFailure(
 	identity progressIdentity,
 	err error,
-	session *workers.ProviderSessionMetadata,
+	continuation *workers.ProviderContinuationRef,
 	reference *providers.SessionRef,
 	providerMessage string,
 	provider string,
@@ -357,38 +356,37 @@ func (s *service) publishTerminalFailure(
 		metadata = nil
 	}
 	s.publish(workers.ProgressFragment{
-		Correlation:              identity.correlation,
-		DispatchID:               identity.dispatchID,
-		Kind:                     workers.FailedFragmentKind,
-		Type:                     eventType,
-		Payload:                  boundedFailureMessage(message),
-		Provider:                 provider,
-		ProviderSessionReference: workers.CloneProviderSessionReference(reference),
-		ProviderSessionRef:       workers.CloneProviderSessionMetadata(session),
-		ExternalEventType:        "STREAM_FAILED",
-		Metadata:                 metadata,
+		Correlation:       identity.correlation,
+		DispatchID:        identity.dispatchID,
+		Kind:              workers.FailedFragmentKind,
+		Type:              eventType,
+		Payload:           boundedFailureMessage(message),
+		Provider:          provider,
+		Continuation:      cloneContinuation(continuation),
+		ExternalEventType: "STREAM_FAILED",
+		Metadata:          metadata,
 	})
 }
 
 func (s *service) publishFailureProgress(
 	identity progressIdentity,
 	failure providers.ExecuteFailure,
-	session *workers.ProviderSessionMetadata,
+	continuation *workers.ProviderContinuationRef,
 	provider string,
 ) {
 	if failure.Diagnostics == nil {
 		return
 	}
 	s.publishProgress(identity, providers.ExecuteResult{
-		SessionRef:  workers.CloneProviderSessionReference(failure.SessionRef),
+		SessionRef:  cloneSessionRef(failure.SessionRef),
 		Diagnostics: failure.Diagnostics,
-	}, session, provider)
+	}, continuation, provider)
 }
 
 func (s *service) publishProgress(
 	identity progressIdentity,
 	result providers.ExecuteResult,
-	session *workers.ProviderSessionMetadata,
+	continuation *workers.ProviderContinuationRef,
 	provider string,
 ) {
 	var terminalMessages []providers.ExecuteProgress
@@ -408,7 +406,7 @@ func (s *service) publishProgress(
 				terminalMessages = append(terminalMessages, progress)
 				continue
 			}
-			s.publishProviderProgress(identity, progress, session, result.SessionRef, provider)
+			s.publishProviderProgress(identity, progress, continuation, provider)
 		}
 	}
 	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
@@ -420,38 +418,36 @@ func (s *service) publishProgress(
 	// Publish authoritative completed messages after provider run/turn lifecycle
 	// completion so all transports observe the same terminal ordering.
 	for _, progress := range terminalMessages {
-		s.publishProviderProgress(identity, progress, session, result.SessionRef, provider)
+		s.publishProviderProgress(identity, progress, continuation, provider)
 	}
 }
 
 func (s *service) publishProviderProgress(
 	identity progressIdentity,
 	progress providers.ExecuteProgress,
-	session *workers.ProviderSessionMetadata,
-	reference *providers.SessionRef,
+	continuation *workers.ProviderContinuationRef,
 	provider string,
 ) {
 	s.publish(workers.ProgressFragment{
-		Correlation:              identity.correlation,
-		DispatchID:               identity.dispatchID,
-		Kind:                     workers.ProgressFragmentKind,
-		Type:                     progress.Phase,
-		Payload:                  progress.Detail,
-		Provider:                 provider,
-		ProviderSessionReference: workers.CloneProviderSessionReference(reference),
-		ProviderSessionRef:       workers.CloneProviderSessionMetadata(session),
-		Metadata:                 cloneMetadata(progress.Metadata),
+		Correlation:  identity.correlation,
+		DispatchID:   identity.dispatchID,
+		Kind:         workers.ProgressFragmentKind,
+		Type:         progress.Phase,
+		Payload:      progress.Detail,
+		Provider:     provider,
+		Continuation: cloneContinuation(continuation),
+		Metadata:     cloneMetadata(progress.Metadata),
 	})
 }
 
 func validateRequest(request workers.RunnerExecutionRequest) error {
-	if request.Continuation == nil && request.ResumeSession == nil {
+	if request.Continuation == nil {
 		if err := providers.ID(request.RunnerID).Validate(); err != nil {
 			return badRequest("agent provider identity is invalid", err)
 		}
 	} else if request.Continuation != nil {
 		if _, err := request.Continuation.ToSessionRef(); err != nil {
-			return badRequest("agent provider continuation is invalid", err)
+			return invalidContinuationRequestError(request.Continuation, err)
 		}
 	}
 	if strings.TrimSpace(request.Dispatch.DispatchID) == "" {
@@ -464,12 +460,39 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 	return nil
 }
 
-// executeProviderAttempt runs one provider attempt for request. A
-// Worker-Session-owned ResumeSession is always passed unchanged to
-// Providers.Continue, preserving provider-specific kind and opaque identity
-// without consulting runner/default selection. Legacy configuration SessionID
-// resumes retain their established compatibility path. Providers.Execute is
-// used only when neither continuation value is present.
+func invalidContinuationRequestError(
+	continuation *workers.ProviderContinuationRef,
+	cause error,
+) *workers.ProviderError {
+	normalized := continuation.Normalize()
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	failure := providers.ContinuationFailure{
+		Kind:    providers.ContinuationFailureKindInvalid,
+		Message: cause.Error(),
+		Reference: providers.SessionRef{
+			Provider: providers.ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       identity,
+		},
+	}
+	result := workers.NewProviderError(
+		workers.WorkFailureTypePermanentBadRequest,
+		"agent provider continuation is invalid",
+		failure,
+	)
+	result.ProviderContinuationFailureKind = providers.ContinuationFailureKindInvalid
+	result.Continuation = cloneContinuation(continuation)
+	return result
+}
+
+// executeProviderAttempt runs one provider attempt for request. An admitted
+// opaque continuation is passed unchanged to Providers.ContinueReference;
+// legacy configuration SessionID resumes retain their established compatibility
+// path. Providers.Execute is used only when neither continuation value is
+// present.
 func (s *service) executeProviderAttempt(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
@@ -488,7 +511,20 @@ func (s *service) executeProviderAttempt(
 	if request.Continuation != nil {
 		reference, err := request.Continuation.ToSessionRef()
 		if err != nil {
-			return providers.ExecuteResult{}, err
+			normalized := request.Continuation.Normalize()
+			identity := strings.TrimSpace(normalized.ProviderSessionID)
+			if identity == "" {
+				identity = strings.TrimSpace(normalized.ExternalRef)
+			}
+			return providers.ExecuteResult{}, providers.ContinuationFailure{
+				Kind:    providers.ContinuationFailureKindInvalid,
+				Message: err.Error(),
+				Reference: providers.SessionRef{
+					Provider: providers.ID(normalized.Provider),
+					Kind:     normalized.Kind,
+					ID:       identity,
+				},
+			}
 		}
 		continued, err := s.providers.ContinueReference(ctx, providers.ContinueReferenceRequest{
 			Reference: request.Continuation.Clone(),
@@ -504,21 +540,7 @@ func (s *service) executeProviderAttempt(
 		if referenceErr != nil {
 			return providers.ExecuteResult{}, referenceErr
 		}
-		return continuedExecuteResultFromOpaque(continued, continuedReference)
-	}
-	if request.ResumeSession != nil {
-		reference := request.ResumeSession.Clone()
-		continued, err := continueLegacyProvider(ctx, s.providers, providers.ContinueRequest{
-			Reference: reference,
-			Attempt:   attempt,
-		})
-		if err != nil {
-			return providers.ExecuteResult{}, err
-		}
-		if continued.Outcome == providers.ContinuationOutcomeUnsupported {
-			return providers.ExecuteResult{}, continuationUnsupportedError{reference: reference}
-		}
-		return continuedExecuteResult(continued, reference)
+		return continuedExecuteResultFromOpaque(continued, reference, continuedReference)
 	}
 	if strings.TrimSpace(request.SessionID) == "" {
 		return s.providers.Execute(ctx, attempt)
@@ -551,15 +573,16 @@ func continueLegacyProvider(
 
 func continuedExecuteResultFromOpaque(
 	continued providers.ContinueReferenceResult,
-	reference providers.SessionRef,
+	requested providers.SessionRef,
+	returned providers.SessionRef,
 ) (providers.ExecuteResult, error) {
 	return continuedExecuteResult(
 		providers.ContinueResult{
-			Reference: reference,
+			Reference: returned,
 			Outcome:   continued.Outcome,
 			Result:    continued.Result,
 		},
-		reference,
+		requested,
 	)
 }
 
@@ -575,15 +598,10 @@ func (s *service) observeProviderSession(
 		reference = reference.Clone()
 		live.set(reference)
 		s.publish(workers.ProgressFragment{
-			Correlation:              identity.correlation,
-			DispatchID:               identity.dispatchID,
-			Kind:                     workers.ProviderSessionObservedFragmentKind,
-			ProviderSessionReference: &reference,
-			ProviderSessionRef: &workers.ProviderSessionMetadata{
-				Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
-				Kind:     reference.Kind,
-				ID:       reference.ID,
-			},
+			Correlation:  identity.correlation,
+			DispatchID:   identity.dispatchID,
+			Kind:         workers.ProviderSessionObservedFragmentKind,
+			Continuation: continuationFromSessionRef(&reference),
 		})
 	}
 }
@@ -603,8 +621,8 @@ func (s *service) observeProviderProgress(
 	provider string,
 ) providers.ProgressObserver {
 	return func(progress providers.ExecuteProgress) {
-		reference, session := live.snapshot()
-		s.publishProviderProgress(identity, progress, session, reference, provider)
+		continuation := live.snapshot()
+		s.publishProviderProgress(identity, progress, continuation, provider)
 	}
 }
 
@@ -624,20 +642,17 @@ func (l *liveProviderSession) set(reference providers.SessionRef) {
 	l.mu.Unlock()
 }
 
-// snapshot returns a detached reference and its matching response metadata, or
-// two nils when the provider has not authored a session yet.
-func (l *liveProviderSession) snapshot() (*providers.SessionRef, *workers.ProviderSessionMetadata) {
+// snapshot returns the opaque continuation for the provider-authored session,
+// or nil when the provider has not authored a session yet.
+func (l *liveProviderSession) snapshot() *workers.ProviderContinuationRef {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.reference == nil {
-		return nil, nil
+		return nil
 	}
 	reference := l.reference.Clone()
-	return &reference, &workers.ProviderSessionMetadata{
-		Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
-		Kind:     reference.Kind,
-		ID:       reference.ID,
-	}
+	continuation := reference.ContinuationRef()
+	return &continuation
 }
 
 // continuedExecuteResult admits only a provider response that affirms the
@@ -696,23 +711,19 @@ func providerIDForRunner(runnerID string) providers.ID {
 	return providers.ID(workers.NormalizeRunnerID(runnerID))
 }
 
-// providerIDForRequest makes the Worker Session-owned exact reference the
+// providerIDForRequest makes the opaque continuation's provider identity the
 // authority for continuation routing. Runner IDs remain the selection input
 // for ordinary execution, but cannot redirect or invalidate an admitted
-// continuation whose provider identity is already recorded in ResumeSession.
+// continuation.
 func providerIDForRequest(request workers.RunnerExecutionRequest) providers.ID {
 	if request.Continuation != nil {
 		return providers.ID(strings.TrimSpace(request.Continuation.Provider))
-	}
-	if request.ResumeSession != nil {
-		return request.ResumeSession.Provider
 	}
 	return providerIDForRunner(request.RunnerID)
 }
 
 func hasContinuation(request workers.RunnerExecutionRequest) bool {
-	return request.Continuation != nil || request.ResumeSession != nil ||
-		strings.TrimSpace(request.SessionID) != ""
+	return request.Continuation != nil || strings.TrimSpace(request.SessionID) != ""
 }
 
 func continuationSessionRef(
@@ -722,10 +733,6 @@ func continuationSessionRef(
 		if reference, err := request.Continuation.ToSessionRef(); err == nil {
 			return &reference
 		}
-	}
-	if request.ResumeSession != nil {
-		reference := request.ResumeSession.Clone()
-		return &reference
 	}
 	if sessionID := strings.TrimSpace(request.SessionID); sessionID != "" {
 		return &providers.SessionRef{
@@ -747,13 +754,7 @@ func runnerResult(
 		Outcome: workers.WorkOutcome(result.Outcome),
 	}
 	if result.SessionRef != nil {
-		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(
-				result.SessionRef.Provider.String(),
-			),
-			Kind: result.SessionRef.Kind,
-			ID:   result.SessionRef.ID,
-		}
+		response.Continuation = continuationFromSessionRef(result.SessionRef)
 	}
 	if result.Diagnostics != nil {
 		metadata := cloneMetadata(result.Diagnostics.Metadata)
@@ -803,39 +804,27 @@ func runnerFailureResult(
 		SessionRef:  failure.SessionRef,
 		Diagnostics: failure.Diagnostics,
 	}, providerIDForRequest(request))
-	if response.ProviderSession == nil && failure.SessionRef != nil {
-		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(
-				failure.SessionRef.Provider.String(),
-			),
-			Kind: failure.SessionRef.Kind,
-			ID:   failure.SessionRef.ID,
-		}
+	if response.Continuation == nil && failure.SessionRef != nil {
+		response.Continuation = continuationFromSessionRef(failure.SessionRef)
 	}
-	if response.ProviderSession == nil {
+	if response.Continuation == nil {
 		if reference := continuationSessionRef(request); reference != nil {
-			response.ProviderSession = &workers.ProviderSessionMetadata{
-				Provider: workers.CanonicalProviderSessionProvider(reference.Provider.String()),
-				Kind:     reference.Kind,
-				ID:       reference.ID,
-			}
+			response.Continuation = continuationFromSessionRef(reference)
 		}
 	}
-	if response.ProviderSession == nil && strings.TrimSpace(request.SessionID) != "" {
-		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(request.RunnerID),
+	if response.Continuation == nil && strings.TrimSpace(request.SessionID) != "" {
+		response.Continuation = continuationFromSessionRef(&providers.SessionRef{
+			Provider: providerIDForRequest(request),
 			Kind:     providers.SessionIDKind,
 			ID:       request.SessionID,
-		}
+		})
 	}
-	if response.ProviderSession == nil {
-		response.ProviderSession = &workers.ProviderSessionMetadata{
-			Provider: workers.CanonicalProviderSessionProvider(request.RunnerID),
+	if response.Continuation == nil {
+		response.Continuation = &workers.ProviderContinuationRef{
+			Provider: providers.CanonicalProviderSessionProvider(request.RunnerID),
 		}
-	} else if strings.TrimSpace(response.ProviderSession.Provider) == "" {
-		response.ProviderSession.Provider = workers.CanonicalProviderSessionProvider(
-			request.RunnerID,
-		)
+	} else if strings.TrimSpace(response.Continuation.Provider) == "" {
+		response.Continuation.Provider = providers.CanonicalProviderSessionProvider(request.RunnerID)
 	}
 	return response
 }
@@ -894,9 +883,7 @@ func normalizeProviderFailure(
 	if continuation {
 		normalized.ProviderFailureKind = failure.Kind
 	}
-	normalized.ProviderSession = workers.CloneProviderSessionMetadata(
-		result.ProviderSession,
-	)
+	normalized.Continuation = cloneContinuation(result.Continuation)
 	normalized.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
 	return normalized
 }
@@ -925,7 +912,7 @@ func continuationFailureResult(
 			err,
 		)
 		normalized.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
-		normalized.ProviderSession = workers.CloneProviderSessionMetadata(response.ProviderSession)
+		normalized.Continuation = cloneContinuation(response.Continuation)
 		return response, normalized, true
 	}
 	if failure, ok := continuationFailure(err); ok {
@@ -936,7 +923,7 @@ func continuationFailureResult(
 			errors.Join(ctx.Err(), err),
 		)
 		normalized.ProviderContinuationFailureKind = failure.Kind
-		normalized.ProviderSession = workers.CloneProviderSessionMetadata(response.ProviderSession)
+		normalized.Continuation = cloneContinuation(response.Continuation)
 		return response, normalized, true
 	}
 	return workers.RunnerExecutionResult{}, nil, false
@@ -950,7 +937,11 @@ func runnerContinuationFailureResult(
 	if requested := continuationSessionRef(request); requested != nil {
 		reference = requested.Clone()
 	}
-	return runnerFailureResult(providers.ExecuteFailure{SessionRef: &reference}, request)
+	result := runnerFailureResult(providers.ExecuteFailure{SessionRef: &reference}, request)
+	if request.Continuation != nil {
+		result.Continuation = cloneContinuation(request.Continuation)
+	}
+	return result
 }
 
 func unsupportedContinuation(err error) (continuationUnsupportedError, bool) {
@@ -971,4 +962,28 @@ func continuationFailure(err error) (providers.ContinuationFailure, bool) {
 		return pointer.Clone(), true
 	}
 	return providers.ContinuationFailure{}, false
+}
+
+func cloneContinuation(reference *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	clone := reference.Clone()
+	return &clone
+}
+
+func continuationFromSessionRef(reference *providers.SessionRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	continuation := reference.ContinuationRef()
+	return &continuation
+}
+
+func cloneSessionRef(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	clone := reference.Clone()
+	return &clone
 }

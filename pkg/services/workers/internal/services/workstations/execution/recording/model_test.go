@@ -9,6 +9,7 @@ import (
 	"time"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -290,13 +291,10 @@ func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
 	}
 	runner := NewProviderRunner(
 		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			continuation := providers.SessionRef{Provider: "agent", Kind: "session-id", ID: "provider-session-1"}.ContinuationRef()
 			return workerexecution.RunnerExecutionResult{
-				Content: "provider output",
-				ProviderSession: &workerexecution.ProviderSessionMetadata{
-					Provider: "agent",
-					Kind:     "session-id",
-					ID:       "provider-session-1",
-				},
+				Content:      "provider output",
+				Continuation: &continuation,
 			}, nil
 		}),
 		func(event workerexecution.InferenceEvent) { events = append(events, event) },
@@ -330,8 +328,8 @@ func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
 		events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
 		t.Fatalf("inference request IDs = %q/%q, want matching dispatch correlation", events[0].Request.InferenceRequestID, events[1].Response.InferenceRequestID)
 	}
-	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "provider-session-1" || events[1].Response.ProviderSession.Provider != "cursor" {
-		t.Fatalf("provider session = %#v, want canonical cursor session identity", events[1].Response.ProviderSession)
+	if events[1].Response.Continuation == nil || events[1].Response.Continuation.ProviderSessionID != "provider-session-1" || events[1].Response.Continuation.Provider != "cursor" {
+		t.Fatalf("provider continuation = %#v, want canonical cursor session identity", events[1].Response.Continuation)
 	}
 	if events[0].DispatchID != request.Dispatch.DispatchID || events[1].RequestID != request.Dispatch.Execution.RequestID {
 		t.Fatalf("event correlation = %#v/%#v, want dispatch/request IDs", events[0], events[1])

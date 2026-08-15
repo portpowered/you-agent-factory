@@ -842,7 +842,6 @@ func workstationDispatchRequestFromExecute(
 			Worktree:                    request.Target.Workspace.Worktree,
 			WorkingDirectory:            request.Target.Environment.WorkingDirectory,
 			WorkingDirectoryAuthored:    request.Target.Environment.WorkingDirectorySet,
-			ResumeSession:               buildContinuationSession(request.Input.Resume),
 			Continuation:                cloneBuildContinuation(request.Input.Resume),
 			SkipPermissions:             request.Target.Permissions.SkipPermissions,
 		},
@@ -881,7 +880,7 @@ func executeResultFromWorkstationDispatch(
 			Cost:       result.Result.Metrics.Cost,
 			RetryCount: result.Result.Metrics.RetryCount,
 		},
-		Continuation: continuationFromWorkstationSession(result.Result.ProviderSession),
+		Continuation: cloneBuildContinuation(result.Result.Continuation),
 		Diagnostics:  result.Result.Diagnostics.ToSafeDiagnostics(),
 	}
 	if result.Result.FailureMetadata != nil || strings.TrimSpace(result.Result.Error) != "" {
@@ -917,20 +916,6 @@ func executionFailureFromWorkstationResult(
 		failure.Message = dispatchErr.Error()
 	}
 	return failure
-}
-
-func continuationFromWorkstationSession(
-	session *workers.ProviderSessionMetadata,
-) *workers.ProviderContinuationRef {
-	if session == nil {
-		return nil
-	}
-	return &workers.ProviderContinuationRef{
-		Provider:          session.Provider,
-		Kind:              session.Kind,
-		ProviderSessionID: session.ID,
-		ExternalRef:       session.ID,
-	}
 }
 
 func canceledExecuteResult(request workers.ExecuteRequest) workers.ExecuteResult {
@@ -971,17 +956,6 @@ func firstBuildValue(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func buildContinuationSession(value *workers.ProviderContinuationRef) *providers.SessionRef {
-	if value == nil {
-		return nil
-	}
-	reference, err := value.ToSessionRef()
-	if err != nil {
-		return nil
-	}
-	return &reference
 }
 
 func cloneBuildContinuation(value *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {

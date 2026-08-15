@@ -19,9 +19,9 @@ import (
 func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	provider := &executionTestProvider{response: workerexecution.InferenceResponse{
 		Content: "done",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-1",
-		},
+		}),
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			Provider: &workerexecution.ProviderDiagnostic{Provider: "cursor", ResponseMetadata: map[string]string{"content_bytes": "4"}},
 			Command:  &workerexecution.CommandDiagnostic{Stdin: "secret prompt", Env: map[string]string{"API_KEY": "secret"}},
@@ -37,8 +37,8 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	if provider.calls != 1 || result.Attempt != 3 || result.Response.Content != "done" {
 		t.Fatalf("result = %#v, calls = %d", result, provider.calls)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.Provider != "codex" || result.ProviderSession.ID != "sess-1" {
-		t.Fatalf("provider session = %#v", result.ProviderSession)
+	if result.Continuation == nil || result.Continuation.Provider != "codex" || result.Continuation.ProviderSessionID != "sess-1" {
+		t.Fatalf("provider continuation = %#v", result.Continuation)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["content_bytes"] != "4" {
 		t.Fatalf("safe diagnostics = %#v", result.Diagnostics)
@@ -53,7 +53,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 		workerexecution.WorkFailureTypeThrottled,
 		"Provider capacity is temporarily unavailable.",
 		errors.New("exit status 1"),
-		&workerexecution.ProviderSessionMetadata{Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-failed"},
+		providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-failed"}),
 	)
 	provider := &executionTestProvider{err: providerErr}
 
@@ -67,8 +67,8 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider is temporarily unavailable due to usage or capacity limits." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.Provider != "codex" {
-		t.Fatalf("provider session = %#v", result.ProviderSession)
+	if result.Continuation == nil || result.Continuation.Provider != "codex" {
+		t.Fatalf("provider continuation = %#v", result.Continuation)
 	}
 }
 
@@ -160,12 +160,13 @@ func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *te
 func TestProviderExecutorContinuationUsesProvidersReferenceWithoutFreshExecute(t *testing.T) {
 	provider := &continuationExecutionTestProvider{}
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: "thread", ID: "opaque-session"}
+	continuation := reference.ContinuationRef()
 	result, err := workerinvocation.NewProviderExecutor(provider).Execute(
 		context.Background(),
 		workerexecution.InvocationInput{Request: workerexecution.ProviderInferenceRequest{
 			ModelProvider: string(providers.IDCodex),
 			Dispatch:      work.WorkDispatch{DispatchID: "attempt-continue"},
-			ResumeSession: &reference,
+			Continuation:  &continuation,
 		}},
 	)
 	if err != nil {
@@ -267,6 +268,30 @@ func (provider *continuationExecutionTestProvider) Continue(
 	}, nil
 }
 
+func (provider *continuationExecutionTestProvider) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continued, err := provider.Continue(ctx, providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   request.Attempt,
+	})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	resultReference := continued.Reference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
+}
+
 func newBlockingExecutionTestProvider() *blockingExecutionTestProvider {
 	return &blockingExecutionTestProvider{started: make(chan struct{})}
 }
@@ -347,15 +372,15 @@ func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
 
 func assertRunnerExecutorSuccess(t *testing.T) {
 	t.Helper()
-	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"}
+	providerContinuation := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"})
 	diagnostics := &workerexecution.WorkDiagnostics{
 		Provider: &workerexecution.ProviderDiagnostic{Provider: "codex", ResponseMetadata: map[string]string{"source": "runner"}},
 	}
 	runner := &runnerExecutorTestDouble{result: workerexecution.RunnerExecutionResult{
-		Content:         "runner output",
-		Outcome:         workerexecution.OutcomeAccepted,
-		ProviderSession: providerSession,
-		Diagnostics:     diagnostics,
+		Content:      "runner output",
+		Outcome:      workerexecution.OutcomeAccepted,
+		Continuation: providerContinuation,
+		Diagnostics:  diagnostics,
 	}}
 
 	result, err := workerinvocation.NewRunnerExecutor(runner).Execute(
@@ -368,8 +393,8 @@ func assertRunnerExecutorSuccess(t *testing.T) {
 	if result.Attempt != 1 || result.Response.Content != "runner output" || result.Response.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("runner result = %#v, want normalized attempt and output", result)
 	}
-	if result.ProviderSession == providerSession || result.Response.ProviderSession == providerSession {
-		t.Fatal("runner result shares ProviderSession pointer with the runner")
+	if result.Continuation == providerContinuation || result.Response.Continuation == providerContinuation {
+		t.Fatal("runner result shares continuation pointer with the runner")
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["source"] != "runner" {
 		t.Fatalf("runner diagnostics = %#v, want preserved safe metadata", result.Diagnostics)
@@ -452,8 +477,8 @@ func assertStructuredProviderResult(t *testing.T, result workerexecution.Invocat
 	if err != nil {
 		t.Fatalf("provider Execute() = %v", err)
 	}
-	if result.Response.Content != "provider output" || result.ProviderSession == nil || result.ProviderSession.ID != "provider-session" {
-		t.Fatalf("provider result = %#v, want content and exact session metadata", result)
+	if result.Response.Content != "provider output" || result.Continuation == nil || result.Continuation.ProviderSessionID != "provider-session" {
+		t.Fatalf("provider result = %#v, want content and exact continuation", result)
 	}
 }
 
@@ -517,7 +542,7 @@ func assertProviderFailureKinds(t *testing.T) {
 			if err == nil || !errors.As(err, &providerErr) || result.FailureDetail == nil || result.FailureDetail.Reason != testCase.want {
 				t.Fatalf("result = %#v, err = %v, want %q provider failure", result, err, testCase.want)
 			}
-			if result.ProviderSession == nil || result.ProviderSession.ID != "failed-session" || result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+			if result.Continuation == nil || result.Continuation.ProviderSessionID != "failed-session" || result.Diagnostics == nil || result.Diagnostics.Provider == nil {
 				t.Fatalf("normalized failure = %#v, want session and safe diagnostics", result)
 			}
 		})

@@ -2,7 +2,6 @@ package workers
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
@@ -30,7 +29,7 @@ type InferenceResponse struct {
 	// its envelope. Runtime validates and materializes these items, so a runner
 	// that parses an envelope must surface them instead of dropping them.
 	RecordedOutputWork []work.FactoryWorkItem   `json:"recorded_output_work,omitempty"`
-	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Continuation       *ProviderContinuationRef `json:"continuation,omitempty"`
 	Diagnostics        *WorkDiagnostics         `json:"diagnostics,omitempty"`
 }
 
@@ -86,7 +85,7 @@ type InferenceResponseEventPayload struct {
 	FailureDetail      *InferenceResponseFailureDetail `json:"failureDetail,omitempty"`
 	InferenceRequestID string                          `json:"inferenceRequestId"`
 	Outcome            InferenceOutcome                `json:"outcome"`
-	ProviderSession    *ProviderSessionMetadata        `json:"providerSession,omitempty"`
+	Continuation       *ProviderContinuationRef        `json:"continuation,omitempty"`
 	Response           *string                         `json:"response,omitempty"`
 }
 
@@ -164,7 +163,7 @@ type ModelResponseEventPayload struct {
 	Outcome            InferenceOutcome                 `json:"outcome"`
 	OutputContent      *[]work.WorkContentPart          `json:"outputContent,omitempty"`
 	OutputPreview      *string                          `json:"outputPreview,omitempty"`
-	ProviderSession    *ProviderSessionMetadata         `json:"providerSession,omitempty"`
+	Continuation       *ProviderContinuationRef         `json:"continuation,omitempty"`
 	ProviderLocality   string                           `json:"providerLocality"`
 	ResourceAcquired   *bool                            `json:"resourceAcquired,omitempty"`
 	ResourceWaitMillis *int64                           `json:"resourceWaitMillis,omitempty"`
@@ -393,7 +392,7 @@ type WorkResult struct {
 	SelectedClassificationLabel string                        `json:"selected_classification_label,omitempty"`
 	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
 	FailureMetadata             *WorkFailureMetadata          `json:"failure_metadata,omitempty"`
-	ProviderSession             *ProviderSessionMetadata      `json:"provider_session,omitempty"`
+	Continuation                *ProviderContinuationRef      `json:"continuation,omitempty"`
 	// ProviderFailureKind and ProviderContinuation* retain Providers-owned
 	// classifications across the in-process Workers result boundary. They are
 	// deliberately excluded from event serialization: Factory Event contracts
@@ -432,25 +431,6 @@ func (value *WorkResult) UnmarshalJSON(data []byte) error {
 	value.StructuredResult = structured
 	value.StructuredResultPresent = present
 	return nil
-}
-
-// ProviderSessionMetadata carries a stable provider rollout/session identity.
-type ProviderSessionMetadata = providers.SessionMetadata
-
-// CanonicalProviderSessionProvider maps provider-session identities onto the
-// stable backend-facing names used for loading, events, and persisted
-// diagnostics. Cursor keeps the CLI command name `agent` but stores `cursor`
-// as the provider-session contract.
-func CanonicalProviderSessionProvider(provider string) string {
-	trimmed := strings.TrimSpace(provider)
-	switch trimmed {
-	case "", "cursor":
-		return trimmed
-	case "agent", "cursor-agent", "cursor-cli":
-		return "cursor"
-	default:
-		return trimmed
-	}
 }
 
 // WorkOutcome distinguishes the result routing behavior for worker output.
@@ -683,16 +663,6 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 	default:
 		return WorkFailureDecision{Terminal: true}
 	}
-}
-
-// CloneProviderSessionMetadata returns a detached provider-session metadata
-// value for Worker-owned execution and stream contracts.
-func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
 }
 
 func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {

@@ -95,8 +95,9 @@ func TestExecutePublishesLiveProviderSessionObservationBeforeProviderReturns(t *
 	if !fake.observedBeforeReturn {
 		t.Fatal("Provider session observation was not delivered while Providers.Execute was live")
 	}
+	wantContinuation := reference.ContinuationRef()
 	if len(published) < 2 || published[0].Kind != workers.ProviderSessionObservedFragmentKind ||
-		published[0].ProviderSessionReference == nil || *published[0].ProviderSessionReference != reference {
+		published[0].Continuation == nil || *published[0].Continuation != wantContinuation {
 		t.Fatalf("published observations = %#v, want exact live session observation before output", published)
 	}
 }
@@ -200,13 +201,13 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 	if published[0].Kind != workers.FailedFragmentKind || published[0].Payload != longMessage[:failureMessageRuneLimit] {
 		t.Fatalf("terminal failure publication = %#v", published[0])
 	}
-	wantSession := &workers.ProviderSessionMetadata{
-		Provider: string(providers.IDCodex),
+	wantContinuation := providers.SessionRef{
+		Provider: providers.IDCodex,
 		Kind:     providers.SessionIDKind,
 		ID:       "failure-session-1",
-	}
-	if !reflect.DeepEqual(result.ProviderSession, wantSession) {
-		t.Fatalf("ProviderSession = %#v, want %#v", result.ProviderSession, wantSession)
+	}.ContinuationRef()
+	if result.Continuation == nil || !reflect.DeepEqual(*result.Continuation, wantContinuation) {
+		t.Fatalf("Continuation = %#v, want %#v", result.Continuation, wantContinuation)
 	}
 	var providerErr *workers.ProviderError
 	if !errors.As(err, &providerErr) {
@@ -215,8 +216,8 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 	if len([]rune(providerErr.Message)) != failureMessageRuneLimit {
 		t.Fatalf("ProviderError.Message length = %d, want %d runes", len([]rune(providerErr.Message)), failureMessageRuneLimit)
 	}
-	if !reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
-		t.Fatalf("ProviderError.ProviderSession = %#v, want failure session %#v", providerErr.ProviderSession, wantSession)
+	if providerErr.Continuation == nil || !reflect.DeepEqual(*providerErr.Continuation, wantContinuation) {
+		t.Fatalf("ProviderError.Continuation = %#v, want failure continuation %#v", providerErr.Continuation, wantContinuation)
 	}
 }
 
@@ -286,7 +287,8 @@ func TestExecuteResumesThroughExactWorkerSessionReferenceWithoutLegacyReconstruc
 	request := baseAgentRequest()
 	request.SessionID = "legacy-session-that-must-not-be-used"
 	request.RunnerID = string(providers.IDClaude)
-	request.ResumeSession = &exact
+	continuation := exact.ContinuationRef()
+	request.Continuation = &continuation
 	if _, err := runner.Execute(t.Context(), request); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -297,9 +299,9 @@ func TestExecuteResumesThroughExactWorkerSessionReferenceWithoutLegacyReconstruc
 	if fake.request.Provider != exact.Provider {
 		t.Fatalf("Providers.Continue Attempt.Provider = %q, want exact reference provider %q", fake.request.Provider, exact.Provider)
 	}
-	request.ResumeSession.ID = "caller-mutated"
+	request.Continuation.ProviderSessionID = "caller-mutated"
 	if fake.continuationReference.ID != wantReference.ID {
-		t.Fatalf("Providers.Continue retained caller ResumeSession mutation: %#v", fake.continuationReference)
+		t.Fatalf("Providers.Continue retained caller continuation mutation: %#v", fake.continuationReference)
 	}
 	if fake.executeCalls != 0 {
 		t.Fatalf("Providers.Execute calls = %d, want 0 for exact continuation", fake.executeCalls)
@@ -347,10 +349,7 @@ func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t
 	}{
 		{
 			name: "malformed reference",
-			reference: providers.SessionRef{
-				Provider: providers.IDCodex,
-				ID:       "opaque-malformed-session",
-			},
+			reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind},
 			wantContinuationFailureKind: providers.ContinuationFailureKindInvalid,
 			wantError:                   providers.ErrInvalidContinuationRequest,
 		},
@@ -433,7 +432,8 @@ func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t
 
 			request := baseAgentRequest()
 			reference := test.reference.Clone()
-			request.ResumeSession = &reference
+			continuation := reference.ContinuationRef()
+			request.Continuation = &continuation
 			_, err = runner.Execute(t.Context(), request)
 			var providerErr *workers.ProviderError
 			if !errors.As(err, &providerErr) {
@@ -447,8 +447,12 @@ func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t
 				providerErr.ProviderContinuationOutcome != test.wantContinuationOutcome {
 				t.Fatalf("ProviderError continuation classification = %#v", providerErr)
 			}
-			if fake.executeCalls != 0 || fake.continueCalls != 1 {
-				t.Fatalf("Providers calls execute=%d continue=%d, want execute=0 continue=1", fake.executeCalls, fake.continueCalls)
+			wantContinueCalls := 1
+			if test.name == "malformed reference" {
+				wantContinueCalls = 0
+			}
+			if fake.executeCalls != 0 || fake.continueCalls != wantContinueCalls {
+				t.Fatalf("Providers calls execute=%d continue=%d, want execute=0 continue=%d", fake.executeCalls, fake.continueCalls, wantContinueCalls)
 			}
 		})
 	}
@@ -484,13 +488,14 @@ func TestExecuteExactContinuationRejectsMismatchedProviderResultBeforePublishing
 			}
 			reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "expected-session"}
 			request := baseAgentRequest()
-			request.ResumeSession = &reference
+			continuation := reference.ContinuationRef()
+			request.Continuation = &continuation
 			result, err := runner.Execute(t.Context(), request)
 			var providerErr *workers.ProviderError
 			if !errors.As(err, &providerErr) || providerErr.ProviderContinuationFailureKind != providers.ContinuationFailureKindInvalid {
 				t.Fatalf("Execute() error = %#v, want invalid continuation ProviderError", err)
 			}
-			if result.Content != "" || result.ProviderSession == nil || result.ProviderSession.ID != reference.ID {
+			if result.Content != "" || result.Continuation == nil || result.Continuation.ProviderSessionID != reference.ID {
 				t.Fatalf("Execute() result = %#v, want no content and retained exact session", result)
 			}
 			if fake.executeCalls != 0 || fake.continueCalls != 1 {
@@ -734,7 +739,7 @@ func (fake *observingProvidersFake) Execute(
 ) (providers.ExecuteResult, error) {
 	request.ObserveSession(fake.reference)
 	fake.observedBeforeReturn = true
-	return providers.ExecuteResult{Content: "ok", SessionRef: workers.CloneProviderSessionReference(&fake.reference)}, nil
+	return providers.ExecuteResult{Content: "ok", SessionRef: cloneSessionRef(&fake.reference)}, nil
 }
 
 func (fake *observingProvidersFake) Continue(

@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -106,7 +107,7 @@ func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(
 		StartedAt:    time.Date(2026, 4, 22, 19, 0, 0, 0, time.UTC),
 		CompletedAt:  time.Date(2026, 4, 22, 19, 0, 1, 0, time.UTC),
 		Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "openai",
 			Kind:     "session_id",
 			ID:       "session-fallback",
@@ -634,7 +635,7 @@ func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
 			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-completed", PlaceID: completedInput.PlaceID, WorkItem: &completedInput}},
 			InputWorkItems: []work.FactoryWorkItem{completedInput}, OutputWorkItems: []work.FactoryWorkItem{completedOutput},
 			CurrentChainingTraceID: "chain-parent-a", PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"}, TraceIDs: []string{completedInput.TraceID},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "session_id", ID: "session-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "openai", Kind: "session_id", ID: "session-1"},
 			Diagnostics: &workerdiagnostics.SafeWorkDiagnostics{Provider: &workerdiagnostics.SafeProviderDiagnostic{
 				Provider: "openai", Model: "gpt-5.4", RequestMetadata: map[string]string{"prompt_source": "factory-renderer"}, ResponseMetadata: map[string]string{"provider_session_id": "session-1", "retry_count": "0"},
 			}},

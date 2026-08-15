@@ -342,14 +342,15 @@ func assertServiceAgentFailureFacts(
 	published []workers.ProgressFragment,
 ) {
 	t.Helper()
-	wantSession := &workers.ProviderSessionMetadata{
+	wantSession := &providers.SessionMetadata{
 		Provider: string(providers.IDCodex),
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-1",
 	}
-	if !reflect.DeepEqual(result.ProviderSession, wantSession) ||
-		!reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
-		t.Fatalf("failure sessions = result:%#v error:%#v, want %#v", result.ProviderSession, providerErr.ProviderSession, wantSession)
+	wantContinuation := providers.ContinuationFromSessionMetadata(wantSession)
+	if !reflect.DeepEqual(result.Continuation, wantContinuation) ||
+		!reflect.DeepEqual(providerErr.Continuation, wantContinuation) {
+		t.Fatalf("failure continuations = result:%#v error:%#v, want %#v", result.Continuation, providerErr.Continuation, wantContinuation)
 	}
 	if len(published) != 2 ||
 		published[0].DispatchID != "dispatch-agent-1" ||
@@ -361,9 +362,7 @@ func assertServiceAgentFailureFacts(
 }
 
 func cloneServiceProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
-	fragment.ProviderSessionRef = workers.CloneProviderSessionMetadata(
-		fragment.ProviderSessionRef,
-	)
+	fragment.Continuation = workers.CloneContinuationReference(fragment.Continuation)
 	if fragment.Metadata == nil {
 		return fragment
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -542,7 +543,7 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
 			DispatchID:     "dispatch-1",
@@ -557,7 +558,7 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
@@ -666,7 +667,7 @@ func TestBuildFactoryWorldView_CountsMultiTokenProviderDispatchOnce(t *testing.T
 				TransitionID:    "t-review",
 				WorkstationName: "Review",
 				Outcome:         string(workerexecution.OutcomeAccepted),
-				ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+				ProviderSession: providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 				WorkItemIDs:     []string{"work-1", "work-1"},
 			},
 			{
@@ -674,7 +675,7 @@ func TestBuildFactoryWorldView_CountsMultiTokenProviderDispatchOnce(t *testing.T
 				TransitionID:    "t-review",
 				WorkstationName: "Review",
 				Outcome:         string(workerexecution.OutcomeAccepted),
-				ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-retry"},
+				ProviderSession: providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-retry"},
 				WorkItemIDs:     []string{"work-1", "work-1"},
 			},
 		},
@@ -752,7 +753,7 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
 			DispatchID:     "dispatch-1",
@@ -767,7 +768,7 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",

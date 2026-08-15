@@ -9,7 +9,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -914,11 +914,11 @@ func pointerStringSlice(value *[]string) []string {
 	return append([]string(nil), (*value)...)
 }
 
-func providerSessionRef(metadata workers.ProviderSessionMetadata) providers.SessionRef {
+func providerSessionRef(metadata providers.SessionMetadata) providers.SessionRef {
 	return providers.SessionRef{Provider: providers.ID(metadata.Provider), Kind: metadata.Kind, ID: metadata.ID}
 }
 
-func cloneProviderMetadata(metadata *workers.ProviderSessionMetadata) *workers.ProviderSessionMetadata {
+func cloneProviderMetadata(metadata *providers.SessionMetadata) *providers.SessionMetadata {
 	if metadata == nil {
 		return nil
 	}

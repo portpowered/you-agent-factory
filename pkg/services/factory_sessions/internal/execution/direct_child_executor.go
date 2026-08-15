@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -159,14 +160,15 @@ func (e *directChildExecutor) inferenceRequest(
 }
 
 func directChildProviderFields(result workers.InvocationResult) (string, string) {
-	if result.ProviderSession == nil {
+	metadata := providers.SessionMetadataFromContinuation(result.Continuation)
+	if metadata == nil {
 		return "", ""
 	}
-	name := workers.CanonicalProviderSessionProvider(result.ProviderSession.Provider)
+	name := providers.CanonicalProviderSessionProvider(metadata.Provider)
 	if name == "" {
-		name = strings.TrimSpace(result.ProviderSession.Provider)
+		name = strings.TrimSpace(metadata.Provider)
 	}
-	return name, strings.TrimSpace(result.ProviderSession.ID)
+	return name, strings.TrimSpace(metadata.ID)
 }
 
 // failedChild preserves the Workers-owned failure classification on the record,

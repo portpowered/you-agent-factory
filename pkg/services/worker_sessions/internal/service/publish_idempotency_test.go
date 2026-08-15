@@ -552,11 +552,11 @@ func TestControlHistory_OrdersPauseResumeBracketsBeforeTerminalAndDeduplicatesRe
 		t.Fatalf("Resume() = %#v, %v, want applied RUNNING", resumed, err)
 	}
 	resumedResult := completedDispatchResult(resumed.DispatchID)
-	resumedResult.Result.ProviderSession = &workers.ProviderSessionMetadata{
+	resumedResult.Result.Continuation = continuationFromProviderMetadata(&providers.SessionMetadata{
 		Provider: reference.Provider.String(),
 		Kind:     reference.Kind,
 		ID:       reference.ID,
-	}
+	})
 	boundary.complete(resumedResult, nil)
 	if result := <-started; result.Session.State != workersessions.StateCompleted {
 		t.Fatalf("InvokeSession() result = %#v, want COMPLETED", result)

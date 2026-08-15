@@ -17,6 +17,18 @@ func observationTestProviderSession() providers.SessionRef {
 	return providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
 }
 
+func testContinuationFromSessionRef(reference *providers.SessionRef) *providers.ContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	continuation := reference.ContinuationRef()
+	return &continuation
+}
+
+func testContinuationFromMetadata(metadata *providers.SessionMetadata) *providers.ContinuationRef {
+	return providers.ContinuationFromSessionMetadata(metadata)
+}
+
 func validObservationForTest(state State) Observation {
 	started := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	observation := Observation{
@@ -261,39 +273,41 @@ func (s *publisherServiceSpy) ObserveProviderSession(
 
 func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
 	reference := &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}
-	metadata := &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "session-1"}
+	metadata := &providers.SessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "session-1"}
 	assertProviderFragmentIdentity(t, reference, metadata)
 	assertCanonicalDraftIdentity(t)
 	assertProviderIdentityResolution(t, reference, metadata)
 	assertProgressProvenance(t)
 }
 
-func assertProviderFragmentIdentity(t *testing.T, reference *providers.SessionRef, metadata *workers.ProviderSessionMetadata) {
+func assertProviderFragmentIdentity(t *testing.T, reference *providers.SessionRef, metadata *providers.SessionMetadata) {
 	t.Helper()
+	claudeContinuation := testContinuationFromSessionRef(&providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "session-1"})
+	otherContinuation := testContinuationFromSessionRef(&providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "other"})
+	continuation := testContinuationFromSessionRef(reference)
+	metadataContinuation := testContinuationFromMetadata(metadata)
 	if !providerFragmentAgrees(workers.ProgressFragment{}) {
 		t.Fatal("empty provider fragment should agree")
 	}
 	if providerFragmentAgrees(workers.ProgressFragment{
-		Provider:                 "codex",
-		ProviderSessionReference: reference,
-		ProviderSessionRef:       &workers.ProviderSessionMetadata{Provider: "claude", Kind: providers.SessionIDKind, ID: "session-1"},
+		Provider:     "codex",
+		Continuation: claudeContinuation,
 	}) {
-		t.Fatal("provider/reference metadata mismatch should be rejected")
+		t.Fatal("provider/continuation provider mismatch should be rejected")
 	}
 	if providerFragmentAgrees(workers.ProgressFragment{
-		Provider:                 "codex",
-		ProviderSessionReference: reference,
-		ProviderSessionRef:       &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "other"},
+		Provider:     "codex",
+		Continuation: otherContinuation,
 	}) {
-		t.Fatal("reference/metadata identity mismatch should be rejected")
+		t.Fatal("provider/continuation identity mismatch should be rejected")
 	}
-	if providerFragmentAgrees(workers.ProgressFragment{Provider: "claude", ProviderSessionReference: reference}) {
-		t.Fatal("explicit provider/reference mismatch should be rejected")
+	if providerFragmentAgrees(workers.ProgressFragment{Provider: "claude", Continuation: continuation}) {
+		t.Fatal("explicit provider/continuation mismatch should be rejected")
 	}
-	if providerFragmentAgrees(workers.ProgressFragment{Provider: "claude", ProviderSessionRef: metadata}) {
-		t.Fatal("explicit provider/metadata mismatch should be rejected")
+	if providerFragmentAgrees(workers.ProgressFragment{Provider: "claude", Continuation: metadataContinuation}) {
+		t.Fatal("explicit provider/continuation metadata mismatch should be rejected")
 	}
-	if !providerFragmentAgrees(workers.ProgressFragment{Provider: "CoDeX", ProviderSessionRef: metadata}) {
+	if !providerFragmentAgrees(workers.ProgressFragment{Provider: "CoDeX", Continuation: metadataContinuation}) {
 		t.Fatal("provider identity comparison should be case-insensitive")
 	}
 }
@@ -330,7 +344,7 @@ func assertCanonicalDraftIdentity(t *testing.T) {
 	}
 }
 
-func assertProviderIdentityResolution(t *testing.T, reference *providers.SessionRef, metadata *workers.ProviderSessionMetadata) {
+func assertProviderIdentityResolution(t *testing.T, reference *providers.SessionRef, metadata *providers.SessionMetadata) {
 	t.Helper()
 	if got := providerIdentityForFragment(workers.ProgressFragment{Provider: "claude"}, &workers.Draft{
 		Provenance: workers.Provenance{Provider: "codex"},
@@ -342,11 +356,11 @@ func assertProviderIdentityResolution(t *testing.T, reference *providers.Session
 	}); got != "claude" {
 		t.Fatalf("synthetic draft provider fallback = %q, want claude", got)
 	}
-	if got := providerIdentityForFragment(workers.ProgressFragment{ProviderSessionReference: reference}, nil); got != "codex" {
-		t.Fatalf("reference provider = %q, want codex", got)
+	if got := providerIdentityForFragment(workers.ProgressFragment{Continuation: testContinuationFromSessionRef(reference)}, nil); got != "codex" {
+		t.Fatalf("continuation provider = %q, want codex", got)
 	}
-	if got := providerIdentityForFragment(workers.ProgressFragment{ProviderSessionRef: metadata}, nil); got != "codex" {
-		t.Fatalf("metadata provider = %q, want codex", got)
+	if got := providerIdentityForFragment(workers.ProgressFragment{Continuation: testContinuationFromMetadata(metadata)}, nil); got != "codex" {
+		t.Fatalf("continuation metadata provider = %q, want codex", got)
 	}
 	if got := providerIdentityForFragment(workers.ProgressFragment{}, nil); got != "" {
 		t.Fatalf("empty provider identity = %q, want empty", got)
@@ -365,17 +379,17 @@ func assertProviderIdentityResolution(t *testing.T, reference *providers.Session
 	}) {
 		t.Fatal("explicit provider mismatch should be rejected")
 	}
-	if providerIdentityAgrees(workers.ProgressFragment{ProviderSessionReference: &providers.SessionRef{Provider: providers.IDClaude}}, workers.Draft{
+	if providerIdentityAgrees(workers.ProgressFragment{Continuation: testContinuationFromSessionRef(&providers.SessionRef{Provider: providers.IDClaude})}, workers.Draft{
 		Provenance: workers.Provenance{Provider: "codex"},
 	}) {
-		t.Fatal("reference provider mismatch should be rejected")
+		t.Fatal("continuation provider mismatch should be rejected")
 	}
-	if providerIdentityAgrees(workers.ProgressFragment{ProviderSessionRef: &workers.ProviderSessionMetadata{Provider: "claude"}}, workers.Draft{
+	if providerIdentityAgrees(workers.ProgressFragment{Continuation: testContinuationFromMetadata(&providers.SessionMetadata{Provider: "claude", ID: "session-1"})}, workers.Draft{
 		Provenance: workers.Provenance{Provider: "codex"},
 	}) {
-		t.Fatal("metadata provider mismatch should be rejected")
+		t.Fatal("continuation metadata provider mismatch should be rejected")
 	}
-	if !providerIdentityAgrees(workers.ProgressFragment{Provider: "CoDeX", ProviderSessionRef: metadata}, workers.Draft{
+	if !providerIdentityAgrees(workers.ProgressFragment{Provider: "CoDeX", Continuation: testContinuationFromMetadata(metadata)}, workers.Draft{
 		Provenance: workers.Provenance{Provider: "codex"},
 	}) {
 		t.Fatal("matching provider identities should agree")
@@ -574,14 +588,9 @@ func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
 	publisher.Bind(observer)
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-runtime"}
 	progress := workers.ProgressFragment{
-		DispatchID:               "runtime-dispatch",
-		Kind:                     workers.ResponseFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(),
-			Kind:     reference.Kind,
-			ID:       reference.ID,
-		},
+		DispatchID:   "runtime-dispatch",
+		Kind:         workers.ResponseFragmentKind,
+		Continuation: testContinuationFromSessionRef(&reference),
 	}
 	observer.observeErr = ErrProviderSessionAssociationAttemptMismatch
 
@@ -591,10 +600,9 @@ func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
 	}
 
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               progress.DispatchID,
-		Kind:                     workers.ProviderSessionObservedFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef:       workers.CloneProviderSessionMetadata(progress.ProviderSessionRef),
+		DispatchID:   progress.DispatchID,
+		Kind:         workers.ProviderSessionObservedFragmentKind,
+		Continuation: workers.CloneContinuationReference(progress.Continuation),
 	})
 	if len(forwarded) != 1 {
 		t.Fatalf("internal association hand-off forwarded=%#v, want suppressed", forwarded)
@@ -606,12 +614,11 @@ func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
 	observer.observeErr = nil
 	observer.publishErr = ErrProviderBindingConflict
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               "runtime-dispatch-publication-fallback",
-		Kind:                     workers.ProgressFragmentKind,
-		Type:                     "message.delta",
-		Payload:                  "still visible",
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef:       workers.CloneProviderSessionMetadata(progress.ProviderSessionRef),
+		DispatchID:   "runtime-dispatch-publication-fallback",
+		Kind:         workers.ProgressFragmentKind,
+		Type:         "message.delta",
+		Payload:      "still visible",
+		Continuation: testContinuationFromSessionRef(&reference),
 	})
 	if len(forwarded) != 2 || forwarded[1].DispatchID != "runtime-dispatch-publication-fallback" {
 		t.Fatalf("publication fallback forwarded=%#v, want one downstream progress", forwarded)

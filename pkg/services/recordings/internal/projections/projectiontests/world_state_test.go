@@ -8,6 +8,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -248,7 +249,7 @@ func TestReconstructFactoryWorldState_RetainsInferenceAttemptsByDispatchID(t *te
 
 func TestReconstructFactoryWorldState_PromotesModelResponseProviderSession(t *testing.T) {
 	t0 := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
-	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "model-session-1"}
+	providerSession := &providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "model-session-1"}
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workstationRequestEvent(1, t0.Add(time.Second), interfaces.WorkstationRequestPayload{
@@ -478,7 +479,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     900,
 			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeTimeout, Message: "provider timed out"},
-			ProviderSession: generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{
+			ProviderSession: generatedProviderSessionForProjectionTest(&providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-1",
@@ -491,7 +492,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureMetadata: &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyRetryable, Type: workerexecution.WorkFailureTypeTimeout}},
 			DurationMillis: 900,
 			TraceData:      &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-1",

@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -57,7 +58,7 @@ type replayCompletion struct {
 
 type replayInferenceAttempt struct {
 	attempt         int
-	providerSession *workerexecution.ProviderSessionMetadata
+	providerSession *providers.SessionMetadata
 	diagnostics     *workerexecution.WorkDiagnostics
 }
 
@@ -511,9 +512,23 @@ func replayInferenceAttemptFromEvent(event interfaces.FactoryEvent) (string, rep
 	if err != nil {
 		return "", replayInferenceAttempt{}, fmt.Errorf("decode inference response event %q: %w", event.Id, err)
 	}
+	providerSession := providers.SessionMetadataFromContinuation(payload.Continuation)
+	if providerSession == nil {
+		// Replay accepts older public event artifacts whose response payload
+		// carried providerSession before canonical events switched to the opaque
+		// continuation. This compatibility decode stays at the recording
+		// boundary; Workers still receives only Continuation.
+		var legacy struct {
+			ProviderSession *providers.SessionMetadata `json:"providerSession"`
+		}
+		if decodeErr := json.Unmarshal(event.Payload, &legacy); decodeErr != nil {
+			return "", replayInferenceAttempt{}, fmt.Errorf("decode legacy inference response event %q: %w", event.Id, decodeErr)
+		}
+		providerSession = providers.CloneSessionMetadata(legacy.ProviderSession)
+	}
 	return stringValue(event.Context.DispatchID), replayInferenceAttempt{
 		attempt:         payload.Attempt,
-		providerSession: workerexecution.CloneProviderSessionMetadata(payload.ProviderSession),
+		providerSession: providerSession,
 		diagnostics:     diagnostics,
 	}, nil
 }
@@ -550,7 +565,7 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
 			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(payload.ProviderFailure),
-			ProviderSession:             workerexecution.CloneProviderSessionMetadata(inference.providerSession),
+			Continuation:                providers.ContinuationFromSessionMetadata(inference.providerSession),
 			Metrics:                     replayWorkMetricsFromEvent(payload.Metrics),
 			Diagnostics:                 diagnostics,
 		},

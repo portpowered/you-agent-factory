@@ -238,8 +238,8 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	if events[0].Request.InferenceRequestID == "" || events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
 		t.Fatalf("inference request correlation = %#v, want matching IDs", events)
 	}
-	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "session-attempt-override" {
-		t.Fatalf("provider session event = %#v, want override session identity", events[1].Response.ProviderSession)
+	if events[1].Response.Continuation == nil || events[1].Response.Continuation.ProviderSessionID != "session-attempt-override" {
+		t.Fatalf("provider continuation event = %#v, want override session identity", events[1].Response.Continuation)
 	}
 }
 
@@ -792,11 +792,11 @@ func (provider *statelessProviderOverride) Infer(
 	}
 	return workers.InferenceResponse{
 		Content: content,
-		ProviderSession: &workers.ProviderSessionMetadata{
+		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session-id",
 			ID:       "session-attempt-override",
-		},
+		}),
 	}, nil
 }
 

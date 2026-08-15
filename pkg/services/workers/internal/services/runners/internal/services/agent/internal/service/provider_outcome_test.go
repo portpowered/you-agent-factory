@@ -37,9 +37,10 @@ func TestExecuteOpaqueContinuationPreservesKindAndIdentity(t *testing.T) {
 		fake.continuationReference.ID != "opaque-provider-session" {
 		t.Fatalf("Providers continuation reference = %#v, want exact kind and session id", fake.continuationReference)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.Kind != "provider-native-thread" ||
-		result.ProviderSession.ID != "opaque-provider-session" {
-		t.Fatalf("runner result ProviderSession = %#v, want exact continuation identity", result.ProviderSession)
+	if result.Continuation == nil || result.Continuation.Kind != "provider-native-thread" ||
+		result.Continuation.ProviderSessionID != "opaque-provider-session" ||
+		result.Continuation.ExternalRef != "opaque-provider-token" {
+		t.Fatalf("runner result Continuation = %#v, want exact continuation identity", result.Continuation)
 	}
 }
 
@@ -73,8 +74,8 @@ func TestExecutePreservesProviderOutcomeAndStructuredDiagnostics(t *testing.T) {
 
 func assertProviderOutcome(t *testing.T, result workers.RunnerExecutionResult) {
 	t.Helper()
-	if result.Content != "structured provider output" || result.Outcome != workers.WorkOutcome(providers.ExecuteOutcomeAccepted) || result.ProviderSession == nil || result.ProviderSession.Kind != "provider-thread" || result.ProviderSession.ID != "provider-session" {
-		t.Fatalf("runner result = %#v, want outcome and exact provider session", result)
+	if result.Content != "structured provider output" || result.Outcome != workers.WorkOutcome(providers.ExecuteOutcomeAccepted) || result.Continuation == nil || result.Continuation.Kind != "provider-thread" || result.Continuation.ProviderSessionID != "provider-session" {
+		t.Fatalf("runner result = %#v, want outcome and exact provider continuation", result)
 	}
 }
 

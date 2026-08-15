@@ -94,13 +94,13 @@ func committedNamedOwnerConfirmations() []NamedOwnerConfirmation {
 					Note:          "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root.",
 				},
 				{
-					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider",
+					PackagePrefix: "pkg/services/workers/providercompat",
 					Destination:   "providers",
 					Disposition:   DispositionMove,
 					Note:          "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners.",
 				},
 				{
-					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider_test",
+					PackagePrefix: "pkg/services/workers/providercompat_test",
 					Destination:   "providers",
 					Disposition:   DispositionMove,
 					Note:          "Provider test/support packages follow the Providers extraction successor.",

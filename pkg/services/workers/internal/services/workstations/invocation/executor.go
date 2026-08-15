@@ -71,16 +71,16 @@ func (e *runnerExecutor) Execute(
 		return failedInvocationResult(attempt, err), err
 	}
 	response := workers.InferenceResponse{
-		Content:         result.Content,
-		Outcome:         result.Outcome,
-		ProviderSession: workers.CloneProviderSessionMetadata(result.ProviderSession),
-		Diagnostics:     workers.CloneWorkDiagnostics(result.Diagnostics),
+		Content:      result.Content,
+		Outcome:      result.Outcome,
+		Continuation: cloneContinuation(result.Continuation),
+		Diagnostics:  workers.CloneWorkDiagnostics(result.Diagnostics),
 	}
 	return workers.InvocationResult{
-		Response:        response,
-		Attempt:         attempt,
-		ProviderSession: workers.CloneProviderSessionMetadata(response.ProviderSession),
-		Diagnostics:     workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
+		Response:     response,
+		Attempt:      attempt,
+		Continuation: cloneContinuation(response.Continuation),
+		Diagnostics:  workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
 	}, nil
 }
 
@@ -114,17 +114,16 @@ func (e *Executor) Execute(
 		return failedInvocationResult(attempt, normalized), normalized
 	}
 	response := workers.InferenceResponse{
-		Content:         result.Content,
-		Outcome:         workers.WorkOutcome(result.Outcome),
-		ProviderSession: providerSessionMetadata(result.SessionRef),
-		Diagnostics:     workersDiagnostics(result.Diagnostics, result.SessionRef),
+		Content:      result.Content,
+		Outcome:      workers.WorkOutcome(result.Outcome),
+		Continuation: continuationFromSessionRef(result.SessionRef),
+		Diagnostics:  workersDiagnostics(result.Diagnostics, result.SessionRef),
 	}
-	response.ProviderSession = canonicalProviderSession(response.ProviderSession)
 	return workers.InvocationResult{
-		Response:        response,
-		Attempt:         attempt,
-		ProviderSession: workers.CloneProviderSessionMetadata(response.ProviderSession),
-		Diagnostics:     workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
+		Response:     response,
+		Attempt:      attempt,
+		Continuation: cloneContinuation(response.Continuation),
+		Diagnostics:  workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
 	}, nil
 }
 
@@ -135,9 +134,6 @@ func (e *Executor) executeRequest(
 ) (providers.ExecuteResult, error) {
 	if input.Continuation != nil {
 		return e.executeContinuationReference(ctx, input.Continuation, request)
-	}
-	if input.ResumeSession != nil {
-		return e.executeResumeSession(ctx, input.ResumeSession, request)
 	}
 	return e.executeFresh(ctx, request)
 }
@@ -158,23 +154,6 @@ func (e *Executor) executeContinuationReference(
 		} else {
 			err = unsupportedProviderContinuationError(converted)
 		}
-	}
-	return continued.Result, err
-}
-
-func (e *Executor) executeResumeSession(
-	ctx context.Context,
-	reference *providers.SessionRef,
-	request providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	cloned := reference.Clone()
-	request.Provider = cloned.Provider
-	continued, err := e.provider.Continue(ctx, providers.ContinueRequest{
-		Reference: cloned,
-		Attempt:   request,
-	})
-	if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
-		err = unsupportedProviderContinuationError(cloned)
 	}
 	return continued.Result, err
 }
@@ -303,7 +282,7 @@ func normalizeProvidersFailure(err error) error {
 			err,
 		)
 		normalized.ProviderContinuationFailureKind = continuation.Kind
-		normalized.ProviderSession = providerSessionMetadata(&continuation.Reference)
+		normalized.Continuation = continuationFromSessionRef(&continuation.Reference)
 		return normalized
 	}
 	var failure providers.ExecuteFailure
@@ -315,7 +294,7 @@ func normalizeProvidersFailure(err error) error {
 		failure.Message,
 		err,
 	)
-	normalized.ProviderSession = providerSessionMetadata(failure.SessionRef)
+	normalized.Continuation = continuationFromSessionRef(failure.SessionRef)
 	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef)
 	return normalized
 }
@@ -327,7 +306,7 @@ func unsupportedProviderContinuationError(reference providers.SessionRef) error 
 		nil,
 	)
 	normalized.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
-	normalized.ProviderSession = providerSessionMetadata(&reference)
+	normalized.Continuation = continuationFromSessionRef(&reference)
 	return normalized
 }
 
@@ -351,15 +330,12 @@ func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureTy
 	}
 }
 
-func providerSessionMetadata(reference *providers.SessionRef) *workers.ProviderSessionMetadata {
+func continuationFromSessionRef(reference *providers.SessionRef) *workers.ProviderContinuationRef {
 	if reference == nil {
 		return nil
 	}
-	return &workers.ProviderSessionMetadata{
-		Provider: reference.Provider.String(),
-		Kind:     reference.Kind,
-		ID:       reference.ID,
-	}
+	continuation := reference.ContinuationRef()
+	return &continuation
 }
 
 func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *providers.SessionRef) *workers.WorkDiagnostics {
@@ -446,7 +422,6 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 			err,
 		)
 	}
-	providerErr.ProviderSession = canonicalProviderSession(providerErr.ProviderSession)
 	metadata := &workers.WorkFailureMetadata{
 		Family: providerErr.Family,
 		Type:   providerErr.Type,
@@ -454,7 +429,7 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 	decision := workers.FailureDecisionFromMetadata(metadata)
 	return workers.InvocationResult{
 		Attempt:         attempt,
-		ProviderSession: workers.CloneProviderSessionMetadata(providerErr.ProviderSession),
+		Continuation:    cloneContinuation(providerErr.Continuation),
 		FailureMetadata: metadata,
 		FailureDecision: &decision,
 		FailureDetail: &workers.FailureDetail{
@@ -465,14 +440,12 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 	}
 }
 
-func canonicalProviderSession(
-	session *workers.ProviderSessionMetadata,
-) *workers.ProviderSessionMetadata {
-	clone := workers.CloneProviderSessionMetadata(session)
-	if clone != nil {
-		clone.Provider = workers.CanonicalProviderSessionProvider(clone.Provider)
+func cloneContinuation(reference *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
 	}
-	return clone
+	clone := reference.Clone()
+	return &clone
 }
 
 func safeFailureMessage(reason workers.WorkFailureType) string {

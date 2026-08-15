@@ -282,14 +282,7 @@ func agentRunInferenceRequest(
 		Worktree:           request.Worktree,
 		WorkingDirectory:   request.WorkingDirectory,
 	}
-	if request.ResumeSession != nil {
-		reference := request.ResumeSession.Clone()
-		req.ResumeSession = &reference
-	}
-	if request.Continuation != nil {
-		continuation := request.Continuation.Clone()
-		req.Continuation = &continuation
-	}
+	req.Continuation = workerexecution.CloneContinuationReference(request.Continuation)
 	if workerDef != nil {
 		req.Model = workerDef.Model
 		req.ModelProvider = workerDef.ModelProvider

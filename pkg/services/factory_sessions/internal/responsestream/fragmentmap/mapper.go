@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -635,7 +636,7 @@ func fragmentProvider(fragment responsestream.Event) string {
 		return provider
 	}
 	if fragment.ProviderSessionRef != nil {
-		if provider := workerexecution.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
+		if provider := providers.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
 			return provider
 		}
 	}
@@ -660,7 +661,7 @@ func fragmentNativeEventType(fragment responsestream.Event) string {
 	return string(fragment.Kind)
 }
 
-func providerSessionRefString(session *workerexecution.ProviderSessionMetadata) string {
+func providerSessionRefString(session *providers.SessionMetadata) string {
 	if session == nil {
 		return ""
 	}

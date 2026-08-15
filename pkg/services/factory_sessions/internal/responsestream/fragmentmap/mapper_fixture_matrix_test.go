@@ -5,14 +5,15 @@ import (
 	"reflect"
 	"testing"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"time"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 var internalFragmentFixtureMatrix = []struct {
@@ -216,7 +217,7 @@ func TestMapFragment_ResponseFragmentItemIDStableAcrossMatrixDeltas(t *testing.T
 		Kind:       responsestream.EventKindResponseFragment,
 		Type:       responsestream.EventTypeTextDelta,
 		DispatchID: "dispatch-matrix",
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-matrix",

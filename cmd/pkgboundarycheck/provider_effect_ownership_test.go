@@ -864,7 +864,7 @@ func TestRunAllowsAbsorbedWorkersProviderRegistryAndProvidersCatalog(t *testing.
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/providers/internal/services/execution/internal/provider/registry/registry.go", `package registry
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/providercompat/registry/registry.go", `package registry
 
 type Registry struct {
 	IDs []string

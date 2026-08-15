@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -82,7 +83,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	cp := d
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
-	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(d.ProviderSession)
+	cp.ProviderSession = providers.CloneSessionMetadata(d.ProviderSession)
 	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
 	if d.OutputMutations != nil {
 		cp.OutputMutations = make([]interfaces.TokenMutationRecord, len(d.OutputMutations))
@@ -101,7 +102,10 @@ func cloneExpectedArtifactTemplateContext(
 
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
-	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
+	if result.Continuation != nil {
+		continuation := result.Continuation.Clone()
+		cp.Continuation = &continuation
+	}
 	cp.StructuredResult = jsonvalue.Clone(result.StructuredResult)
 	cp.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	cp.ArtifactVerification = result.ArtifactVerification.Clone()

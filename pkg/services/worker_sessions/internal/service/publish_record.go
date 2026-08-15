@@ -641,8 +641,8 @@ func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
 
 func sameProviderIdentity(left, right string) bool {
 	return strings.EqualFold(
-		workers.CanonicalProviderSessionProvider(left),
-		workers.CanonicalProviderSessionProvider(right),
+		providers.CanonicalProviderSessionProvider(left),
+		providers.CanonicalProviderSessionProvider(right),
 	)
 }
 
@@ -702,7 +702,7 @@ func (r *registry) EnsureProviderBinding(
 	if pub == nil {
 		return workersessions.ProviderBindingResult{}, workersessions.ErrSessionNotFound
 	}
-	provider := workers.CanonicalProviderSessionProvider(req.Provider)
+	provider := providers.CanonicalProviderSessionProvider(req.Provider)
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
 	return r.publishProviderBindingLocked(ctx, ownerID, strings.TrimSpace(req.DispatchID), provider, pub)
@@ -715,7 +715,7 @@ func (r *registry) publishProviderBindingLocked(
 	provider string,
 	pub *publication,
 ) (workersessions.ProviderBindingResult, error) {
-	provider = workers.CanonicalProviderSessionProvider(provider)
+	provider = providers.CanonicalProviderSessionProvider(provider)
 	if !pub.open {
 		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "publication_not_open")
 		return workersessions.ProviderBindingResult{}, workersessions.ErrPublicationNotOpen

@@ -95,9 +95,9 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDi
 	return we.executeResolved(ctx, workerexecution.WorkstationExecutionRequest{Dispatch: dispatch})
 }
 
-// ExecuteResolved preserves Worker Sessions' resolved continuation metadata
+// ExecuteResolved preserves Worker Sessions' resolved opaque continuation
 // while retaining the legacy WorkDispatch entry point for ordinary Factory
-// dispatches. In particular, ResumeSession must survive workstation prompt
+// dispatches. In particular, Continuation must survive workstation prompt
 // rendering so the inner runner reaches Providers.Continue rather than
 // starting a fresh provider session.
 func (we *WorkstationExecutor) ExecuteResolved(
@@ -259,11 +259,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 	if failed != nil {
 		return *failed, nil
 	}
-	executionRequest.ResumeSession = workerexecution.CloneProviderSessionReference(request.ResumeSession)
-	if request.ResumeSession != nil {
-		continuation := request.ResumeSession.ContinuationRef()
-		executionRequest.Continuation = &continuation
-	}
+	executionRequest.Continuation = workerexecution.CloneContinuationReference(request.Continuation)
 
 	result, err := we.executeInnerWorker(ctx, executionRequest, workerDef, workstationDef, start, logger)
 	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)

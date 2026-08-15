@@ -3,7 +3,9 @@
 package factoryeventprojection
 
 import (
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"encoding/json"
+
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -14,14 +16,72 @@ func ReconstructFactoryWorldState(
 	reconstruct recordings.WorldStateReconstructor,
 	events []factoryapi.FactoryEvent,
 	selectedTick int,
-) (factorycontracts.FactoryWorldState, error) {
-	canonicalEvents := make([]factorycontracts.FactoryEvent, 0, len(events))
+) (recordings.FactoryWorldState, error) {
+	canonicalEvents := make([]recordings.FactoryEvent, 0, len(events))
 	for _, event := range events {
-		canonicalEvent, err := factorycontracts.NewFactoryEvent(event)
+		canonicalEvent, err := canonicalFactoryEvent(event)
 		if err != nil {
-			return factorycontracts.FactoryWorldState{}, err
+			return recordings.FactoryWorldState{}, err
 		}
 		canonicalEvents = append(canonicalEvents, canonicalEvent)
 	}
 	return reconstruct(canonicalEvents, selectedTick)
+}
+
+// CanonicalFactoryEvent converts one public Factory event into the canonical
+// event representation used by recordings and projections. Inference and
+// model response payloads translate the public provider-session projection
+// into the Providers-owned opaque continuation before decoding.
+func CanonicalFactoryEvent(event factoryapi.FactoryEvent) (recordings.FactoryEvent, error) {
+	return canonicalFactoryEvent(event)
+}
+
+func canonicalFactoryEvent(event factoryapi.FactoryEvent) (recordings.FactoryEvent, error) {
+	if event.Type == factoryapi.FactoryEventTypeInferenceResponse || event.Type == factoryapi.FactoryEventTypeModelResponse {
+		envelope, err := json.Marshal(event)
+		if err != nil {
+			return recordings.FactoryEvent{}, err
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(envelope, &fields); err != nil {
+			return recordings.FactoryEvent{}, err
+		}
+		payload, err := canonicalExecutionPayload(fields["payload"])
+		if err != nil {
+			return recordings.FactoryEvent{}, err
+		}
+		fields["payload"] = payload
+		return recordings.NewFactoryEvent(fields)
+	}
+	return recordings.NewFactoryEvent(event)
+}
+
+func canonicalExecutionPayload(payload json.RawMessage) (json.RawMessage, error) {
+	if len(payload) == 0 {
+		return payload, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return nil, err
+	}
+	if _, exists := fields["continuation"]; exists {
+		return payload, nil
+	}
+	providerSessionPayload, exists := fields["providerSession"]
+	if !exists {
+		return payload, nil
+	}
+	var session providers.SessionMetadata
+	if err := json.Unmarshal(providerSessionPayload, &session); err != nil {
+		return nil, err
+	}
+	if continuation := providers.ContinuationFromSessionMetadata(&session); continuation != nil {
+		encoded, err := json.Marshal(continuation)
+		if err != nil {
+			return nil, err
+		}
+		fields["continuation"] = encoded
+	}
+	delete(fields, "providerSession")
+	return json.Marshal(fields)
 }

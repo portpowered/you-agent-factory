@@ -153,7 +153,7 @@ func responseEvent(request workerexecution.RunnerExecutionRequest, response work
 		Worker:           firstNonEmpty(request.WorkerType, workerName(workerDef)),
 		Model:            firstNonEmpty(request.Model, modelName(workerDef)),
 		ProviderLocality: firstNonEmpty(strings.TrimSpace(request.ModelLocality), modelLocality(workerDef)),
-		ProviderSession:  workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+		Continuation:     cloneContinuation(response.Continuation),
 		DurationMillis:   duration.Milliseconds(),
 		Resources:        resourceSummaries(factoryCfg, workerDef),
 		Bindings:         resolvedBindings(request.ModelBindings),

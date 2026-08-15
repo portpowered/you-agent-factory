@@ -319,7 +319,6 @@ func continuationExecution(
 	continuation.Execution.Dispatch.DispatchID = dispatchID
 	continuation.Execution.UserMessage = followUpInput
 	continuedReference := reference.Clone()
-	continuation.Execution.ResumeSession = &continuedReference
 	continuationRef := continuedReference.ContinuationRef()
 	continuation.Execution.Continuation = &continuationRef
 	return continuation

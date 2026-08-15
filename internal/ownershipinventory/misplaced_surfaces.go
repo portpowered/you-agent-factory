@@ -101,7 +101,7 @@ func committedPublicSurfaces() []PublicSurfaceEntry {
 		{
 			ID:               "behavior_test:provider-functionaltests",
 			Kind:             PublicSurfaceKindBehaviorTest,
-			SurfacePath:      "pkg/services/providers/internal/services/execution/internal/provider/functionaltests",
+			SurfacePath:      "pkg/services/workers/providercompat/functionaltests",
 			ReplacementOwner: "providers",
 			Note:             "Provider compatibility/behavior tests follow the Providers Execution successor after cutover.",
 		},

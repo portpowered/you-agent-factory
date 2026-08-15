@@ -24,7 +24,7 @@ func TestDirectWorkerSessionContinueUnsupportedProviderDoesNotFreshStartThroughR
 	provider := &unsupportedContinuationProvider{
 		MockProvider: testutil.NewMockProvider(workerexecution.InferenceResponse{
 			Content: "initial provider output",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: string(providers.IDCodex),
 				Kind:     providers.SessionIDKind,
 				ID:       "unsupported-source-thread",

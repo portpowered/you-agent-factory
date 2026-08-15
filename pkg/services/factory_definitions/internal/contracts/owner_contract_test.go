@@ -2,6 +2,7 @@ package factorycontracts
 
 import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
@@ -22,7 +23,7 @@ type (
 	InvocationArgumentSource        = work.InvocationArgumentSource
 	InvocationDiagnostic            = workerexecution.InvocationDiagnostic
 	InvocationParameterDiagnostic   = workerexecution.InvocationParameterDiagnostic
-	ProviderSessionMetadata         = workerexecution.ProviderSessionMetadata
+	ProviderSessionMetadata         = providers.SessionMetadata
 	ProviderDiagnostic              = workerexecution.ProviderDiagnostic
 	RenderedPromptDiagnostic        = workerexecution.RenderedPromptDiagnostic
 	CommandDiagnostic               = workerexecution.CommandDiagnostic
@@ -93,12 +94,12 @@ const (
 
 var (
 	CloneProviderInferenceRequest             = workerexecution.CloneProviderInferenceRequest
-	CloneProviderSessionMetadata              = workerexecution.CloneProviderSessionMetadata
+	CloneProviderSessionMetadata              = providers.CloneSessionMetadata
 	CloneSubprocessExecutionRequest           = workerexecution.CloneSubprocessExecutionRequest
 	CloneWorkDispatch                         = work.CloneWorkDispatch
 	CloneWorkstationExecutionRequest          = workerexecution.CloneWorkstationExecutionRequest
 	CloneWorkFailureMetadata                  = workerexecution.CloneWorkFailureMetadata
-	CanonicalProviderSessionProvider          = workerexecution.CanonicalProviderSessionProvider
+	CanonicalProviderSessionProvider          = providers.CanonicalProviderSessionProvider
 	BuiltInRunnerMetadata                     = workerexecution.BuiltInRunnerMetadata
 	GeneratedSafeWorkDiagnostics              = workerdiagnosticsmapping.GeneratedSafeWorkDiagnostics
 	NewRunnerCapabilities                     = workerexecution.NewCapabilities

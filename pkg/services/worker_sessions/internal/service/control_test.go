@@ -417,8 +417,9 @@ func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrela
 		t.Fatalf("Resume() = %#v, %v, want applied RUNNING", resumed, err)
 	}
 	continuation := boundary.currentRequest()
-	if continuation.Execution.ResumeSession == nil || *continuation.Execution.ResumeSession != reference {
-		t.Fatalf("continuation ResumeSession = %#v, want exact %#v", continuation.Execution.ResumeSession, reference)
+	wantContinuation := reference.ContinuationRef()
+	if continuation.Execution.Continuation == nil || *continuation.Execution.Continuation != wantContinuation {
+		t.Fatalf("continuation Continuation = %#v, want exact %#v", continuation.Execution.Continuation, wantContinuation)
 	}
 	if continuation.WorkstationName != initial.WorkstationName || continuation.Execution.Dispatch.Execution.RequestID != initial.Execution.Dispatch.Execution.RequestID {
 		t.Fatalf("continuation correlation = %#v, want preserved workstation and turn request", continuation)
@@ -428,11 +429,11 @@ func TestPauseResume_ContinuesExactProviderReferenceWithSameWorkerSessionCorrela
 	}
 
 	resumedResult := completedDispatchResult(resumed.DispatchID)
-	resumedResult.Result.ProviderSession = &workers.ProviderSessionMetadata{
+	resumedResult.Result.Continuation = continuationFromProviderMetadata(&providers.SessionMetadata{
 		Provider: reference.Provider.String(),
 		Kind:     reference.Kind,
 		ID:       reference.ID,
-	}
+	})
 	boundary.complete(resumedResult, nil)
 	final := <-started
 	if final.Session.State != workersessions.StateCompleted || final.Dispatch.DispatchID != resumed.DispatchID {
@@ -498,19 +499,19 @@ func TestPausedControl_TerminalizesWithoutRecancelingCompletedPauseDispatch(t *t
 func TestPauseResume_InvalidContinuationResultFailsAndRetainsAssociation(t *testing.T) {
 	tests := []struct {
 		name     string
-		metadata func(providers.SessionRef) *workers.ProviderSessionMetadata
+		metadata func(providers.SessionRef) *providers.SessionMetadata
 	}{
 		{name: "missing reference"},
 		{
 			name: "malformed reference",
-			metadata: func(reference providers.SessionRef) *workers.ProviderSessionMetadata {
-				return &workers.ProviderSessionMetadata{Provider: reference.Provider.String(), Kind: reference.Kind}
+			metadata: func(reference providers.SessionRef) *providers.SessionMetadata {
+				return &providers.SessionMetadata{Provider: reference.Provider.String(), Kind: reference.Kind}
 			},
 		},
 		{
 			name: "foreign reference",
-			metadata: func(reference providers.SessionRef) *workers.ProviderSessionMetadata {
-				return &workers.ProviderSessionMetadata{Provider: reference.Provider.String(), Kind: reference.Kind, ID: "foreign-provider-session"}
+			metadata: func(reference providers.SessionRef) *providers.SessionMetadata {
+				return &providers.SessionMetadata{Provider: reference.Provider.String(), Kind: reference.Kind, ID: "foreign-provider-session"}
 			},
 		},
 	}
@@ -539,7 +540,7 @@ func TestPauseResume_InvalidContinuationResultFailsAndRetainsAssociation(t *test
 			}
 			invalid := completedDispatchResult(resumed.DispatchID)
 			if test.metadata != nil {
-				invalid.Result.ProviderSession = test.metadata(reference)
+				invalid.Result.Continuation = continuationFromProviderMetadata(test.metadata(reference))
 			}
 			boundary.complete(invalid, nil)
 

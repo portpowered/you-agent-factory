@@ -19,7 +19,7 @@ const (
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
-	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
+	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/workers/providercompat"
 )
 
 var canonicalEventOwnerCalls = map[string]struct{}{

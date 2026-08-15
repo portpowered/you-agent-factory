@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -413,11 +414,10 @@ type smokeLiveChildProvider struct{}
 func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Continuation: func() *providers.ContinuationRef {
+			ref := providers.SessionRef{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}.ContinuationRef()
+			return &ref
+		}(),
 		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
 			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 		}},

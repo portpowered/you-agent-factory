@@ -7,6 +7,7 @@ import (
 	"time"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -337,7 +338,7 @@ type CompletedDispatch struct {
 	Reason                      string                                        `json:"reason,omitempty"`
 	ArtifactVerification        *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
 	FailureMetadata             *workerexecution.WorkFailureMetadata          `json:"failure_metadata,omitempty"`
-	ProviderSession             *workerexecution.ProviderSessionMetadata      `json:"provider_session,omitempty"`
+	ProviderSession             *providers.SessionMetadata                    `json:"provider_session,omitempty"`
 	StartTime                   time.Time                                     `json:"start_time"`
 	EndTime                     time.Time                                     `json:"end_time"`
 	Duration                    time.Duration                                 `json:"duration"`

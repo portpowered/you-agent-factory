@@ -16,7 +16,7 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/commandenv"
 )
 
 // ExecutableDependencies are policy-free host effects used to resolve the

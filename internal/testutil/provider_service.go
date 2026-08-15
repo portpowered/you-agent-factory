@@ -131,7 +131,7 @@ func providerInferenceRequest(
 		GoalRoutingDecisionEnvelope:  request.GoalRoutingDecisionEnvelope,
 		ModelLocality:                request.ModelLocality,
 		SessionID:                    request.SessionID,
-		ResumeSession:                cloneSessionRef(resume),
+		Continuation:                 continuationFromSessionRef(resume),
 		WorkingDirectory:             request.WorkingDirectory,
 		Worktree:                     request.Worktree,
 		EnvVars:                      cloneStringMap(request.EnvVars),
@@ -147,11 +147,9 @@ func providerExecuteResult(response workerexecution.InferenceResponse) providers
 		Content: response.Content,
 		Outcome: providers.ExecuteOutcome(response.Outcome),
 	}
-	if response.ProviderSession != nil {
-		result.SessionRef = &providers.SessionRef{
-			Provider: providers.ID(response.ProviderSession.Provider),
-			Kind:     response.ProviderSession.Kind,
-			ID:       response.ProviderSession.ID,
+	if response.Continuation != nil {
+		if reference, err := response.Continuation.ToSessionRef(); err == nil {
+			result.SessionRef = &reference
 		}
 	}
 	if response.Diagnostics != nil {
@@ -306,12 +304,12 @@ func mergeStringMap(base, overlay map[string]string) map[string]string {
 	return base
 }
 
-func cloneSessionRef(reference *providers.SessionRef) *providers.SessionRef {
+func continuationFromSessionRef(reference *providers.SessionRef) *workerexecution.ProviderContinuationRef {
 	if reference == nil {
 		return nil
 	}
-	cloned := reference.Clone()
-	return &cloned
+	continuation := reference.ContinuationRef()
+	return &continuation
 }
 
 func runnerCapabilities(values []string) []workerexecution.RunnerOptionalCapability {

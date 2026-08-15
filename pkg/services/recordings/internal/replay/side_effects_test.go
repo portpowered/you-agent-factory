@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -216,7 +217,7 @@ func TestSideEffects_InferProvidesCompletionEvidenceWhenReplayArtifactOmitsDiagn
 			1,
 			3,
 			"recorded provider output",
-			&workerexecution.ProviderSessionMetadata{
+			&providers.SessionMetadata{
 				Provider: "claude",
 				Kind:     "response_id",
 				ID:       "resp-no-diagnostics",
@@ -256,8 +257,9 @@ func TestSideEffects_InferProvidesCompletionEvidenceWhenReplayArtifactOmitsDiagn
 		resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
 		t.Fatalf("diagnostics = %#v, want safe completion evidence", resp.Diagnostics)
 	}
-	if resp.ProviderSession == nil || resp.ProviderSession.ID != "resp-no-diagnostics" {
-		t.Fatalf("provider session = %#v, want resp-no-diagnostics", resp.ProviderSession)
+	providerSession := providers.SessionMetadataFromContinuation(resp.Continuation)
+	if providerSession == nil || providerSession.ID != "resp-no-diagnostics" {
+		t.Fatalf("provider session = %#v, want resp-no-diagnostics", providerSession)
 	}
 }
 

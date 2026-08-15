@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -19,7 +20,7 @@ func TestExecuteProviderWithRetryCarriesSessionAndBoundsAttempts(t *testing.T) {
 		"provider temporarily unavailable",
 		nil,
 	)
-	providerErr.ProviderSession = &workers.ProviderSessionMetadata{ID: "provider-session-1"}
+	providerErr.Continuation = providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", ID: "provider-session-1"})
 
 	result, err := service.executeProviderWithRetry(
 		context.Background(),
@@ -86,22 +87,22 @@ func TestExecuteProviderWithRetryStopsAtMaximumAndHonorsCancellation(t *testing.
 	}
 }
 
-func TestProviderSessionForRetryPrefersErrorThenResult(t *testing.T) {
+func TestProviderContinuationForRetryPrefersErrorThenResult(t *testing.T) {
 	t.Parallel()
 
-	errorSession := &workers.ProviderSessionMetadata{ID: "error-session"}
-	resultSession := &workers.ProviderSessionMetadata{ID: "result-session"}
-	if got := providerSessionForRetry(
+	errorSession := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", ID: "error-session"})
+	resultSession := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", ID: "result-session"})
+	if got := providerContinuationForRetry(
 		workers.NewProviderErrorWithSession(workers.WorkFailureTypeThrottled, "busy", nil, errorSession),
-		workers.RunnerExecutionResult{ProviderSession: resultSession},
-	); got == nil || got.ID != "error-session" {
-		t.Fatalf("providerSessionForRetry(error, result) = %#v, want error session", got)
+		workers.RunnerExecutionResult{Continuation: resultSession},
+	); got == nil || got.ProviderSessionID != "error-session" {
+		t.Fatalf("providerContinuationForRetry(error, result) = %#v, want error continuation", got)
 	}
-	if got := providerSessionForRetry(nil, workers.RunnerExecutionResult{ProviderSession: resultSession}); got == nil || got.ID != "result-session" {
-		t.Fatalf("providerSessionForRetry(nil, result) = %#v, want result session", got)
+	if got := providerContinuationForRetry(nil, workers.RunnerExecutionResult{Continuation: resultSession}); got == nil || got.ProviderSessionID != "result-session" {
+		t.Fatalf("providerContinuationForRetry(nil, result) = %#v, want result continuation", got)
 	}
-	if got := providerSessionForRetry(nil, workers.RunnerExecutionResult{}); got != nil {
-		t.Fatalf("providerSessionForRetry(empty) = %#v, want nil", got)
+	if got := providerContinuationForRetry(nil, workers.RunnerExecutionResult{}); got != nil {
+		t.Fatalf("providerContinuationForRetry(empty) = %#v, want nil", got)
 	}
 }
 

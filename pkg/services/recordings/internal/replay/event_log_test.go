@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -431,7 +432,7 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 			1,
 			3,
 			"recorded provider output",
-			&workerexecution.ProviderSessionMetadata{
+			&providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "response_id",
 				ID:       "resp-no-diagnostics",
@@ -456,8 +457,9 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 	}
 
 	completion := reduced.Completions[0]
-	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-no-diagnostics" {
-		t.Fatalf("provider session = %#v, want resp-no-diagnostics", completion.result.ProviderSession)
+	providerSession := providers.SessionMetadataFromContinuation(completion.result.Continuation)
+	if providerSession == nil || providerSession.ID != "resp-no-diagnostics" {
+		t.Fatalf("provider session = %#v, want resp-no-diagnostics", providerSession)
 	}
 	if completion.result.Diagnostics != nil {
 		t.Fatalf("completion diagnostics = %#v, want nil", completion.result.Diagnostics)
@@ -526,7 +528,7 @@ func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 		1,
 		3,
 		"recorded provider output",
-		&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+		&providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
 		safeDiagnosticReductionFixture(),
 		"",
 	)
@@ -581,8 +583,9 @@ func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompl
 	if completion.result.Output != "recorded provider output" {
 		t.Fatalf("completion output = %q, want recorded provider output", completion.result.Output)
 	}
-	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-safe-123" {
-		t.Fatalf("provider session = %#v, want resp-safe-123", completion.result.ProviderSession)
+	providerSession := providers.SessionMetadataFromContinuation(completion.result.Continuation)
+	if providerSession == nil || providerSession.ID != "resp-safe-123" {
+		t.Fatalf("provider session = %#v, want resp-safe-123", providerSession)
 	}
 	if completion.result.FailureMetadata == nil || completion.result.FailureMetadata.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failure metadata = %#v, want throttled", completion.result.FailureMetadata)
@@ -804,7 +807,7 @@ func replayInferenceResponseEvent(
 	attempt int,
 	tick int,
 	response string,
-	providerSession *workerexecution.ProviderSessionMetadata,
+	providerSession *providers.SessionMetadata,
 	diagnostics *workerexecution.WorkDiagnostics,
 	errorClass string,
 ) factoryapi.FactoryEvent {

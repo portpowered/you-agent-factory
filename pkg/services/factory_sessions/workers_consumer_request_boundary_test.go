@@ -176,10 +176,11 @@ func runWorkersInferenceThroughRootProof(
 			fixture.model,
 		)
 	}
-	if inferResponse.ProviderSession == nil || inferResponse.ProviderSession.ID != "workers-root-boundary-session" {
+	inferSession := providers.SessionMetadataFromContinuation(inferResponse.Continuation)
+	if inferSession == nil || inferSession.ID != "workers-root-boundary-session" {
 		t.Fatalf(
 			"inference provider session = %#v, want workers-root-boundary-session",
-			inferResponse.ProviderSession,
+			inferSession,
 		)
 	}
 }
@@ -250,12 +251,8 @@ func (stub *workersRequestBoundaryStub) Execute(
 	return workers.InvocationResult{
 		Attempt: input.Attempt,
 		Response: workers.InferenceResponse{
-			Content: "workers-root-boundary",
-			ProviderSession: &workers.ProviderSessionMetadata{
-				Provider: "mock",
-				Kind:     "session_id",
-				ID:       "workers-root-boundary-session",
-			},
+			Content:      "workers-root-boundary",
+			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}),
 		},
 	}, nil
 }
@@ -266,12 +263,8 @@ func (stub *workersRequestBoundaryStub) Infer(
 ) (workers.InferenceResponse, error) {
 	stub.lastInference = request
 	return workers.InferenceResponse{
-		Content: "workers-root-boundary",
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "workers-root-boundary-session",
-		},
+		Content:      "workers-root-boundary",
+		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}),
 	}, nil
 }
 

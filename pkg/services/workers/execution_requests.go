@@ -212,16 +212,9 @@ type WorkstationExecutionRequest struct {
 	Worktree                    string                          `json:"worktree,omitempty"`
 	WorkingDirectory            string                          `json:"working_directory,omitempty"`
 	WorkingDirectoryAuthored    bool                            `json:"working_directory_authored,omitempty"`
-	// ResumeSession is the exact detached Providers-owned session identity a
-	// resumed Worker Session must continue. It is intentionally distinct from
-	// configuration's legacy SessionID: this value retains provider-specific
-	// kind and opaque identity, so a resumed attempt cannot reconstruct a
-	// reference from the selected runner or model.
-	ResumeSession *providers.SessionRef `json:"-"`
-	// Continuation is the canonical opaque Providers-owned continuation. The
-	// legacy ResumeSession field remains populated at compatibility boundaries,
-	// but provider-backed execution must prefer this value so the exact session
-	// kind and detached identity survive the Workers boundary unchanged.
+	// Continuation is the opaque Providers-owned continuation. Workers carries
+	// it across execution boundaries without reconstructing provider-session
+	// state or retaining a typed session object.
 	Continuation *ProviderContinuationRef `json:"-"`
 	// SkipPermissions is the invocation-effective worker policy for a Worker
 	// whose caller resolved it, rather than a workstation definition. A
@@ -266,13 +259,8 @@ type ProviderInferenceRequest struct {
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	WorkflowContext              *Context                        `json:"-"`
-	// ResumeSession carries an exact typed Providers reference for continuation
-	// attempts. When non-nil, the provider runner must call Providers.Continue
-	// with this value unchanged and must not select ordinary execution.
-	ResumeSession *providers.SessionRef `json:"-"`
-	// Continuation is the canonical opaque Providers-owned continuation. It is
-	// preferred over ResumeSession by provider invocation and is never decoded
-	// by Workers beyond the detached provider identity needed for routing.
+	// Continuation is the opaque Providers-owned continuation. Providers owns
+	// decoding it and deciding whether the referenced attempt can continue.
 	Continuation *ProviderContinuationRef `json:"-"`
 	// SkipPermissions is the invocation-effective worker policy. Construction
 	// resolves persisted configuration and invocation overrides before the
@@ -307,7 +295,6 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
-	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	return clone
@@ -323,20 +310,11 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.RequiredOptionalCapabilities = append([]RunnerOptionalCapability(nil), request.RequiredOptionalCapabilities...)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
-	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.TemporaryFiles = request.TemporaryFiles
 	clone.ExecutionLogger = request.ExecutionLogger
 	return clone
-}
-
-func cloneSessionRef(reference *providers.SessionRef) *providers.SessionRef {
-	if reference == nil {
-		return nil
-	}
-	cloned := reference.Clone()
-	return &cloned
 }
 
 func cloneContinuation(reference *ProviderContinuationRef) *ProviderContinuationRef {

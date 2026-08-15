@@ -156,9 +156,10 @@ func TestWorkstationExecutorPreservesResolvedContinuationReference(t *testing.T)
 		Kind:     providers.SessionIDKind,
 		ID:       "provider-session-1",
 	}
+	continuation := reference.ContinuationRef()
 
 	_, err := executor.ExecuteResolved(context.Background(), workerexecution.WorkstationExecutionRequest{
-		ResumeSession: &reference,
+		Continuation: &continuation,
 		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-resume",
 			TransitionID:    "transition-resume",
@@ -169,12 +170,12 @@ func TestWorkstationExecutorPreservesResolvedContinuationReference(t *testing.T)
 	if err != nil {
 		t.Fatalf("ExecuteResolved() error = %v", err)
 	}
-	if capture.dispatch.ResumeSession == nil || *capture.dispatch.ResumeSession != reference {
-		t.Fatalf("inner request ResumeSession = %#v, want %#v", capture.dispatch.ResumeSession, reference)
+	if capture.dispatch.Continuation == nil || *capture.dispatch.Continuation != continuation {
+		t.Fatalf("inner request Continuation = %#v, want %#v", capture.dispatch.Continuation, continuation)
 	}
-	reference.ID = "caller-mutated"
-	if capture.dispatch.ResumeSession.ID != "provider-session-1" {
-		t.Fatalf("inner request retained caller mutation: %#v", capture.dispatch.ResumeSession)
+	continuation.ProviderSessionID = "caller-mutated"
+	if capture.dispatch.Continuation.ProviderSessionID != "provider-session-1" {
+		t.Fatalf("inner request retained caller mutation: %#v", capture.dispatch.Continuation)
 	}
 }
 

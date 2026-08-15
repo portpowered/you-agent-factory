@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -182,8 +183,8 @@ func mutateRequest(request *workers.RunnerExecutionRequest) {
 
 func mutateResult(result *workers.RunnerExecutionResult) {
 	result.Content = "mutated"
-	if result.ProviderSession != nil {
-		result.ProviderSession.ID = "mutated"
+	if result.Continuation != nil {
+		result.Continuation.ProviderSessionID = "mutated"
 	}
 	if result.Diagnostics == nil {
 		return
@@ -215,13 +216,11 @@ var _ workers.Runner = (*InMemoryRunner)(nil)
 
 // NewInMemorySubject returns the external-effect-free foundation subject.
 func NewInMemorySubject() Subject {
+	reference := providers.SessionRef{Provider: "memory", Kind: "fixture", ID: "session-1"}
+	continuation := reference.ContinuationRef()
 	result := workers.RunnerExecutionResult{
-		Content: "fixture success",
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "memory",
-			Kind:     "fixture",
-			ID:       "session-1",
-		},
+		Content:      "fixture success",
+		Continuation: &continuation,
 		Diagnostics: &workers.WorkDiagnostics{
 			Provider: &workers.ProviderDiagnostic{
 				Provider:         "memory",
@@ -324,7 +323,10 @@ func (runner *InMemoryRunner) CapturedRequest() (
 
 func cloneResult(result workers.RunnerExecutionResult) workers.RunnerExecutionResult {
 	clone := result
-	clone.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
+	if result.Continuation != nil {
+		continuation := result.Continuation.Clone()
+		clone.Continuation = &continuation
+	}
 	clone.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
 }

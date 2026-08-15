@@ -293,8 +293,8 @@ func TestNormalizeProviderExecutionError_PreservesBoundedProviderSessionInspecti
 	if normalized.Diagnostics == nil || normalized.Diagnostics.Provider == nil {
 		t.Fatalf("normalized.Diagnostics = %#v, want provider diagnostics", normalized.Diagnostics)
 	}
-	if normalized.ProviderSession == nil || normalized.ProviderSession.ID != "rollout-resource-limit" {
-		t.Fatalf("normalized.ProviderSession = %#v, want stable provider session identity", normalized.ProviderSession)
+	if normalized.Continuation == nil || normalized.Continuation.ProviderSessionID != "rollout-resource-limit" {
+		t.Fatalf("normalized.Continuation = %#v, want stable provider session identity", normalized.Continuation)
 	}
 	metadata := normalized.Diagnostics.Provider.ResponseMetadata
 	if metadata[ProviderResponseMetadataFailureOperation] != "provider_session_ingestion" ||

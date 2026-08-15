@@ -19,6 +19,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func continuationFromProviderMetadata(metadata *providers.SessionMetadata) *providers.ContinuationRef {
+	return providers.ContinuationFromSessionMetadata(metadata)
+}
+
+func continuationFromProviderReference(reference providers.SessionRef) *providers.ContinuationRef {
+	continuation := reference.ContinuationRef()
+	return &continuation
+}
+
 func newService(
 	boundary workers.WorkstationPoolBoundary,
 	eventsAppender workersessionservice.EventsAppender,
@@ -485,14 +494,16 @@ func assertContinuationHandoff(
 	if handoff.Execution.UserMessage != request.FollowUpInput {
 		t.Fatalf("continuation input = %q, want %q", handoff.Execution.UserMessage, request.FollowUpInput)
 	}
-	if handoff.Execution.ResumeSession == nil || *handoff.Execution.ResumeSession != reference {
-		t.Fatalf("continuation ResumeSession = %#v, want exact %#v", handoff.Execution.ResumeSession, reference)
+	wantContinuation := reference.ContinuationRef()
+	if handoff.Execution.Continuation == nil || *handoff.Execution.Continuation != wantContinuation {
+		t.Fatalf("continuation Continuation = %#v, want exact %#v", handoff.Execution.Continuation, wantContinuation)
 	}
 	if source.Session.ProviderSessionAssociation == nil {
 		t.Fatal("source session has no provider association")
 	}
-	if handoff.Execution.ResumeSession == &source.Session.ProviderSessionAssociation.Reference {
-		t.Fatal("continuation ResumeSession shares source association storage")
+	source.Session.ProviderSessionAssociation.Reference.ID = "source-mutated"
+	if handoff.Execution.Continuation.ProviderSessionID != reference.ID {
+		t.Fatal("continuation shares source association storage")
 	}
 	if handoff.Execution.Dispatch.DispatchID == "dispatch-source" || handoff.Execution.Dispatch.DispatchID == "" {
 		t.Fatalf("continuation dispatch ID = %q, want a distinct non-empty identity", handoff.Execution.Dispatch.DispatchID)
@@ -672,7 +683,7 @@ func (b *continuationFailureBoundary) PublishWithAdmission(
 	admitted workers.WorkstationDispatchAdmissionFunc,
 	accept workers.WorkstationDispatchAcceptFunc,
 ) error {
-	if request.Execution.ResumeSession == nil {
+	if request.Execution.Continuation == nil {
 		return b.controlledBoundary.PublishWithAdmission(ctx, request, admitted, accept)
 	}
 	accept(context.Background(), request, workers.WorkstationDispatchResult{
@@ -789,13 +800,13 @@ func (b *continuationAdmissionBoundary) PublishWithAdmission(
 	accept workers.WorkstationDispatchAcceptFunc,
 ) error {
 	embeddedAdmission := admitted
-	if request.Execution.ResumeSession != nil {
+	if request.Execution.Continuation != nil {
 		embeddedAdmission = nil
 	}
 	if err := b.controlledBoundary.PublishWithAdmission(ctx, request, embeddedAdmission, accept); err != nil {
 		return err
 	}
-	if request.Execution.ResumeSession == nil || admitted == nil {
+	if request.Execution.Continuation == nil || admitted == nil {
 		if admitted != nil {
 			admitted()
 		}
@@ -919,11 +930,11 @@ func TestContinue_RejectsUnknownActiveAndUnassociatedSourcesWithoutSuccessor(t *
 
 func completedDispatchWithProviderSession(dispatchID string, reference providers.SessionRef) workers.WorkstationDispatchResult {
 	result := completedDispatch(dispatchID)
-	result.Result.ProviderSession = &workers.ProviderSessionMetadata{
+	result.Result.Continuation = continuationFromProviderMetadata(&providers.SessionMetadata{
 		Provider: reference.Provider.String(),
 		Kind:     reference.Kind,
 		ID:       reference.ID,
-	}
+	})
 	return result
 }
 

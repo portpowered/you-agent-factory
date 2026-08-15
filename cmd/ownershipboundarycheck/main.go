@@ -65,7 +65,7 @@ var deletionGates = map[string]string{
 // Workers ownership exception.
 var approvedPlatformLeafPorts = map[string]struct{}{
 	modulePath + "/pkg/services/providers/execution/inferencecontract":                                     {},
-	modulePath + "/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract": {},
+	modulePath + "/pkg/services/workers/providercompat/inferencecontract": {},
 }
 
 // approvedPlatformAdapterPorts records narrow source-to-owner exceptions for a

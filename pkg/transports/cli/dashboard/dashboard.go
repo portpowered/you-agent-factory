@@ -4,12 +4,14 @@ package dashboard
 
 import (
 	"fmt"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
 	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // SimpleDashboardHeader carries orchestration-neutral dashboard header facts
@@ -309,5 +311,5 @@ type dashboardProviderSessionView struct {
 	TransitionID    string
 	WorkstationName string
 	WorkItems       []interfaces.FactoryWorldWorkItemRef
-	ProviderSession *workerexecution.ProviderSessionMetadata
+	ProviderSession *providers.SessionMetadata
 }

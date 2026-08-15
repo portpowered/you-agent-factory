@@ -8,9 +8,11 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 )
 
 func TestFactoryRelationsFromRequest_PreservesRequestNameAndContextResolution(t *testing.T) {
@@ -128,7 +130,8 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 	response := "finished"
 	exitCode := 0
 	failureType := workerexecution.ScriptFailureTypeTimeout
-	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "session-1"}
+	providerSession := &providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "session-1"}
+	continuation := providers.ContinuationFromSessionMetadata(providerSession)
 	diagnostics := json.RawMessage(`{"provider":{"provider":"codex","model":"gpt-5"}}`)
 	events := []interfaces.FactoryEvent{
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceRequest, context, workerexecution.InferenceRequestEventPayload{
@@ -136,7 +139,7 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 		}),
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceResponse, context, workerexecution.InferenceResponseEventPayload{
 			Attempt: 2, InferenceRequestID: "inference-1", Outcome: workerexecution.InferenceOutcomeSucceeded,
-			Response: &response, DurationMillis: 1250, ExitCode: &exitCode, ProviderSession: providerSession, Diagnostics: diagnostics,
+			Response: &response, DurationMillis: 1250, ExitCode: &exitCode, Continuation: continuation, Diagnostics: diagnostics,
 		}),
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeScriptRequest, context, workerexecution.ScriptRequestEventPayload{
 			Attempt: 1, DispatchID: dispatchID, TransitionID: "review", ScriptRequestID: "script-1", Command: "go", Args: []string{"test", "./..."},
@@ -317,7 +320,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 		DurationMillis:  800,
 		TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-		ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+		ProviderSession: &providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 	})
 	inference := projectionReducerGeneratedEvent(
 		factoryapi.FactoryEventTypeInferenceResponse,
@@ -330,7 +333,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     700,
-			ProviderSession:    projectionReducerProviderSession(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
+			ProviderSession:    projectionReducerProviderSession(&providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
 		},
 	)
 
@@ -387,7 +390,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 
 func mustCanonicalProjectionEvent(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {
 	t.Helper()
-	canonicalEvent, err := interfaces.NewFactoryEvent(event)
+	canonicalEvent, err := factoryeventprojection.CanonicalFactoryEvent(event)
 	if err != nil {
 		t.Fatalf("convert projection event %q: %v", event.Type, err)
 	}
@@ -560,7 +563,7 @@ func projectionReducerGeneratedOutputWork(payload interfaces.WorkstationResponse
 	return works
 }
 
-func projectionReducerProviderSession(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func projectionReducerProviderSession(session *providers.SessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}

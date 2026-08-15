@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -55,7 +56,7 @@ func testFactoryWorldDispatchCompletion() interfaces.FactoryWorldDispatchComplet
 		}},
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 		TraceIDs:                 []string{"trace-1"},
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-1",

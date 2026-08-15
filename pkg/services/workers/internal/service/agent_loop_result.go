@@ -64,7 +64,7 @@ func normalizeDetachedDecisionEnvelope(
 			boundedDetachedDecisionEnvelopeMessage(parsed.Error),
 			nil,
 		)
-		failure.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
+		failure.Continuation = workers.CloneContinuationReference(result.Continuation)
 		failure.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
 		return result, failure
 	}

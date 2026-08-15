@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -570,11 +571,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 			TransitionID: "t1",
 			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "done",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "codex",
-				Kind:     "session_id",
-				ID:       "sess_codex_123",
-			},
+			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "sess_codex_123"}),
 		}},
 	}
 
@@ -596,7 +593,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 		t.Fatalf("completed output mutations = %#v, want one cloned output token", completed.OutputMutations)
 	}
 
-	snapshot.Results[0].ProviderSession.ID = "mutated-session"
+	snapshot.Results[0].Continuation.ProviderSessionID = "mutated-session"
 	snapshot.Dispatches["d-1"].ConsumedTokens[0].Color.Tags["owner"] = "mutated"
 	result.Mutations[0].NewToken.Color.Payload[0] = 'X'
 

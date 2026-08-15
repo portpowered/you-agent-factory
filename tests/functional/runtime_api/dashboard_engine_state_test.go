@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -35,7 +36,7 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	}
 	provider.respond(workerexecution.InferenceResponse{
 		Content: "COMPLETE",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-world-view-success",
@@ -50,7 +51,7 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 		Type:    workerexecution.WorkFailureTypePermanentBadRequest,
 		Message: "provider rejected dashboard world-view work",
 		Cause:   errors.New("provider rejected"),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-world-view-failed",

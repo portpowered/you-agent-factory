@@ -2,7 +2,6 @@ package replay
 
 import (
 	"encoding/json"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -250,7 +252,7 @@ func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			1,
 			2,
 			"completed",
-			&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+			&providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
 			unsafeReplayDiagnosticsFixture(),
 			"",
 		),

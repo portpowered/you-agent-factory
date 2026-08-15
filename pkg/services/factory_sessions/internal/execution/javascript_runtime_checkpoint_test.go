@@ -5,6 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -14,14 +21,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"os"
-	"path/filepath"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
@@ -465,17 +467,15 @@ func (p *resumeCoverageBlockingProvider) Execute(
 	p.mu.Unlock()
 
 	if call == 1 {
+		session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}
+		continuation := providers.ContinuationFromSessionMetadata(session)
 		response := workerexecution.InferenceResponse{
-			Content: `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "mock",
-				Kind:     "session_id",
-				ID:       "live-provider-session-1",
-			},
+			Content:      `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
+			Continuation: continuation,
 		}
 		return workerexecution.InvocationResult{
 			Response: response, Attempt: input.Attempt,
-			ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+			Continuation: workerexecution.CloneContinuationReference(response.Continuation),
 		}, nil
 	}
 
@@ -491,17 +491,15 @@ func (p *resumeCoverageBlockingProvider) Execute(
 		return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
 	}
 
+	session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}
+	continuation := providers.ContinuationFromSessionMetadata(session)
 	response := workerexecution.InferenceResponse{
-		Content: `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-2",
-		},
+		Content:      `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
+		Continuation: continuation,
 	}
 	return workerexecution.InvocationResult{
 		Response: response, Attempt: input.Attempt,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+		Continuation: workerexecution.CloneContinuationReference(response.Continuation),
 	}, nil
 }
 

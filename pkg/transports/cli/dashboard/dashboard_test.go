@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -189,7 +190,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 					WorkstationName: interfaces.SystemTimeExpiryTransitionID,
 					Outcome:         string(workerexecution.OutcomeFailed),
 					FailureDetail:   &workerexecution.FailureDetail{Reason: "expired", Message: "expired"},
-					ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
+					ProviderSession: providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
 				}},
 			},
 		},
@@ -350,7 +351,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
 					Outcome:         string(workerexecution.OutcomeFailed),
 					FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "provider unavailable"},
-					ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
+					ProviderSession: providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
 				}},
 			},
 		}

@@ -150,14 +150,14 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 	shapedContent, err := ae.canonicalInferenceOutput(resp.Content, workerDef, request.ModelOperation)
 	if err != nil {
 		return workerexecution.WorkResult{
-			DispatchID:      request.Dispatch.DispatchID,
-			TransitionID:    request.Dispatch.TransitionID,
-			Outcome:         workerexecution.OutcomeFailed,
-			Output:          resp.Content,
-			Error:           err.Error(),
-			ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
-			Diagnostics:     diagnostics,
-			Metrics:         agentWorkMetrics(start, retryCount, ae.clock),
+			DispatchID:   request.Dispatch.DispatchID,
+			TransitionID: request.Dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Output:       resp.Content,
+			Error:        err.Error(),
+			Continuation: cloneContinuation(resp.Continuation),
+			Diagnostics:  diagnostics,
+			Metrics:      agentWorkMetrics(start, retryCount, ae.clock),
 		}, nil
 	}
 	if shapedContent != "" {
@@ -291,7 +291,7 @@ func decisionEnvelopeWorkResult(
 		request.Dispatch.TransitionID,
 		resp.Content,
 	)
-	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.Continuation = cloneContinuation(resp.Continuation)
 	result.Diagnostics = mergeWorkDiagnostics(diagnostics, result.Diagnostics)
 	result.Metrics = agentWorkMetrics(start, retryCount, clock)
 	return result
@@ -312,7 +312,7 @@ func goalRoutingEnvelopeWorkResult(
 			request.Dispatch.TransitionID,
 			resp.Content,
 		)
-	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.Continuation = cloneContinuation(resp.Continuation)
 	result.Diagnostics = mergeWorkDiagnostics(diagnostics, result.Diagnostics)
 	result.Metrics = agentWorkMetrics(start, retryCount, clock)
 	return result
@@ -353,7 +353,7 @@ func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics
 		Outcome:         workerexecution.OutcomeFailed,
 		Error:           formatAgentProviderError(err),
 		FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadata),
-		ProviderSession: providerSessionFromError(providerErr),
+		Continuation:    continuationFromError(providerErr),
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount, clock),
 	}
@@ -383,9 +383,9 @@ func missingCompletionEvidenceWorkResult(
 			Family: workerexecution.WorkFailureFamilyTerminal,
 			Type:   workerexecution.WorkFailureTypeUnknown,
 		},
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
-		Diagnostics:     completionValidationDiagnostics(diagnostics, failureClassification),
-		Metrics:         agentWorkMetrics(start, retryCount, clock),
+		Continuation: cloneContinuation(resp.Continuation),
+		Diagnostics:  completionValidationDiagnostics(diagnostics, failureClassification),
+		Metrics:      agentWorkMetrics(start, retryCount, clock),
 	}
 }
 
@@ -404,7 +404,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 				Output:          resp.Content,
 				Error:           "structured output schema violation: " + parseErr.Error(),
 				FailureMetadata: structuredOutputSchemaViolationMetadata(),
-				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
+				Continuation:    cloneContinuation(resp.Continuation),
 				Diagnostics:     completionValidationDiagnostics(diagnostics, "missing_required_output"),
 				Metrics:         metrics,
 			}, nil
@@ -421,7 +421,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 				Output:          resp.Content,
 				Error:           "structured output verdict failed: " + verdictFailure,
 				FailureMetadata: structuredOutputFailureMetadata(),
-				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
+				Continuation:    cloneContinuation(resp.Continuation),
 				Diagnostics:     diagnostics,
 				Metrics:         metrics,
 			}, nil
@@ -435,7 +435,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 		Output:                  resp.Content,
 		StructuredResult:        structuredResult,
 		StructuredResultPresent: structuredResultPresent,
-		ProviderSession:         workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
+		Continuation:            cloneContinuation(resp.Continuation),
 		Diagnostics:             diagnostics,
 		Metrics:                 metrics,
 	}, nil
@@ -468,7 +468,6 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		ProcessEnvironment:           append([]string(nil), request.ProcessEnvironment...),
 		Worktree:                     request.Worktree,
 		WorkingDirectory:             request.WorkingDirectory,
-		ResumeSession:                cloneResumeSession(request.ResumeSession),
 		Continuation:                 cloneContinuation(request.Continuation),
 	}
 	if workerDef != nil {
@@ -492,14 +491,6 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		}
 	}
 	return req
-}
-
-func cloneResumeSession(reference *providers.SessionRef) *providers.SessionRef {
-	if reference == nil {
-		return nil
-	}
-	cloned := reference.Clone()
-	return &cloned
 }
 
 func cloneContinuation(reference *workerexecution.ProviderContinuationRef) *workerexecution.ProviderContinuationRef {
@@ -551,11 +542,11 @@ func inferenceWorkstationType(request workerexecution.WorkstationExecutionReques
 	return request.Dispatch.WorkstationName
 }
 
-func providerSessionFromError(providerErr *workerexecution.ProviderError) *workerexecution.ProviderSessionMetadata {
+func continuationFromError(providerErr *workerexecution.ProviderError) *workerexecution.ProviderContinuationRef {
 	if providerErr == nil {
 		return nil
 	}
-	return workerexecution.CloneProviderSessionMetadata(providerErr.ProviderSession)
+	return cloneContinuation(providerErr.Continuation)
 }
 
 func providerDiagnosticsFromError(providerErr *workerexecution.ProviderError) *workerexecution.WorkDiagnostics {
@@ -612,12 +603,12 @@ func (ae *AgentExecutor) inferWithRetry(
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
-		session := providerErr.ProviderSession
-		if session == nil {
-			session = result.ProviderSession
+		continuation := providerErr.Continuation
+		if continuation == nil {
+			continuation = result.Continuation
 		}
-		if session != nil && strings.TrimSpace(session.ID) != "" {
-			req.SessionID = strings.TrimSpace(session.ID)
+		if continuation != nil && strings.TrimSpace(continuation.ProviderSessionID) != "" {
+			req.SessionID = strings.TrimSpace(continuation.ProviderSessionID)
 			req.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
 				req.RequiredOptionalCapabilities,
 				workerexecution.RunnerOptionalCapabilitySessionResume,

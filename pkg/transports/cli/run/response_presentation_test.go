@@ -17,6 +17,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -231,9 +232,12 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 		4,
 		factorydefinitions.FactoryEventTypeInferenceResponse,
 		workerexecution.InferenceResponseEventPayload{
-			Diagnostics:     json.RawMessage(`{"schemaVersion":"agent-factory.response-event.v1","textDelta":"PRIVATE_PROVIDER_CHUNK_71f2"}`),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", ID: providerCanary},
-			Response:        &providerResponse,
+			Diagnostics: json.RawMessage(`{"schemaVersion":"agent-factory.response-event.v1","textDelta":"PRIVATE_PROVIDER_CHUNK_71f2"}`),
+			Continuation: func() *providers.ContinuationRef {
+				ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: providerCanary}.ContinuationRef()
+				return &ref
+			}(),
+			Response: &providerResponse,
 		},
 	))
 

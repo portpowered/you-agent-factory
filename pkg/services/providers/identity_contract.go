@@ -50,6 +50,73 @@ type SessionMetadata struct {
 	ID       string `json:"id,omitempty"`
 }
 
+// CloneSessionMetadata returns a detached provider-session identity
+// projection. Session storage and transcript state remain outside this value.
+func CloneSessionMetadata(session *SessionMetadata) *SessionMetadata {
+	if session == nil {
+		return nil
+	}
+	clone := *session
+	return &clone
+}
+
+// CanonicalProviderSessionProvider maps legacy provider command names onto the
+// stable provider identity used by persisted diagnostics and event projections.
+func CanonicalProviderSessionProvider(provider string) string {
+	trimmed := strings.TrimSpace(provider)
+	switch trimmed {
+	case "", "cursor":
+		return trimmed
+	case "agent", "cursor-agent", "cursor-cli":
+		return "cursor"
+	default:
+		return trimmed
+	}
+}
+
+// ContinuationFromSessionMetadata projects a detached session identity onto
+// the opaque continuation vocabulary used across Worker boundaries.
+func ContinuationFromSessionMetadata(session *SessionMetadata) *ContinuationRef {
+	if session == nil {
+		return nil
+	}
+	provider := CanonicalProviderSessionProvider(session.Provider)
+	if strings.TrimSpace(provider) == "" || strings.TrimSpace(session.ID) == "" {
+		return nil
+	}
+	continuation := ContinuationRef{
+		Provider:          provider,
+		Kind:              strings.TrimSpace(session.Kind),
+		ProviderSessionID: strings.TrimSpace(session.ID),
+		ExternalRef:       strings.TrimSpace(session.ID),
+	}.Normalize()
+	return &continuation
+}
+
+// SessionMetadataFromContinuation projects an opaque continuation onto the
+// detached identity shape required by canonical event and transport models.
+func SessionMetadataFromContinuation(reference *ContinuationRef) *SessionMetadata {
+	if reference == nil {
+		return nil
+	}
+	normalized := reference.Normalize()
+	if strings.TrimSpace(normalized.Provider) == "" {
+		return nil
+	}
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	if identity == "" {
+		return nil
+	}
+	return &SessionMetadata{
+		Provider: CanonicalProviderSessionProvider(normalized.Provider),
+		Kind:     normalized.Kind,
+		ID:       identity,
+	}
+}
+
 // Validate checks that the provider ID is non-empty after trimming.
 func (id ID) Validate() error {
 	if strings.TrimSpace(string(id)) == "" {
@@ -198,7 +265,7 @@ func (ref ContinuationRef) ToSessionRef() (SessionRef, error) {
 // exact session.
 func (ref SessionRef) ContinuationRef() ContinuationRef {
 	return ContinuationRef{
-		Provider:          ref.Provider.String(),
+		Provider:          CanonicalProviderSessionProvider(ref.Provider.String()),
 		Kind:              ref.Kind,
 		ProviderSessionID: ref.ID,
 		ExternalRef:       ref.ID,

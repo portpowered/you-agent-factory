@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factoryapi.FactoryEvent {
@@ -19,9 +20,11 @@ func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factor
 	canonical := history.CanonicalEvents()
 	generated := make([]factoryapi.FactoryEvent, len(canonical))
 	for index, event := range canonical {
-		if err := event.Decode(&generated[index]); err != nil {
-			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		mapped, err := apisurface.FactoryEventToAPI(event)
+		if err != nil {
+			t.Fatalf("map canonical Factory event %q for compatibility assertion: %v", event.Id, err)
 		}
+		generated[index] = mapped
 	}
 	return generated
 }

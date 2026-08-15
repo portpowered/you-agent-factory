@@ -248,7 +248,10 @@ func assertReplayDirectDiagnostics(t *testing.T) {
 		completion: &replayCompletion{
 			result: workers.WorkResult{
 				Outcome: workers.OutcomeAccepted, Output: "direct provider output",
-				ProviderSession: &workers.ProviderSessionMetadata{Provider: "claude", Kind: "thread", ID: "direct-session"},
+				Continuation: func() *providers.ContinuationRef {
+					ref := providers.SessionRef{Provider: "claude", Kind: "thread", ID: "direct-session"}.ContinuationRef()
+					return &ref
+				}(),
 			},
 			diagnostics: &workers.WorkDiagnostics{
 				Provider: &workers.ProviderDiagnostic{ResponseMetadata: map[string]string{"provider": "claude"}},

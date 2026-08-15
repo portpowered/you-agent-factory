@@ -760,7 +760,8 @@ func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
 	if !strings.Contains(resp.Content, "live:agent-run-fake-child") {
 		t.Fatalf("content = %q, want live child smoke payload", resp.Content)
 	}
-	if resp.ProviderSession == nil || resp.ProviderSession.ID != "live-provider-session-1" {
-		t.Fatalf("provider session = %#v, want live-provider-session-1", resp.ProviderSession)
+	providerSession := providers.SessionMetadataFromContinuation(resp.Continuation)
+	if providerSession == nil || providerSession.ID != "live-provider-session-1" {
+		t.Fatalf("provider session = %#v, want live-provider-session-1", providerSession)
 	}
 }

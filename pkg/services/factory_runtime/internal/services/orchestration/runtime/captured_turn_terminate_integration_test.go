@@ -248,8 +248,14 @@ func assertContinuationRequest(
 	wantTurnID string,
 ) {
 	t.Helper()
+	continuation := request.Execution.Continuation
+	var gotReference providers.SessionRef
+	var err error
+	if continuation != nil {
+		gotReference, err = continuation.ToSessionRef()
+	}
 	if request.WorkstationName != "review" || request.Execution.Dispatch.Execution.RequestID != wantTurnID ||
-		request.Execution.ResumeSession == nil || *request.Execution.ResumeSession != wantReference {
+		continuation == nil || err != nil || gotReference != wantReference {
 		t.Fatalf("continuation request = %#v, want review/%q and exact reference %#v", request, wantTurnID, wantReference)
 	}
 }
@@ -520,7 +526,7 @@ func (e *continuationFanOutExecution) DispatchWorkstationWithAdmission(
 	request workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
 ) (workers.WorkstationDispatchResult, error) {
-	if request.Execution.ResumeSession != nil {
+	if request.Execution.Continuation != nil {
 		return e.dispatchContinuation(request, admitted)
 	}
 	return e.dispatchInitial(request, admitted)
@@ -660,11 +666,10 @@ func completedContinuation(dispatchID string, reference providers.SessionRef) co
 		Result: workers.WorkResult{
 			DispatchID: dispatchID,
 			Outcome:    workers.OutcomeAccepted,
-			ProviderSession: &workers.ProviderSessionMetadata{
-				Provider: reference.Provider.String(),
-				Kind:     reference.Kind,
-				ID:       reference.ID,
-			},
+			Continuation: func() *providers.ContinuationRef {
+				continuation := reference.ContinuationRef()
+				return &continuation
+			}(),
 		},
 	}}
 }

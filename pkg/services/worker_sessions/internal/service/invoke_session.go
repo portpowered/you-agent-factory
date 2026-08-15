@@ -456,18 +456,7 @@ func openingSessionContinuation(request workers.WorkstationExecutionRequest) *wo
 		}
 		return nil
 	}
-	if request.ResumeSession == nil {
-		return nil
-	}
-	continuation := workers.SessionContinuation{
-		Provider: string(request.ResumeSession.Provider),
-		Kind:     request.ResumeSession.Kind,
-		ID:       request.ResumeSession.ID,
-	}
-	if continuation.Provider == "" && continuation.Kind == "" && continuation.ID == "" {
-		return nil
-	}
-	return &continuation
+	return nil
 }
 
 // providerIdentityForExecution returns only a provider identity already
@@ -485,9 +474,6 @@ func providerIdentityForExecution(request workers.WorkstationExecutionRequest) s
 	}
 	if request.Continuation != nil {
 		return strings.TrimSpace(request.Continuation.Provider)
-	}
-	if request.ResumeSession != nil {
-		return strings.TrimSpace(string(request.ResumeSession.Provider))
 	}
 	return ""
 }

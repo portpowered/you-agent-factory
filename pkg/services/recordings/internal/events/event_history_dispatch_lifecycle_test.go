@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -83,7 +84,7 @@ func recordDispatchLifecycleSequence(
 		Reason:           "provider disconnected",
 		ObservedStatus:   interfaces.FactoryDispatchStatusFailed,
 		RetryPlanned:     true,
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: "cursor", Kind: "session_id", ID: "provider-session-1",
 		},
 		CheckpointRef: &interfaces.FactorySessionJavaScriptCheckpointEventRef{

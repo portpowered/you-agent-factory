@@ -803,7 +803,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider/inference_provider_test.go",
+      "filePath": "pkg/services/workers/providercompat/inference_provider_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -812,7 +812,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider/inference_provider_test.go",
+      "filePath": "pkg/services/workers/providercompat/inference_provider_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -821,7 +821,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider/inference_provider_test_helpers_test.go",
+      "filePath": "pkg/services/workers/providercompat/inference_provider_test_helpers_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -830,7 +830,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider/inference_provider_test_helpers_test.go",
+      "filePath": "pkg/services/workers/providercompat/inference_provider_test_helpers_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -839,7 +839,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider/provider_behavior_test.go",
+      "filePath": "pkg/services/workers/providercompat/provider_behavior_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -848,7 +848,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider/provider_behavior_test.go",
+      "filePath": "pkg/services/workers/providercompat/provider_behavior_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",

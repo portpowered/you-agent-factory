@@ -290,19 +290,16 @@ func (s *Service) executeProviderWithRetry(
 			return result, err
 		}
 
-		if session := providerSessionForRetry(providerErr, result); session != nil {
+		if continuation := providerContinuationForRetry(providerErr, result); continuation != nil {
 			if request.Continuation != nil {
-				continuation := workers.ProviderContinuationRef{
-					Provider:          strings.TrimSpace(session.Provider),
-					Kind:              strings.TrimSpace(session.Kind),
-					ProviderSessionID: strings.TrimSpace(session.ID),
-					ExternalRef:       strings.TrimSpace(session.ID),
-				}
-				request.Continuation = &continuation
-				request.ResumeSession = nil
+				request.Continuation = workers.CloneContinuationReference(continuation)
 				request.SessionID = ""
 			} else {
-				request.SessionID = strings.TrimSpace(session.ID)
+				normalized := continuation.Normalize()
+				request.SessionID = strings.TrimSpace(normalized.ProviderSessionID)
+				if request.SessionID == "" {
+					request.SessionID = strings.TrimSpace(normalized.ExternalRef)
+				}
 			}
 			request.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
 				request.RequiredOptionalCapabilities,
@@ -322,16 +319,15 @@ func retryableProviderFailure(providerErr *workers.ProviderError) bool {
 	return workers.WorkFailureDecisionFromProviderError(providerErr).Retryable
 }
 
-func providerSessionForRetry(
+func providerContinuationForRetry(
 	providerErr *workers.ProviderError,
 	result workers.RunnerExecutionResult,
-) *workers.ProviderSessionMetadata {
-	if providerErr != nil && providerErr.ProviderSession != nil &&
-		strings.TrimSpace(providerErr.ProviderSession.ID) != "" {
-		return workers.CloneProviderSessionMetadata(providerErr.ProviderSession)
+) *workers.ProviderContinuationRef {
+	if providerErr != nil && providerErr.Continuation != nil {
+		return workers.CloneContinuationReference(providerErr.Continuation)
 	}
-	if result.ProviderSession != nil && strings.TrimSpace(result.ProviderSession.ID) != "" {
-		return workers.CloneProviderSessionMetadata(result.ProviderSession)
+	if result.Continuation != nil {
+		return workers.CloneContinuationReference(result.Continuation)
 	}
 	return nil
 }

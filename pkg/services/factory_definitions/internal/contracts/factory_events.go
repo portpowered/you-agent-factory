@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -289,7 +290,7 @@ type DispatchInterruptedEventPayload struct {
 	CheckpointRef      *FactorySessionJavaScriptCheckpointEventRef `json:"checkpointRef,omitempty"`
 	InterruptedAt      time.Time                                   `json:"interruptedAt"`
 	ObservedStatus     FactoryDispatchStatus                       `json:"observedStatus"`
-	ProviderSessionRef *workerexecution.ProviderSessionMetadata    `json:"providerSessionRef,omitempty"`
+	ProviderSessionRef *providers.SessionMetadata                  `json:"providerSessionRef,omitempty"`
 	Reason             string                                      `json:"reason"`
 	RetryPlanned       bool                                        `json:"retryPlanned"`
 }
@@ -663,18 +664,18 @@ type WorkstationRequestPayload struct {
 
 // WorkstationResponsePayload describes the result and outputs of a dispatch.
 type WorkstationResponsePayload struct {
-	DispatchID      string                                   `json:"dispatch_id"`
-	TransitionID    string                                   `json:"transition_id"`
-	Workstation     FactoryWorkstationRef                    `json:"workstation"`
-	Result          WorkstationResult                        `json:"result"`
-	DurationMillis  int64                                    `json:"duration_millis"`
-	Outputs         []WorkstationOutput                      `json:"outputs,omitempty"`
-	OutputWork      []work.FactoryWorkItem                   `json:"output_work,omitempty"`
-	OutputResources []FactoryResourceUnit                    `json:"output_resources,omitempty"`
-	TraceData       *FactoryTraceData                        `json:"trace_data,omitempty"`
-	ProviderSession *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics     *workerdiagnostics.SafeWorkDiagnostics   `json:"diagnostics,omitempty"`
-	TerminalWork    *FactoryTerminalWork                     `json:"terminal_work,omitempty"`
+	DispatchID      string                                 `json:"dispatch_id"`
+	TransitionID    string                                 `json:"transition_id"`
+	Workstation     FactoryWorkstationRef                  `json:"workstation"`
+	Result          WorkstationResult                      `json:"result"`
+	DurationMillis  int64                                  `json:"duration_millis"`
+	Outputs         []WorkstationOutput                    `json:"outputs,omitempty"`
+	OutputWork      []work.FactoryWorkItem                 `json:"output_work,omitempty"`
+	OutputResources []FactoryResourceUnit                  `json:"output_resources,omitempty"`
+	TraceData       *FactoryTraceData                      `json:"trace_data,omitempty"`
+	ProviderSession *providers.SessionMetadata             `json:"provider_session,omitempty"`
+	Diagnostics     *workerdiagnostics.SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+	TerminalWork    *FactoryTerminalWork                   `json:"terminal_work,omitempty"`
 }
 
 // DispatchConsumedWorkRef identifies one work item consumed by a dispatch.

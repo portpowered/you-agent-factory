@@ -111,11 +111,11 @@ func (e *ProviderInvocationExecutor) Execute(
 		outcome = result.Response.Outcome
 	}
 	return attachStructuredResult(request, workerexecution.WorkResult{
-		DispatchID:      request.Dispatch.DispatchID,
-		TransitionID:    request.Dispatch.TransitionID,
-		Outcome:         outcome,
-		Output:          result.Response.Content,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		DispatchID:   request.Dispatch.DispatchID,
+		TransitionID: request.Dispatch.TransitionID,
+		Outcome:      outcome,
+		Output:       result.Response.Content,
+		Continuation: cloneContinuation(result.Continuation),
 	}), nil
 }
 
@@ -153,7 +153,6 @@ func providerInvocationRequest(
 		Model:              request.Model,
 		ModelProvider:      request.ModelProvider,
 		ReasoningEffort:    request.ReasoningEffort,
-		ResumeSession:      cloneResumeSession(request.ResumeSession),
 		Continuation:       cloneContinuation(request.Continuation),
 		SkipPermissions:    request.SkipPermissions,
 	}
@@ -172,7 +171,7 @@ func providerInvocationFailure(
 		TransitionID:    request.Dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeFailed,
 		FailureMetadata: result.FailureMetadata,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		Continuation:    cloneContinuation(result.Continuation),
 	}
 	if result.FailureDetail != nil {
 		failure.Error = result.FailureDetail.Message

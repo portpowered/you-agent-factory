@@ -5,6 +5,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -167,7 +168,7 @@ func (r *factoryWorldReducer) applyInferenceResponse(event interfaces.FactoryEve
 			Message: payload.FailureDetail.Message,
 		}
 	}
-	current.ProviderSession = workerexecution.CloneProviderSessionMetadata(payload.ProviderSession)
+	current.ProviderSession = providers.SessionMetadataFromContinuation(payload.Continuation)
 	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload.Diagnostics)
 	if err != nil {
 		return err
@@ -192,7 +193,7 @@ func (r *factoryWorldReducer) applyModelResponse(event interfaces.FactoryEvent, 
 	current.Outcome = string(payload.Outcome)
 	current.Response = stringValue(payload.OutputPreview)
 	current.DurationMillis = payload.DurationMillis
-	current.ProviderSession = workerexecution.CloneProviderSessionMetadata(payload.ProviderSession)
+	current.ProviderSession = providers.SessionMetadataFromContinuation(payload.Continuation)
 	current.FailureDetail = workerexecution.CloneFailureDetail(payload.FailureDetail)
 	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload.Diagnostics)
 	if err != nil {
@@ -464,7 +465,7 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		TransitionID:             payload.TransitionID,
 		WorkstationName:          dispatch.Workstation.Name,
 		Outcome:                  string(payload.Outcome),
-		ProviderSession:          *workerexecution.CloneProviderSessionMetadata(completion.ProviderSession),
+		ProviderSession:          *providers.CloneSessionMetadata(completion.ProviderSession),
 		WorkItemIDs:              completion.WorkItemIDs,
 		ConsumedInputs:           interfaces.CloneWorkstationInputs(completion.ConsumedInputs),
 		CurrentChainingTraceID:   completion.CurrentChainingTraceID,
@@ -591,11 +592,11 @@ func (r *factoryWorldReducer) latestInferenceAttemptForDispatch(dispatchID strin
 	return latest
 }
 
-func latestInferenceProviderSession(attempt *interfaces.FactoryWorldInferenceAttempt) *workerexecution.ProviderSessionMetadata {
+func latestInferenceProviderSession(attempt *interfaces.FactoryWorldInferenceAttempt) *providers.SessionMetadata {
 	if attempt == nil {
 		return nil
 	}
-	return workerexecution.CloneProviderSessionMetadata(attempt.ProviderSession)
+	return providers.CloneSessionMetadata(attempt.ProviderSession)
 }
 
 func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *workerdiagnostics.SafeWorkDiagnostics {

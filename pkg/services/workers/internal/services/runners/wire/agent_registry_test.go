@@ -75,7 +75,7 @@ func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing
 	assertAgentProviderRequest(t, fake.Request())
 	assertAgentResult(t, result)
 
-	result.ProviderSession.ID = "caller-mutated"
+	result.Continuation.ProviderSessionID = "caller-mutated"
 	result.Diagnostics.Metadata["fixture"] = "caller-mutated"
 	result.Diagnostics.Provider.ResponseMetadata["fixture"] = "caller-mutated"
 	if fake.result.SessionRef.ID != "provider-session-1" ||
@@ -340,11 +340,11 @@ func agentRequest() workers.RunnerExecutionRequest {
 func expectedAgentResult() workers.RunnerExecutionResult {
 	return workers.RunnerExecutionResult{
 		Content: "fixture output",
-		ProviderSession: &workers.ProviderSessionMetadata{
+		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
 			Provider: string(providers.IDCodex),
 			Kind:     providers.SessionIDKind,
 			ID:       "provider-session-1",
-		},
+		}),
 		Diagnostics: &workers.WorkDiagnostics{
 			Provider: &workers.ProviderDiagnostic{
 				Provider: string(providers.IDCodex),

@@ -198,12 +198,12 @@ func (s *SideEffects) Execute(ctx context.Context, request providers.ExecuteRequ
 		return providers.ExecuteResult{}, replayExecuteFailure(err)
 	}
 	result := providers.ExecuteResult{Content: response.Content}
-	if response.ProviderSession != nil {
-		result.SessionRef = &providers.SessionRef{
-			Provider: providers.ID(response.ProviderSession.Provider),
-			Kind:     response.ProviderSession.Kind,
-			ID:       response.ProviderSession.ID,
+	if response.Continuation != nil {
+		reference, err := response.Continuation.ToSessionRef()
+		if err != nil {
+			return providers.ExecuteResult{}, replayExecuteFailure(err)
 		}
+		result.SessionRef = &reference
 	}
 	if response.Diagnostics != nil {
 		metadata := cloneStringMap(response.Diagnostics.Metadata)
@@ -454,10 +454,18 @@ func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInf
 	}
 
 	return workerexecution.InferenceResponse{
-		Content:         result.Output,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
-		Diagnostics:     diagnostics,
+		Content:      result.Output,
+		Continuation: cloneReplayContinuation(result.Continuation),
+		Diagnostics:  diagnostics,
 	}, nil
+}
+
+func cloneReplayContinuation(reference *providers.ContinuationRef) *providers.ContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	clone := reference.Clone()
+	return &clone
 }
 
 // Run implements workers.CommandRunner by returning the recorded script command

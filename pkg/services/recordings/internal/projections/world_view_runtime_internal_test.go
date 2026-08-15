@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -404,13 +405,13 @@ func buildWorldViewProviderSessions() []interfaces.FactoryWorldProviderSessionRe
 			TransitionID:    "t-review",
 			WorkItemIDs:     []string{"work-active"},
 			ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
-			ProviderSession: workerexecution.ProviderSessionMetadata{ID: "provider-session"},
+			ProviderSession: providers.SessionMetadata{ID: "provider-session"},
 		},
 		{
 			DispatchID:      "dispatch-provider-system",
 			TransitionID:    interfaces.SystemTimeExpiryTransitionID,
 			WorkItemIDs:     []string{"time-work"},
-			ProviderSession: workerexecution.ProviderSessionMetadata{ID: "provider-system"},
+			ProviderSession: providers.SessionMetadata{ID: "provider-system"},
 		},
 	}
 }

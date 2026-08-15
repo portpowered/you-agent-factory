@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -172,7 +173,7 @@ func (r *Bundle) runtimeWorkerDefinition(workerName string) (*interfaces.Factory
 }
 
 func normalizedRuntimeMetricProvider(provider string) string {
-	return workerexecution.CanonicalProviderSessionProvider(strings.TrimSpace(provider))
+	return providers.CanonicalProviderSessionProvider(strings.TrimSpace(provider))
 }
 
 func providerMetricProvider(diagnostics *workerexecution.WorkDiagnostics, workerDef *interfaces.FactoryWorkerConfig) string {

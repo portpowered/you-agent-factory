@@ -13,6 +13,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -63,10 +64,10 @@ func withInferenceResponseDiagnostics(base *workerexecution.WorkDiagnostics, res
 	}
 	diagnostics.Provider.ResponseMetadata["content_bytes"] = fmt.Sprintf("%d", len(resp.Content))
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
-	if resp.ProviderSession != nil {
-		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = workerexecution.CanonicalProviderSessionProvider(resp.ProviderSession.Provider)
-		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = resp.ProviderSession.Kind
-		diagnostics.Provider.ResponseMetadata["provider_session_id"] = resp.ProviderSession.ID
+	if session := providers.SessionMetadataFromContinuation(resp.Continuation); session != nil {
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = providers.CanonicalProviderSessionProvider(session.Provider)
+		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = session.Kind
+		diagnostics.Provider.ResponseMetadata["provider_session_id"] = session.ID
 	}
 	return diagnostics
 }

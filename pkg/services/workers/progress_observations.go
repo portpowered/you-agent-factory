@@ -39,12 +39,9 @@ type ProgressFragment struct {
 	// intentionally independent from ProviderSessionReference: a provider may
 	// author progress without exposing a resumable native session identity.
 	Provider string
-	// ProviderSessionReference is the exact detached typed reference returned
-	// by Providers for this attempt. ProviderSessionRef remains the
-	// response-stream metadata projection; Worker Sessions must use this field
-	// when it associates a resumable execution before forwarding output.
-	ProviderSessionReference       *providers.SessionRef
-	ProviderSessionRef             *providers.SessionMetadata
+	// Continuation is the opaque provider-owned identity used to associate a
+	// resumable execution before forwarding output.
+	Continuation                   *providers.ContinuationRef
 	ExternalEventType              string
 	Metadata                       map[string]string
 	CanonicalDraft                 any
@@ -54,9 +51,9 @@ type ProgressFragment struct {
 // ProgressPublisher receives transient Worker observations.
 type ProgressPublisher func(ProgressFragment)
 
-// CloneProviderSessionReference returns a detached copy of the exact typed
-// Provider Session reference carried by a Workers progress fragment.
-func CloneProviderSessionReference(reference *providers.SessionRef) *providers.SessionRef {
+// CloneContinuationReference returns a detached copy of the opaque provider
+// continuation carried by a Workers progress fragment.
+func CloneContinuationReference(reference *providers.ContinuationRef) *providers.ContinuationRef {
 	if reference == nil {
 		return nil
 	}

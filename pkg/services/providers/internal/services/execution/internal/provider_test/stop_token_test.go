@@ -3,7 +3,7 @@ package provider_test
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
+	"github.com/portpowered/infinite-you/pkg/services/workers/providercompat"
 )
 
 func TestContainsStopToken_Found(t *testing.T) {

@@ -161,17 +161,17 @@ var workersCommittedOwnerPackageMappingCases = []committedOwnerPackageMappingCas
 		},
 	},
 	{
-		path: "pkg/services/providers/internal/services/execution/internal/provider/registry",
+		path: "pkg/services/workers/providercompat/registry",
 		want: PackageMapping{
-			PackagePath: "pkg/services/providers/internal/services/execution/internal/provider/registry",
+			PackagePath: "pkg/services/workers/providercompat/registry",
 			Disposition: DispositionMove,
 			Destination: "providers/internal/services/catalog",
 		},
 	},
 	{
-		path: "pkg/services/providers/internal/services/execution/internal/provider_test",
+		path: "pkg/services/workers/providercompat_test",
 		want: PackageMapping{
-			PackagePath: "pkg/services/providers/internal/services/execution/internal/provider_test",
+			PackagePath: "pkg/services/workers/providercompat_test",
 			Disposition: DispositionMove,
 			Destination: "providers/internal/services/execution",
 		},

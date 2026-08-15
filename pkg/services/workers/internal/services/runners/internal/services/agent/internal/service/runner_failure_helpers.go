@@ -15,7 +15,7 @@ func canceledProviderError(cause error, result workers.RunnerExecutionResult) *w
 		agentCanceledFailureMessage,
 		cause,
 	)
-	normalized.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
+	normalized.Continuation = cloneContinuation(result.Continuation)
 	normalized.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
 	return normalized
 }

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestExecutionServiceAndHelperNormalization(t *testing.T) {
@@ -80,8 +82,9 @@ func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SmokeLiveChildProvider().Infer: %v", err)
 	}
-	if response.ProviderSession == nil || response.ProviderSession.ID == "" {
-		t.Fatalf("provider session = %#v, want stable session metadata", response.ProviderSession)
+	providerSession := providers.SessionMetadataFromContinuation(response.Continuation)
+	if providerSession == nil || providerSession.ID == "" {
+		t.Fatalf("provider session = %#v, want stable session metadata", providerSession)
 	}
 }
 
