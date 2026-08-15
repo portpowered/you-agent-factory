@@ -89,6 +89,119 @@ func TestProject_FullProjectionOmitsNilDispatch(t *testing.T) {
 	}
 }
 
+func TestProject_ExcludesObservedDispatchResponseFromInFlightProjection(t *testing.T) {
+	snapshot := sampleRootObservationSnapshot()
+	snapshot.DispatchHistory = append(snapshot.DispatchHistory, interfaces.CompletedDispatch{DispatchID: "d1"})
+
+	full := Project(snapshot, factory.ObservationScopeFull)
+	if full.Progress.InFlightDispatchCount != 0 {
+		t.Fatalf("progress in-flight count = %d, want 0 after observed response", full.Progress.InFlightDispatchCount)
+	}
+	if len(full.InFlightDispatches) != 0 {
+		t.Fatalf("in-flight dispatches = %#v, want observed response excluded", full.InFlightDispatches)
+	}
+}
+
+func TestProject_UsesMapKeyAndObservedResultIDs(t *testing.T) {
+	snapshot := &legacysnapshot.Snapshot{
+		InFlightCount: 2,
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"fallback-dispatch": {
+				WorkstationName: "fallback-desk",
+				ConsumedTokens: []workerexecution.Token{
+					{Color: workerexecution.Color{WorkID: "work-fallback"}},
+				},
+			},
+			"observed-dispatch": {
+				DispatchID: "observed-dispatch",
+			},
+		},
+		Results: []workerexecution.WorkResult{
+			{DispatchID: "observed-dispatch"},
+			{DispatchID: ""},
+		},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			{DispatchID: ""},
+		},
+	}
+
+	full := Project(snapshot, factory.ObservationScopeFull)
+	if full.Progress.InFlightDispatchCount != 1 {
+		t.Fatalf("progress in-flight count = %d, want 1", full.Progress.InFlightDispatchCount)
+	}
+	if len(full.InFlightDispatches) != 1 {
+		t.Fatalf("in-flight dispatches = %#v, want one fallback dispatch", full.InFlightDispatches)
+	}
+	if got := full.InFlightDispatches[0]; got.DispatchID != "fallback-dispatch" || got.WorkstationName != "fallback-desk" || len(got.WorkIDs) != 1 || got.WorkIDs[0] != "work-fallback" {
+		t.Fatalf("fallback dispatch = %#v, want map-key identity and work", got)
+	}
+	if len(full.Results) != 1 || full.Results[0].DispatchID != "" {
+		t.Fatalf("results = %#v, want empty-ID history result", full.Results)
+	}
+}
+
+func TestReconcileInFlightDispatchCount(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		reportedCount int
+		activeIDs     map[string]struct{}
+		completedIDs  []string
+		wantCount     int
+	}{
+		{
+			name:          "active dispatch",
+			reportedCount: 1,
+			activeIDs:     map[string]struct{}{"dispatch-active": {}},
+			wantCount:     1,
+		},
+		{
+			name:          "backing off after terminal response",
+			reportedCount: 1,
+			activeIDs:     map[string]struct{}{"dispatch-throttled": {}},
+			completedIDs:  []string{"dispatch-throttled"},
+			wantCount:     0,
+		},
+		{
+			name:          "quiescent",
+			reportedCount: 0,
+			wantCount:     0,
+		},
+		{
+			name:          "retained count without active dispatch",
+			reportedCount: 1,
+			completedIDs:  []string{"dispatch-throttled"},
+			wantCount:     0,
+		},
+		{
+			name:          "unmatched response stays conservative",
+			reportedCount: 1,
+			activeIDs:     map[string]struct{}{"dispatch-active": {}},
+			completedIDs:  []string{"dispatch-unknown"},
+			wantCount:     1,
+		},
+		{
+			name:          "result and history do not double count one dispatch",
+			reportedCount: 2,
+			activeIDs: map[string]struct{}{
+				"dispatch-throttled": {},
+				"dispatch-active":    {},
+			},
+			completedIDs: []string{"dispatch-throttled", "dispatch-throttled"},
+			wantCount:    1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reconcileInFlightDispatchCount(test.reportedCount, test.activeIDs, test.completedIDs); got != test.wantCount {
+				t.Fatalf("reconcileInFlightDispatchCount() = %d, want %d", got, test.wantCount)
+			}
+		})
+	}
+}
+
 func TestProject_ScopeFilters(t *testing.T) {
 	snap := sampleRootObservationSnapshot()
 

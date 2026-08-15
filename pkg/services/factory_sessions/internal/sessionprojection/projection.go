@@ -181,9 +181,66 @@ func projectedSessionProgress(ctx ProjectionContext) RuntimeProgress {
 	return RuntimeProgress{
 		FactoryState:  projectedSessionFactoryState(ctx),
 		Categories:    categories,
-		InFlightCount: ctx.Snapshot.InFlightCount,
+		InFlightCount: projectedSnapshotInFlightDispatchCount(ctx.Snapshot),
 		TotalTokens:   countProjectionTokens(&ctx.Snapshot.Marking),
 	}
+}
+
+func projectedSnapshotInFlightDispatchCount(
+	snapshot *interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet],
+) int {
+	if snapshot == nil {
+		return 0
+	}
+	active := make(map[string]struct{}, len(snapshot.Dispatches))
+	for mapKey, entry := range snapshot.Dispatches {
+		if entry == nil {
+			continue
+		}
+		dispatchID := entry.DispatchID
+		if dispatchID == "" {
+			dispatchID = mapKey
+		}
+		active[dispatchID] = struct{}{}
+	}
+	completed := make([]string, 0, len(snapshot.Results)+len(snapshot.DispatchHistory))
+	for _, result := range snapshot.Results {
+		if result.DispatchID != "" {
+			completed = append(completed, result.DispatchID)
+		}
+	}
+	for _, dispatch := range snapshot.DispatchHistory {
+		if dispatch.DispatchID != "" {
+			completed = append(completed, dispatch.DispatchID)
+		}
+	}
+	return reconcileInFlightDispatchCount(snapshot.InFlightCount, active, completed)
+}
+
+func reconcileInFlightDispatchCount(
+	reportedCount int,
+	activeDispatchIDs map[string]struct{},
+	completedDispatchIDs []string,
+) int {
+	if reportedCount <= 0 || len(activeDispatchIDs) == 0 {
+		return 0
+	}
+
+	completed := 0
+	seen := make(map[string]struct{}, len(completedDispatchIDs))
+	for _, dispatchID := range completedDispatchIDs {
+		if _, alreadySeen := seen[dispatchID]; alreadySeen {
+			continue
+		}
+		seen[dispatchID] = struct{}{}
+		if _, active := activeDispatchIDs[dispatchID]; active {
+			completed++
+		}
+	}
+	if completed >= reportedCount {
+		return 0
+	}
+	return reportedCount - completed
 }
 
 func projectedSessionUsage(ctx ProjectionContext) RuntimeUsage {

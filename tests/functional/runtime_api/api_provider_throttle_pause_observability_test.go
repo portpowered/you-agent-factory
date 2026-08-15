@@ -2,6 +2,8 @@ package runtime_api
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +17,6 @@ import (
 
 // portos:func-length-exception owner=agent-factory reason=provider-throttle-runtime-observability-smoke review=2026-07-19 removal=split-pause-setup-runtime-polling-and-dashboard-assertions-before-next-throttle-observability-change
 func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession(t *testing.T) {
-	support.SkipLongFunctional(t, "slow throttle-pause observability smoke")
 	fixture := newThrottlePauseObservabilityFixture(t)
 
 	waitForThrottlePausePublicSession(
@@ -40,9 +41,27 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 				support.HasWorkAtCustomerState(listed, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
 		},
 	)
+	// The predicate reads Work through the canonical event projection. Refresh
+	// the aggregate session after that event-backed condition so the assertion
+	// compares public progress and Work state from the same observation window.
+	isolatedSession = support.GetDefaultSession(t, fixture.server.URL())
 
 	if isolatedSession.Runtime.Progress.InFlightCount != 0 {
-		t.Fatalf("isolated public session in-flight count = %d, want 0", isolatedSession.Runtime.Progress.InFlightCount)
+		listed := support.ListDefaultSessionWork(t, fixture.server.URL())
+		events := fixture.server.GetFactoryEvents(t)
+		dispatches := support.ObserveDispatchEvents(t, events)
+		t.Fatalf(
+			"isolated public session in-flight count = %d, want 0; session=%#v work=%#v dispatches=%s events=%#v",
+			isolatedSession.Runtime.Progress.InFlightCount,
+			isolatedSession.Runtime,
+			listed.Results,
+			formatThrottlePauseDispatchDiagnostics(
+				dispatches,
+				listed.Results,
+				isolatedSession.Runtime.Progress.InFlightCount,
+			),
+			throttlePauseDispatchEventTypes(events),
+		)
 	}
 
 	assertThrottlePauseRequestSequence(t, fixture.runner.Requests())
@@ -218,4 +237,80 @@ func dispatchesForProviderSmokeWork(
 		}
 	}
 	return matches
+}
+
+func throttlePauseDispatchEventTypes(events []factoryapi.FactoryEvent) []string {
+	types := make([]string, 0)
+	for _, event := range events {
+		if event.Context.DispatchId == nil || *event.Context.DispatchId == "" {
+			continue
+		}
+		types = append(types, fmt.Sprintf("%s:%s", *event.Context.DispatchId, event.Type))
+	}
+	return types
+}
+
+func formatThrottlePauseDispatchDiagnostics(
+	dispatches []support.DispatchEventObservation,
+	work []factoryapi.Work,
+	publicInFlightCount int,
+) string {
+	workByID := make(map[string]factoryapi.Work, len(work))
+	for _, item := range work {
+		if item.WorkId == nil || *item.WorkId == "" {
+			continue
+		}
+		workByID[*item.WorkId] = item
+	}
+
+	formatted := make([]string, 0, len(dispatches))
+	for _, dispatch := range dispatches {
+		lifecycle := "IN_FLIGHT"
+		outcome := ""
+		failure := ""
+		if dispatch.Response != nil {
+			outcome = string(dispatch.Response.Outcome)
+			lifecycle = "RESPONSE_" + outcome
+			if dispatch.Response.ProviderFailure != nil && dispatch.Response.ProviderFailure.Type != nil {
+				failure = string(*dispatch.Response.ProviderFailure.Type)
+			}
+		}
+		for _, workID := range dispatch.WorkIDs {
+			item := workByID[workID]
+			workType := ""
+			name := ""
+			state := ""
+			stateType := ""
+			if item.WorkTypeName != nil {
+				workType = *item.WorkTypeName
+			}
+			name = item.Name
+			if item.State != nil {
+				state = item.State.Name
+				stateType = string(item.State.Type)
+			}
+			// Factory Session exposes only the aggregate count. A non-terminal
+			// Work item is the public evidence used to identify the retained
+			// dispatch that contributes to a non-zero count.
+			contribution := "not-counted"
+			if publicInFlightCount > 0 && stateType != string(factoryapi.WorkStateTypeTERMINAL) && stateType != string(factoryapi.WorkStateTypeFAILED) {
+				contribution = "inferred-count-contributor"
+			}
+			formatted = append(formatted, fmt.Sprintf(
+				"dispatchID=%s workID=%s lane=%s/%s workState=%s/%s workstation=%s lifecycle=%s outcome=%s providerFailure=%s publicCount=%s",
+				dispatch.DispatchID,
+				workID,
+				workType,
+				name,
+				state,
+				stateType,
+				dispatch.Request.TransitionId,
+				lifecycle,
+				outcome,
+				failure,
+				contribution,
+			))
+		}
+	}
+	return strings.Join(formatted, "; ")
 }
