@@ -12,6 +12,12 @@ const entryPoints = Object.fromEntries([
     `${categoryPath}/index`,
     path.join(sourceRoot, categoryPath, "index.ts"),
   ]),
+  // This source file is type-only, but emitted declarations reference it.
+  // Keep its runtime counterpart deterministic without changing exports.
+  [
+    "graphs/graph-node-handle",
+    path.join(sourceRoot, "graphs/graph-node-handle.ts"),
+  ],
 ]);
 
 function isExternalPackage(moduleId: string): boolean {
@@ -30,10 +36,13 @@ export default defineConfig({
     outDir: "dist",
     rollupOptions: {
       external: isExternalPackage,
+      treeshake: false,
       output: {
         assetFileNames: "assets/[name][extname]",
         chunkFileNames: "chunks/[name].js",
         entryFileNames: "[name].js",
+        preserveModules: true,
+        preserveModulesRoot: "src",
       },
     },
     sourcemap: false,
