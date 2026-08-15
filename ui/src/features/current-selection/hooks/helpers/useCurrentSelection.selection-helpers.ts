@@ -96,9 +96,13 @@ export function buildTerminalWorkItems(
             latestAttempt?.dispatch_id,
           failureMessage:
             matchedFailureDetail?.failure_message ??
+            (latestRequest
+              ? requestFailureMessage(latestRequest)
+              : undefined) ??
             latestAttempt?.failure_message,
           failureReason:
             matchedFailureDetail?.failure_reason ??
+            (latestRequest ? requestFailureReason(latestRequest) : undefined) ??
             latestAttempt?.failure_reason,
           label: matchedWorkItem?.display_name?.trim() || label,
           traceWorkID:
@@ -132,16 +136,16 @@ function uniqueTerminalWorkItemsForLabel(
       byWorkID.set(workItem.work_id, workItem);
     }
   };
-  for (const attempt of attempts ?? []) {
-    for (const workItem of attempt.work_items ?? []) {
-      addIfMatching(workItem);
-    }
-  }
   for (const detail of failureDetails) {
     addIfMatching(detail.work_item);
   }
   for (const request of requests) {
     for (const workItem of requestWorkItems(request)) {
+      addIfMatching(workItem);
+    }
+  }
+  for (const attempt of attempts ?? []) {
+    for (const workItem of attempt.work_items ?? []) {
       addIfMatching(workItem);
     }
   }

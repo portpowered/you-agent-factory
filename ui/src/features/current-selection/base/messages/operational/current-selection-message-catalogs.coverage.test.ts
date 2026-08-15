@@ -267,6 +267,7 @@ const invokeWorkstationDetailSecondaryFormatters = (
       return [formatter("Gemini" as never, "Factory" as never)];
     case "historyRequestCountLabel":
     case "historyRunCountLabel":
+    case "showMoreHistoryAction":
       return [formatter(1 as never), formatter(3 as never)];
     case "editableConfigurationPromptAutocompleteSummary":
       return [
@@ -367,6 +368,8 @@ const invokeWorkstationDetail = (
         formatter("LOGICAL_MOVE" as never),
         formatter("FUTURE_TYPE" as never),
       ];
+    case "historyProgressLabel":
+      return [formatter(10 as never, 12 as never, 2 as never)];
     case "editableConfigurationModelInvokeBindingDuplicate":
     case "editableConfigurationModelInvokeBindingRequired":
       return [formatter("prompt" as never)];
