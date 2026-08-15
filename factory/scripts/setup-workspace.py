@@ -487,24 +487,30 @@ def confirm_ref_matches(repo_path, ref_name, expected_sha):
         )
 
 
-def ancestor_commits(repo_path, head_sha):
-    """Return every commit reachable behind head_sha, excluding head_sha."""
+def ancestor_commit_trees(repo_path, head_sha):
+    """Return reachable ancestor commit/tree pairs without per-commit Git calls."""
     result = run_git(
-        "rev-list", "--parents", head_sha,
+        "log", "--format=%H%x00%T", "--no-decorate", head_sha,
         cwd=repo_path, check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"root main sync could not inspect ancestors of {head_sha}: "
+            f"root main sync could not inspect ancestor trees of {head_sha}: "
             f"{command_failure_details(result)}"
         )
 
-    commits = []
+    commit_trees = []
     for line in result.stdout.splitlines():
-        commit = line.split(maxsplit=1)[0] if line.strip() else ""
-        if commit and commit != head_sha:
-            commits.append(commit)
-    return commits
+        values = line.split("\0")
+        if len(values) != 2 or not all(immutable_object_id(value) for value in values):
+            raise RuntimeError(
+                f"root main sync received an invalid ancestor commit/tree pair for "
+                f"{head_sha}: {line!r}"
+            )
+        commit, tree = values
+        if commit != head_sha:
+            commit_trees.append((commit, tree))
+    return commit_trees
 
 
 def tree_for_revision(repo_path, revision, description):
@@ -559,14 +565,7 @@ def verify_no_ancestor_residue(repo_path):
     if not local_states:
         return
 
-    ancestor_trees = [
-        (ancestor_sha, tree_for_revision(
-            repo_path,
-            ancestor_sha,
-            f"root main sync could not capture ancestor {ancestor_sha} tree",
-        ))
-        for ancestor_sha in ancestor_commits(repo_path, head_sha)
-    ]
+    ancestor_trees = ancestor_commit_trees(repo_path, head_sha)
     findings = []
     for state_name, state_tree in local_states:
         for ancestor_sha, ancestor_tree in ancestor_trees:

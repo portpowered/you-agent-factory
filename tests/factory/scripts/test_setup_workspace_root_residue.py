@@ -91,6 +91,44 @@ def create_remote_repository(root, remote_ahead):
     return local, upstream, merge_sha
 
 
+def create_linear_history(repo_path, commit_count):
+    """Add a linear commit history in one Git process for scaling coverage."""
+    parent = git(["rev-parse", "HEAD"], repo_path).stdout.strip()
+    stream = bytearray()
+    next_mark = 1
+    for commit_number in range(commit_count):
+        blob_mark = next_mark
+        commit_mark = next_mark + 1
+        next_mark += 2
+        path = f"history-{commit_number}.txt"
+        contents = f"history {commit_number}\n".encode("utf-8")
+        message = contents
+        stream.extend(f"blob\nmark :{blob_mark}\ndata {len(contents)}\n".encode())
+        stream.extend(contents)
+        stream.extend(
+            (
+                "commit refs/heads/main\n"
+                f"mark :{commit_mark}\n"
+                "author Setup Workspace Test <setup-workspace-test@example.com> 0 +0000\n"
+                "committer Setup Workspace Test <setup-workspace-test@example.com> 0 +0000\n"
+                f"data {len(message)}\n"
+            ).encode()
+        )
+        stream.extend(message)
+        stream.extend(f"from {parent}\nM 100644 :{blob_mark} {path}\n".encode())
+        parent = f":{commit_mark}"
+    stream.extend(b"done\n")
+    result = subprocess.run(
+        ["git", "fast-import"],
+        cwd=repo_path,
+        input=bytes(stream),
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr.decode("utf-8", errors="replace"))
+    git(["reset", "--hard", "HEAD"], repo_path)
+
+
 def configure_operator_ignores(repo_path):
     """Model the ignored operator paths that root sync must never remove."""
     exclude_path = repo_path / ".git" / "info" / "exclude"
@@ -516,6 +554,37 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         self.assertEqual(report["index_tree"], report["head_tree"])
         self.assertNotEqual(report["worktree_tree"], report["head_tree"])
         self.assertEqual(report["porcelain"], " M README.md\n")
+
+    def test_guard_uses_bounded_git_invocations_for_long_dirty_history(self):
+        """A legitimate edit does not spawn Git once for every ancestor."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "guard-long-history", remote_ahead=True,
+        )
+        git(["reset", "--hard", remote_sha], local)
+        create_linear_history(local, 80)
+
+        (local / "README.md").write_text("legitimate operator edit\n", encoding="utf-8")
+        original_run_git = self.module.run_git
+        invocations = []
+
+        def counting_run_git(*args, **kwargs):
+            invocations.append(args)
+            return original_run_git(*args, **kwargs)
+
+        self.module.run_git = counting_run_git
+        try:
+            self.module.verify_no_ancestor_residue(local)
+        finally:
+            self.module.run_git = original_run_git
+
+        self.assertLessEqual(
+            len(invocations), 10,
+            f"ancestor guard spawned too many Git processes: {invocations}",
+        )
+        self.assertEqual(
+            git(["status", "--porcelain"], local).stdout,
+            " M README.md\n",
+        )
 
     def test_sync_guard_preserves_snapshot_anchor_when_restore_leaves_ancestor_residue(self):
         """Guard failure keeps the captured snapshot available for recovery."""
