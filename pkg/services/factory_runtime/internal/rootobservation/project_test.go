@@ -102,6 +102,44 @@ func TestProject_ExcludesObservedDispatchResponseFromInFlightProjection(t *testi
 	}
 }
 
+func TestProject_UsesMapKeyAndObservedResultIDs(t *testing.T) {
+	snapshot := &legacysnapshot.Snapshot{
+		InFlightCount: 2,
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"fallback-dispatch": {
+				WorkstationName: "fallback-desk",
+				ConsumedTokens: []workerexecution.Token{
+					{Color: workerexecution.Color{WorkID: "work-fallback"}},
+				},
+			},
+			"observed-dispatch": {
+				DispatchID: "observed-dispatch",
+			},
+		},
+		Results: []workerexecution.WorkResult{
+			{DispatchID: "observed-dispatch"},
+			{DispatchID: ""},
+		},
+		DispatchHistory: []interfaces.CompletedDispatch{
+			{DispatchID: ""},
+		},
+	}
+
+	full := Project(snapshot, factory.ObservationScopeFull)
+	if full.Progress.InFlightDispatchCount != 1 {
+		t.Fatalf("progress in-flight count = %d, want 1", full.Progress.InFlightDispatchCount)
+	}
+	if len(full.InFlightDispatches) != 1 {
+		t.Fatalf("in-flight dispatches = %#v, want one fallback dispatch", full.InFlightDispatches)
+	}
+	if got := full.InFlightDispatches[0]; got.DispatchID != "fallback-dispatch" || got.WorkstationName != "fallback-desk" || len(got.WorkIDs) != 1 || got.WorkIDs[0] != "work-fallback" {
+		t.Fatalf("fallback dispatch = %#v, want map-key identity and work", got)
+	}
+	if len(full.Results) != 1 || full.Results[0].DispatchID != "" {
+		t.Fatalf("results = %#v, want empty-ID history result", full.Results)
+	}
+}
+
 func TestReconcileInFlightDispatchCount(t *testing.T) {
 	t.Parallel()
 
