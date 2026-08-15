@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import {
   mockFactoryDocumentSave,
   mockPendingFactoryDocumentSave,
@@ -20,6 +21,54 @@ beforeEach(() => {
 });
 
 describe("useScopedFactoryDocumentSave scope isolation when scopeKey changes", () => {
+  it("preserves alias confirmation but resets on genuine scope changes", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "idle" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: DEFAULT_FACTORY_SESSION_ID },
+        wrapper: createScopedFactoryDocumentSaveQueryClientWrapper(),
+      },
+    );
+
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveState).toEqual({ status: "confirming" });
+
+    rerender({ scopeKey: "runtime-default-session" });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "confirming" });
+    });
+
+    rerender({ scopeKey: "runtime-other-session" });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "idle" });
+    });
+
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveState).toEqual({ status: "confirming" });
+
+    rerender({ scopeKey: DEFAULT_FACTORY_SESSION_ID });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "idle" });
+    });
+  });
+
   it("clears confirmation, success, warning, and error state when scopeKey changes", async () => {
     const saveMutation = mockFactoryDocumentSave({
       mode: "error",
@@ -133,6 +182,70 @@ describe("useScopedFactoryDocumentSave scope isolation for dirty drafts", () => 
     rerender({ isDirty: true });
 
     expect(result.current.saveState).toEqual({ status: "idle" });
+  });
+});
+
+describe("useScopedFactoryDocumentSave alias remap during in-flight save", () => {
+  it("completes an in-flight save across a default alias remap", async () => {
+    const pendingSave = mockPendingFactoryDocumentSave();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(pendingSave.saveMutation as never);
+    const onSaved = vi.fn();
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: DEFAULT_FACTORY_SESSION_ID },
+        wrapper: createScopedFactoryDocumentSaveQueryClientWrapper(),
+      },
+    );
+
+    const request: ScopedFactoryDocumentSaveRequest = {
+      ...defaultScopedFactoryDocumentSaveRequest,
+      onSaved,
+      scopeKey: DEFAULT_FACTORY_SESSION_ID,
+    };
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveState).toEqual({ status: "confirming" });
+
+    let savePromise: Promise<void> | undefined;
+    await act(async () => {
+      savePromise = result.current.confirmSave(request);
+      await Promise.resolve();
+    });
+
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    rerender({ scopeKey: "runtime-default-session" });
+    expect(result.current.saveState).toEqual({ status: "submitting" });
+
+    pendingSave.deferred.resolve({
+      name: "Current Factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [],
+      workstations: [],
+    });
+
+    await act(async () => {
+      await savePromise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "success" });
+    });
+    expect(result.current.saveState).not.toEqual({ status: "confirming" });
+    expect(onSaved).toHaveBeenCalledTimes(1);
   });
 });
 

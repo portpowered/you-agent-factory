@@ -1,6 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { isDefaultFactorySessionID } from "../../../api/session-routing";
 import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
   currentFactoryDefinitionQueryKey,
@@ -13,6 +12,8 @@ import {
 } from "../../factory-session-detail/hooks/use-factory-session-detail";
 import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+
+export { isDefaultToRuntimeSessionAliasRemap } from "../../../api/session-routing";
 export {
   dashboardSessionKey,
   sessionIDFromDashboardSessionKey,
@@ -21,34 +22,6 @@ export {
 } from "./dashboard-session-key";
 
 export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";
-
-function isDefaultFactorySessionAliasRemap(
-  previousSessionID: string | null,
-  sessionID: string | null,
-): boolean {
-  if (previousSessionID == null || sessionID == null) {
-    return false;
-  }
-  if (previousSessionID === sessionID) {
-    return false;
-  }
-  return (
-    isDefaultFactorySessionID(previousSessionID) ||
-    isDefaultFactorySessionID(sessionID)
-  );
-}
-
-/** True when sync-preflight remaps the default alias to its runtime UUID identity. */
-export function isDefaultToRuntimeSessionAliasRemap(
-  previousSessionID: string | null,
-  sessionID: string | null,
-): boolean {
-  return (
-    isDefaultFactorySessionAliasRemap(previousSessionID, sessionID) &&
-    isDefaultFactorySessionID(previousSessionID) &&
-    !isDefaultFactorySessionID(sessionID)
-  );
-}
 
 export function resetDashboardSessionScopedState(
   queryClient: QueryClient,

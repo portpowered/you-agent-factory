@@ -14,6 +14,7 @@ import type {
   CurrentFactoryDocument,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
+import { areFactorySessionIDsEquivalent as isSameLogicalScope } from "../../../../api/session-routing";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
@@ -98,10 +99,11 @@ export function useScopedFactoryDocumentSave<
     setSaveAttemptRevision,
   });
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
-  const hasScopeChanged = previousScopeKeyRef.current !== scopeKey;
-  if (hasScopeChanged) {
-    previousScopeKeyRef.current = scopeKey;
-  }
+  const hasScopeChanged = !isSameLogicalScope(
+    previousScopeKeyRef.current,
+    scopeKey,
+  );
+  previousScopeKeyRef.current = scopeKey;
   useResetSuccessfulSaveStateOnDraftChange({
     isDirty,
     scopeKey,
@@ -217,7 +219,7 @@ async function executeScopedFactoryDocumentSave<
 }) {
   if (
     activeScopeKeyRef.current == null ||
-    request.scopeKey !== activeScopeKeyRef.current ||
+    !isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current) ||
     saveInFlightRef.current
   ) {
     return;
@@ -234,7 +236,7 @@ async function executeScopedFactoryDocumentSave<
       baseVersion: request.baseVersion,
       factory: request.factory,
     });
-    if (activeScopeKeyRef.current !== request.scopeKey) {
+    if (!isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current)) {
       return;
     }
     request.onSaved?.(document);
@@ -252,7 +254,7 @@ async function executeScopedFactoryDocumentSave<
     setIsConfirming(false);
     setSubmittingScopeKey(null);
     setLastSuccessfulScopeKey(null);
-    if (activeScopeKeyRef.current !== request.scopeKey) {
+    if (!isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current)) {
       return;
     }
     setLastFailedScope({
@@ -264,7 +266,7 @@ async function executeScopedFactoryDocumentSave<
     });
   } finally {
     saveInFlightRef.current = false;
-    if (activeScopeKeyRef.current !== request.scopeKey) {
+    if (!isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current)) {
       setSubmittingScopeKey(null);
     }
   }
@@ -287,7 +289,10 @@ function resolveDetailCardSaveState<
   scopeKey: string | null;
   submittingScopeKey: string | null;
 }): FactoryDocumentSaveState<TFieldErrors> {
-  if (submittingScopeKey !== null && submittingScopeKey === scopeKey) {
+  if (
+    submittingScopeKey !== null &&
+    isSameLogicalScope(submittingScopeKey, scopeKey)
+  ) {
     return { status: "submitting" };
   }
   if (hasScopeChanged) {
@@ -299,7 +304,7 @@ function resolveDetailCardSaveState<
   if (
     lastFailedScope !== null &&
     scopeKey !== null &&
-    lastFailedScope.scopeKey === scopeKey
+    isSameLogicalScope(lastFailedScope.scopeKey, scopeKey)
   ) {
     if (lastFailedScope.status === "warning") {
       return {
@@ -314,7 +319,10 @@ function resolveDetailCardSaveState<
       status: "error",
     };
   }
-  if (lastSuccessfulScopeKey !== null && lastSuccessfulScopeKey === scopeKey) {
+  if (
+    lastSuccessfulScopeKey !== null &&
+    isSameLogicalScope(lastSuccessfulScopeKey, scopeKey)
+  ) {
     return { status: "success" };
   }
 
@@ -341,14 +349,18 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
 
   useEffect(() => {
-    if (previousScopeKeyRef.current !== scopeKey) {
+    const hasExitedScope = !isSameLogicalScope(
+      previousScopeKeyRef.current,
+      scopeKey,
+    );
+    if (hasExitedScope) {
       setIsConfirming(false);
       setLastFailedScope(null);
       setLastSuccessfulScopeKey(null);
       setLastSuccessfulSaveWasTopologyAffecting(false);
       setSaveAttemptRevision(0);
-      previousScopeKeyRef.current = scopeKey;
     }
+    previousScopeKeyRef.current = scopeKey;
   }, [
     scopeKey,
     setIsConfirming,
@@ -375,7 +387,7 @@ function useResetSuccessfulSaveStateOnDraftChange({
   useEffect(() => {
     if (isDirty) {
       setLastSuccessfulScopeKey((currentScopeKey) =>
-        currentScopeKey === scopeKey ? null : currentScopeKey,
+        isSameLogicalScope(currentScopeKey, scopeKey) ? null : currentScopeKey,
       );
       setLastSuccessfulSaveWasTopologyAffecting(false);
     }

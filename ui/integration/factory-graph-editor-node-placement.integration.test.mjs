@@ -12,6 +12,7 @@ import {
   selectLabeledComboboxOption,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForDurableCheckpoint,
   waitForFactoryGraphSelectionReady,
   waitForStableFactoryGraphNodePlacement,
   waitForStableFactoryGraphViewport,
@@ -492,48 +493,456 @@ async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
   };
 }
 
+async function beginSaveActivationTrace(page) {
+  await page.evaluate(() => {
+    const trace = {
+      activationEvents: [],
+      activationPoints: {},
+      handlerBinding: null,
+      handlerInvocations: [],
+      records: [],
+      recordCount: 0,
+      startedAt: performance.now(),
+    };
+    let previousSignature = null;
+    const instrumentedButtons = new WeakSet();
+    const wrappedReactProps = new WeakMap();
+
+    const findSaveButton = () =>
+      [...document.querySelectorAll("button")].find(
+        (button) =>
+          button.getAttribute("aria-label") === "Save changes" ||
+          button.getAttribute("aria-label") === "Saving...",
+      );
+
+    const findReactFiber = (element) => {
+      const fiberKey = Object.getOwnPropertyNames(element).find((key) =>
+        key.startsWith("__reactFiber$"),
+      );
+      return fiberKey ? element[fiberKey] : null;
+    };
+
+    const readEditorState = () => {
+      const toolbar = document.querySelector("[data-toolbar-editor-controls]");
+      let fiber = toolbar ? findReactFiber(toolbar) : null;
+      let sessionID = null;
+      let factoryDocumentScopeKey = null;
+      let editorMode = null;
+
+      while (fiber) {
+        const props = fiber.memoizedProps ?? fiber.pendingProps;
+        if (props && typeof props === "object") {
+          const sessionCandidate =
+            props.sessionID ?? props.sessionId ?? props.viewModel?.sessionID;
+          if (sessionID === null && typeof sessionCandidate === "string") {
+            sessionID = sessionCandidate;
+          }
+          if (
+            factoryDocumentScopeKey === null &&
+            typeof props.factoryDocumentScopeKey === "string"
+          ) {
+            factoryDocumentScopeKey = props.factoryDocumentScopeKey;
+          }
+
+          const editorControls =
+            props.editorControls ?? props.viewModel?.editorControls;
+          if (
+            editorMode === null &&
+            typeof editorControls?.isEditing === "boolean"
+          ) {
+            editorMode = editorControls.isEditing;
+          }
+          if (
+            editorMode === null &&
+            typeof props.editModeToggle?.editorMode === "boolean"
+          ) {
+            editorMode = props.editModeToggle.editorMode;
+          }
+        }
+        fiber = fiber.return;
+      }
+
+      const networkSessionIDs = [
+        ...new Set(
+          performance
+            .getEntriesByType("resource")
+            .map((entry) => {
+              const match = entry.name.match(
+                /\/factory-sessions\/([^/]+)(?:\/|$)/,
+              );
+              return match ? decodeURIComponent(match[1]) : null;
+            })
+            .filter((value) => value != null),
+        ),
+      ];
+
+      return {
+        editorMode,
+        factoryDocumentScopeKey,
+        networkSessionIDs,
+        sessionID: sessionID ?? networkSessionIDs.at(-1) ?? null,
+      };
+    };
+
+    const describe = () => {
+      const saveButton = findSaveButton();
+      const activeElement = document.activeElement;
+      const dialogs = [...document.querySelectorAll('[role="dialog"]')].map(
+        (dialog) => {
+          const labelledBy = dialog.getAttribute("aria-labelledby");
+          const labelledElement = labelledBy
+            ? document.getElementById(labelledBy)
+            : null;
+          const bounds = dialog.getBoundingClientRect();
+          const styles = window.getComputedStyle(dialog);
+          return {
+            accessibleName: labelledElement?.textContent?.trim() ?? null,
+            ariaHidden: dialog.getAttribute("aria-hidden"),
+            connected: dialog.isConnected,
+            display: styles.display,
+            hidden: dialog.hidden,
+            role: dialog.getAttribute("role"),
+            visibility: styles.visibility,
+            visible:
+              !dialog.hidden &&
+              dialog.getAttribute("aria-hidden") !== "true" &&
+              styles.display !== "none" &&
+              styles.visibility !== "hidden" &&
+              bounds.width > 0 &&
+              bounds.height > 0,
+          };
+        },
+      );
+      const editorState = readEditorState();
+      const buttonBounds = saveButton?.getBoundingClientRect();
+      const buttonStyles = saveButton
+        ? window.getComputedStyle(saveButton)
+        : null;
+      return {
+        activeElement: activeElement
+          ? {
+              ariaLabel: activeElement.getAttribute("aria-label"),
+              connected: activeElement.isConnected,
+              tagName: activeElement.tagName,
+            }
+          : null,
+        button: saveButton
+          ? {
+              ariaBusy: saveButton.getAttribute("aria-busy"),
+              ariaLabel: saveButton.getAttribute("aria-label"),
+              connected: saveButton.isConnected,
+              disabled: saveButton.disabled,
+              display: buttonStyles?.display ?? null,
+              visible: Boolean(
+                buttonBounds &&
+                  buttonBounds.width > 0 &&
+                  buttonBounds.height > 0,
+              ),
+            }
+          : null,
+        dialogs,
+        editorState,
+        elapsedMs: Math.round(performance.now() - trace.startedAt),
+      };
+    };
+
+    const instrumentSaveButton = () => {
+      const saveButton = findSaveButton();
+      if (!saveButton) {
+        return;
+      }
+
+      if (!instrumentedButtons.has(saveButton)) {
+        instrumentedButtons.add(saveButton);
+        const recordActivationEvent = (event) => {
+          trace.activationEvents.push({
+            activeElement: document.activeElement?.getAttribute("aria-label"),
+            buttonDisabled: saveButton.disabled,
+            buttonLabel: saveButton.getAttribute("aria-label"),
+            elapsedMs: Math.round(performance.now() - trace.startedAt),
+            eventPhase: event.eventPhase,
+            type: event.type,
+          });
+          if (trace.activationEvents.length > 32) {
+            trace.activationEvents.shift();
+          }
+        };
+        saveButton.addEventListener("click", recordActivationEvent, true);
+        saveButton.addEventListener("click", recordActivationEvent);
+        saveButton.addEventListener("keydown", recordActivationEvent, true);
+      }
+
+      const reactPropsKey = Object.getOwnPropertyNames(saveButton).find(
+        (key) => key.startsWith("__reactProps$") && key.length > 13,
+      );
+      const reactProps = reactPropsKey ? saveButton[reactPropsKey] : undefined;
+      if (
+        reactProps &&
+        typeof reactProps.onClick === "function" &&
+        wrappedReactProps.get(reactProps) !== reactProps.onClick
+      ) {
+        const originalOnClick = reactProps.onClick;
+        const wrappedOnClick = (...args) => {
+          trace.handlerInvocations.push({
+            activeElement: document.activeElement?.getAttribute("aria-label"),
+            buttonDisabled: saveButton.disabled,
+            elapsedMs: Math.round(performance.now() - trace.startedAt),
+          });
+          return originalOnClick(...args);
+        };
+        reactProps.onClick = wrappedOnClick;
+        wrappedReactProps.set(reactProps, wrappedOnClick);
+        trace.handlerBinding = "react-onClick-wrapped";
+      } else {
+        trace.handlerBinding = "react-onClick-not-found";
+      }
+    };
+
+    const record = () => {
+      instrumentSaveButton();
+      const observation = describe();
+      const signature = JSON.stringify(observation);
+      if (signature === previousSignature) {
+        return;
+      }
+      previousSignature = signature;
+      trace.recordCount += 1;
+      if (trace.records.length < 80) {
+        trace.records.push(observation);
+      }
+    };
+
+    const observer = new MutationObserver(record);
+    observer.observe(document.body, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    record();
+    window.__graphSaveActivationTrace = { describe, observer, record, trace };
+  });
+}
+
+async function recordSaveActivationPoint(page, label) {
+  await page.evaluate((pointLabel) => {
+    const entry = window.__graphSaveActivationTrace;
+    if (!entry) {
+      return;
+    }
+    entry.trace.activationPoints[pointLabel] = entry.describe();
+    entry.record();
+  }, label);
+}
+
+async function endSaveActivationTrace(
+  page,
+  {
+    confirmButtonPollCount,
+    dialogPollCount,
+    enabledPollCount,
+    errorMessage,
+    outcome,
+  },
+) {
+  return await page.evaluate(
+    ({
+      confirmButtonPollCount,
+      dialogPollCount,
+      enabledPollCount,
+      errorMessage,
+      outcome,
+    }) => {
+      const entry = window.__graphSaveActivationTrace;
+      if (!entry) {
+        return null;
+      }
+      entry.observer.disconnect();
+      const beforeEnter = entry.trace.activationPoints.beforeEnter;
+      const afterEnter = entry.trace.activationPoints.afterEnter;
+      const activationRecords = [
+        beforeEnter,
+        ...entry.trace.records.filter((record) =>
+          beforeEnter && afterEnter
+            ? record.elapsedMs >= beforeEnter.elapsedMs &&
+              record.elapsedMs <= afterEnter.elapsedMs
+            : true,
+        ),
+        afterEnter,
+      ].filter(Boolean);
+      const sessionIDs = [
+        ...new Set(
+          activationRecords
+            .map((record) => record.editorState?.sessionID)
+            .filter((sessionID) => sessionID != null),
+        ),
+      ];
+      const factoryDocumentScopeKeys = [
+        ...new Set(
+          activationRecords
+            .map((record) => record.editorState?.factoryDocumentScopeKey)
+            .filter((scopeKey) => scopeKey != null),
+        ),
+      ];
+      const editorModeStates = [
+        ...new Set(
+          activationRecords
+            .map((record) => record.editorState?.editorMode)
+            .filter((mode) => typeof mode === "boolean"),
+        ),
+      ];
+      entry.trace.activationSessionIDs = sessionIDs;
+      entry.trace.activationScopeKeys = factoryDocumentScopeKeys;
+      entry.trace.activationEditorModeStates = editorModeStates;
+      entry.trace.scopeChangedBetweenActivation =
+        sessionIDs.length > 1 || factoryDocumentScopeKeys.length > 1;
+      entry.trace.editorModeLostBetweenActivation =
+        editorModeStates.includes(true) && editorModeStates.includes(false);
+      entry.trace.confirmButtonPollCount = confirmButtonPollCount;
+      entry.trace.dialogPollCount = dialogPollCount;
+      entry.trace.enabledPollCount = enabledPollCount;
+      entry.trace.errorMessage = errorMessage;
+      entry.trace.finishedAt = performance.now();
+      entry.trace.outcome = outcome;
+      delete window.__graphSaveActivationTrace;
+      return entry.trace;
+    },
+    {
+      confirmButtonPollCount,
+      dialogPollCount,
+      enabledPollCount,
+      errorMessage,
+      outcome,
+    },
+  );
+}
+
+async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
+  const observations = [];
+  let previousSignature = null;
+  let errorMessage = null;
+  let pollCount = 0;
+  let outcome = "success";
+  try {
+    await waitForStableFactoryGraphNodePlacement(
+      page,
+      nodeTestId,
+      uiInteractionTimeoutMs,
+      100,
+      (observation) => {
+        pollCount = observation.pollCount;
+        const signature = JSON.stringify({
+          nextSample: observation.nextSample,
+          stable: observation.stable,
+          withinViewport: observation.withinViewport,
+        });
+        if (signature !== previousSignature && observations.length < 80) {
+          observations.push(observation);
+          previousSignature = signature;
+        }
+      },
+    );
+  } catch (error) {
+    errorMessage = String(error);
+    outcome = "failure";
+    throw error;
+  } finally {
+    console.log(
+      `[graph-node-placement-trace] ${JSON.stringify({
+        errorMessage,
+        nodeTestId,
+        observations,
+        outcome,
+        pollCount,
+      })}`,
+    );
+  }
+}
+
 async function saveGraphDraft(page, toolbar, expect) {
   const saveChangesButton = toolbar.getByRole("button", {
     name: "Save changes",
   });
-  await expect
-    .poll(async () => await saveChangesButton.isEnabled(), {
-      timeout: uiInteractionTimeoutMs,
-    })
-    .toBe(true);
+  let enabledPollCount = 0;
+  let dialogPollCount = 0;
+  let confirmButtonPollCount = 0;
+  let failure = null;
+  await beginSaveActivationTrace(page);
+  try {
+    await expect
+      .poll(
+        async () => {
+          enabledPollCount += 1;
+          return await saveChangesButton.isEnabled();
+        },
+        {
+          timeout: uiInteractionTimeoutMs,
+        },
+      )
+      .toBe(true);
 
-  await saveChangesButton.focus();
-  await saveChangesButton.press("Enter");
-  const saveDialog = page.getByRole("dialog", {
-    name: "Save factory graph changes?",
-  });
-  await saveDialog.waitFor({
-    state: "visible",
-    timeout: uiInteractionTimeoutMs,
-  });
-  const confirmButton = saveDialog
-    .getByRole("button", { name: /Save (topology|changes)/ })
-    .first();
-  await confirmButton.waitFor({
-    state: "visible",
-    timeout: uiInteractionTimeoutMs,
-  });
-  const saveResponsePromise = page.waitForResponse(
-    (response) =>
-      response.request().method() === "PUT" &&
-      response
-        .url()
-        .includes(
-          `/factory-sessions/${resolvedDefaultFactorySessionID}/factory`,
-        ),
-    { timeout: uiInteractionTimeoutMs },
-  );
-  await confirmButton.click();
-  const saveResponse = await saveResponsePromise;
-  if (!saveResponse.ok()) {
-    throw new Error(
-      `Expected graph save response to succeed, received ${saveResponse.status()}: ${await saveResponse.text()} | request=${saveResponse.request().postData() ?? "<empty>"}`,
+    await saveChangesButton.focus();
+    await recordSaveActivationPoint(page, "beforeEnter");
+    await saveChangesButton.press("Enter");
+    await recordSaveActivationPoint(page, "afterEnter");
+    const saveDialog = page.getByRole("dialog", {
+      name: "Save factory graph changes?",
+    });
+    await waitForDurableCheckpoint(
+      "save confirmation dialog activation",
+      {
+        dialogPresent: async () => {
+          dialogPollCount += 1;
+          return (await saveDialog.count()) > 0;
+        },
+        dialogVisible: async () => await saveDialog.isVisible(),
+      },
+      uiInteractionTimeoutMs,
     );
+    const confirmButton = saveDialog
+      .getByRole("button", { name: /Save (topology|changes)/ })
+      .first();
+    await waitForDurableCheckpoint(
+      "save confirmation action readiness",
+      {
+        confirmButtonPresent: async () => {
+          confirmButtonPollCount += 1;
+          return (await confirmButton.count()) > 0;
+        },
+        confirmButtonVisible: async () => await confirmButton.isVisible(),
+      },
+      uiInteractionTimeoutMs,
+    );
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        response
+          .url()
+          .includes(
+            `/factory-sessions/${resolvedDefaultFactorySessionID}/factory`,
+          ),
+      { timeout: uiInteractionTimeoutMs },
+    );
+    await confirmButton.click();
+    const saveResponse = await saveResponsePromise;
+    if (!saveResponse.ok()) {
+      throw new Error(
+        `Expected graph save response to succeed, received ${saveResponse.status()}: ${await saveResponse.text()} | request=${saveResponse.request().postData() ?? "<empty>"}`,
+      );
+    }
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    const trace = await endSaveActivationTrace(page, {
+      confirmButtonPollCount,
+      dialogPollCount,
+      enabledPollCount,
+      errorMessage: failure ? String(failure) : null,
+      outcome: failure ? "failure" : "success",
+    });
+    if (trace) {
+      console.log(`[graph-save-activation-trace] ${JSON.stringify(trace)}`);
+    }
   }
 }
 
@@ -765,7 +1174,7 @@ describe.concurrent("factory graph editor node placement browser integration", (
         const toolbar = await enterGraphEditor(browserPage.page);
         await addResource(browserPage.page, toolbar, { name: "extra-gpu" });
         const resourceTestId = "rf__node-resource:extra-gpu";
-        await waitForStableFactoryGraphNodePlacement(
+        await waitForTrackedFactoryGraphNodePlacement(
           browserPage.page,
           resourceTestId,
         );
@@ -833,7 +1242,7 @@ describe.concurrent("factory graph editor node placement browser integration", (
           server,
         );
         await enterGraphEditor(browserPage.page);
-        await waitForStableFactoryGraphNodePlacement(
+        await waitForTrackedFactoryGraphNodePlacement(
           browserPage.page,
           resourceTestId,
         );
