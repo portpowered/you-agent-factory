@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { FACTORY_GRAPH_NODE_TYPES } from "@you-agent-factory/factory-graph";
 
 import {
   WorkstationKind,
@@ -23,6 +24,7 @@ import type {
   FactoryGraphTopology,
 } from "../../lib/draft/factory-graph-draft-types";
 import { buildFactoryGraphEditorLayout } from "../../lib/editor/factory-graph-editor-layout";
+import { projectFactoryGraphToReactFlow } from "../../lib/projection/factory-graph-react-flow-projection";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -297,11 +299,71 @@ describe("factory graph editor edge labels", () => {
 
     expect(
       writerNode.querySelector(
-        "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='active-work']",
+        "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='worker']",
       ),
     ).not.toBeNull();
     expect(writerNode.textContent).toContain("Worker");
     expect(writerNode.textContent).toContain("Active");
+  });
+
+  it("uses the package semantic registry for equivalent observe and edit projections", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const observer = projectFactoryGraphToReactFlow({
+      mode: "observer",
+      topology,
+    });
+    const editor = buildFactoryGraphEditorFlowModel({
+      canEditConnections: false,
+      pendingAdditionEdgeIds: new Set<string>(),
+      pendingAdditionNodeIds: new Set<string>(),
+      pendingConnectionSource: null,
+      pendingRemovalEdgeIds: new Set<string>(),
+      pendingRemovalNodeIds: new Set<string>(),
+      topology,
+    });
+
+    expect(FACTORY_GRAPH_EDITOR_NODE_TYPES).toBe(FACTORY_GRAPH_NODE_TYPES);
+    expect(editor.nodes.map((node) => node.type)).toEqual(
+      observer.nodes.map((node) => node.type),
+    );
+    expect(editor.nodes.map((node) => node.id)).toEqual(
+      observer.nodes.map((node) => node.id),
+    );
+    for (const editorNode of editor.nodes) {
+      const observerNode = observer.nodes.find(
+        (node) => node.id === editorNode.id,
+      );
+      expect(observerNode).toBeDefined();
+      expect(editorNode).toMatchObject({
+        height: observerNode?.height,
+        initialHeight: observerNode?.initialHeight,
+        initialWidth: observerNode?.initialWidth,
+        measured: observerNode?.measured,
+        position: observerNode?.position,
+        width: observerNode?.width,
+      });
+      expect(editorNode.data.kind).toBe(observerNode?.data.kind);
+      expect(editorNode.data.handles.map((handle) => handle.id)).toEqual(
+        observerNode?.data.handles.map((handle) => handle.id),
+      );
+    }
+    expect(
+      editor.edges.map(({ source, sourceHandle, target, targetHandle }) => ({
+        source,
+        sourceHandle,
+        target,
+        targetHandle,
+      })),
+    ).toEqual(
+      observer.edges.map(({ source, sourceHandle, target, targetHandle }) => ({
+        source,
+        sourceHandle,
+        target,
+        targetHandle,
+      })),
+    );
   });
 
   it("joins authored semantics for a legacy workstation with a blank topology id", async () => {

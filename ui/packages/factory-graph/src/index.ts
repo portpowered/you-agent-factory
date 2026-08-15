@@ -5,6 +5,22 @@ export {
   projectFactoryGraphReplayFlow,
 } from "./factory-graph-replay-surface.js";
 export {
+  FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS,
+  type FactoryGraphGroupRegionBounds,
+  type FactoryGraphGroupRegionColorStyle,
+  type FactoryGraphGroupRegionColorToken,
+  type FactoryGraphGroupRegionInput,
+  FactoryGraphGroupRegionLayer,
+  type FactoryGraphGroupRegionLayerProps,
+  type FactoryGraphGroupRegionResolvedColor,
+  type FactoryGraphGroupRegionView,
+  factoryGraphGroupRegionColorStyle,
+  isValidFactoryGraphGroupRegionBounds,
+  projectFactoryGraphGroupRegionBounds,
+  projectFactoryGraphGroupRegions,
+  resolveFactoryGraphGroupRegionColor,
+} from "./group-region-presentation.js";
+export {
   FACTORY_GRAPH_NODE_FAMILIES,
   FACTORY_GRAPH_NODE_FAMILY_ROLES,
   type FactoryGraphNodeDimensionBounds,
@@ -26,21 +42,11 @@ export {
   resolveFactoryGraphNodeResizeDimensions,
 } from "./node-family.js";
 export {
-  FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS,
-  type FactoryGraphGroupRegionBounds,
-  type FactoryGraphGroupRegionColorStyle,
-  type FactoryGraphGroupRegionColorToken,
-  type FactoryGraphGroupRegionInput,
-  FactoryGraphGroupRegionLayer,
-  type FactoryGraphGroupRegionLayerProps,
-  type FactoryGraphGroupRegionResolvedColor,
-  type FactoryGraphGroupRegionView,
-  factoryGraphGroupRegionColorStyle,
-  isValidFactoryGraphGroupRegionBounds,
-  projectFactoryGraphGroupRegionBounds,
-  projectFactoryGraphGroupRegions,
-  resolveFactoryGraphGroupRegionColor,
-} from "./group-region-presentation.js";
+  type FactoryGraphNodeInteractionBadge,
+  type FactoryGraphNodeInteractionBadgeTone,
+  type FactoryGraphNodeInteractionOverlay,
+  FactoryGraphNodeInteractionOverlayView,
+} from "./node-interaction-overlay.js";
 export {
   FactoryGraphNodeResizeControls,
   type FactoryGraphNodeResizeControlsProps,

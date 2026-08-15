@@ -2,6 +2,7 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
@@ -29,6 +30,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind: "worker";
   locale?: string;
   muted: boolean;
@@ -36,6 +38,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   place: FactoryGraphPlaceRef;
   resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorker: boolean;
+  validationError?: boolean;
 }
 
 export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
@@ -45,6 +48,7 @@ export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   isDefaultWorkType?: boolean;
   kind: "work-type";
   locale?: string;
@@ -67,6 +71,7 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind: "resource";
   locale?: string;
   muted: boolean;
@@ -75,6 +80,7 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedResource: boolean;
   tokenCount: number;
+  validationError?: boolean;
 }
 
 export type FactoryGraphResourceNode = Node<
@@ -98,11 +104,13 @@ export function FactoryGraphWorkerNodeView({
     focused: data.focused,
     muted: data.muted,
     selected,
+    validation: data.validationError,
   });
   const content = (
     <span
       aria-label={label}
       className="flex min-w-0 items-center gap-1.5 overflow-hidden"
+      data-factory-entity-semantic-icon
       data-worker-label-zone
       role="img"
       title={label}
@@ -128,6 +136,8 @@ export function FactoryGraphWorkerNodeView({
           className={factoryGraphNodeWrappedTextClassName(
             "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
           )}
+          data-factory-entity-title
+          title={workerName}
         >
           {workerName}
         </strong>
@@ -146,6 +156,7 @@ export function FactoryGraphWorkerNodeView({
         }),
       )}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="worker"
       resizeControls={
         data.resizeControls
@@ -157,6 +168,7 @@ export function FactoryGraphWorkerNodeView({
         focused: data.focused,
         muted: data.muted,
         selected,
+        validation: data.validationError,
       }}
     >
       {selectable ? (
@@ -257,6 +269,7 @@ export function FactoryGraphWorkTypeNodeView({
         }),
       )}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="workType"
       resizeControls={
         data.resizeControls
@@ -307,6 +320,7 @@ export function FactoryGraphResourceNodeView({
     focused: data.focused,
     muted: data.muted,
     selected,
+    validation: data.validationError,
   });
   const content = (
     <FactoryGraphResourceNodeContent
@@ -330,6 +344,7 @@ export function FactoryGraphResourceNodeView({
         }),
       )}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="resource"
       resizeControls={
         data.resizeControls
@@ -341,6 +356,7 @@ export function FactoryGraphResourceNodeView({
         focused: data.focused,
         muted: data.muted,
         selected,
+        validation: data.validationError,
       }}
     >
       {selectable ? (

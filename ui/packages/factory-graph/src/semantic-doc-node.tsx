@@ -1,5 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
@@ -24,6 +25,7 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
   factoryGraphNodeId?: string;
   fileType?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind: "doc";
   locale?: string;
   onSelectDoc?: (targetPath: string) => void;
@@ -68,6 +70,7 @@ export function FactoryGraphDocNodeView({
         .filter(Boolean)
         .join(" ")}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="doc"
       resizeControls={
         data.resizeControls
@@ -127,18 +130,21 @@ function FactoryGraphDocNodeContent({
   return (
     <div className="grid min-w-0 gap-1 px-2 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <GraphSemanticIcon
-          className={factoryGraphNodeVisualIconClassName(
-            visualState,
-            "text-on-surface-variant",
-          )}
-          kind="doc"
-          label={docLabel}
-        />
+        <span data-factory-entity-semantic-icon>
+          <GraphSemanticIcon
+            className={factoryGraphNodeVisualIconClassName(
+              visualState,
+              "text-on-surface-variant",
+            )}
+            kind="doc"
+            label={docLabel}
+          />
+        </span>
         <span
           className={factoryGraphNodeWrappedTextClassName(
             "block text-sm font-medium text-on-surface",
           )}
+          data-factory-entity-title
         >
           {displayLabel}
         </span>
