@@ -1,4 +1,4 @@
-package factorydefinitions
+package retiredboundary
 
 // RetiredFieldAlias describes a field that is no longer part of the
 // canonical Factory Definition contract and the guidance shown to authors
@@ -7,6 +7,9 @@ type RetiredFieldAlias struct {
 	Key         string
 	Replacement string
 }
+
+// Field is the retired-field shape used by boundary-specific rejection rules.
+type Field = RetiredFieldAlias
 
 // RetiredFactoryFieldAliases returns the retired top-level Factory fields
 // shared by authored and generated boundary validation.

@@ -7,14 +7,14 @@ import (
 	"reflect"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
 	"gopkg.in/yaml.v3"
 )
 
 func decodeAgentsFrontmatter(
 	frontmatter []byte,
 	target any,
-	retiredAliases []factorydefinitions.RetiredFieldAlias,
+	retiredAliases []retiredboundary.RetiredFieldAlias,
 ) error {
 	rawFrontmatter, err := parseAgentsFrontmatterMap(frontmatter)
 	if err != nil {
@@ -53,74 +53,117 @@ func validateAgentsFrontmatterFields(
 	value any,
 	targetType reflect.Type,
 	path string,
-	retiredAliases []factorydefinitions.RetiredFieldAlias,
+	retiredAliases []retiredboundary.RetiredFieldAlias,
 ) error {
+	targetType = indirectAuthoredType(targetType)
+	switch targetType.Kind() {
+	case reflect.Struct:
+		return validateAuthoredStructFields(value, targetType, path, retiredAliases)
+	case reflect.Slice, reflect.Array:
+		return validateAuthoredSequenceFields(value, targetType, path, retiredAliases)
+	case reflect.Map:
+		return validateAuthoredMapFields(value, targetType, path, retiredAliases)
+	default:
+		return nil
+	}
+}
+
+func indirectAuthoredType(targetType reflect.Type) reflect.Type {
 	for targetType.Kind() == reflect.Pointer {
 		targetType = targetType.Elem()
 	}
+	return targetType
+}
 
-	switch targetType.Kind() {
-	case reflect.Struct:
-		container, ok := value.(map[string]any)
-		if !ok {
-			return nil
+func validateAuthoredStructFields(
+	value any,
+	targetType reflect.Type,
+	path string,
+	retiredAliases []retiredboundary.RetiredFieldAlias,
+) error {
+	container, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	fields := authoredYAMLFieldTypes(targetType)
+	for key, child := range container {
+		if err := validateAuthoredStructField(child, fields, path, key, retiredAliases); err != nil {
+			return err
 		}
-		fields := authoredYAMLFieldTypes(targetType)
-		for key, child := range container {
-			if alias := authoredRetiredAlias(path, key, retiredAliases); alias != nil {
-				return fmt.Errorf(
-					"%s.%s is not supported; %s",
-					path,
-					key,
-					alias.Replacement,
-				)
-			}
-			childType, ok := fields[key]
-			if !ok {
-				return fmt.Errorf(
-					"%s.%s is not supported; use a canonical authored field",
-					path,
-					key,
-				)
-			}
-			if err := validateAgentsFrontmatterFields(
-				child,
-				childType,
-				path+"."+key,
-				retiredAliases,
-			); err != nil {
-				return err
-			}
+	}
+	return nil
+}
+
+func validateAuthoredStructField(
+	value any,
+	fields map[string]reflect.Type,
+	path string,
+	key string,
+	retiredAliases []retiredboundary.RetiredFieldAlias,
+) error {
+	if alias := authoredRetiredAlias(path, key, retiredAliases); alias != nil {
+		return fmt.Errorf(
+			"%s.%s is not supported; %s",
+			path,
+			key,
+			alias.Replacement,
+		)
+	}
+	childType, ok := fields[key]
+	if !ok {
+		return fmt.Errorf(
+			"%s.%s is not supported; use a canonical authored field",
+			path,
+			key,
+		)
+	}
+	return validateAgentsFrontmatterFields(value, childType, path+"."+key, retiredAliases)
+}
+
+func validateAuthoredSequenceFields(
+	value any,
+	targetType reflect.Type,
+	path string,
+	retiredAliases []retiredboundary.RetiredFieldAlias,
+) error {
+	values, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	for index, child := range values {
+		if err := validateAgentsFrontmatterFields(
+			child,
+			targetType.Elem(),
+			fmt.Sprintf("%s[%d]", path, index),
+			retiredAliases,
+		); err != nil {
+			return err
 		}
-	case reflect.Slice, reflect.Array:
-		values, ok := value.([]any)
-		if !ok {
-			return nil
-		}
-		for index, child := range values {
-			if err := validateAgentsFrontmatterFields(
-				child,
-				targetType.Elem(),
-				fmt.Sprintf("%s[%d]", path, index),
-				retiredAliases,
-			); err != nil {
-				return err
-			}
-		}
-	case reflect.Map:
-		values, ok := value.(map[string]any)
-		if !ok || targetType.Key().Kind() != reflect.String {
-			return nil
-		}
-		for key, child := range values {
-			if err := validateAgentsFrontmatterFields(
-				child,
-				targetType.Elem(),
-				fmt.Sprintf("%s.%s", path, key),
-				retiredAliases,
-			); err != nil {
-				return err
-			}
+	}
+	return nil
+}
+
+func validateAuthoredMapFields(
+	value any,
+	targetType reflect.Type,
+	path string,
+	retiredAliases []retiredboundary.RetiredFieldAlias,
+) error {
+	if targetType.Key().Kind() != reflect.String {
+		return nil
+	}
+	values, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	for key, child := range values {
+		if err := validateAgentsFrontmatterFields(
+			child,
+			targetType.Elem(),
+			fmt.Sprintf("%s.%s", path, key),
+			retiredAliases,
+		); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -148,11 +191,11 @@ func authoredYAMLFieldTypes(targetType reflect.Type) map[string]reflect.Type {
 func authoredRetiredAlias(
 	path string,
 	key string,
-	retiredAliases []factorydefinitions.RetiredFieldAlias,
-) *factorydefinitions.RetiredFieldAlias {
+	retiredAliases []retiredboundary.RetiredFieldAlias,
+) *retiredboundary.RetiredFieldAlias {
 	aliases := retiredAliases
 	if path == "frontmatter.cron" {
-		aliases = factorydefinitions.RetiredCronFieldAliases()
+		aliases = retiredboundary.RetiredCronFieldAliases()
 	}
 	for index := range aliases {
 		if aliases[index].Key == key {

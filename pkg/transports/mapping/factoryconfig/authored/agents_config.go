@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,7 +42,7 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 	if err := decodeAgentsFrontmatter(
 		frontmatter,
 		&parsed,
-		factorydefinitions.RetiredWorkerFieldAliases(),
+		retiredboundary.RetiredWorkerFieldAliases(),
 	); err != nil {
 		return nil, fmt.Errorf("parse worker frontmatter in %s: %w", sourcePath, err)
 	}
@@ -129,7 +130,7 @@ func ParseWorkstationConfig(data []byte, sourcePath string) (*factorydefinitions
 	if err := decodeAgentsFrontmatter(
 		frontmatter,
 		&cfg,
-		factorydefinitions.RetiredWorkstationFieldAliases(),
+		retiredboundary.RetiredWorkstationFieldAliases(),
 	); err != nil {
 		return nil, fmt.Errorf("parse workstation frontmatter in %s: %w", sourcePath, err)
 	}

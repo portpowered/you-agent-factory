@@ -327,7 +327,17 @@ func TestGeneratedFactoryFromOpenAPIJSON_PreservesMixedLegacyModelWorkerOnSaveRo
 func TestGeneratedFactoryFromOpenAPIJSON_ProjectsScheduledLegacyModelWorkerAsInference(t *testing.T) {
 	t.Parallel()
 
-	cfgJSON := []byte(`{
+	generated := mustGeneratedFactory(t, scheduledLegacyWorkerFactoryJSON())
+	assertScheduledLegacyWorkerProjection(t, generated)
+
+	runtimeConfig := mustRuntimeFactoryConfig(t, generated)
+	canonical := mustCanonicalFactoryConfig(t, &runtimeConfig)
+	regenerated := mustGeneratedFactory(t, canonical)
+	assertScheduledLegacyWorkerProjection(t, regenerated)
+}
+
+func scheduledLegacyWorkerFactoryJSON() []byte {
+	return []byte(`{
 		"name":"scheduled-legacy-model",
 		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers":[
@@ -340,51 +350,62 @@ func TestGeneratedFactoryFromOpenAPIJSON_ProjectsScheduledLegacyModelWorkerAsInf
 			{"name":"agent-story","type":"MODEL_WORKSTATION","behavior":"CRON","worker":"explicit-agent"}
 		]
 	}`)
+}
 
-	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
-	}
+func assertScheduledLegacyWorkerProjection(t *testing.T, generated factoryapi.Factory) {
+	t.Helper()
 	if generated.Workers == nil || len(*generated.Workers) != 2 {
 		t.Fatalf("generated workers = %#v, want two workers", generated.Workers)
 	}
-	if worker := generatedWorkerByName(*generated.Workers, "scheduled"); worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeInference {
-		t.Fatalf("scheduled worker = %#v, want INFERENCE_WORKER", worker.Type)
+	for name, want := range map[string]string{
+		"scheduled":      interfaces.WorkerTypeInference,
+		"explicit-agent": interfaces.WorkerTypeAgent,
+	} {
+		worker := generatedWorkerByName(*generated.Workers, name)
+		if worker.Type == nil || string(*worker.Type) != want {
+			t.Fatalf("%s worker = %#v, want %s", name, worker.Type, want)
+		}
 	}
-	if worker := generatedWorkerByName(*generated.Workers, "explicit-agent"); worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeAgent {
-		t.Fatalf("explicit agent worker = %#v, want AGENT_WORKER", worker.Type)
+	if generated.Workstations == nil || len(*generated.Workstations) != 3 {
+		t.Fatalf("generated workstations = %#v, want three workstations", generated.Workstations)
 	}
-	if workstation := generatedWorkstationByName(*generated.Workstations, "repeat-story"); workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeModel {
-		t.Fatalf("repeat workstation = %#v, want MODEL_WORKSTATION", workstation.Type)
+	for name, want := range map[string]string{
+		"repeat-story": interfaces.WorkstationTypeModel,
+		"cron-story":   interfaces.WorkstationTypeModel,
+		"agent-story":  interfaces.WorkstationTypeAgent,
+	} {
+		workstation := generatedWorkstationByName(*generated.Workstations, name)
+		if workstation.Type == nil || string(*workstation.Type) != want {
+			t.Fatalf("%s workstation = %#v, want %s", name, workstation.Type, want)
+		}
 	}
-	if workstation := generatedWorkstationByName(*generated.Workstations, "cron-story"); workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeModel {
-		t.Fatalf("cron workstation = %#v, want MODEL_WORKSTATION", workstation.Type)
-	}
-	if workstation := generatedWorkstationByName(*generated.Workstations, "agent-story"); workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeAgent {
-		t.Fatalf("explicit agent workstation = %#v, want AGENT_RUN", workstation.Type)
-	}
+}
 
+func mustGeneratedFactory(t *testing.T, data []byte) factoryapi.Factory {
+	t.Helper()
+	generated, err := GeneratedFactoryFromOpenAPIJSON(data)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	return generated
+}
+
+func mustRuntimeFactoryConfig(t *testing.T, generated factoryapi.Factory) interfaces.FactoryConfig {
+	t.Helper()
 	runtimeConfig, err := FactoryConfigFromOpenAPI(generated)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 	}
-	canonical, err := MarshalCanonicalFactoryConfig(&runtimeConfig)
+	return runtimeConfig
+}
+
+func mustCanonicalFactoryConfig(t *testing.T, runtimeConfig *interfaces.FactoryConfig) []byte {
+	t.Helper()
+	canonical, err := MarshalCanonicalFactoryConfig(runtimeConfig)
 	if err != nil {
 		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
 	}
-	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
-	}
-	if worker := generatedWorkerByName(*regenerated.Workers, "scheduled"); worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeInference {
-		t.Fatalf("round-tripped scheduled worker = %#v, want INFERENCE_WORKER", worker.Type)
-	}
-	if workstation := generatedWorkstationByName(*regenerated.Workstations, "cron-story"); workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeModel {
-		t.Fatalf("round-tripped cron workstation = %#v, want MODEL_WORKSTATION", workstation.Type)
-	}
-	if workstation := generatedWorkstationByName(*regenerated.Workstations, "agent-story"); workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeAgent {
-		t.Fatalf("round-tripped explicit agent workstation = %#v, want AGENT_RUN", workstation.Type)
-	}
+	return canonical
 }
 
 func generatedWorkerByName(workers []factoryapi.Worker, name string) factoryapi.Worker {

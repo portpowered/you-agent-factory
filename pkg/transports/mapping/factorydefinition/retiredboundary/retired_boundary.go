@@ -7,11 +7,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-type Field = interfaces.RetiredFieldAlias
-
-var factoryFields = interfaces.RetiredFactoryFieldAliases()
-var workerFields = interfaces.RetiredWorkerFieldAliases()
-var workstationFields = interfaces.RetiredWorkstationFieldAliases()
+var factoryFields = RetiredFactoryFieldAliases()
+var workerFields = RetiredWorkerFieldAliases()
+var workstationFields = RetiredWorkstationFieldAliases()
 
 func RejectFanInField(data []byte) error {
 	var payload struct {
@@ -163,7 +161,7 @@ func RejectCronBoundaryAliases(raw any, path string) error {
 	if !ok {
 		return nil
 	}
-	return RejectFields(cron, path, interfaces.RetiredCronFieldAliases())
+	return RejectFields(cron, path, RetiredCronFieldAliases())
 }
 
 func RejectFields(container map[string]any, path string, fields []Field) error {
