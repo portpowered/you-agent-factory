@@ -4,7 +4,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
@@ -159,6 +159,24 @@ export function FactoryGraphEditorToolbar({
   });
   const deleteDisabled =
     toolbarButtonsDisabled || deleteAction.kind === "disabled";
+  const handleSaveKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.defaultPrevented ||
+      saveDisabled ||
+      isSaving ||
+      onSave === undefined
+    ) {
+      return;
+    }
+
+    // The browser normally synthesizes a click for Enter. Under the loaded
+    // graph-editor render path that default dispatch can be dropped after the
+    // keydown reaches this still-enabled button, so make the user action
+    // atomic at the button boundary and avoid a duplicate native click.
+    event.preventDefault();
+    onSave();
+  };
 
   return (
     <FactoryGraphEditorFloatingSurface
@@ -280,6 +298,7 @@ export function FactoryGraphEditorToolbar({
                     disabled={saveDisabled}
                     executing={isSaving}
                     iconOnly
+                    onKeyDown={handleSaveKeyDown}
                     onClick={onSave}
                     placement="above"
                     tooltip={saveDisabledReason ?? messages.draftActionsSave}
