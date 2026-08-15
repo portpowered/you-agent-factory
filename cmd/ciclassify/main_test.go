@@ -130,6 +130,24 @@ func TestClassifierOwnershipBoundaries(t *testing.T) {
 	}
 }
 
+func TestClassifierSelectsLocalInferenceForPR1938PublicationSeam(t *testing.T) {
+	t.Parallel()
+	paths := []string{
+		"pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go",
+		"pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go",
+		"pkg/services/workers/execution_requests.go",
+		"pkg/services/workers/internal/service/execute.go",
+		"pkg/services/workers/internal/services/runtime_assembly/construction/service.go",
+		"pkg/services/workers/internal/services/workstations/execution/recording/model_test.go",
+		"pkg/services/workers/internal/services/workstations/execution/recording/provider.go",
+		"pkg/services/workers/wire/stateless_execute_test.go",
+		"tests/functional/runtime_api/api_inference_events_test.go",
+	}
+
+	result := classifyPaths(paths)
+	assertLaneSet(t, result, laneBackend, laneLocalInference)
+}
+
 func assertLaneSet(t *testing.T, result classificationResult, want ...string) {
 	t.Helper()
 	wantSet := make(map[string]bool, len(want))
