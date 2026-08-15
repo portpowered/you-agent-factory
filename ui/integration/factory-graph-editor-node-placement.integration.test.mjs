@@ -833,6 +833,9 @@ async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
         const signature = JSON.stringify({
           nextSample: observation.nextSample,
           stable: observation.stable,
+          stableSampleCount: observation.stableSampleCount,
+          terminalDiagnostic: observation.terminalDiagnostic,
+          viewportViolation: observation.viewportViolation,
           withinViewport: observation.withinViewport,
         });
         if (signature !== previousSignature && observations.length < 80) {

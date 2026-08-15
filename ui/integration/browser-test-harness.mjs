@@ -336,15 +336,97 @@ function graphNodePlacementSamplesEqual(left, right) {
   );
 }
 
+const settledGraphNodePlacementSampleCount = 3;
+
+function formatGraphNodePlacementNumber(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : String(value);
+}
+
+function graphNodePlacementViewportViolation(sample) {
+  if (!sample) {
+    return null;
+  }
+
+  const nodeCenter = {
+    x: sample.node.x + sample.node.width / 2,
+    y: sample.node.y + sample.node.height / 2,
+  };
+  const viewport = {
+    bottom: sample.viewport.y + sample.viewport.height,
+    left: sample.viewport.x,
+    right: sample.viewport.x + sample.viewport.width,
+    top: sample.viewport.y,
+  };
+  const violations = [];
+
+  if (nodeCenter.x < viewport.left) {
+    violations.push({
+      axis: "x",
+      boundary: "left edge",
+      direction: "left of",
+      overshootPx: viewport.left - nodeCenter.x,
+    });
+  }
+  if (nodeCenter.x > viewport.right) {
+    violations.push({
+      axis: "x",
+      boundary: "right edge",
+      direction: "right of",
+      overshootPx: nodeCenter.x - viewport.right,
+    });
+  }
+  if (nodeCenter.y < viewport.top) {
+    violations.push({
+      axis: "y",
+      boundary: "top edge",
+      direction: "above",
+      overshootPx: viewport.top - nodeCenter.y,
+    });
+  }
+  if (nodeCenter.y > viewport.bottom) {
+    violations.push({
+      axis: "y",
+      boundary: "bottom edge",
+      direction: "below",
+      overshootPx: nodeCenter.y - viewport.bottom,
+    });
+  }
+
+  if (violations.length === 0) {
+    return null;
+  }
+
+  return {
+    nodeCenter,
+    viewport,
+    violations,
+  };
+}
+
 function graphNodePlacementIsWithinViewport(sample) {
-  const nodeCenterX = sample.node.x + sample.node.width / 2;
-  const nodeCenterY = sample.node.y + sample.node.height / 2;
-  return (
-    nodeCenterX >= sample.viewport.x &&
-    nodeCenterX <= sample.viewport.x + sample.viewport.width &&
-    nodeCenterY >= sample.viewport.y &&
-    nodeCenterY <= sample.viewport.y + sample.viewport.height
-  );
+  return graphNodePlacementViewportViolation(sample) === null;
+}
+
+function formatGraphNodePlacementViewportViolation(
+  nodeTestId,
+  pollCount,
+  stableSampleCount,
+  violation,
+) {
+  const outOfRangeAxes = violation.violations
+    .map(
+      ({ axis, boundary, direction, overshootPx }) =>
+        `${axis} ${direction} ${boundary} by ${formatGraphNodePlacementNumber(overshootPx)}px`,
+    )
+    .join("; ");
+
+  return [
+    `Settled graph node placement cannot satisfy viewport visibility for ${nodeTestId}`,
+    `after ${stableSampleCount} consecutive byte-identical samples at poll ${pollCount}`,
+    `node center=(${formatGraphNodePlacementNumber(violation.nodeCenter.x)}, ${formatGraphNodePlacementNumber(violation.nodeCenter.y)})`,
+    `viewport edges={left=${formatGraphNodePlacementNumber(violation.viewport.left)}, right=${formatGraphNodePlacementNumber(violation.viewport.right)}, top=${formatGraphNodePlacementNumber(violation.viewport.top)}, bottom=${formatGraphNodePlacementNumber(violation.viewport.bottom)}}`,
+    `out-of-range axes: ${outOfRangeAxes}`,
+  ].join("; ");
 }
 
 /**
@@ -361,6 +443,7 @@ export async function waitForStableFactoryGraphNodePlacement(
   let previousSample = null;
   let stableSample = null;
   let pollCount = 0;
+  let stableSampleCount = 0;
 
   await waitForDurableCheckpoint(
     `factory graph node placement: ${nodeTestId}`,
@@ -402,16 +485,35 @@ export async function waitForStableFactoryGraphNodePlacement(
         }, nodeTestId)
         .catch(() => null);
       const stable = graphNodePlacementSamplesEqual(previousSample, nextSample);
+      stableSampleCount = stable ? stableSampleCount + 1 : nextSample ? 1 : 0;
+      const viewportViolation = graphNodePlacementViewportViolation(nextSample);
       const withinViewport = Boolean(
         nextSample && graphNodePlacementIsWithinViewport(nextSample),
       );
+      const terminalDiagnostic =
+        stableSampleCount >= settledGraphNodePlacementSampleCount &&
+        viewportViolation
+          ? formatGraphNodePlacementViewportViolation(
+              nodeTestId,
+              pollCount,
+              stableSampleCount,
+              viewportViolation,
+            )
+          : null;
       onObservation?.({
         nextSample,
         pollCount,
         stable,
+        stableSampleCount,
+        terminalDiagnostic,
+        viewportViolation,
         withinViewport,
       });
       previousSample = nextSample;
+
+      if (terminalDiagnostic) {
+        throw new Error(terminalDiagnostic);
+      }
 
       if (!stable || !nextSample || !withinViewport) {
         return false;
