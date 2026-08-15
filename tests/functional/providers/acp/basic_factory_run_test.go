@@ -17,7 +17,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -207,7 +206,7 @@ func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	writeLegacyACPWorker(t, dir, "missing-acp")
 
 	var processStarts atomic.Int32
-	fallback := &legacyProvider{response: workers.InferenceResponse{Content: "legacy COMPLETE"}}
+	fallback := &legacyProvider{response: providers.ExecuteResult{Content: "legacy COMPLETE"}}
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
 		ProviderOverride:              fallback,
@@ -230,7 +229,7 @@ func TestScriptWrapExecutorProviderRetainsLegacyProviderRoute(t *testing.T) {
 	writeLegacyACPWorker(t, dir, "SCRIPT_WRAP")
 
 	var processStarts atomic.Int32
-	fallback := &legacyProvider{response: workers.InferenceResponse{Content: "legacy route COMPLETE"}}
+	fallback := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
 		ProviderOverride:              fallback,
@@ -345,9 +344,9 @@ func acpFailureDiagnostics(events []factoryapi.FactoryEvent) string {
 }
 
 type legacyProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	calls    atomic.Int32
-	response workers.InferenceResponse
+	response providers.ExecuteResult
 	err      error
 }
 
@@ -355,23 +354,30 @@ type availableExecutableLocator struct{}
 
 func (availableExecutableLocator) LookPath(file string) (string, error) { return file, nil }
 
-func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (p *legacyProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	p.calls.Add(1)
-	response := p.response
+	response := p.response.Clone()
 	if response.Content != "" && response.Diagnostics == nil {
-		response.Diagnostics = &workers.WorkDiagnostics{Metadata: map[string]string{
-			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		response.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			"completion_evidence": "provider_response",
 		}}
 	}
 	return response, p.err
 }
 
-func (p *legacyProvider) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	return (testutil.ProviderServiceAdapter{InferFunc: p.Infer}).Execute(ctx, request)
-}
-
 func (p *legacyProvider) Continue(ctx context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
-	return (testutil.ProviderServiceAdapter{InferFunc: p.Infer}).Continue(ctx, request)
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	result, err := p.Execute(ctx, request.Attempt)
+	if err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    result,
+	}, nil
 }
 
 func TestACPAgentHelperProcess(t *testing.T) {

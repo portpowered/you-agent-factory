@@ -21,7 +21,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -56,7 +56,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	// ProviderOverride (an in-process Infer-shaped fake) is used here
+	// ProviderOverride (an in-process execute-shaped Providers fake) is used here
 	// instead of the standards-preferred ProviderCommandRunner
 	// (platformprocess.CommandRunner, a subprocess-launch-shaped fake).
 	// ProviderCommandRunner *can* drive this exact @you/goal fixture --
@@ -69,7 +69,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	// execution adapter expects for each of those rounds, coupling this test
 	// to that adapter's wire format for no additional coverage of the
 	// on-demand-activation behavior this test exists to prove;
-	// ProviderOverride's higher-level workers.InferenceResponse shape
+	// ProviderOverride's higher-level providers.ExecuteResult shape
 	// isolates this test from that coupling. Both edges are equally real
 	// external-effect ports serviceedges.Edges accepts.
 	provider := newAcceptedGoalProvider()
@@ -571,7 +571,7 @@ func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
 	return responses
 }
 
-// acceptedGoalProvider is an Infer-shaped provider that answers every inference
+// acceptedGoalProvider is an execute-shaped provider that answers every attempt
 // with the one decision envelope the seeded @you/goal packaged Factory's
 // `outcomeFormat: decision-envelope` executor contract accepts as complete,
 // so its goal loop reaches its authored `complete` terminal state.
@@ -584,49 +584,45 @@ func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
 // `onFailure`, and fail the invocation -- turning a delegation test red for a
 // reason that has nothing to do with delegation.
 type acceptedGoalProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 }
 
 func newAcceptedGoalProvider() acceptedGoalProvider {
 	provider := acceptedGoalProvider{}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (acceptedGoalProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
-	return workers.InferenceResponse{
+func (acceptedGoalProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{
 		Content: `{"decision":"accepted","feedback":"","output":"goal reached over ACP"}`,
 	}, nil
 }
 
-// blockingProvider wraps an Infer-shaped provider and blocks its first Infer call
+// blockingProvider wraps an execute-shaped provider and blocks its first Execute call
 // until release is closed, closing started exactly once when that call
 // begins. A test uses this to deterministically observe that a Factory
 // dispatch's own inference call is genuinely in flight -- proving the
 // admitted turn is actually RUNNING, not merely scheduled on a goroutine --
 // before sending a concurrent request, with no sleep-based synchronization.
 type blockingProvider struct {
-	testutil.ProviderServiceAdapter
-	inner interface {
-		Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
-	}
+	testutil.NativeProvider
+	inner   providers.Service
 	started chan struct{}
 	release chan struct{}
 	once    sync.Once
 }
 
-func newBlockingProvider(inner interface {
-	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
-}) *blockingProvider {
+func newBlockingProvider(inner providers.Service) *blockingProvider {
 	provider := &blockingProvider{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (b *blockingProvider) Infer(ctx context.Context, req workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (b *blockingProvider) Execute(ctx context.Context, req providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	b.once.Do(func() { close(b.started) })
 	<-b.release
-	return b.inner.Infer(ctx, req)
+	return b.inner.Execute(ctx, req)
 }
 
 // TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch
@@ -696,7 +692,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 
 	// Snapshot the generator count immediately before and after the
 	// concurrent busy request, while the first turn's own dispatch is still
-	// parked inside the blocked Infer call and so cannot itself be
+	// parked inside the blocked Execute call and so cannot itself be
 	// consuming the generator concurrently. The first turn keeps consuming
 	// this same generator for its own internal bookkeeping once unblocked
 	// below, so "unchanged across the whole test" is not the right

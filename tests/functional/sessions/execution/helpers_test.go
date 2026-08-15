@@ -21,7 +21,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -39,37 +38,37 @@ const (
 )
 
 type partialResultBlockingProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
-	inferBlocked    chan struct{}
+	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newPartialResultBlockingProvider(workflowName string) *partialResultBlockingProvider {
 	provider := &partialResultBlockingProvider{
-		inferBlocked: make(chan struct{}),
-		workflowName: workflowName,
+		executeBlocked: make(chan struct{}),
+		workflowName:   workflowName,
 	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (p *partialResultBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+func (p *partialResultBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case <-p.inferBlocked:
+	case <-p.executeBlocked:
 	case <-timer.C:
-		t.Fatal("provider Infer did not enter its cancellable wait")
+		t.Fatal("provider Execute did not enter its cancellable wait")
 	}
 }
 
-func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+func (p *partialResultBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -82,13 +81,13 @@ func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeo
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+	t.Fatal("provider Execute did not observe canceled workflow context")
 }
 
-func (p *partialResultBlockingProvider) Infer(
+func (p *partialResultBlockingProvider) Execute(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -96,11 +95,11 @@ func (p *partialResultBlockingProvider) Infer(
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
+		return providers.ExecuteResult{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &providers.SessionMetadata{
+			SessionRef: &providers.SessionRef{
 				Provider: "mock",
-				Kind:     "session_id",
+				Kind:     providers.SessionIDKind,
 				ID:       "partial-result-provider-session-1",
 			},
 		}, nil
@@ -109,21 +108,21 @@ func (p *partialResultBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
-		close(p.inferBlocked)
+		close(p.executeBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &providers.SessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "mock",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "partial-result-provider-session-2",
 		},
 	}, nil
@@ -663,9 +662,9 @@ func releaseBlockedPartialResultSession(
 	t.Helper()
 
 	reason := "results dispatches partial result cleanup"
-	provider.waitForInferBlocked(t, 5*time.Second)
+	provider.waitForExecuteBlocked(t, 5*time.Second)
 	interruptFactoryDispatch(t, serverURL, sessionID, partialResultSecondDispatchID, reason)
-	provider.waitForCanceledInfer(t, 5*time.Second)
+	provider.waitForCanceledExecute(t, 5*time.Second)
 	waitForDurableSessionStatus(
 		t,
 		serverURL,

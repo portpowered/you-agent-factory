@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -39,7 +39,7 @@ func TestFactoryMixesACPAndScriptWrapWorkersWithoutCrossRouting(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "1")
 
 	var starts atomic.Int32
-	legacy := &legacyProvider{response: workers.InferenceResponse{Content: "native COMPLETE"}}
+	legacy := &legacyProvider{response: providers.ExecuteResult{Content: "native COMPLETE"}}
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},

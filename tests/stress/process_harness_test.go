@@ -24,6 +24,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -44,11 +45,19 @@ type stressProcessHarness struct {
 func startStressProcess(
 	t *testing.T,
 	dir string,
-	provider inferenceProvider,
+	provider any,
 ) *stressProcessHarness {
 	t.Helper()
 	ensureStressProviderDefinitions(t, dir)
-	providerService := testutil.ProviderServiceAdapter{InferFunc: provider.Infer}
+	var providerService providers.Service
+	switch provider := provider.(type) {
+	case providers.Service:
+		providerService = provider
+	case inferenceProvider:
+		providerService = testutil.ProviderServiceAdapter{InferFunc: provider.Infer}
+	default:
+		panic("startStressProcess requires a Providers service or legacy test provider")
+	}
 
 	var (
 		serverMu sync.Mutex

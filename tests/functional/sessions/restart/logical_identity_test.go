@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -435,7 +434,7 @@ func startInterruptedResumableSession(
 	)
 
 	reason := "logical identity resume interrupt"
-	provider.waitForInferBlocked(t, 5*time.Second)
+	provider.waitForExecuteBlocked(t, 5*time.Second)
 	postLogicalIdentityJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		baseURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
@@ -444,7 +443,7 @@ func startInterruptedResumableSession(
 			Reason:     &reason,
 		},
 	)
-	provider.waitForCanceledInfer(t, 5*time.Second)
+	provider.waitForCanceledExecute(t, 5*time.Second)
 	waitForDurableFactorySessionStatus(
 		t,
 		baseURL,
@@ -727,33 +726,33 @@ func strPtr(value string) *string {
 }
 
 type logicalIdentityResumeBlockingProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
-	inferBlocked    chan struct{}
+	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newLogicalIdentityResumeBlockingProvider(workflowName string) *logicalIdentityResumeBlockingProvider {
 	provider := &logicalIdentityResumeBlockingProvider{
-		inferBlocked: make(chan struct{}),
-		workflowName: workflowName,
+		executeBlocked: make(chan struct{}),
+		workflowName:   workflowName,
 	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (p *logicalIdentityResumeBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+func (p *logicalIdentityResumeBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case <-p.inferBlocked:
+	case <-p.executeBlocked:
 	case <-timer.C:
-		t.Fatal("provider Infer did not enter its cancellable wait")
+		t.Fatal("provider Execute did not enter its cancellable wait")
 	}
 }
 
@@ -763,10 +762,10 @@ func (p *logicalIdentityResumeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *logicalIdentityResumeBlockingProvider) Infer(
+func (p *logicalIdentityResumeBlockingProvider) Execute(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -774,11 +773,11 @@ func (p *logicalIdentityResumeBlockingProvider) Infer(
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
+		return providers.ExecuteResult{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &providers.SessionMetadata{
+			SessionRef: &providers.SessionRef{
 				Provider: "mock",
-				Kind:     "session_id",
+				Kind:     providers.SessionIDKind,
 				ID:       "live-provider-session-1",
 			},
 		}, nil
@@ -787,27 +786,27 @@ func (p *logicalIdentityResumeBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
-		close(p.inferBlocked)
+		close(p.executeBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &providers.SessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "mock",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "live-provider-session-2",
 		},
 	}, nil
 }
 
-func (p *logicalIdentityResumeBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+func (p *logicalIdentityResumeBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -819,5 +818,5 @@ func (p *logicalIdentityResumeBlockingProvider) waitForCanceledInfer(t *testing.
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+	t.Fatal("provider Execute did not observe canceled workflow context")
 }

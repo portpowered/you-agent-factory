@@ -13,6 +13,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -30,11 +31,20 @@ func withClock(clock platformclock.Source) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
 }
 
-func withProvider(provider interface {
-	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
-}) runtimeOption {
+func withProvider(provider any) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
-		cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
+		switch provider := provider.(type) {
+		case nil:
+			cfg.Edges.ProviderOverride = nil
+		case providers.Service:
+			cfg.Edges.ProviderOverride = provider
+		case interface {
+			Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+		}:
+			cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
+		default:
+			panic("withProvider requires a Providers service or legacy test provider")
+		}
 	}
 }
 

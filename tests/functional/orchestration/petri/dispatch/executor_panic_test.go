@@ -8,8 +8,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -30,9 +30,9 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 	})
 
 	// ProviderOverride (not ProviderCommandRunner) is required here; see the
-	// documented in-scope exception on panicInferenceProvider below.
-	provider := panicInferenceProvider{message: "simulated executor catastrophic panic"}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	// documented in-scope exception on panicExecuteProvider below.
+	provider := panicExecuteProvider{message: "simulated executor catastrophic panic"}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
@@ -66,7 +66,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 	)
 }
 
-// panicInferenceProvider panics from Infer to exercise the Workers execution
+// panicExecuteProvider panics from Execute to exercise the Workers execution
 // boundary's WorkerExecutor panic recovery through the customer process
 // boundary rather than any internal Petri or Workers seam.
 //
@@ -86,18 +86,18 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 // so ProviderCommandRunner can only ever produce the ordinary failed-executor
 // path already covered by the "provider_command_exit_routes_to_failed_terminal"
 // subtest in simple_run_test.go, never a Go-level panic. An in-process
-// Provider.Infer fake is therefore the only way to exercise the recover() in
+// An in-process Provider.Execute fake is therefore the only way to exercise the recover() in
 // workerExecutorRequestAdapter.Execute
 // (pkg/services/workers/workstation_pool_boundary_impl.go).
-type panicInferenceProvider struct {
-	testutil.ProviderServiceAdapter
+type panicExecuteProvider struct {
+	testutil.NativeProvider
 	message string
 }
 
-func (p panicInferenceProvider) Infer(
+func (p panicExecuteProvider) Execute(
 	_ context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	panic(p.message)
 }
 
