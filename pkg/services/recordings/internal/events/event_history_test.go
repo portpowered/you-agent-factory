@@ -430,14 +430,9 @@ closed:
 }
 
 func TestFactoryEventHistory_NilSubscribeReturnsClosedStream(t *testing.T) {
-	var history *FactoryEventHistory
-
-	stream, err := history.Subscribe(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
-	if err != nil {
-		t.Fatalf("Subscribe: %v", err)
-	}
-	if stream.Events == nil {
-		t.Fatal("Subscribe returned a nil event stream")
+	stream, err := (*FactoryEventHistory)(nil).Subscribe(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil || stream.Events == nil {
+		t.Fatalf("Subscribe() = %#v, %v; want a closed event stream", stream, err)
 	}
 	if _, ok := <-stream.Events; ok {
 		t.Fatal("nil history returned an open event stream")
