@@ -1,6 +1,6 @@
 import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { cn } from "../../../lib/cn";
 import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
@@ -48,6 +48,11 @@ export interface CompletedFailedWorkstationCardProps {
 interface TerminalWorkRowProps {
   emptyMessage: string;
   fallbackMessage: string;
+  historyProgressLabel: (
+    shownCount: number,
+    totalCount: number,
+    remainingCount: number,
+  ) => string;
   iconLabel: string;
   itemCountLabel: string;
   items: TerminalWorkItem[];
@@ -55,6 +60,7 @@ interface TerminalWorkRowProps {
   onSelectItem: (item: TerminalWorkItem) => void;
   selectedItem?: TerminalWorkSelection | null;
   status: TerminalWorkStatus;
+  showMoreHistoryAction: (remainingCount: number) => string;
   summary: (status: TerminalWorkStatus, workstation: string) => string;
   title: string;
   toggleLabel: (expanded: boolean) => string;
@@ -63,6 +69,8 @@ interface TerminalWorkRowProps {
 
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_BUTTON_META_CLASS = "leading-snug text-current";
+// Keep each terminal status group compact while making every retained Work reachable.
+const TERMINAL_WORK_HISTORY_PAGE_SIZE = 10;
 
 function terminalStatusIconKind(
   status: TerminalWorkStatus,
@@ -149,16 +157,18 @@ export function CompletedFailedWorkstationCard({
           <TerminalWorkRow
             emptyMessage={messages.emptyState(status)}
             fallbackMessage={messages.sessionSummaryFallback(status)}
+            historyProgressLabel={messages.historyProgressLabel}
             iconLabel={messages.iconLabel(status)}
             itemCountLabel={messages.itemCountLabel(
               itemsByStatus[status].length,
             )}
             items={itemsByStatus[status]}
-            key={status}
+            key={`${widgetId}:${status}`}
             messages={messages}
             onSelectItem={(item) => onSelectItem(status, item)}
             selectedItem={selectedItem}
             status={status}
+            showMoreHistoryAction={messages.showMoreHistoryAction}
             summary={messages.summary}
             title={messages.rowTitle(status)}
             toggleLabel={messages.disclosureLabel}
@@ -173,6 +183,7 @@ export function CompletedFailedWorkstationCard({
 function TerminalWorkRow({
   emptyMessage,
   fallbackMessage,
+  historyProgressLabel,
   iconLabel,
   itemCountLabel,
   items,
@@ -180,6 +191,7 @@ function TerminalWorkRow({
   onSelectItem,
   selectedItem,
   status,
+  showMoreHistoryAction,
   summary,
   title,
   toggleLabel,
@@ -187,6 +199,36 @@ function TerminalWorkRow({
 }: TerminalWorkRowProps) {
   const rowId = `${widgetId}-${status}-items`;
   const headingId = `${rowId}-heading`;
+  const [visibleItemCount, setVisibleItemCount] = useState(
+    TERMINAL_WORK_HISTORY_PAGE_SIZE,
+  );
+  const [focusHistoryListAfterReveal, setFocusHistoryListAfterReveal] =
+    useState(false);
+  const historyListRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (!focusHistoryListAfterReveal) {
+      return;
+    }
+
+    historyListRef.current?.focus();
+    setFocusHistoryListAfterReveal(false);
+  }, [focusHistoryListAfterReveal]);
+
+  const visibleItems = items.slice(0, visibleItemCount);
+  const remainingItemCount = items.length - visibleItems.length;
+  const revealMoreItems = () => {
+    if (remainingItemCount <= 0) {
+      return;
+    }
+
+    if (remainingItemCount <= TERMINAL_WORK_HISTORY_PAGE_SIZE) {
+      setFocusHistoryListAfterReveal(true);
+    }
+    setVisibleItemCount((currentCount) =>
+      Math.min(currentCount + TERMINAL_WORK_HISTORY_PAGE_SIZE, items.length),
+    );
+  };
 
   return (
     <StandardExpandableSection
@@ -215,25 +257,53 @@ function TerminalWorkRow({
       toggleLabel={({ expanded }) => toggleLabel(expanded)}
     >
       {items.length > 0 ? (
-        <ul className="m-0 grid list-none gap-2.5 p-0">
-          {items.map((item) => (
-            <TerminalWorkListItem
-              fallbackMessage={fallbackMessage}
-              item={item}
-              key={terminalWorkIdentity(item)}
-              messages={messages}
-              onClick={() => onSelectItem(item)}
-              selected={terminalWorkSelectionMatches(
-                item,
-                selectedItem,
-                status,
-              )}
-              selectionActionLabel={messages.selectWorkItemLabel(item.label)}
-              status={status}
-              summary={summary}
-            />
-          ))}
-        </ul>
+        <>
+          <ul
+            className="m-0 grid list-none gap-2.5 p-0"
+            id={`${rowId}-list`}
+            ref={historyListRef}
+            tabIndex={-1}
+          >
+            {visibleItems.map((item) => (
+              <TerminalWorkListItem
+                fallbackMessage={fallbackMessage}
+                item={item}
+                key={terminalWorkIdentity(item)}
+                messages={messages}
+                onClick={() => onSelectItem(item)}
+                selected={terminalWorkSelectionMatches(
+                  item,
+                  selectedItem,
+                  status,
+                )}
+                selectionActionLabel={messages.selectWorkItemLabel(item.label)}
+                status={status}
+                summary={summary}
+              />
+            ))}
+          </ul>
+          {remainingItemCount > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CurrentSelectionSupportingText
+                className={TERMINAL_BUTTON_META_CLASS}
+                tone="status"
+              >
+                {historyProgressLabel(
+                  visibleItems.length,
+                  items.length,
+                  remainingItemCount,
+                )}
+              </CurrentSelectionSupportingText>
+              <DashboardActionButton
+                aria-controls={`${rowId}-list`}
+                onClick={revealMoreItems}
+                type="button"
+              >
+                {showMoreHistoryAction(remainingItemCount)}
+              </DashboardActionButton>
+            </div>
+          ) : null}
+        </>
       ) : (
         <WidgetDetailCopy>{emptyMessage}</WidgetDetailCopy>
       )}

@@ -51,6 +51,17 @@ const failedItems: TerminalWorkItem[] = [
   },
 ];
 
+const boundedCompletedItems: TerminalWorkItem[] = Array.from(
+  { length: 12 },
+  (_, index) => {
+    const itemNumber = index + 1;
+    return {
+      label: `Completed Story ${itemNumber}`,
+      traceWorkID: `work-completed-story-${itemNumber}`,
+    };
+  },
+);
+
 const ACCENT_SELECTED_TOKENS = [
   "bg-primary",
   "bg-primary-container",
@@ -194,6 +205,60 @@ export const LocalizedJapanese = {
         name: messages.disclosureLabel(false),
       }),
     ).toHaveAttribute("aria-expanded", "false");
+  },
+};
+
+export const BoundedHistory = {
+  tags: ["test"],
+  render: () => (
+    <CompletedFailedWorkstationCard
+      completedItems={boundedCompletedItems}
+      failedItems={[]}
+      onSelectItem={() => {}}
+      widgetId="terminal-work-bounded-history-story"
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const messages = getTerminalWorkMessages("en");
+    const terminalWork = await canvas.findByLabelText(messages.cardTitle);
+    const completedRow = (
+      await within(terminalWork).findByRole("heading", {
+        name: messages.rowTitle("completed"),
+      })
+    ).closest("section");
+    if (!(completedRow instanceof HTMLElement)) {
+      throw new Error("expected completed terminal-work row");
+    }
+
+    const completedList = within(completedRow).getByRole("list");
+    await expect(within(completedList).getAllByRole("listitem")).toHaveLength(
+      10,
+    );
+    await expect(
+      within(completedRow).getByText("Showing 10 of 12 items. 2 remaining."),
+    ).toBeVisible();
+
+    const revealAction = within(completedRow).getByRole("button", {
+      name: "Show 2 more items",
+    });
+    revealAction.focus();
+    await userEvent.keyboard("{Enter}");
+
+    await expect(within(completedList).getAllByRole("listitem")).toHaveLength(
+      12,
+    );
+    await expect(
+      within(completedRow).getByRole("button", {
+        name: messages.selectWorkItemLabel("Completed Story 12"),
+      }),
+    ).toBeVisible();
+    expect(
+      within(completedRow).queryByRole("button", {
+        name: "Show 2 more items",
+      }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(completedList);
   },
 };
 

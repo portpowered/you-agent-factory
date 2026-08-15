@@ -20,6 +20,87 @@ const failedAttempt: DashboardProviderSessionAttempt = {
 };
 
 describe("CompletedFailedWorkstationCard", () => {
+  it("reveals bounded terminal history without skipping or duplicating rows", () => {
+    const completedItems = Array.from({ length: 12 }, (_, index) => {
+      const itemNumber = index + 1;
+      return {
+        label: `Completed Story ${itemNumber}`,
+        traceWorkID: `work-completed-story-${itemNumber}`,
+      };
+    });
+
+    render(
+      <CompletedFailedWorkstationCard
+        completedItems={completedItems}
+        failedItems={[]}
+        onSelectItem={vi.fn()}
+        selectedItem={{
+          status: "completed",
+          traceWorkID: "work-completed-story-1",
+        }}
+      />,
+    );
+
+    const completedRow = screen
+      .getByRole("heading", { name: "Completed" })
+      .closest("section");
+    if (!completedRow) {
+      throw new Error("expected completed row");
+    }
+    const completedList = within(completedRow).getByRole("list");
+
+    expect(within(completedList).getAllByRole("listitem")).toHaveLength(10);
+    expect(
+      within(completedRow)
+        .getByRole("button", {
+          name: "Select work item Completed Story 1",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(completedRow).getByText("Showing 10 of 12 items. 2 remaining."),
+    ).toBeTruthy();
+    expect(
+      within(completedRow).queryByRole("button", {
+        name: "Show 2 more items",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(completedRow).queryByRole("button", {
+        name: "Select work item Completed Story 11",
+      }),
+    ).toBeNull();
+
+    const revealAction = within(completedRow).getByRole("button", {
+      name: "Show 2 more items",
+    });
+    revealAction.focus();
+    fireEvent.click(revealAction);
+
+    expect(within(completedList).getAllByRole("listitem")).toHaveLength(12);
+    expect(
+      within(completedRow).getByRole("button", {
+        name: "Select work item Completed Story 11",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(completedRow)
+        .getByRole("button", {
+          name: "Select work item Completed Story 1",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      within(completedRow).queryByText("Showing 10 of 12 items. 2 remaining."),
+    ).toBeNull();
+    expect(
+      within(completedRow).queryByRole("button", {
+        name: "Show 2 more items",
+      }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(completedList);
+  });
+
   it("renders distinct expandable outcome rows with canonical work identity", () => {
     const onSelectItem = vi.fn();
     const messages = getTerminalWorkMessages("en");

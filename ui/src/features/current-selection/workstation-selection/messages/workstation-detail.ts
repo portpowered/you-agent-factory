@@ -220,6 +220,8 @@ const workstationDetailMessagesByLocale = {
     elapsedLabel: "Elapsed",
     totalRuntimeLabel: "Total runtime",
     expandAction: "Expand",
+    historyProgressLabel: (shownCount, totalCount, remainingCount) =>
+      `Showing ${shownCount} of ${totalCount} requests. ${remainingCount} remaining.`,
     historyRequestCountLabel: (count) =>
       singularPlural(count, "request", "requests"),
     historyRunCountLabel: (count) => singularPlural(count, "run", "runs"),
@@ -243,6 +245,8 @@ const workstationDetailMessagesByLocale = {
     requestDetailsUnavailable: (dispatchId) =>
       `Request details unavailable for dispatch ${dispatchId}.`,
     requestHistoryHeading: "Request history",
+    showMoreHistoryAction: (remainingCount) =>
+      `Show ${remainingCount} more request${remainingCount === 1 ? "" : "s"}`,
     requestSelectedAction: "Request selected",
     requestStatusStartedAgo: (elapsed) => `Started ${elapsed}`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
@@ -508,6 +512,8 @@ const workstationDetailMessagesByLocale = {
     elapsedLabel: "経過時間",
     totalRuntimeLabel: "合計実行時間",
     expandAction: "展開",
+    historyProgressLabel: (shownCount, totalCount, remainingCount) =>
+      `${totalCount}件中${shownCount}件を表示しています。残り${remainingCount}件。`,
     historyRequestCountLabel: (count) => `${count} 件のリクエスト`,
     historyRunCountLabel: (count) => `${count} 件のラン`,
     historicalRequestsLabel: "過去のリクエスト",
@@ -531,6 +537,7 @@ const workstationDetailMessagesByLocale = {
     requestDetailsUnavailable: (dispatchId) =>
       `ディスパッチ ${dispatchId} のリクエスト詳細は利用できません。`,
     requestHistoryHeading: "リクエスト履歴",
+    showMoreHistoryAction: (remainingCount) => `残り${remainingCount}件を表示`,
     requestSelectedAction: "リクエストを選択済み",
     requestStatusStartedAgo: (elapsed) => `${elapsed} に開始`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
@@ -792,6 +799,8 @@ const workstationDetailMessagesByLocale = {
     elapsedLabel: "경과 시간",
     totalRuntimeLabel: "총 실행 시간",
     expandAction: "펼치기",
+    historyProgressLabel: (shownCount, totalCount, remainingCount) =>
+      `${totalCount}개 요청 중 ${shownCount}개를 표시합니다. ${remainingCount}개 남았습니다.`,
     historyRequestCountLabel: (count) => `${count}개 요청`,
     historyRunCountLabel: (count) => `${count}개 실행`,
     historicalRequestsLabel: "이전 요청",
@@ -814,6 +823,8 @@ const workstationDetailMessagesByLocale = {
     requestDetailsUnavailable: (dispatchId) =>
       `디스패치 ${dispatchId}의 요청 세부정보를 사용할 수 없습니다.`,
     requestHistoryHeading: "요청 기록",
+    showMoreHistoryAction: (remainingCount) =>
+      `요청 ${remainingCount}개 더 표시`,
     requestSelectedAction: "요청 선택됨",
     requestStatusStartedAgo: (elapsed) => `${elapsed} 시작`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
@@ -1058,6 +1069,8 @@ const workstationDetailMessagesByLocale = {
     elapsedLabel: "已用时间",
     totalRuntimeLabel: "总运行时间",
     expandAction: "展开",
+    historyProgressLabel: (shownCount, totalCount, remainingCount) =>
+      `显示 ${totalCount} 个请求中的 ${shownCount} 个。剩余 ${remainingCount} 个。`,
     historyRequestCountLabel: (count) => `${count} 个请求`,
     historyRunCountLabel: (count) => `${count} 次运行`,
     historicalRequestsLabel: "历史请求",
@@ -1078,6 +1091,8 @@ const workstationDetailMessagesByLocale = {
     requestDetailsUnavailable: (dispatchId) =>
       `无法提供分派 ${dispatchId} 的请求详情。`,
     requestHistoryHeading: "请求历史",
+    showMoreHistoryAction: (remainingCount) =>
+      `再显示 ${remainingCount} 个请求`,
     requestSelectedAction: "请求已选中",
     requestStatusStartedAgo: (elapsed) => `开始于 ${elapsed}`,
     runnerFieldHelp: (runnerName, sourceLabel) =>
