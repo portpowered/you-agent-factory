@@ -2,6 +2,7 @@ package recording
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -290,5 +291,63 @@ func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
 	}
 	if events[0].DispatchID != request.Dispatch.DispatchID || events[1].RequestID != request.Dispatch.Execution.RequestID {
 		t.Fatalf("event correlation = %#v/%#v, want dispatch/request IDs", events[0], events[1])
+	}
+}
+
+func TestRunnerRecordsOneStructuredAudioTerminalResponse(t *testing.T) {
+	start := time.Unix(500, 0).UTC()
+	audio := []work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
+		File:        "artifacts/response.wav",
+		ContentType: "audio/wav",
+	}}
+	raw, err := json.Marshal(audio)
+	if err != nil {
+		t.Fatalf("marshal audio content: %v", err)
+	}
+
+	var events []workerexecution.ModelEvent
+	times := []time.Time{start, start.Add(4 * time.Millisecond)}
+	now := func() time.Time {
+		value := times[0]
+		times = times[1:]
+		return value
+	}
+	runner := NewRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{Content: string(raw)}, nil
+		}),
+		nil,
+		&workerconfig.FactoryWorkerConfig{Name: "audio-worker", Model: "audio-model"},
+		func(event workerexecution.ModelEvent) { events = append(events, event) },
+		now,
+	)
+
+	request := workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID: "dispatch-audio",
+			Execution:  work.ExecutionMetadata{RequestID: "request-audio"},
+		},
+	}
+	if _, err := runner.Execute(context.Background(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(events) != 2 || events[0].Kind != workerexecution.ModelEventKindRequest ||
+		events[1].Kind != workerexecution.ModelEventKindResponse || events[1].Response == nil {
+		t.Fatalf("events = %#v, want one request and one terminal response", events)
+	}
+	response := events[1].Response
+	if response.Outcome != workerexecution.InferenceOutcomeSucceeded || response.OutputContent == nil {
+		t.Fatalf("response = %#v, want successful structured output", response)
+	}
+	if len(*response.OutputContent) != 1 {
+		t.Fatalf("output content = %#v, want exactly one audio part", *response.OutputContent)
+	}
+	part := (*response.OutputContent)[0]
+	if part.Type != work.WorkContentPartTypeAudio || part.File != audio[0].File || part.ContentType != audio[0].ContentType {
+		t.Fatalf("audio part = %#v, want file/content type preserved", part)
+	}
+	if response.OutputPreview != nil {
+		t.Fatalf("output preview = %q, want nil for structured audio output", *response.OutputPreview)
 	}
 }

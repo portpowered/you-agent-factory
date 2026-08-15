@@ -25,6 +25,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestMain(m *testing.M) {
@@ -106,6 +107,53 @@ func TestBuildStatelessWorkersComposesAndPropagatesProviderValidation(t *testing
 	})
 	if err == nil || !strings.Contains(err.Error(), "provider registry validation failed") {
 		t.Fatalf("BuildStatelessWorkers(invalid provider) error = %v, want provider validation failure", err)
+	}
+}
+
+func TestBuildMockStatelessWorkersValidatesContextBeforeComposition(t *testing.T) {
+	t.Parallel()
+
+	mockWorkers := workers.NewEmptyMockWorkersConfig()
+	if service, err := BuildMockStatelessWorkers(nil, serviceedges.Edges{}, mockWorkers); service != nil ||
+		err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("BuildMockStatelessWorkers(nil) = (%#v, %v), want required-context failure", service, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if service, err := BuildMockStatelessWorkers(ctx, serviceedges.Edges{}, mockWorkers); service != nil ||
+		!errors.Is(err, context.Canceled) {
+		t.Fatalf("BuildMockStatelessWorkers(canceled) = (%#v, %v), want context.Canceled", service, err)
+	}
+}
+
+func TestBuildMockStatelessWorkersComposesAndPropagatesProviderValidation(t *testing.T) {
+	t.Parallel()
+
+	service, err := BuildMockStatelessWorkers(
+		context.Background(),
+		serviceedges.Edges{},
+		workers.NewEmptyMockWorkersConfig(),
+	)
+	if err != nil {
+		t.Fatalf("BuildMockStatelessWorkers() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("BuildMockStatelessWorkers() returned nil service")
+	}
+
+	_, err = BuildMockStatelessWorkers(
+		context.Background(),
+		serviceedges.Edges{
+			ProviderRegistrations: []inference.Registration{{
+				Manifest:    rootExternalManifest(t, "claude", "collision"),
+				Integration: &rootRecordingIntegration{identity: "claude"},
+			}},
+		},
+		workers.NewEmptyMockWorkersConfig(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "provider registry validation failed") {
+		t.Fatalf("BuildMockStatelessWorkers(invalid provider) error = %v, want provider validation failure", err)
 	}
 }
 

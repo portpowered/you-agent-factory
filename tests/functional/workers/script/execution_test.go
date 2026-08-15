@@ -46,6 +46,14 @@ func TestScriptWorkerCompletesWithPublicPrimaryResult(t *testing.T) {
 	if runner.CallCount() != 1 {
 		t.Fatalf("script command calls = %d, want exactly one external command effect", runner.CallCount())
 	}
+	request := runner.LastRequest()
+	if request.Command != "echo" {
+		t.Fatalf("script command = %q, want authored command %q", request.Command, "echo")
+	}
+	assertCommandArgs(t, request, []string{"default-output"})
+	if request.WorkDir == "" {
+		t.Fatal("script command work directory is empty, want the runtime workspace")
+	}
 
 	assertDispatchOutput(t, events, scriptPrimaryResultOutput)
 }

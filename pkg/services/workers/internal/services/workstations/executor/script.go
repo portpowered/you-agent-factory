@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 // ScriptExecutor adapts the private runners.Service.Execute result onto the
@@ -201,9 +202,22 @@ func (se *ScriptExecutor) Execute(
 			return outputSchemaConfigurationFailure(request, err), nil
 		}
 	}
+	ctx = workerexecution.WithProgressPublisher(ctx, se.Publish)
+	ctx = workerexecution.WithScriptEventRecorder(ctx, se.recorder)
+	ctx = workerexecution.WithCommandRunnerOverride(ctx, se.CommandRunner)
+	attempt := scriptRunnerRequest(request)
+	if strings.TrimSpace(attempt.Command) == "" {
+		attempt.Command = se.Command
+	}
+	if len(attempt.Args) == 0 {
+		attempt.Args = append([]string(nil), se.Args...)
+	}
+	if strings.TrimSpace(attempt.FactoryDirectory) == "" {
+		attempt.FactoryDirectory = se.FactoryDir
+	}
 	result, executionErr := se.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity: runners.ScriptIdentity,
-		Attempt:  scriptRunnerRequest(request),
+		Attempt:  attempt,
 	})
 	return attachStructuredResult(request, scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr)), nil
 }
@@ -248,6 +262,9 @@ func scriptRunnerRequest(request workers.WorkstationExecutionRequest) workers.Ru
 		InputTokens:        request.InputTokens,
 		ModelOperation:     request.ModelOperation,
 		ModelBindings:      request.ModelBindings,
+		Command:            request.Command,
+		Args:               append([]string(nil), request.Args...),
+		FactoryDirectory:   request.FactoryDirectory,
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
 		OutputSchema:       request.OutputSchema,

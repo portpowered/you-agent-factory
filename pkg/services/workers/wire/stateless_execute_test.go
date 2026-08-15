@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -238,6 +239,131 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	}
 	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "session-attempt-override" {
 		t.Fatalf("provider session event = %#v, want override session identity", events[1].Response.ProviderSession)
+	}
+}
+
+func TestNewMockServiceExecutesMockThroughCanonicalWorkersBehavior(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	config := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		WorkerName: "mock-worker",
+		RunType:    workers.MockWorkerRunTypeAccept,
+	}}}
+	var observations []workers.ExecutionObservation
+	service, err := NewMockService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		config,
+		MockDependencies{},
+		func(_ context.Context, observation workers.ExecutionObservation) error {
+			observations = append(observations, observation)
+			return nil
+		},
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewMockService() error = %v", err)
+	}
+
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-mock",
+			RuntimeID:        "runtime-mock",
+			GenerationID:     "generation-mock",
+			DispatchID:       "dispatch-mock",
+			AttemptID:        "attempt-mock",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "mock-worker",
+			RunnerID:   "mock",
+		},
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("mock Execute() error = %v", err)
+	}
+	if result.Correlation != request.Correlation {
+		t.Fatalf("mock correlation = %#v, want %#v", result.Correlation, request.Correlation)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
+		result.Output.Primary[0].Text != "mock worker accepted" {
+		t.Fatalf("mock result = %#v, want accepted canonical output", result)
+	}
+	if len(observations) != 2 || observations[0].Kind != workers.ExecutionObservationKindStarted ||
+		observations[1].Kind != workers.ExecutionObservationKindCompleted {
+		t.Fatalf("mock observations = %#v, want started and completed", observations)
+	}
+	for index, observation := range observations {
+		if observation.Correlation != request.Correlation {
+			t.Fatalf("mock observation[%d].Correlation = %#v, want %#v", index, observation.Correlation, request.Correlation)
+		}
+	}
+}
+
+func TestNewMockServiceRequiresExplicitMockComposition(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	if _, err := NewMockService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		MockDependencies{},
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	); err == nil {
+		t.Fatal("NewMockService() error = nil, want explicit mock configuration error")
+	}
+}
+
+func TestNewServiceRejectsMockSelectionWithoutExplicitMockComposition(t *testing.T) {
+	t.Parallel()
+
+	fixture := newStatelessTestFixture(t)
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-production-mock",
+			RuntimeID:        "runtime-production-mock",
+			GenerationID:     "generation-production-mock",
+			DispatchID:       "dispatch-production-mock",
+			AttemptID:        "attempt-production-mock",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "mock-worker",
+			RunnerID:   runners.MockIdentity,
+		},
+		Input: workers.ExecutionInput{
+			MockWorkers: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+				WorkerName: "mock-worker",
+				RunType:    workers.MockWorkerRunTypeAccept,
+			}}},
+		},
+	}
+
+	result, err := fixture.service.Execute(context.Background(), request)
+	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("production mock Execute() error = %v, want invalid execute request", err)
+	}
+	if result.Correlation != (workers.ExecutionCorrelation{}) ||
+		result.Outcome != "" || len(result.Output.Primary) != 0 || result.Failure != nil {
+		t.Fatalf("production mock result = %#v, want no started result", result)
 	}
 }
 

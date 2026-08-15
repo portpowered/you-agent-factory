@@ -58,6 +58,9 @@ func TestResolveInferenceRunnerDelegatesWhenModelsDeclines(t *testing.T) {
 	if inner.request.RunnerID != workers.RunnerIDCodex {
 		t.Fatalf("delegate runner id = %q, want codex", inner.request.RunnerID)
 	}
+	if inner.request.ModelOperation != request.ModelOperation {
+		t.Fatalf("delegate model operation = %q, want %q", inner.request.ModelOperation, request.ModelOperation)
+	}
 	if modelsEdge.calls != 1 {
 		t.Fatalf("Models calls = %d, want 1", modelsEdge.calls)
 	}
@@ -69,6 +72,9 @@ func TestResolveInferenceRunnerDelegatesWhenModelsDeclines(t *testing.T) {
 	}
 	if modelsEdge.request.Scope != scope {
 		t.Fatalf("Models scope = %q, want %q", modelsEdge.request.Scope, scope)
+	}
+	if modelsEdge.request.ModelOperation != request.ModelOperation {
+		t.Fatalf("Models model operation = %q, want %q", modelsEdge.request.ModelOperation, request.ModelOperation)
 	}
 }
 

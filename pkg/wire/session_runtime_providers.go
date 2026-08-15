@@ -782,6 +782,73 @@ func provideStatelessWorkersService(
 	agentToolFileSystem workers.AgentToolFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.Service, error) {
+	return provideStatelessWorkersServiceWithMock(
+		providersService,
+		modelsService,
+		scriptCommandRunner,
+		factoryDocsFileSystem,
+		clock,
+		logger,
+		worktreePreparer,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentToolFileSystem,
+		decisionEnvelopes,
+		nil,
+	)
+}
+
+// provideMockStatelessWorkersService is the explicit mock-feature composition
+// used only by the public root's opt-in detached Workers builder. Normal
+// process composition continues through provideStatelessWorkersService.
+func provideMockStatelessWorkersService(
+	providersService providers.Service,
+	modelsService models.Service,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	factoryDocsFileSystem platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock,
+	logger *zap.Logger,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	providerOverride workers.Provider,
+	agentToolFileSystem workers.AgentToolFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
+	return provideStatelessWorkersServiceWithMock(
+		providersService,
+		modelsService,
+		scriptCommandRunner,
+		factoryDocsFileSystem,
+		clock,
+		logger,
+		worktreePreparer,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentToolFileSystem,
+		decisionEnvelopes,
+		mockWorkers,
+	)
+}
+
+func provideStatelessWorkersServiceWithMock(
+	providersService providers.Service,
+	modelsService models.Service,
+	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
+	factoryDocsFileSystem platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock,
+	logger *zap.Logger,
+	worktreePreparer workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles platformfilesystem.TemporaryFileSystem,
+	providerOverride workers.Provider,
+	agentToolFileSystem workers.AgentToolFileSystem,
+	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("construct stateless Workers: clock is required")
 	}
@@ -795,32 +862,57 @@ func provideStatelessWorkersService(
 		Logger: logging.NoopLogger{},
 		Clock:  workers.ClockFunc(clock.Now),
 	}
+	agentDependencies := workerswire.AgentDependencies{
+		Providers: providersService,
+		Publish:   func(workers.ProgressFragment) {},
+		// Decision-envelope interpretation belongs to Factory Definitions.
+		// The detached Execute path routes envelope output through this
+		// injected owner instead of re-implementing the contract.
+		DecisionEnvelopes: decisionEnvelopes,
+	}
+	scriptConfig := workerswire.ScriptConfig{RequestSelected: true}
+	scriptDependencies := workerswire.ScriptDependencies{
+		CommandRunner: scriptRunner,
+		FactoryDocs:   factoryDocs,
+		Now:           clock.Now,
+		Publish:       func(workers.ProgressFragment) {},
+		Record:        func(workers.ScriptEvent) {},
+	}
+	inferenceConfig := workerswire.InferenceConfig{
+		Worker: models.LocalWorker{
+			Name: "request-selected-inference",
+			Type: factorydefinitions.WorkerTypeInference,
+		},
+	}
+	inferenceDependencies := workerswire.InferenceDependencies{Models: modelsService}
+	loggerValue := logging.NewZapLogger(logger, false)
+	if mockWorkers != nil {
+		return workerswire.NewMockService(
+			agentDependencies,
+			scriptConfig,
+			scriptDependencies,
+			inferenceConfig,
+			inferenceDependencies,
+			mockWorkers,
+			workerswire.MockDependencies{},
+			nil,
+			loggerValue,
+			clock.Now,
+			worktreePreparer,
+			worktreeRelease,
+			temporaryFiles,
+			agentToolFileSystem,
+			providerOverride,
+		)
+	}
 	return workerswire.NewService(
-		workerswire.AgentDependencies{
-			Providers: providersService,
-			Publish:   func(workers.ProgressFragment) {},
-			// Decision-envelope interpretation belongs to Factory Definitions.
-			// The detached Execute path routes envelope output through this
-			// injected owner instead of re-implementing the contract.
-			DecisionEnvelopes: decisionEnvelopes,
-		},
-		workerswire.ScriptConfig{RequestSelected: true},
-		workerswire.ScriptDependencies{
-			CommandRunner: scriptRunner,
-			FactoryDocs:   factoryDocs,
-			Now:           clock.Now,
-			Publish:       func(workers.ProgressFragment) {},
-			Record:        func(workers.ScriptEvent) {},
-		},
-		workerswire.InferenceConfig{
-			Worker: models.LocalWorker{
-				Name: "request-selected-inference",
-				Type: factorydefinitions.WorkerTypeInference,
-			},
-		},
-		workerswire.InferenceDependencies{Models: modelsService},
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
 		nil,
-		logging.NewZapLogger(logger, false),
+		loggerValue,
 		clock.Now,
 		worktreePreparer,
 		worktreeRelease,

@@ -10,37 +10,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/mock"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/testkit"
 )
 
-func TestNewMockRegistryIsInertAndResolvesWithoutExecution(t *testing.T) {
+func TestNewMockProductionRegistryIsInertAndResolvesWithoutExecution(t *testing.T) {
 	var commandCalls atomic.Int32
-	registry, err := NewMockRegistry(
-		runners.MockConfig{
-			WorkersConfig: &workers.MockWorkersConfig{
-				MockWorkers: []workers.MockWorkerConfig{{
-					WorkerName: "writer",
-					RunType:    workers.MockWorkerRunTypeAccept,
-				}},
-			},
-		},
-		runners.MockDependencies{
-			Next: &mockCommandSpy{calls: &commandCalls},
-		},
-	)
-	if err != nil {
-		t.Fatalf("NewMockRegistry() error = %v", err)
-	}
+	registry := newExplicitMockRegistry(t, &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName: "writer",
+			RunType:    workers.MockWorkerRunTypeAccept,
+		}},
+	}, &mockCommandSpy{calls: &commandCalls})
+
 	if commandCalls.Load() != 0 {
 		t.Fatalf("construction command calls = %d, want 0", commandCalls.Load())
 	}
 
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: mock.Identity})
+	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: runners.MockIdentity})
 	if err != nil {
 		t.Fatalf("Resolve(mock) error = %v", err)
 	}
-	if binding.Identity != mock.Identity || binding.Runner == nil {
+	if binding.Identity != runners.MockIdentity || binding.Runner == nil {
 		t.Fatalf("Resolve(mock) = %#v, want complete mock binding", binding)
 	}
 	if commandCalls.Load() != 0 {
@@ -48,28 +38,20 @@ func TestNewMockRegistryIsInertAndResolvesWithoutExecution(t *testing.T) {
 	}
 }
 
-func TestMockRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
-	registry, err := NewMockRegistry(
-		runners.MockConfig{
-			WorkersConfig: &workers.MockWorkersConfig{
-				MockWorkers: []workers.MockWorkerConfig{{
-					WorkerName: "writer",
-					RunType:    workers.MockWorkerRunTypeAccept,
-				}, {
-					WorkerName: "failing",
-					RunType:    workers.MockWorkerRunTypeReject,
-				}},
-			},
-		},
-		runners.MockDependencies{},
-	)
-	if err != nil {
-		t.Fatalf("NewMockRegistry() error = %v", err)
-	}
+func TestMockRunnerThroughProductionRegistryConformsToCommonContract(t *testing.T) {
+	registry := newExplicitMockRegistry(t, &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName: "writer",
+			RunType:    workers.MockWorkerRunTypeAccept,
+		}, {
+			WorkerName: "failing",
+			RunType:    workers.MockWorkerRunTypeReject,
+		}},
+	}, nil)
 
 	valid := mockRequest("writer")
 	baseline, err := registry.Execute(t.Context(), runners.ExecuteRequest{
-		Identity: mock.Identity,
+		Identity: runners.MockIdentity,
 		Attempt:  valid,
 	})
 	if err != nil {
@@ -85,7 +67,7 @@ func TestMockRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 
 	testkit.RunService(t, testkit.ServiceSubject{
 		Service:            registry,
-		Identity:           mock.Identity,
+		Identity:           runners.MockIdentity,
 		ValidRequest:       valid,
 		InvalidRequest:     invalid,
 		UnsupportedRequest: unsupported,
@@ -95,20 +77,12 @@ func TestMockRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	})
 }
 
-func TestMockRegistryResolveAndExecuteConcurrently(t *testing.T) {
-	registry, err := NewMockRegistry(
-		runners.MockConfig{
-			WorkersConfig: &workers.MockWorkersConfig{
-				MockWorkers: []workers.MockWorkerConfig{{
-					RunType: workers.MockWorkerRunTypeAccept,
-				}},
-			},
-		},
-		runners.MockDependencies{},
-	)
-	if err != nil {
-		t.Fatalf("NewMockRegistry() error = %v", err)
-	}
+func TestMockProductionRegistryResolveAndExecuteConcurrently(t *testing.T) {
+	registry := newExplicitMockRegistry(t, &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			RunType: workers.MockWorkerRunTypeAccept,
+		}},
+	}, nil)
 
 	const executions = 24
 	var group sync.WaitGroup
@@ -118,13 +92,13 @@ func TestMockRegistryResolveAndExecuteConcurrently(t *testing.T) {
 		go func() {
 			defer group.Done()
 			if _, resolveErr := registry.Resolve(runners.ResolutionRequest{
-				Identity: mock.Identity,
+				Identity: runners.MockIdentity,
 			}); resolveErr != nil {
 				errs <- resolveErr
 				return
 			}
 			result, executeErr := registry.Execute(t.Context(), runners.ExecuteRequest{
-				Identity: mock.Identity,
+				Identity: runners.MockIdentity,
 				Attempt:  mockRequest("writer"),
 			})
 			if executeErr != nil {
@@ -143,11 +117,44 @@ func TestMockRegistryResolveAndExecuteConcurrently(t *testing.T) {
 	}
 }
 
-func TestNewMockRegistryRejectsMissingConfig(t *testing.T) {
-	_, err := NewMockRegistry(runners.MockConfig{}, runners.MockDependencies{})
+func TestNewMockProductionRegistryRejectsMissingConfig(t *testing.T) {
+	_, err := NewMockProductionRegistry(
+		runners.AgentDependencies{Providers: newAgentProvidersFake(), Publish: agentNoopPublisher},
+		runners.ScriptConfig{Command: "fixture"},
+		scriptDependencies(&scriptConformanceCommand{}, func(string) (map[string]string, error) {
+			return nil, nil
+		}),
+		inferenceRegistryConfig(),
+		inferenceDependencies(&inferenceConformanceModels{}, nil),
+		runners.MockConfig{},
+		runners.MockDependencies{},
+	)
 	if err == nil {
-		t.Fatal("NewMockRegistry() error = nil, want missing config")
+		t.Fatal("NewMockProductionRegistry() error = nil, want missing config")
 	}
+}
+
+func newExplicitMockRegistry(
+	t *testing.T,
+	config *workers.MockWorkersConfig,
+	next workers.CommandRunner,
+) runners.Service {
+	t.Helper()
+	registry, err := NewMockProductionRegistry(
+		runners.AgentDependencies{Providers: newAgentProvidersFake(), Publish: agentNoopPublisher},
+		runners.ScriptConfig{Command: "fixture"},
+		scriptDependencies(&scriptConformanceCommand{}, func(string) (map[string]string, error) {
+			return nil, nil
+		}),
+		inferenceRegistryConfig(),
+		inferenceDependencies(&inferenceConformanceModels{}, nil),
+		runners.MockConfig{WorkersConfig: config},
+		runners.MockDependencies{Next: next},
+	)
+	if err != nil {
+		t.Fatalf("NewMockProductionRegistry() error = %v", err)
+	}
+	return registry
 }
 
 func mockRequest(workerType string) workers.RunnerExecutionRequest {
@@ -158,7 +165,7 @@ func mockRequest(workerType string) workers.RunnerExecutionRequest {
 				"nested": []any{"dispatch-original"},
 			}},
 		},
-		RunnerID:    mock.Identity,
+		RunnerID:    runners.MockIdentity,
 		WorkerType:  workerType,
 		UserMessage: "run mock",
 		InputTokens: []any{map[string]any{
