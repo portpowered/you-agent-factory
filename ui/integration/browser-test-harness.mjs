@@ -317,6 +317,184 @@ export async function waitForStableFactoryGraphViewport(
   return stableTransform;
 }
 
+/** Read the React Flow position encoded by a graph node's DOM transform. */
+export async function readFactoryGraphNodeFlowPosition(nodeLocator) {
+  return nodeLocator
+    .evaluate((element) => {
+      const flowNode =
+        element.classList.contains("react-flow__node") === true
+          ? element
+          : element.closest(".react-flow__node");
+      if (!flowNode) {
+        return null;
+      }
+
+      const transform =
+        flowNode.style.transform || window.getComputedStyle(flowNode).transform;
+      if (!transform || transform === "none") {
+        return null;
+      }
+
+      const translateMatch =
+        /translate(?:3d)?\(([-\d.]+)px,\s*([-\d.]+)px/.exec(transform);
+      if (translateMatch) {
+        return {
+          x: Number(translateMatch[1]),
+          y: Number(translateMatch[2]),
+        };
+      }
+
+      const matrixMatch = /matrix\(([^)]+)\)/.exec(transform);
+      if (matrixMatch) {
+        const values = matrixMatch[1]
+          .split(",")
+          .map((value) => Number.parseFloat(value.trim()));
+        if (values.length >= 6) {
+          return { x: values[4], y: values[5] };
+        }
+      }
+
+      return null;
+    })
+    .catch(() => null);
+}
+
+export function flowPositionDistance(left, right) {
+  if (!left || !right) {
+    return null;
+  }
+
+  return Math.max(Math.abs(left.x - right.x), Math.abs(left.y - right.y));
+}
+
+async function draggableFactoryGraphNodeStartPoint(nodeLocator, nodeLabel) {
+  const point = await nodeLocator.evaluate((element) => {
+    const flowNode =
+      element.classList.contains("react-flow__node") === true
+        ? element
+        : element.closest(".react-flow__node");
+    if (!flowNode) {
+      return null;
+    }
+
+    const flowNodeBox = flowNode.getBoundingClientRect();
+    const elementBox = element.getBoundingClientRect();
+    const candidates = [
+      { x: flowNodeBox.right - 4, y: flowNodeBox.top + flowNodeBox.height / 2 },
+      { x: flowNodeBox.left + 4, y: flowNodeBox.top + flowNodeBox.height / 2 },
+      {
+        x: flowNodeBox.left + flowNodeBox.width / 2,
+        y: flowNodeBox.top + 4,
+      },
+      {
+        x: flowNodeBox.left + flowNodeBox.width / 2,
+        y: flowNodeBox.bottom - 4,
+      },
+      { x: elementBox.right - 4, y: elementBox.top + elementBox.height / 2 },
+    ];
+
+    for (const candidate of candidates) {
+      const hit = document.elementFromPoint(candidate.x, candidate.y);
+      if (hit && flowNode.contains(hit) && !hit.closest(".nodrag")) {
+        return candidate;
+      }
+    }
+
+    return null;
+  });
+
+  if (!point) {
+    throw new Error(
+      `Expected a draggable surface inside ${nodeLabel}; all candidate points were nodrag controls.`,
+    );
+  }
+
+  return point;
+}
+
+/**
+ * Drag a graph node and verify that React Flow moved it during and after the
+ * pointer gesture. The tolerance is caller-provided because browser checks
+ * intentionally use different movement contracts.
+ */
+export async function dragNodeByOffset(
+  page,
+  nodeLocator,
+  deltaX,
+  deltaY,
+  { displacementTolerancePx, nodeLabel = "graph node", steps = 16 } = {},
+) {
+  if (!Number.isFinite(displacementTolerancePx)) {
+    throw new TypeError(
+      `A finite displacement tolerance is required to drag ${nodeLabel}.`,
+    );
+  }
+
+  await nodeLocator.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  const initialFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+  const startPoint = await draggableFactoryGraphNodeStartPoint(
+    nodeLocator,
+    nodeLabel,
+  );
+
+  let pointerIsDown = false;
+  let midDragFlowPosition = null;
+  try {
+    await page.mouse.move(startPoint.x, startPoint.y);
+    await page.mouse.down();
+    pointerIsDown = true;
+    await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
+      steps,
+    });
+    midDragFlowPosition = await readFactoryGraphNodeFlowPosition(nodeLocator);
+  } finally {
+    if (pointerIsDown) {
+      await page.mouse.up();
+    }
+  }
+
+  const postMouseUpFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+  const midDragDistancePx = flowPositionDistance(
+    initialFlowPosition,
+    midDragFlowPosition,
+  );
+  const postMouseUpDistancePx = flowPositionDistance(
+    initialFlowPosition,
+    postMouseUpFlowPosition,
+  );
+  if (
+    midDragDistancePx === null ||
+    midDragDistancePx <= displacementTolerancePx ||
+    postMouseUpDistancePx === null ||
+    postMouseUpDistancePx <= displacementTolerancePx
+  ) {
+    throw new Error(
+      `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
+        {
+          initialFlowPosition,
+          midDragFlowPosition,
+          midDragDistancePx,
+          postMouseUpFlowPosition,
+          postMouseUpDistancePx,
+        },
+      )}`,
+    );
+  }
+
+  return {
+    initialFlowPosition,
+    midDragFlowPosition,
+    midDragDistancePx,
+    postMouseUpDistancePx,
+    postMouseUpFlowPosition,
+  };
+}
+
 function graphNodePlacementSamplesEqual(left, right) {
   if (!left || !right) {
     return false;
