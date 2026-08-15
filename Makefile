@@ -2,8 +2,9 @@ BINARY_NAME := you
 CMD_PATH    := ./cmd/factory/
 BIN_DIR     := bin
 GO          ?= go
-INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
+INSTALL_DIR = $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
+NODE        ?= node
 ifeq ($(OS),Windows_NT)
 BUN_BIN     := $(shell where.exe bun >/dev/null 2>&1 && echo bun)
 else
@@ -132,6 +133,10 @@ LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_CHECKER_DRIVER ?=
 LINT_LANE_PACKAGE := ./cmd/lintlane
 LINT_JOBS ?= $(GO_LANE_BUDGET)
+# Keep the recursive command available to lintlane without spelling the
+# special $(MAKE) variable in this recipe; GNU Make executes such recipes
+# during -n so recursive builds can receive the dry-run flag.
+LINT_MAKE ?= $(MAKE)
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
 
 define run_lint_checker
@@ -215,13 +220,13 @@ endef
 .PHONY: ui-package-client-build ui-package-components-build ui-package-emulator-build ui-package-replay-build ui-package-visualizers-build ui-packages-build ui-dashboard-build ui-build-all build-all
 
 
-default:
-	$(MAKE) generate-api
-	$(MAKE) ui-deps
-	$(MAKE) ui-build
-	$(MAKE) build
-	$(MAKE) test
-	$(MAKE) lint
+# Keep the default pipeline as an ordinary ordered dependency graph. Recipe-
+# level $(MAKE) invocations are special to GNU Make and execute during -n so
+# that recursive builds can receive the dry-run flag; on the measured Windows
+# Make implementation that still launched real work. These aggregators remain
+# serialized to preserve the old stop-on-failure behavior even with -j.
+.NOTPARALLEL: default test
+default: generate-api ui-deps ui-build build test lint
 
 # Print the derived values without starting a toolchain process. This is useful
 # for controlled host-capacity probes, for example:
@@ -249,7 +254,7 @@ install:
 	$(GO) build $(GO_BUILD_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 bundle-api:
-	node scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
+	$(NODE) scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
 
 generate-api: bundle-api generate-go-api generate-ui-api
 
@@ -262,7 +267,7 @@ generate-go-client-api:
 	$(GO) generate -run=client -tags=interfaces ./pkg/transports/http
 
 generate-ui-api:
-	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
+	cd ui && $(NODE) ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
 
 # Interface generation is split by consumer so callers can refresh only UI
 # artifacts or all generated interfaces without relying on prerequisite order.
@@ -435,12 +440,10 @@ docs-reference-smoke:
 readme-check:
 	$(GO) run ./cmd/readmecheck
 
-test:
-	$(MAKE) test-unit
-	$(MAKE) test-ci-workflows
+test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	node --test scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -682,7 +685,7 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(GO) run $(LINT_LANE_PACKAGE) -make "$(MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
+	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
 backend-size:
 	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
