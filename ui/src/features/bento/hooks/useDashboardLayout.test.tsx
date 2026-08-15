@@ -122,12 +122,11 @@ describe("useDashboardLayout core migrations", () => {
           item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
       ),
     ).toEqual(
-      expect.objectContaining(
-        DEFAULT_DASHBOARD_LAYOUT.find(
-          (item) =>
-            item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
-        ),
-      ),
+      expect.objectContaining({
+        id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+        widgetType: DASHBOARD_WIDGET_IDS.providerSession,
+        y: 12,
+      }),
     );
   });
 });
@@ -330,7 +329,7 @@ describe("useDashboardLayout persisted layout merging", () => {
         h: 9,
         id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph,
         widgetType: DASHBOARD_WIDGET_IDS.workGraph,
-        y: 3,
+        y: 4,
       }),
     );
   });
@@ -399,7 +398,7 @@ describe("useDashboardLayout work-outcome chart sizing", () => {
       result.current.dashboardLayout.find(
         (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       ),
-    ).toMatchObject({ x: 8, y: 27 });
+    ).toMatchObject({ x: 0, y: 37 });
   });
 });
 
@@ -474,7 +473,7 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
     );
   });
 
-  it("widens legacy trace cards and drops stale max-width constraints during reload migration", () => {
+  it("widens the primary trace card and drops duplicate singleton traces during reload migration", () => {
     window.localStorage.setItem(
       DASHBOARD_LAYOUT_STORAGE_KEY,
       JSON.stringify([
@@ -506,8 +505,8 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
     const primaryTrace = result.current.dashboardLayout.find(
       (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
     );
-    const duplicateTrace = result.current.dashboardLayout.find(
-      (item) => item.id === "trace::instance-1",
+    const traceCards = result.current.dashboardLayout.filter(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.trace && !item.hidden,
     );
 
     expect(primaryTrace).toMatchObject({
@@ -520,13 +519,7 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
       x: 0,
       y: 17,
     });
-    expect(duplicateTrace).toMatchObject({
-      id: "trace::instance-1",
-      widgetType: DASHBOARD_WIDGET_IDS.trace,
-      w: 8,
-      x: 0,
-      y: 17,
-    });
+    expect(traceCards).toHaveLength(1);
   });
 });
 
@@ -674,8 +667,8 @@ describe("useDashboardLayout reload persistence", () => {
       id: "work-outcome-chart::instance-1",
       w: 6,
       widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
-      x: 2,
-      y: 28,
+      x: 0,
+      y: 37,
     });
     expect(
       reloadedLayout.filter(
@@ -691,8 +684,8 @@ describe("useDashboardLayout reload persistence", () => {
       id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       w: 3,
       widgetType: DASHBOARD_WIDGET_IDS.addWidget,
-      x: 9,
-      y: 28,
+      x: 6,
+      y: 37,
     });
   });
 });

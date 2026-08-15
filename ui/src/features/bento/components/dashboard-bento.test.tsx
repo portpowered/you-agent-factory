@@ -11,6 +11,11 @@ import { DashboardBento } from "./dashboard-bento";
 const addDashboardWidget = vi.fn();
 const removeDashboardWidget = vi.fn();
 let mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+let mockDashboardLayoutDiagnostics: Array<{
+  code: "invalid-size";
+  count: number;
+  severity: "repair";
+}> = [];
 
 const currentSelectionState = {
   canRedoSelection: false,
@@ -336,6 +341,7 @@ vi.mock("../hooks/useDashboardLayout", () => ({
         addDashboardWidget(widgetType);
       },
       dashboardLayout,
+      dashboardLayoutDiagnostics: mockDashboardLayoutDiagnostics,
       persistDashboardLayout: vi.fn(),
       removeDashboardWidget: (widgetInstanceID: string) => {
         removeDashboardWidget(widgetInstanceID);
@@ -393,6 +399,7 @@ describe("DashboardBento", () => {
     removeDashboardWidget.mockReset();
     mockUseCurrentActivityImportController.mockClear();
     mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+    mockDashboardLayoutDiagnostics = [];
     timelineStoreState = defaultTimelineStoreState;
   });
 
@@ -435,6 +442,18 @@ describe("DashboardBento", () => {
     expect(screen.getByTestId("worker-session-timeline").textContent).toContain(
       "Worker Session timeline card",
     );
+  });
+
+  it("renders scoped layout repair diagnostics above the dashboard cards", () => {
+    mockDashboardLayoutDiagnostics = [
+      { code: "invalid-size", count: 1, severity: "repair" },
+    ];
+
+    render(<DashboardBento />);
+
+    expect(
+      screen.getByTestId("dashboard-layout-diagnostics").textContent,
+    ).toContain("Invalid card sizes were repaired.");
   });
 
   it("keeps provider-session selection centralized between the current selection and provider-session cards", () => {

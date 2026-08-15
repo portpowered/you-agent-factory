@@ -21,6 +21,27 @@ export interface DashboardLayoutStorageEnvelope {
   scope: DashboardLayoutScope;
 }
 
+export type DashboardLayoutDiagnosticCode =
+  | "invalid-item"
+  | "invalid-id"
+  | "duplicate-id"
+  | "invalid-size"
+  | "out-of-bounds"
+  | "collision"
+  | "singleton-violation"
+  | "malformed-json"
+  | "unsupported-envelope"
+  | "storage-unavailable"
+  | "storage-read-failed"
+  | "storage-quota-exceeded"
+  | "storage-write-failed";
+
+export interface DashboardLayoutDiagnostic {
+  code: DashboardLayoutDiagnosticCode;
+  count: number;
+  severity: "error" | "repair";
+}
+
 export function createDashboardLayoutScope(
   factoryID: string,
   sessionID: string,

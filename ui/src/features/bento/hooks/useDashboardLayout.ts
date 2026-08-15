@@ -10,12 +10,13 @@ import {
 import { mergeDashboardLayout } from "./dashboardLayoutPersistence";
 import {
   DASHBOARD_LAYOUT_STORAGE_KEY,
+  type DashboardLayoutDiagnostic,
   type DashboardLayoutScope,
   DEFAULT_DASHBOARD_LAYOUT,
   getDashboardLayoutStorageKey,
 } from "./dashboardLayoutSchema";
 import {
-  readStoredDashboardLayout,
+  readStoredDashboardLayoutResult,
   writeStoredDashboardLayout,
 } from "./storage/dashboardLayoutStorage";
 
@@ -36,17 +37,23 @@ export {
 export interface UseDashboardLayoutResult {
   addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   dashboardLayout: AgentBentoLayoutItem[];
+  dashboardLayoutDiagnostics: DashboardLayoutDiagnostic[];
   persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
   removeDashboardWidget: (widgetInstanceID: string) => void;
 }
 
-export type { DashboardLayoutScope } from "./dashboardLayoutSchema";
+export type {
+  DashboardLayoutDiagnostic,
+  DashboardLayoutDiagnosticCode,
+  DashboardLayoutScope,
+} from "./dashboardLayoutSchema";
 
 interface DashboardLayoutStoreState {
   addDashboardWidget: (
     scope: DashboardLayoutScope | null | undefined,
     widgetType: DashboardWidgetPickerWidgetType,
   ) => void;
+  diagnosticsByStorageKey: Record<string, DashboardLayoutDiagnostic[]>;
   layoutsByStorageKey: Record<string, AgentBentoLayoutItem[]>;
   loadDashboardLayout: (scope: DashboardLayoutScope | null | undefined) => void;
   persistDashboardLayout: (
@@ -59,16 +66,34 @@ interface DashboardLayoutStoreState {
   ) => void;
 }
 
+const initialDashboardLayoutStorageResult = readStoredDashboardLayoutResult();
+
 const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
   addDashboardWidget: (scope, widgetType) => {
     set((state) => {
       const storageKey = getStorageKey(scope);
+      const storedResult = state.layoutsByStorageKey[storageKey]
+        ? null
+        : readStoredDashboardLayoutResult(scope);
       const currentLayout =
         state.layoutsByStorageKey[storageKey] ??
-        readStoredDashboardLayout(scope);
-      const nextLayout = addDashboardWidgetToLayout(currentLayout, widgetType);
-      writeStoredDashboardLayout(nextLayout, scope);
+        storedResult?.layout ??
+        DEFAULT_DASHBOARD_LAYOUT;
+      const nextLayout = mergeDashboardLayout(
+        addDashboardWidgetToLayout(currentLayout, widgetType),
+        currentLayout,
+      );
+      const writeResult = writeStoredDashboardLayout(nextLayout, scope);
       return {
+        diagnosticsByStorageKey: {
+          ...state.diagnosticsByStorageKey,
+          [storageKey]: combineDashboardLayoutDiagnostics(
+            state.diagnosticsByStorageKey[storageKey] ??
+              storedResult?.diagnostics ??
+              [],
+            writeResult.diagnostics,
+          ),
+        },
         layoutsByStorageKey: {
           ...state.layoutsByStorageKey,
           [storageKey]: nextLayout,
@@ -77,15 +102,23 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
     });
   },
   layoutsByStorageKey: {
-    [getStorageKey(undefined)]: readStoredDashboardLayout(),
+    [getStorageKey(undefined)]: initialDashboardLayoutStorageResult.layout,
+  },
+  diagnosticsByStorageKey: {
+    [getStorageKey(undefined)]: initialDashboardLayoutStorageResult.diagnostics,
   },
   loadDashboardLayout: (scope) => {
     set((state) => {
       const storageKey = getStorageKey(scope);
+      const storedResult = readStoredDashboardLayoutResult(scope);
       return {
+        diagnosticsByStorageKey: {
+          ...state.diagnosticsByStorageKey,
+          [storageKey]: storedResult.diagnostics,
+        },
         layoutsByStorageKey: {
           ...state.layoutsByStorageKey,
-          [storageKey]: readStoredDashboardLayout(scope),
+          [storageKey]: storedResult.layout,
         },
       };
     });
@@ -93,12 +126,25 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
   persistDashboardLayout: (scope, layout) => {
     set((state) => {
       const storageKey = getStorageKey(scope);
+      const storedResult = state.layoutsByStorageKey[storageKey]
+        ? null
+        : readStoredDashboardLayoutResult(scope);
       const currentLayout =
         state.layoutsByStorageKey[storageKey] ??
-        readStoredDashboardLayout(scope);
+        storedResult?.layout ??
+        DEFAULT_DASHBOARD_LAYOUT;
       const nextLayout = mergeDashboardLayout(layout, currentLayout);
-      writeStoredDashboardLayout(nextLayout, scope);
+      const writeResult = writeStoredDashboardLayout(nextLayout, scope);
       return {
+        diagnosticsByStorageKey: {
+          ...state.diagnosticsByStorageKey,
+          [storageKey]: combineDashboardLayoutDiagnostics(
+            state.diagnosticsByStorageKey[storageKey] ??
+              storedResult?.diagnostics ??
+              [],
+            writeResult.diagnostics,
+          ),
+        },
         layoutsByStorageKey: {
           ...state.layoutsByStorageKey,
           [storageKey]: nextLayout,
@@ -109,15 +155,28 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
   removeDashboardWidget: (scope, widgetInstanceID) => {
     set((state) => {
       const storageKey = getStorageKey(scope);
+      const storedResult = state.layoutsByStorageKey[storageKey]
+        ? null
+        : readStoredDashboardLayoutResult(scope);
       const currentLayout =
         state.layoutsByStorageKey[storageKey] ??
-        readStoredDashboardLayout(scope);
+        storedResult?.layout ??
+        DEFAULT_DASHBOARD_LAYOUT;
       const nextLayout = removeDashboardWidgetFromLayout(
         currentLayout,
         widgetInstanceID,
       );
-      writeStoredDashboardLayout(nextLayout, scope);
+      const writeResult = writeStoredDashboardLayout(nextLayout, scope);
       return {
+        diagnosticsByStorageKey: {
+          ...state.diagnosticsByStorageKey,
+          [storageKey]: combineDashboardLayoutDiagnostics(
+            state.diagnosticsByStorageKey[storageKey] ??
+              storedResult?.diagnostics ??
+              [],
+            writeResult.diagnostics,
+          ),
+        },
         layoutsByStorageKey: {
           ...state.layoutsByStorageKey,
           [storageKey]: nextLayout,
@@ -146,6 +205,9 @@ export function useDashboardLayout(
   const dashboardLayout = useDashboardLayoutStore(
     (state) =>
       state.layoutsByStorageKey[storageKey] ?? DEFAULT_DASHBOARD_LAYOUT,
+  );
+  const dashboardLayoutDiagnostics = useDashboardLayoutStore(
+    (state) => state.diagnosticsByStorageKey[storageKey] ?? [],
   );
 
   useEffect(() => {
@@ -180,6 +242,7 @@ export function useDashboardLayout(
   return {
     addDashboardWidget,
     dashboardLayout,
+    dashboardLayoutDiagnostics,
     persistDashboardLayout,
     removeDashboardWidget,
   };
@@ -195,4 +258,27 @@ function getStorageKey(scope?: DashboardLayoutScope | null): string {
   return scope
     ? getDashboardLayoutStorageKey(scope)
     : DASHBOARD_LAYOUT_STORAGE_KEY;
+}
+
+function combineDashboardLayoutDiagnostics(
+  ...diagnosticLists: readonly DashboardLayoutDiagnostic[][]
+): DashboardLayoutDiagnostic[] {
+  const diagnosticsByCode = new Map<
+    DashboardLayoutDiagnostic["code"],
+    DashboardLayoutDiagnostic
+  >();
+  for (const diagnostics of diagnosticLists) {
+    for (const diagnostic of diagnostics) {
+      const previous = diagnosticsByCode.get(diagnostic.code);
+      diagnosticsByCode.set(diagnostic.code, {
+        code: diagnostic.code,
+        count: (previous?.count ?? 0) + diagnostic.count,
+        severity:
+          previous?.severity === "error" || diagnostic.severity === "error"
+            ? "error"
+            : "repair",
+      });
+    }
+  }
+  return [...diagnosticsByCode.values()];
 }

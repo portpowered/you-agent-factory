@@ -26,6 +26,7 @@ import {
   buildDashboardCards,
   type DashboardCardBuilderArgs,
 } from "./dashboard-bento-cards";
+import { DashboardLayoutDiagnostics } from "./dashboard-layout-diagnostics";
 
 function useDashboardBentoSelectionState() {
   return {
@@ -76,6 +77,7 @@ export function DashboardBento({
   const {
     addDashboardWidget,
     dashboardLayout,
+    dashboardLayoutDiagnostics,
     persistDashboardLayout,
     removeDashboardWidget,
   } = useDashboardLayout(layoutScope);
@@ -145,6 +147,10 @@ export function DashboardBento({
 
   return (
     <>
+      <DashboardLayoutDiagnostics
+        diagnostics={dashboardLayoutDiagnostics}
+        locale={resolvedLocale}
+      />
       <AgentBentoLayout
         cards={cards}
         layout={renderableLayout}
