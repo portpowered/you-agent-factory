@@ -1,0 +1,214 @@
+package construction
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
+)
+
+func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
+	t.Parallel()
+
+	if got := (*Service)(nil).WithRunWorktree("worktree"); got != nil {
+		t.Fatalf("nil Service.WithRunWorktree() = %#v, want nil", got)
+	}
+	if got := (*Service)(nil).WithRunReasoningEffort("high"); got != nil {
+		t.Fatalf("nil Service.WithRunReasoningEffort() = %#v, want nil", got)
+	}
+	if got := (*Service)(nil).WithProviderRegistry(nil); got != nil {
+		t.Fatalf("nil Service.WithProviderRegistry() = %#v, want nil", got)
+	}
+	if got := (*Service)(nil).WithRunnerRegistry(nil); got != nil {
+		t.Fatalf("nil Service.WithRunnerRegistry() = %#v, want nil", got)
+	}
+
+	scriptFactory, err := workerexecutor.NewScriptFactory(
+		&mockworker.MockWorkerCommandRunner{},
+		workers.ClockFunc(testClock),
+		testFactoryDocs,
+	)
+	if err != nil {
+		t.Fatalf("NewScriptFactory() error = %v", err)
+	}
+	service := New(
+		nil,
+		scriptFactory,
+		nil,
+		nil,
+		testFactoryDocs,
+		nil,
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+	)
+	registry := &captureRunnerRegistry{}
+	configured := service.
+		WithRunWorktree("/tmp/worktree").
+		WithRunReasoningEffort("high").
+		WithRunnerRegistry(registry)
+	if configured == service {
+		t.Fatal("service copy mutated the original")
+	}
+	if configured.runWorktree != "/tmp/worktree" || configured.runReasoningEffort != "high" {
+		t.Fatalf("run-scoped options = %q/%q, want retained options", configured.runWorktree, configured.runReasoningEffort)
+	}
+	if configured.runnerRegistry != registry {
+		t.Fatal("WithRunnerRegistry() did not retain the injected registry")
+	}
+	if configured.scriptFactory == service.scriptFactory {
+		t.Fatal("WithRunnerRegistry() mutated or reused the original ScriptFactory")
+	}
+
+	providerRegistry := constructionProviderRegistry{}
+	configured = configured.WithProviderRegistry(providerRegistry)
+	if configured.providerRegistry != providerRegistry {
+		t.Fatal("WithProviderRegistry() did not retain the injected provider registry")
+	}
+	replacement, err := workerexecutor.NewScriptFactory(
+		&mockworker.MockWorkerCommandRunner{},
+		workers.ClockFunc(testClock),
+		testFactoryDocs,
+	)
+	if err != nil {
+		t.Fatalf("replacement NewScriptFactory() error = %v", err)
+	}
+	rebuilt := configured.WithExecutionFactories(nil, replacement)
+	if rebuilt.runnerRegistry != registry || rebuilt.scriptFactory == replacement {
+		t.Fatal("WithExecutionFactories() dropped or bypassed the retained registry")
+	}
+}
+
+func TestAgentRunnerUsesRetainedRegistryForInferenceSelection(t *testing.T) {
+	registry := &captureRunnerRegistry{}
+	service := New(
+		nil,
+		nil,
+		nil,
+		nil,
+		testFactoryDocs,
+		nil,
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+	).WithRunnerRegistry(registry)
+
+	runner, err := service.agentRunner(
+		runtimefixtures.RuntimeConfigLookupFixture{},
+		&interfaces.FactoryWorkerConfig{Type: interfaces.WorkerTypeInference},
+		logging.NoopLogger{},
+		false,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("agentRunner() error = %v", err)
+	}
+	if _, err := runner.Execute(t.Context(), workers.RunnerExecutionRequest{
+		RunnerID:       workers.RunnerIDCodex,
+		ModelOperation: "transcribe",
+	}); err != nil {
+		t.Fatalf("retained registry Execute() error = %v", err)
+	}
+	if registry.request.Identity != runners.InferenceIdentity {
+		t.Fatalf("registry identity = %q, want inference", registry.request.Identity)
+	}
+	if registry.request.Attempt.RunnerID != workers.RunnerIDCodex ||
+		registry.request.Attempt.ModelOperation != "transcribe" {
+		t.Fatalf("registry attempt = %#v, want caller request identity and operation", registry.request.Attempt)
+	}
+}
+
+func TestServiceBuildLogicalUsesConfiguredConstructionDependencies(t *testing.T) {
+	service := New(
+		nil,
+		nil,
+		nil,
+		nil,
+		testFactoryDocs,
+		nil,
+		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
+		testRetryRandom,
+		platformfilesystem.Local{},
+	)
+	result := service.BuildLogical(
+		runtimefixtures.RuntimeConfigLookupFixture{},
+		"logical",
+		workers.RunnerIDCodex,
+		nil,
+		logging.NoopLogger{},
+		testClock,
+		os.Environ,
+		os.Getwd,
+	)
+	if result.Dispatch == nil || result.Direct != nil {
+		t.Fatalf("BuildLogical() = %#v, want dispatch-only result", result)
+	}
+}
+
+func TestConstructionAdaptersPreserveExecutionBoundary(t *testing.T) {
+	t.Parallel()
+
+	registry := &captureRunnerRegistry{}
+	runner := registryRunner{registry: registry, identity: runners.AgentIdentity}
+	if _, err := runner.Execute(t.Context(), workers.RunnerExecutionRequest{RunnerID: workers.RunnerIDCodex}); err != nil {
+		t.Fatalf("registryRunner.Execute() error = %v", err)
+	}
+	if registry.request.Identity != runners.AgentIdentity {
+		t.Fatalf("registryRunner identity = %q, want agent", registry.request.Identity)
+	}
+
+	adapter := runnerProviderAdapter{runner: runnerFunc(func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+		return workers.RunnerExecutionResult{Content: "forwarded"}, nil
+	})}
+	response, err := adapter.Infer(t.Context(), workers.ProviderInferenceRequest{})
+	if err != nil {
+		t.Fatalf("runnerProviderAdapter.Infer() error = %v", err)
+	}
+	if response.Content != "forwarded" {
+		t.Fatalf("runnerProviderAdapter.Infer() content = %q, want forwarded", response.Content)
+	}
+	if _, err := (runnerProviderAdapter{}).Infer(t.Context(), workers.ProviderInferenceRequest{}); err == nil {
+		t.Fatal("nil runnerProviderAdapter.Infer() error = nil, want misconfigured error")
+	}
+	if _, err := (registryRunner{}).Execute(t.Context(), workers.RunnerExecutionRequest{}); err == nil {
+		t.Fatal("nil registryRunner.Execute() error = nil, want missing registry error")
+	}
+}
+
+type constructionProviderRegistry struct{}
+
+func (constructionProviderRegistry) UsesNativeRunner(string) bool { return true }
+
+func (constructionProviderRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+
+func (constructionProviderRegistry) RunnerIdentities() []string { return nil }
+
+func (constructionProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, error) {
+	return workers.RunnerMetadata{}, nil
+}
+
+func (constructionProviderRegistry) ValidateRunnerPrerequisites(
+	platformprocess.ExecutableLocator,
+	string,
+) error {
+	return nil
+}
+
+func (constructionProviderRegistry) ResolveRunnerSelection(
+	_, _, worker string,
+) (workers.ResolvedRunnerSelection, error) {
+	return workers.ResolvedRunnerSelection{RunnerID: worker}, nil
+}
