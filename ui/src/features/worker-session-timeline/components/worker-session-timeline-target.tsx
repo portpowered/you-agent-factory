@@ -1,4 +1,4 @@
-import { EnumSelect } from "@you-agent-factory/components/forms";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { WorkerSessionObservation } from "../../../api/worker-sessions";
 import { AlertPanel } from "../../../components/ui/alert-panel";
@@ -56,26 +56,82 @@ export function WorkerSessionTimelineTarget({
     state.selectedWorkerSessionID ?? state.observations[0]?.workerSessionId;
 
   return (
-    <EnumSelect
-      aria-label={messages.sessionTargetSelectLabel}
-      id="worker-session-timeline-target"
-      onValueChange={state.setSelectedWorkerSessionID}
-      options={state.observations.map((observation) => ({
-        label: sessionTargetOption(messages, observation),
-        value: observation.workerSessionId,
-      }))}
-      value={selectedWorkerSessionID}
-    />
+    <ul
+      aria-label={messages.sessionTargetListLabel}
+      className="m-0 grid list-none gap-3 p-0"
+    >
+      {state.observations.map((observation) => {
+        const selected =
+          observation.workerSessionId === selectedWorkerSessionID;
+        return (
+          <li
+            className="grid min-w-0 gap-3 rounded-lg border border-outline bg-surface-container-low p-3"
+            key={observation.workerSessionId}
+          >
+            <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+              <TargetDetail
+                label={messages.workerSessionIDLabel}
+                value={observation.workerSessionId}
+              />
+              <TargetDetail
+                label={messages.attemptIDLabel}
+                value={observation.attemptId}
+              />
+              <TargetDetail
+                label={messages.sessionLifecycleLabel}
+                value={messages.sessionLifecycleStateLabel(observation.state)}
+              />
+              <TargetDetail
+                label={messages.providerSessionLabel}
+                value={providerSessionOrigin(messages, observation)}
+              />
+            </dl>
+            <DashboardActionButton
+              aria-label={messages.openWorkerSessionTargetLabel(
+                observation.workerSessionId,
+                workID,
+              )}
+              aria-pressed={selected}
+              className="w-fit"
+              onClick={() =>
+                state.setSelectedWorkerSessionID(observation.workerSessionId)
+              }
+              type="button"
+            >
+              {selected
+                ? messages.selectedWorkerSessionAction
+                : messages.openWorkerSessionAction}
+            </DashboardActionButton>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
-function sessionTargetOption(
+function TargetDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-1">
+      <Label as="dt">{label}</Label>
+      <Text as="dd" className="m-0 min-w-0 [overflow-wrap:anywhere]">
+        {value}
+      </Text>
+    </div>
+  );
+}
+
+function providerSessionOrigin(
   messages: WorkerSessionTimelineMessages,
   observation: WorkerSessionObservation,
 ): string {
-  return messages.sessionTargetOption(
-    observation.workerSessionId,
-    observation.attemptId,
-    observation.state,
-  );
+  const providerSession = observation.providerSession;
+  if (
+    !providerSession?.provider ||
+    !providerSession.kind ||
+    !providerSession.id
+  ) {
+    return messages.providerSessionUnavailable;
+  }
+
+  return `${providerSession.provider} / ${providerSession.kind} / ${providerSession.id}`;
 }
