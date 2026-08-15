@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -118,6 +120,41 @@ func TestRunSuccessReportsUnambiguousResult(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("success stderr = %q", stderr.String())
+	}
+}
+
+func TestRunWritesCompleteJSONReportWhenTargetsFail(t *testing.T) {
+	original := executeTarget
+	t.Cleanup(func() { executeTarget = original })
+	executeTarget = func(_, target string, stdout, _ io.Writer) error {
+		fmt.Fprintf(stdout, "diagnostic:%s\n", target)
+		if target == "broken" {
+			return errors.New("controlled failure")
+		}
+		return nil
+	}
+
+	reportPath := filepath.Join(t.TempDir(), "backend-lint.json")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-report-file", reportPath, "-jobs", "2", "clean", "broken"}, &stdout, &stderr); code == 0 {
+		t.Fatalf("run() exit code = 0, want failed target; stdout = %q", stdout.String())
+	}
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	var report lintReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("decode report: %v; data = %s", err, data)
+	}
+	if report.Version != 1 || report.Jobs != 2 || len(report.Targets) != 2 {
+		t.Fatalf("report metadata = %+v, want version 1, jobs 2, and two targets", report)
+	}
+	if report.Targets[0].Name != "clean" || report.Targets[0].Status != "pass" || report.Targets[0].Output != "diagnostic:clean\n" {
+		t.Fatalf("clean target report = %+v", report.Targets[0])
+	}
+	if report.Targets[1].Name != "broken" || report.Targets[1].Status != "fail" || report.Targets[1].Error != "controlled failure" {
+		t.Fatalf("broken target report = %+v", report.Targets[1])
 	}
 }
 

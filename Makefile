@@ -137,6 +137,7 @@ LINT_JOBS ?= $(GO_LANE_BUDGET)
 # special $(MAKE) variable in this recipe; GNU Make executes such recipes
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
+LINT_REPORT_FILE ?=
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
 
 define run_lint_checker
@@ -449,7 +450,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -691,7 +692,7 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
+	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
 backend-size:
 	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")

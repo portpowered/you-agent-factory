@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
 
 const defaultLintJobs = 4
@@ -22,14 +23,16 @@ type config struct {
 	checkerPackage  string
 	checkerCacheDir string
 	goTool          string
+	reportFile      string
 	jobs            int
 	targets         []string
 }
 
 type targetResult struct {
-	target string
-	output string
-	err    error
+	target   string
+	output   string
+	err      error
+	duration time.Duration
 }
 
 type targetRunner func(makeTool, target string, stdout, stderr io.Writer) error
@@ -49,6 +52,7 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	started := time.Now()
 	cfg, err := parseConfig(args, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -70,6 +74,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	defer cleanup()
 	results := runTargets(cfg.makeTool, cfg.targets, cfg.jobs, runner)
+	if cfg.reportFile != "" {
+		if err := writeReportFile(cfg.reportFile, cfg.jobs, time.Since(started), results); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	if err := writeReport(stdout, results); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -85,6 +95,7 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 	checkerPackage := flags.String("checker-package", "", "checker driver package to compile once for this lint lane")
 	checkerCacheDir := flags.String("cache-dir", ".cache/lint-checkers", "directory for temporary lint lane executables")
 	goTool := flags.String("go", "go", "Go executable used to compile the lint checker driver")
+	reportFile := flags.String("report-file", "", "JSON file for the complete per-target lint report")
 	jobs := flags.Int("jobs", defaultLintJobs, "maximum number of lint targets to run concurrently")
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
@@ -104,6 +115,9 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 	if strings.TrimSpace(*goTool) == "" {
 		return config{}, errors.New("go tool must not be empty")
 	}
+	if strings.TrimSpace(*reportFile) == "" && *reportFile != "" {
+		return config{}, errors.New("report file must not be empty")
+	}
 	if *jobs < 1 {
 		return config{}, fmt.Errorf("lint job limit must be positive, got %d", *jobs)
 	}
@@ -122,6 +136,7 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 		checkerPackage:  *checkerPackage,
 		checkerCacheDir: *checkerCacheDir,
 		goTool:          *goTool,
+		reportFile:      *reportFile,
 		jobs:            *jobs,
 		targets:         targets,
 	}, nil
@@ -182,9 +197,15 @@ func runTargets(makeTool string, targets []string, jobs int, runner targetRunner
 		go func() {
 			defer workers.Done()
 			for item := range work {
+				started := time.Now()
 				output := &lockedBuffer{}
 				err := runner(makeTool, item.target, output, output)
-				results[item.index] = targetResult{target: item.target, output: output.String(), err: err}
+				results[item.index] = targetResult{
+					target:   item.target,
+					output:   output.String(),
+					err:      err,
+					duration: time.Since(started),
+				}
 			}
 		}()
 	}
