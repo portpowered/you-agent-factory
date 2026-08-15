@@ -131,7 +131,7 @@ attribute before P3-P7 authoring:
 | Runtime activation and deactivation | pkg/services/factory_runtime/wire/runtime_activation_test.go and tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go | Detached successful state, duplicate identity, failed-start cleanup, and retry behavior are guarded. |
 | Recording order, scope isolation, stale/foreign references, and replay | pkg/services/recordings/internal/canonical_recording_lifecycle_test.go and pkg/services/recordings/internal/projection_query_contract_test.go | Canonical ledger and scope behavior are protected at the service boundary. |
 | ACP delegation, duplicate delivery, busy control, and terminal failure | tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go and tests/functional/transport/acp/stdio/cli_serve_acp_controls_test.go | The ACP caller has observable root/session and control-flow coverage. |
-| HTTP startup unwind and concurrent request isolation | tests/functional/transport/http/server/startup_shutdown_test.go and tests/functional/transport/http/concurrent_requests_test.go | HTTP lifecycle and request isolation are covered, although later transport packets still need a complete response corpus. |
+| HTTP startup unwind and concurrent request isolation | tests/functional/transport/http/server/startup_shutdown_test.go and tests/functional/transport/http/server/concurrent_requests_test.go | HTTP lifecycle and request isolation are covered, although later transport packets still need a complete response corpus. |
 | Throttled in-flight projection and termination race | pkg/services/factory_runtime/internal/rootobservation/project_test.go, pkg/services/factory_sessions/internal/sessionprojection/projection_test.go, pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests/termination_test.go:TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement, and tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go:TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession | This is current-main behavior from 1be29c60d and must remain part of any later runtime/session seam move. |
 
 The P0 characterization suite remains the baseline for success, provider
@@ -1077,6 +1077,15 @@ terminal response, and one cross-caller terminal-response corpus. A failing
 scenario is a product or owning-lane defect, not permission to weaken the
 assertion or add a source-inventory test.
 
+The final cross-packet behavioral criterion has one named direct guard:
+planned `tests/functional/sessions/root_composition/p3_p7_behavior_matrix_test.go:TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation`
+runs real canonical operations through `root.BuildProcess` and
+`Process.Execute`, then asserts one terminal outcome, cleanup after activation,
+cancellation, and failure, and equivalent replay facts in isolated sessions.
+It is a behavior corpus, not a source or registration inventory; the guard must
+run in focused local and race execution and in the PR functional tier before
+Story 005 can be considered complete.
+
 ### Build first
 
 1. Freeze a behavior matrix keyed by customer operation and observable
@@ -1144,7 +1153,7 @@ source, route, command, registration, inventory, link, or asset scan.
 | Detached agent-run preserves goal envelope, typed failure, cancellation, terminal output, and resource release without opening Runtime/Session. | tests/functional/workers/agent/stateless_root_test.go:TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot, pkg/services/workers/wire/stateless_execute_test.go:TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope, pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass, and pkg/wire/session_runtime_providers_test.go:TestCanonicalStatelessWorkersReleasesProductionWorktreeAfterCancellation. | Local Workers/root tests and race tests for cancellation; PR root-process acceptance and Linux functional coverage lanes. |
 | Runtime accepts concurrent/duplicate completion exactly once, preserves terminal mapping, and does not terminate observed in-flight work early. | pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce, TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay, pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_terminal_semantics_test.go:TestFactoryImpl_DirectAndChildDispatchPreserveIdenticalTerminalOutcomeMapping, and pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests/termination_test.go:TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement. | Local Runtime integration and go test -race; PR backend integration, functional coverage, and race lane. |
 | Canonical replay and retained projections are equivalent and isolated across concurrent recording scopes. | pkg/services/recordings/internal/projection_query_contract_test.go:TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts and pkg/services/recordings/internal/projection_query_contract_test.go:TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes, plus pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopesKeepConcurrentSessionsIsolated. | Local Recordings tests and race tests; PR backend integration and replay/functional lane. |
-| Multi-part Work content reaches a public terminal response without reordering or inventing success. | pkg/services/work/transports/http/admission_mapping_test.go:TestSubmitWorkResponseToAPI_EncodesDetachedResult, pkg/services/work/transports/http/read_mapping_test.go:TestWorkReadModelToAPI_EncodesDetachedReadModel, and tests/functional/sessions/root_composition/work_admission_response_stream_test.go:TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle. | Local Work/Session integration; PR API contract and Linux functional coverage lanes. |
+| Multi-part Work content reaches a public terminal response without reordering, losing type, or inventing success. | **Planned direct guard:** `tests/functional/transport/http/server/work_terminal_response_test.go:TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary` submits a Work whose terminal result contains at least two differently typed and ordered parts (text followed by JSON), asserts both discriminated types and payloads remain in order, and asserts a failure terminal outcome is not reported as success. The existing `pkg/services/work/transports/http/admission_mapping_test.go:TestSubmitWorkResponseToAPI_EncodesDetachedResult`, `pkg/services/work/transports/http/read_mapping_test.go:TestWorkReadModelToAPI_EncodesDetachedReadModel`, and `tests/functional/sessions/root_composition/work_admission_response_stream_test.go:TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle` are prerequisites for mapping, read-model, and root activation only; they are not sufficient direct proof. | Local public HTTP/Work functional test; PR API contract and Linux functional coverage lanes. |
 
 P7 owners run focused tests, go test -race for all attempt, stream, replay,
 and cleanup changes, make test-root-process-acceptance, make verify-fast,
@@ -1191,6 +1200,13 @@ rewriting them. The current-main audit disagreement and historical
 throttled-lane guard remain explicit. Every behavioral row names an observable
 guard and execution tier; no packet relies on a source, route, command,
 registration, inventory, link, or asset scan as acceptance.
+
+The final reconciliation also requires the named
+`TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` behavioral
+corpus to observe terminal-output preservation, lifecycle cleanup, and
+replay/session isolation on the canonical path. This is an observable
+outcome assertion with local/race and PR functional execution tiers, not a
+structural inventory check.
 
 The authoring diff is documentation-only and contains only this owned plan.
 No Go, UI, generated contract, standard, workflow, quarantine, script, or
