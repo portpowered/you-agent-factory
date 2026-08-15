@@ -104,6 +104,8 @@ func (adapter ProviderServiceAdapter) execute(
 		SystemPrompt:                 request.SystemPrompt,
 		UserMessage:                  request.UserMessage,
 		InputTokens:                  append([]any(nil), request.InputTokens...),
+		ModelOperation:               request.ModelOperation,
+		ModelBindings:                workerModelOperationBindings(request.ModelBindings),
 		OutputSchema:                 request.OutputSchema,
 		ToolExecutionMode:            workerexecution.RunnerToolExecutionMode(request.ToolExecutionMode),
 		RequiredOptionalCapabilities: runnerCapabilities(request.RequiredCapabilities),
@@ -129,7 +131,10 @@ func (adapter ProviderServiceAdapter) execute(
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	result := providers.ExecuteResult{Content: response.Content}
+	result := providers.ExecuteResult{
+		Content: response.Content,
+		Outcome: providers.ExecuteOutcome(response.Outcome),
+	}
 	if response.ProviderSession != nil {
 		result.SessionRef = &providers.SessionRef{
 			Provider: providers.ID(response.ProviderSession.Provider),
@@ -165,6 +170,21 @@ func (adapter ProviderServiceAdapter) execute(
 		}
 	}
 	return result, nil
+}
+
+func workerModelOperationBindings(values []providers.ResolvedModelOperationBinding) []workerexecution.ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	converted := make([]workerexecution.ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		converted[index] = workerexecution.ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  workerexecution.ModelOperationBindingSource(value.Source),
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
+	return converted
 }
 
 func (adapter ProviderServiceAdapter) ControlAttempt(_ context.Context, request providers.ControlAttemptRequest) (providers.ControlAttemptResult, error) {

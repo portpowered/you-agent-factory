@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -41,6 +42,7 @@ func TestHTTPModelInvocationMapsAudioWorkContent(t *testing.T) {
 			},
 		},
 	}
+	providerStub.ProviderServiceAdapter.InferFunc = providerStub.Infer
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -213,6 +215,7 @@ func stringPointerValue[T ~string](value *T) string {
 }
 
 type httpWorkContentProvider struct {
+	testutil.ProviderServiceAdapter
 	mu       sync.Mutex
 	response workerexecution.InferenceResponse
 }

@@ -170,6 +170,9 @@ func hasAuthoritativeCompletionEvidence(resp workerexecution.InferenceResponse) 
 	if strings.TrimSpace(resp.Content) == "" {
 		return false
 	}
+	if resp.Outcome != "" {
+		return true
+	}
 	for _, value := range completionEvidenceValues(resp) {
 		switch strings.ToLower(strings.TrimSpace(value)) {
 		case completionEvidenceAgentMessage, completionEvidenceProviderResponse:
@@ -801,6 +804,13 @@ func tokenHasImageContent(token workerexecution.Token) bool {
 // When a stop token is configured, the output is checked: found → ACCEPTED,
 // <CONTINUE> → CONTINUE, otherwise → REJECTED.
 func (ae *AgentExecutor) evaluateOutcome(resp workerexecution.InferenceResponse, workerDef *interfaces.FactoryWorkerConfig) workerexecution.WorkOutcome {
+	switch resp.Outcome {
+	case workerexecution.OutcomeAccepted,
+		workerexecution.OutcomeContinue,
+		workerexecution.OutcomeRejected,
+		workerexecution.OutcomeFailed:
+		return resp.Outcome
+	}
 	if workerDef.StopToken == "" {
 		ae.logger.Info("no stop token configured; defaulting to ACCEPTED outcome")
 		return workerexecution.OutcomeAccepted

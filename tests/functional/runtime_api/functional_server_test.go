@@ -20,7 +20,7 @@ type runtimeOption func(*support.FunctionalAPIServerConfig)
 
 func withProvider(provider workers.Provider) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
-		cfg.Edges.ProviderOverride = provider
+		cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
 	}
 }
 

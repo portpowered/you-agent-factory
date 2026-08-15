@@ -156,6 +156,7 @@ func waitForPublicWorkInPlace(t *testing.T, baseURL, placeID, workID string, tim
 }
 
 type functionalWorldViewProvider struct {
+	testutil.ProviderServiceAdapter
 	requests  chan workerexecution.ProviderInferenceRequest
 	responses chan functionalWorldViewProviderResponse
 }
@@ -166,10 +167,12 @@ type functionalWorldViewProviderResponse struct {
 }
 
 func newFunctionalWorldViewProvider() *functionalWorldViewProvider {
-	return &functionalWorldViewProvider{
+	provider := &functionalWorldViewProvider{
 		requests:  make(chan workerexecution.ProviderInferenceRequest, 2),
 		responses: make(chan functionalWorldViewProviderResponse, 2),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *functionalWorldViewProvider) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {

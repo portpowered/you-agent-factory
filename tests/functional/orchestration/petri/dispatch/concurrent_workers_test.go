@@ -205,6 +205,7 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 		rejectTraceID: failTraceID,
 		reviewCounts:  make(map[string]int),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 15*time.Second)
@@ -241,6 +242,7 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 }
 
 type traceAwareReviewInferenceProvider struct {
+	testutil.ProviderServiceAdapter
 	rejectTraceID string
 	mu            sync.Mutex
 	reviewCounts  map[string]int

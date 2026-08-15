@@ -31,6 +31,19 @@ func MockInferenceProvider(contents ...string) providers.Service {
 	return testutil.NewMockProvider(responses...)
 }
 
+// ProviderServiceFromInference bridges a retained Infer-shaped test provider
+// into the Providers-root edge used by root.BuildProcess. The adapter keeps
+// the compatibility fake unchanged while exposing the same Execute-shaped
+// contract as native Providers test doubles.
+func ProviderServiceFromInference(provider workerexecution.Provider) providers.Service {
+	if provider == nil {
+		return nil
+	}
+	adapter := &testutil.ProviderServiceAdapter{}
+	adapter.InferFunc = provider.Infer
+	return adapter
+}
+
 // BlockingInferenceProvider blocks the first inference call until release is
 // closed or the context is canceled, then completes subsequent calls immediately.
 func BlockingInferenceProvider(release <-chan struct{}) providers.Service {

@@ -30,7 +30,9 @@ func withClock(clock platformclock.Source) runtimeOption {
 }
 
 func withProvider(provider workers.Provider) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.ProviderOverride = provider }
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
+	}
 }
 
 func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunner) runtimeOption {

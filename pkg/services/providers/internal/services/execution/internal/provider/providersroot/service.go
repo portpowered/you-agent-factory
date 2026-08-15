@@ -132,6 +132,8 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		WorkerType:                   strings.TrimSpace(request.WorkerType),
 		WorkstationType:              strings.TrimSpace(request.WorkstationName),
 		Model:                        strings.TrimSpace(request.Model),
+		ModelOperation:               strings.TrimSpace(request.ModelOperation),
+		ModelBindings:                workerModelOperationBindings(request.ModelBindings),
 		ModelLocality:                strings.TrimSpace(request.ModelLocality),
 		ReasoningEffort:              canonicalReasoningEffort(request.ReasoningEffort),
 		ModelProvider:                modelProviderForProviderIdentity(providerID),
@@ -158,6 +160,21 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		ExecutionLogger:              request.ExecutionLogger,
 	}
 	return infer
+}
+
+func workerModelOperationBindings(values []providers.ResolvedModelOperationBinding) []workers.ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	converted := make([]workers.ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		converted[index] = workers.ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  workers.ModelOperationBindingSource(value.Source),
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
+	return converted
 }
 
 func canonicalReasoningEffort(value string) string {
@@ -216,7 +233,10 @@ func executeResult(
 	response workers.InferenceResponse,
 	providerID providers.ID,
 ) providers.ExecuteResult {
-	result := providers.ExecuteResult{Content: response.Content}
+	result := providers.ExecuteResult{
+		Content: response.Content,
+		Outcome: providers.ExecuteOutcome(response.Outcome),
+	}
 	if response.ProviderSession != nil {
 		result.SessionRef = &providers.SessionRef{
 			Provider: providerID,

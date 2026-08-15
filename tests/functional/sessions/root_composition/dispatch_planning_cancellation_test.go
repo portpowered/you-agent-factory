@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -207,6 +208,7 @@ func postDispatchPlanningCancellation(
 }
 
 type dispatchPlanningCancellationProvider struct {
+	testutil.ProviderServiceAdapter
 	started   chan workers.ProviderInferenceRequest
 	cancelled chan workers.ProviderInferenceRequest
 
@@ -215,10 +217,12 @@ type dispatchPlanningCancellationProvider struct {
 }
 
 func newDispatchPlanningCancellationProvider() *dispatchPlanningCancellationProvider {
-	return &dispatchPlanningCancellationProvider{
+	provider := &dispatchPlanningCancellationProvider{
 		started:   make(chan workers.ProviderInferenceRequest, 1),
 		cancelled: make(chan workers.ProviderInferenceRequest, 1),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *dispatchPlanningCancellationProvider) Infer(

@@ -394,7 +394,7 @@ func startRootCLIResumeAPIServer(
 		return nil
 	}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProviderOverride: provider,
+		ProviderOverride: support.ProviderServiceFromInference(provider),
 		APIServerStarter: startServer,
 	})
 	if err != nil {

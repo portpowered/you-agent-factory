@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -207,6 +208,7 @@ func TestPackagedTTSModelFailureReturnsNoFalseArtifact(t *testing.T) {
 }
 
 type packagedTTSFakeProvider struct {
+	testutil.ProviderServiceAdapter
 	mu    sync.Mutex
 	audio []byte
 	calls int
@@ -214,7 +216,9 @@ type packagedTTSFakeProvider struct {
 }
 
 func newPackagedTTSFakeProvider(audio []byte) *packagedTTSFakeProvider {
-	return &packagedTTSFakeProvider{audio: append([]byte(nil), audio...)}
+	provider := &packagedTTSFakeProvider{audio: append([]byte(nil), audio...)}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (provider *packagedTTSFakeProvider) callCount() int {
@@ -282,6 +286,7 @@ func (provider *packagedTTSFakeProvider) Infer(
 var _ workerexecution.Provider = (*packagedTTSFakeProvider)(nil)
 
 type packagedTTSFailingFakeProvider struct {
+	testutil.ProviderServiceAdapter
 	mu          sync.Mutex
 	calls       int
 	last        *workerexecution.ProviderInferenceRequest
@@ -289,7 +294,9 @@ type packagedTTSFailingFakeProvider struct {
 }
 
 func newPackagedTTSFailingFakeProvider(message string) *packagedTTSFailingFakeProvider {
-	return &packagedTTSFailingFakeProvider{failMessage: message}
+	provider := &packagedTTSFailingFakeProvider{failMessage: message}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (provider *packagedTTSFailingFakeProvider) callCount() int {

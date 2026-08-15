@@ -677,7 +677,7 @@ func startDependencyFactory(
 
 	server := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderOverride: provider,
+		ProviderOverride: support.ProviderServiceFromInference(provider),
 		APIServerStarter: server.Start,
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -844,6 +844,7 @@ func fanInDispatchOrdering(
 }
 
 type fanInSecondFinisherGateProvider struct {
+	testutil.ProviderServiceAdapter
 	secondFinisherReached chan struct{}
 	release               chan struct{}
 	releaseOnce           sync.Once
@@ -855,10 +856,12 @@ type fanInSecondFinisherGateProvider struct {
 var _ workerexecution.Provider = (*fanInSecondFinisherGateProvider)(nil)
 
 func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
-	return &fanInSecondFinisherGateProvider{
+	provider := &fanInSecondFinisherGateProvider{
 		secondFinisherReached: make(chan struct{}, 1),
 		release:               make(chan struct{}),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *fanInSecondFinisherGateProvider) Infer(

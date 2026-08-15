@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -28,7 +29,7 @@ func startRecoveryAPIServer(
 		UseMockWorkers:            false,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
+			ProviderOverride: support.ProviderServiceFromInference(provider),
 		},
 	})
 }
@@ -175,6 +176,7 @@ func stringPtr(value string) *string {
 }
 
 type recoveryRedispatchBlockingProvider struct {
+	testutil.ProviderServiceAdapter
 	failWorker   string
 	blockWorker  string
 	callCounts   map[string]int
@@ -187,13 +189,15 @@ type recoveryRedispatchBlockingProvider struct {
 var _ workerexecution.Provider = (*recoveryRedispatchBlockingProvider)(nil)
 
 func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *recoveryRedispatchBlockingProvider {
-	return &recoveryRedispatchBlockingProvider{
+	provider := &recoveryRedispatchBlockingProvider{
 		failWorker:   failWorker,
 		blockWorker:  blockWorker,
 		callCounts:   make(map[string]int),
 		blockStarted: make(chan struct{}, 1),
 		releaseBlock: make(chan struct{}),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *recoveryRedispatchBlockingProvider) Infer(

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -71,6 +72,7 @@ func (e *runnerExecutor) Execute(
 	}
 	response := workers.InferenceResponse{
 		Content:         result.Content,
+		Outcome:         result.Outcome,
 		ProviderSession: workers.CloneProviderSessionMetadata(result.ProviderSession),
 		Diagnostics:     workers.CloneWorkDiagnostics(result.Diagnostics),
 	}
@@ -151,6 +153,7 @@ func (e *Executor) Execute(
 	}
 	response := workers.InferenceResponse{
 		Content:         result.Content,
+		Outcome:         workers.WorkOutcome(result.Outcome),
 		ProviderSession: providerSessionMetadata(result.SessionRef),
 		Diagnostics:     workersDiagnostics(result.Diagnostics, result.SessionRef),
 	}
@@ -220,6 +223,8 @@ func providersRequest(request workers.ProviderInferenceRequest) (providers.Execu
 		InputBindings:               cloneStringSliceMap(request.Dispatch.InputBindings),
 		SessionID:                   request.SessionID,
 		Model:                       request.Model,
+		ModelOperation:              request.ModelOperation,
+		ModelBindings:               providerModelOperationBindings(request.ModelBindings),
 		ReasoningEffort:             request.ReasoningEffort,
 		ModelLocality:               request.ModelLocality,
 		SkipPermissions:             request.SkipPermissions,
@@ -244,6 +249,21 @@ func providersRequest(request workers.ProviderInferenceRequest) (providers.Execu
 		ProcessEnvironment:          append([]string(nil), request.ProcessEnvironment...),
 		ExecutionLogger:             request.ExecutionLogger,
 	}, nil
+}
+
+func providerModelOperationBindings(values []workers.ResolvedModelOperationBinding) []providers.ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	converted := make([]providers.ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		converted[index] = providers.ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  string(value.Source),
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
+	return converted
 }
 
 func normalizeProvidersFailure(err error) error {

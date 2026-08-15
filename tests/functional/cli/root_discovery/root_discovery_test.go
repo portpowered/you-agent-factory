@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -224,7 +225,7 @@ func runCurrentFactoryFailureCaseForCommand(
 			effects.Add(1)
 			return "unexpected-session"
 		},
-		ProviderOverride: countingProvider{calls: &effects},
+		ProviderOverride: newCountingProvider(&effects),
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -300,7 +301,7 @@ func runServerLifecycleCase(t *testing.T) {
 			cancel()
 			return nil
 		},
-		ProviderOverride: countingProvider{calls: &providerCalls},
+		ProviderOverride: newCountingProvider(&providerCalls),
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -445,7 +446,7 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
 			effects.Add(1)
 		},
-		ProviderOverride: countingProvider{calls: &effects},
+		ProviderOverride: newCountingProvider(&effects),
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -690,7 +691,14 @@ const idleCurrentFactoryJSON = `{
 }`
 
 type countingProvider struct {
+	testutil.ProviderServiceAdapter
 	calls *atomic.Int32
+}
+
+func newCountingProvider(calls *atomic.Int32) countingProvider {
+	provider := countingProvider{calls: calls}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 var _ workers.Provider = countingProvider{}

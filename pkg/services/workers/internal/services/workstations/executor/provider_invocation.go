@@ -74,10 +74,17 @@ func (e *ProviderInvocationExecutor) Execute(
 	// WorkResult holds the wider internal form; there is no widening
 	// conversion because widening would mean re-inventing detail that was
 	// dropped on purpose.
+	outcome := workerexecution.OutcomeAccepted
+	switch result.Response.Outcome {
+	case workerexecution.OutcomeContinue,
+		workerexecution.OutcomeRejected,
+		workerexecution.OutcomeFailed:
+		outcome = result.Response.Outcome
+	}
 	return attachStructuredResult(request, workerexecution.WorkResult{
 		DispatchID:      request.Dispatch.DispatchID,
 		TransitionID:    request.Dispatch.TransitionID,
-		Outcome:         workerexecution.OutcomeAccepted,
+		Outcome:         outcome,
 		Output:          result.Response.Content,
 		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
 	}), nil

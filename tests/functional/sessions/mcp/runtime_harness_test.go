@@ -26,7 +26,9 @@ func startRootRuntimeMCPServer(
 ) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderOverride: provider})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderOverride: support.ProviderServiceFromInference(provider),
+	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}

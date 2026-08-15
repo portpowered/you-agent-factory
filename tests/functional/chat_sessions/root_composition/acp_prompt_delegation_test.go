@@ -583,9 +583,15 @@ func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
 // queue that ran dry would fall back to unparseable filler, route through
 // `onFailure`, and fail the invocation -- turning a delegation test red for a
 // reason that has nothing to do with delegation.
-type acceptedGoalProvider struct{}
+type acceptedGoalProvider struct {
+	testutil.ProviderServiceAdapter
+}
 
-func newAcceptedGoalProvider() acceptedGoalProvider { return acceptedGoalProvider{} }
+func newAcceptedGoalProvider() acceptedGoalProvider {
+	provider := acceptedGoalProvider{}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
+}
 
 func (acceptedGoalProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{
@@ -600,6 +606,7 @@ func (acceptedGoalProvider) Infer(context.Context, workers.ProviderInferenceRequ
 // admitted turn is actually RUNNING, not merely scheduled on a goroutine --
 // before sending a concurrent request, with no sleep-based synchronization.
 type blockingProvider struct {
+	testutil.ProviderServiceAdapter
 	inner   workers.Provider
 	started chan struct{}
 	release chan struct{}
@@ -607,7 +614,9 @@ type blockingProvider struct {
 }
 
 func newBlockingProvider(inner workers.Provider) *blockingProvider {
-	return &blockingProvider{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
+	provider := &blockingProvider{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (b *blockingProvider) Infer(ctx context.Context, req workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {

@@ -81,7 +81,7 @@ func runFactoryThroughCustomerProcess(
 	server := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter: server.Start,
-		ProviderOverride: provider,
+		ProviderOverride: support.ProviderServiceFromInference(provider),
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",

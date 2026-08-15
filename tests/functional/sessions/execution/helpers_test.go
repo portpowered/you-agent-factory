@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -37,6 +38,7 @@ const (
 )
 
 type partialResultBlockingProvider struct {
+	testutil.ProviderServiceAdapter
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
@@ -46,10 +48,12 @@ type partialResultBlockingProvider struct {
 }
 
 func newPartialResultBlockingProvider(workflowName string) *partialResultBlockingProvider {
-	return &partialResultBlockingProvider{
+	provider := &partialResultBlockingProvider{
 		inferBlocked: make(chan struct{}),
 		workflowName: workflowName,
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *partialResultBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {

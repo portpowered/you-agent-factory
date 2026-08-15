@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // ErrExecuteCancelled reports that one provider execution attempt was cancelled
@@ -98,6 +99,30 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 	}
 }
 
+// ResolvedModelOperationBinding carries one detached model-operation input
+// through the Providers execution boundary without importing Workers request
+// types. Content remains the shared Work content vocabulary so structured
+// text, JSON, and audio parts retain their shape.
+type ResolvedModelOperationBinding struct {
+	Slot    string
+	Source  string
+	Content []work.WorkContentPart
+}
+
+// ExecuteOutcome carries an already-classified terminal work outcome across
+// the compatibility boundary. Providers does not derive this value; native
+// adapters leave it empty, while transitional inference-shaped callers may
+// provide it so the Workers output policy is not silently changed by the
+// boundary translation.
+type ExecuteOutcome string
+
+const (
+	ExecuteOutcomeAccepted ExecuteOutcome = "ACCEPTED"
+	ExecuteOutcomeContinue ExecuteOutcome = "CONTINUE"
+	ExecuteOutcomeRejected ExecuteOutcome = "REJECTED"
+	ExecuteOutcomeFailed   ExecuteOutcome = "FAILED"
+)
+
 // ExecuteRequest is the plain one-attempt execute vocabulary. Providers owns
 // exactly one normalized native attempt per call; callers own selection,
 // retry, throttle, and scheduling policy.
@@ -116,6 +141,8 @@ type ExecuteRequest struct {
 	InputBindings   map[string][]string
 	SessionID       string
 	Model           string
+	ModelOperation  string
+	ModelBindings   []ResolvedModelOperationBinding
 	ReasoningEffort string
 	ModelLocality   string
 	SkipPermissions bool
@@ -230,6 +257,24 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	if request.InputTokens != nil {
 		cloned.InputTokens = append([]any(nil), request.InputTokens...)
 	}
+	if request.ModelBindings != nil {
+		cloned.ModelBindings = cloneModelOperationBindings(request.ModelBindings)
+	}
+	return cloned
+}
+
+func cloneModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		cloned[index] = ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  value.Source,
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
 	return cloned
 }
 
@@ -333,6 +378,7 @@ func (diagnostics ExecuteDiagnostics) Clone() ExecuteDiagnostics {
 // ExecuteResult is the detached result of one normalized provider attempt.
 type ExecuteResult struct {
 	Content     string
+	Outcome     ExecuteOutcome
 	SessionRef  *SessionRef
 	Diagnostics *ExecuteDiagnostics
 }
