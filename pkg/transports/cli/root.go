@@ -447,6 +447,9 @@ func executeCommandResult(diagnostics *clidiag.DiagnosticWriter, err error) erro
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, context.Canceled) {
+		return executeCommandFailure(diagnostics, err)
+	}
 	if diagnostics != nil && diagnostics.DiagnosticRendered() {
 		return err
 	}
@@ -457,14 +460,19 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 	if err == nil {
 		return nil
 	}
+	// Cancellation is a process-control sentinel, not a command failure. Keep
+	// its identity independent of whether a command already rendered a
+	// diagnostic before returning it.
+	if errors.Is(err, context.Canceled) {
+		if !clidiag.DiagnosticRendered(diagnostics) {
+			_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
+			clidiag.MarkDiagnosticRendered(diagnostics)
+		}
+		return context.Canceled
+	}
 	normalized := clidiag.Normalize(err)
 	if clidiag.DiagnosticRendered(diagnostics) {
 		return err
-	}
-	if errors.Is(err, context.Canceled) {
-		_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
-		clidiag.MarkDiagnosticRendered(diagnostics)
-		return normalized
 	}
 	clidiag.WriteFailure(diagnostics, normalized)
 	return normalized
