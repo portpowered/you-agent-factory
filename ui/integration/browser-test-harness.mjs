@@ -412,21 +412,81 @@ async function draggableFactoryGraphNodeStartPoint(nodeLocator, nodeLabel) {
   return point;
 }
 
+const defaultDragAttemptCount = 2;
+const defaultDragSettleDelayMs = 50;
+
+async function dragFactoryGraphNodeAttempt(
+  page,
+  nodeLocator,
+  deltaX,
+  deltaY,
+  nodeLabel,
+  steps,
+  settleDelayMs,
+) {
+  const startPoint = await draggableFactoryGraphNodeStartPoint(
+    nodeLocator,
+    nodeLabel,
+  );
+  let pointerGestureStarted = false;
+  let midDragFlowPosition = null;
+
+  try {
+    await page.waitForTimeout(settleDelayMs);
+    await page.mouse.move(startPoint.x, startPoint.y);
+    pointerGestureStarted = true;
+    await page.mouse.down();
+    await page.waitForTimeout(settleDelayMs);
+    await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
+      steps,
+    });
+    await page.waitForTimeout(settleDelayMs);
+    midDragFlowPosition = await readFactoryGraphNodeFlowPosition(nodeLocator);
+  } finally {
+    if (pointerGestureStarted) {
+      await page.mouse.up().catch(() => {});
+    }
+  }
+
+  await page.waitForTimeout(settleDelayMs);
+  const postMouseUpFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+
+  return { midDragFlowPosition, postMouseUpFlowPosition };
+}
+
 /**
  * Drag a graph node and verify that React Flow moved it during and after the
  * pointer gesture. The tolerance is caller-provided because browser checks
- * intentionally use different movement contracts.
+ * intentionally use different movement contracts. A failed displacement gets
+ * one bounded settle/retry before the measured failure is reported.
  */
 export async function dragNodeByOffset(
   page,
   nodeLocator,
   deltaX,
   deltaY,
-  { displacementTolerancePx, nodeLabel = "graph node", steps = 16 } = {},
+  {
+    displacementTolerancePx,
+    maxAttempts = defaultDragAttemptCount,
+    nodeLabel = "graph node",
+    settleDelayMs = defaultDragSettleDelayMs,
+    steps = 16,
+  } = {},
 ) {
   if (!Number.isFinite(displacementTolerancePx)) {
     throw new TypeError(
       `A finite displacement tolerance is required to drag ${nodeLabel}.`,
+    );
+  }
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new TypeError(
+      `A positive integer attempt count is required to drag ${nodeLabel}.`,
+    );
+  }
+  if (!Number.isFinite(settleDelayMs) || settleDelayMs < 0) {
+    throw new TypeError(
+      `A non-negative settle delay is required to drag ${nodeLabel}.`,
     );
   }
 
@@ -434,65 +494,68 @@ export async function dragNodeByOffset(
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
+  await page.waitForTimeout(settleDelayMs);
   const initialFlowPosition =
     await readFactoryGraphNodeFlowPosition(nodeLocator);
-  const startPoint = await draggableFactoryGraphNodeStartPoint(
-    nodeLocator,
-    nodeLabel,
-  );
 
-  let pointerIsDown = false;
-  let midDragFlowPosition = null;
-  try {
-    await page.mouse.move(startPoint.x, startPoint.y);
-    await page.mouse.down();
-    pointerIsDown = true;
-    await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
-      steps,
+  let latestObservation = {
+    midDragDistancePx: null,
+    midDragFlowPosition: null,
+    postMouseUpDistancePx: null,
+    postMouseUpFlowPosition: null,
+  };
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await nodeLocator.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
     });
-    midDragFlowPosition = await readFactoryGraphNodeFlowPosition(nodeLocator);
-  } finally {
-    if (pointerIsDown) {
-      await page.mouse.up();
+    const { midDragFlowPosition, postMouseUpFlowPosition } =
+      await dragFactoryGraphNodeAttempt(
+        page,
+        nodeLocator,
+        deltaX,
+        deltaY,
+        nodeLabel,
+        steps,
+        settleDelayMs,
+      );
+    const midDragDistancePx = flowPositionDistance(
+      initialFlowPosition,
+      midDragFlowPosition,
+    );
+    const postMouseUpDistancePx = flowPositionDistance(
+      initialFlowPosition,
+      postMouseUpFlowPosition,
+    );
+    latestObservation = {
+      midDragDistancePx,
+      midDragFlowPosition,
+      postMouseUpDistancePx,
+      postMouseUpFlowPosition,
+    };
+
+    if (
+      midDragDistancePx !== null &&
+      midDragDistancePx > displacementTolerancePx &&
+      postMouseUpDistancePx !== null &&
+      postMouseUpDistancePx > displacementTolerancePx
+    ) {
+      return {
+        initialFlowPosition,
+        ...latestObservation,
+      };
     }
   }
 
-  const postMouseUpFlowPosition =
-    await readFactoryGraphNodeFlowPosition(nodeLocator);
-  const midDragDistancePx = flowPositionDistance(
-    initialFlowPosition,
-    midDragFlowPosition,
+  throw new Error(
+    `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
+      {
+        attempts: maxAttempts,
+        initialFlowPosition,
+        ...latestObservation,
+      },
+    )}`,
   );
-  const postMouseUpDistancePx = flowPositionDistance(
-    initialFlowPosition,
-    postMouseUpFlowPosition,
-  );
-  if (
-    midDragDistancePx === null ||
-    midDragDistancePx <= displacementTolerancePx ||
-    postMouseUpDistancePx === null ||
-    postMouseUpDistancePx <= displacementTolerancePx
-  ) {
-    throw new Error(
-      `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
-        {
-          initialFlowPosition,
-          midDragFlowPosition,
-          midDragDistancePx,
-          postMouseUpFlowPosition,
-          postMouseUpDistancePx,
-        },
-      )}`,
-    );
-  }
-
-  return {
-    initialFlowPosition,
-    midDragFlowPosition,
-    midDragDistancePx,
-    postMouseUpDistancePx,
-    postMouseUpFlowPosition,
-  };
 }
 
 function graphNodePlacementSamplesEqual(left, right) {

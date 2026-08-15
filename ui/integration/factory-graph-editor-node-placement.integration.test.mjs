@@ -168,6 +168,9 @@ const editableGraphFactoryReplayLines = [
 
 const flowPositionTolerancePx = 8;
 const persistedFlowPositionTolerancePx = 80;
+// The 120x80 gesture has a 120px max-axis displacement, preserving the
+// greater-than-80px persistence contract while keeping tolerance caller-scoped.
+const persistedNodeDragDelta = { x: 120, y: 80 };
 
 function flowPositionsMatchWithinTolerance(
   left,
@@ -1066,8 +1069,8 @@ describe.concurrent("factory graph editor node placement browser integration", (
         const dragObservation = await dragNodeByOffset(
           browserPage.page,
           browserPage.page.getByTestId(resourceTestId),
-          120,
-          80,
+          persistedNodeDragDelta.x,
+          persistedNodeDragDelta.y,
           {
             displacementTolerancePx: persistedFlowPositionTolerancePx,
             nodeLabel: resourceTestId,

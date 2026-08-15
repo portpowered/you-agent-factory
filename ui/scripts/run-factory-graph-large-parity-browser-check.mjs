@@ -1,5 +1,8 @@
 import { chromium } from "playwright";
-import { expectNoBrowserErrors } from "../integration/browser-test-harness.mjs";
+import {
+  dragNodeByOffset,
+  expectNoBrowserErrors,
+} from "../integration/browser-test-harness.mjs";
 import { ensureStorybookServer } from "./run-storybook-responsive-check.mjs";
 import {
   storyUrl,
@@ -13,6 +16,11 @@ const storybookUrl = `http://${host}:${port}`;
 const storyId =
   "factory-graph-editor-large-fixtures--large-factory-visual-parity-matrix";
 const browserCheckTimeoutMs = 60_000;
+// The parity gesture is intentionally smaller than the integration drag:
+// max(|28|, |20|) = 28px of requested flow displacement, so 8px rejects a
+// no-op while remaining below the movement this check is asserting.
+const parityDragDelta = { x: 28, y: 20 };
+const parityDragDisplacementTolerancePx = 8;
 const viewports = [
   { height: 844, label: "mobile", width: 390 },
   { height: 1024, label: "tablet", width: 768 },
@@ -164,7 +172,16 @@ try {
       await authoredNode.click();
       await assertNodeSelected(page, authoredNodeId, viewport.label);
       const initialNodeTransform = await readNodeTransform(authoredNode);
-      await dragNodeByOffset(page, authoredNode, 28, 20);
+      await dragNodeByOffset(
+        page,
+        authoredNode,
+        parityDragDelta.x,
+        parityDragDelta.y,
+        {
+          displacementTolerancePx: parityDragDisplacementTolerancePx,
+          nodeLabel: authoredNodeId,
+        },
+      );
       await page.waitForFunction(
         ({ id, initialTransform }) => {
           const node = document.querySelector(
@@ -269,42 +286,6 @@ async function assertNodeSelected(page, nodeId, viewportLabel) {
   if (!(await selected.isVisible())) {
     throw new Error(`Selected graph node was not visible at ${viewportLabel}.`);
   }
-}
-
-async function dragNodeByOffset(page, node, deltaX, deltaY) {
-  const box = await node.boundingBox();
-  if (!box) {
-    throw new Error("Expected an authored node bounding box for pointer drag.");
-  }
-  const point = await page.evaluate(
-    ({ box: nodeBox }) => {
-      const candidates = [
-        { x: nodeBox.x + nodeBox.width / 2, y: nodeBox.y + 4 },
-        { x: nodeBox.x + 4, y: nodeBox.y + nodeBox.height / 2 },
-        {
-          x: nodeBox.x + nodeBox.width - 4,
-          y: nodeBox.y + nodeBox.height / 2,
-        },
-      ];
-      for (const candidate of candidates) {
-        const hit = document.elementFromPoint(candidate.x, candidate.y);
-        if (hit && !hit.closest(".nodrag")) {
-          return candidate;
-        }
-      }
-      return null;
-    },
-    { box },
-  );
-  if (!point) {
-    throw new Error(
-      "Expected a draggable point outside nested graph controls.",
-    );
-  }
-  await page.mouse.move(point.x, point.y);
-  await page.mouse.down();
-  await page.mouse.move(point.x + deltaX, point.y + deltaY, { steps: 12 });
-  await page.mouse.up();
 }
 
 function assertNoBrowserErrors(pageErrors, consoleErrors, viewportLabel) {
