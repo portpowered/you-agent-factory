@@ -33,19 +33,37 @@ func TestNewProductionRegistryBuildsOneInertRegistryForEveryStrategy(t *testing.
 	if err != nil {
 		t.Fatalf("NewProductionRegistry() error = %v", err)
 	}
-	if provider.calls.Load() != 0 || commandCalls.Load() != 0 || modelCalls.Load() != 0 {
-		t.Fatalf("construction effects = provider %d command %d model %d, want zero",
-			provider.calls.Load(), commandCalls.Load(), modelCalls.Load())
-	}
+	assertRegistryEffects(t, provider, &commandCalls, &modelCalls, 0, "construction")
+	assertProductionBindings(t, registry)
+	assertRegistryEffects(t, provider, &commandCalls, &modelCalls, 0, "resolution")
+	assertProductionExecutions(t, registry)
+	assertRegistryEffects(t, provider, &commandCalls, &modelCalls, 1, "execution")
+}
 
+func assertRegistryEffects(
+	t *testing.T,
+	provider *agentProvidersFake,
+	commandCalls, modelCalls *atomic.Int32,
+	want int32,
+	stage string,
+) {
+	t.Helper()
+	if provider.calls.Load() != want || commandCalls.Load() != want || modelCalls.Load() != want {
+		t.Fatalf("%s effects = provider %d command %d model %d, want %d each",
+			stage, provider.calls.Load(), commandCalls.Load(), modelCalls.Load(), want)
+	}
+}
+
+func assertProductionBindings(t *testing.T, registry runners.Service) {
+	t.Helper()
 	for _, identity := range []string{
 		runners.AgentIdentity,
 		runners.ScriptIdentity,
 		runners.InferenceIdentity,
 	} {
-		binding, resolveErr := registry.Resolve(runners.ResolutionRequest{Identity: identity})
-		if resolveErr != nil {
-			t.Fatalf("Resolve(%q) error = %v", identity, resolveErr)
+		binding, err := registry.Resolve(runners.ResolutionRequest{Identity: identity})
+		if err != nil {
+			t.Fatalf("Resolve(%q) error = %v", identity, err)
 		}
 		if binding.Identity != identity || binding.Runner == nil {
 			t.Fatalf("Resolve(%q) = %#v, want complete binding", identity, binding)
@@ -54,37 +72,31 @@ func TestNewProductionRegistryBuildsOneInertRegistryForEveryStrategy(t *testing.
 	if _, err := registry.Resolve(runners.ResolutionRequest{Identity: runners.MockIdentity}); !errors.Is(err, workers.ErrUnknownRunnerSelection) {
 		t.Fatalf("Resolve(mock) error = %v, want unknown production strategy", err)
 	}
-	if provider.calls.Load() != 0 || commandCalls.Load() != 0 || modelCalls.Load() != 0 {
-		t.Fatalf("resolution effects = provider %d command %d model %d, want zero",
-			provider.calls.Load(), commandCalls.Load(), modelCalls.Load())
-	}
+}
 
-	productionRequests := []struct {
+func assertProductionExecutions(t *testing.T, registry runners.Service) {
+	t.Helper()
+	requests := []struct {
 		identity string
 		request  workers.RunnerExecutionRequest
-		want     string
 	}{
-		{identity: runners.AgentIdentity, request: agentRequest(), want: "fixture output"},
-		{identity: runners.ScriptIdentity, request: scriptRequest(), want: "fixture output"},
-		{identity: runners.InferenceIdentity, request: inferenceRequest(), want: "fixture output"},
+		{identity: runners.AgentIdentity, request: agentRequest()},
+		{identity: runners.ScriptIdentity, request: scriptRequest()},
+		{identity: runners.InferenceIdentity, request: inferenceRequest()},
 	}
-	for _, test := range productionRequests {
+	for _, test := range requests {
 		t.Run(test.identity, func(t *testing.T) {
-			result, executeErr := registry.Execute(t.Context(), runners.ExecuteRequest{
+			result, err := registry.Execute(t.Context(), runners.ExecuteRequest{
 				Identity: test.identity,
 				Attempt:  test.request,
 			})
-			if executeErr != nil {
-				t.Fatalf("Execute() error = %v", executeErr)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
 			}
-			if result.Content != test.want {
-				t.Fatalf("Execute() content = %q, want %q", result.Content, test.want)
+			if result.Content != "fixture output" {
+				t.Fatalf("Execute() content = %q, want fixture output", result.Content)
 			}
 		})
-	}
-	if provider.calls.Load() != 1 || commandCalls.Load() != 1 || modelCalls.Load() != 1 {
-		t.Fatalf("execution effects = provider %d command %d model %d, want one each",
-			provider.calls.Load(), commandCalls.Load(), modelCalls.Load())
 	}
 }
 

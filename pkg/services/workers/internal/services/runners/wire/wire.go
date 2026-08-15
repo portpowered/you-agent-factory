@@ -4,6 +4,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -80,18 +81,18 @@ func newProductionRegistry(
 ) (runners.Service, error) {
 	agentImplementation, err := agentImplementation(agentDependencies)
 	if err != nil {
-		return nil, err
+		return nil, invalidRunnerConstruction(runners.AgentIdentity, err)
 	}
 	scriptImplementation, err := scriptImplementation(scriptConfig, scriptDependencies)
 	if err != nil {
-		return nil, err
+		return nil, invalidRunnerConstruction(runners.ScriptIdentity, err)
 	}
 	inferenceImplementation, err := inferenceImplementation(
 		inferenceConfig,
 		inferenceDependencies,
 	)
 	if err != nil {
-		return nil, err
+		return nil, invalidRunnerConstruction(runners.InferenceIdentity, err)
 	}
 	registrations := []runners.Registration{
 		{
@@ -116,7 +117,7 @@ func newProductionRegistry(
 			mock.Dependencies{Next: mockDependencies.Next},
 		)
 		if mockErr != nil {
-			return nil, mockErr
+			return nil, invalidRunnerConstruction(runners.MockIdentity, mockErr)
 		}
 		registrations = append(registrations, runners.Registration{
 			Identity: runners.MockIdentity,
@@ -125,6 +126,15 @@ func newProductionRegistry(
 		})
 	}
 	return NewService(registrations)
+}
+
+func invalidRunnerConstruction(identity string, err error) error {
+	return fmt.Errorf(
+		"%w: %s runner construction failed: %w",
+		workers.ErrInvalidRunnerRegistration,
+		identity,
+		err,
+	)
 }
 
 // NewScriptRegistry constructs one Script Runner from explicit effects and
@@ -269,9 +279,6 @@ func (runner registryExecutionRunner) Execute(
 ) (workers.RunnerExecutionResult, error) {
 	if runner.registry == nil {
 		return workers.RunnerExecutionResult{}, errors.New("runner registry is required")
-	}
-	if runner.identity == runners.InferenceIdentity {
-		request.RunnerID = runners.InferenceIdentity
 	}
 	return runner.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity:             runner.identity,

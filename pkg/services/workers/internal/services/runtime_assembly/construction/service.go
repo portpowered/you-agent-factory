@@ -385,9 +385,6 @@ func (runner registryRunner) Execute(
 	if runner.registry == nil {
 		return workers.RunnerExecutionResult{}, fmt.Errorf("shared runner registry is required")
 	}
-	if runner.identity == runners.InferenceIdentity {
-		request.RunnerID = runners.InferenceIdentity
-	}
 	return runner.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity:             runner.identity,
 		RequiredCapabilities: request.RequiredOptionalCapabilities,

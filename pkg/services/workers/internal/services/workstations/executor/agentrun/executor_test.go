@@ -707,9 +707,23 @@ func TestAgentRunExecutor_PublishesOneCorrelatedTerminalEventAndFinalResponse(t 
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
+	assertDetachedAgentRunResult(t, result)
+	event := assertDetachedAgentRunEvent(t, recorded)
+	assertDetachedAgentRunFinalResponse(t, fragments, event, result.Output)
+}
+
+func assertDetachedAgentRunResult(t *testing.T, result workerexecution.WorkResult) {
+	t.Helper()
 	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "detached answer" {
 		t.Fatalf("result = %#v, want accepted detached answer", result)
 	}
+}
+
+func assertDetachedAgentRunEvent(
+	t *testing.T,
+	recorded []workerexecution.AgentRunResponseEvent,
+) workerexecution.AgentRunResponseEvent {
+	t.Helper()
 	if len(recorded) != 1 {
 		t.Fatalf("recorded terminal events = %d, want exactly one", len(recorded))
 	}
@@ -720,6 +734,16 @@ func TestAgentRunExecutor_PublishesOneCorrelatedTerminalEventAndFinalResponse(t 
 		event.Payload.Outcome != string(workerexecution.OutcomeAccepted) {
 		t.Fatalf("terminal event = %#v, want dispatch-correlated accepted event", event)
 	}
+	return event
+}
+
+func assertDetachedAgentRunFinalResponse(
+	t *testing.T,
+	fragments []workerexecution.ProgressFragment,
+	event workerexecution.AgentRunResponseEvent,
+	wantContent string,
+) {
+	t.Helper()
 	if len(fragments) != 1 {
 		t.Fatalf("final response fragments = %d, want exactly one", len(fragments))
 	}
@@ -734,7 +758,7 @@ func TestAgentRunExecutor_PublishesOneCorrelatedTerminalEventAndFinalResponse(t 
 	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
 		t.Fatalf("decode final response payload: %v", err)
 	}
-	if len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != result.Output {
-		t.Fatalf("final response payload = %#v, want result content %q", payload, result.Output)
+	if len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != wantContent {
+		t.Fatalf("final response payload = %#v, want result content %q", payload, wantContent)
 	}
 }
