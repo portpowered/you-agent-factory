@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 )
 
@@ -222,6 +225,39 @@ func TestTeeWriterPassesBytesThroughUnchanged(t *testing.T) {
 			t.Fatalf("record = %+v, want agent/out attribution", record)
 		}
 	}
+}
+
+func TestTeeWriterRollsBackRejectedFrameWithRollingTranscript(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	rolling := &rollingfile.Writer{Filename: path, MaxSize: 1}
+	writer := wiretranscript.NewWriter(rolling, testClock{})
+	tee := wiretranscript.TeeWriter(shortWriteSink{}, writer, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+
+	frame := []byte(`{"id":1}` + "\n")
+	n, err := tee.Write(frame)
+	if err != nil {
+		t.Fatalf("TeeWriter.Write() error = %v, want the sink result", err)
+	}
+	if n != len(frame)-1 {
+		t.Fatalf("TeeWriter.Write() bytes = %d, want %d", n, len(frame)-1)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("writer.Close() error = %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("rejected frame left transcript file, stat error = %v", err)
+	}
+}
+
+type shortWriteSink struct{}
+
+func (shortWriteSink) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return len(p) - 1, nil
 }
 
 // TestNilRecorderIsATotalNoOp keeps "recording disabled" from needing a second

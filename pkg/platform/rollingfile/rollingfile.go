@@ -44,7 +44,117 @@ type Writer struct {
 	now  func() time.Time
 }
 
+// Checkpoint is a reversible position in the active rolling file. It is used
+// by callers that publish a related external effect only after a transcript
+// record has been made visible.
+type Checkpoint struct {
+	filename string
+	size     int64
+	active   bool
+	existed  bool
+}
+
 var _ io.WriteCloser = (*Writer)(nil)
+
+// CanWrite reports whether one write of writeLen bytes can fit without
+// rotation. Transactional callers use this conservative check so a failed
+// external publication can roll the transcript back within the same file.
+func (w *Writer) CanWrite(writeLen int) bool {
+	if w == nil || writeLen < 0 {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	maxSize := w.maxSize()
+	if int64(writeLen) > maxSize {
+		return false
+	}
+	if w.file != nil {
+		return w.size+int64(writeLen) <= maxSize
+	}
+	info, err := os.Stat(w.Filename)
+	if errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	// openExistingOrNew rotates at the equality boundary when no active file
+	// is open, so leave one byte of headroom in that state.
+	return info.Size()+int64(writeLen) < maxSize
+}
+
+// Checkpoint captures the current active-file position without opening the
+// file. A subsequent Rollback restores it when no rotation is required.
+func (w *Writer) Checkpoint() (any, error) {
+	if w == nil {
+		return nil, errors.New("rolling file writer is nil")
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	checkpoint := Checkpoint{filename: w.Filename, active: w.file != nil, size: w.size}
+	if w.file != nil {
+		return checkpoint, nil
+	}
+	info, err := os.Stat(w.Filename)
+	if errors.Is(err, os.ErrNotExist) {
+		return checkpoint, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	checkpoint.existed = true
+	checkpoint.size = info.Size()
+	return checkpoint, nil
+}
+
+// Rollback restores a checkpoint created by Checkpoint. The caller must have
+// used CanWrite first; that prevents a transactional record from crossing a
+// rolling boundary that cannot be restored as one file position.
+func (w *Writer) Rollback(value any) error {
+	if w == nil {
+		return errors.New("rolling file writer is nil")
+	}
+	checkpoint, ok := value.(Checkpoint)
+	if !ok || checkpoint.filename != w.Filename {
+		return errors.New("invalid rolling file checkpoint")
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file != nil {
+		if err := w.file.Truncate(checkpoint.size); err != nil {
+			return err
+		}
+		if _, err := w.file.Seek(checkpoint.size, io.SeekStart); err != nil {
+			return err
+		}
+		if checkpoint.active {
+			w.size = checkpoint.size
+			return nil
+		}
+		if err := w.file.Close(); err != nil {
+			return err
+		}
+		w.file = nil
+		w.size = 0
+		if !checkpoint.existed {
+			return os.Remove(w.Filename)
+		}
+		return nil
+	}
+	if checkpoint.active {
+		file, err := os.OpenFile(w.Filename, os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		if err := file.Truncate(checkpoint.size); err != nil {
+			return err
+		}
+	}
+	w.size = 0
+	return nil
+}
 
 // Write appends p to the active file, rotating before the write when the
 // configured size limit would be exceeded.

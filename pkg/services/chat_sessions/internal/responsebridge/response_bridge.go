@@ -227,10 +227,8 @@ func (s *Service) drainTail(
 	state *drainState,
 ) error {
 	batch, err := cursor.Drain()
-	if errors.Is(err, factorysessions.ErrResponseEventSubscriptionClosed) {
-		return nil
-	}
-	if err != nil {
+	closed := errors.Is(err, factorysessions.ErrResponseEventSubscriptionClosed)
+	if err != nil && !closed {
 		return err
 	}
 	if err := s.sequencePending(deliveryCtx, chatSessionID, state); err != nil {

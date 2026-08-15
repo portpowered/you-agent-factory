@@ -494,6 +494,11 @@ func TestServiceRunDefersUnknownDispatchResponseUntilWorkerAssociation(t *testin
 		Kind: workers.KindMessage, Phase: workers.PhaseDelta,
 		Payload: json.RawMessage(`{"text":"child output"}`),
 	}
+	terminal := factorysessions.FactoryResponseEvent{
+		FactorySessionID: "factory-1", EventID: "terminal-response", Sequence: 2,
+		Kind: workers.KindMessage, Phase: workers.PhaseCompleted,
+		Payload: json.RawMessage(`{"text":"merged result"}`),
+	}
 	cursor := &factorysessions.ResponseEventCursor{
 		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
 			liveResponseSeenOnce.Do(func() { close(liveResponseSeen) })
@@ -506,7 +511,10 @@ func TestServiceRunDefersUnknownDispatchResponseUntilWorkerAssociation(t *testin
 			return nil, ctx.Err()
 		},
 		DrainEvents: func() ([]factorysessions.FactoryResponseEvent, error) {
-			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+			// A closed cursor can still return the final retained batch. The
+			// bridge must classify the deferred child first and preserve the
+			// legitimate top-level terminal event in that same batch.
+			return []factorysessions.FactoryResponseEvent{terminal}, factorysessions.ErrResponseEventSubscriptionClosed
 		},
 		DetachCursor: func() {},
 	}
@@ -531,8 +539,14 @@ func TestServiceRunDefersUnknownDispatchResponseUntilWorkerAssociation(t *testin
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil", err)
 	}
-	if len(sequencer.sequences) != 0 {
-		t.Fatalf("top-level response sequences = %d, want child response to be suppressed", len(sequencer.sequences))
+	if len(sequencer.sequences) != 1 {
+		t.Fatalf("top-level response sequences = %d, want only the terminal event", len(sequencer.sequences))
+	}
+	if got := sequencer.sequences[0].SourceEventID; got != events.SourceEventID(terminal.EventID) {
+		t.Fatalf("top-level response event = %q, want %q", got, terminal.EventID)
+	}
+	if sequencer.sequences[0].WorkerSessionAssociation != nil {
+		t.Fatalf("terminal response association = %#v, want no Worker association", sequencer.sequences[0].WorkerSessionAssociation)
 	}
 }
 
