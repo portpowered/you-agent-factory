@@ -70,8 +70,7 @@ func (w *Writer) Record(conn string, peer Peer, direction Direction, stream Stre
 }
 
 type checkpointableOutput interface {
-	CanWrite(int) bool
-	Checkpoint() (any, error)
+	Prepare(int) (any, error)
 	Rollback(any) error
 }
 
@@ -109,14 +108,11 @@ func (w *Writer) BeginOutbound(
 	record := w.record(conn, peer, DirectionOut, stream, line, w.sequence+1)
 	record.Timestamp = w.clock.Now().UTC().Format(time.RFC3339Nano)
 	encoded, err := encodeRecord(record)
-	if err != nil || !output.CanWrite(len(encoded)) {
+	if err != nil {
 		w.mu.Unlock()
-		if err != nil {
-			return nil, err
-		}
-		return nil, io.ErrShortWrite
+		return nil, err
 	}
-	checkpoint, err := output.Checkpoint()
+	checkpoint, err := output.Prepare(len(encoded))
 	if err != nil {
 		w.mu.Unlock()
 		return nil, err

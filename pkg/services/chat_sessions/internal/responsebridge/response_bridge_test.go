@@ -505,16 +505,17 @@ func TestServiceRunDefersUnknownDispatchResponseUntilWorkerAssociation(t *testin
 			if response.EventID != "" {
 				event := response
 				response.EventID = ""
-				return []factorysessions.FactoryResponseEvent{event}, nil
+				// The associated child response and the legitimate top-level
+				// terminal event are one live batch. The bridge must defer only
+				// the child copy rather than losing the batch remainder when the
+				// cursor closes at the terminal boundary.
+				return []factorysessions.FactoryResponseEvent{event, terminal}, nil
 			}
 			<-ctx.Done()
 			return nil, ctx.Err()
 		},
 		DrainEvents: func() ([]factorysessions.FactoryResponseEvent, error) {
-			// A closed cursor can still return the final retained batch. The
-			// bridge must classify the deferred child first and preserve the
-			// legitimate top-level terminal event in that same batch.
-			return []factorysessions.FactoryResponseEvent{terminal}, factorysessions.ErrResponseEventSubscriptionClosed
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
 		},
 		DetachCursor: func() {},
 	}

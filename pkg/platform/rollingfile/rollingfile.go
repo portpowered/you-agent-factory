@@ -48,69 +48,78 @@ type Writer struct {
 // by callers that publish a related external effect only after a transcript
 // record has been made visible.
 type Checkpoint struct {
-	filename string
-	size     int64
-	active   bool
-	existed  bool
+	filename      string
+	size          int64
+	active        bool
+	existed       bool
+	rotatedBackup string
 }
 
 var _ io.WriteCloser = (*Writer)(nil)
 
-// CanWrite reports whether one write of writeLen bytes can fit without
-// rotation. Transactional callers use this conservative check so a failed
-// external publication can roll the transcript back within the same file.
-func (w *Writer) CanWrite(writeLen int) bool {
-	if w == nil || writeLen < 0 {
-		return false
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	maxSize := w.maxSize()
-	if int64(writeLen) > maxSize {
-		return false
-	}
-	if w.file != nil {
-		return w.size+int64(writeLen) <= maxSize
-	}
-	info, err := os.Stat(w.Filename)
-	if errors.Is(err, os.ErrNotExist) {
-		return true
-	}
-	if err != nil {
-		return false
-	}
-	// openExistingOrNew rotates at the equality boundary when no active file
-	// is open, so leave one byte of headroom in that state.
-	return info.Size()+int64(writeLen) < maxSize
-}
-
-// Checkpoint captures the current active-file position without opening the
-// file. A subsequent Rollback restores it when no rotation is required.
-func (w *Writer) Checkpoint() (any, error) {
+// Prepare makes room for one write and returns a checkpoint that can restore
+// the pre-write state. If the write would cross a rolling boundary, the
+// existing file is moved to its backup and a fresh active file is opened before
+// the related external effect is published. Rollback can then restore the
+// original active file without leaving a speculative frame behind.
+func (w *Writer) Prepare(writeLen int) (any, error) {
 	if w == nil {
 		return nil, errors.New("rolling file writer is nil")
 	}
+	if writeLen < 0 {
+		return nil, errors.New("rolling file write length cannot be negative")
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	maxSize := w.maxSize()
+	if int64(writeLen) > maxSize {
+		return nil, fmt.Errorf("write length %d exceeds maximum file size %d", writeLen, maxSize)
+	}
 	checkpoint := Checkpoint{filename: w.Filename, active: w.file != nil, size: w.size}
 	if w.file != nil {
+		if w.size+int64(writeLen) <= maxSize {
+			return checkpoint, nil
+		}
+		backupPath, err := w.rotateForReservation()
+		if err != nil {
+			return nil, err
+		}
+		checkpoint.rotatedBackup = backupPath
 		return checkpoint, nil
 	}
+
 	info, err := os.Stat(w.Filename)
 	if errors.Is(err, os.ErrNotExist) {
+		if err := w.openNew(); err != nil {
+			return nil, err
+		}
 		return checkpoint, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting log file info: %w", err)
 	}
 	checkpoint.existed = true
 	checkpoint.size = info.Size()
+	if info.Size()+int64(writeLen) <= maxSize {
+		file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, fmt.Errorf("can't open existing logfile: %w", err)
+		}
+		w.file = file
+		w.size = info.Size()
+		return checkpoint, nil
+	}
+
+	backupPath, err := w.rotateForReservation()
+	if err != nil {
+		return nil, err
+	}
+	checkpoint.rotatedBackup = backupPath
 	return checkpoint, nil
 }
 
-// Rollback restores a checkpoint created by Checkpoint. The caller must have
-// used CanWrite first; that prevents a transactional record from crossing a
-// rolling boundary that cannot be restored as one file position.
+// Rollback restores a checkpoint created by Prepare.
 func (w *Writer) Rollback(value any) error {
 	if w == nil {
 		return errors.New("rolling file writer is nil")
@@ -121,14 +130,23 @@ func (w *Writer) Rollback(value any) error {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if checkpoint.rotatedBackup != "" {
+		return w.rollbackRotation(checkpoint)
+	}
 	if w.file != nil {
-		if err := w.file.Truncate(checkpoint.size); err != nil {
-			return err
-		}
-		if _, err := w.file.Seek(checkpoint.size, io.SeekStart); err != nil {
-			return err
-		}
 		if checkpoint.active {
+			if err := w.file.Close(); err != nil {
+				return err
+			}
+			w.file = nil
+			if err := os.Truncate(w.Filename, checkpoint.size); err != nil {
+				return err
+			}
+			file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				return fmt.Errorf("can't reopen rolled back logfile: %w", err)
+			}
+			w.file = file
 			w.size = checkpoint.size
 			return nil
 		}
@@ -139,6 +157,9 @@ func (w *Writer) Rollback(value any) error {
 		w.size = 0
 		if !checkpoint.existed {
 			return os.Remove(w.Filename)
+		}
+		if err := os.Truncate(w.Filename, checkpoint.size); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -153,6 +174,32 @@ func (w *Writer) Rollback(value any) error {
 		}
 	}
 	w.size = 0
+	return nil
+}
+
+func (w *Writer) rollbackRotation(checkpoint Checkpoint) error {
+	if w.file != nil {
+		if err := w.file.Close(); err != nil {
+			return err
+		}
+		w.file = nil
+	}
+	w.size = 0
+	if err := os.Remove(w.Filename); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(checkpoint.rotatedBackup, w.Filename); err != nil {
+		return err
+	}
+	if !checkpoint.active {
+		return nil
+	}
+	file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("can't reopen rolled back logfile: %w", err)
+	}
+	w.file = file
+	w.size = checkpoint.size
 	return nil
 }
 
@@ -257,16 +304,51 @@ func (w *Writer) openNew() error {
 		}
 	}
 
+	if err := w.openFile(mode); err != nil {
+		return err
+	}
+	// Retention is intentionally synchronous and errors are diagnostic-only;
+	// they must not turn a successful log write into a runtime failure.
+	_ = w.cleanBackups()
+	return nil
+}
+
+func (w *Writer) openFile(mode os.FileMode) error {
 	file, err := os.OpenFile(w.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return fmt.Errorf("can't open new logfile: %w", err)
 	}
 	w.file = file
 	w.size = 0
-	// Retention is intentionally synchronous and errors are diagnostic-only;
-	// they must not turn a successful log write into a runtime failure.
-	_ = w.cleanBackups()
 	return nil
+}
+
+func (w *Writer) rotateForReservation() (string, error) {
+	if err := w.close(); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(w.Filename)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := w.openNew(); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("error getting log file info: %w", err)
+	}
+	backupPath, err := w.nextBackupPath()
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(w.Filename, backupPath); err != nil {
+		return "", fmt.Errorf("can't rename log file: %w", err)
+	}
+	if err := w.openFile(info.Mode()); err != nil {
+		_ = os.Rename(backupPath, w.Filename)
+		return "", err
+	}
+	return backupPath, nil
 }
 
 func (w *Writer) nextBackupPath() (string, error) {
