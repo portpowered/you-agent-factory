@@ -21,6 +21,27 @@ does not change dashboard behavior, tests, generated artifacts, or runtime
 code. The final implementation diff is allowed to contain this document and
 the dated pointers in the two historical UX plans.
 
+## Current status rollup
+
+The thirty probe rows reconcile to **1 FIXED, 27 PARTIAL, 1 OPEN, and 1
+SUPERSEDED**. The totals add to 30; a probe appears in exactly one row and has
+exactly one status.
+
+| Status | Probes | Count |
+| --- | --- | ---: |
+| FIXED | 2 | 1 |
+| PARTIAL | 1, 3-12, 14-17, 19-30 | 27 |
+| OPEN | 13 | 1 |
+| SUPERSEDED | 18 | 1 |
+
+`OPEN` is probe 13 because the current-selection geometry contract has no
+sufficient behavioral or narrow-canvas evidence. `SUPERSEDED` is probe 18
+because the provider-coupled historical finding has been replaced by the
+provider-neutral Worker Session timeline contract. The blocked
+`factory-visualizers` renderer assertions are not counted as passes; the
+dashboard rows that have independent executed evidence remain classified by
+their own checkable sub-findings, while package-renderer credit stays absent.
+
 ## Evidence order and status rules
 
 Evidence is considered in this order:
@@ -106,6 +127,129 @@ React Flow interaction wiring, save/reload, and timeline destinations
 (`:273-280`). Its separate visual rollup will therefore attribute graph
 presentation work to Stories 1-7 without double-counting dashboard Stories
 9-10 or other probe owners.
+
+## Dashboard Story 0-12 rollup
+
+Dashboard ownership can overlap because one historical probe crosses more than
+one product seam. The table is a planning rollup, not another status count;
+partial evidence for one probe does not complete a story that still has an
+unresolved owned finding.
+
+| Dashboard story | Owned probes | Delivered scope on the audited tree | Exact remaining customer work |
+| --- | --- | --- | --- |
+| 0. Deterministic regression probe | 1-30 as the audit baseline | Named `origin/main` baseline, evidence hierarchy, graph-suite executability record, Worker Session and graph starting points, and one decomposed row for every probe. | Keep the blocked renderer setup and browser-only geometry, race, accessibility, and scale gaps explicit; this audit supplies evidence but does not add the regression fixture or product fixes. |
+| 1. Factory Session identity and entry flows | 1-3 | Canonical `~default` identity, Open/New validation and confirmation, tab reconciliation, and timeline selection have executed evidence. | Render useful session-specific tab content, derive status per session, separate client stream pause from Factory lifecycle pause, and label Live versus Historical state. |
+| 2. Stream, replay, and session-switch state | 1, 3, 29 | Resolved stream identity, preflight/checkpoint hydration, reconnect and stale-cursor recovery, and session-switch guards execute in focused tests. | Add per-card known-empty, stale, reconnecting, historical, and live semantics plus an A-to-B late-callback integration assertion; make pause scope truthful. |
+| 3. Work metrics and charts | 4, 21 | Localized totals, one chart axis treatment, and loading/empty/error presentation have executed assertions. | Choose one documented Work/dispatch/attempt population, align the card and chart units and time semantics, and prove responsive reflow. |
+| 4. Session-safe Submit Work | 22-23 | Simple submission is session-scoped and returns identity; status, file ordering, per-item errors, and session-scoped staging routes are exercised. | Define draft/clear behavior for every composer, add size/count limits and progress/abort, use idempotent opaque staging receipts, and persist staged-file-to-Work lineage. The isolated `vi.doMock` suite remains runner-blocked. |
+| 5. Concurrent and terminal Work identity | 15, 20; graph overlap for 5 is attributed below | Active rows retain dispatch/Work identity, history has dispatch-keyed evidence, and completed/failed duplicate-card behavior is covered. | Render every Work and attempt in multi-Work requests, key/select by canonical identity, add canceled and other terminal outcomes, bound history, and link Worker Sessions. |
+| 6. Worker Sessions end to end | 18, 20 | Provider-neutral Worker Session identity, attempt chronology, cursors, gaps, replay health, and terminal closure are tested; probe 18 is superseded by this contract. | Add Worker Session links and bounded history to terminal rows; keep new provider-origin gaps in probe 19 rather than reviving the superseded finding. |
+| 7. Workstation and inspection history | 14, 16-17, 20 | Shared editable draft summary, dispatch history, Work content/lineage states, relation projection, and operation rows have executed evidence. | Verify the browser confirmation/success path, preserve every Work and attempt in every fallback, retrieve binary content through opaque references, show malformed-part diagnostics, and expose direct Worker/Provider origin links. |
+| 8. Trace, Work, Worker, and Provider inspection | 14, 16-19, 24-26, 29 | Direct relation/lineage tests, Provider Session detail/transcript states, and session-generation/cursor foundations execute. | Include session and generation in trace identity, model the full async taxonomy, render relation-only and textual fallbacks, remove positional causality, synchronize graph/table selection, and define origin, redaction, and retention policy. |
+| 9. Editor transactions and grouping | 5-11 | Group geometry/membership, selection/delete planning, save summaries, stale blocking, and layout command evidence execute. | Make observe mode immutable, unify topology/field/layout/group history, restore gestures on cancel, prune only after confirmed deletion, and require an explicit dirty-scope-change decision. |
+| 10. Progressive graph interaction | 5, 7-9, 11-12 | Known Add and connection errors, selection/delete guards, legend vocabulary, accessible control state, and observer deletion protection execute. | Fail closed for unknown Add actions, cancel Add and connection intent, report duplicate edges, contain graph failures with local retry, meet 44px targets, reserve narrow overlays, and include group bounds in Fit. |
+| 11. Bento lifecycle and persistence | 27-30 | Duplicate-capable IDs, targeted removal, pointer resize, compact stacking, and layout reload behavior have focused coverage. | Scope and version persistence, repair hostile IDs/geometry/singletons, use monotonic allocation, isolate or reject duplicate graph bridges, add dirty remove/undo/focus restoration, and support keyboard/touch layout editing. |
+| 12. Spacing, accessibility, locales, and scale | 4, 13, 21, 24-26, 28-30 | Localized labels, component async states, scroll ownership, relation projections, session recovery, and compact breakpoint foundations execute. | Establish shared narrow-canvas geometry, card-local boundaries and async states, textual relation fallback, 44px and keyboard/touch coverage, complete or consistently remove ja/ko support, bound dense inspectors, and measure clock-driven rerenders. |
+
+## Factory-graph visual Story 1-7 rollup
+
+This is a separate attribution from the dashboard Story 0-12 table. It credits
+only shared graph-package visual behavior; dashboard editor transactions,
+overlay policy, session state, and inspection navigation remain dashboard-owned.
+The package-local graph tests and runtime-resolution checks pass, but the
+`factory-visualizers` renderer suite is blocked by the missing mocked
+`@xyflow/react` `useStore` export, so those renderer assertions receive no
+credit.
+
+| Factory-graph story | Probe overlap | Current evidence and delivered scope | Remaining graph-visual work |
+| --- | --- | --- | --- |
+| 1. Node shapes, colors, and runtime emphasis | 5, 12 | `ui/packages/factory-graph/src/visual-state.test.ts` exercises lifecycle/selection/validation/active-flow precedence; `node-family.test.ts` exercises family roles and dimensions. | Prove shared renderer parity, vivid fit-to-view active treatment, contrast, keyboard focus, and reduced-motion behavior across hosts and palettes. |
+| 2. High-volume Work totals | 5 | `work-progress-presentation.test.ts` executes the item-to-total boundary, and `factory-graph-replay-surface.test.ts` preserves graph identity while selected-tick Work changes. | Execute a shared renderer assertion that four or more Work items replace item rows with one accessible total; do not infer that from the pure rule while the relevant renderer path is blocked. |
+| 3. Long names and authored resizing | 6, 11, 12 | `node-family.test.ts` covers fitting, bounds, authored-size precedence, and allowed resize axes; replay tests retain authored dimensions across ticks. | Prove pointer/keyboard resize and save/reload/observe/replay continuity through the package and browser hosts, including long localized labels. |
+| 4. Colored, non-blocking group regions | 6, 11 | `group-region-presentation.test.ts` covers semantic colors, invalid-value fallback, labels, bounds, and deterministic overlap order; dashboard group tests cover parts of interaction and membership. | Complete cross-host render, fit-to-members, recolor, click-through, keyboard operation, save/reload, and responsive visual evidence. |
+| 5. Live-update and host-surface parity | 5-12 | Package replay/source tests and the declaration/runtime guard prove the public package contracts and stable authored projections. | Run the same semantic node/count/size/group contract in observe, edit, replay, trace, and packed consumers; clear the renderer blocker and prove live transitions do not move unrelated graph geometry. |
+| 6. Workstation type, behavior, and guard meaning | 5, 7, 12 | `workstation-semantics.test.ts` and replay projection tests separate runtime type, scheduling behavior, guard role, stable identity, and neutral unknown fallback. | Prove fit-to-view presentation for every workstation family across all hosts, including browser/package parity and accessible type/behavior/guard labels. |
+| 7. First-party disconnected Work states | No direct dashboard row; adjacent topology contract | This audit confirms the separate ownership boundary but does not claim a catalog-hygiene pass. | Run the first-party catalog check, reconcile `goal:execute` and other disconnected candidates in authored definitions, regenerate catalogs/docs, and prove the cleaned graph and runtime routes. |
+
+## Remaining findings ordered by customer impact
+
+The following order is for follow-up planning, not a new classification system.
+Each item names the current evidence boundary and the concrete work packet it
+can seed.
+
+1. **Truthful session and asynchronous state.** Probes 1, 3, 24, and 29 have
+   executed identity, replay, or component-state assertions, but source still
+   shares one stream status across tabs (`dashboard-session-tabs.tsx:53-54`),
+   treats pause as client stream control (`useDashboardSnapshot.ts:225-241`),
+   and exposes only narrow `loading|ready` projections (`dashboard-world-view.ts`,
+   `use-dashboard-bento-snapshot.ts`). Deliver per-session status, explicit
+   Live/Historical and stale/reconnecting/recovery states, and the late
+   session-A-to-B callback test.
+2. **Exact Work, attempt, and Worker Session inspection.** Probes 15-20 and
+   22-23 have strong focused identity/content evidence, but
+   `workstation-request-history-section.tsx:41-158` still presents only the
+   first Work for a request, terminal rows key by labels
+   (`terminal-work-card.tsx:63-124`), and staged content lacks bounded opaque
+   receipts. Preserve every Work/attempt, add terminal outcomes and paging,
+   expose Worker/Provider origin, and make staged/file content safe and
+   traceable.
+3. **Editor safety and graph failure containment.** Probes 5-12 execute
+   meaningful editor assertions, yet observe mode still enables dragging
+   (`react-flow-current-activity-card-viewport.tsx:750`), topology history is
+   separate from layout history (`use-editable-factory-graph.ts:115-143`),
+   group gestures lack cancel restoration, and graph errors escape through
+   `react-flow-current-activity-card-errors.ts:13-21`. Unify the document
+   transaction, make observe read-only, restore failed/cancelled gestures, and
+   keep failures inside the card with retry.
+4. **Causal trace and relation completeness.** Probes 24-26 pass direct
+   relation/lineage assertions, while `useTrace.ts:10,125-133` omits session
+   generation, `useTraceDrilldown.ts:18-34` can hide relation-only traces, and
+   the no-lineage fallback still invents sequence in
+   `trace-dispatch-factory-graph.test.ts:124-135`. Add canonical identity,
+   unresolved-lineage treatment, textual relations, and synchronized graph/
+   table selection.
+5. **Bento persistence, responsive input, and resilience.** Probes 27-30
+   cover basic IDs, pointer layout, recovery, and localization foundations, but
+   `dashboardLayoutPersistence.ts:39-105,191-201` silently falls back without
+   repair or scope, `dashboardLayoutMutations.ts:96-121` can reuse IDs, and
+   `agent-bento.tsx:258-275` has no keyboard layout path. Add scoped versioned
+   persistence, sanitation diagnostics, dirty removal/undo, keyboard/touch
+   operation, 640-768px geometry, card boundaries, and bounded inspectors.
+6. **Shared graph visual trust.** Probes 5-12 have package-level evidence for
+   state, Work-volume rules, dimensions, groups, and workstation semantics, but
+   the three `factory-visualizers` renderer assertions fail before their target
+   assertions because the mock lacks `useStore`. Clear that blocker, then run
+   host parity, responsive, accessibility, and first-party topology-hygiene
+   checks before crediting the separate graph plan.
+
+## Reproducible verification
+
+Run from the repository root against the audited tree. The focused commands
+below are the minimum evidence set; the story sections later in this document
+retain the exact dashboard paths used for each row group.
+
+```text
+bun install --frozen-lockfile
+bun run --cwd ui typecheck
+bun run --cwd ui/packages/components check:declaration-runtime
+bunx --no-install vitest run --config vitest.config.ts src/package-declaration-runtime.test.ts
+bun run --cwd ui/packages/factory-graph check:components-runtime-resolution
+bun run --cwd ui/packages/factory-graph test
+bun test src/features/current-selection/work-selection/lib/selected-work-relationship-graph.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-graph.instances.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-relations.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-relations.instances.bun.unit.test.ts src/features/trace-drilldown/lib/trace-relation-factory-graph.bun.unit.test.ts
+bun test src/api/worker-sessions/api.bun.unit.test.ts
+go test ./pkg/services/worker_sessions/...
+bun run --cwd ui/packages/factory-visualizers test
+```
+
+The first nine commands above pass on the named baseline. The final command
+starts its files but fails three renderer assertions before they exercise the
+intended behavior because the `@xyflow/react` mock lacks `useStore`; those
+claims remain uncredited. Direct Bun component tests require
+`--preload ./src/testing/bun/component.setup.ts`. The isolated Submit Work
+file is blocked by `vi.doMock` support in the direct Bun runner, and the
+editable-workstation file has one unrelated baseline assertion failure. A
+passing typecheck, compilation, generated artifact, PR title, or unrelated
+green suite is a quality signal, not delivery evidence.
 
 ## Story 2: graph and editor probes 5-12
 
