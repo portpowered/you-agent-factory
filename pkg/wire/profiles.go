@@ -240,11 +240,20 @@ func provideOperatorSettingsCreateTemporaryFile(edges serviceedges.Edges) operat
 }
 
 func provideOperatorSettingsProviderCatalog(
-	providers workers.ProviderRegistry,
+	providersService providers.Service,
 ) operatorsettings.ProviderCatalog {
 	return func(value string) (string, bool) {
-		canonical, err := providers.CanonicalIdentity(value)
-		return canonical, err == nil
+		if providersService == nil {
+			return "", false
+		}
+		resolved, err := providersService.ResolveIdentity(
+			context.Background(),
+			providers.ResolveIdentityRequest{Identity: value},
+		)
+		if err != nil {
+			return "", false
+		}
+		return resolved.ID.String(), true
 	}
 }
 

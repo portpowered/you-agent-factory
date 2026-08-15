@@ -482,7 +482,7 @@ func (s *service) executeProviderAttempt(
 	)
 	if request.ResumeSession != nil {
 		reference := request.ResumeSession.Clone()
-		continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
+		continued, err := providers.Continue(ctx, s.providers, providers.ContinueRequest{
 			Reference: reference,
 			Attempt:   attempt,
 		})
@@ -502,7 +502,7 @@ func (s *service) executeProviderAttempt(
 		Kind:     providers.SessionIDKind,
 		ID:       request.SessionID,
 	}
-	continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
+	continued, err := providers.Continue(ctx, s.providers, providers.ContinueRequest{
 		Reference: reference,
 		Attempt:   attempt,
 	})

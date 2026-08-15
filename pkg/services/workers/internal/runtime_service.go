@@ -63,8 +63,7 @@ type Service struct {
 	executableInspector               platformfilesystem.PathInspector
 	executableFiles                   platformfilesystem.ReadOpener
 	operatingSystem                   workers.OperatingSystem
-	providerRegistry                  workers.ProviderRegistry
-	providerRegistryRebinder          ProviderRegistryRebinder
+	providersRebinder                 ProvidersRebinder
 }
 
 var _ workers.RuntimeService = (*Service)(nil)

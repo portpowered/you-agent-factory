@@ -139,14 +139,10 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
 	operatorSettings, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providerRegistry),
+		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),

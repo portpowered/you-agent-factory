@@ -29,14 +29,10 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
 	settings, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providerRegistry),
+		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),

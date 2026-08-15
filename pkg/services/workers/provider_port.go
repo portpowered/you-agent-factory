@@ -1,9 +1,19 @@
 package workers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
+
+// Provider is a transitional request-scoped compatibility port retained for
+// callers that still inject an Infer-shaped fake. Production Workers
+// execution uses providers.Service; this port is not used for provider
+// selection, execution, continuation, or failure authority.
+// TODO(WSE-09): remove after the retained compatibility consumers migrate.
+type Provider interface {
+	Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)
+}
 
 const ExecutorProviderACP = "ACP"
 

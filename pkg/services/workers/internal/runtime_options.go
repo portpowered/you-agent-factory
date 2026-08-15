@@ -131,7 +131,7 @@ func (s *Service) BuildRuntimeExecutors(
 }
 
 func (s *Service) rebindProvidersCommandRunner(logger logging.Logger) error {
-	if s == nil || !s.providerCommandInjected || s.providerCommandRunner == nil || s.providerRegistryRebinder == nil {
+	if s == nil || !s.providerCommandInjected || s.providerCommandRunner == nil || s.providersRebinder == nil {
 		return nil
 	}
 	providersRunner := workers.CommandRunnerWithLogging(
@@ -139,11 +139,11 @@ func (s *Service) rebindProvidersCommandRunner(logger logging.Logger) error {
 		logging.EnsureLogger(logger),
 		serviceCommandClock(s),
 	)
-	reboundRegistry, reboundProviders, err := rebindProviderRegistry(s.providerRegistry, providersRunner, s.providerRegistryRebinder)
+	reboundProviders, err := rebindProvidersService(s.providers, providersRunner, s.providersRebinder)
 	if err != nil {
-		return fmt.Errorf("rebind provider registry for session command logging: %w", err)
+		return fmt.Errorf("rebind Providers service for session command logging: %w", err)
 	}
-	return applyReboundProviderRegistry(s, reboundRegistry, reboundProviders)
+	return applyReboundProvidersService(s, reboundProviders)
 }
 
 func (s *Service) runtimeRunnerDecorators(

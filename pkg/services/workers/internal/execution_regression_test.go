@@ -375,7 +375,6 @@ func TestNewConfiguredRuntimeAcceptsDetachedStatelessService(t *testing.T) {
 		true,
 		false,
 		nil,
-		nil,
 		&stateless,
 	)
 	if err != nil {

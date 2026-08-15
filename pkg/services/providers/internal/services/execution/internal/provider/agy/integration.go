@@ -126,7 +126,7 @@ func (i *Integration) executeInvocation(
 ) (providers.ExecuteResult, error) {
 	attempt := executeRequestFromInvocation(request)
 	if reference := requestedSession(request); reference != nil {
-		continued, err := i.providers.Continue(ctx, providers.ContinueRequest{Reference: *reference, Attempt: attempt})
+		continued, err := providers.Continue(ctx, i.providers, providers.ContinueRequest{Reference: *reference, Attempt: attempt})
 		if err != nil {
 			return providers.ExecuteResult{}, err
 		}

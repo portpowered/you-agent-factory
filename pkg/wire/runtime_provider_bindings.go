@@ -33,24 +33,19 @@ func provideRuntimeProviderBindings(
 	edges serviceedges.Edges,
 	integrations []operatorsettings.ACPIntegration,
 	runner workers.CommandRunner,
-) (workers.ProviderRegistry, providers.Service, workerswire.ProviderRegistryRebinder, error) {
+) (providers.Service, providers.Service, workerswire.ProvidersRebinder, error) {
 	runtimeProviders, err := provideConfiguredProvidersService(edges, integrations, runner)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("construct runtime Providers service: %w", err)
 	}
-	runtimeRegistry, err := workerswire.NewProviderRegistry(context.Background(), runtimeProviders)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("construct runtime provider registry: %w", err)
-	}
-	rebinder := workerswire.ProviderRegistryRebinder(func(reboundRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+	rebinder := workerswire.ProvidersRebinder(func(reboundRunner workers.CommandRunner) (providers.Service, error) {
 		reboundProviders, rebuildErr := provideConfiguredProvidersService(edges, integrations, reboundRunner)
 		if rebuildErr != nil {
-			return nil, nil, rebuildErr
+			return nil, rebuildErr
 		}
-		reboundRegistry, registryErr := workerswire.NewProviderRegistry(context.Background(), reboundProviders)
-		return reboundRegistry, reboundProviders, registryErr
+		return reboundProviders, nil
 	})
-	return runtimeRegistry, runtimeProviders, rebinder, nil
+	return runtimeProviders, runtimeProviders, rebinder, nil
 }
 
 // providerCommandEffect projects the request-scoped Workers command edge into

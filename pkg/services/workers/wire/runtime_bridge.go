@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// ProviderRegistryRebinder reconstructs the provider registry for runtime command edges.
-type ProviderRegistryRebinder = workersinternal.ProviderRegistryRebinder
+// ProvidersRebinder reconstructs the Providers root for runtime command edges.
+type ProvidersRebinder = workersinternal.ProvidersRebinder
 
 // NewConfiguredRuntime constructs the legacy runtime compatibility role through
 // the owner-internal implementation. Process composition uses NewService and
@@ -60,8 +60,7 @@ func NewConfiguredRuntime(
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
 	providersLifecycleOwned bool,
-	providerRegistry workers.ProviderRegistry,
-	providerRegistryRebinder ProviderRegistryRebinder,
+	providersRebinder ProvidersRebinder,
 	statelessExecute workers.Service,
 ) (workers.RuntimeService, error) {
 	return workersinternal.NewConfiguredRuntime(
@@ -100,8 +99,7 @@ func NewConfiguredRuntime(
 		providerCommandInjected,
 		scriptCommandInjected,
 		providersLifecycleOwned,
-		providerRegistry,
-		providerRegistryRebinder,
+		providersRebinder,
 		statelessExecute,
 	)
 }

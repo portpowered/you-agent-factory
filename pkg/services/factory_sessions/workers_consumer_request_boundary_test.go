@@ -233,7 +233,6 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 		_ workers.InvocationExecutor
 		_ workers.CommandRunner
 		_ workers.PTYAllocator
-		_ workers.ProviderRegistry
 	)
 }
 

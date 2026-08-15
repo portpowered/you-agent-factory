@@ -672,22 +672,22 @@ func TestProvideRuntimeProviderBindingsRebindsInjectedRunner(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
 	adaptedRunner := workers.AdaptCommandRunner(runner)
 
-	registry, service, rebinder, err := provideRuntimeProviderBindings(
+	providersRoot, service, rebinder, err := provideRuntimeProviderBindings(
 		serviceedges.Edges{}, nil, adaptedRunner,
 	)
 	if err != nil {
 		t.Fatalf("provideRuntimeProviderBindings() error = %v", err)
 	}
-	if registry == nil || service == nil || rebinder == nil {
-		t.Fatalf("provideRuntimeProviderBindings() = registry %T, service %T, rebinder %T; want all non-nil", registry, service, rebinder)
+	if providersRoot == nil || service == nil || rebinder == nil {
+		t.Fatalf("provideRuntimeProviderBindings() = Providers root %T, service %T, rebinder %T; want all non-nil", providersRoot, service, rebinder)
 	}
 
-	reboundRegistry, reboundService, err := rebinder(adaptedRunner)
+	reboundService, err := rebinder(adaptedRunner)
 	if err != nil {
 		t.Fatalf("rebinder() error = %v", err)
 	}
-	if reboundRegistry == nil || reboundService == nil {
-		t.Fatalf("rebinder() = registry %T, service %T; want both non-nil", reboundRegistry, reboundService)
+	if reboundService == nil {
+		t.Fatalf("rebinder() = service %T; want non-nil", reboundService)
 	}
 }
 
@@ -710,7 +710,7 @@ func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing
 	}
 }
 
-func TestProviderRegistryRebinderUsesTheSessionRunner(t *testing.T) {
+func TestProvidersRebinderUsesTheSessionRunner(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
 	adaptedRunner := workers.AdaptCommandRunner(runner)
 
@@ -718,15 +718,15 @@ func TestProviderRegistryRebinderUsesTheSessionRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	rebinder, err := provideProviderRegistryRebinder(providersService, serviceedges.Edges{})
+	rebinder, err := provideProvidersRebinder(providersService, serviceedges.Edges{})
 	if err != nil {
-		t.Fatalf("provideProviderRegistryRebinder() error = %v", err)
+		t.Fatalf("provideProvidersRebinder() error = %v", err)
 	}
-	if _, _, err := rebinder(nil); err == nil {
-		t.Fatal("provider registry rebinder(nil) error = nil")
+	if _, err := rebinder(nil); err == nil {
+		t.Fatal("Providers rebinder(nil) error = nil")
 	}
-	if registry, rebound, err := rebinder(adaptedRunner); err != nil || registry == nil || rebound == nil {
-		t.Fatalf("provider registry rebinder(valid) = registry %T, service %T, error %v", registry, rebound, err)
+	if rebound, err := rebinder(adaptedRunner); err != nil || rebound == nil {
+		t.Fatalf("Providers rebinder(valid) = service %T, error %v", rebound, err)
 	}
 }
 
@@ -744,11 +744,11 @@ func TestProviderInvocationEdgeSelectsTheSessionRunner(t *testing.T) {
 	if _, _, err := providerInvocationProviderEdge(nil, adaptedRunner, adaptedRunner); err == nil {
 		t.Fatal("providerInvocationProviderEdge(missing rebinder) error = nil")
 	}
-	rebound := func(runner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+	rebound := func(runner workers.CommandRunner) (providers.Service, error) {
 		if runner != adaptedRunner {
-			return nil, nil, errors.New("unexpected runner")
+			return nil, errors.New("unexpected runner")
 		}
-		return nil, providersService, nil
+		return providersService, nil
 	}
 	if reboundService, gotRunner, err := providerInvocationProviderEdge(rebound, adaptedRunner, nil); err != nil || reboundService != providersService || gotRunner != adaptedRunner {
 		t.Fatalf("providerInvocationProviderEdge(rebound) = service %T, runner %v, error %v", reboundService, gotRunner, err)

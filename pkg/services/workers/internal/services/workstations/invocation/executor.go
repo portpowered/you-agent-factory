@@ -110,7 +110,7 @@ func (e *Executor) Execute(
 	if input.Request.ResumeSession != nil {
 		reference := input.Request.ResumeSession.Clone()
 		request.Provider = reference.Provider
-		continued, continueErr := e.provider.Continue(ctx, providers.ContinueRequest{
+		continued, continueErr := providers.Continue(ctx, e.provider, providers.ContinueRequest{
 			Reference: reference,
 			Attempt:   request,
 		})

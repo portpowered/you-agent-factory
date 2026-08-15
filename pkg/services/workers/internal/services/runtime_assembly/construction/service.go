@@ -82,7 +82,6 @@ type Service struct {
 	workstationFiles   platformfilesystem.ReadFileInspector
 	resolveRunner      workers.RunnerSelectionResolver
 	resolveProvider    workers.ProviderIdentityResolver
-	providerRegistry   workers.ProviderRegistry
 }
 
 // New constructs a worker executor service from process-owned factories.
@@ -160,17 +159,6 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 	return &clone
 }
 
-// WithProviderRegistry returns a service copy that can route agent dispatch
-// through conductor-backed provider integrations on the Providers root.
-func (s *Service) WithProviderRegistry(registry workers.ProviderRegistry) *Service {
-	if s == nil {
-		return nil
-	}
-	clone := *s
-	clone.providerRegistry = registry
-	return &clone
-}
-
 // WithRunnerRegistry returns a service copy that routes Agent and Inference
 // construction through the shared immutable Workers registry. Script
 // construction remains on its retained compatibility factory until the
@@ -185,8 +173,8 @@ func (s *Service) WithRunnerRegistry(registry runners.Service) *Service {
 }
 
 // WithExecutionFactories returns a service copy that uses replacement provider
-// and script factories while preserving registry-backed runner selection and
-// provider-identity resolution wiring.
+// and script factories while preserving the narrow resolver callbacks used by
+// legacy construction tests.
 func (s *Service) WithExecutionFactories(
 	providerFactory providers.Service,
 	scriptFactory *workerexecutor.ScriptFactory,

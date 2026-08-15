@@ -42,13 +42,31 @@ type Service interface {
 	// Valid requests return a typed completed or unsupported outcome as a
 	// successful result; unsupported is not encoded as an error.
 	ControlAttempt(context.Context, ControlAttemptRequest) (ControlAttemptResult, error)
-	// Continue resumes the exact prior Provider Session named by
-	// ContinueRequest.Reference for one continued attempt. A malformed or
-	// foreign reference fails with a typed ContinuationFailure before any
-	// provider adapter is invoked; a reference the resolved provider cannot
-	// continue returns the typed unsupported outcome as a successful result
-	// instead of starting a fresh attempt. Provider continuation is requested
-	// exclusively through Continue - Execute does not expose a resume
-	// reference.
+}
+
+// ContinuationService is the optional Providers capability for exact-session
+// continuation. Keeping it separate from Service lets ordinary provider test
+// doubles and integrations adopt continuation incrementally without changing
+// the one-attempt execution contract.
+type ContinuationService interface {
 	Continue(context.Context, ContinueRequest) (ContinueResult, error)
+}
+
+// Continue routes an exact-session continuation when the supplied Providers
+// root implements the optional capability. Roots without that capability
+// report the same explicit unsupported outcome as a provider that cannot
+// resume the requested session; they never fall back to Execute.
+func Continue(
+	ctx context.Context,
+	service Service,
+	request ContinueRequest,
+) (ContinueResult, error) {
+	continuation, ok := service.(ContinuationService)
+	if !ok {
+		return ContinueResult{
+			Reference: request.Reference.Clone(),
+			Outcome:   ContinuationOutcomeUnsupported,
+		}, nil
+	}
+	return continuation.Continue(ctx, request)
 }

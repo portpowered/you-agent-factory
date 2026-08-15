@@ -110,16 +110,12 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
 	decoder := provideOperatorConfigDecoder()
 	encoder := provideOperatorConfigEncoder()
 	settings, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providerRegistry),
+		provideOperatorSettingsProviderCatalog(providersRoot),
 		decoder,
 		encoder,
 		provideOperatorSettingsIDGenerator(edges),
