@@ -8,6 +8,7 @@ import {
 	renderBackendLintSummary,
 	summarizeBackendLintReport,
 } from "./backend-lint-report.mjs";
+import { BACKEND_LINT_ALLOWANCES } from "./backend-lint-policy.mjs";
 
 function report(overrides = {}) {
 	return {
@@ -38,6 +39,16 @@ function report(overrides = {}) {
 	};
 }
 
+function baselineTargets(overrides = {}) {
+	return Object.entries(BACKEND_LINT_ALLOWANCES).map(([name]) => ({
+		name,
+		status: "pass",
+		durationMillis: 100,
+		output: "checker passed",
+		...overrides[name],
+	}));
+}
+
 test("mixed hosted results retain the complete inventory and derive counts", () => {
 	const summary = summarizeBackendLintReport(report());
 
@@ -52,6 +63,62 @@ test("mixed hosted results retain the complete inventory and derive counts", () 
 	assert.match(renderBackendLintSummary(summary), /\| clean-check \| `pass` \| 0 \|/);
 	assert.match(renderBackendLintSummary(summary), /\| broken-check \| `fail` \| 2 \|/);
 	assert.match(renderBackendLintSummary(summary), /Failed checker diagnostics/);
+});
+
+test("all clean current-main checkers pass the baseline policy", () => {
+	const summary = summarizeBackendLintReport(report({ targets: baselineTargets() }));
+
+	assert.equal(summary.ok, true);
+	assert.equal(summary.failures.length, 0);
+	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 6);
+});
+
+test("a measured baseline failure is reported but allowed at its recorded count", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "Frontend dead-code baseline drift detected; current findings: 11",
+			},
+		}),
+	}));
+	const markdown = renderBackendLintSummary(summary);
+
+	assert.equal(summary.ok, true);
+	assert.equal(summary.targets.find((target) => target.name === "ui-deadcode").policyStatus, "allowed");
+	assert.match(markdown, /Allowed baseline debt: `1` checker\(s\) within measured limits/);
+	assert.match(markdown, /\| ui-deadcode \| 11 \| 11 \| allowed \|/);
+});
+
+test("baseline growth fails the gate instead of being hidden by an allowance", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "Frontend dead-code baseline drift detected; current findings: 12",
+			},
+		}),
+	}));
+
+	assert.equal(summary.ok, false);
+	assert.match(summary.failures.join("\n"), /ui-deadcode reported 12 violation\(s\), exceeding its baseline allowance of 11/);
+});
+
+test("a newly failing clean checker is gated immediately", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: [
+			...baselineTargets(),
+			{
+				name: "new-clean-check",
+				status: "fail",
+				durationMillis: 100,
+				output: "found 1 new violation(s)",
+			},
+		],
+	}));
+
+	assert.equal(summary.ok, false);
+	assert.match(summary.failures.join("\n"), /new-clean-check failed with 1 reported violation\(s\); no baseline allowance exists/);
 });
 
 test("a successful checker always reports zero violations", () => {

@@ -2,6 +2,11 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
+import {
+	BACKEND_LINT_BASELINE_SOURCE,
+	evaluateBackendLintPolicy,
+} from "./backend-lint-policy.mjs";
+
 const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
 export const BACKEND_LINT_COMMENT_MARKER = "<!-- backend-lint-report -->";
@@ -76,6 +81,8 @@ export function summarizeBackendLintReport(report, options = {}) {
 			error: reportErrorSummary(options.error, options.log),
 			totalDurationMillis: 0,
 			jobs: null,
+			baselineSource: BACKEND_LINT_BASELINE_SOURCE,
+			allowances: [],
 		};
 	}
 
@@ -92,14 +99,14 @@ export function summarizeBackendLintReport(report, options = {}) {
 			error: textValue(target.error),
 		};
 	});
-	const failures = targets
-		.filter((target) => target.status !== "pass")
-		.map((target) => `${target.name} failed with ${target.violationCount} reported violation(s).`);
+	const policy = evaluateBackendLintPolicy(targets);
 
 	return {
-		ok: failures.length === 0,
-		targets,
-		failures,
+		ok: policy.ok,
+		targets: policy.targets,
+		failures: policy.failures,
+		baselineSource: BACKEND_LINT_BASELINE_SOURCE,
+		allowances: policy.allowances,
 		totalDurationMillis: numericValue(report.totalDurationMillis),
 		jobs: Number.isInteger(report.jobs) ? report.jobs : null,
 	};
@@ -121,29 +128,58 @@ function preview(text) {
 	return `${safe.slice(0, DIAGNOSTIC_PREVIEW_LIMIT)}\n... truncated; full output is in the uploaded artifact.`;
 }
 
+function formatMarkdownCell(value) {
+	return textValue(value)
+		.replaceAll("|", "\\|")
+		.replaceAll("\r", "")
+		.replaceAll("\n", " ") || "(none)";
+}
+
 export function renderBackendLintSummary(summary) {
 	const lines = [
 		"## Backend Lint",
 		"",
 		`- Result: \`${summary.ok ? "passed" : "failed"}\``,
 		`- Canonical checkers observed: \`${summary.targets.length}\``,
+		`- Clean checkers gated: \`${summary.targets.filter((target) => target.policyStatus === "clean").length}\``,
+		`- Allowed baseline debt: \`${summary.targets.filter((target) => target.policyStatus === "allowed").length}\` checker(s) within measured limits`,
+		`- Baseline source: ${summary.baselineSource || "not recorded"}`,
 		`- LINT_JOBS: \`${summary.jobs ?? "unknown"}\``,
 		`- Total Backend Lint wall time: \`${formatDuration(summary.totalDurationMillis)}\``,
 		"",
-		"| Checker | Result | Violations | Wall time |",
-		"| --- | --- | ---: | ---: |",
+		"| Checker | Result | Violations | Wall time | Policy |",
+		"| --- | --- | ---: | ---: | --- |",
 	];
 	for (const target of summary.targets) {
 		lines.push(
-			`| ${target.name} | \`${target.status}\` | ${target.violationCount} | ${formatDuration(target.durationMillis)} |`,
+			`| ${target.name} | \`${target.status}\` | ${target.violationCount} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,
 		);
 	}
 
-	if (summary.failures.length > 0) {
+	lines.push(
+		"",
+		"### Baseline allowances",
+		"",
+		"Allowances are capped measured debt; they do not permit new checker failures or growth.",
+		"",
+		"| Checker | Baseline | Observed | Status | Reason | Owner/remediation lane | Deadline | Removal condition |",
+		"| --- | ---: | ---: | --- | --- | --- | --- | --- |",
+	);
+	for (const allowance of summary.allowances || []) {
+		lines.push(
+			`| ${allowance.name} | ${allowance.baselineViolationCount} | ${allowance.observedViolationCount ?? "not observed"} | ${allowance.status} | ${formatMarkdownCell(allowance.reason)} | ${formatMarkdownCell(allowance.ownerOrLane)} | ${allowance.deadline} | ${formatMarkdownCell(allowance.removalCondition)} |`,
+		);
+	}
+	if (!(summary.allowances || []).length) {
+		lines.push("| (none) | — | — | — | No baseline allowances loaded. | — | — | — |");
+	}
+
+	const failedTargets = summary.targets.filter((target) => target.status !== "pass");
+	if (failedTargets.length > 0) {
 		lines.push("", "### Failed checker diagnostics", "");
-		for (const target of summary.targets.filter((item) => item.status !== "pass")) {
+		for (const target of failedTargets) {
 			lines.push(
-				`<details><summary>${target.name}: ${target.violationCount} reported violation(s)</summary>`,
+				`<details><summary>${target.name}: ${target.violationCount} reported violation(s) (${target.policyStatus || "ungated"})</summary>`,
 				"",
 				"```text",
 				preview(target.output || target.error),

@@ -20,6 +20,7 @@ test("Backend Lint publishes the hosted inventory and feeds Verification Policy"
 	assert.match(workflow, /pull-requests: write/);
 	assert.match(workflow, /uses: actions\/github-script@v7/);
 	assert.match(workflow, /backend-lint-report/);
+	assert.match(workflow, /continue-on-error: true/);
 	assert.match(workflow, /needs: \[classify,[^\n]*backend-lint/);
 	assert.match(workflow, /RUN_BACKEND_LINT: "true"/);
 	assert.match(workflow, /BACKEND_LINT_RESULT: \$\{\{ needs\.backend-lint\.result \}\}/);
