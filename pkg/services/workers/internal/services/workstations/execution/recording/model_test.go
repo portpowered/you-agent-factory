@@ -336,6 +336,35 @@ func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
 	}
 }
 
+func TestRunnerFailurePreservesProviderIdentityWithoutSessionID(t *testing.T) {
+	start := time.Unix(450, 0).UTC()
+	var events []workerexecution.ModelEvent
+	runner := NewRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{}, errors.New("provider unavailable")
+		}),
+		nil,
+		&workerconfig.FactoryWorkerConfig{Name: "worker", Model: "model", ModelProvider: "antigravity"},
+		func(event workerexecution.ModelEvent) { events = append(events, event) },
+		func() time.Time { return start },
+	)
+
+	_, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-provider-failure"},
+		ModelProvider: "antigravity",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want provider failure")
+	}
+	if len(events) != 2 || events[1].Response == nil {
+		t.Fatalf("events = %#v, want request and response", events)
+	}
+	providerSession := events[1].Response.ProviderSession
+	if providerSession == nil || providerSession.Provider != "antigravity" || providerSession.ID != "" {
+		t.Fatalf("provider session = %#v, want provider-only antigravity metadata", providerSession)
+	}
+}
+
 func TestRunnerRecordsOneStructuredAudioTerminalResponse(t *testing.T) {
 	start := time.Unix(500, 0).UTC()
 	audio := []work.WorkContentPart{{

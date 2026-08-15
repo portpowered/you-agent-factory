@@ -657,12 +657,16 @@ func recordDetachedModelResponse(cfg *runtimeConfig, request workers.ExecuteRequ
 		attempt = 1
 	}
 	modelRequestID := detachedModelRequestID(request.Correlation.DispatchID, attempt)
+	continuation := cloneRuntimeContinuation(result.Continuation)
 	payload := workers.ModelResponseEventPayload{
 		ModelRequestID: modelRequestID, Attempt: attempt,
 		Operation: strings.TrimSpace(request.Input.ModelOperation), Worker: executionWorkerName(request),
 		Model: strings.TrimSpace(request.Target.Model.Name), ProviderLocality: strings.TrimSpace(request.Target.Model.Locality),
-		DurationMillis: result.Metrics.Duration.Milliseconds(), Continuation: cloneRuntimeContinuation(result.Continuation),
+		DurationMillis: result.Metrics.Duration.Milliseconds(), Continuation: continuation,
 		Bindings: resolvedModelBindings(request.Input.ModelBindings),
+	}
+	if !continuationHasSessionIdentity(continuation) {
+		payload.ProviderSession = providerSessionFromExecuteResult(request, result)
 	}
 	if detachedModelProviderSucceeded(result, executeErr) {
 		payload.Outcome = workers.InferenceOutcomeSucceeded
@@ -793,6 +797,14 @@ func providerSessionFromExecuteResult(
 		Provider: providers.ID(provider).CanonicalSessionProvider(),
 		Kind:     providers.SessionIDKind,
 	}
+}
+
+func continuationHasSessionIdentity(continuation *workers.ProviderContinuationRef) bool {
+	if continuation == nil {
+		return false
+	}
+	return strings.TrimSpace(continuation.ProviderSessionID) != "" ||
+		strings.TrimSpace(continuation.ExternalRef) != ""
 }
 
 func modelFailureDetailFromExecute(result workers.ExecuteResult, executeErr error) *workers.FailureDetail {

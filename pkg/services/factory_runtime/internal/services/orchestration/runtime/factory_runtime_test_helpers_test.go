@@ -1983,6 +1983,7 @@ func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks
 		clock:          testRuntimeClock{},
 	}
 	request := modelRecordingRequest()
+	request.Target.Provider.ID = "antigravity"
 	request.Attempt.Number = 2
 	request.Target.WorkerName = ""
 	request.Target.WorkerType = "worker-type"
@@ -2015,6 +2016,13 @@ func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks
 
 func assertModelFailureEvents(t *testing.T, events []workers.ModelEvent) {
 	t.Helper()
+	for _, event := range events {
+		if event.Response == nil || event.Response.ProviderSession == nil ||
+			event.Response.ProviderSession.Provider != "antigravity" ||
+			event.Response.ProviderSession.ID != "" {
+			t.Fatalf("failure provider session = %#v, want provider-only antigravity metadata", event.Response)
+		}
+	}
 	if got := events[0].Response.FailureDetail; got == nil || got.Message != "safe timeout" {
 		t.Fatalf("detailed failure = %#v, want cloned safe detail", got)
 	}

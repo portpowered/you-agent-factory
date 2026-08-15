@@ -147,6 +147,9 @@ func inferenceResponseEvent(
 		payload.FailureDetail = providerFailureDetail(executionErr)
 		payload.ExitCode = providerErrorExitCode(executionErr)
 		payload.Continuation = cloneContinuation(continuationFromError(executionErr))
+		if !continuationHasSessionIdentity(payload.Continuation) {
+			payload.ProviderSession = providerSessionForRequest(request, nil)
+		}
 		payload.Diagnostics = Diagnostics(nil, executionErr)
 	} else {
 		payload.Outcome = workers.InferenceOutcomeSucceeded
