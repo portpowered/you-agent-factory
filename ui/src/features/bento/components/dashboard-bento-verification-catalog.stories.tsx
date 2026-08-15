@@ -1,6 +1,7 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
+import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import {
   DashboardBentoResponsiveStory,
   expectBentoHeaderDragSurface,
@@ -80,7 +81,7 @@ export const ResponsiveVerification = {
     ).toBeVisible();
     await expect(
       await canvas.findByRole("article", {
-        name: "Completed and failed work",
+        name: getTerminalWorkMessages("en").cardTitle,
       }),
     ).toBeVisible();
     await expect(

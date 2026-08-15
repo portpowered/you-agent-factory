@@ -1,8 +1,8 @@
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
-import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
+import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
   completedAttempt,
@@ -37,7 +37,10 @@ export const TerminalWork = {
             },
           ]}
           onSelectItem={() => undefined}
-          selectedItem={{ label: "Failed Story", status: "failed" }}
+          selectedItem={{
+            status: "failed",
+            traceWorkID: "work-failed-story",
+          }}
           widgetId="terminal-work::story"
         />
       ),
@@ -49,14 +52,16 @@ export const TerminalWork = {
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", {
-      name: "Completed and failed work",
-    });
     const messages = getTerminalWorkMessages("en");
+    const card = await canvas.findByRole("article", {
+      name: messages.cardTitle,
+    });
     const terminalScope = within(card);
 
     await expect(
-      terminalScope.getByRole("button", { name: "Failed Story" }),
+      terminalScope.getByRole("button", {
+        name: messages.selectWorkItemLabel("Failed Story"),
+      }),
     ).toBeVisible();
 
     const completedToggle = (
@@ -68,14 +73,18 @@ export const TerminalWork = {
     await userEvent.click(completedToggle);
     await expect(completedToggle).toHaveAttribute("aria-expanded", "false");
     expect(
-      terminalScope.queryByRole("button", { name: "Done Story" }),
+      terminalScope.queryByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
     ).toBeNull();
     await userEvent.click(completedToggle);
     await expect(completedToggle).toHaveAttribute("aria-expanded", "true");
     await expect(
-      terminalScope.getByRole("button", { name: "Done Story" }),
+      terminalScope.getByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
     ).toBeVisible();
-    expectBentoHeaderDragSurface(card, "Completed and failed work");
+    expectBentoHeaderDragSurface(card, messages.cardTitle);
   },
 };
 
@@ -99,15 +108,16 @@ export const TerminalWorkEmpty = {
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
+    const messages = getTerminalWorkMessages("en");
     const card = await canvas.findByRole("article", {
-      name: "Completed and failed work",
+      name: messages.cardTitle,
     });
 
     await expect(
-      within(card).getByText("No completed work recorded yet."),
+      within(card).getByText(messages.emptyState("completed")),
     ).toBeVisible();
     await expect(
-      within(card).getByText("No failed work recorded yet."),
+      within(card).getByText(messages.emptyState("failed")),
     ).toBeVisible();
   },
 };

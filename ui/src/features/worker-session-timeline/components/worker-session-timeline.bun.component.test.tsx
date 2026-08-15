@@ -16,6 +16,7 @@ import type {
   WorkerSessionObservation,
 } from "../../../api/worker-sessions";
 import type { UseWorkerSessionTimelineResult } from "../hooks/useWorkerSessionTimeline";
+import type { UseWorkerSessionTimelineTargetResult } from "../hooks/useWorkerSessionTimelineTarget";
 import {
   projectWorkerSessionTimeline,
   type WorkerSessionTimelineEntry,
@@ -23,6 +24,7 @@ import {
 import { getWorkerSessionTimelineMessages } from "../messages/worker-session-timeline";
 import { WorkerSessionTimelineContent } from "./worker-session-timeline";
 import { BoundedCode } from "./worker-session-timeline-detail-primitives";
+import { WorkerSessionTimelineTarget } from "./worker-session-timeline-target";
 import { WorkerSessionTimelineWidget } from "./worker-session-timeline-widget";
 
 const WORKER_SESSION_ID = "worker-session-ui-1";
@@ -423,8 +425,19 @@ describe("WorkerSessionTimelineContent large details", () => {
 });
 
 describe("WorkerSessionTimelineWidget target selection", () => {
-  it("selects a Worker Session target from the selected Work before rendering its timeline", async () => {
-    const loadWorkerSessionTargets = async () => [observation("worker-1")];
+  it("renders every observation and opens the exact selected Worker Session timeline", async () => {
+    const loadWorkerSessionTargets = async () => [
+      observation("worker-1", "attempt-1", {
+        providerSession: {
+          id: "provider-session-1",
+          kind: "session_id",
+          provider: "codex",
+        },
+        providerSessionAvailable: true,
+        state: "COMPLETED",
+      }),
+      observation("worker-2", "attempt-2", { state: "FAILED" }),
+    ];
 
     render(
       <WorkerSessionTimelineWidget
@@ -441,11 +454,35 @@ describe("WorkerSessionTimelineWidget target selection", () => {
     const messages = getWorkerSessionTimelineMessages("en");
     await waitFor(() => {
       expect(
-        screen.getByRole("combobox", {
-          name: messages.sessionTargetSelectLabel,
+        screen.getByRole("list", {
+          name: messages.sessionTargetListLabel,
         }),
       ).toBeTruthy();
     });
+    expect(screen.getByText("worker-1")).toBeTruthy();
+    expect(screen.getByText("attempt-1")).toBeTruthy();
+    expect(
+      screen.getByText(messages.sessionLifecycleStateLabel("COMPLETED")),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(messages.sessionLifecycleStateLabel("FAILED")),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("codex / session_id / provider-session-1"),
+    ).toBeTruthy();
+    expect(screen.getByText(messages.providerSessionUnavailable)).toBeTruthy();
+
+    const secondTargetButton = screen.getByRole("button", {
+      name: messages.openWorkerSessionTargetLabel("worker-2", "work-1"),
+    });
+    fireEvent.click(secondTargetButton);
+
+    expect(secondTargetButton).toHaveAttribute("aria-pressed", "true");
+    expect(
+      document.querySelector(
+        '[data-worker-session-timeline-worker-session-id="worker-2"]',
+      ),
+    ).toBeTruthy();
     expect(screen.getByText(messages.timelineTitle)).toBeTruthy();
   });
 
@@ -467,6 +504,48 @@ describe("WorkerSessionTimelineWidget target selection", () => {
   });
 });
 
+describe("WorkerSessionTimelineTarget states", () => {
+  it("keeps loading, empty, error, and retry states explicit", () => {
+    const messages = getWorkerSessionTimelineMessages("en");
+    const retry = mock(() => {});
+    const { rerender } = render(
+      <WorkerSessionTimelineTarget
+        messages={messages}
+        state={targetState({ status: "loading" })}
+        workID="work-1"
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      messages.sessionTargetLoading,
+    );
+
+    rerender(
+      <WorkerSessionTimelineTarget
+        messages={messages}
+        state={targetState({ refetch: retry, status: "error" })}
+        workID="work-1"
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      messages.sessionTargetError,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.sessionTargetRetry }),
+    );
+    expect(retry).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <WorkerSessionTimelineTarget
+        messages={messages}
+        state={targetState({ status: "ready" })}
+        workID="work-1"
+      />,
+    );
+    expect(screen.getByText(messages.sessionTargetEmpty)).toBeTruthy();
+  });
+});
+
 function createQueryWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -478,9 +557,13 @@ function createQueryWrapper() {
   };
 }
 
-function observation(workerSessionId: string): WorkerSessionObservation {
+function observation(
+  workerSessionId: string,
+  attemptId = "attempt-1",
+  overrides: Partial<WorkerSessionObservation> = {},
+): WorkerSessionObservation {
   return {
-    attemptId: "attempt-1",
+    attemptId,
     direct: false,
     durationBasis: "UNAVAILABLE",
     durationMillis: null,
@@ -493,7 +576,22 @@ function observation(workerSessionId: string): WorkerSessionObservation {
     turnId: null,
     workIds: ["work-1"],
     workerSessionId,
+    ...overrides,
   } as WorkerSessionObservation;
+}
+
+function targetState(
+  overrides: Partial<UseWorkerSessionTimelineTargetResult> = {},
+): UseWorkerSessionTimelineTargetResult {
+  return {
+    error: null,
+    observations: [],
+    refetch: mock(() => {}),
+    selectedWorkerSessionID: null,
+    setSelectedWorkerSessionID: mock(() => {}),
+    status: "idle",
+    ...overrides,
+  };
 }
 
 function timelineState(

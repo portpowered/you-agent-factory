@@ -73,6 +73,7 @@ export function WorkstationDetailCard({
         <WorkstationHistorySection
           collapseActionLabel={messages.collapseAction}
           expandActionLabel={messages.expandAction}
+          locale={locale}
           messages={messages}
           now={now}
           onSelectProviderSession={onSelectProviderSession}

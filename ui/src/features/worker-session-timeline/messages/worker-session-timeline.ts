@@ -71,19 +71,24 @@ export interface WorkerSessionTimelineMessages {
   ) => string;
   retryAction: string;
   retryReasonLabel: string;
+  openWorkerSessionAction: string;
+  openWorkerSessionTargetLabel: (
+    workerSessionID: string,
+    workID: string | null,
+  ) => string;
+  providerSessionUnavailable: string;
+  selectedWorkerSessionAction: string;
+  sessionLifecycleLabel: string;
+  sessionLifecycleStateLabel: (state: string) => string;
+  workerSessionIDLabel: string;
   sourceErrorHeading: string;
   sourceLabel: string;
   sourceSequenceLabel: (sequence: number) => string;
   sessionTargetEmpty: string;
   sessionTargetError: string;
   sessionTargetLoading: string;
-  sessionTargetOption: (
-    workerSessionID: string,
-    attemptID: string,
-    state: string,
-  ) => string;
+  sessionTargetListLabel: string;
   sessionTargetRetry: string;
-  sessionTargetSelectLabel: string;
   successorLabel: string;
   terminalOutcomeLabel: (outcome: WorkerTimelineTerminalOutcome) => string;
   terminalOutcomeHeading: string;
@@ -151,10 +156,16 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
         "This canonical event has no additional displayable detail.",
       openWorkerSessionLabel: (workerSessionID) =>
         `Open Worker Session ${workerSessionID}`,
+      openWorkerSessionAction: "Open Worker Session",
+      openWorkerSessionTargetLabel: (workerSessionID, workID) =>
+        workID
+          ? `Open Worker Session ${workerSessionID} for Work ${workID}`
+          : `Open Worker Session ${workerSessionID}`,
       outputTokensLabel: "Output tokens",
       predecessorLabel: "Predecessor Worker Session",
       providerLabel: "Provider",
       providerSessionLabel: "Provider Session",
+      providerSessionUnavailable: "Provider Session unavailable",
       reasoningDeltaLabel: "Reasoning delta",
       reasoningLabel: "Reasoning",
       reasoningSnapshotLabel: "Reasoning snapshot",
@@ -173,6 +184,26 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
               : "Recording is incomplete; some history may be missing.",
       retryAction: "Retry",
       retryReasonLabel: "Retry reason",
+      selectedWorkerSessionAction: "Worker Session selected",
+      sessionLifecycleLabel: "Lifecycle outcome",
+      sessionLifecycleStateLabel: (state) => {
+        switch (state.trim().toUpperCase()) {
+          case "CANCELED":
+          case "CANCELLED":
+            return "Canceled";
+          case "COMPLETED":
+            return "Completed";
+          case "FAILED":
+            return "Failed";
+          case "RUNNING":
+            return "Running";
+          case "STARTING":
+            return "Starting";
+          default:
+            return state || "Unknown";
+        }
+      },
+      workerSessionIDLabel: "Worker Session ID",
       sourceErrorHeading: "Worker Session records could not be loaded",
       sourceLabel: "Source",
       sourceSequenceLabel: (sequence) => `Source sequence ${sequence}`,
@@ -180,10 +211,8 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
         "No Worker Session attempts are correlated with this Work.",
       sessionTargetError: "Worker Session attempts could not be loaded.",
       sessionTargetLoading: "Loading Worker Session attempts…",
-      sessionTargetOption: (workerSessionID, attemptID, state) =>
-        `${workerSessionID} · ${attemptID} · ${state}`,
+      sessionTargetListLabel: "Worker Session attempts",
       sessionTargetRetry: "Retry Worker Session lookup",
-      sessionTargetSelectLabel: "Worker Session attempt",
       successorLabel: "Successor Worker Session",
       terminalOutcomeLabel: (outcome) =>
         outcome === "SUCCESS"
@@ -267,10 +296,16 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       noDetailState: "此规范事件没有可显示的其他详情。",
       openWorkerSessionLabel: (workerSessionID) =>
         `打开 Worker 会话 ${workerSessionID}`,
+      openWorkerSessionAction: "打开 Worker 会话",
+      openWorkerSessionTargetLabel: (workerSessionID, workID) =>
+        workID
+          ? `打开工作 ${workID} 的 Worker 会话 ${workerSessionID}`
+          : `打开 Worker 会话 ${workerSessionID}`,
       outputTokensLabel: "输出令牌",
       predecessorLabel: "前置 Worker 会话",
       providerLabel: "提供方",
       providerSessionLabel: "提供方会话",
+      providerSessionUnavailable: "提供方会话不可用",
       reasoningDeltaLabel: "推理增量",
       reasoningLabel: "推理",
       reasoningSnapshotLabel: "推理快照",
@@ -289,16 +324,34 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
               : "记录不完整，部分历史可能缺失。",
       retryAction: "重试",
       retryReasonLabel: "重试原因",
+      selectedWorkerSessionAction: "Worker 会话已选择",
+      sessionLifecycleLabel: "生命周期结果",
+      sessionLifecycleStateLabel: (state) => {
+        switch (state.trim().toUpperCase()) {
+          case "CANCELED":
+          case "CANCELLED":
+            return "已取消";
+          case "COMPLETED":
+            return "已完成";
+          case "FAILED":
+            return "失败";
+          case "RUNNING":
+            return "运行中";
+          case "STARTING":
+            return "正在启动";
+          default:
+            return state || "未知";
+        }
+      },
+      workerSessionIDLabel: "Worker 会话 ID",
       sourceErrorHeading: "无法加载 Worker 会话记录",
       sourceLabel: "来源",
       sourceSequenceLabel: (sequence) => `来源序列 ${sequence}`,
       sessionTargetEmpty: "没有与此工作关联的 Worker 会话尝试。",
       sessionTargetError: "无法加载 Worker 会话尝试。",
       sessionTargetLoading: "正在加载 Worker 会话尝试…",
-      sessionTargetOption: (workerSessionID, attemptID, state) =>
-        `${workerSessionID} · ${attemptID} · ${state}`,
+      sessionTargetListLabel: "Worker 会话尝试",
       sessionTargetRetry: "重试 Worker 会话查找",
-      sessionTargetSelectLabel: "Worker 会话尝试",
       successorLabel: "后继 Worker 会话",
       terminalOutcomeLabel: (outcome) =>
         outcome === "SUCCESS"

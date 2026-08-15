@@ -68,7 +68,10 @@ describe("TerminalWorkWidget", () => {
           { label: "Failed Story", traceWorkID: "work-failed-story" },
         ]}
         onSelectItem={onSelectItem}
-        selectedItem={{ label: "Done Story", status: "completed" }}
+        selectedItem={{
+          status: "completed",
+          traceWorkID: "work-done-story",
+        }}
       />,
     );
 

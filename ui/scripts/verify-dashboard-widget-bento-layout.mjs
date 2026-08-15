@@ -29,6 +29,13 @@ const storyChecks = [
     viewports: [
       { height: 844, label: "mobile", width: 390 },
       { height: 900, label: "desktop", width: 1440 },
+      {
+        forcedColors: "active",
+        height: 900,
+        label: "forced-colors",
+        width: 1280,
+      },
+      { height: 900, label: "zoom-200", pageScaleFactor: 2, width: 1280 },
     ],
   },
 ];
@@ -88,11 +95,18 @@ async function waitForHttpOk(url, timeoutMs = 30_000) {
 
 async function verifyStory(browser, storyCheck, viewport) {
   const context = await browser.newContext({
+    forcedColors: viewport.forcedColors,
     viewport: { height: viewport.height, width: viewport.width },
   });
   const page = await context.newPage();
 
   try {
+    if (viewport.pageScaleFactor) {
+      const client = await context.newCDPSession(page);
+      await client.send("Emulation.setPageScaleFactor", {
+        pageScaleFactor: viewport.pageScaleFactor,
+      });
+    }
     await page.goto(storyUrl(baseUrl, storyCheck.id), {
       timeout: STORY_RENDER_TIMEOUT_MS,
       waitUntil: "domcontentloaded",
