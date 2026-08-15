@@ -120,17 +120,7 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 				}
 			}
 		case "coverage-rootobservation-regression":
-			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
-				"mode: count",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:51.1,52.1 8 1",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:41.1,42.1 1 0",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:1.1,2.1 10 1",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:21.1,22.1 1 0",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:61.1,62.1 6 1",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:31.3,32.1 7 1",
-				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:11.1,12.1 12 1",
-				"",
-			}, "\n")); err != nil {
+			if err := writeRootObservationRegressionProfile(profilePath); err != nil {
 				return "", "", err
 			}
 		case "coverage-with-coverpkg-ok-summary", "coverage-with-ok-summary", "coverage-default":
@@ -192,6 +182,20 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 	default:
 		return "", "", fmt.Errorf("unexpected go test scenario: %s", scenario)
 	}
+}
+
+func writeRootObservationRegressionProfile(profilePath string) error {
+	return writeFakeCoverageProfile(profilePath, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:51.1,52.1 8 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:41.1,42.1 1 0",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:1.1,2.1 10 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:21.1,22.1 1 0",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:61.1,62.1 6 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:31.3,32.1 7 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:11.1,12.1 12 1",
+		"",
+	}, "\n"))
 }
 
 func fakeGoToolScenario(scenario string, args []string) (string, string, error) {
