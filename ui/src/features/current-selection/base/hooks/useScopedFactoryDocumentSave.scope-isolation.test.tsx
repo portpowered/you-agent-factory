@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 describe("useScopedFactoryDocumentSave scope isolation when scopeKey changes", () => {
-  it("preserves confirmation when the default session resolves to its runtime identity", async () => {
+  it("preserves alias confirmation but resets on genuine scope changes", async () => {
     const saveMutation = mockFactoryDocumentSave({ mode: "idle" });
     vi.spyOn(
       factoryDocumentSaveHooks,
@@ -51,7 +51,18 @@ describe("useScopedFactoryDocumentSave scope isolation when scopeKey changes", (
       expect(result.current.saveState).toEqual({ status: "confirming" });
     });
 
-    rerender({ scopeKey: "session-other" });
+    rerender({ scopeKey: "runtime-other-session" });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "idle" });
+    });
+
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveState).toEqual({ status: "confirming" });
+
+    rerender({ scopeKey: DEFAULT_FACTORY_SESSION_ID });
 
     await waitFor(() => {
       expect(result.current.saveState).toEqual({ status: "idle" });
