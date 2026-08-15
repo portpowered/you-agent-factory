@@ -296,6 +296,34 @@ func TestWriterPrepareRollsBackAcrossActiveRotation(t *testing.T) {
 	}
 }
 
+func TestWriterPrepareRollsBackActiveFileWithoutRotation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	writer := &Writer{Filename: path, MaxSize: 1}
+	const original = "original"
+	if _, err := writer.Write([]byte(original)); err != nil {
+		t.Fatalf("initial Write(): %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+
+	checkpoint, err := writer.Prepare(len(" rejected"))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte(" rejected")); err != nil {
+		t.Fatalf("Write() before rollback: %v", err)
+	}
+	if err := writer.Rollback(checkpoint); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if got, err := os.ReadFile(path); err != nil || string(got) != original {
+		t.Fatalf("rolled-back active file = (%q, %v), want %q", got, err, original)
+	}
+	if writer.file == nil || writer.size != int64(len(original)) {
+		t.Fatalf("rolled-back writer state = (file %v, size %d), want active file at size %d", writer.file != nil, writer.size, len(original))
+	}
+}
+
 func TestWriterPrepareCommitsAcrossActiveRotation(t *testing.T) {
 	path, original, at, writer := newActiveRotationWriter(t)
 	_, err := writer.Prepare(len("kept") + 1)

@@ -37,6 +37,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 // Edges aggregates replaceable external-effect ports for process construction
@@ -178,6 +179,7 @@ type Edges struct {
 	}
 
 	Clock                            platformclock.Source
+	ACPWireRecorder                  acp.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
 	WorkerRecordingWriter            recordings.WorkerRecordingWriter
@@ -524,6 +526,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock
+	}
+	if replacements.ACPWireRecorder != nil {
+		defaults.ACPWireRecorder = replacements.ACPWireRecorder
 	}
 	if replacements.SubmissionRecorder != nil {
 		defaults.SubmissionRecorder = replacements.SubmissionRecorder

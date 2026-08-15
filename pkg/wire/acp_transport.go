@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -203,10 +204,14 @@ const (
 // handle, so it structurally cannot reach the protocol stream that `you serve
 // acp` reserves on stdout.
 func provideACPWireRecorder(
+	edges serviceedges.Edges,
 	paths platformruntimeartifact.Reserver,
 	clock runtimeArtifactClock,
 	resolveHomeDir acpServerResolveHomeDir,
 ) (acp.WireRecorder, error) {
+	if edges.ACPWireRecorder != nil {
+		return edges.ACPWireRecorder, nil
+	}
 	if strings.EqualFold(strings.TrimSpace(os.Getenv(acpWireLogEnvironment)), acpWireLogDisabledValue) {
 		return nil, nil
 	}
