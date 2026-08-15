@@ -78,7 +78,7 @@ test("a measured baseline failure is reported but allowed at its recorded count"
 		targets: baselineTargets({
 			"ui-deadcode": {
 				status: "fail",
-				output: "Frontend dead-code baseline drift detected; current findings: 11",
+				output: "Frontend dead-code baseline drift detected; current findings: 12",
 			},
 		}),
 	}));
@@ -87,7 +87,7 @@ test("a measured baseline failure is reported but allowed at its recorded count"
 	assert.equal(summary.ok, true);
 	assert.equal(summary.targets.find((target) => target.name === "ui-deadcode").policyStatus, "allowed");
 	assert.match(markdown, /Allowed baseline debt: `1` checker\(s\) within measured limits/);
-	assert.match(markdown, /\| ui-deadcode \| 11 \| 11 \| allowed \|/);
+	assert.match(markdown, /\| ui-deadcode \| 12 \| 12 \| allowed \|/);
 });
 
 test("baseline growth fails the gate instead of being hidden by an allowance", () => {
@@ -95,13 +95,13 @@ test("baseline growth fails the gate instead of being hidden by an allowance", (
 		targets: baselineTargets({
 			"ui-deadcode": {
 				status: "fail",
-				output: "Frontend dead-code baseline drift detected; current findings: 12",
+				output: "Frontend dead-code baseline drift detected; current findings: 13",
 			},
 		}),
 	}));
 
 	assert.equal(summary.ok, false);
-	assert.match(summary.failures.join("\n"), /ui-deadcode reported 12 violation\(s\), exceeding its baseline allowance of 11/);
+	assert.match(summary.failures.join("\n"), /ui-deadcode reported 13 violation\(s\), exceeding its baseline allowance of 12/);
 });
 
 test("a newly failing clean checker is gated immediately", () => {
