@@ -1,5 +1,13 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

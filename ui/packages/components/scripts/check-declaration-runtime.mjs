@@ -147,8 +147,6 @@ function extractRelativeModuleSpecifiers(source, filePath = "module.d.ts") {
 export async function scanDeclarationRuntimeReferences({
   distRoot,
   declarationPaths,
-  allowBundledEntrypoints = false,
-  bundledEntrypoints = [],
 } = {}) {
   const resolvedDistRoot = path.resolve(distRoot ?? defaultDistRoot);
   const allDeclarationPaths = (
@@ -157,10 +155,6 @@ export async function scanDeclarationRuntimeReferences({
   const files = declarationPaths
     ? [...declarationPaths].map((filePath) => path.resolve(filePath)).sort()
     : allDeclarationPaths;
-  const declarationPathSet = new Set(allDeclarationPaths);
-  const bundledEntrypointSet = new Set(
-    bundledEntrypoints.map((filePath) => path.resolve(filePath)),
-  );
   const violations = [];
   let referenceCount = 0;
 
@@ -181,36 +175,6 @@ export async function scanDeclarationRuntimeReferences({
         ),
       );
       if (runtimePath) continue;
-
-      if (allowBundledEntrypoints) {
-        const declarationTargetCandidates = moduleSpecifierCandidates(
-          declarationPath,
-          specifier,
-          declarationExtensions,
-        );
-        const declarationTarget = await resolveExistingCandidate(
-          declarationTargetCandidates.filter((candidate) =>
-            isWithinDirectory(candidate, resolvedDistRoot),
-          ),
-        );
-        const relativeDeclarationPath = path.relative(
-          resolvedDistRoot,
-          declarationPath,
-        );
-        const bundledEntrypoint = path.join(
-          resolvedDistRoot,
-          path.dirname(relativeDeclarationPath),
-          "index.js",
-        );
-
-        if (
-          declarationTarget &&
-          declarationPathSet.has(path.resolve(declarationTarget)) &&
-          bundledEntrypointSet.has(bundledEntrypoint)
-        ) {
-          continue;
-        }
-      }
 
       violations.push({
         declarationPath,
@@ -391,10 +355,6 @@ export async function verifyBundledPackage({
         await scanDeclarationRuntimeReferences({
           distRoot,
           declarationPaths,
-          allowBundledEntrypoints: true,
-          bundledEntrypoints: runtimeTargets
-            .map(({ target }) => path.resolve(resolvedPackageRoot, target))
-            .filter((target) => target.endsWith(".js")),
         })
       ).violations,
     }),
@@ -473,7 +433,7 @@ async function main() {
   }
 
   process.stdout.write(
-    `[components-declaration-runtime] package verification passed (${report.declarationCount} declarations, ${report.runtimeCount} runtime modules; bundled entrypoints are allowed).\n`,
+    `[components-declaration-runtime] package verification passed (${report.declarationCount} declarations, ${report.runtimeCount} runtime modules; every declaration reference resolves).\n`,
   );
 }
 
