@@ -17,7 +17,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	provideradapter "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/commandenv"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 
@@ -345,18 +344,6 @@ type parsedProviderFailure struct {
 	failure         ProviderFailureResult
 	internalCause   string
 	providerSession *providers.SessionMetadata
-}
-
-func providerErrorFromAdapterFailure(
-	failure *provideradapter.FailureFacts,
-	cause error,
-	diagnostics *workerexecution.WorkDiagnostics,
-) *ProviderError {
-	return &ProviderError{
-		Family: failure.Family, Type: failure.Type, Message: failure.Message,
-		Continuation: (failure.ProviderSession).ContinuationRef(),
-		Diagnostics:  workerexecution.CloneWorkDiagnostics(diagnostics), Cause: cause,
-	}
 }
 
 func parseProviderExitFailure(provider string, result CommandResult) parsedProviderFailure {

@@ -1456,8 +1456,6 @@
       "fromOwner": "factory_sessions",
       "toOwner": "providers",
       "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
       "evidence": "pkg/services/factory_sessions/internal/execution -> pkg/services/providers"
     },
     {
@@ -1656,14 +1654,6 @@
     },
     {
       "fromOwner": "providers",
-      "toOwner": "factory_sessions",
-      "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
-      "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/factory_sessions"
-    },
-    {
-      "fromOwner": "providers",
       "toOwner": "models",
       "class": "command",
       "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/models"
@@ -1694,7 +1684,7 @@
       "class": "command",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/workers/internal/providercompat/adapter -> pkg/services/workers"
+      "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -5424,22 +5414,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/providercompat",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/adapter",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/adapter/testkit",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

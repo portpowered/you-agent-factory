@@ -481,8 +481,6 @@
     "pkg/services/workers/internal/diagnostics",
     "pkg/services/workers/internal/interface",
     "pkg/services/workers/internal/providercompat",
-    "pkg/services/workers/internal/providercompat/adapter",
-    "pkg/services/workers/internal/providercompat/adapter/testkit",
     "pkg/services/workers/internal/providercompat/agy",
     "pkg/services/workers/internal/providercompat/agypty",
     "pkg/services/workers/internal/providercompat/claude",
@@ -2790,16 +2788,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/providercompat",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/adapter",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/adapter/testkit",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

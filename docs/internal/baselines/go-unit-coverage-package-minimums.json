@@ -2111,14 +2111,6 @@
       "minimum": 73.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter",
-      "minimum": 85.32
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter/testkit",
-      "minimum": 80.67
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy",
       "minimum": 50.75
     },

@@ -22,7 +22,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
@@ -455,22 +454,6 @@ func assertInferenceExitFailure(t *testing.T, tc exitFailureInferenceTestCase) {
 	}
 	if providerErr.Message != tc.wantMessage {
 		t.Fatalf("provider error message = %q, want %q", providerErr.Message, tc.wantMessage)
-	}
-}
-
-func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		command  string
-		identity adapter.Identity
-	}{
-		{command: "claude", identity: adapter.Identity(modelprovider.ProviderClaude)},
-	}
-	for _, tc := range tests {
-		if got := progressStreamIdentity(tc.command); got != tc.identity {
-			t.Fatalf("progressStreamIdentity(%q) = %q, want %q", tc.command, got, tc.identity)
-		}
 	}
 }
 
