@@ -2016,13 +2016,7 @@ func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks
 
 func assertModelFailureEvents(t *testing.T, events []workers.ModelEvent) {
 	t.Helper()
-	for _, event := range events {
-		if event.Response == nil || event.Response.ProviderSession == nil ||
-			event.Response.ProviderSession.Provider != "antigravity" ||
-			event.Response.ProviderSession.ID != "" {
-			t.Fatalf("failure provider session = %#v, want provider-only antigravity metadata", event.Response)
-		}
-	}
+	assertModelFailureProviderSessions(t, events)
 	if got := events[0].Response.FailureDetail; got == nil || got.Message != "safe timeout" {
 		t.Fatalf("detailed failure = %#v, want cloned safe detail", got)
 	}
@@ -2035,6 +2029,19 @@ func assertModelFailureEvents(t *testing.T, events []workers.ModelEvent) {
 	for _, event := range events {
 		if event.Response == nil || event.Response.Outcome != workers.InferenceOutcomeFailed || event.Tick != 9 {
 			t.Fatalf("failure response = %#v, want failed response at current tick", event.Response)
+		}
+	}
+}
+
+func assertModelFailureProviderSessions(t *testing.T, events []workers.ModelEvent) {
+	t.Helper()
+	for _, event := range events {
+		if event.Response == nil {
+			t.Fatal("failure response is nil")
+		}
+		providerSession := event.Response.ProviderSession
+		if providerSession == nil || providerSession.Provider != "antigravity" || providerSession.ID != "" {
+			t.Fatalf("failure provider session = %#v, want provider-only antigravity metadata", event.Response)
 		}
 	}
 }
