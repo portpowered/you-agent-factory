@@ -757,10 +757,17 @@ async function endSaveActivationTrace(
         return null;
       }
       entry.observer.disconnect();
+      const beforeEnter = entry.trace.activationPoints.beforeEnter;
+      const afterEnter = entry.trace.activationPoints.afterEnter;
       const activationRecords = [
-        entry.trace.activationPoints.beforeEnter,
-        ...entry.trace.records,
-        entry.trace.activationPoints.afterEnter,
+        beforeEnter,
+        ...entry.trace.records.filter((record) =>
+          beforeEnter && afterEnter
+            ? record.elapsedMs >= beforeEnter.elapsedMs &&
+              record.elapsedMs <= afterEnter.elapsedMs
+            : true,
+        ),
+        afterEnter,
       ].filter(Boolean);
       const sessionIDs = [
         ...new Set(
