@@ -74,18 +74,18 @@ with an instruction to remove or narrow the quarantine; missing terminal events,
 unexpected outcomes, and subprocess errors fail closed and remain visible in
 the ratchet diagnostics.
 
-The required pull-request tier is `pr-short`: it runs the complete discovered
-tree with `-short`, subtracts only the true environment quarantine, and reports
-tests skipped by `testing.Short()` as `deferred-short-tests`. Those deferred
-tests are not quarantine entries. A push to `main` selects the explicit
-`merge-full` tier, runs the same subtractive selection with `-short=false`, and
-has a 75-minute runner budget (the pull-request `pr-short` tier has a 35-minute
-budget) so the deferred behavior executes after merge.
+The required backend CI tier for pull requests and pushes to `main` is
+`merge-full`: it runs the complete discovered tree with `-short=false`,
+subtracts only the true environment quarantine, and uses a 75-minute runner
+budget. Both triggers use the same subtractive selection and required pinned
+real-client ACPX evidence, so tests previously skipped only because of
+`testing.Short()` execute before merge. The Makefile and local runner retain
+`pr-short` defaults for fast developer feedback; set `FUNCTIONAL_SHORT=false`
+locally to exercise the full tier.
 The Linux job allows an additional five minutes for always-run summary and
 artifact-upload steps after a tier timeout. The runner fails on budget expiry,
 preserves its command log and any partial inventory/timing/quarantine output,
 and reports each tier's trigger, budget, selection rule, and quarantine path.
-Set `FUNCTIONAL_SHORT=false` locally to exercise the full tier.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains
