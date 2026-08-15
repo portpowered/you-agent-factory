@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -964,7 +965,7 @@ func isLifecycleProvenance(draft workers.Draft) bool {
 }
 
 func canonicalProvider(value string) string {
-	return workers.CanonicalProviderSessionProvider(strings.TrimSpace(value))
+	return providers.ID(strings.TrimSpace(value)).CanonicalSessionProvider()
 }
 
 func sameProvider(left, right string) bool {

@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -379,7 +380,7 @@ func sortedWorldWorkItemRefs(
 	return workItems
 }
 
-func cloneProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
+func cloneProviderSessionMetadata(session *providers.SessionMetadata) *providers.SessionMetadata {
 	if session == nil || session.ID == "" {
 		return nil
 	}

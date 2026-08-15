@@ -227,8 +227,8 @@ func (r *registry) prepareContinuation(
 	supervision.attemptsMade++
 	continuation := cloneWorkstationDispatchRequest(supervision.execution)
 	continuation.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/resume/%d", previousDispatchID, supervision.resumeCount)
-	continuedReference := reference.Clone()
-	continuation.Execution.ResumeSession = &continuedReference
+	continuationRef := reference.ContinuationRef()
+	continuation.Execution.Continuation = &continuationRef
 	supervision.dispatchID = continuation.Execution.Dispatch.DispatchID
 	delete(r.dispatchOwners, previousDispatchID)
 	r.dispatchOwners[supervision.dispatchID] = id
@@ -906,16 +906,12 @@ func (r *registry) continuationResultMatchesAssociation(id string, result worker
 	if result.Result.Outcome != workers.OutcomeAccepted && result.Result.Outcome != workers.OutcomeContinue {
 		return true
 	}
-	metadata := result.Result.ProviderSession
-	if metadata == nil {
+	continuation := result.Result.Continuation
+	if continuation == nil {
 		return false
 	}
-	reference := providers.SessionRef{
-		Provider: providers.ID(metadata.Provider),
-		Kind:     metadata.Kind,
-		ID:       metadata.ID,
-	}
-	if err := reference.Validate(); err != nil {
+	reference, err := continuation.ToSessionRef()
+	if err != nil {
 		return false
 	}
 	r.mu.RLock()

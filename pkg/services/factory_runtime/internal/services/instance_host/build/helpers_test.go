@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -141,13 +142,17 @@ func TestCommandRunnerOverrideForMode_ReplayReplacesOnlyProductionEdge(t *testin
 	}
 }
 
-type stubProvider struct{}
+type stubProvider struct {
+	*testutil.ProviderServiceAdapter
+}
 
 func (stubProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	return workerexecution.InferenceResponse{}, nil
 }
 
-type scriptedReplaySideEffects struct{}
+type scriptedReplaySideEffects struct {
+	*testutil.ProviderServiceAdapter
+}
 
 func (*scriptedReplaySideEffects) Infer(
 	context.Context,
@@ -216,8 +221,8 @@ func TestWarnPortableBundledReplacementReport_LogsTargets(t *testing.T) {
 func TestProviderOverrideForMode_PrefersConfiguredProviderAndFallsBackToReplay(t *testing.T) {
 	t.Parallel()
 
-	configured := stubProvider{}
-	sideEffects := &scriptedReplaySideEffects{}
+	configured := stubProvider{ProviderServiceAdapter: &testutil.ProviderServiceAdapter{}}
+	sideEffects := &scriptedReplaySideEffects{ProviderServiceAdapter: &testutil.ProviderServiceAdapter{}}
 
 	if got := providerOverrideForMode(configured, sideEffects); got != configured {
 		t.Fatalf("configured provider = %#v, want %#v", got, configured)

@@ -9,6 +9,60 @@
       "count": 1,
       "stage": "wire-injection-full-blow",
       "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    },
+    {
+      "owner": "factory_sessions",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
+      "symbol": "NewOnDemandFactoryTargetService",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    },
+    {
+      "owner": "events",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/events/wire",
+      "symbol": "NewService",
+      "filePath": "pkg/services/worker_sessions/internal/service/fakes_test.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    },
+    {
+      "owner": "providers",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
+      "symbol": "NewService",
+      "filePath": "pkg/services/workers/internal/providercompat/agy/conductor_composition_test.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    },
+    {
+      "owner": "providers",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
+      "symbol": "NewService",
+      "filePath": "pkg/services/workers/internal/providercompat/agy/integration_test.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    },
+    {
+      "owner": "providers",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
+      "symbol": "NewService",
+      "filePath": "pkg/services/workers/internal/providercompat/claude/integration_test.go",
+      "count": 2,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    },
+    {
+      "owner": "providers",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/providers/wire",
+      "symbol": "NewService",
+      "filePath": "pkg/services/workers/internal/providercompat/codex/integration_test.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
     }
   ]
 }

@@ -2,7 +2,9 @@
 // canonical Worker execution contracts live at pkg/services/workers.
 package workerexecution
 
-import workers "github.com/portpowered/infinite-you/pkg/services/workers"
+import (
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+)
 
 type WorkerState = workers.WorkerState
 type InferenceResponse = workers.InferenceResponse
@@ -29,7 +31,6 @@ type DispatchResponseEventPayload = workers.DispatchResponseEventPayload
 type DispatchResourceEventRef = workers.DispatchResourceEventRef
 type WorkMetricsEventPayload = workers.WorkMetricsEventPayload
 type WorkResult = workers.WorkResult
-type ProviderSessionMetadata = workers.ProviderSessionMetadata
 type WorkOutcome = workers.WorkOutcome
 type WorkMetrics = workers.WorkMetrics
 type WorkDiagnostics = workers.WorkDiagnostics
@@ -96,9 +97,7 @@ const (
 	ExpectedArtifactVerificationReasonEmpty   = workers.ExpectedArtifactVerificationReasonEmpty
 )
 
-var CanonicalProviderSessionProvider = workers.CanonicalProviderSessionProvider
 var FailureDecisionFromMetadata = workers.FailureDecisionFromMetadata
-var CloneProviderSessionMetadata = workers.CloneProviderSessionMetadata
 var CloneWorkFailureMetadata = workers.CloneWorkFailureMetadata
 var CloneFailureDetail = workers.CloneFailureDetail
 var CloneWorkDiagnostics = workers.CloneWorkDiagnostics

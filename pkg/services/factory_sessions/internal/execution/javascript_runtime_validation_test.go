@@ -80,8 +80,9 @@ func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SmokeLiveChildProvider().Infer: %v", err)
 	}
-	if response.ProviderSession == nil || response.ProviderSession.ID == "" {
-		t.Fatalf("provider session = %#v, want stable session metadata", response.ProviderSession)
+	providerSession := (response.Continuation).SessionMetadata()
+	if providerSession == nil || providerSession.ID == "" {
+		t.Fatalf("provider session = %#v, want stable session metadata", providerSession)
 	}
 }
 

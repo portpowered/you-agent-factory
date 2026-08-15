@@ -13,6 +13,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -63,10 +64,10 @@ func withInferenceResponseDiagnostics(base *workerexecution.WorkDiagnostics, res
 	}
 	diagnostics.Provider.ResponseMetadata["content_bytes"] = fmt.Sprintf("%d", len(resp.Content))
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
-	if resp.ProviderSession != nil {
-		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = workerexecution.CanonicalProviderSessionProvider(resp.ProviderSession.Provider)
-		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = resp.ProviderSession.Kind
-		diagnostics.Provider.ResponseMetadata["provider_session_id"] = resp.ProviderSession.ID
+	if session := (resp.Continuation).SessionMetadata(); session != nil {
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = providers.ID(session.Provider).CanonicalSessionProvider()
+		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = session.Kind
+		diagnostics.Provider.ResponseMetadata["provider_session_id"] = session.ID
 	}
 	return diagnostics
 }
@@ -499,4 +500,62 @@ func expectedArtifactVerificationError(
 
 func isASCIIAlpha(value byte) bool {
 	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+}
+
+func (we *WorkstationExecutor) expectedArtifactDeclarations(
+	tokens []workerexecution.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+) []interfaces.ExpectedArtifactConfig {
+	if workstation == nil {
+		return nil
+	}
+	var declarations []interfaces.ExpectedArtifactConfig
+	if we != nil && we.RuntimeConfig != nil {
+		if factory := we.RuntimeConfig.FactoryConfig(); factory != nil {
+			seenWorkTypes := make(map[string]struct{})
+			for _, token := range tokens {
+				if token.Color.DataType == workerexecution.DataTypeResource {
+					continue
+				}
+				workTypeID := strings.TrimSpace(token.Color.WorkTypeID)
+				if workTypeID == "" {
+					continue
+				}
+				if _, seen := seenWorkTypes[workTypeID]; seen {
+					continue
+				}
+				seenWorkTypes[workTypeID] = struct{}{}
+				for _, workType := range factory.WorkTypes {
+					if workType.ID == workTypeID || workType.Name == workTypeID {
+						declarations = append(declarations, workType.ExpectedArtifacts...)
+						break
+					}
+				}
+			}
+		}
+	}
+	declarations = append(declarations, workstation.ExpectedArtifacts...)
+	return interfaces.NormalizeExpectedArtifactConfigs(declarations)
+}
+
+func (we *WorkstationExecutor) expectedArtifactFileSystem() platformfilesystem.GlobInspector {
+	if we == nil {
+		return nil
+	}
+	if we.ArtifactFileSystem != nil {
+		return we.ArtifactFileSystem
+	}
+	inspector, _ := we.FileSystem.(platformfilesystem.GlobInspector)
+	return inspector
+}
+
+func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch work.WorkDispatch) string {
+	if workstationDef != nil && workstationDef.WorkerTypeName != "" {
+		return workstationDef.WorkerTypeName
+	}
+	return dispatch.WorkerType
+}
+
+func workstationLookupKey(dispatch work.WorkDispatch) string {
+	return dispatch.WorkstationName
 }

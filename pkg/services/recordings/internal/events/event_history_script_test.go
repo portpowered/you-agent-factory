@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -30,9 +31,9 @@ func TestFactoryEventHistory_RecordInferenceEvent_OwnsEnvelopeAndPreservesPublic
 			DurationMillis:     125,
 			InferenceRequestID: "dispatch-inference/inference-request/1",
 			Outcome:            workerexecution.InferenceOutcomeSucceeded,
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: "mock", Kind: "session_id", ID: "provider-session-1",
-			},
+			}).ContinuationRef(),
 			Response: stringPtr("provider response"),
 		},
 	})

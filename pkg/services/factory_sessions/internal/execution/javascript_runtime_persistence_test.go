@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
@@ -732,7 +733,7 @@ func TestExecutionServiceRolesNameWorkersRootContracts(t *testing.T) {
 
 	var (
 		_ workers.InvocationExecutor
-		_ workers.Provider
+		_ providers.Service
 		_ workers.ProgressPublisher
 	)
 }
@@ -759,7 +760,8 @@ func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
 	if !strings.Contains(resp.Content, "live:agent-run-fake-child") {
 		t.Fatalf("content = %q, want live child smoke payload", resp.Content)
 	}
-	if resp.ProviderSession == nil || resp.ProviderSession.ID != "live-provider-session-1" {
-		t.Fatalf("provider session = %#v, want live-provider-session-1", resp.ProviderSession)
+	providerSession := (resp.Continuation).SessionMetadata()
+	if providerSession == nil || providerSession.ID != "live-provider-session-1" {
+		t.Fatalf("provider session = %#v, want live-provider-session-1", providerSession)
 	}
 }

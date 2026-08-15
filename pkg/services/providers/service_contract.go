@@ -1,6 +1,10 @@
 package providers
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+)
 
 // Service is the singular cross-service Providers root authority. Peer packages
 // depend on this one named interface for Providers-owned catalog enumeration,
@@ -42,13 +46,51 @@ type Service interface {
 	// Valid requests return a typed completed or unsupported outcome as a
 	// successful result; unsupported is not encoded as an error.
 	ControlAttempt(context.Context, ControlAttemptRequest) (ControlAttemptResult, error)
-	// Continue resumes the exact prior Provider Session named by
-	// ContinueRequest.Reference for one continued attempt. A malformed or
-	// foreign reference fails with a typed ContinuationFailure before any
-	// provider adapter is invoked; a reference the resolved provider cannot
-	// continue returns the typed unsupported outcome as a successful result
-	// instead of starting a fresh attempt. Provider continuation is requested
-	// exclusively through Continue - Execute does not expose a resume
-	// reference.
+	// Continue resumes the exact provider session identified by Reference.
+	// Unsupported continuation is returned as a typed successful outcome and
+	// never falls back to Execute.
 	Continue(context.Context, ContinueRequest) (ContinueResult, error)
+	// ContinueReference validates and routes a detached opaque continuation
+	// reference without exposing Provider Session state to callers.
+	ContinueReference(context.Context, ContinueReferenceRequest) (ContinueReferenceResult, error)
+}
+
+// ContinueReferenceRequest carries the detached continuation vocabulary to
+// the Providers root. It is intentionally separate from ContinueRequest so
+// Workers and Runtime do not need to construct or inspect a provider-owned
+// SessionRef while forwarding an opaque continuation.
+type ContinueReferenceRequest struct {
+	Reference ContinuationRef
+	Attempt   ExecuteRequest
+}
+
+// ContinueReferenceResult is the detached result of one opaque continuation
+// request. Reference echoes the canonical provider identity and exact session
+// kind/id while retaining any caller-supplied external reference.
+type ContinueReferenceResult struct {
+	Reference ContinuationRef
+	Outcome   ContinuationOutcome
+	Result    ExecuteResult
+}
+
+func firstContinuationIdentity(ref ContinuationRef) string {
+	if value := strings.TrimSpace(ref.ProviderSessionID); value != "" {
+		return value
+	}
+	return strings.TrimSpace(ref.ExternalRef)
+}
+
+// Clone returns a detached continuation-reference result.
+func (result ContinueReferenceResult) Clone() ContinueReferenceResult {
+	clone := result
+	clone.Reference = result.Reference.Clone()
+	clone.Result = result.Result.Clone()
+	return clone
+}
+
+// String returns a bounded identity useful for diagnostics without exposing
+// provider-specific request material.
+func (ref ContinuationRef) String() string {
+	normalized := ref.Normalize()
+	return fmt.Sprintf("%s/%s/%s", normalized.Provider, normalized.Kind, firstContinuationIdentity(normalized))
 }

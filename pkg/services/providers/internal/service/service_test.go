@@ -603,14 +603,18 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 	}
 }
 
-func mustRootService(t *testing.T) providers.Service {
+func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
 	root, err := providerswire.NewService()
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
-	return root
+	service, ok := root.(*providerservice.Service)
+	if !ok {
+		t.Fatalf("NewService() returned %T, want Providers root implementation", root)
+	}
+	return service
 }
 
 func assertGetErrorIs(

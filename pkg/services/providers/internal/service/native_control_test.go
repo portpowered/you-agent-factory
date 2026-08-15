@@ -39,7 +39,7 @@ func (a *ctxAwareAttempt) attempt(ctx context.Context, request providers.Execute
 	}
 }
 
-func mustControlCapableRootService(t *testing.T, attempt execution.Attempt) providers.Service {
+func mustControlCapableRootService(t *testing.T, attempt execution.Attempt) *providerservice.Service {
 	t.Helper()
 
 	catalogService, err := catalogwire.NewService()

@@ -33,6 +33,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
@@ -195,7 +196,7 @@ type Edges struct {
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
 	ModelPullMetricsRecorder         interface{ RecordModelPullMetric(PullMetric) }
-	ProviderOverride                 providercontract.Provider
+	ProviderOverride                 providers.Service
 	providercontract.ProviderRegistrations
 	ProviderCatalogCapabilityOverrides []providercontract.CatalogCapabilityOverride
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree

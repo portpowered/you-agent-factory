@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -163,16 +164,15 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 			DispatchID:   "dispatch-0",
 			TransitionID: "trans-0",
 			Outcome:      workerexecution.OutcomeAccepted,
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "codex",
-				Kind:     "session_id",
-				ID:       "sess-result-1",
-			},
+			Continuation: func() *providers.ContinuationRef {
+				ref := providers.SessionRef{Provider: "codex", Kind: providers.SessionIDKind, ID: "sess-result-1"}.ContinuationRef()
+				return &ref
+			}(),
 		}},
 		DispatchHistory: []interfaces.CompletedDispatch{{
 			DispatchID:   "dispatch-0",
 			TransitionID: "trans-0",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-history-1",
@@ -252,8 +252,8 @@ func assertRuntimeSnapshotIgnoresResultAndHistoryMutations(t *testing.T, rs *Run
 	if len(snap.Results) != 1 {
 		t.Errorf("snapshot results should have 1 entry, got %d", len(snap.Results))
 	}
-	rs.Results[0].ProviderSession.ID = "mutated-result-session"
-	if snap.Results[0].ProviderSession.ID != "sess-result-1" {
+	rs.Results[0].Continuation.ProviderSessionID = "mutated-result-session"
+	if snap.Results[0].Continuation.ProviderSessionID != "sess-result-1" {
 		t.Error("snapshot result provider session should not reflect mutations to original")
 	}
 

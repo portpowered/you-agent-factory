@@ -153,10 +153,13 @@ func responseEvent(request workerexecution.RunnerExecutionRequest, response work
 		Worker:           firstNonEmpty(request.WorkerType, workerName(workerDef)),
 		Model:            firstNonEmpty(request.Model, modelName(workerDef)),
 		ProviderLocality: firstNonEmpty(strings.TrimSpace(request.ModelLocality), modelLocality(workerDef)),
-		ProviderSession:  workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+		Continuation:     cloneContinuation(response.Continuation),
 		DurationMillis:   duration.Milliseconds(),
 		Resources:        resourceSummaries(factoryCfg, workerDef),
 		Bindings:         resolvedBindings(request.ModelBindings),
+	}
+	if !continuationHasSessionIdentity(response.Continuation) {
+		payload.ProviderSession = providerSessionForRequest(request, workerDef)
 	}
 	if err != nil {
 		payload.Outcome = workerexecution.InferenceOutcomeFailed
@@ -180,6 +183,35 @@ func responseEvent(request workerexecution.RunnerExecutionRequest, response work
 		payload.OutputPreview = stringPtr(truncate(strings.TrimSpace(response.Content), modelExecutionOutputPreviewMax))
 	}
 	return Event(request, workerexecution.ModelEventKindResponse, modelResponseEventID(request.Dispatch.DispatchID, responseOrdinal), eventTime, nil, &payload)
+}
+
+func providerSessionForRequest(
+	request workerexecution.RunnerExecutionRequest,
+	workerDef *interfaces.FactoryWorkerConfig,
+) *workerexecution.ProviderSessionMetadata {
+	provider, _ := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider)
+	if strings.TrimSpace(provider) == "" {
+		provider = strings.TrimSpace(request.ModelProvider)
+	}
+	if strings.TrimSpace(provider) == "" {
+		provider = strings.TrimSpace(request.RunnerID)
+	}
+	if strings.TrimSpace(provider) == "" && workerDef != nil {
+		provider = strings.TrimSpace(workerDef.ModelProvider)
+	}
+	provider = workers.CanonicalProviderSessionProvider(provider)
+	if provider == "" {
+		return nil
+	}
+	return &workerexecution.ProviderSessionMetadata{Provider: provider}
+}
+
+func continuationHasSessionIdentity(continuation *workerexecution.ProviderContinuationRef) bool {
+	if continuation == nil {
+		return false
+	}
+	return strings.TrimSpace(continuation.ProviderSessionID) != "" ||
+		strings.TrimSpace(continuation.ExternalRef) != ""
 }
 
 func modelResponseEventID(dispatchID string, ordinal int) string {

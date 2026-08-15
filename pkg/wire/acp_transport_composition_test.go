@@ -134,14 +134,10 @@ func seedACPAgentProfile(t *testing.T, home, defaultTarget string, allowedTarget
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
 	service, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providerRegistry),
+		provideOperatorSettingsProviderCatalog(providersRoot),
 		provideOperatorConfigDecoder(),
 		provideOperatorConfigEncoder(),
 		provideOperatorSettingsIDGenerator(edges),

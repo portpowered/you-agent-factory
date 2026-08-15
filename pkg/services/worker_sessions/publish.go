@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -121,26 +122,39 @@ func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.P
 }
 
 func providerFragmentAgrees(fragment workers.ProgressFragment) bool {
-	metadata := workers.CloneProviderSessionMetadata(fragment.ProviderSessionRef)
-	reference := workers.CloneProviderSessionReference(fragment.ProviderSessionReference)
-	if reference != nil && metadata != nil &&
-		(!sameProviderIdentity(reference.Provider.String(), metadata.Provider) ||
-			reference.Kind != metadata.Kind || reference.ID != metadata.ID) {
-		return false
-	}
+	continuation := cloneContinuation(fragment.Continuation)
 	provider := strings.TrimSpace(fragment.Provider)
-	if provider != "" && reference != nil && strings.TrimSpace(reference.Provider.String()) != "" &&
-		!sameProviderIdentity(provider, reference.Provider.String()) {
+	if provider != "" && continuation != nil && strings.TrimSpace(continuation.Provider) != "" &&
+		!sameProviderIdentity(provider, continuation.Provider) {
 		return false
 	}
-	return provider == "" || metadata == nil || strings.TrimSpace(metadata.Provider) == "" ||
-		sameProviderIdentity(provider, metadata.Provider)
+	return provider == "" || continuation == nil || strings.TrimSpace(continuation.Provider) == "" ||
+		sameProviderIdentity(provider, continuation.Provider)
+}
+
+func cloneContinuation(reference *providers.ContinuationRef) *providers.ContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	clone := reference.Clone()
+	return &clone
+}
+
+func sessionRefFromContinuation(reference *providers.ContinuationRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	session, err := reference.ToSessionRef()
+	if err != nil {
+		return nil
+	}
+	return &session
 }
 
 func sameProviderIdentity(left, right string) bool {
 	return strings.EqualFold(
-		workers.CanonicalProviderSessionProvider(left),
-		workers.CanonicalProviderSessionProvider(right),
+		providers.ID(left).CanonicalSessionProvider(),
+		providers.ID(right).CanonicalSessionProvider(),
 	)
 }
 
@@ -148,7 +162,7 @@ func (p *ProviderSessionObservationPublisher) associateProviderSession(
 	observer Service,
 	fragment workers.ProgressFragment,
 ) error {
-	reference := workers.CloneProviderSessionReference(fragment.ProviderSessionReference)
+	reference := sessionRefFromContinuation(fragment.Continuation)
 	if reference == nil {
 		return nil
 	}
@@ -220,13 +234,10 @@ func providerIdentityForFragment(fragment workers.ProgressFragment, draft *worke
 	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
 		return provider
 	}
-	if reference := fragment.ProviderSessionReference; reference != nil {
-		if provider := strings.TrimSpace(reference.Provider.String()); provider != "" {
+	if continuation := fragment.Continuation; continuation != nil {
+		if provider := strings.TrimSpace(continuation.Provider); provider != "" {
 			return provider
 		}
-	}
-	if metadata := fragment.ProviderSessionRef; metadata != nil {
-		return strings.TrimSpace(metadata.Provider)
 	}
 	return ""
 }
@@ -240,13 +251,9 @@ func providerIdentityAgrees(fragment workers.ProgressFragment, draft workers.Dra
 		!sameProviderIdentity(provider, explicit) {
 		return false
 	}
-	if reference := fragment.ProviderSessionReference; reference != nil &&
-		strings.TrimSpace(reference.Provider.String()) != "" &&
-		!sameProviderIdentity(provider, reference.Provider.String()) {
-		return false
-	}
-	if metadata := fragment.ProviderSessionRef; metadata != nil && strings.TrimSpace(metadata.Provider) != "" &&
-		!sameProviderIdentity(provider, metadata.Provider) {
+	if continuation := fragment.Continuation; continuation != nil &&
+		strings.TrimSpace(continuation.Provider) != "" &&
+		!sameProviderIdentity(provider, continuation.Provider) {
 		return false
 	}
 	return true

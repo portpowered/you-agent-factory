@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
@@ -395,7 +396,7 @@ func (service *combinedService) ReplayClock(
 func (service *combinedService) ReplayExecution(
 	artifact *recordings.ReplayArtifact,
 ) (
-	workers.Provider,
+	providers.Service,
 	workers.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,

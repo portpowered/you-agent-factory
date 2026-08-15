@@ -78,7 +78,7 @@ var _ acp.ContinuationService = (*negotiatedCapabilityACPService)(nil)
 func mustNegotiatedCapabilityRootService(
 	t *testing.T,
 	acpService *negotiatedCapabilityACPService,
-) providers.Service {
+) *providerservice.Service {
 	t.Helper()
 	catalogService, err := catalogwire.NewService()
 	if err != nil {

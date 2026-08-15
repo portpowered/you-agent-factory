@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -22,9 +23,13 @@ type Service struct {
 	execution   execution.Service
 	acp         acp.Service
 	packagedACP []providers.ACPIntegration
-	lifecycles  []providers.Lifecycle
+	lifecycles  []providerLifecycle
 	logger      logging.Logger
 	attempts    *liveAttemptRegistry
+}
+
+type providerLifecycle interface {
+	Close(context.Context) error
 }
 
 var _ providers.Service = (*Service)(nil)
@@ -32,7 +37,7 @@ var _ providers.Service = (*Service)(nil)
 // New constructs an inert Providers root facade over its two private sibling
 // capabilities. logger is the direct, required operation-logging
 // abstraction; callers with no operation logging pass logging.NoopLogger{}.
-func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (providers.Service, error) {
+func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (*Service, error) {
 	return newService(catalogService, executionService, nil, nil, logger, nil)
 }
 
@@ -46,8 +51,8 @@ func NewWithACP(
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
-	lifecycles ...providers.Lifecycle,
-) (providers.Service, error) {
+	lifecycles ...providerLifecycle,
+) (*Service, error) {
 	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
 }
 
@@ -57,8 +62,8 @@ func newService(
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
-	lifecycles []providers.Lifecycle,
-) (providers.Service, error) {
+	lifecycles []providerLifecycle,
+) (*Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
@@ -75,7 +80,7 @@ func newService(
 		execution:   executionService,
 		acp:         acpService,
 		packagedACP: cloneACPIntegrations(packagedACP),
-		lifecycles:  append([]providers.Lifecycle(nil), lifecycles...),
+		lifecycles:  append([]providerLifecycle(nil), lifecycles...),
 		logger:      logging.EnsureLogger(logger),
 		attempts:    newLiveAttemptRegistry(),
 	}, nil
@@ -436,6 +441,111 @@ func (s *Service) Continue(
 	}, nil
 }
 
+// ContinueReference is the Providers-root seam for Workers and Runtime
+// callers that carry only a detached continuation reference. It canonicalizes
+// the provider, verifies that an explicitly supplied attempt provider matches,
+// and delegates to Continue without ever falling back to Execute.
+func (s *Service) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindInvalid,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	if s == nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindInvalid,
+			"Providers service is required",
+			request.Reference,
+		)
+	}
+
+	canonical, err := s.ResolveIdentity(ctx, providers.ResolveIdentityRequest{
+		Identity: reference.Provider.String(),
+	})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindForeign,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	if err := canonical.ID.Validate(); err != nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindForeign,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	reference.Provider = canonical.ID
+
+	attempt := request.Attempt.Clone()
+	if strings.TrimSpace(attempt.Provider.String()) == "" {
+		attempt.Provider = canonical.ID
+	} else {
+		attemptIdentity, resolveErr := s.ResolveIdentity(ctx, providers.ResolveIdentityRequest{
+			Identity: attempt.Provider.String(),
+		})
+		if resolveErr != nil || attemptIdentity.ID != canonical.ID {
+			message := "attempt provider does not match continuation provider"
+			if resolveErr != nil {
+				message = resolveErr.Error()
+			}
+			return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+				providers.ContinuationFailureKindForeign,
+				message,
+				request.Reference,
+			)
+		}
+		attempt.Provider = canonical.ID
+	}
+
+	continued, err := s.Continue(ctx, providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   attempt,
+	})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if strings.TrimSpace(continuedReference.Provider.String()) == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
+}
+
+func continuationReferenceFailure(
+	kind providers.ContinuationFailureKind,
+	message string,
+	ref providers.ContinuationRef,
+) providers.ContinuationFailure {
+	normalized := ref.Normalize()
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	return providers.ContinuationFailure{
+		Kind:    kind,
+		Message: message,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       identity,
+		},
+	}
+}
+
 // resolveContinuationProvider returns the canonical provider identity for
 // reference.Provider and whether that resolved provider truthfully
 // advertises CapabilitySessionResume, without invoking any provider adapter
@@ -685,4 +795,75 @@ func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	}
 }
 
-var _ providers.ACPConfiguration = (*Service)(nil)
+var _ interface {
+	ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+} = (*Service)(nil)
+
+// acpAttemptControl is the control handle bound for one live ACP provider
+// attempt. Unlike nativeAttemptControl, whether Cancel is truthfully
+// supported depends on live ACP session state that exists only for the span
+// between the bound attempt's session/prompt call starting and returning
+// (see acp.Service.Claim); before or after that span the attempt stays live
+// and untouched, so a later Cancel can still succeed once the span opens.
+// Pause and Terminate are never supported: the only ACP protocol seam
+// available cancels one session/prompt turn, it does not pause a turn or
+// shut down the daemon.
+//
+// generation is nil until supports(Cancel) successfully claims one; signal
+// then delivers only to that captured generation, never re-deriving
+// liveness from canonical/attemptID strings. This is what keeps a claimed
+// control bound to the exact execution generation it was claimed from: even
+// if that generation completes and a later execution reuses the identical
+// canonical/attemptID identity before signal runs, signal still targets only
+// the originally captured generation and cannot be redirected to the
+// replacement. supports and signal are always called sequentially by the
+// same caller (registry.claim, then ControlAttempt) with no intervening
+// concurrent access, so generation needs no synchronization of its own.
+type acpAttemptControl struct {
+	acp        acp.Service
+	canonical  providers.ID
+	attemptID  string
+	generation acp.Generation
+}
+
+var _ liveAttemptControl = (*acpAttemptControl)(nil)
+
+// supports atomically claims the bound attempt's exact live generation, if
+// its session/prompt turn is truthfully live right now, capturing it into
+// generation for signal to use. It is used only to decide whether the
+// registry should remove this identity's registration for a Cancel request
+// at all (so a Cancel that arrives before or after the live window leaves the
+// registration untouched for a later attempt); signal remains the atomic
+// source of truth for whether the resulting outcome was genuinely accepted,
+// grounded in the exact generation captured here rather than in a later
+// re-derivation by identity.
+func (control *acpAttemptControl) supports(action providers.ControlAction) bool {
+	if action != providers.ControlActionCancel {
+		return false
+	}
+	generation, ok := control.acp.Claim(control.canonical, control.attemptID)
+	if !ok {
+		return false
+	}
+	control.generation = generation
+	return true
+}
+
+// signal delivers to the exact generation supports captured, via
+// acp.Service.TryCancel, which grounds its accepted result in that
+// generation's real recorded outcome - so a natural completion racing this
+// call, or a generation that already ended before this call runs, reports
+// accepted=false instead of a false ControlOutcomeCompleted, and can never
+// observe a different (for example later, identity-reusing) generation's
+// outcome. TryCancel already distinguishes its two non-nil-error cases by
+// construction: a genuine delivery failure is wrapped in
+// providers.ErrControlSignalFailed, while ctx ending before the outcome
+// could be observed surfaces as the caller's own unwrapped ctx.Err(); signal
+// only adds identifying context, preserving errors.Is for both underneath.
+func (control *acpAttemptControl) signal(ctx context.Context) (bool, error) {
+	accepted, err := control.acp.TryCancel(ctx, control.generation)
+	if err != nil {
+		return false, fmt.Errorf("deliver cancel to provider %q attempt %q: %w", control.canonical, control.attemptID, err)
+	}
+	return accepted, nil
+}

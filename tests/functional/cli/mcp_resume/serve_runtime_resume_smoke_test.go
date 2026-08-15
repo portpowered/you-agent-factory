@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -289,11 +289,15 @@ func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmoke
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) (*stdioMCPClient, func()) {
 	t.Helper()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderOverride: provider})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderOverride: support.ProviderServiceFromInference(provider),
+	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
@@ -825,7 +829,7 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ wor
 	if call == 1 {
 		return workerexecution.InferenceResponse{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -848,7 +852,7 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ wor
 
 	return workerexecution.InferenceResponse{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-2",

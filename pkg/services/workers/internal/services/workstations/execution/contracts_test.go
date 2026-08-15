@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -43,7 +44,7 @@ func TestCanonicalProviderSessionProviderPreservesAliasesAndUnknowns(t *testing.
 		{input: "cursor-cli", want: "cursor"},
 		{input: "acme", want: "acme"},
 	} {
-		if got := CanonicalProviderSessionProvider(tc.input); got != tc.want {
+		if got := providers.ID(tc.input).CanonicalSessionProvider(); got != tc.want {
 			t.Fatalf("CanonicalProviderSessionProvider(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
@@ -52,8 +53,8 @@ func TestCanonicalProviderSessionProviderPreservesAliasesAndUnknowns(t *testing.
 func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
 	t.Parallel()
 
-	original := &ProviderSessionMetadata{Provider: "cursor", Kind: "session_id", ID: "session-1"}
-	clone := CloneProviderSessionMetadata(original)
+	original := &providers.SessionMetadata{Provider: "cursor", Kind: "session_id", ID: "session-1"}
+	clone := (original).Clone()
 	if clone == nil || clone == original {
 		t.Fatalf("CloneProviderSessionMetadata() = %#v, want a detached non-nil value", clone)
 	}
@@ -62,7 +63,7 @@ func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
 	if original.Provider != "cursor" || original.ID != "session-1" {
 		t.Fatalf("clone mutation changed original metadata: original = %#v", original)
 	}
-	if got := CloneProviderSessionMetadata(nil); got != nil {
+	if got := (*providers.SessionMetadata)(nil).Clone(); got != nil {
 		t.Fatalf("CloneProviderSessionMetadata(nil) = %#v, want nil", got)
 	}
 }
@@ -70,8 +71,8 @@ func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
 func TestProviderSessionMetadataFromGenerated_CanonicalizesLegacyCursorProvider(t *testing.T) {
 	t.Parallel()
 
-	metadata := ProviderSessionMetadata{Provider: "agent", Kind: "session_id", ID: "cursor-session-123"}
-	metadata.Provider = CanonicalProviderSessionProvider(metadata.Provider)
+	metadata := providers.SessionMetadata{Provider: "agent", Kind: "session_id", ID: "cursor-session-123"}
+	metadata.Provider = providers.ID(metadata.Provider).CanonicalSessionProvider()
 	if metadata.Provider != "cursor" || metadata.Kind != "session_id" || metadata.ID != "cursor-session-123" {
 		t.Fatalf("metadata = %#v, want canonical cursor session metadata", metadata)
 	}

@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -672,13 +671,15 @@ func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEve
 func startDependencyFactory(
 	t *testing.T,
 	dir string,
-	provider workerprovider.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) (baseURL string, daemon *support.ProcessCommand) {
 	t.Helper()
 
 	server := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderOverride: provider,
+		ProviderOverride: support.ProviderServiceFromInference(provider),
 		APIServerStarter: server.Start,
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -845,6 +846,7 @@ func fanInDispatchOrdering(
 }
 
 type fanInSecondFinisherGateProvider struct {
+	testutil.ProviderServiceAdapter
 	secondFinisherReached chan struct{}
 	release               chan struct{}
 	releaseOnce           sync.Once
@@ -853,13 +855,13 @@ type fanInSecondFinisherGateProvider struct {
 	starterCalls          int
 }
 
-var _ workerprovider.Provider = (*fanInSecondFinisherGateProvider)(nil)
-
 func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
-	return &fanInSecondFinisherGateProvider{
+	provider := &fanInSecondFinisherGateProvider{
 		secondFinisherReached: make(chan struct{}, 1),
 		release:               make(chan struct{}),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *fanInSecondFinisherGateProvider) Infer(

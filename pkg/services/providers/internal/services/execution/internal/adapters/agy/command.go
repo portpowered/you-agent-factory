@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/commandenv"
 )
 
 const (
@@ -24,7 +25,9 @@ const (
 // NewCommandEffect binds the canonical AGY print-mode invocation to the
 // Providers command-runner boundary. The command runner owns process
 // creation; this adapter owns only AGY's argv and timeout policy.
-func NewCommandEffect(runner workers.CommandRunner, clock workers.Clock) Effect {
+
+func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
+	runner := providerservice.AdaptCommandRunner(candidate)
 	if runner == nil || clock == nil {
 		return nil
 	}
@@ -65,7 +68,7 @@ func NewCommandEffect(runner workers.CommandRunner, clock workers.Clock) Effect 
 	})
 }
 
-func buildCommand(request execution.ContinuationRequest) (workers.CommandRequest, error) {
+func buildCommand(request execution.ContinuationRequest) (providerservice.CommandRequest, error) {
 	workDir := strings.TrimSpace(request.WorkingDirectory)
 	if workDir == "" {
 		workDir = "."
@@ -73,10 +76,10 @@ func buildCommand(request execution.ContinuationRequest) (workers.CommandRequest
 	request.WorkingDirectory = workDir
 	args, err := buildAgyArgs(request)
 	if err != nil {
-		return workers.CommandRequest{}, err
+		return providerservice.CommandRequest{}, err
 	}
 
-	return commanddispatch.WorkersCommand(request.ExecuteRequest, workers.CommandRequest{
+	return commanddispatch.Request(request.ExecuteRequest, providerservice.CommandRequest{
 		Command: agyExecutable,
 		Args:    args,
 		Env: commandenv.Build(
@@ -143,17 +146,18 @@ func outputFormatForRequest(request execution.ContinuationRequest) string {
 
 func runCommand(
 	ctx context.Context,
-	runner workers.CommandRunner,
-	command workers.CommandRequest,
+	runner providerservice.CommandRunner,
+	command providerservice.CommandRequest,
 	observe func([]byte) error,
-) (workers.CommandResult, error) {
+) (providerservice.CommandResult, error) {
 	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
+		RunStreaming(context.Context, providerservice.CommandRequest, providerservice.OutputChunkObserver) (providerservice.CommandResult, error)
 	}); ok {
-		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) {
-			if strings.TrimSpace(stream) == workers.OutputStreamStdout && len(chunk) > 0 {
-				_ = observe(chunk)
+		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
+			if strings.TrimSpace(stream) != providerservice.OutputStreamStdout || len(chunk) == 0 {
+				return nil
 			}
+			return observe(chunk)
 		})
 	}
 	result, err := runner.Run(ctx, command)

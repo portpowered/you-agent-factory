@@ -618,7 +618,10 @@ func cloneReplayPlannedResult(result workerexecution.WorkResult) workerexecution
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
 	}
 	clone.FailureMetadata = workerexecution.CloneWorkFailureMetadata(result.FailureMetadata)
-	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
+	if result.Continuation != nil {
+		continuation := result.Continuation.Clone()
+		clone.Continuation = &continuation
+	}
 	clone.Diagnostics = workerexecution.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
 }

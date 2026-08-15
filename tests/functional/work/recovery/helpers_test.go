@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,7 +21,9 @@ import (
 func startRecoveryAPIServer(
 	t *testing.T,
 	factoryDir string,
-	provider workerprovider.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -29,7 +31,7 @@ func startRecoveryAPIServer(
 		UseMockWorkers:            false,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
+			ProviderOverride: support.ProviderServiceFromInference(provider),
 		},
 	})
 }
@@ -176,6 +178,7 @@ func stringPtr(value string) *string {
 }
 
 type recoveryRedispatchBlockingProvider struct {
+	testutil.ProviderServiceAdapter
 	failWorker   string
 	blockWorker  string
 	callCounts   map[string]int
@@ -185,16 +188,16 @@ type recoveryRedispatchBlockingProvider struct {
 	mu           sync.Mutex
 }
 
-var _ workerprovider.Provider = (*recoveryRedispatchBlockingProvider)(nil)
-
 func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *recoveryRedispatchBlockingProvider {
-	return &recoveryRedispatchBlockingProvider{
+	provider := &recoveryRedispatchBlockingProvider{
 		failWorker:   failWorker,
 		blockWorker:  blockWorker,
 		callCounts:   make(map[string]int),
 		blockStarted: make(chan struct{}, 1),
 		releaseBlock: make(chan struct{}),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *recoveryRedispatchBlockingProvider) Infer(

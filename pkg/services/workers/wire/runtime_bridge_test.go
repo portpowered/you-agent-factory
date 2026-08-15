@@ -59,7 +59,6 @@ func TestRuntimeBridgeCompatibilityConstructorsValidateDelegatedInputs(t *testin
 		false,
 		nil,
 		nil,
-		nil,
 	); err == nil {
 		t.Fatal("NewConfiguredRuntime() error = nil, want delegated construction error")
 	}

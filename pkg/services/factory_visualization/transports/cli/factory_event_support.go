@@ -93,7 +93,7 @@ func redactPrivateFactoryEventPayload(value any) any {
 	if object["schemaVersion"] == string(factorysessions.ResponseEventSchemaVersionV1) {
 		return map[string]any{}
 	}
-	for _, key := range []string{"diagnostics", "response", "providerSession", "provider_session", "providerSessionRef", "textDelta", "toolCallId", "toolCalls"} {
+	for _, key := range []string{"continuation", "diagnostics", "response", "providerSession", "provider_session", "providerSessionRef", "textDelta", "toolCallId", "toolCalls"} {
 		delete(object, key)
 	}
 	for key, child := range object {

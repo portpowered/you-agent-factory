@@ -2,11 +2,15 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -122,5 +126,66 @@ func TestGetEventsBySessionIdJSONRecoveryProbeUsesSessionEventAPI(t *testing.T) 
 	}
 	if probedSessionID != "session-alpha" || probedCursor == nil || probedCursor.AfterSequence == nil || *probedCursor.AfterSequence != 7 {
 		t.Fatalf("probe = session %q cursor %#v, want session-alpha after_sequence 7", probedSessionID, probedCursor)
+	}
+}
+
+func TestGetEventsBySessionIdProjectsProviderContinuation(t *testing.T) {
+	continuation := (&providers.SessionMetadata{
+		Provider: string(providers.IDCodex),
+		Kind:     providers.SessionIDKind,
+		ID:       "session-from-event",
+	}).ContinuationRef()
+	payload, err := json.Marshal(workers.InferenceResponseEventPayload{
+		Outcome:      workers.InferenceOutcomeSucceeded,
+		Continuation: continuation,
+	})
+	if err != nil {
+		t.Fatalf("marshal inference response payload: %v", err)
+	}
+
+	closed := make(chan factorydefinitions.FactoryEvent)
+	close(closed)
+	handler := NewHandler(Dependencies{
+		SessionEvents: sessionEventAPIFake{
+			subscribe: func(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+				return &factorydefinitions.FactoryEventStream{
+					History: []factorydefinitions.FactoryEvent{{
+						Id:            "factory-event/inference-response/1",
+						Payload:       payload,
+						SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
+						Type:          factorydefinitions.FactoryEventTypeInferenceResponse,
+					}},
+					Events: closed,
+				}, nil
+			},
+		},
+	}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha/events", nil)
+
+	handler.GetEventsBySessionId(
+		recorder,
+		request,
+		factoryapi.SessionID("session-alpha"),
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response status = %d, want 200", recorder.Code)
+	}
+	line := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(recorder.Body.String()), "data:"))
+	var public factoryapi.FactoryEvent
+	if err := json.Unmarshal([]byte(line), &public); err != nil {
+		t.Fatalf("decode public event: %v; body=%q", err, recorder.Body.String())
+	}
+	decoded, err := public.Payload.AsInferenceResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode public inference response payload: %v", err)
+	}
+	if decoded.ProviderSession == nil || decoded.ProviderSession.Id == nil || *decoded.ProviderSession.Id != "session-from-event" {
+		t.Fatalf("provider session = %#v, want projected session identity", decoded.ProviderSession)
+	}
+	if strings.Contains(line, `"continuation"`) {
+		t.Fatalf("public event retained opaque continuation: %s", line)
 	}
 }

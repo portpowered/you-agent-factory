@@ -19,7 +19,7 @@ func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompleti
 	clone.OutputWorkItems = cloneFactoryWorkItems(completion.OutputWorkItems)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(completion.PreviousChainingTraceIDs)
 	clone.TraceIDs = cloneStringSlice(completion.TraceIDs)
-	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(completion.ProviderSession)
+	clone.ProviderSession = (completion.ProviderSession).Clone()
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(completion.Diagnostics)
 	clone.TerminalWork = cloneFactoryTerminalWork(completion.TerminalWork)
 	return clone
@@ -35,7 +35,7 @@ func cloneExpectedArtifactTemplateContext(
 // canonical selected-tick provider-session record.
 func CloneFactoryWorldProviderSessionRecord(record FactoryWorldProviderSessionRecord) FactoryWorldProviderSessionRecord {
 	clone := record
-	clone.ProviderSession = *workerexecution.CloneProviderSessionMetadata(&record.ProviderSession)
+	clone.ProviderSession = *(&record.ProviderSession).Clone()
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(record.Diagnostics)
 	clone.WorkItemIDs = cloneStringSlice(record.WorkItemIDs)
 	clone.WorkItems = cloneFactoryWorldWorkItemRefs(record.WorkItems)
@@ -78,7 +78,7 @@ func CloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 func cloneFactoryWorldInferenceAttempt(attempt FactoryWorldInferenceAttempt) FactoryWorldInferenceAttempt {
 	clone := attempt
 	clone.ExitCode = cloneIntPtr(attempt.ExitCode)
-	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(attempt.ProviderSession)
+	clone.ProviderSession = (attempt.ProviderSession).Clone()
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(attempt.Diagnostics)
 	return clone
 }

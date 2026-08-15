@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -26,7 +27,7 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 		Type:       responsestream.EventTypeProgress,
 		DispatchID: "dispatch-42",
 		Payload:    "planning next step",
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
@@ -388,7 +389,7 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 		Type:       responsestream.EventTypeTextDelta,
 		DispatchID: "dispatch-42",
 		Payload:    "hello ",
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
@@ -597,7 +598,7 @@ func TestMapFragment_StreamCompletedEmitsRunCompleted(t *testing.T) {
 		RecordedAt: recordedAt,
 		Kind:       responsestream.EventKindStreamCompleted,
 		DispatchID: "dispatch-42",
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
@@ -661,7 +662,7 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 		Type:       responsestream.EventTypeFailed,
 		DispatchID: "dispatch-99",
 		Payload:    "normalized provider failure",
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-456",
@@ -854,7 +855,7 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 			FirstRetainedSequence: 3,
 			LastDroppedSequence:   2,
 		},
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",

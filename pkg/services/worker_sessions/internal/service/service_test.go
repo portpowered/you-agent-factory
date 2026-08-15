@@ -716,8 +716,9 @@ func assertInterruptHandoff(
 	if handoff.Execution.UserMessage != request.ReplacementMessage {
 		t.Fatalf("replacement message = %q, want byte-equivalent %q", handoff.Execution.UserMessage, request.ReplacementMessage)
 	}
-	if handoff.Execution.ResumeSession == nil || *handoff.Execution.ResumeSession != reference {
-		t.Fatalf("successor ResumeSession = %#v, want exact %v", handoff.Execution.ResumeSession, reference)
+	wantContinuation := reference.ContinuationRef()
+	if handoff.Execution.Continuation == nil || *handoff.Execution.Continuation != wantContinuation {
+		t.Fatalf("successor Continuation = %#v, want exact %v", handoff.Execution.Continuation, wantContinuation)
 	}
 	if handoff.Execution.Dispatch.DispatchID == "dispatch-source" || handoff.Execution.Dispatch.DispatchID == "" {
 		t.Fatalf("successor dispatch ID = %q, want distinct non-empty ID", handoff.Execution.Dispatch.DispatchID)

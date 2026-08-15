@@ -814,6 +814,7 @@ func (we *WorkstationExecutor) prepareWorkstationDefinition(
 }
 
 func (we *WorkstationExecutor) prepareWorkerDefinition(
+	ctx context.Context,
 	dispatch work.WorkDispatch,
 	workerName string,
 	workerDef *interfaces.FactoryWorkerConfig,
@@ -848,7 +849,7 @@ func (we *WorkstationExecutor) prepareWorkerDefinition(
 	if strings.TrimSpace(interpolated.Model) == "" {
 		interpolated.Model = interpolated.RuntimeDefaultModel
 	}
-	if failed := we.resolveInvocationProvider(dispatch, &interpolated, diagnostics, start); failed != nil {
+	if failed := we.resolveInvocationProvider(ctx, dispatch, &interpolated, diagnostics, start); failed != nil {
 		return nil, failed
 	}
 	return &interpolated, nil
@@ -968,32 +969,5 @@ func (we *WorkstationExecutor) workstationPromptSource(
 	return interfaces.PromptSource{
 		Path:       workstationDef.PromptSourcePath,
 		IsTemplate: workstationDef.PromptSourceIsTemplate,
-	}
-}
-
-func promptSourceFailureResult(
-	dispatch work.WorkDispatch,
-	role string,
-	name string,
-	path string,
-	err error,
-	diagnostics *workerexecution.WorkDiagnostics,
-	duration time.Duration,
-) workerexecution.WorkResult {
-	return workerexecution.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      workerexecution.OutcomeFailed,
-		Error: fmt.Sprintf(
-			"%s %q prompt source %s: %v",
-			role,
-			name,
-			path,
-			err,
-		),
-		Diagnostics: diagnostics,
-		Metrics: workerexecution.WorkMetrics{
-			Duration: duration,
-		},
 	}
 }

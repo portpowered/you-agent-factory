@@ -25,12 +25,12 @@ const (
 	// implementation compatibility path. It is permitted to keep the existing
 	// provider effect declaration while the public Providers Execution leaf is
 	// the canonical owner.
-	providersExecutionCompatibilityPackage = "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
+	providersExecutionCompatibilityPackage = "pkg/services/workers/internal/providercompat/inferencecontract"
 
 	// providersExecutionCompatibilityPrefix contains the current Providers
 	// implementation compatibility surface. Competing forks outside Providers
 	// and this exact compatibility subtree are rejected.
-	providersExecutionCompatibilityPrefix = "pkg/services/providers/internal/services/execution/internal/provider/"
+	providersExecutionCompatibilityPrefix = "pkg/services/workers/internal/providercompat/"
 
 	// workersRequestScopedProviderPortPackage is the sole Workers-root bridge
 	// retained for request-scoped execution construction. It is an adapter over

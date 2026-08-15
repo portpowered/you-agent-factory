@@ -9,6 +9,7 @@ import (
 	"time"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -109,6 +110,50 @@ func TestRunnerRecordsDistinctResponseIDsAcrossRetryOutcomes(t *testing.T) {
 
 	executeRetryPair(t, runner, request)
 	assertRetryRecording(t, events)
+}
+
+func TestRunnerResponsePreservesMultipartStructuredContentIncludingAudio(t *testing.T) {
+	want := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "spoken answer"},
+		{
+			Type:        work.WorkContentPartTypeAudio,
+			URL:         "file:///tmp/spoken-answer.wav",
+			ContentType: "audio/wav",
+			ArtifactID:  "artifact-audio-1",
+			Metadata:    map[string]any{"voice": "alloy"},
+		},
+		{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"durationMs":1200}`)},
+	}
+	raw, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal structured model output: %v", err)
+	}
+
+	var events []workerexecution.ModelEvent
+	runner := NewRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{Content: string(raw)}, nil
+		}),
+		nil,
+		&workerconfig.FactoryWorkerConfig{Name: "worker", Model: "model"},
+		func(event workerexecution.ModelEvent) { events = append(events, event) },
+		func() time.Time { return time.Unix(500, 0).UTC() },
+	)
+
+	if _, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-structured"},
+	}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(events) != 2 || events[1].Response == nil {
+		t.Fatalf("events = %#v, want one request and one response", events)
+	}
+	if events[1].Response.OutputContent == nil {
+		t.Fatal("MODEL_RESPONSE output content is nil, want the multipart structured result")
+	}
+	if !reflect.DeepEqual(*events[1].Response.OutputContent, want) {
+		t.Fatalf("MODEL_RESPONSE output content = %#v, want %#v", *events[1].Response.OutputContent, want)
+	}
 }
 
 func executeRetryPair(t *testing.T, runner workerexecution.Runner, request workerexecution.RunnerExecutionRequest) {
@@ -246,13 +291,10 @@ func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
 	}
 	runner := NewProviderRunner(
 		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			continuation := providers.SessionRef{Provider: "agent", Kind: "session-id", ID: "provider-session-1"}.ContinuationRef()
 			return workerexecution.RunnerExecutionResult{
-				Content: "provider output",
-				ProviderSession: &workerexecution.ProviderSessionMetadata{
-					Provider: "agent",
-					Kind:     "session-id",
-					ID:       "provider-session-1",
-				},
+				Content:      "provider output",
+				Continuation: &continuation,
 			}, nil
 		}),
 		func(event workerexecution.InferenceEvent) { events = append(events, event) },
@@ -286,11 +328,40 @@ func TestProviderRunnerRecordsCanonicalEventsAndProviderSession(t *testing.T) {
 		events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
 		t.Fatalf("inference request IDs = %q/%q, want matching dispatch correlation", events[0].Request.InferenceRequestID, events[1].Response.InferenceRequestID)
 	}
-	if events[1].Response.ProviderSession == nil || events[1].Response.ProviderSession.ID != "provider-session-1" || events[1].Response.ProviderSession.Provider != "cursor" {
-		t.Fatalf("provider session = %#v, want canonical cursor session identity", events[1].Response.ProviderSession)
+	if events[1].Response.Continuation == nil || events[1].Response.Continuation.ProviderSessionID != "provider-session-1" || events[1].Response.Continuation.Provider != "cursor" {
+		t.Fatalf("provider continuation = %#v, want canonical cursor session identity", events[1].Response.Continuation)
 	}
 	if events[0].DispatchID != request.Dispatch.DispatchID || events[1].RequestID != request.Dispatch.Execution.RequestID {
 		t.Fatalf("event correlation = %#v/%#v, want dispatch/request IDs", events[0], events[1])
+	}
+}
+
+func TestRunnerFailurePreservesProviderIdentityWithoutSessionID(t *testing.T) {
+	start := time.Unix(450, 0).UTC()
+	var events []workerexecution.ModelEvent
+	runner := NewRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{}, errors.New("provider unavailable")
+		}),
+		nil,
+		&workerconfig.FactoryWorkerConfig{Name: "worker", Model: "model", ModelProvider: "antigravity"},
+		func(event workerexecution.ModelEvent) { events = append(events, event) },
+		func() time.Time { return start },
+	)
+
+	_, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-provider-failure"},
+		ModelProvider: "antigravity",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want provider failure")
+	}
+	if len(events) != 2 || events[1].Response == nil {
+		t.Fatalf("events = %#v, want request and response", events)
+	}
+	providerSession := events[1].Response.ProviderSession
+	if providerSession == nil || providerSession.Provider != "antigravity" || providerSession.ID != "" {
+		t.Fatalf("provider session = %#v, want provider-only antigravity metadata", providerSession)
 	}
 }
 

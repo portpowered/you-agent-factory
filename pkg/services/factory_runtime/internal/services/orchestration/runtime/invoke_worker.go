@@ -363,7 +363,7 @@ func executeRequestFromWorkstationRequest(
 			Invocation:             invocation,
 			ModelBindings:          modelBindings,
 			ModelOperation:         firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
-			Resume:                 continuationFromLegacySession(execution.ResumeSession),
+			Resume:                 cloneRuntimeContinuation(execution.Continuation),
 			WorkflowContext:        workflowContext,
 			MockWorkers:            cfg.mockWorkersConfig.Clone(),
 			ProgressPublisher:      cfg.progressPublisher,
@@ -596,9 +596,18 @@ func continuationFromLegacySession(session *providers.SessionRef) *workers.Provi
 	}
 	return &workers.ProviderContinuationRef{
 		Provider:          provider,
+		Kind:              strings.TrimSpace(session.Kind),
 		ProviderSessionID: id,
 		ExternalRef:       id,
 	}
+}
+
+func cloneRuntimeContinuation(reference *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	clone := reference.Clone()
+	return &clone
 }
 
 // InvokeWorker runs one orchestrator-resolved Worker through the same
@@ -779,8 +788,8 @@ func invokeWorkerResultFromDispatch(
 		Output:          result.Result.Output,
 		Attempts:        attempts,
 	}
-	if session := result.Result.ProviderSession; session != nil {
-		invoked.Provider = workers.CanonicalProviderSessionProvider(session.Provider)
+	if session := providerSessionFromContinuation(result.Result.Continuation); session != nil {
+		invoked.Provider = providers.ID(session.Provider).CanonicalSessionProvider()
 		if invoked.Provider == "" {
 			invoked.Provider = strings.TrimSpace(session.Provider)
 		}
@@ -953,8 +962,8 @@ func invokeWorkerResultFrom(
 		Output:          result.Dispatch.Result.Output,
 		Attempts:        result.Attempts,
 	}
-	if session := result.Dispatch.Result.ProviderSession; session != nil {
-		invoked.Provider = workers.CanonicalProviderSessionProvider(session.Provider)
+	if session := providerSessionFromContinuation(result.Dispatch.Result.Continuation); session != nil {
+		invoked.Provider = providers.ID(session.Provider).CanonicalSessionProvider()
 		if invoked.Provider == "" {
 			invoked.Provider = strings.TrimSpace(session.Provider)
 		}

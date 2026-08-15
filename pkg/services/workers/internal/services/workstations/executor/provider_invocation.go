@@ -2,7 +2,9 @@ package executor
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -29,6 +31,33 @@ type ProviderInvocationExecutor struct {
 }
 
 var _ WorkstationRequestExecutor = (*ProviderInvocationExecutor)(nil)
+
+func promptSourceFailureResult(
+	dispatch work.WorkDispatch,
+	role string,
+	name string,
+	path string,
+	err error,
+	diagnostics *workerexecution.WorkDiagnostics,
+	duration time.Duration,
+) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeFailed,
+		Error: fmt.Sprintf(
+			"%s %q prompt source %s: %v",
+			role,
+			name,
+			path,
+			err,
+		),
+		Diagnostics: diagnostics,
+		Metrics: workerexecution.WorkMetrics{
+			Duration: duration,
+		},
+	}
+}
 
 // NewProviderInvocationExecutor constructs the direct-inference executor from
 // the Workers-owned invocation boundary. A nil invocation boundary yields a nil
@@ -74,12 +103,19 @@ func (e *ProviderInvocationExecutor) Execute(
 	// WorkResult holds the wider internal form; there is no widening
 	// conversion because widening would mean re-inventing detail that was
 	// dropped on purpose.
+	outcome := workerexecution.OutcomeAccepted
+	switch result.Response.Outcome {
+	case workerexecution.OutcomeContinue,
+		workerexecution.OutcomeRejected,
+		workerexecution.OutcomeFailed:
+		outcome = result.Response.Outcome
+	}
 	return attachStructuredResult(request, workerexecution.WorkResult{
-		DispatchID:      request.Dispatch.DispatchID,
-		TransitionID:    request.Dispatch.TransitionID,
-		Outcome:         workerexecution.OutcomeAccepted,
-		Output:          result.Response.Content,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		DispatchID:   request.Dispatch.DispatchID,
+		TransitionID: request.Dispatch.TransitionID,
+		Outcome:      outcome,
+		Output:       result.Response.Content,
+		Continuation: cloneContinuation(result.Continuation),
 	}), nil
 }
 
@@ -117,7 +153,7 @@ func providerInvocationRequest(
 		Model:              request.Model,
 		ModelProvider:      request.ModelProvider,
 		ReasoningEffort:    request.ReasoningEffort,
-		ResumeSession:      cloneResumeSession(request.ResumeSession),
+		Continuation:       cloneContinuation(request.Continuation),
 		SkipPermissions:    request.SkipPermissions,
 	}
 }
@@ -135,7 +171,7 @@ func providerInvocationFailure(
 		TransitionID:    request.Dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeFailed,
 		FailureMetadata: result.FailureMetadata,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		Continuation:    cloneContinuation(result.Continuation),
 	}
 	if result.FailureDetail != nil {
 		failure.Error = result.FailureDetail.Message

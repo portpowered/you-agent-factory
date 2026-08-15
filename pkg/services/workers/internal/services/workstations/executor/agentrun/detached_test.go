@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
@@ -155,9 +156,10 @@ func TestExecuteDetachedKeepsLastRunnerTurnAuthoritative(t *testing.T) {
 			Content:  `{"outcome":"COMPLETE","feedback":"ship it"}`,
 			Outcome:  workerexecution.WorkOutcome("COMPLETE"),
 			Feedback: "ship it",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				ID: "provider-session-9",
-			},
+			Continuation: (&providers.SessionMetadata{
+				Provider: "codex",
+				ID:       "provider-session-9",
+			}).ContinuationRef(),
 		},
 	}}
 	harness := &inferencingHarnessStub{
@@ -186,8 +188,8 @@ func TestExecuteDetachedKeepsLastRunnerTurnAuthoritative(t *testing.T) {
 	if result.Feedback != "ship it" {
 		t.Fatalf("ExecuteDetached() Feedback = %q, want the last runner turn feedback", result.Feedback)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.ID != "provider-session-9" {
-		t.Fatalf("ExecuteDetached() ProviderSession = %+v, want the last runner turn Provider Session", result.ProviderSession)
+	if result.Continuation == nil || result.Continuation.ProviderSessionID != "provider-session-9" {
+		t.Fatalf("ExecuteDetached() Continuation = %+v, want the last runner turn continuation", result.Continuation)
 	}
 	if runner.callCount() != 2 {
 		t.Fatalf("runner executed %d times, want one execution per harness turn", runner.callCount())

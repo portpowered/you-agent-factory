@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -595,6 +595,7 @@ func waitForParallelCompositionLabelCompletion(
 }
 
 type gatedParallelChildProvider struct {
+	testutil.ProviderServiceAdapter
 	mu                  sync.Mutex
 	active              int
 	peak                int
@@ -605,10 +606,12 @@ type gatedParallelChildProvider struct {
 }
 
 func newGatedParallelChildProvider() *gatedParallelChildProvider {
-	return &gatedParallelChildProvider{
+	provider := &gatedParallelChildProvider{
 		release:    make(chan struct{}),
 		concurrent: make(chan struct{}),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *gatedParallelChildProvider) waitForConcurrentCalls(t *testing.T, timeout time.Duration) {
@@ -692,9 +695,8 @@ func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest)
 	return message
 }
 
-var _ workerprovider.Provider = (*gatedParallelChildProvider)(nil)
-
 type labelGatedParallelChildProvider struct {
+	testutil.ProviderServiceAdapter
 	mu              sync.Mutex
 	gates           map[string]chan struct{}
 	releaseOnce     map[string]*sync.Once
@@ -710,6 +712,7 @@ func newLabelGatedParallelChildProvider(labels []string) *labelGatedParallelChil
 		provider.gates[label] = make(chan struct{})
 		provider.releaseOnce[label] = &sync.Once{}
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	return provider
 }
 
@@ -765,12 +768,14 @@ func (p *labelGatedParallelChildProvider) Infer(
 	}, nil
 }
 
-var _ workerprovider.Provider = (*labelGatedParallelChildProvider)(nil)
-
-type partialFailureParallelChildProvider struct{}
+type partialFailureParallelChildProvider struct {
+	testutil.ProviderServiceAdapter
+}
 
 func newPartialFailureParallelChildProvider() *partialFailureParallelChildProvider {
-	return &partialFailureParallelChildProvider{}
+	provider := &partialFailureParallelChildProvider{}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *partialFailureParallelChildProvider) Infer(
@@ -790,5 +795,3 @@ func (p *partialFailureParallelChildProvider) Infer(
 		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
 	}, nil
 }
-
-var _ workerprovider.Provider = (*partialFailureParallelChildProvider)(nil)

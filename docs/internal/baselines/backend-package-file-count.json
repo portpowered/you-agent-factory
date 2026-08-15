@@ -291,7 +291,7 @@
     },
     {
       "packagePath": "pkg/services/workers",
-      "fileCount": 43,
+      "fileCount": 41,
       "owner": "worker-maintainers",
       "removalReason": "Continue extracting worker policy and execution capabilities."
     },

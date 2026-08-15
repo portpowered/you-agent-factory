@@ -1,14 +1,12 @@
 package construction
 
 import (
-	"context"
 	"os"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -25,9 +23,6 @@ func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
 	}
 	if got := (*Service)(nil).WithRunReasoningEffort("high"); got != nil {
 		t.Fatalf("nil Service.WithRunReasoningEffort() = %#v, want nil", got)
-	}
-	if got := (*Service)(nil).WithProviderRegistry(nil); got != nil {
-		t.Fatalf("nil Service.WithProviderRegistry() = %#v, want nil", got)
 	}
 	if got := (*Service)(nil).WithRunnerRegistry(nil); got != nil {
 		t.Fatalf("nil Service.WithRunnerRegistry() = %#v, want nil", got)
@@ -70,11 +65,6 @@ func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
 		t.Fatal("WithRunnerRegistry() unexpectedly replaced the retained ScriptFactory")
 	}
 
-	providerRegistry := constructionProviderRegistry{}
-	configured = configured.WithProviderRegistry(providerRegistry)
-	if configured.providerRegistry != providerRegistry {
-		t.Fatal("WithProviderRegistry() did not retain the injected provider registry")
-	}
 	replacement, err := workerexecutor.NewScriptFactory(
 		&mockworker.MockWorkerCommandRunner{},
 		workers.ClockFunc(testClock),
@@ -168,47 +158,7 @@ func TestConstructionAdaptersPreserveExecutionBoundary(t *testing.T) {
 		t.Fatalf("registryRunner identity = %q, want agent", registry.request.Identity)
 	}
 
-	adapter := runnerProviderAdapter{runner: runnerFunc(func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
-		return workers.RunnerExecutionResult{Content: "forwarded"}, nil
-	})}
-	response, err := adapter.Infer(t.Context(), workers.ProviderInferenceRequest{})
-	if err != nil {
-		t.Fatalf("runnerProviderAdapter.Infer() error = %v", err)
-	}
-	if response.Content != "forwarded" {
-		t.Fatalf("runnerProviderAdapter.Infer() content = %q, want forwarded", response.Content)
-	}
-	if _, err := (runnerProviderAdapter{}).Infer(t.Context(), workers.ProviderInferenceRequest{}); err == nil {
-		t.Fatal("nil runnerProviderAdapter.Infer() error = nil, want misconfigured error")
-	}
 	if _, err := (registryRunner{}).Execute(t.Context(), workers.RunnerExecutionRequest{}); err == nil {
 		t.Fatal("nil registryRunner.Execute() error = nil, want missing registry error")
 	}
-}
-
-type constructionProviderRegistry struct{}
-
-func (constructionProviderRegistry) UsesNativeRunner(string) bool { return true }
-
-func (constructionProviderRegistry) CanonicalIdentity(identity string) (string, error) {
-	return identity, nil
-}
-
-func (constructionProviderRegistry) RunnerIdentities() []string { return nil }
-
-func (constructionProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, error) {
-	return workers.RunnerMetadata{}, nil
-}
-
-func (constructionProviderRegistry) ValidateRunnerPrerequisites(
-	platformprocess.ExecutableLocator,
-	string,
-) error {
-	return nil
-}
-
-func (constructionProviderRegistry) ResolveRunnerSelection(
-	_, _, worker string,
-) (workers.ResolvedRunnerSelection, error) {
-	return workers.ResolvedRunnerSelection{RunnerID: worker}, nil
 }

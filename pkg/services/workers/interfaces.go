@@ -122,7 +122,7 @@ type InvocationInput struct {
 type InvocationResult struct {
 	Response        InferenceResponse
 	Attempt         int
-	ProviderSession *ProviderSessionMetadata
+	Continuation    *ProviderContinuationRef
 	FailureMetadata *WorkFailureMetadata
 	FailureDecision *WorkFailureDecision
 	FailureDetail   *FailureDetail

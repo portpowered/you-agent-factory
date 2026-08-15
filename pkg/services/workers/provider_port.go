@@ -1,19 +1,9 @@
 package workers
 
 import (
-	"context"
 	"fmt"
 	"strings"
 )
-
-// Provider is the request-scoped compatibility adapter retained at the Workers
-// root for existing construction boundaries. Providers owns provider protocol,
-// selection, session identity, native adapters, and the one normalized attempt;
-// Workers owns when to execute this request and how to retry or schedule it.
-// New durable provider-effect contracts belong under Providers Execution.
-type Provider interface {
-	Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)
-}
 
 const ExecutorProviderACP = "ACP"
 

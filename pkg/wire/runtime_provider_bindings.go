@@ -2,14 +2,11 @@ package wire
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 // newConfiguredProvidersService always installs the shell-free Antigravity
@@ -26,28 +23,59 @@ func newConfiguredProvidersService(
 	return providerswire.NewService(options...)
 }
 
-// provideRuntimeProviderBindings builds graph-worker provider bindings over the
-// Factory Runtime's effective command runner, including mock and replay wrappers.
-func provideRuntimeProviderBindings(
-	edges serviceedges.Edges,
-	integrations []operatorsettings.ACPIntegration,
-	runner workers.CommandRunner,
-) (workers.ProviderRegistry, providers.Service, workerswire.ProviderRegistryRebinder, error) {
-	runtimeProviders, err := provideConfiguredProvidersService(edges, integrations, runner)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("construct runtime Providers service: %w", err)
+// providerPTYAllocator projects the Providers-owned PTY effect into the
+// legacy Workers consumer boundary. It is a composition-only bridge; neither
+// provider adapters nor the Providers root depend on Workers PTY contracts.
+func providerPTYAllocator(allocator providerswire.PTYAllocator) workers.PTYAllocator {
+	if allocator == nil {
+		return nil
 	}
-	runtimeRegistry, err := workerswire.NewProviderRegistry(context.Background(), runtimeProviders)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("construct runtime provider registry: %w", err)
-	}
-	rebinder := workerswire.ProviderRegistryRebinder(func(reboundRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
-		reboundProviders, rebuildErr := provideConfiguredProvidersService(edges, integrations, reboundRunner)
-		if rebuildErr != nil {
-			return nil, nil, rebuildErr
-		}
-		reboundRegistry, registryErr := workerswire.NewProviderRegistry(context.Background(), reboundProviders)
-		return reboundRegistry, reboundProviders, registryErr
+	return providerPTYAllocatorAdapter{allocator: allocator}
+}
+
+type providerPTYAllocatorAdapter struct {
+	allocator providerswire.PTYAllocator
+}
+
+func (adapter providerPTYAllocatorAdapter) Allocate(
+	ctx context.Context,
+	launch workers.PTYProcessLaunch,
+	config workers.PTYSessionConfig,
+) (workers.PTYSession, error) {
+	session, err := adapter.allocator.Allocate(ctx, providerswire.PTYProcessLaunch{
+		Executable: launch.Executable,
+		Argv:       append([]string(nil), launch.Argv...),
+		WorkDir:    launch.WorkDir,
+		Env:        append([]string(nil), launch.Env...),
+	}, providerswire.PTYSessionConfig{
+		MaxCaptureBytes: config.MaxCaptureBytes,
+		IdleTimeout:     config.IdleTimeout,
+		HardTimeout:     config.HardTimeout,
 	})
-	return runtimeRegistry, runtimeProviders, rebinder, nil
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, errors.New("provider PTY allocator returned a nil session")
+	}
+	return providerPTYSessionAdapter{session: session}, nil
+}
+
+type providerPTYSessionAdapter struct {
+	session providerswire.PTYSession
+}
+
+func (adapter providerPTYSessionAdapter) Run(ctx context.Context) (workers.PTYSessionResult, error) {
+	result, err := adapter.session.Run(ctx)
+	return workers.PTYSessionResult{
+		ExitCode:    result.ExitCode,
+		RawBytes:    append([]byte(nil), result.RawBytes...),
+		CleanedText: result.CleanedText,
+		TimedOut:    result.TimedOut,
+		CapacityHit: result.CapacityHit,
+	}, err
+}
+
+func (adapter providerPTYSessionAdapter) Close() error {
+	return adapter.session.Close()
 }

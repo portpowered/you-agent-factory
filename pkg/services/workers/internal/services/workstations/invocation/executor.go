@@ -3,19 +3,26 @@ package invocation
 
 import (
 	"context"
+	"errors"
+	"strings"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Executor adapts the public Provider contract to one Worker invocation
-// attempt.
+// Executor adapts the Providers root to one Worker invocation attempt. The
+// adapter translates only the detached Worker request and result values at the
+// boundary; provider selection, prerequisite checks, execution, and failure
+// normalization remain owned by Providers.
 type Executor struct {
-	provider workers.Provider
+	provider providers.Service
 }
 
 // NewExecutor constructs the concrete Workers invocation adapter selected by
 // Wire and same-owner Workers constituents.
-func NewExecutor(provider workers.Provider) workers.InvocationExecutor {
+func NewExecutor(provider providers.Service) workers.InvocationExecutor {
 	if provider == nil {
 		return nil
 	}
@@ -24,8 +31,57 @@ func NewExecutor(provider workers.Provider) workers.InvocationExecutor {
 
 // NewProviderExecutor constructs the concrete adapter without narrowing its
 // return type. It is useful in same-owner tests that exercise adapter details.
-func NewProviderExecutor(provider workers.Provider) *Executor {
+func NewProviderExecutor(provider providers.Service) *Executor {
 	return &Executor{provider: provider}
+}
+
+// NewRunnerExecutor adapts an already selected Workers runner without
+// reintroducing a provider client interface. The runner is still invoked for
+// one request-scoped attempt; provider-backed runners reach Providers through
+// their owner-side implementation.
+func NewRunnerExecutor(runner workers.Runner) workers.InvocationExecutor {
+	if runner == nil {
+		return nil
+	}
+	return &runnerExecutor{runner: runner}
+}
+
+type runnerExecutor struct {
+	runner workers.Runner
+}
+
+func (e *runnerExecutor) Execute(
+	ctx context.Context,
+	input workers.InvocationInput,
+) (workers.InvocationResult, error) {
+	attempt := input.Attempt
+	if attempt < 1 {
+		attempt = 1
+	}
+	if e == nil || e.runner == nil {
+		err := workers.NewProviderError(
+			workers.WorkFailureTypeMisconfigured,
+			"runner execution requires a runner",
+			nil,
+		)
+		return failedInvocationResult(attempt, err), err
+	}
+	result, err := e.runner.Execute(ctx, input.Request)
+	if err != nil {
+		return failedInvocationResult(attempt, err), err
+	}
+	response := workers.InferenceResponse{
+		Content:      result.Content,
+		Outcome:      result.Outcome,
+		Continuation: cloneContinuation(result.Continuation),
+		Diagnostics:  workers.CloneWorkDiagnostics(result.Diagnostics),
+	}
+	return workers.InvocationResult{
+		Response:     response,
+		Attempt:      attempt,
+		Continuation: cloneContinuation(response.Continuation),
+		Diagnostics:  workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
+	}, nil
 }
 
 func (e *Executor) Execute(
@@ -48,17 +104,313 @@ func (e *Executor) Execute(
 		return failedInvocationResult(attempt, err), err
 	}
 
-	response, err := e.provider.Infer(ctx, input.Request)
+	request, err := providersRequest(input.Request)
 	if err != nil {
 		return failedInvocationResult(attempt, err), err
 	}
-	response.ProviderSession = canonicalProviderSession(response.ProviderSession)
+	result, err := e.executeRequest(ctx, input.Request, request)
+	if err != nil {
+		normalized := normalizeProvidersFailure(err)
+		return failedInvocationResult(attempt, normalized), normalized
+	}
+	response := workers.InferenceResponse{
+		Content:      result.Content,
+		Outcome:      workers.WorkOutcome(result.Outcome),
+		Continuation: continuationFromSessionRef(result.SessionRef),
+		Diagnostics:  workersDiagnostics(result.Diagnostics, result.SessionRef),
+	}
 	return workers.InvocationResult{
-		Response:        response,
-		Attempt:         attempt,
-		ProviderSession: workers.CloneProviderSessionMetadata(response.ProviderSession),
-		Diagnostics:     workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
+		Response:     response,
+		Attempt:      attempt,
+		Continuation: cloneContinuation(response.Continuation),
+		Diagnostics:  workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
 	}, nil
+}
+
+func (e *Executor) executeRequest(
+	ctx context.Context,
+	input workers.ProviderInferenceRequest,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	if input.Continuation != nil {
+		return e.executeContinuationReference(ctx, input.Continuation, request)
+	}
+	return e.executeFresh(ctx, request)
+}
+
+func (e *Executor) executeContinuationReference(
+	ctx context.Context,
+	reference *workers.ProviderContinuationRef,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	continued, err := e.provider.ContinueReference(ctx, providers.ContinueReferenceRequest{
+		Reference: reference.Clone(),
+		Attempt:   request,
+	})
+	if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
+		converted, convertErr := continued.Reference.ToSessionRef()
+		if convertErr != nil {
+			err = convertErr
+		} else {
+			err = unsupportedProviderContinuationError(converted)
+		}
+	}
+	return continued.Result, err
+}
+
+func (e *Executor) executeFresh(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	identity, err := e.provider.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: request.Provider.String()})
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	request.Provider = identity.ID
+	if err := e.provider.ValidatePrerequisites(ctx, providers.ValidatePrerequisitesRequest{ID: request.Provider}); err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	return e.provider.Execute(ctx, request)
+}
+
+func providersRequest(request workers.ProviderInferenceRequest) (providers.ExecuteRequest, error) {
+	provider := ""
+	if request.Continuation != nil {
+		provider = strings.TrimSpace(request.Continuation.Provider)
+	}
+	if provider == "" {
+		provider = strings.TrimSpace(request.ModelProvider)
+	}
+	if provider == "" {
+		provider = strings.TrimSpace(request.RunnerID)
+	}
+	if provider == "" {
+		provider = strings.TrimSpace(request.ExecutorProvider)
+	}
+	runnerID := strings.TrimSpace(request.RunnerID)
+	if runnerID == "" {
+		runnerID = provider
+	}
+	attemptID := strings.TrimSpace(request.Correlation.AttemptID)
+	if attemptID == "" {
+		attemptID = strings.TrimSpace(request.Dispatch.DispatchID)
+	}
+	dispatchID := strings.TrimSpace(request.Correlation.DispatchID)
+	if dispatchID == "" {
+		dispatchID = strings.TrimSpace(request.Dispatch.DispatchID)
+	}
+	requestID := strings.TrimSpace(request.Correlation.RequestID)
+	if requestID == "" {
+		requestID = strings.TrimSpace(request.Dispatch.Execution.RequestID)
+	}
+	traceID := strings.TrimSpace(request.Correlation.TraceID)
+	if traceID == "" {
+		traceID = strings.TrimSpace(request.Dispatch.Execution.TraceID)
+	}
+	workIDs := append([]string(nil), request.Dispatch.Execution.WorkIDs...)
+	return providers.ExecuteRequest{
+		Provider:  providers.ID(provider),
+		AttemptID: attemptID,
+		Correlation: providers.ExecuteCorrelation{
+			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			GenerationID:     request.Correlation.GenerationID,
+			DispatchID:       dispatchID,
+			AttemptID:        attemptID,
+			RequestID:        requestID,
+			TraceID:          traceID,
+			ReplayKey:        request.Dispatch.Execution.ReplayKey,
+			WorkIDs:          workIDs,
+		},
+		WorkerType:                  request.WorkerType,
+		WorkstationName:             request.WorkstationType,
+		RunnerID:                    runnerID,
+		ProjectID:                   request.ProjectID,
+		TransitionID:                request.Dispatch.TransitionID,
+		InputBindings:               cloneStringSliceMap(request.Dispatch.InputBindings),
+		SessionID:                   request.SessionID,
+		Model:                       request.Model,
+		ModelOperation:              request.ModelOperation,
+		ModelBindings:               providerModelOperationBindings(request.ModelBindings),
+		ReasoningEffort:             request.ReasoningEffort,
+		ModelLocality:               request.ModelLocality,
+		SkipPermissions:             request.SkipPermissions,
+		PrintTimeout:                request.PrintTimeout,
+		SystemPrompt:                request.SystemPrompt,
+		UserMessage:                 request.UserMessage,
+		InputTokens:                 append([]any(nil), request.InputTokens...),
+		OutputSchema:                request.OutputSchema,
+		ToolExecutionMode:           string(request.ToolExecutionMode),
+		RequiredCapabilities:        runnerCapabilityNames(request.RequiredOptionalCapabilities),
+		Command:                     request.Command,
+		Args:                        append([]string(nil), request.Args...),
+		FactoryDirectory:            request.FactoryDirectory,
+		OutputContract:              request.OutputContract,
+		OutputFormat:                request.OutputFormat,
+		StopToken:                   request.StopToken,
+		DecisionEnvelope:            request.DecisionEnvelope,
+		GoalRoutingDecisionEnvelope: request.GoalRoutingDecisionEnvelope,
+		WorkingDirectory:            request.WorkingDirectory,
+		Worktree:                    request.Worktree,
+		EnvVars:                     cloneStringMap(request.EnvVars),
+		ProcessEnvironment:          append([]string(nil), request.ProcessEnvironment...),
+		ExecutionLogger:             request.ExecutionLogger,
+	}, nil
+}
+
+func providerModelOperationBindings(values []workers.ResolvedModelOperationBinding) []providers.ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	converted := make([]providers.ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		converted[index] = providers.ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  string(value.Source),
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
+	return converted
+}
+
+func normalizeProvidersFailure(err error) error {
+	var continuation providers.ContinuationFailure
+	if errors.As(err, &continuation) {
+		normalized := workers.NewProviderError(
+			workers.WorkFailureTypePermanentBadRequest,
+			"provider session continuation was rejected",
+			err,
+		)
+		normalized.ProviderContinuationFailureKind = continuation.Kind
+		normalized.Continuation = continuationFromSessionRef(&continuation.Reference)
+		return normalized
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		return err
+	}
+	normalized := workers.NewProviderError(
+		workersFailureType(failure.Kind),
+		failure.Message,
+		err,
+	)
+	normalized.Continuation = continuationFromSessionRef(failure.SessionRef)
+	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef)
+	return normalized
+}
+
+func unsupportedProviderContinuationError(reference providers.SessionRef) error {
+	normalized := workers.NewProviderError(
+		workers.WorkFailureTypePermanentBadRequest,
+		"provider session continuation is unsupported",
+		nil,
+	)
+	normalized.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
+	normalized.Continuation = continuationFromSessionRef(&reference)
+	return normalized
+}
+
+func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureType {
+	switch kind {
+	case providers.ExecuteFailureKindCanceled:
+		return workers.WorkFailureTypeUnknown
+	case providers.ExecuteFailureKindTimeout:
+		return workers.WorkFailureTypeTimeout
+	case providers.ExecuteFailureKindAuthentication:
+		return workers.WorkFailureTypeAuthFailure
+	case providers.ExecuteFailureKindInvalidRequest,
+		providers.ExecuteFailureKindCapabilityMismatch:
+		return workers.WorkFailureTypePermanentBadRequest
+	case providers.ExecuteFailureKindThrottled:
+		return workers.WorkFailureTypeThrottled
+	case providers.ExecuteFailureKindMisconfigured:
+		return workers.WorkFailureTypeMisconfigured
+	default:
+		return workers.WorkFailureTypeUnknown
+	}
+}
+
+func continuationFromSessionRef(reference *providers.SessionRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
+	}
+	continuation := reference.ContinuationRef()
+	return &continuation
+}
+
+func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *providers.SessionRef) *workers.WorkDiagnostics {
+	if diagnostics == nil && reference == nil {
+		return nil
+	}
+	metadata := map[string]string(nil)
+	if diagnostics != nil {
+		metadata = cloneStringMap(diagnostics.Metadata)
+	}
+	provider := ""
+	if reference != nil {
+		provider = reference.Provider.String()
+	}
+	result := &workers.WorkDiagnostics{
+		Provider: &workers.ProviderDiagnostic{
+			Provider:         provider,
+			ResponseMetadata: metadata,
+		},
+		Metadata: metadata,
+	}
+	if diagnostics != nil && diagnostics.Command != nil {
+		result.Command = &workers.CommandDiagnostic{
+			Command:    diagnostics.Command.Command,
+			Args:       append([]string(nil), diagnostics.Command.Args...),
+			Env:        cloneStringMap(diagnostics.Command.Env),
+			Stdin:      diagnostics.Command.Stdin,
+			Stdout:     diagnostics.Command.Stdout,
+			Stderr:     diagnostics.Command.Stderr,
+			ExitCode:   diagnostics.Command.ExitCode,
+			TimedOut:   diagnostics.Command.TimedOut,
+			Duration:   time.Duration(diagnostics.Command.DurationMS) * time.Millisecond,
+			WorkingDir: diagnostics.Command.WorkingDir,
+		}
+	}
+	if diagnostics != nil && diagnostics.Panic != nil {
+		result.Panic = &workers.PanicDiagnostic{
+			Message: diagnostics.Panic.Message,
+			Stack:   diagnostics.Panic.Stack,
+		}
+	}
+	return result
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string][]string, len(values))
+	for key, items := range values {
+		cloned[key] = append([]string(nil), items...)
+	}
+	return cloned
+}
+
+func runnerCapabilityNames(values []workers.RunnerOptionalCapability) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	names := make([]string, len(values))
+	for index, value := range values {
+		names[index] = string(value)
+	}
+	return names
 }
 
 func failedInvocationResult(attempt int, err error) workers.InvocationResult {
@@ -70,7 +422,6 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 			err,
 		)
 	}
-	providerErr.ProviderSession = canonicalProviderSession(providerErr.ProviderSession)
 	metadata := &workers.WorkFailureMetadata{
 		Family: providerErr.Family,
 		Type:   providerErr.Type,
@@ -78,7 +429,7 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 	decision := workers.FailureDecisionFromMetadata(metadata)
 	return workers.InvocationResult{
 		Attempt:         attempt,
-		ProviderSession: workers.CloneProviderSessionMetadata(providerErr.ProviderSession),
+		Continuation:    cloneContinuation(providerErr.Continuation),
 		FailureMetadata: metadata,
 		FailureDecision: &decision,
 		FailureDetail: &workers.FailureDetail{
@@ -89,14 +440,12 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 	}
 }
 
-func canonicalProviderSession(
-	session *workers.ProviderSessionMetadata,
-) *workers.ProviderSessionMetadata {
-	clone := workers.CloneProviderSessionMetadata(session)
-	if clone != nil {
-		clone.Provider = workers.CanonicalProviderSessionProvider(clone.Provider)
+func cloneContinuation(reference *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
 	}
-	return clone
+	clone := reference.Clone()
+	return &clone
 }
 
 func safeFailureMessage(reason workers.WorkFailureType) string {

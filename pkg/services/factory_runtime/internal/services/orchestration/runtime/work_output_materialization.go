@@ -298,8 +298,8 @@ func workstationDispatchResultFromExecute(
 			Cost:       result.Metrics.Cost,
 			RetryCount: result.Metrics.RetryCount,
 		},
-		ProviderSession: providerSessionFromContinuation(result.Continuation),
-		Diagnostics:     result.Diagnostics.ToWorkDiagnostics(),
+		Continuation: result.Continuation,
+		Diagnostics:  result.Diagnostics.ToWorkDiagnostics(),
 	}
 	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
 	switch result.Outcome {
@@ -404,7 +404,7 @@ func primaryOutputText(parts []work.WorkContentPart) string {
 
 func providerSessionFromContinuation(
 	continuation *workers.ProviderContinuationRef,
-) *workers.ProviderSessionMetadata {
+) *providers.SessionMetadata {
 	if continuation == nil {
 		return nil
 	}
@@ -415,9 +415,10 @@ func providerSessionFromContinuation(
 	if id == "" && strings.TrimSpace(continuation.Provider) == "" {
 		return nil
 	}
-	return &workers.ProviderSessionMetadata{
-		Provider: continuation.Provider,
-		Kind:     providers.SessionIDKind,
+	normalized := continuation.Normalize()
+	return &providers.SessionMetadata{
+		Provider: providers.ID(normalized.Provider).CanonicalSessionProvider(),
+		Kind:     normalized.Kind,
 		ID:       id,
 	}
 }
@@ -656,12 +657,16 @@ func recordDetachedModelResponse(cfg *runtimeConfig, request workers.ExecuteRequ
 		attempt = 1
 	}
 	modelRequestID := detachedModelRequestID(request.Correlation.DispatchID, attempt)
+	continuation := cloneRuntimeContinuation(result.Continuation)
 	payload := workers.ModelResponseEventPayload{
 		ModelRequestID: modelRequestID, Attempt: attempt,
 		Operation: strings.TrimSpace(request.Input.ModelOperation), Worker: executionWorkerName(request),
 		Model: strings.TrimSpace(request.Target.Model.Name), ProviderLocality: strings.TrimSpace(request.Target.Model.Locality),
-		DurationMillis: result.Metrics.Duration.Milliseconds(), ProviderSession: providerSessionFromExecuteResult(request, result),
+		DurationMillis: result.Metrics.Duration.Milliseconds(), Continuation: continuation,
 		Bindings: resolvedModelBindings(request.Input.ModelBindings),
+	}
+	if !continuationHasSessionIdentity(continuation) {
+		payload.ProviderSession = providerSessionFromExecuteResult(request, result)
 	}
 	if detachedModelProviderSucceeded(result, executeErr) {
 		payload.Outcome = workers.InferenceOutcomeSucceeded
@@ -764,14 +769,14 @@ func resolvedModelBindings(bindings []workers.ResolvedModelOperationBinding) *[]
 func providerSessionFromExecuteResult(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
-) *workers.ProviderSessionMetadata {
+) *providers.SessionMetadata {
 	if continuation := result.Continuation; continuation != nil {
 		id := strings.TrimSpace(continuation.ProviderSessionID)
 		if id == "" {
 			id = strings.TrimSpace(continuation.ExternalRef)
 		}
 		if id != "" || strings.TrimSpace(continuation.Provider) != "" {
-			return &workers.ProviderSessionMetadata{Provider: continuation.Provider, Kind: providers.SessionIDKind, ID: id}
+			return &providers.SessionMetadata{Provider: continuation.Provider, Kind: providers.SessionIDKind, ID: id}
 		}
 	}
 
@@ -788,10 +793,18 @@ func providerSessionFromExecuteResult(
 	if provider == "" {
 		return nil
 	}
-	return &workers.ProviderSessionMetadata{
-		Provider: workers.CanonicalProviderSessionProvider(provider),
+	return &providers.SessionMetadata{
+		Provider: providers.ID(provider).CanonicalSessionProvider(),
 		Kind:     providers.SessionIDKind,
 	}
+}
+
+func continuationHasSessionIdentity(continuation *workers.ProviderContinuationRef) bool {
+	if continuation == nil {
+		return false
+	}
+	return strings.TrimSpace(continuation.ProviderSessionID) != "" ||
+		strings.TrimSpace(continuation.ExternalRef) != ""
 }
 
 func modelFailureDetailFromExecute(result workers.ExecuteResult, executeErr error) *workers.FailureDetail {

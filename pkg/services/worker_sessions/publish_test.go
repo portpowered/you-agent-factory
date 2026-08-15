@@ -20,6 +20,11 @@ type providerSessionObservationSpy struct {
 	err      error
 }
 
+func continuationFor(reference providers.SessionRef) *providers.ContinuationRef {
+	continuation := reference.ContinuationRef()
+	return &continuation
+}
+
 func (s *providerSessionObservationSpy) ObserveProviderSession(
 	_ context.Context,
 	req workersessions.ProviderSessionObservationRequest,
@@ -108,9 +113,8 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	var forwarded []workers.ProgressFragment
 	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, workers.ProgressFragment{
-			DispatchID:               fragment.DispatchID,
-			ProviderSessionReference: workers.CloneProviderSessionReference(fragment.ProviderSessionReference),
-			ProviderSessionRef:       workers.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+			DispatchID:   fragment.DispatchID,
+			Continuation: (fragment.Continuation).ClonePtr(),
 		})
 	})
 
@@ -123,11 +127,8 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
 	fragment := workers.ProgressFragment{
-		DispatchID:               "dispatch-1",
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(), Kind: reference.Kind, ID: reference.ID,
-		},
+		DispatchID:   "dispatch-1",
+		Continuation: continuationFor(reference),
 	}
 	// Reference-bearing output cannot leak before its Worker Session observer
 	// exists.
@@ -143,75 +144,68 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	if len(first.requests) != 1 || first.requests[0].DispatchID != "dispatch-1" || first.requests[0].Reference != reference {
 		t.Fatalf("observed requests = %#v, want exact dispatch/reference", first.requests)
 	}
-	if len(forwarded) != 2 || forwarded[1].ProviderSessionReference == nil || *forwarded[1].ProviderSessionReference != reference {
-		t.Fatalf("forwarded fragments = %#v, want exact reference after observation", forwarded)
+	if len(forwarded) != 2 || forwarded[1].Continuation == nil || forwarded[1].Continuation.ProviderSessionID != reference.ID {
+		t.Fatalf("forwarded fragments = %#v, want exact continuation after observation", forwarded)
 	}
 
 	// The live reference hand-off commits the association but is internal
 	// bookkeeping, so it cannot add a response-stream observation ahead of
 	// provider-authored output.
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               "dispatch-1",
-		Kind:                     workers.ProviderSessionObservedFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(), Kind: reference.Kind, ID: reference.ID,
-		},
+		DispatchID:   "dispatch-1",
+		Kind:         workers.ProviderSessionObservedFragmentKind,
+		Continuation: continuationFor(reference),
 	})
 	if len(first.requests) != 2 || len(forwarded) != 2 {
 		t.Fatalf("live reference hand-off requests=%#v forwarded=%#v, want observed without forwarding", first.requests, forwarded)
 	}
 
-	fragment.ProviderSessionReference.ID = "caller-mutated"
-	if first.requests[0].Reference.ID != reference.ID || forwarded[1].ProviderSessionReference.ID != reference.ID {
-		t.Fatalf("association or forwarded reference retained caller mutation: %#v %#v", first.requests[0], forwarded[1])
+	fragment.Continuation.ProviderSessionID = "caller-mutated"
+	if first.requests[0].Reference.ID != reference.ID || forwarded[1].Continuation.ProviderSessionID != reference.ID {
+		t.Fatalf("association or forwarded continuation retained caller mutation: %#v %#v", first.requests[0], forwarded[1])
 	}
 
 	// A second Bind cannot reroute a live runtime to another Worker Sessions
-	// registry, and mismatched public metadata is not forwarded.
+	// registry, and a mismatched opaque continuation is not forwarded.
 	second := &providerSessionObservationSpy{}
 	publisher.Bind(second)
+	first.err = workersessions.ErrProviderSessionAssociationAttemptMismatch
 	mismatch := workers.ProgressFragment{
-		DispatchID:               "dispatch-1",
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "different-session",
-		},
+		DispatchID: "dispatch-1",
+		Continuation: continuationFor(providers.SessionRef{
+			Provider: reference.Provider, Kind: reference.Kind, ID: "different-session",
+		}),
 	}
 	publisher.Publish(mismatch)
-	if len(first.requests) != 2 || len(second.requests) != 0 || len(forwarded) != 2 {
+	if len(first.requests) != 3 || len(second.requests) != 0 || len(forwarded) != 2 {
 		t.Fatalf("mismatched fragment rerouted or forwarded: first=%#v second=%#v forwarded=%#v", first.requests, second.requests, forwarded)
 	}
+	first.err = nil
 
-	// Metadata-only compatibility output is not a provider-native SessionRef.
-	// It must remain visible to the response stream, but cannot be reconstructed
-	// into a resumable association.
+	// An incomplete opaque continuation remains visible to the response stream,
+	// but cannot be reconstructed into a resumable association.
 	legacy := workers.ProgressFragment{
-		DispatchID: "dispatch-legacy",
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "legacy-session",
-		},
+		DispatchID:   "dispatch-legacy",
+		Continuation: &providers.ContinuationRef{Provider: reference.Provider.String(), Kind: reference.Kind},
 	}
 	publisher.Publish(legacy)
-	if len(first.requests) != 2 || len(forwarded) != 3 ||
-		forwarded[2].ProviderSessionReference != nil ||
-		forwarded[2].ProviderSessionRef == nil ||
-		forwarded[2].ProviderSessionRef.ID != "legacy-session" {
-		t.Fatalf("metadata-only output association or forwarding = requests:%#v forwarded:%#v", first.requests, forwarded)
+	if len(first.requests) != 3 || len(forwarded) != 3 ||
+		forwarded[2].Continuation == nil ||
+		forwarded[2].Continuation.ProviderSessionID != "" {
+		t.Fatalf("incomplete continuation association or forwarding = requests:%#v forwarded:%#v", first.requests, forwarded)
 	}
 	noDownstream := workersessions.NewProviderSessionObservationPublisher(nil)
 	noDownstream.Bind(first)
 	noDownstream.Publish(legacy)
-	if len(first.requests) != 2 {
+	if len(first.requests) != 3 {
 		t.Fatalf("nil-downstream metadata-only output was observed: %#v", first.requests)
 	}
 	first.err = errors.New("association rejected")
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               "dispatch-1",
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef:       workers.CloneProviderSessionMetadata(forwarded[1].ProviderSessionRef),
+		DispatchID:   "dispatch-1",
+		Continuation: (forwarded[1].Continuation).ClonePtr(),
 	})
-	if len(first.requests) != 3 || len(forwarded) != 3 {
+	if len(first.requests) != 4 || len(forwarded) != 3 {
 		t.Fatalf("rejected observation forwarded output: requests:%#v forwarded:%#v", first.requests, forwarded)
 	}
 
@@ -340,8 +334,7 @@ func TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance(t *t
 	if output.Provenance.Provider != "antigravity" || output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted {
 		t.Fatalf("output draft = %#v, want antigravity MESSAGE/COMPLETED provenance", output)
 	}
-	if len(forwarded) != 1 || forwarded[0].Provider != "antigravity" ||
-		forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
+	if len(forwarded) != 1 || forwarded[0].Provider != "antigravity" || forwarded[0].Continuation != nil {
 		t.Fatalf("forwarded output = %#v, want provider identity without a synthesized session", forwarded)
 	}
 }

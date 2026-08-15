@@ -42,8 +42,7 @@
 // provider registry/conductor types, concrete adapters, or transport/UI
 // concerns.
 //
-// Transitional pkg/services/providers/internal/services/execution/internal/provider/** implementations remain in place
-// for later IMP-PROV-* absorption. Nested catalog/execution implementation
-// moves, Wire/root/initializer wiring, CLI-manifest, and OpenAPI package-motion
-// edits remain out of scope for the root-contract packet.
+// A separately owned compatibility adapter subtree remains isolated from this
+// package while its retained request/result vocabulary is retired. It is not
+// part of the Providers production implementation or its public contract.
 package providers

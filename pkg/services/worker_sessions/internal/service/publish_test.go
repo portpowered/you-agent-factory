@@ -685,19 +685,21 @@ func readWorkerSessionRecords(t *testing.T, eventsSvc events.Service, id string)
 
 func assertSourceContinuationLineage(t *testing.T, records []events.Record, request workersessions.ContinueRequest, reference providers.SessionRef) {
 	t.Helper()
+	want := reference.ContinuationRef().Normalize()
 	if len(records) != 3 || records[2].SourceType != events.SourceType("worker_session_lineage") {
 		t.Fatalf("source records = %#v, want opening/terminal/successor lineage", records)
 	}
 	payload := decodeLineageSessionPayload(t, records[2])
 	if payload.Lineage == nil || payload.Lineage.SuccessorWorkerSessionID != request.SuccessorWorkerSessionID ||
-		payload.Continuation == nil || payload.Continuation.Provider != string(reference.Provider) ||
-		payload.Continuation.Kind != reference.Kind || payload.Continuation.ID != reference.ID {
+		payload.Continuation == nil || payload.Continuation.Provider != want.Provider ||
+		payload.Continuation.Kind != want.Kind || payload.Continuation.ID != want.ProviderSessionID {
 		t.Fatalf("source lineage payload = %#v, want exact successor and Provider Session reference", payload)
 	}
 }
 
 func assertSuccessorContinuationOpening(t *testing.T, records []events.Record, request workersessions.ContinueRequest, reference providers.SessionRef) {
 	t.Helper()
+	want := reference.ContinuationRef().Normalize()
 	if len(records) == 0 {
 		t.Fatal("successor records are empty")
 	}
@@ -705,8 +707,8 @@ func assertSuccessorContinuationOpening(t *testing.T, records []events.Record, r
 	if payload.AttemptReason != workers.AttemptReasonResume || payload.Lineage == nil ||
 		payload.Lineage.PredecessorWorkerSessionID != request.SourceWorkerSessionID ||
 		payload.Lineage.PreviousDispatchID != "dispatch-exact" || payload.Lineage.PreviousAttemptID != "dispatch-exact" ||
-		payload.Continuation == nil || payload.Continuation.Provider != string(reference.Provider) ||
-		payload.Continuation.Kind != reference.Kind || payload.Continuation.ID != reference.ID {
+		payload.Continuation == nil || payload.Continuation.Provider != want.Provider ||
+		payload.Continuation.Kind != want.Kind || payload.Continuation.ID != want.ProviderSessionID {
 		t.Fatalf("successor opening payload = %#v, want exact RESUME lineage", payload)
 	}
 }

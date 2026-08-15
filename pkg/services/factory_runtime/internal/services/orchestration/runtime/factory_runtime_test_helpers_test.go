@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -22,7 +23,6 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
@@ -242,7 +242,7 @@ func testLegacyRequestFromExecute(
 			WorkingDirectory:            request.Target.Environment.WorkingDirectory,
 			WorkingDirectoryAuthored:    request.Target.Environment.WorkingDirectorySet,
 			SkipPermissions:             request.Target.Permissions.SkipPermissions,
-			ResumeSession:               providerSessionRefFromContinuation(request.Input.Resume),
+			Continuation:                cloneRuntimeContinuation(request.Input.Resume),
 		},
 	}
 }
@@ -799,7 +799,7 @@ func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch wo
 	workID := safeBoundaryWorkID(dispatch)
 	switch workID {
 	case "work-safe-success":
-		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeAccepted, "", nil, &workerexecution.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeAccepted, "", nil, &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "response_id",
 			ID:       "resp-safe-success",
@@ -808,7 +808,7 @@ func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch wo
 		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeFailed, "provider timed out", &workerexecution.WorkFailureMetadata{
 			Family: workerexecution.WorkFailureFamilyRetryable,
 			Type:   workerexecution.WorkFailureTypeTimeout,
-		}, &workerexecution.ProviderSessionMetadata{
+		}, &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-failure",
@@ -817,7 +817,7 @@ func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch wo
 		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &workerexecution.WorkFailureMetadata{
 			Family: workerexecution.WorkFailureFamilyRetryable,
 			Type:   workerexecution.WorkFailureTypeInternalServerError,
-		}, &workerexecution.ProviderSessionMetadata{
+		}, &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-windows-4294967295",
@@ -1275,7 +1275,7 @@ func safeBoundaryResult(
 	outcome workerexecution.WorkOutcome,
 	errText string,
 	providerFailure *workerexecution.WorkFailureMetadata,
-	providerSession *workerexecution.ProviderSessionMetadata,
+	providerSession *providers.SessionMetadata,
 	retryCount string,
 ) workerexecution.WorkResult {
 	return workerexecution.WorkResult{
@@ -1285,7 +1285,7 @@ func safeBoundaryResult(
 		Output:          "safe boundary output for " + workID,
 		Error:           errText,
 		FailureMetadata: providerFailure,
-		ProviderSession: providerSession,
+		Continuation:    (providerSession).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-" + workID,
@@ -1917,8 +1917,9 @@ func assertDetachedModelResponseMetadata(t *testing.T, response *workers.ModelRe
 	if response.Outcome != workers.InferenceOutcomeSucceeded || response.ModelRequestID != "dispatch-1/model-request/1" || response.DurationMillis != 1500 {
 		t.Fatalf("recorded response = %#v, want successful detached model response", response)
 	}
-	if response.ProviderSession == nil || response.ProviderSession.ID != "session-1" {
-		t.Fatalf("recorded provider session = %#v, want session-1", response.ProviderSession)
+	providerSession := (response.Continuation).SessionMetadata()
+	if providerSession == nil || providerSession.ID != "session-1" {
+		t.Fatalf("recorded provider session = %#v, want session-1", providerSession)
 	}
 }
 
@@ -1982,6 +1983,7 @@ func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks
 		clock:          testRuntimeClock{},
 	}
 	request := modelRecordingRequest()
+	request.Target.Provider.ID = "antigravity"
 	request.Attempt.Number = 2
 	request.Target.WorkerName = ""
 	request.Target.WorkerType = "worker-type"
@@ -2014,6 +2016,7 @@ func TestRuntimeModelResponseRecordingClassifiesFailuresAndContinuationFallbacks
 
 func assertModelFailureEvents(t *testing.T, events []workers.ModelEvent) {
 	t.Helper()
+	assertModelFailureProviderSessions(t, events)
 	if got := events[0].Response.FailureDetail; got == nil || got.Message != "safe timeout" {
 		t.Fatalf("detailed failure = %#v, want cloned safe detail", got)
 	}
@@ -2026,6 +2029,19 @@ func assertModelFailureEvents(t *testing.T, events []workers.ModelEvent) {
 	for _, event := range events {
 		if event.Response == nil || event.Response.Outcome != workers.InferenceOutcomeFailed || event.Tick != 9 {
 			t.Fatalf("failure response = %#v, want failed response at current tick", event.Response)
+		}
+	}
+}
+
+func assertModelFailureProviderSessions(t *testing.T, events []workers.ModelEvent) {
+	t.Helper()
+	for _, event := range events {
+		if event.Response == nil {
+			t.Fatal("failure response is nil")
+		}
+		providerSession := event.Response.ProviderSession
+		if providerSession == nil || providerSession.Provider != "antigravity" || providerSession.ID != "" {
+			t.Fatalf("failure provider session = %#v, want provider-only antigravity metadata", event.Response)
 		}
 	}
 }

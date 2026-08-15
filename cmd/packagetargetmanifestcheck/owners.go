@@ -157,12 +157,12 @@ func splitServicesOwnerPath(packagePath string) (owner, rest string, ok bool) {
 func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	switch {
 	case packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-		packagePath == "pkg/services/providers/internal/services/execution/internal/provider",
-		strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider/"),
-		packagePath == "pkg/services/providers/internal/services/execution/internal/provider_test",
-		strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider_test/"):
+		packagePath == "pkg/services/workers/internal/providercompat",
+		strings.HasPrefix(packagePath, "pkg/services/workers/internal/providercompat/"),
+		packagePath == "pkg/services/workers/internal/providercompat_test",
+		strings.HasPrefix(packagePath, "pkg/services/workers/internal/providercompat_test/"):
 		destination := "providers/internal/services/execution"
-		if packagePath == "pkg/services/providers/internal/services/execution/internal/provider/registry" {
+		if packagePath == "pkg/services/workers/internal/providercompat/registry" {
 			destination = "providers/internal/services/catalog"
 		}
 		return PackageMapping{

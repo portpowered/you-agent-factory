@@ -146,12 +146,15 @@ func inferenceResponseEvent(
 		payload.Outcome = workers.InferenceOutcomeFailed
 		payload.FailureDetail = providerFailureDetail(executionErr)
 		payload.ExitCode = providerErrorExitCode(executionErr)
-		payload.ProviderSession = canonicalProviderSession(providerSessionFromError(executionErr))
+		payload.Continuation = cloneContinuation(continuationFromError(executionErr))
+		if !continuationHasSessionIdentity(payload.Continuation) {
+			payload.ProviderSession = providerSessionForRequest(request, nil)
+		}
 		payload.Diagnostics = Diagnostics(nil, executionErr)
 	} else {
 		payload.Outcome = workers.InferenceOutcomeSucceeded
 		payload.Response = stringPtr(response.Content)
-		payload.ProviderSession = canonicalProviderSession(response.ProviderSession)
+		payload.Continuation = cloneContinuation(response.Continuation)
 		payload.Diagnostics = Diagnostics(response.Diagnostics, nil)
 	}
 	return inferenceEvent(
@@ -205,12 +208,12 @@ func providerFailureDetail(err error) *workers.InferenceResponseFailureDetail {
 	return &workers.InferenceResponseFailureDetail{Reason: reason, Message: message}
 }
 
-func providerSessionFromError(err error) *workers.ProviderSessionMetadata {
+func continuationFromError(err error) *workers.ProviderContinuationRef {
 	providerErr := workers.NormalizeProviderExecutionError(err)
 	if providerErr == nil {
 		return nil
 	}
-	return providerErr.ProviderSession
+	return providerErr.Continuation
 }
 
 func providerErrorExitCode(err error) *int {
@@ -225,12 +228,12 @@ func providerErrorExitCode(err error) *int {
 	return &exitCode
 }
 
-func canonicalProviderSession(session *workers.ProviderSessionMetadata) *workers.ProviderSessionMetadata {
-	cloned := workers.CloneProviderSessionMetadata(session)
-	if cloned != nil {
-		cloned.Provider = workers.CanonicalProviderSessionProvider(cloned.Provider)
+func cloneContinuation(reference *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
+	if reference == nil {
+		return nil
 	}
-	return cloned
+	clone := reference.Clone()
+	return &clone
 }
 
 func retryableProviderFailure(err error) bool {

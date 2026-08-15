@@ -5,13 +5,16 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// MockProvider implements provider.Provider for testing. It returns
+// MockWorkerMapProvider implements the Providers root contract for testing.
+// It returns
 // predetermined InferenceResponses in sequence. When the sequence is
 // exhausted, it returns a default response.
 type MockWorkerMapProvider struct {
+	ProviderServiceAdapter
 	workerCalls     map[string][]workerexecution.ProviderInferenceRequest
 	mu              sync.Mutex
 	workerIndex     map[string]int            // tracks call count per worker type for response sequencing
@@ -48,7 +51,7 @@ func mapResponses(input map[string][]workerexecution.InferenceResponse) map[stri
 }
 
 func NewMockWorkerMapProviderWithDefault(responses map[string][]WorkResponse) *MockWorkerMapProvider {
-	return &MockWorkerMapProvider{
+	provider := &MockWorkerMapProvider{
 		workerResponses: responses,
 		defaultR: workerexecution.InferenceResponse{
 			Content: "default mock response",
@@ -56,6 +59,8 @@ func NewMockWorkerMapProviderWithDefault(responses map[string][]WorkResponse) *M
 		workerIndex: make(map[string]int),
 		workerCalls: make(map[string][]workerexecution.ProviderInferenceRequest),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 // Infer records the request and returns the next predetermined response.
@@ -127,4 +132,4 @@ func (m *MockWorkerMapProvider) LastCall(workerType string) workerexecution.Prov
 }
 
 // Compile-time check.
-var _ workerexecution.Provider = (*MockWorkerMapProvider)(nil)
+var _ providers.Service = (*MockWorkerMapProvider)(nil)

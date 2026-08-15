@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
@@ -26,7 +27,7 @@ func (s *Service) runAgentLoop(
 	request workers.ExecuteRequest,
 	identity string,
 	runnerRequest workers.RunnerExecutionRequest,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 ) (workers.RunnerExecutionResult, error) {
 	if s.agentRunHarness == nil {
 		return workers.RunnerExecutionResult{}, errMisconfigured("agent-run harness is required")
@@ -50,7 +51,7 @@ func (s *Service) runAgentLoop(
 func (s *Service) agentLoopRunner(
 	request workers.ExecuteRequest,
 	identity string,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 ) workers.Runner {
 	if providerOverride != nil && identity == runners.AgentIdentity &&
 		!usesACPProvider(request.Target.ExecutorProvider) {

@@ -356,8 +356,8 @@ func sessionRef(id string) providers.SessionRef {
 	}
 }
 
-func providerMetadata(ref providers.SessionRef) *workers.ProviderSessionMetadata {
-	return &workers.ProviderSessionMetadata{
+func providerMetadata(ref providers.SessionRef) *providers.SessionMetadata {
+	return &providers.SessionMetadata{
 		Provider: string(ref.Provider),
 		Kind:     ref.Kind,
 		ID:       ref.ID,
@@ -447,7 +447,7 @@ func executionFor(
 				FailureMetadata: metadata,
 			}
 			if ref != nil {
-				result.ProviderSession = providerMetadata(*ref)
+				result.Continuation = continuationFromProviderMetadata(providerMetadata(*ref))
 			}
 			return workers.WorkstationDispatchResult{
 				DispatchID:      dispatchID,
@@ -489,7 +489,7 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 				Result: workers.WorkResult{
 					DispatchID:      dispatchID,
 					Outcome:         workers.OutcomeAccepted,
-					ProviderSession: providerMetadata(firstRef),
+					Continuation:    continuationFromProviderMetadata(providerMetadata(firstRef)),
 				},
 			}, nil
 		}
@@ -502,7 +502,7 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 				DispatchID:      dispatchID,
 				Outcome:         workers.OutcomeFailed,
 				FailureMetadata: failureMetadata,
-				ProviderSession: providerMetadata(secondRef),
+				Continuation:    continuationFromProviderMetadata(providerMetadata(secondRef)),
 			},
 		}, nil
 	}
@@ -686,7 +686,7 @@ func TestReadTranscript_DistinguishesActiveMissingUnavailableAndCanceled(t *test
 		return workers.WorkstationDispatchResult{
 			DispatchID:      request.Execution.Dispatch.DispatchID,
 			TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
-			Result:          workers.WorkResult{DispatchID: request.Execution.Dispatch.DispatchID, Outcome: workers.OutcomeAccepted, ProviderSession: providerMetadata(ref)},
+			Result:          workers.WorkResult{DispatchID: request.Execution.Dispatch.DispatchID, Outcome: workers.OutcomeAccepted, Continuation: continuationFromProviderMetadata(providerMetadata(ref))},
 		}, nil
 	}}
 	projection := &observationProjectionStub{projectErr: providersessions.ErrSessionStorageUnavailable}

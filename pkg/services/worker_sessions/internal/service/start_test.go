@@ -950,7 +950,7 @@ func TestStart_ValidNewIdentity_ObservesRunningDuringAdmittedInFlightHandoff(t *
 // completion bridge commits the exact Providers-owned reference while the
 // attempt is still supervised, before terminal publication closes the session.
 func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing.T) {
-	returnedReference := &workers.ProviderSessionMetadata{
+	returnedReference := &providers.SessionMetadata{
 		Provider: "codex",
 		Kind:     "provider-native-kind",
 		ID:       "opaque-provider-session-1",
@@ -962,9 +962,9 @@ func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing
 				WorkstationName: req.WorkstationName,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
 				Result: workers.WorkResult{
-					DispatchID:      req.Execution.Dispatch.DispatchID,
-					Outcome:         workers.OutcomeAccepted,
-					ProviderSession: returnedReference,
+					DispatchID:   req.Execution.Dispatch.DispatchID,
+					Outcome:      workers.OutcomeAccepted,
+					Continuation: continuationFromProviderMetadata(returnedReference),
 				},
 			}, nil
 		},
@@ -1035,52 +1035,47 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 			t.Fatalf("association before forwarding = %#v, want %#v", got, reference)
 		}
 		forwarded = append(forwarded, workers.ProgressFragment{
-			DispatchID:         fragment.DispatchID,
-			Kind:               fragment.Kind,
-			ProviderSessionRef: workers.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+			DispatchID:   fragment.DispatchID,
+			Kind:         fragment.Kind,
+			Continuation: (fragment.Continuation).ClonePtr(),
 		})
 	})
 	publisher.Bind(registry)
 
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               "dispatch-1",
-		Kind:                     workers.CompletedFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(),
-			Kind:     reference.Kind,
-			ID:       reference.ID,
-		},
+		DispatchID:   "dispatch-1",
+		Kind:         workers.CompletedFragmentKind,
+		Continuation: func() *providers.ContinuationRef { continuation := reference.ContinuationRef(); return &continuation }(),
 	})
 	if len(forwarded) != 1 || forwarded[0].DispatchID != "dispatch-1" ||
-		forwarded[0].ProviderSessionRef == nil || forwarded[0].ProviderSessionRef.ID != reference.ID {
+		forwarded[0].Continuation == nil || forwarded[0].Continuation.ProviderSessionID != reference.ID {
 		t.Fatalf("forwarded provider output = %#v, want one associated dispatch-1 fragment", forwarded)
 	}
-	// The typed source reference and the response-stream metadata must agree;
-	// otherwise output would advertise a different Provider Session than the
-	// one Worker Sessions retained.
+	// The opaque continuation must agree with the source association; otherwise
+	// output would advertise a different Provider Session than the one Worker
+	// Sessions retained.
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               "dispatch-1",
-		Kind:                     workers.CompletedFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "mismatched-metadata-session",
-		},
+		DispatchID: "dispatch-1",
+		Kind:       workers.CompletedFragmentKind,
+		Continuation: func() *providers.ContinuationRef {
+			mismatched := providers.SessionRef{Provider: reference.Provider, Kind: reference.Kind, ID: "mismatched-session"}.ContinuationRef()
+			return &mismatched
+		}(),
 	})
 	if len(forwarded) != 1 {
-		t.Fatalf("forwarded output after mismatched metadata = %#v, want no inconsistent output", forwarded)
+		t.Fatalf("forwarded output after mismatched continuation = %#v, want no inconsistent output", forwarded)
 	}
 
 	// A reference-bearing fragment from a sibling/foreign dispatch is rejected
 	// by Worker Sessions and never reaches the response publisher.
 	publisher.Publish(workers.ProgressFragment{
-		DispatchID:               "foreign-dispatch",
-		Kind:                     workers.CompletedFragmentKind,
-		ProviderSessionReference: workers.CloneProviderSessionReference(&reference),
-		ProviderSessionRef: &workers.ProviderSessionMetadata{
-			Provider: reference.Provider.String(), Kind: reference.Kind, ID: "foreign-session",
-		},
+		DispatchID: "foreign-dispatch",
+		Kind:       workers.CompletedFragmentKind,
+		Continuation: func() *providers.ContinuationRef {
+			foreign := providers.SessionRef{Provider: reference.Provider, Kind: reference.Kind, ID: "foreign-session"}.ContinuationRef()
+			return &foreign
+		}(),
 	})
 	if len(forwarded) != 1 {
 		t.Fatalf("forwarded provider output after foreign dispatch = %#v, want no cross-session output", forwarded)
@@ -1100,16 +1095,17 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 		t.Fatalf("Resume() = %#v, %v, want applied exact continuation", resumed, err)
 	}
 	continuation := boundary.currentRequest()
-	if continuation.Execution.ResumeSession == nil || *continuation.Execution.ResumeSession != reference {
-		t.Fatalf("continuation ResumeSession = %#v, want exact %#v", continuation.Execution.ResumeSession, reference)
+	wantContinuation := reference.ContinuationRef()
+	if continuation.Execution.Continuation == nil || *continuation.Execution.Continuation != wantContinuation {
+		t.Fatalf("continuation Continuation = %#v, want exact %#v", continuation.Execution.Continuation, wantContinuation)
 	}
 
 	continued := completedDispatchResult(resumed.DispatchID)
-	continued.Result.ProviderSession = &workers.ProviderSessionMetadata{
+	continued.Result.Continuation = continuationFromProviderMetadata(&providers.SessionMetadata{
 		Provider: reference.Provider.String(),
 		Kind:     reference.Kind,
 		ID:       reference.ID,
-	}
+	})
 	boundary.complete(continued, nil)
 	if result := <-started; result.Session.State != workersessions.StateCompleted ||
 		result.Session.ProviderSessionAssociation == nil || result.Session.ProviderSessionAssociation.Reference != reference {
@@ -1231,9 +1227,9 @@ func TestAssociateProviderSession_CommitsBeforeDependentWorkerRecord(t *testing.
 				Result: workers.WorkResult{
 					DispatchID: req.Execution.Dispatch.DispatchID,
 					Outcome:    workers.OutcomeAccepted,
-					ProviderSession: &workers.ProviderSessionMetadata{
+					Continuation: continuationFromProviderMetadata(&providers.SessionMetadata{
 						Provider: "claude", Kind: "conversation-token", ID: "opaque-provider-session-2",
-					},
+					}),
 				},
 			}, nil
 		},
@@ -1450,11 +1446,9 @@ func TestStart_InvalidProviderSessionResultRemainsExplicitlyUnassociated(t *test
 				WorkstationName: req.WorkstationName,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
 				Result: workers.WorkResult{
-					DispatchID: req.Execution.Dispatch.DispatchID,
-					Outcome:    workers.OutcomeAccepted,
-					ProviderSession: &workers.ProviderSessionMetadata{
-						Kind: "thread", ID: "opaque-invalid",
-					},
+					DispatchID:   req.Execution.Dispatch.DispatchID,
+					Outcome:      workers.OutcomeAccepted,
+					Continuation: &providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: ""},
 				},
 			}, nil
 		},
@@ -2589,9 +2583,10 @@ func TestStart_OpeningRecordCarriesExactContinuationAndResumeReason(t *testing.T
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 	request := validStartRequest("worker-1", "dispatch-1")
-	request.Execution.Execution.ResumeSession = &providers.SessionRef{
+	continuation := providers.SessionRef{
 		Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "opaque-provider-session",
-	}
+	}.ContinuationRef()
+	request.Execution.Execution.Continuation = &continuation
 	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
 		t.Fatalf("InvokeSession() error = %v, want nil", err)
 	}
@@ -2662,8 +2657,8 @@ func assertNoProviderSessionHistory(t *testing.T, read events.ReadResult, forwar
 		t.Fatalf("output = %#v, want final-only antigravity MESSAGE/COMPLETED snapshot", output)
 	}
 	assertLifecycleDraft(t, terminal, workers.PhaseCompleted, "antigravity", "terminal")
-	if forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
-		t.Fatalf("forwarded output = %#v, want no synthesized Provider Session reference", forwarded[0])
+	if forwarded[0].Continuation != nil {
+		t.Fatalf("forwarded output = %#v, want no synthesized continuation", forwarded[0])
 	}
 	if read.Records[2].SourceType != workersessions.WorkerObservationSourceType || read.Records[2].SourceSequence != 1 || read.Records[2].SourceEventID != "worker-no-session/1" {
 		t.Fatalf("output source identity = %q/%q/%d/%q, want worker observation worker-no-session/1", read.Records[2].SourceType, read.Records[2].SourceID, read.Records[2].SourceSequence, read.Records[2].SourceEventID)

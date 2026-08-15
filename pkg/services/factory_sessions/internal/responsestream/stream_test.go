@@ -7,7 +7,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -57,7 +57,7 @@ func TestSessionResponseStream_AppendAssignsMonotonicSequenceAndRetentionMetadat
 		Kind:       responsestream.EventKindResponseFragment,
 		DispatchID: "dispatch-1",
 		Payload:    "partial response",
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: "cursor",
 			Kind:     "session_id",
 			ID:       "sess-1",

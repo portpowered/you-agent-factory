@@ -3,6 +3,7 @@
 package workerdiagnostics
 
 import (
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -65,7 +66,7 @@ func WorkFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadat
 }
 
 // GeneratedProviderSessionMetadata maps canonical provider-session metadata to the public contract.
-func GeneratedProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func GeneratedProviderSessionMetadata(session *providers.SessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}
@@ -77,11 +78,11 @@ func GeneratedProviderSessionMetadata(session *workerexecution.ProviderSessionMe
 }
 
 // ProviderSessionMetadataFromGenerated maps public provider-session metadata to the canonical contract.
-func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
+func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMetadata) *providers.SessionMetadata {
 	if session == nil {
 		return nil
 	}
-	return &workerexecution.ProviderSessionMetadata{
+	return &providers.SessionMetadata{
 		Provider: stringValue(session.Provider),
 		Kind:     stringValue(session.Kind),
 		ID:       stringValue(session.Id),

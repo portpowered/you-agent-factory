@@ -32,6 +32,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 	// ProviderOverride (not ProviderCommandRunner) is required here; see the
 	// documented in-scope exception on panicInferenceProvider below.
 	provider := panicInferenceProvider{message: "simulated executor catastrophic panic"}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
@@ -77,7 +78,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 // proves: ScriptWrapProvider.Execute converts CommandRunner.Run's
 // (CommandResult, error) return into an ordinary *ProviderError branch on
 // err != nil or ExitCode != 0
-// (pkg/services/providers/internal/services/execution/internal/provider/inference_provider.go:179-217),
+// (pkg/services/workers/internal/providercompat/inference_provider.go:179-217),
 // and everything downstream of that (invocation.Executor.Execute at
 // pkg/services/workers/internal/services/workstations/invocation/executor.go:51)
 // only calls deterministic, non-panicking string/format helpers on the
@@ -89,6 +90,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 // workerExecutorRequestAdapter.Execute
 // (pkg/services/workers/workstation_pool_boundary_impl.go).
 type panicInferenceProvider struct {
+	testutil.ProviderServiceAdapter
 	message string
 }
 

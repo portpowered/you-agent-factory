@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -457,7 +458,7 @@ func openingCoordinatorDurableExecution(
 	_ operatorconfig.ResolvedDefaults,
 	_ RuntimeRoot,
 	_ factoryruntime.Clock,
-	_ workers.Provider,
+	_ providers.Service,
 	_ *workers.MockWorkersConfig,
 	_ FactorySessionExecutionFactory,
 	_ factorysessions.ProviderIdentityResolver,

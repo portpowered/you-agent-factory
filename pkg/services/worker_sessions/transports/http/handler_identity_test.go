@@ -113,8 +113,8 @@ func assertWorkerSessionStartServiceRequest(t *testing.T, request workersessions
 	if request.Execution.Execution.Dispatch.DispatchID != "dispatch-1" {
 		t.Fatalf("dispatch ID = %q, want dispatch-1", request.Execution.Execution.Dispatch.DispatchID)
 	}
-	if request.Execution.Execution.ResumeSession == nil || request.Execution.Execution.ResumeSession.ID != "provider-session" {
-		t.Fatalf("resume session = %#v, want provider-session", request.Execution.Execution.ResumeSession)
+	if request.Execution.Execution.Continuation == nil || request.Execution.Execution.Continuation.ProviderSessionID != "provider-session" {
+		t.Fatalf("continuation = %#v, want provider-session", request.Execution.Execution.Continuation)
 	}
 	if len(request.Execution.Execution.ModelBindings) != 1 || request.Execution.Execution.ModelBindings[0].Slot != "slot" {
 		t.Fatalf("model bindings = %#v, want slot binding", request.Execution.Execution.ModelBindings)

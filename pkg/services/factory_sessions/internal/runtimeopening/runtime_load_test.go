@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,15 +15,14 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
@@ -33,6 +33,147 @@ type runtimeLoadPortableFailureCase struct {
 	payload  []byte
 	readErr  error
 	wantCode recordings.ReplayArtifactDiagnosticCode
+}
+
+type runtimeLoadReplayInputs struct {
+	readFile   func(string) ([]byte, error)
+	loadLegacy recordings.ReplayArtifactLoader
+}
+
+func newRuntimeLoadReplayInputs(
+	readFile func(string) ([]byte, error),
+	loadLegacy recordings.ReplayArtifactLoader,
+) recordings.ReplayInputLoader {
+	return runtimeLoadReplayInputs{readFile: readFile, loadLegacy: loadLegacy}
+}
+
+func (loader runtimeLoadReplayInputs) LoadReplayInput(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+	if loader.readFile == nil {
+		return recordings.LoadReplayInputResult{}, runtimeLoadInputError(
+			recordings.ReplayInputFamilyPortable,
+			fmt.Errorf("Factory Session replay recording reader is required"),
+		)
+	}
+	data, err := loader.readFile(request.Path)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, runtimeLoadInputError(
+			recordings.ReplayInputFamilyPortable,
+			fmt.Errorf("read replay recording: %w", err),
+		)
+	}
+	if runtimeLoadIsPortable(data) {
+		return loader.loadPortable(data)
+	}
+	if loader.loadLegacy == nil {
+		return recordings.LoadReplayInputResult{}, runtimeLoadInputError(
+			recordings.ReplayInputFamilyPortable,
+			fmt.Errorf("replay artifact loader is required"),
+		)
+	}
+	artifact, err := loader.loadLegacy(request.Path)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, runtimeLoadInputError(
+			recordings.ReplayInputFamilyLegacy,
+			fmt.Errorf("load replay artifact: %w", err),
+		)
+	}
+	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+}
+
+func (loader runtimeLoadReplayInputs) loadPortable(data []byte) (recordings.LoadReplayInputResult, error) {
+	portable, err := recordings.DecodePortableRecording(bytes.NewReader(data))
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, runtimeLoadInputError(recordings.ReplayInputFamilyPortable, err)
+	}
+	return recordings.LoadReplayInputResult{Portable: &portable}, nil
+}
+
+func runtimeLoadIsPortable(data []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	token, err := decoder.Token()
+	if err != nil {
+		return false
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok || delimiter != '{' {
+		return false
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return false
+		}
+		if keyText == "recordingKind" {
+			var kind string
+			if err := decoder.Decode(&kind); err != nil {
+				return false
+			}
+			return kind == recordings.KindJavaScriptFactorySession
+		}
+		var ignored json.RawMessage
+		if err := decoder.Decode(&ignored); err != nil {
+			return false
+		}
+	}
+	return false
+}
+
+func runtimeLoadInputError(family recordings.ReplayInputFamily, cause error) *recordings.ReplayInputError {
+	return &recordings.ReplayInputError{
+		Family:     family,
+		Diagnostic: runtimeLoadDiagnostic(cause),
+		Cause:      cause,
+	}
+}
+
+func runtimeLoadDiagnostic(err error) recordings.ReplayArtifactDiagnostic {
+	var artifactErr *recordings.ReplayArtifactError
+	if errors.As(err, &artifactErr) && artifactErr != nil {
+		return artifactErr.Diagnostic
+	}
+	var portableErr *recordings.PortableRecordingDiagnostic
+	if errors.As(err, &portableErr) && portableErr != nil {
+		return runtimeLoadPortableDiagnostic(portableErr)
+	}
+	return recordings.ReplayArtifactDiagnostic{
+		Code:    recordings.ReplayArtifactDiagnosticDependencyFailure,
+		Area:    "input",
+		Path:    "replayInput",
+		Message: "replay input could not be loaded",
+	}
+}
+
+func runtimeLoadPortableDiagnostic(diagnostic *recordings.PortableRecordingDiagnostic) recordings.ReplayArtifactDiagnostic {
+	result := recordings.ReplayArtifactDiagnostic{
+		Area:               diagnostic.Area,
+		Path:               diagnostic.Path,
+		EncounteredVersion: diagnostic.EncounteredVersion,
+		Action:             diagnostic.Action,
+		SupportedVersions:  append([]string(nil), diagnostic.SupportedVersions...),
+	}
+	switch diagnostic.Code {
+	case recordings.PortableRecordingCodeMalformedContract:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticMalformed, "recording document is malformed"
+	case recordings.PortableRecordingCodeUnsupportedVersion:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticUnsupportedVersion, "recording uses an unsupported replay compatibility version"
+	case recordings.PortableRecordingCodeUnsupportedSchema:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticUnsupportedSchema, "recording uses an unsupported schema version"
+	case recordings.PortableRecordingCodeInvalidIdentity:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticInvalidIdentity, "recording identity is invalid"
+	case recordings.PortableRecordingCodeInvalidDigest:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticInvalidIntegrity, "recording integrity is invalid"
+	case recordings.PortableRecordingCodeInvalidSummary:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticInvalidSummary, "recording summary is invalid"
+	case recordings.PortableRecordingCodeInvalidOrder:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticInvalidOrder, "recording event order is invalid"
+	default:
+		result.Code, result.Message = recordings.ReplayArtifactDiagnosticDependencyFailure, "replay input could not be loaded"
+	}
+	return result
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
@@ -46,9 +187,7 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	var loggerSessionID string
 	var loggerFolderPath string
 	var loggerFactoryDir string
-	replayInputs := recordingswire.NewReplayInputLoader(
-		recordings.RecordingReadFile(os.ReadFile), nil, logging.NoopLogger{},
-	)
+	replayInputs := newRuntimeLoadReplayInputs(os.ReadFile, nil)
 	loaded, err := LoadRuntime(
 		t.TempDir(),
 		"",
@@ -139,12 +278,12 @@ func TestLoadRuntimePropagatesReplayInputFailure(t *testing.T) {
 
 	root := RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()}
 	want := errors.New("recording read unavailable")
-	replayInputs := recordingswire.NewReplayInputLoader(func(path string) ([]byte, error) {
+	replayInputs := newRuntimeLoadReplayInputs(func(path string) ([]byte, error) {
 		if path != "recording.json" {
 			t.Fatalf("path = %q, want recording.json", path)
 		}
 		return nil, want
-	}, nil, logging.NoopLogger{})
+	}, nil)
 	_, err := LoadRuntime(
 		t.TempDir(), "", "recording.json", operatorconfig.ResolvedDefaults{}, nil, root,
 		nil, nil, nil, replayInputs, nil,
@@ -168,10 +307,9 @@ func TestLoadRuntimePreservesLegacyReplayFailureContext(t *testing.T) {
 		t.Fatalf("write legacy replay fixture: %v", err)
 	}
 	want := errors.New("legacy replay unavailable")
-	replayInputs := recordingswire.NewReplayInputLoader(
-		recordings.RecordingReadFile(os.ReadFile),
+	replayInputs := newRuntimeLoadReplayInputs(
+		os.ReadFile,
 		func(string) (*recordings.ReplayArtifact, error) { return nil, want },
-		logging.NoopLogger{},
 	)
 	loaded, err := LoadRuntime(
 		t.TempDir(), "", path, operatorconfig.ResolvedDefaults{}, nil,
@@ -202,7 +340,7 @@ func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 			FinishedAt: time.Date(2026, time.July, 20, 2, 5, 0, 0, time.UTC),
 		},
 	}
-	capability := recordingswire.NewReplayInputLoader(
+	capability := newRuntimeLoadReplayInputs(
 		func(path string) ([]byte, error) {
 			if path != "legacy-replay.json" {
 				t.Fatalf("read path = %q, want legacy-replay.json", path)
@@ -215,7 +353,6 @@ func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 			}
 			return artifact, nil
 		},
-		logging.NoopLogger{},
 	)
 
 	loaded, err := LoadRuntime(
@@ -410,7 +547,7 @@ func assertPortableRuntimeFailureBeforeFactoryConstruction(
 	loadFactoryCalls := 0
 	decodeReplayConfigCalls := 0
 	newLoadedFactoryCalls := 0
-	capability := recordingswire.NewReplayInputLoader(
+	capability := newRuntimeLoadReplayInputs(
 		func(path string) ([]byte, error) {
 			if path != "portable-replay.json" {
 				t.Fatalf("read path = %q, want portable-replay.json", path)
@@ -421,7 +558,6 @@ func assertPortableRuntimeFailureBeforeFactoryConstruction(
 			t.Fatal("legacy loader must not be called for portable replay failures")
 			return nil, nil
 		},
-		logging.NoopLogger{},
 	)
 
 	loaded, err := LoadRuntime(
@@ -481,10 +617,9 @@ func TestLoadRuntimePreservesLegacyTypedDiagnostic(t *testing.T) {
 		},
 		Cause: recordings.ErrForeignPortableArtifact,
 	}
-	capability := recordingswire.NewReplayInputLoader(
+	capability := newRuntimeLoadReplayInputs(
 		func(string) ([]byte, error) { return []byte(`{"schemaVersion":"legacy"}`), nil },
 		func(string) (*recordings.ReplayArtifact, error) { return nil, failure },
-		logging.NoopLogger{},
 	)
 
 	loaded, err := LoadRuntime(
@@ -652,7 +787,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	executionFactory := func(
 		_ string,
 		_ factorysessions.PersistencePolicy,
-		_ workers.Provider,
+		_ providers.Service,
 		_ factoryruntime.Clock,
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,

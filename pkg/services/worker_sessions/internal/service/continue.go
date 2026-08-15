@@ -319,7 +319,8 @@ func continuationExecution(
 	continuation.Execution.Dispatch.DispatchID = dispatchID
 	continuation.Execution.UserMessage = followUpInput
 	continuedReference := reference.Clone()
-	continuation.Execution.ResumeSession = &continuedReference
+	continuationRef := continuedReference.ContinuationRef()
+	continuation.Execution.Continuation = &continuationRef
 	return continuation
 }
 
@@ -933,4 +934,31 @@ func (r *registry) transcriptSession(req workersessions.ReadTranscriptRequest) (
 		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
 	}
 	return session, metadata, nil
+}
+
+func projectObservationEvent(record events.Record, workerSessionIDArgs ...string) workersessions.ObservationEvent {
+	workerSessionID := observationWorkerSessionIDFromTopic(record.ID.Topic)
+	if len(workerSessionIDArgs) > 0 && strings.TrimSpace(workerSessionIDArgs[0]) != "" {
+		workerSessionID = strings.TrimSpace(workerSessionIDArgs[0])
+	}
+	return workersessions.ObservationEvent{
+		Position: uint64(record.ID.Position),
+		Cursor: workersessions.ObservationCursor{
+			WorkerSessionID: workerSessionID,
+			Position:        uint64(record.ID.Position),
+		},
+		SourceType:     string(record.SourceType),
+		SourceID:       string(record.SourceID),
+		SourceSequence: uint64(record.SourceSequence),
+		SourceEventID:  string(record.SourceEventID),
+		SchemaID:       string(record.SchemaID),
+		Payload:        append([]byte(nil), record.Payload...),
+	}
+}
+
+func observationWorkerSessionIDFromTopic(topic events.Topic) string {
+	value := strings.TrimSpace(string(topic))
+	value = strings.TrimPrefix(value, "worker-session/")
+	value = strings.TrimSuffix(value, "/events")
+	return value
 }

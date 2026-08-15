@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -68,6 +69,14 @@ type ProviderSessionsPorts struct {
 	Service providersessions.Service
 }
 
+// ProviderOverrideService is the optional request-scoped Providers root
+// replacement selected by process composition. The distinct interface keeps
+// Wire from confusing the override with the process-owned Providers root when
+// both are available in the same provider set.
+type ProviderOverrideService interface {
+	providers.Service
+}
+
 // FactoryRuntimePorts contains Factory Runtime's opening collaborators.
 type FactoryRuntimePorts struct {
 	Logger                          *zap.Logger
@@ -81,7 +90,7 @@ type FactoryRuntimePorts struct {
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 	Clock                           factoryruntime.Clock
-	ProviderOverride                workers.Provider
+	ProviderOverride                ProviderOverrideService
 	SubmissionRecorder              recordings.SubmissionRecorder
 	DispatchRecorder                recordings.DispatchRecorder
 }
@@ -214,7 +223,7 @@ type Factory struct {
 	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
 	runtimeRoot                      FactoryRuntimeRoot
 	clock                            factoryruntime.Clock
-	providerOverride                 workers.Provider
+	providerOverride                 providers.Service
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder
 	providerCommandRunner            workers.CommandRunner
 	scriptCommandRunner              workers.CommandRunner

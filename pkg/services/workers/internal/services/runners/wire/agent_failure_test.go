@@ -303,14 +303,15 @@ func assertAgentFailureFacts(
 	published []workers.ProgressFragment,
 ) {
 	t.Helper()
-	wantSession := &workers.ProviderSessionMetadata{
+	wantSession := &providers.SessionMetadata{
 		Provider: string(providers.IDCodex),
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-1",
 	}
-	if !reflect.DeepEqual(result.ProviderSession, wantSession) ||
-		!reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
-		t.Fatalf("failure sessions = result:%#v error:%#v, want %#v", result.ProviderSession, providerErr.ProviderSession, wantSession)
+	wantContinuation := (wantSession).ContinuationRef()
+	if !reflect.DeepEqual(result.Continuation, wantContinuation) ||
+		!reflect.DeepEqual(providerErr.Continuation, wantContinuation) {
+		t.Fatalf("failure continuations = result:%#v error:%#v, want %#v", result.Continuation, providerErr.Continuation, wantContinuation)
 	}
 	if result.Diagnostics == nil ||
 		result.Diagnostics.Provider == nil ||
@@ -325,10 +326,10 @@ func assertAgentFailureFacts(
 	if len(published) != 2 ||
 		published[0].DispatchID != "dispatch-agent-1" ||
 		published[0].Payload != "provider stopped" ||
-		!reflect.DeepEqual(published[0].ProviderSessionRef, wantSession) ||
+		!reflect.DeepEqual(published[0].Continuation, wantContinuation) ||
 		published[1].Kind != workers.FailedFragmentKind ||
 		published[1].Type != "FAILED" ||
-		!reflect.DeepEqual(published[1].ProviderSessionRef, wantSession) {
+		!reflect.DeepEqual(published[1].Continuation, wantContinuation) {
 		t.Fatalf("failure progress = %#v, want correlated diagnostic and terminal failure", published)
 	}
 }

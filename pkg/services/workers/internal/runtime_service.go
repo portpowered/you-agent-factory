@@ -43,7 +43,7 @@ type Service struct {
 	factoryRunnerID                   string
 	runWorktree                       string
 	invocationSkipPermissionsOverride *bool
-	providerOverride                  workers.Provider
+	providerOverride                  providers.Service
 	clock                             func() time.Time
 	processEnvironment                func() []string
 	currentWorkingDirectory           func() (string, error)
@@ -63,8 +63,11 @@ type Service struct {
 	executableInspector               platformfilesystem.PathInspector
 	executableFiles                   platformfilesystem.ReadOpener
 	operatingSystem                   workers.OperatingSystem
-	providerRegistry                  workers.ProviderRegistry
-	providerRegistryRebinder          ProviderRegistryRebinder
+	providersRebinder                 ProvidersRebinder
+}
+
+type providerLifecycle interface {
+	Close(context.Context) error
 }
 
 var _ workers.RuntimeService = (*Service)(nil)
@@ -80,7 +83,7 @@ func (s *Service) Close(ctx context.Context) error {
 
 type ownedProviderLifecycles struct {
 	mu         sync.Mutex
-	lifecycles []providers.Lifecycle
+	lifecycles []providerLifecycle
 	closed     bool
 }
 
@@ -92,7 +95,7 @@ func (owned *ownedProviderLifecycles) Add(service providers.Service) bool {
 	if owned == nil {
 		return false
 	}
-	lifecycle, ok := service.(providers.Lifecycle)
+	lifecycle, ok := service.(providerLifecycle)
 	if !ok {
 		return true
 	}
@@ -115,7 +118,7 @@ func (owned *ownedProviderLifecycles) Close(ctx context.Context) error {
 		return nil
 	}
 	owned.closed = true
-	lifecycles := append([]providers.Lifecycle(nil), owned.lifecycles...)
+	lifecycles := append([]providerLifecycle(nil), owned.lifecycles...)
 	owned.lifecycles = nil
 	owned.mu.Unlock()
 	var result error
@@ -149,7 +152,7 @@ func New(
 	runWorktree string,
 	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),

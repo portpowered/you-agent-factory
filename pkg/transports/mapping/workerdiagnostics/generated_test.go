@@ -3,14 +3,14 @@ package workerdiagnostics
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestProviderSessionMetadataFromGenerated_PreservesProviderRepresentation(t *testing.T) {
 	t.Parallel()
 
-	generated := GeneratedProviderSessionMetadata(&workers.ProviderSessionMetadata{
+	generated := GeneratedProviderSessionMetadata(&providers.SessionMetadata{
 		Provider: "agent",
 		Kind:     "session_id",
 		ID:       "cursor-session-123",

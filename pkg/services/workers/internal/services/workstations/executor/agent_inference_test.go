@@ -68,11 +68,11 @@ func TestAgentExecutor_RetryableFailureRetriesWithPreservedSession(t *testing.T)
 		workerexecution.WorkFailureTypeThrottled,
 		"temporarily unavailable",
 		nil,
-		&workerexecution.ProviderSessionMetadata{
+		(&providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderKiro),
 			Kind:     providerSessionKindSessionID,
 			ID:       sessionID,
-		},
+		}).ContinuationRef(),
 	)
 	provider := &agentMockProvider{
 		errors: []error{throttleErr, nil},
@@ -247,7 +247,8 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 		withAgentOutputSchema(`{"type":"object"}`),
 	)
 	reference := providers.SessionRef{Provider: providers.IDClaude, Kind: "provider-native-thread", ID: "opaque-provider-session"}
-	request.ResumeSession = &reference
+	continuation := reference.ContinuationRef()
+	request.Continuation = &continuation
 
 	_, err := executor.Execute(context.Background(), request)
 	if err != nil {
@@ -270,12 +271,12 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 	if req.Model != "claude-sonnet-4-20250514" || req.ModelProvider != string(modelprovider.ProviderClaude) || req.SessionID != "session-1" {
 		t.Fatalf("request provider fields = model %q provider %q session %q", req.Model, req.ModelProvider, req.SessionID)
 	}
-	if req.ResumeSession == nil || *req.ResumeSession != reference {
-		t.Fatalf("request ResumeSession = %#v, want exact %#v", req.ResumeSession, reference)
+	if req.Continuation == nil || *req.Continuation != continuation {
+		t.Fatalf("request Continuation = %#v, want exact %#v", req.Continuation, continuation)
 	}
-	request.ResumeSession.ID = "caller-mutated"
-	if req.ResumeSession.ID != "opaque-provider-session" {
-		t.Fatalf("request ResumeSession retained caller mutation: %#v", req.ResumeSession)
+	request.Continuation.ProviderSessionID = "caller-mutated"
+	if req.Continuation.ProviderSessionID != "opaque-provider-session" {
+		t.Fatalf("request Continuation retained caller mutation: %#v", req.Continuation)
 	}
 	if req.EnvVars["PORTOS_TEST_ENV"] != "enabled" {
 		t.Fatalf("request env vars = %#v", req.EnvVars)
@@ -687,4 +688,74 @@ func TestPrintTimeoutFromWorkerTimeoutPreservesValidNativePrintLimits(t *testing
 			}
 		})
 	}
+}
+
+func (m *agentMockProvider) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if request.Identity == "" {
+		request.Identity = "codex"
+	}
+	return m.ProviderServiceAdapter.ResolveIdentity(ctx, request)
+}
+
+func (m *agentMockProvider) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if request.ID == "" {
+		request.ID = providers.IDCodex
+	}
+	return m.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
+}
+
+func (m *agentMockProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	adapter := m.ProviderServiceAdapter
+	adapter.InferFunc = m.Infer
+	return adapter.Execute(ctx, request)
+}
+
+func (m *agentMockProvider) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	adapter := m.ProviderServiceAdapter
+	adapter.InferFunc = m.Infer
+	return adapter.Continue(ctx, request)
+}
+
+func (m *agentMockProvider) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, providers.ContinuationFailure{
+			Kind:      providers.ContinuationFailureKindInvalid,
+			Message:   err.Error(),
+			Reference: providers.SessionRef{},
+		}
+	}
+	continued, err := m.Continue(ctx, providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   request.Attempt,
+	})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if continuedReference.Provider == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
 }

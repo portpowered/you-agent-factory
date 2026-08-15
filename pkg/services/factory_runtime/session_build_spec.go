@@ -2,6 +2,7 @@ package factory
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -33,7 +34,7 @@ type SessionBuildSpec struct {
 	Clock                 Clock
 	RecordPath            string
 	WorkflowID            string
-	ProviderOverride      workers.Provider
+	ProviderOverride      providers.Service
 	ProviderCommandRunner workers.CommandRunner
 	CommandRunnerOverride workers.CommandRunner
 	// ReplayCommandRunner is kept separate from the selected production

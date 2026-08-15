@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -71,7 +72,7 @@ type providerBoundaryExecutor struct {
 
 func (e providerBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	response := "provider contract output"
-	session := &workerexecution.ProviderSessionMetadata{
+	session := &providers.SessionMetadata{
 		Provider: "mock", Kind: "session_id", ID: "petri-provider-session-1",
 	}
 	diagnostics := json.RawMessage(`{"provider":{"provider":"mock","model":"fixture-model","responseMetadata":{"provider_session_id":"petri-provider-session-1"}}}`)
@@ -90,16 +91,16 @@ func (e providerBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkD
 			WorkIDs:    append([]string(nil), dispatch.Execution.WorkIDs...),
 			Response: &workerexecution.InferenceResponseEventPayload{
 				Attempt: 1, Diagnostics: diagnostics, InferenceRequestID: dispatch.DispatchID + "/inference-request/1",
-				Outcome: workerexecution.InferenceOutcomeSucceeded, ProviderSession: session, Response: &response,
+				Outcome: workerexecution.InferenceOutcomeSucceeded, Continuation: (session).ContinuationRef(), Response: &response,
 			},
 		})
 	}
 	return workerexecution.WorkResult{
-		DispatchID:      dispatch.DispatchID,
-		TransitionID:    dispatch.TransitionID,
-		Outcome:         workerexecution.OutcomeAccepted,
-		Output:          response,
-		ProviderSession: session,
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeAccepted,
+		Output:       response,
+		Continuation: (session).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "mock", Model: "fixture-model",
 		}},

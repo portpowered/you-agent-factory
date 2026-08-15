@@ -3,7 +3,6 @@ package workers
 import (
 	"strings"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -40,12 +39,14 @@ type ProgressFragment struct {
 	// intentionally independent from ProviderSessionReference: a provider may
 	// author progress without exposing a resumable native session identity.
 	Provider string
-	// ProviderSessionReference is the exact detached typed reference returned
-	// by Providers for this attempt. ProviderSessionRef remains the
-	// response-stream metadata projection; Worker Sessions must use this field
-	// when it associates a resumable execution before forwarding output.
+	// Continuation is the opaque provider-owned identity used to associate a
+	// resumable execution before forwarding output.
+	// ProviderSessionReference and ProviderSessionRef retain the old detached
+	// projections for the compatibility subtree until its successor deletion
+	// lane removes them. New code uses Continuation.
 	ProviderSessionReference       *providers.SessionRef
-	ProviderSessionRef             *providersessions.Metadata
+	ProviderSessionRef             *providers.SessionMetadata
+	Continuation                   *providers.ContinuationRef
 	ExternalEventType              string
 	Metadata                       map[string]string
 	CanonicalDraft                 any
@@ -55,8 +56,8 @@ type ProgressFragment struct {
 // ProgressPublisher receives transient Worker observations.
 type ProgressPublisher func(ProgressFragment)
 
-// CloneProviderSessionReference returns a detached copy of the exact typed
-// Provider Session reference carried by a Workers progress fragment.
+// CloneProviderSessionReference returns a detached compatibility copy of the
+// exact provider-session reference carried by a legacy progress fragment.
 func CloneProviderSessionReference(reference *providers.SessionRef) *providers.SessionRef {
 	if reference == nil {
 		return nil

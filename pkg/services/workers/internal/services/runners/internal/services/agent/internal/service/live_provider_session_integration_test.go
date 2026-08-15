@@ -239,14 +239,14 @@ func liveSessionRunnerRequest(request workers.WorkstationDispatchRequest) worker
 		WorkingDirectory:   execution.WorkingDirectory,
 		Worktree:           execution.Worktree,
 		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
-		ResumeSession:      workers.CloneProviderSessionReference(execution.ResumeSession),
+		Continuation:       (execution.Continuation).ClonePtr(),
 	}
 }
 
 func liveSessionDispatchResult(request workers.WorkstationDispatchRequest, response workers.RunnerExecutionResult, attemptErr error) workers.WorkstationDispatchResult {
 	result := workers.WorkResult{
 		DispatchID: request.Execution.Dispatch.DispatchID, TransitionID: request.Execution.Dispatch.TransitionID,
-		Output: response.Content, ProviderSession: workers.CloneProviderSessionMetadata(response.ProviderSession), Diagnostics: workers.CloneWorkDiagnostics(response.Diagnostics),
+		Output: response.Content, Continuation: cloneContinuation(response.Continuation), Diagnostics: workers.CloneWorkDiagnostics(response.Diagnostics),
 	}
 	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
 	if attemptErr != nil {

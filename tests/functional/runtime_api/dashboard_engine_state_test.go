@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -36,7 +36,7 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	}
 	provider.respond(workerexecution.InferenceResponse{
 		Content: "COMPLETE",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-world-view-success",
@@ -51,7 +51,7 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 		Type:    workerexecution.WorkFailureTypePermanentBadRequest,
 		Message: "provider rejected dashboard world-view work",
 		Cause:   errors.New("provider rejected"),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-world-view-failed",
@@ -157,6 +157,7 @@ func waitForPublicWorkInPlace(t *testing.T, baseURL, placeID, workID string, tim
 }
 
 type functionalWorldViewProvider struct {
+	testutil.ProviderServiceAdapter
 	requests  chan workerexecution.ProviderInferenceRequest
 	responses chan functionalWorldViewProviderResponse
 }
@@ -167,10 +168,12 @@ type functionalWorldViewProviderResponse struct {
 }
 
 func newFunctionalWorldViewProvider() *functionalWorldViewProvider {
-	return &functionalWorldViewProvider{
+	provider := &functionalWorldViewProvider{
 		requests:  make(chan workerexecution.ProviderInferenceRequest, 2),
 		responses: make(chan functionalWorldViewProviderResponse, 2),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 func (p *functionalWorldViewProvider) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
@@ -206,5 +209,3 @@ func (p *functionalWorldViewProvider) respond(response workerexecution.Inference
 	}
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
-
-var _ workerprovider.Provider = (*functionalWorldViewProvider)(nil)

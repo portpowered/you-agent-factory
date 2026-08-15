@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // workerSessionControlKey identifies the one immutable target set owned by a
@@ -954,7 +953,7 @@ type recordedDispatchObservation struct {
 	endedAt         *time.Time
 	state           workersessions.State
 	failure         *workersessions.FailureCause
-	provider        *workers.ProviderSessionMetadata
+	provider        *providers.SessionMetadata
 }
 
 type recordedDispatchAssociation struct {

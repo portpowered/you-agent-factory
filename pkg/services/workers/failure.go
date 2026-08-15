@@ -147,10 +147,13 @@ func adaptClassificationError(err error) error {
 
 // ProviderError is the public normalized Worker provider failure.
 type ProviderError struct {
-	Family                          WorkFailureFamily
-	Type                            WorkFailureType
-	Message                         string
+	Family  WorkFailureFamily
+	Type    WorkFailureType
+	Message string
+	// ProviderSession is retained for legacy Infer-shaped callers. Providers
+	// owns the detached identity; new code uses Continuation at this boundary.
 	ProviderSession                 *ProviderSessionMetadata
+	Continuation                    *ProviderContinuationRef
 	Diagnostics                     *WorkDiagnostics
 	Cause                           error
 	ProviderFailureKind             providers.ExecuteFailureKind
@@ -191,6 +194,9 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 	}
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) {
+		if providerErr != nil && providerErr.Continuation == nil {
+			providerErr.Continuation = (providerErr.ProviderSession).ContinuationRef()
+		}
 		return providerErr
 	}
 	if providerErr := normalizeProviderSessionError(err); providerErr != nil {
@@ -236,12 +242,13 @@ func normalizeProviderSessionError(err error) *ProviderError {
 		provider = strings.TrimSpace(string(lookupErr.Provider))
 		sessionID = strings.TrimSpace(lookupErr.SessionID)
 	}
-	var session *ProviderSessionMetadata
+	var continuation *ProviderContinuationRef
 	if sessionID != "" {
-		session = &ProviderSessionMetadata{
-			Provider: provider,
-			Kind:     providersessions.SessionIDKind,
-			ID:       sessionID,
+		continuation = &ProviderContinuationRef{
+			Provider:          provider,
+			Kind:              providersessions.SessionIDKind,
+			ProviderSessionID: sessionID,
+			ExternalRef:       sessionID,
 		}
 	}
 	diagnostics := &WorkDiagnostics{
@@ -253,16 +260,17 @@ func normalizeProviderSessionError(err error) *ProviderError {
 			},
 		},
 	}
-	if session != nil {
-		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = session.Provider
-		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = session.Kind
-		diagnostics.Provider.ResponseMetadata["provider_session_id"] = session.ID
+	if continuation != nil {
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = continuation.Provider
+		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = continuation.Kind
+		diagnostics.Provider.ResponseMetadata["provider_session_id"] = continuation.ProviderSessionID
 	}
 	return &ProviderError{
 		Family:          providerFailureFamily(failureType),
 		Type:            failureType,
 		Message:         message,
-		ProviderSession: session,
+		ProviderSession: (continuation).SessionMetadata(),
+		Continuation:    continuation,
 		Diagnostics:     diagnostics,
 		Cause:           err,
 	}
@@ -292,10 +300,11 @@ func NewProviderErrorWithSession(
 	failureType WorkFailureType,
 	message string,
 	cause error,
-	session *ProviderSessionMetadata,
+	continuation *ProviderContinuationRef,
 ) *ProviderError {
 	err := NewProviderError(failureType, message, cause)
-	err.ProviderSession = CloneProviderSessionMetadata(session)
+	err.Continuation = cloneContinuation(continuation)
+	err.ProviderSession = (err.Continuation).SessionMetadata()
 	return err
 }
 

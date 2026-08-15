@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
@@ -61,7 +62,7 @@ func NewService(
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 	agentToolFiles workers.AgentToolFileSystem,
-	providerOverrides ...workers.Provider,
+	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
@@ -82,7 +83,7 @@ func NewService(
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
-	var providerOverride workers.Provider
+	var providerOverride providers.Service
 	if len(providerOverrides) > 0 {
 		providerOverride = providerOverrides[0]
 	}
@@ -134,7 +135,7 @@ func NewMockService(
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
 	agentToolFiles workers.AgentToolFileSystem,
-	providerOverrides ...workers.Provider,
+	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
 	if mockWorkers == nil {
 		return nil, fmt.Errorf("construct mock Workers: mock workers config is required")
@@ -160,7 +161,7 @@ func NewMockService(
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
-	var providerOverride workers.Provider
+	var providerOverride providers.Service
 	if len(providerOverrides) > 0 {
 		providerOverride = providerOverrides[0]
 	}

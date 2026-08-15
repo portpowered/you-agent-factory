@@ -147,14 +147,16 @@ func workerSessionResolvedExecutionFromAPI(
 		execution.EnvVars = cloneStringMap(*value.EnvVars)
 	}
 	if value.ResumeSession != nil {
-		execution.ResumeSession = &providers.SessionRef{
+		reference := providers.SessionRef{
 			Provider: providers.ID(strings.TrimSpace(value.ResumeSession.Provider)),
 			Kind:     strings.TrimSpace(value.ResumeSession.Kind),
 			ID:       strings.TrimSpace(value.ResumeSession.Id),
 		}
-		if err := execution.ResumeSession.Validate(); err != nil {
+		if err := reference.Validate(); err != nil {
 			return workers.WorkstationDispatchRequest{}, fmt.Errorf("%w: resumeSession: %v", workersessions.ErrInvalidExecutionRequest, err)
 		}
+		continuation := reference.ContinuationRef()
+		execution.Continuation = &continuation
 	}
 	if value.ModelBindings != nil {
 		bindings, err := modelBindingsFromAPI(*value.ModelBindings)
@@ -226,11 +228,15 @@ func workerSessionResolvedExecutionToAPI(
 		}
 		result.ModelBindings = &bindings
 	}
-	if value.Execution.ResumeSession != nil {
+	if value.Execution.Continuation != nil {
+		reference, err := value.Execution.Continuation.ToSessionRef()
+		if err != nil {
+			return factoryapi.WorkerSessionResolvedExecution{}, fmt.Errorf("invalid continuation: %w", err)
+		}
 		result.ResumeSession = &factoryapi.WorkerSessionProviderSessionRef{
-			Provider: string(value.Execution.ResumeSession.Provider),
-			Kind:     value.Execution.ResumeSession.Kind,
-			Id:       value.Execution.ResumeSession.ID,
+			Provider: string(reference.Provider),
+			Kind:     reference.Kind,
+			Id:       reference.ID,
 		}
 	}
 	return result, nil

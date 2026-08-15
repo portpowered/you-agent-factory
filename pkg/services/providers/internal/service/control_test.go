@@ -82,7 +82,7 @@ func assertNoUnsafeControlLogFields(t *testing.T, fields map[string]any) {
 	}
 }
 
-func mustControlRootService(t *testing.T, logger *recordingControlLogger) providers.Service {
+func mustControlRootService(t *testing.T, logger *recordingControlLogger) *providerservice.Service {
 	t.Helper()
 
 	catalogService, err := catalogwire.NewService()

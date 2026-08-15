@@ -212,12 +212,10 @@ type WorkstationExecutionRequest struct {
 	Worktree                    string                          `json:"worktree,omitempty"`
 	WorkingDirectory            string                          `json:"working_directory,omitempty"`
 	WorkingDirectoryAuthored    bool                            `json:"working_directory_authored,omitempty"`
-	// ResumeSession is the exact detached Providers-owned session identity a
-	// resumed Worker Session must continue. It is intentionally distinct from
-	// configuration's legacy SessionID: this value retains provider-specific
-	// kind and opaque identity, so a resumed attempt cannot reconstruct a
-	// reference from the selected runner or model.
-	ResumeSession *providers.SessionRef `json:"-"`
+	// Continuation is the opaque Providers-owned continuation. Workers carries
+	// it across execution boundaries without reconstructing provider-session
+	// state or retaining a typed session object.
+	Continuation *ProviderContinuationRef `json:"-"`
 	// SkipPermissions is the invocation-effective worker policy for a Worker
 	// whose caller resolved it, rather than a workstation definition. A
 	// workstation-backed Worker leaves this false and takes the policy its
@@ -261,10 +259,9 @@ type ProviderInferenceRequest struct {
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	WorkflowContext              *Context                        `json:"-"`
-	// ResumeSession carries an exact typed Providers reference for continuation
-	// attempts. When non-nil, the provider runner must call Providers.Continue
-	// with this value unchanged and must not select ordinary execution.
-	ResumeSession *providers.SessionRef `json:"-"`
+	// Continuation is the opaque Providers-owned continuation. Providers owns
+	// decoding it and deciding whether the referenced attempt can continue.
+	Continuation *ProviderContinuationRef `json:"-"`
 	// SkipPermissions is the invocation-effective worker policy. Construction
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
@@ -298,7 +295,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
-	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	return clone
 }
@@ -313,14 +310,14 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.RequiredOptionalCapabilities = append([]RunnerOptionalCapability(nil), request.RequiredOptionalCapabilities...)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
-	clone.ResumeSession = cloneSessionRef(request.ResumeSession)
+	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.TemporaryFiles = request.TemporaryFiles
 	clone.ExecutionLogger = request.ExecutionLogger
 	return clone
 }
 
-func cloneSessionRef(reference *providers.SessionRef) *providers.SessionRef {
+func cloneContinuation(reference *ProviderContinuationRef) *ProviderContinuationRef {
 	if reference == nil {
 		return nil
 	}
@@ -567,8 +564,8 @@ type ExecutionInput struct {
 	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
 	// ports for detached execution, such as Recordings replay. They are never
 	// serialized or retained by the process-scoped Workers service.
-	ProviderOverride      Provider      `json:"-"`
-	CommandRunnerOverride CommandRunner `json:"-"`
+	ProviderOverride      providers.Service `json:"-"`
+	CommandRunnerOverride CommandRunner     `json:"-"`
 	// PreparedRequestObserver receives the detached request after Workers has
 	// prepared request-scoped resources and before the runner starts. Runtime
 	// uses it to record the effective execution target without moving resource
@@ -622,11 +619,9 @@ type AttemptSummary struct {
 	Finished  time.Time
 }
 
-type ProviderContinuationRef struct {
-	Provider          string
-	ProviderSessionID string
-	ExternalRef       string
-}
+// ProviderContinuationRef is retained as the Workers compatibility name for
+// the Providers-owned opaque continuation value.
+type ProviderContinuationRef = providers.ContinuationRef
 
 type ExecuteResult struct {
 	Correlation             ExecutionCorrelation
@@ -712,11 +707,13 @@ func validateExecutionTarget(target ExecutionTarget) error {
 }
 
 func validateResumeContinuation(resume *ProviderContinuationRef) error {
-	if resume == nil || strings.TrimSpace(resume.Provider) != "" ||
-		strings.TrimSpace(resume.ProviderSessionID) != "" || strings.TrimSpace(resume.ExternalRef) != "" {
+	if resume == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
+	if err := resume.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidExecuteRequest, err)
+	}
+	return nil
 }
 
 // Validate checks the complete identity required to attribute one detached
@@ -786,8 +783,7 @@ func (input ExecutionInput) Clone() ExecutionInput {
 		}
 	}
 	if input.Resume != nil {
-		resume := *input.Resume
-		clone.Resume = &resume
+		clone.Resume = cloneContinuation(input.Resume)
 	}
 	clone.WorkflowContext = input.WorkflowContext.Clone()
 	clone.MockWorkers = input.MockWorkers.Clone()

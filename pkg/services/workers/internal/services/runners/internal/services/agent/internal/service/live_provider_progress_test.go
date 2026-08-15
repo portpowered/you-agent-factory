@@ -162,8 +162,8 @@ func TestExecuteWithoutProviderSessionReferenceStillCarriesProviderIdentity(t *t
 		if fragment.Provider != string(providers.IDCodex) {
 			t.Fatalf("published[%d].Provider = %q, want codex", index, fragment.Provider)
 		}
-		if fragment.ProviderSessionReference != nil || fragment.ProviderSessionRef != nil {
-			t.Fatalf("published[%d] = %#v, want no synthesized Provider Session", index, fragment)
+		if fragment.Continuation != nil {
+			t.Fatalf("published[%d] = %#v, want no synthesized continuation", index, fragment)
 		}
 	}
 }

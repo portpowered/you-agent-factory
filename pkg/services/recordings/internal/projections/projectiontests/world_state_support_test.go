@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -187,7 +188,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 				},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
@@ -210,7 +211,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 	}
 }
@@ -279,7 +280,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     1500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"}),
 			Diagnostics:        generatedWorkDiagnosticsForProjectionTest(diagnostics),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -289,7 +290,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 			DurationMillis:  1500,
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
 			Diagnostics:     diagnostics,
 		}),
 	}
@@ -761,7 +762,7 @@ func generatedResourcesForProjectionTest(resources []interfaces.FactoryResourceU
 	return &out
 }
 
-func generatedProviderSessionForProjectionTest(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func generatedProviderSessionForProjectionTest(session *providers.SessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}

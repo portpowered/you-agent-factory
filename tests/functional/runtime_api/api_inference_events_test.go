@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -28,7 +29,7 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{
 			Content: "Step one done. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "session-inference-events",

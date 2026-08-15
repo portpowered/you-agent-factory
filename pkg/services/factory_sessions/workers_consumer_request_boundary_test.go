@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -175,10 +176,11 @@ func runWorkersInferenceThroughRootProof(
 			fixture.model,
 		)
 	}
-	if inferResponse.ProviderSession == nil || inferResponse.ProviderSession.ID != "workers-root-boundary-session" {
+	inferSession := (inferResponse.Continuation).SessionMetadata()
+	if inferSession == nil || inferSession.ID != "workers-root-boundary-session" {
 		t.Fatalf(
 			"inference provider session = %#v, want workers-root-boundary-session",
-			inferResponse.ProviderSession,
+			inferSession,
 		)
 	}
 }
@@ -228,11 +230,10 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 		_ workers.ProviderInferenceRequest
 		_ workers.InvocationInput
 		_ workers.CommandRequest
-		_ workers.Provider
+		_ providers.Service
 		_ workers.InvocationExecutor
 		_ workers.CommandRunner
 		_ workers.PTYAllocator
-		_ workers.ProviderRegistry
 	)
 }
 
@@ -250,12 +251,8 @@ func (stub *workersRequestBoundaryStub) Execute(
 	return workers.InvocationResult{
 		Attempt: input.Attempt,
 		Response: workers.InferenceResponse{
-			Content: "workers-root-boundary",
-			ProviderSession: &workers.ProviderSessionMetadata{
-				Provider: "mock",
-				Kind:     "session_id",
-				ID:       "workers-root-boundary-session",
-			},
+			Content:      "workers-root-boundary",
+			Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}).ContinuationRef(),
 		},
 	}, nil
 }
@@ -266,12 +263,8 @@ func (stub *workersRequestBoundaryStub) Infer(
 ) (workers.InferenceResponse, error) {
 	stub.lastInference = request
 	return workers.InferenceResponse{
-		Content: "workers-root-boundary",
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "workers-root-boundary-session",
-		},
+		Content:      "workers-root-boundary",
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}).ContinuationRef(),
 	}, nil
 }
 

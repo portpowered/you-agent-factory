@@ -273,7 +273,7 @@ import (
   workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 type testProviderSessionService struct{}
-func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); cursor.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
+func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); cursor.LoadDetails(); providers.ID("agent").CanonicalSessionProvider() }
 func scriptedProviderSessionDetail() {}
 `)
 

@@ -153,7 +153,7 @@ func provideFactoryRuntimeClock(edges serviceedges.Edges) factoryruntime.Clock {
 	return platformclock.Real{}
 }
 
-func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) workers.Provider {
+func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) factorysessionwire.ProviderOverrideService {
 	return edges.ProviderOverride
 }
 
@@ -239,6 +239,14 @@ func provideInvocationOperation(
 }
 
 func provideAgyPTYAllocator(edges serviceedges.Edges) (workers.PTYAllocator, error) {
+	allocator, err := provideProvidersAgyPTYAllocator(edges)
+	if err != nil {
+		return nil, err
+	}
+	return providerPTYAllocator(allocator), nil
+}
+
+func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
 	clock := edges.AgyPTYClock
 	if clock == nil {
 		clock = platformclock.Real{}

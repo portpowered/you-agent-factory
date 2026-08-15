@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -56,14 +57,14 @@ func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
 	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"worker-a": {{
 			Content: "draft stage one complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-draft-step-one",
 			},
 		}, {
 			Content: "review stage one complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-review-step-one",
@@ -71,14 +72,14 @@ func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
 		}},
 		"worker-b": {{
 			Content: "draft stage two complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-draft-step-two",
 			},
 		}, {
 			Content: "review stage two complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-review-step-two",

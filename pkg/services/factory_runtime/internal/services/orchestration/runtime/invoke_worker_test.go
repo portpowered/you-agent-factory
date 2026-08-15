@@ -436,8 +436,9 @@ func TestDetachedResultMaterializationPreservesFailureAndContinuationFacts(t *te
 		result.Result.FailureMetadata.Type != workers.WorkFailureTypeTimeout {
 		t.Fatalf("failure facts = %#v, want timeout metadata", result.Result)
 	}
-	if result.Result.ProviderSession == nil || result.Result.ProviderSession.ID != "provider-session-retry" {
-		t.Fatalf("provider session = %#v, want continuation identity", result.Result.ProviderSession)
+	providerSession := (result.Result.Continuation).SessionMetadata()
+	if providerSession == nil || providerSession.ID != "provider-session-retry" {
+		t.Fatalf("provider session = %#v, want continuation identity", providerSession)
 	}
 	if result.Result.Diagnostics == nil || result.Result.Diagnostics.Provider == nil ||
 		result.Result.Diagnostics.Provider.ResponseMetadata["duration_ms"] != "12" {
@@ -661,10 +662,10 @@ func TestInvokeWorkerResultFromPreservesSessionOutcomeAndSafeDiagnostics(t *test
 			Session: workersessions.Session{ID: "session-completed", State: workersessions.StateCompleted},
 			Dispatch: workers.WorkstationDispatchResult{Result: workers.WorkResult{
 				Output: "completed output",
-				ProviderSession: &workers.ProviderSessionMetadata{
-					Provider: "codex",
-					ID:       "provider-session-completed",
-				},
+				Continuation: func() *providers.ContinuationRef {
+					ref := providers.SessionRef{Provider: providers.IDCodex, ID: "provider-session-completed"}.ContinuationRef()
+					return &ref
+				}(),
 			}},
 			Attempts: 2,
 		},

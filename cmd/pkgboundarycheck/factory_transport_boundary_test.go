@@ -129,9 +129,9 @@ func TestRunRejectsRetiredDomainTransportMigrationFiles(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"pkg/services/providers/internal/services/execution/internal/provider/parityfixtures/mode_parity.go",
-		"pkg/services/providers/internal/services/execution/internal/provider/parityfixtures/suite.go",
-		"pkg/services/providers/internal/services/execution/internal/provider/parityfixtures/transport.go",
+		"pkg/services/workers/internal/providercompat/parityfixtures/mode_parity.go",
+		"pkg/services/workers/internal/providercompat/parityfixtures/suite.go",
+		"pkg/services/workers/internal/providercompat/parityfixtures/transport.go",
 	} {
 		writeGoImportFile(t, repoRoot, path, "parityfixtures", "github.com/portpowered/infinite-you/pkg/transports/mapping")
 	}
@@ -233,4 +233,3 @@ func TestRunRejectsRetiredResponseStreamRemovalGateTransportImport(t *testing.T)
 		t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
 	}
 }
-

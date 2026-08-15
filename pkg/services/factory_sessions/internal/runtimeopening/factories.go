@@ -23,7 +23,7 @@ type WorkFactory = func(work.RuntimeResolver) work.Service
 type FactorySessionExecutionFactory = func(
 	string,
 	factorysessions.PersistencePolicy,
-	workers.Provider,
+	providers.Service,
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
@@ -62,7 +62,7 @@ type DurableExecutionFactory func(
 	operatorsettings.ResolvedDefaults,
 	RuntimeRoot,
 	factoryruntime.Clock,
-	workers.Provider,
+	providers.Service,
 	*workers.MockWorkersConfig,
 	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,

@@ -66,6 +66,7 @@ func adaptRunnerRequest(
 		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
 		PrintTimeout:                 request.Target.Timeout,
 		SessionID:                    providerSessionID(request),
+		Continuation:                 cloneContinuation(request.Input.Resume),
 		ProjectID:                    context.projectID,
 		WorkflowContext:              context.workflow,
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
@@ -282,6 +283,16 @@ func providerSessionID(request workers.ExecuteRequest) string {
 		request.Input.Resume.ProviderSessionID,
 		request.Input.Resume.ExternalRef,
 	)
+}
+
+func cloneContinuation(
+	continuation *workers.ProviderContinuationRef,
+) *workers.ProviderContinuationRef {
+	if continuation == nil {
+		return nil
+	}
+	clone := continuation.Clone()
+	return &clone
 }
 
 func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {

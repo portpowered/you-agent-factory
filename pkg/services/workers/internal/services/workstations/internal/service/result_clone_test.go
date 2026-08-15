@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
@@ -46,6 +47,7 @@ func TestPoolDispatchTerminalResultDetachedFromExecutorAndCaller(t *testing.T) {
 }
 
 func mutableWorkResultFixture() workers.WorkResult {
+	continuation := providers.SessionRef{Provider: "codex", Kind: "session_id", ID: "session-original"}.ContinuationRef()
 	return workers.WorkResult{
 		Outcome: workers.OutcomeAccepted,
 		RecordedOutputWork: []work.FactoryWorkItem{{
@@ -69,11 +71,7 @@ func mutableWorkResultFixture() workers.WorkResult {
 			Family: workers.WorkFailureFamilyRetryable,
 			Type:   workers.WorkFailureTypeTimeout,
 		},
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "codex",
-			Kind:     "session_id",
-			ID:       "session-original",
-		},
+		Continuation: &continuation,
 		Diagnostics: &workers.WorkDiagnostics{
 			RenderedPrompt: &workers.RenderedPromptDiagnostic{
 				Variables: map[string]string{"prompt": "original"},
@@ -109,7 +107,7 @@ func mutateWorkResult(result *workers.WorkResult, value string) {
 	item.Content[0].Metadata["bytes"].([]byte)[0] = '!'
 	item.Tags["owner"] = value
 	result.FailureMetadata.Type = workers.WorkFailureTypeAuthFailure
-	result.ProviderSession.ID = value
+	result.Continuation.ProviderSessionID = value
 	result.Diagnostics.RenderedPrompt.Variables["prompt"] = value
 	result.Diagnostics.Provider.RequestMetadata["request"] = value
 	result.Diagnostics.Provider.ResponseMetadata["response"] = value

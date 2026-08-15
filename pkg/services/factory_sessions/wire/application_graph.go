@@ -100,6 +100,7 @@ type (
 	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
 	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
 	ProviderSessionsRuntimeOpeningPorts    = runtimeopening.ProviderSessionsPorts
+	ProviderOverrideService                = runtimeopening.ProviderOverrideService
 	FactoryRuntimeOpeningPorts             = runtimeopening.FactoryRuntimePorts
 	FactoryDefinitionsRuntimeOpeningPorts  = runtimeopening.FactoryDefinitionsPorts
 	FactorySessionsRuntimeOpeningPorts     = runtimeopening.FactorySessionsPorts

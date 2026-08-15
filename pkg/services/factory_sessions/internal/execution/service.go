@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -400,12 +401,12 @@ func NewJavaScriptExecutionService(
 	), nil
 }
 
-// SmokeLiveChildProvider returns a deterministic mock provider for CLI and
-// fixture-backed live-provider child smoke without MCP host startup. Scope for
-// this provider is the completed CLI live-dispatch smoke lane; MCP live serve and
-// website inspection remain deferred follow-up cells.
-func SmokeLiveChildProvider() workers.Provider {
-	return smokeLiveChildProvider{}
+// SmokeLiveChildProvider returns the Workers-facing fixture provider used by
+// the execution package's live-child contract tests. It is intentionally a
+// Workers compatibility fixture; production Providers behavior is owned by
+// the Providers service root.
+func SmokeLiveChildProvider() *smokeLiveChildProvider {
+	return &smokeLiveChildProvider{}
 }
 
 type smokeLiveChildProvider struct{}
@@ -413,11 +414,10 @@ type smokeLiveChildProvider struct{}
 func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Continuation: func() *providers.ContinuationRef {
+			ref := providers.SessionRef{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}.ContinuationRef()
+			return &ref
+		}(),
 		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
 			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 		}},

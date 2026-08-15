@@ -290,8 +290,17 @@ func (s *Service) executeProviderWithRetry(
 			return result, err
 		}
 
-		if session := providerSessionForRetry(providerErr, result); session != nil {
-			request.SessionID = strings.TrimSpace(session.ID)
+		if continuation := providerContinuationForRetry(providerErr, result); continuation != nil {
+			if request.Continuation != nil {
+				request.Continuation = (continuation).ClonePtr()
+				request.SessionID = ""
+			} else {
+				normalized := continuation.Normalize()
+				request.SessionID = strings.TrimSpace(normalized.ProviderSessionID)
+				if request.SessionID == "" {
+					request.SessionID = strings.TrimSpace(normalized.ExternalRef)
+				}
+			}
 			request.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
 				request.RequiredOptionalCapabilities,
 				workers.RunnerOptionalCapabilitySessionResume,
@@ -310,16 +319,15 @@ func retryableProviderFailure(providerErr *workers.ProviderError) bool {
 	return workers.WorkFailureDecisionFromProviderError(providerErr).Retryable
 }
 
-func providerSessionForRetry(
+func providerContinuationForRetry(
 	providerErr *workers.ProviderError,
 	result workers.RunnerExecutionResult,
-) *workers.ProviderSessionMetadata {
-	if providerErr != nil && providerErr.ProviderSession != nil &&
-		strings.TrimSpace(providerErr.ProviderSession.ID) != "" {
-		return workers.CloneProviderSessionMetadata(providerErr.ProviderSession)
+) *workers.ProviderContinuationRef {
+	if providerErr != nil && providerErr.Continuation != nil {
+		return (providerErr.Continuation).ClonePtr()
 	}
-	if result.ProviderSession != nil && strings.TrimSpace(result.ProviderSession.ID) != "" {
-		return workers.CloneProviderSessionMetadata(result.ProviderSession)
+	if result.Continuation != nil {
+		return (result.Continuation).ClonePtr()
 	}
 	return nil
 }

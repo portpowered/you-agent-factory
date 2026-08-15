@@ -24,11 +24,14 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+type inferenceProvider interface {
+	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+}
 
 type stressProcessHarness struct {
 	t       *testing.T
@@ -41,10 +44,11 @@ type stressProcessHarness struct {
 func startStressProcess(
 	t *testing.T,
 	dir string,
-	provider workerprovider.Provider,
+	provider inferenceProvider,
 ) *stressProcessHarness {
 	t.Helper()
 	ensureStressProviderDefinitions(t, dir)
+	providerService := testutil.ProviderServiceAdapter{InferFunc: provider.Infer}
 
 	var (
 		serverMu sync.Mutex
@@ -52,7 +56,7 @@ func startStressProcess(
 	)
 	ready := make(chan struct{})
 	edges := serviceedges.Edges{
-		ProviderOverride: provider,
+		ProviderOverride: providerService,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			started := httptest.NewServer(request.Handler)
 			serverMu.Lock()

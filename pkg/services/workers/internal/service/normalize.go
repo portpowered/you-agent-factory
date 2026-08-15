@@ -39,7 +39,7 @@ func baseExecuteResult(
 		Correlation:  correlation,
 		Metrics:      workers.ExecutionMetrics{Duration: duration},
 		Diagnostics:  safeDiagnosticsFromWork(runnerResult.Diagnostics),
-		Continuation: continuationFromSession(runnerResult.ProviderSession, request.Input.Resume),
+		Continuation: continuationFromSession(runnerResult.Continuation, request.Input.Resume),
 	}
 }
 
@@ -222,7 +222,7 @@ func genericFailureResult(
 			result.Diagnostics = safeDiagnosticsFromWork(providerErr.Diagnostics)
 		}
 		if result.Continuation == nil {
-			result.Continuation = continuationFromSession(providerErr.ProviderSession, request.Input.Resume)
+			result.Continuation = continuationFromSession(providerErr.Continuation, request.Input.Resume)
 		}
 	}
 	if content := strings.TrimSpace(runnerResult.Content); content != "" {
@@ -348,17 +348,11 @@ func normalizedProviderFailureMessage(providerErr *workers.ProviderError) string
 }
 
 func continuationFromSession(
-	session *workers.ProviderSessionMetadata,
+	continuation *workers.ProviderContinuationRef,
 	resume *workers.ProviderContinuationRef,
 ) *workers.ProviderContinuationRef {
-	// Legacy runner results still carry Provider Session metadata. Execute
-	// projects only the opaque continuation reference onto the public result.
-	if session != nil && strings.TrimSpace(session.ID) != "" {
-		return &workers.ProviderContinuationRef{
-			Provider:          workers.CanonicalProviderSessionProvider(session.Provider),
-			ProviderSessionID: session.ID,
-			ExternalRef:       session.ID,
-		}
+	if continuation != nil {
+		return (continuation).ClonePtr()
 	}
 	if resume == nil {
 		return nil

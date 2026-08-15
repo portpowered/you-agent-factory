@@ -12,6 +12,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -423,11 +424,11 @@ func TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSucce
 					DispatchID: req.Execution.Dispatch.DispatchID,
 					Outcome:    workers.OutcomeAccepted,
 					Output:     "artifact-created",
-					ProviderSession: &workers.ProviderSessionMetadata{
+					Continuation: continuationFromProviderMetadata(&providers.SessionMetadata{
 						Provider: string(providersessions.ProviderCodex),
 						Kind:     providersessions.SessionIDKind,
 						ID:       "rollout-contradictory-ingestion",
-					},
+					}),
 					Diagnostics: &workers.WorkDiagnostics{
 						Command: &workers.CommandDiagnostic{ExitCode: 0},
 						Provider: &workers.ProviderDiagnostic{

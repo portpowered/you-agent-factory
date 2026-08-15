@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -843,10 +842,10 @@ func TestRuntimeCompatibilityRejectsUnsupportedAndUsesInjectedExecutor(t *testin
 	}
 }
 
-func TestRuntimeAssemblyRegistrationsUseProviderRegistryMetadata(t *testing.T) {
+func TestRuntimeAssemblyRegistrationsUseProvidersMetadata(t *testing.T) {
 	t.Parallel()
 
-	registrations, err := runtimeAssemblyRegistrations(compatibilityProviderRegistry{})
+	registrations, err := runtimeAssemblyRegistrations(runtimeAssemblyProvidersService{})
 	if err != nil {
 		t.Fatalf("runtimeAssemblyRegistrations() error = %v", err)
 	}
@@ -889,27 +888,19 @@ func (compatibilityWorkstationExecutor) Execute(
 	return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
 }
 
-type compatibilityProviderRegistry struct{}
-
-func (compatibilityProviderRegistry) UsesNativeRunner(string) bool { return true }
-
-func (compatibilityProviderRegistry) CanonicalIdentity(identity string) (string, error) {
-	return identity, nil
+type runtimeAssemblyProvidersService struct {
+	providers.Service
 }
 
-func (compatibilityProviderRegistry) RunnerIdentities() []string {
-	return []string{workers.RunnerIDCodex}
-}
-
-func (compatibilityProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, error) {
-	metadata, _ := workerrunner.BuiltInRunnerMetadata(workers.RunnerIDCodex)
-	return metadata, nil
-}
-
-func (compatibilityProviderRegistry) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
-	return nil
-}
-
-func (compatibilityProviderRegistry) ResolveRunnerSelection(string, string, string) (workers.ResolvedRunnerSelection, error) {
-	return workers.ResolvedRunnerSelection{RunnerID: workers.RunnerIDCodex}, nil
+func (runtimeAssemblyProvidersService) ListProviders(
+	context.Context,
+	providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{
+		Providers: []providers.Descriptor{{
+			ID:           providers.IDCodex,
+			DisplayName:  "Codex",
+			Availability: providers.AvailabilitySelectable,
+		}},
+	}, nil
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -153,7 +154,7 @@ func (p *eventReplayBlockingProvider) Infer(
 
 	return workerexecution.InferenceResponse{
 		Content: "completed",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-event-replay-smoke",

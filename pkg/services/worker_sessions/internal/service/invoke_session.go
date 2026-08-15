@@ -403,37 +403,60 @@ func openingSessionPayload(
 		WorkingDirectory: strings.TrimSpace(request.WorkingDirectory),
 		Capabilities:     cloneCapabilities(request.Capabilities),
 	}
-	if payload.WorkerType = strings.TrimSpace(request.WorkerType); payload.WorkerType == "" {
-		payload.WorkerType = strings.TrimSpace(dispatch.WorkerType)
-	}
-	if payload.ProjectID == "" {
-		payload.ProjectID = strings.TrimSpace(dispatch.ProjectID)
-	}
-	selection := workers.SessionProviderSelection{
-		RunnerID:         strings.TrimSpace(request.RunnerID),
-		Source:           request.RunnerSelectionSource,
-		ExecutorProvider: strings.TrimSpace(request.ExecutorProvider),
-		ModelProvider:    strings.TrimSpace(request.ModelProvider),
-	}
-	if selection.RunnerID != "" || selection.Source != "" || selection.ExecutorProvider != "" || selection.ModelProvider != "" {
-		payload.ProviderSelection = &selection
-	}
-	if request.ResumeSession != nil {
-		continuation := workers.SessionContinuation{
-			Provider: string(request.ResumeSession.Provider),
-			Kind:     request.ResumeSession.Kind,
-			ID:       request.ResumeSession.ID,
-		}
-		if continuation.Provider != "" || continuation.Kind != "" || continuation.ID != "" {
-			payload.Continuation = &continuation
-			payload.AttemptReason = workers.AttemptReasonResume
-		}
+	payload.WorkerType = firstNonEmpty(strings.TrimSpace(request.WorkerType), strings.TrimSpace(dispatch.WorkerType))
+	payload.ProjectID = firstNonEmpty(payload.ProjectID, strings.TrimSpace(dispatch.ProjectID))
+	payload.ProviderSelection = openingProviderSelection(request)
+	if continuation := openingSessionContinuation(request); continuation != nil {
+		payload.Continuation = continuation
+		payload.AttemptReason = workers.AttemptReasonResume
 	}
 	if len(lineages) > 0 && lineages[0] != nil {
 		lineage := lineages[0].Clone()
 		payload.Lineage = &lineage
 	}
 	return payload
+}
+
+func openingProviderSelection(request workers.WorkstationExecutionRequest) *workers.SessionProviderSelection {
+	selection := workers.SessionProviderSelection{
+		RunnerID:         strings.TrimSpace(request.RunnerID),
+		Source:           request.RunnerSelectionSource,
+		ExecutorProvider: strings.TrimSpace(request.ExecutorProvider),
+		ModelProvider:    strings.TrimSpace(request.ModelProvider),
+	}
+	if selection.RunnerID == "" && selection.Source == "" && selection.ExecutorProvider == "" && selection.ModelProvider == "" {
+		return nil
+	}
+	return &selection
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func openingSessionContinuation(request workers.WorkstationExecutionRequest) *workers.SessionContinuation {
+	if request.Continuation != nil {
+		continuationID := firstNonEmpty(request.Continuation.ProviderSessionID, request.Continuation.ExternalRef)
+		continuationKind := request.Continuation.Kind
+		if strings.TrimSpace(continuationKind) == "" {
+			continuationKind = request.Continuation.Normalize().Kind
+		}
+		continuation := workers.SessionContinuation{
+			Provider: request.Continuation.Provider,
+			Kind:     continuationKind,
+			ID:       continuationID,
+		}
+		if continuation.Provider != "" || continuation.Kind != "" || continuation.ID != "" {
+			return &continuation
+		}
+		return nil
+	}
+	return nil
 }
 
 // providerIdentityForExecution returns only a provider identity already
@@ -449,8 +472,8 @@ func providerIdentityForExecution(request workers.WorkstationExecutionRequest) s
 	if identity, err := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider); err == nil && strings.TrimSpace(identity) != "" {
 		return strings.TrimSpace(identity)
 	}
-	if request.ResumeSession != nil {
-		return strings.TrimSpace(string(request.ResumeSession.Provider))
+	if request.Continuation != nil {
+		return strings.TrimSpace(request.Continuation.Provider)
 	}
 	return ""
 }
@@ -953,31 +976,4 @@ func (s *observationSubscription) closeSource() {
 		cancel()
 		s.source.Next(cancelled)
 	}
-}
-
-func projectObservationEvent(record events.Record, workerSessionIDArgs ...string) workersessions.ObservationEvent {
-	workerSessionID := observationWorkerSessionIDFromTopic(record.ID.Topic)
-	if len(workerSessionIDArgs) > 0 && strings.TrimSpace(workerSessionIDArgs[0]) != "" {
-		workerSessionID = strings.TrimSpace(workerSessionIDArgs[0])
-	}
-	return workersessions.ObservationEvent{
-		Position: uint64(record.ID.Position),
-		Cursor: workersessions.ObservationCursor{
-			WorkerSessionID: workerSessionID,
-			Position:        uint64(record.ID.Position),
-		},
-		SourceType:     string(record.SourceType),
-		SourceID:       string(record.SourceID),
-		SourceSequence: uint64(record.SourceSequence),
-		SourceEventID:  string(record.SourceEventID),
-		SchemaID:       string(record.SchemaID),
-		Payload:        append([]byte(nil), record.Payload...),
-	}
-}
-
-func observationWorkerSessionIDFromTopic(topic events.Topic) string {
-	value := strings.TrimSpace(string(topic))
-	value = strings.TrimPrefix(value, "worker-session/")
-	value = strings.TrimSuffix(value, "/events")
-	return value
 }

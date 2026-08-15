@@ -2,11 +2,9 @@ package workers
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -30,10 +28,19 @@ type InferenceResponse struct {
 	// RecordedOutputWork carries work a decision-envelope reviewer recorded on
 	// its envelope. Runtime validates and materializes these items, so a runner
 	// that parses an envelope must surface them instead of dropping them.
-	RecordedOutputWork []work.FactoryWorkItem   `json:"recorded_output_work,omitempty"`
-	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics        *WorkDiagnostics         `json:"diagnostics,omitempty"`
+	RecordedOutputWork []work.FactoryWorkItem `json:"recorded_output_work,omitempty"`
+	// ProviderSession is a retained compatibility projection for legacy
+	// Infer-shaped fakes. Live execution translates it to Continuation at the
+	// Providers boundary; Workers does not inspect or retain session state.
+	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Continuation    *ProviderContinuationRef `json:"continuation,omitempty"`
+	Diagnostics     *WorkDiagnostics         `json:"diagnostics,omitempty"`
 }
+
+// ProviderSessionMetadata is the retained Workers compatibility name for the
+// Providers-owned detached session identity. It contains identity only; the
+// Provider Sessions service owns transcript and storage state.
+type ProviderSessionMetadata = providers.SessionMetadata
 
 // InferenceEventKind identifies which provider-boundary fact was observed.
 // Factory owns the corresponding canonical event vocabulary and envelope.
@@ -88,6 +95,7 @@ type InferenceResponseEventPayload struct {
 	InferenceRequestID string                          `json:"inferenceRequestId"`
 	Outcome            InferenceOutcome                `json:"outcome"`
 	ProviderSession    *ProviderSessionMetadata        `json:"providerSession,omitempty"`
+	Continuation       *ProviderContinuationRef        `json:"continuation,omitempty"`
 	Response           *string                         `json:"response,omitempty"`
 }
 
@@ -166,6 +174,7 @@ type ModelResponseEventPayload struct {
 	OutputContent      *[]work.WorkContentPart          `json:"outputContent,omitempty"`
 	OutputPreview      *string                          `json:"outputPreview,omitempty"`
 	ProviderSession    *ProviderSessionMetadata         `json:"providerSession,omitempty"`
+	Continuation       *ProviderContinuationRef         `json:"continuation,omitempty"`
 	ProviderLocality   string                           `json:"providerLocality"`
 	ResourceAcquired   *bool                            `json:"resourceAcquired,omitempty"`
 	ResourceWaitMillis *int64                           `json:"resourceWaitMillis,omitempty"`
@@ -380,6 +389,17 @@ func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	return clone
 }
 
+// CanonicalProviderSessionProvider preserves the legacy Workers helper while
+// the compatibility surface is retired by the successor deletion lane.
+func CanonicalProviderSessionProvider(provider string) string {
+	return providers.ID(provider).CanonicalSessionProvider()
+}
+
+// CloneProviderSessionMetadata returns a detached compatibility projection.
+func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
+	return (session).Clone()
+}
+
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
@@ -395,6 +415,7 @@ type WorkResult struct {
 	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
 	FailureMetadata             *WorkFailureMetadata          `json:"failure_metadata,omitempty"`
 	ProviderSession             *ProviderSessionMetadata      `json:"provider_session,omitempty"`
+	Continuation                *ProviderContinuationRef      `json:"continuation,omitempty"`
 	// ProviderFailureKind and ProviderContinuation* retain Providers-owned
 	// classifications across the in-process Workers result boundary. They are
 	// deliberately excluded from event serialization: Factory Event contracts
@@ -433,25 +454,6 @@ func (value *WorkResult) UnmarshalJSON(data []byte) error {
 	value.StructuredResult = structured
 	value.StructuredResultPresent = present
 	return nil
-}
-
-// ProviderSessionMetadata carries a stable provider rollout/session identity.
-type ProviderSessionMetadata = providersessions.Metadata
-
-// CanonicalProviderSessionProvider maps provider-session identities onto the
-// stable backend-facing names used for loading, events, and persisted
-// diagnostics. Cursor keeps the CLI command name `agent` but stores `cursor`
-// as the provider-session contract.
-func CanonicalProviderSessionProvider(provider string) string {
-	trimmed := strings.TrimSpace(provider)
-	switch trimmed {
-	case "", "cursor":
-		return trimmed
-	case "agent", "cursor-agent", "cursor-cli":
-		return "cursor"
-	default:
-		return trimmed
-	}
 }
 
 // WorkOutcome distinguishes the result routing behavior for worker output.
@@ -684,16 +686,6 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 	default:
 		return WorkFailureDecision{Terminal: true}
 	}
-}
-
-// CloneProviderSessionMetadata returns a detached provider-session metadata
-// value for Worker-owned execution and stream contracts.
-func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
 }
 
 func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {

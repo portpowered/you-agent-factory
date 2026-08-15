@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -408,6 +409,7 @@ func assertConcurrentInvocationPrimaryResult(
 }
 
 type concurrentSessionWorkersProvider struct {
+	testutil.ProviderServiceAdapter
 	mu sync.Mutex
 
 	cancelSessionID string
@@ -428,6 +430,7 @@ func newConcurrentSessionWorkersProvider() *concurrentSessionWorkersProvider {
 		cancelledSignal: make(chan workers.ProviderInferenceRequest, 4),
 		release:         make(chan struct{}),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	provider.holding.Store(true)
 	return provider
 }
@@ -547,5 +550,3 @@ func (p *concurrentSessionWorkersProvider) requests() []workers.ProviderInferenc
 func (p *concurrentSessionWorkersProvider) activeCount() int32 {
 	return p.active.Load()
 }
-
-var _ workers.Provider = (*concurrentSessionWorkersProvider)(nil)

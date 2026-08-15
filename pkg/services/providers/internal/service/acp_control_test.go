@@ -175,7 +175,7 @@ func (m *multiACPService) TryCancel(ctx context.Context, generation acp.Generati
 	return gen.owner.TryCancel(ctx, generation)
 }
 
-func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) providers.Service {
+func mustACPControlRootService(t *testing.T, acpService *acpAwareAttempt) *providerservice.Service {
 	t.Helper()
 	catalogService, err := catalogwire.NewService()
 	if err != nil {

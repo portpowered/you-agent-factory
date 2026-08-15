@@ -1974,7 +1974,8 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 		supervision.continuing = false
 
 		continuation, previousDispatchID, prepared := r.prepareContinuation("worker-1", supervision, reference)
-		if !prepared || previousDispatchID != "dispatch-1" || continuation.Execution.ResumeSession == nil || *continuation.Execution.ResumeSession != reference {
+		wantContinuation := reference.ContinuationRef()
+		if !prepared || previousDispatchID != "dispatch-1" || continuation.Execution.Continuation == nil || *continuation.Execution.Continuation != wantContinuation {
 			t.Fatalf("prepareContinuation() = %#v, %q, %t, want a detached exact continuation", continuation, previousDispatchID, prepared)
 		}
 		r.revertContinuation("worker-1", supervision, previousDispatchID)

@@ -43,6 +43,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// providerOverrideService keeps an optional edge replacement distinct from
+// the process Providers root in Wire's type graph. Both expose the same
+// Providers-owned operations; the distinction is composition metadata, not a
+// second provider contract.
+type providerOverrideService = factorysessionwire.ProviderOverrideService
+
 // compositeProcessLifecycle aggregates every inert service that retains
 // resources lazily while commands execute into the single ProcessLifecycle
 // Process.Close reaches. Each closer runs even if an earlier one fails, and
@@ -82,7 +88,9 @@ func provideApplicationProcessLifecycle(
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
 ) (initializerapplication.ProcessLifecycle, error) {
-	lifecycle, ok := service.(providers.Lifecycle)
+	lifecycle, ok := service.(interface {
+		Close(context.Context) error
+	})
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
 	}
@@ -197,32 +205,50 @@ func providePlatformProcessCommandFactory(edges serviceedges.Edges) platformproc
 func provideProviderRegistry(
 	_ serviceedges.Edges,
 	providersService providers.Service,
-) (workers.ProviderRegistry, error) {
-	return workerswire.NewProviderRegistry(context.Background(), providersService)
+) (initializerapplication.ProviderRegistry, error) {
+	if providersService == nil {
+		return nil, fmt.Errorf("construct provider identity projection: Providers service is required")
+	}
+	return providerIdentityProjection{service: providersService}, nil
 }
 
 func buildProviderRegistry(
 	_ serviceedges.Edges,
 	providersService providers.Service,
-) (workers.ProviderRegistry, error) {
-	return workerswire.NewProviderRegistry(context.Background(), providersService)
+) (initializerapplication.ProviderRegistry, error) {
+	return provideProviderRegistry(serviceedges.Edges{}, providersService)
 }
 
-func provideProviderRegistryRebinder(
-	providersService providers.Service,
+func provideProvidersRebinder(
+	_ providers.Service,
 	edges serviceedges.Edges,
-) (workerswire.ProviderRegistryRebinder, error) {
-	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
+
+) (workerswire.ProvidersRebinder, error) {
+	return func(providerRunner workers.CommandRunner) (providers.Service, error) {
 		if providerRunner == nil {
-			return nil, nil, fmt.Errorf("provider registry rebind requires command runner")
+			return nil, fmt.Errorf("Providers rebind requires command runner")
 		}
 		rebound, err := provideConfiguredProvidersService(edges, nil, providerRunner)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		registry, err := workerswire.NewProviderRegistry(context.Background(), rebound)
-		return registry, rebound, err
+		return rebound, nil
 	}, nil
+}
+
+type providerIdentityProjection struct {
+	service providers.Service
+}
+
+func (projection providerIdentityProjection) CanonicalIdentity(identity string) (string, error) {
+	resolved, err := projection.service.ResolveIdentity(
+		context.Background(),
+		providers.ResolveIdentityRequest{Identity: identity},
+	)
+	if err != nil {
+		return "", err
+	}
+	return resolved.ID.String(), nil
 }
 
 func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSystem {
@@ -248,9 +274,21 @@ func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (workers.Comm
 }
 
 func provideFactorySessionProviderIdentityResolver(
-	providers workers.ProviderRegistry,
+	providersService providers.Service,
 ) factorysessions.ProviderIdentityResolver {
-	return providers.CanonicalIdentity
+	return func(identity string) (string, error) {
+		if providersService == nil {
+			return "", fmt.Errorf("Providers service is required")
+		}
+		resolved, err := providersService.ResolveIdentity(
+			context.Background(),
+			providers.ResolveIdentityRequest{Identity: identity},
+		)
+		if err != nil {
+			return "", err
+		}
+		return resolved.ID.String(), nil
+	}
 }
 
 func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service, error) {
@@ -586,7 +624,7 @@ func provideFactorySessionExecutionFactory(
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	allocator workers.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	eventsService events.Service,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.FactorySessionExecutionFactory {
@@ -599,7 +637,7 @@ func provideFactorySessionExecutionFactory(
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
-		provider workers.Provider,
+		provider providers.Service,
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
@@ -778,7 +816,7 @@ func provideStatelessWorkersService(
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	agentToolFileSystem workers.AgentToolFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.Service, error) {
@@ -812,7 +850,7 @@ func provideMockStatelessWorkersService(
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	agentToolFileSystem workers.AgentToolFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	mockWorkers *workers.MockWorkersConfig,
@@ -844,7 +882,7 @@ func provideStatelessWorkersServiceWithMock(
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	agentToolFileSystem workers.AgentToolFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	mockWorkers *workers.MockWorkersConfig,
@@ -944,7 +982,7 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 }
 
 func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
-	allocator, err := provideAgyPTYAllocator(edges)
+	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {
 		return providerswire.AgyPTYPlatformDependencies{}, err
 	}
@@ -1009,9 +1047,9 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 // substitute a provider on purpose -- functional API servers and replays.
 func provideProviderInvocationExecutorFactory(
 	conductorInvocation factorysessionwire.ConductorInvocationWithProgressFactory,
-	registryRebinder workerswire.ProviderRegistryRebinder,
+	providersRebinder workerswire.ProvidersRebinder,
 	allocator workers.PTYAllocator,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 ) factoryruntime.ProviderInvocationExecutorFactory {
 	return func(
@@ -1027,7 +1065,7 @@ func provideProviderInvocationExecutorFactory(
 			return nil, nil
 		}
 		selectedProviders, runner, err := providerInvocationProviderEdge(
-			registryRebinder, sessionCommandRunner, defaultProviderCommandRunner,
+			providersRebinder, sessionCommandRunner, defaultProviderCommandRunner,
 		)
 		if err != nil {
 			return nil, err
@@ -1044,28 +1082,28 @@ func provideProviderInvocationExecutorFactory(
 // provider-invocation Workers run through.
 //
 // A session that composed its own provider command runner -- which is what
-// --with-mock-workers does -- must also have the Providers registry rebuilt
-// around that runner. Providers resolves a runner when a provider is
-// registered, so handing only the conductor the session's runner reaches the
+// --with-mock-workers does -- must also have the Providers root rebuilt around
+// that runner. Providers resolves its execution effect when the root is
+// constructed, so handing only the conductor the session's runner reaches the
 // adapter but never the process the provider actually starts, and every mocked
 // Worker would run for real. A session that composed none takes the process
-// edge and the registry the application already built.
+// edge and the Providers root already built.
 func providerInvocationProviderEdge(
-	registryRebinder workerswire.ProviderRegistryRebinder,
+	providersRebinder workerswire.ProvidersRebinder,
 	sessionCommandRunner workers.CommandRunner,
 	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 ) (providers.Service, workers.CommandRunner, error) {
 	if sessionCommandRunner == nil {
 		return nil, defaultProviderCommandRunner, nil
 	}
-	if registryRebinder == nil {
+	if providersRebinder == nil {
 		return nil, nil, fmt.Errorf(
-			"provider-invocation Worker requires a provider registry rebinder for a session-composed runner",
+			"provider-invocation Worker requires a Providers rebinder for a session-composed runner",
 		)
 	}
-	_, rebound, err := registryRebinder(sessionCommandRunner)
+	rebound, err := providersRebinder(sessionCommandRunner)
 	if err != nil {
-		return nil, nil, fmt.Errorf("rebind provider registry for provider-invocation Worker: %w", err)
+		return nil, nil, fmt.Errorf("rebind Providers service for provider-invocation Worker: %w", err)
 	}
 	return rebound, sessionCommandRunner, nil
 }
@@ -1216,7 +1254,7 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (workers.Provider, error) {
+	return func(runner workers.CommandRunner) (providers.Service, error) {
 		return workerswire.NewProviderFromCommandRunner(
 			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,

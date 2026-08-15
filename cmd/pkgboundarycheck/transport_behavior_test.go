@@ -147,7 +147,7 @@ func mapFailure(err error) {
 	_ = workers.NormalizeProviderExecutionError(err)
 	_ = workers.NewProviderError(workers.WorkFailureTypeTimeout, "timeout", err)
 	_ = workers.SafeWorkDiagnosticsFromWorkDiagnostics(nil)
-	_ = workers.CanonicalProviderSessionProvider("agent")
+	_ = providers.ID("agent").CanonicalSessionProvider()
 	var _ *workers.WorkDiagnostics
 }
 `)

@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree"
@@ -55,6 +56,11 @@ type WorkstationExecutor struct {
 	CurrentWorkingDirectory func() (string, error)
 	RuntimeConfig           interfaces.RuntimeConfigLookup
 	DefaultRunnerID         string
+	// Providers is the sole provider identity and selection authority used by
+	// the live workstation path. The resolver fields remain as a migration
+	// fallback for legacy same-package fixtures until runtime assembly is
+	// retired by its owning packet.
+	Providers               providers.Service
 	ResolveRunnerSelection  workerexecution.RunnerSelectionResolver
 	ResolveProviderIdentity workerexecution.ProviderIdentityResolver
 	WorkflowContext         *workerexecution.Context
@@ -89,9 +95,9 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDi
 	return we.executeResolved(ctx, workerexecution.WorkstationExecutionRequest{Dispatch: dispatch})
 }
 
-// ExecuteResolved preserves Worker Sessions' resolved continuation metadata
+// ExecuteResolved preserves Worker Sessions' resolved opaque continuation
 // while retaining the legacy WorkDispatch entry point for ordinary Factory
-// dispatches. In particular, ResumeSession must survive workstation prompt
+// dispatches. In particular, Continuation must survive workstation prompt
 // rendering so the inner runner reaches Providers.Continue rather than
 // starting a fresh provider session.
 func (we *WorkstationExecutor) ExecuteResolved(
@@ -209,6 +215,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 		}, nil
 	}
 	workerDef, failed := we.prepareWorkerDefinition(
+		ctx,
 		dispatch,
 		workerName,
 		workerConfig,
@@ -248,11 +255,11 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 		}
 	}
 
-	executionRequest, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
+	executionRequest, failed := we.buildWorkstationExecutionRequest(ctx, dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
 	if failed != nil {
 		return *failed, nil
 	}
-	executionRequest.ResumeSession = workerexecution.CloneProviderSessionReference(request.ResumeSession)
+	executionRequest.Continuation = (request.Continuation).ClonePtr()
 
 	result, err := we.executeInnerWorker(ctx, executionRequest, workerDef, workstationDef, start, logger)
 	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)
@@ -269,16 +276,29 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 }
 
 func (we *WorkstationExecutor) resolveInvocationProvider(
+	ctx context.Context,
 	dispatch work.WorkDispatch,
 	worker *factorydefinitions.FactoryWorkerConfig,
 	diagnostics *workerexecution.WorkDiagnostics,
 	start time.Time,
 ) *workerexecution.WorkResult {
-	if we.ResolveProviderIdentity == nil || worker == nil ||
+	if worker == nil ||
 		strings.TrimSpace(worker.ModelProvider) == "" {
 		return nil
 	}
-	canonical, err := we.ResolveProviderIdentity(worker.ModelProvider)
+	var canonical string
+	var err error
+	if we.Providers != nil {
+		resolved, resolveErr := we.Providers.ResolveIdentity(ctx, providers.ResolveIdentityRequest{
+			Identity: worker.ModelProvider,
+		})
+		canonical = resolved.ID.String()
+		err = resolveErr
+	} else if we.ResolveProviderIdentity != nil {
+		canonical, err = we.ResolveProviderIdentity(worker.ModelProvider)
+	} else {
+		return nil
+	}
 	if err == nil {
 		worker.ModelProvider = canonical
 		return nil
@@ -478,7 +498,7 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	} else if identity != "" {
 		selectionIdentity = identity
 	}
-	selection, err := we.resolveRunnerSelection(selectionIdentity, workerDef.ModelProvider)
+	selection, err := we.resolveRunnerSelection(ctx, selectionIdentity, workerDef.ModelProvider)
 	if err != nil {
 		failed := worktree.FailedWorkResultFromPreparation(
 			dispatch.DispatchID,
@@ -617,7 +637,7 @@ func pathExists(fileSystem platformfilesystem.ReadFileInspector, value string) b
 	return err == nil || !errors.Is(err, fs.ErrNotExist)
 }
 
-func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.WorkDispatch, workerName string, workerDef *factorydefinitions.FactoryWorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (workerexecution.WorkstationExecutionRequest, *workerexecution.WorkResult) {
+func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Context, dispatch work.WorkDispatch, workerName string, workerDef *factorydefinitions.FactoryWorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (workerexecution.WorkstationExecutionRequest, *workerexecution.WorkResult) {
 	modelBindings, err := resolveModelOperationBindings(workstationDef, workerDef, requestContext.InputTokens)
 	if err != nil {
 		logger.Error("model operation binding resolution failed",
@@ -658,7 +678,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection, err := we.resolveRunnerSelection(workstationDef.Runner, workerDef.ModelProvider)
+	selection, err := we.resolveRunnerSelection(ctx, workstationDef.Runner, workerDef.ModelProvider)
 	if err != nil {
 		failed := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -701,9 +721,24 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 }
 
 func (we *WorkstationExecutor) resolveRunnerSelection(
+	ctx context.Context,
 	workstationRunner string,
 	workerModelProvider string,
 ) (workerexecution.ResolvedRunnerSelection, error) {
+	if we.Providers != nil {
+		resolved, err := we.Providers.ResolveSelection(ctx, providers.ResolveSelectionRequest{
+			Workstation:   workstationRunner,
+			Factory:       we.DefaultRunnerID,
+			ModelProvider: workerModelProvider,
+		})
+		if err != nil {
+			return workerexecution.ResolvedRunnerSelection{}, err
+		}
+		return workerexecution.ResolvedRunnerSelection{
+			RunnerID: providerRunnerID(resolved.Provider),
+			Source:   workerSelectionSource(resolved.Source),
+		}, nil
+	}
 	if we.ResolveRunnerSelection != nil {
 		return we.ResolveRunnerSelection(
 			workstationRunner,
@@ -716,6 +751,23 @@ func (we *WorkstationExecutor) resolveRunnerSelection(
 		we.DefaultRunnerID,
 		workerModelProvider,
 	), nil
+}
+
+func providerRunnerID(id providers.ID) string {
+	return strings.ToLower(strings.TrimSpace(id.String()))
+}
+
+func workerSelectionSource(source providers.SelectionSource) workerexecution.RunnerSelectionSource {
+	switch source {
+	case providers.SelectionSourceWorkstation:
+		return workerexecution.RunnerSelectionSourceWorkstation
+	case providers.SelectionSourceFactory:
+		return workerexecution.RunnerSelectionSourceFactory
+	case providers.SelectionSourceLegacyProvider:
+		return workerexecution.RunnerSelectionSourceLegacyProvider
+	default:
+		return workerexecution.RunnerSelectionSourceDefault
+	}
 }
 
 func processEnvironment(read func() []string) []string {
@@ -906,62 +958,4 @@ func (we *WorkstationExecutor) runtimeWorkstation(dispatch work.WorkDispatch) (*
 	fallback := *workstationDef
 	fallback.Type = factorydefinitions.WorkstationTypeModel
 	return &fallback, true
-}
-
-func (we *WorkstationExecutor) expectedArtifactDeclarations(
-	tokens []workerexecution.Token,
-	workstation *interfaces.FactoryWorkstationConfig,
-) []interfaces.ExpectedArtifactConfig {
-	if workstation == nil {
-		return nil
-	}
-	var declarations []interfaces.ExpectedArtifactConfig
-	if we != nil && we.RuntimeConfig != nil {
-		if factory := we.RuntimeConfig.FactoryConfig(); factory != nil {
-			seenWorkTypes := make(map[string]struct{})
-			for _, token := range tokens {
-				if token.Color.DataType == workerexecution.DataTypeResource {
-					continue
-				}
-				workTypeID := strings.TrimSpace(token.Color.WorkTypeID)
-				if workTypeID == "" {
-					continue
-				}
-				if _, seen := seenWorkTypes[workTypeID]; seen {
-					continue
-				}
-				seenWorkTypes[workTypeID] = struct{}{}
-				for _, workType := range factory.WorkTypes {
-					if workType.ID == workTypeID || workType.Name == workTypeID {
-						declarations = append(declarations, workType.ExpectedArtifacts...)
-						break
-					}
-				}
-			}
-		}
-	}
-	declarations = append(declarations, workstation.ExpectedArtifacts...)
-	return interfaces.NormalizeExpectedArtifactConfigs(declarations)
-}
-
-func (we *WorkstationExecutor) expectedArtifactFileSystem() platformfilesystem.GlobInspector {
-	if we == nil {
-		return nil
-	}
-	if we.ArtifactFileSystem != nil {
-		return we.ArtifactFileSystem
-	}
-	inspector, _ := we.FileSystem.(platformfilesystem.GlobInspector)
-	return inspector
-}
-
-func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch work.WorkDispatch) string {
-	if workstationDef != nil && workstationDef.WorkerTypeName != "" {
-		return workstationDef.WorkerTypeName
-	}
-	return dispatch.WorkerType
-}
-
-func workstationLookupKey(dispatch work.WorkDispatch) string {
-	return dispatch.WorkstationName
 }

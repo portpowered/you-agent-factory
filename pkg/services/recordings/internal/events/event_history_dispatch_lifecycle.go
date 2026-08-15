@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -138,7 +139,7 @@ type DispatchInterruptedInput struct {
 	Reason              string
 	ObservedStatus      interfaces.FactoryDispatchStatus
 	RetryPlanned        bool
-	ProviderSessionRef  *workerexecution.ProviderSessionMetadata
+	ProviderSessionRef  *providers.SessionMetadata
 	CheckpointRef       *interfaces.FactorySessionJavaScriptCheckpointEventRef
 }
 

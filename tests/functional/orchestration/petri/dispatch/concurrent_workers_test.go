@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -206,6 +205,7 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 		rejectTraceID: failTraceID,
 		reviewCounts:  make(map[string]int),
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 15*time.Second)
@@ -242,6 +242,7 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 }
 
 type traceAwareReviewInferenceProvider struct {
+	testutil.ProviderServiceAdapter
 	rejectTraceID string
 	mu            sync.Mutex
 	reviewCounts  map[string]int
@@ -276,8 +277,6 @@ func traceAwareReviewResponse(content string) workerexecution.InferenceResponse 
 		},
 	}
 }
-
-var _ workerprovider.Provider = (*traceAwareReviewInferenceProvider)(nil)
 
 type seedIdea struct {
 	traceID string

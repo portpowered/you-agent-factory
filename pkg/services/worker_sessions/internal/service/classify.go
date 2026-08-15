@@ -757,7 +757,7 @@ func lifecycleProvenance(provider string) workers.Provenance {
 		Delivery:        workers.DeliverySynthesized,
 		Fidelity:        workers.FidelityLifecycleOnly,
 		NativeEventType: string(lifecycleSourceType),
-		Provider:        workers.CanonicalProviderSessionProvider(provider),
+		Provider:        providers.ID(provider).CanonicalSessionProvider(),
 		Representation:  workers.RepresentationNotification,
 	}
 }
@@ -839,7 +839,7 @@ func (r *registry) publishOpeningRecord(
 	pub.open = true
 	pub.recording = recording
 	pub.recordingID = strings.TrimSpace(payload.RecordingID)
-	pub.provider = workers.CanonicalProviderSessionProvider(provider)
+	pub.provider = providers.ID(provider).CanonicalSessionProvider()
 	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
 	pub.accepted = make(map[events.AppendIdentity]struct{})
@@ -957,18 +957,19 @@ func (r *registry) associateProviderSessionFromResult(
 	id, dispatchID string,
 	result workers.WorkstationDispatchResult,
 ) {
-	metadata := result.Result.ProviderSession
-	if metadata == nil {
+	continuation := result.Result.Continuation
+	if continuation == nil {
 		return
 	}
-	_, err := r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+	reference, err := continuation.ToSessionRef()
+	if err != nil {
+		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")
+		return
+	}
+	_, err = r.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
 		WorkerSessionID: id,
 		DispatchID:      dispatchID,
-		Reference: providers.SessionRef{
-			Provider: providers.ID(metadata.Provider),
-			Kind:     metadata.Kind,
-			ID:       metadata.ID,
-		},
+		Reference:       reference,
 	})
 	if err != nil {
 		r.logger.Info("worker session provider session association from result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "rejected")

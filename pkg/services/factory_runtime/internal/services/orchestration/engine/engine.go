@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -204,7 +204,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 					Outcome:              r.Outcome,
 					Reason:               completedDispatchReasonFromResult(r),
 					ArtifactVerification: r.ArtifactVerification.Clone(),
-					ProviderSession:      workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
+					ProviderSession:      (r.Continuation).SessionMetadata(),
 					StartTime:            entry.StartTime,
 					EndTime:              now,
 					Duration:             now.Sub(entry.StartTime),

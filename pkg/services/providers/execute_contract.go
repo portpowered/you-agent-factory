@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // ErrExecuteCancelled reports that one provider execution attempt was cancelled
@@ -98,29 +99,75 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 	}
 }
 
+// ResolvedModelOperationBinding carries one detached model-operation input
+// through the Providers execution boundary without importing Workers request
+// types. Content remains the shared Work content vocabulary so structured
+// text, JSON, and audio parts retain their shape.
+type ResolvedModelOperationBinding struct {
+	Slot    string
+	Source  string
+	Content []work.WorkContentPart
+}
+
+// ExecuteOutcome carries an already-classified terminal work outcome across
+// the compatibility boundary. Providers does not derive this value; native
+// adapters leave it empty, while transitional inference-shaped callers may
+// provide it so the Workers output policy is not silently changed by the
+// boundary translation.
+type ExecuteOutcome string
+
+const (
+	ExecuteOutcomeAccepted ExecuteOutcome = "ACCEPTED"
+	ExecuteOutcomeContinue ExecuteOutcome = "CONTINUE"
+	ExecuteOutcomeRejected ExecuteOutcome = "REJECTED"
+	ExecuteOutcomeFailed   ExecuteOutcome = "FAILED"
+)
+
 // ExecuteRequest is the plain one-attempt execute vocabulary. Providers owns
 // exactly one normalized native attempt per call; callers own selection,
 // retry, throttle, and scheduling policy.
 type ExecuteRequest struct {
-	Provider        ID
-	AttemptID       string
+	Provider  ID
+	AttemptID string
+	// Correlation carries detached replay/lineage keys used by effect
+	// implementations that must claim the exact recorded attempt. It is not
+	// provider session state and does not influence provider selection.
+	Correlation     ExecuteCorrelation
 	WorkerType      string
 	WorkstationName string
+	RunnerID        string
+	ProjectID       string
+	TransitionID    string
+	InputBindings   map[string][]string
+	SessionID       string
 	Model           string
+	ModelOperation  string
+	ModelBindings   []ResolvedModelOperationBinding
 	ReasoningEffort string
+	ModelLocality   string
 	SkipPermissions bool
 	// PrintTimeout carries an invocation's requested native print limit. It is
 	// kept as provider-neutral execution metadata so a native adapter can
 	// forward it without importing worker-definition types.
-	PrintTimeout       time.Duration
-	SystemPrompt       string
-	UserMessage        string
-	InputTokens        []any
-	OutputSchema       string
-	WorkingDirectory   string
-	Worktree           string
-	EnvVars            map[string]string
-	ProcessEnvironment []string
+	PrintTimeout                time.Duration
+	SystemPrompt                string
+	UserMessage                 string
+	InputTokens                 []any
+	OutputSchema                string
+	ToolExecutionMode           string
+	RequiredCapabilities        []string
+	Command                     string
+	Args                        []string
+	FactoryDirectory            string
+	OutputContract              string
+	OutputFormat                string
+	StopToken                   string
+	DecisionEnvelope            bool
+	GoalRoutingDecisionEnvelope bool
+	WorkingDirectory            string
+	Worktree                    string
+	EnvVars                     map[string]string
+	ProcessEnvironment          []string
 	// SessionObserver receives a detached exact Provider Session reference as
 	// soon as the native provider reports it, while the attempt is still live.
 	// It is an invocation-scoped observation hook rather than a selection or
@@ -143,6 +190,20 @@ type ExecuteRequest struct {
 	// caller state between attempts. A nil sink leaves the runner's
 	// construction-time logger in force.
 	ExecutionLogger logging.Logger
+}
+
+// ExecuteCorrelation identifies caller-owned execution lineage relevant to
+// deterministic effect boundaries such as Recordings replay.
+type ExecuteCorrelation struct {
+	FactorySessionID string
+	RuntimeID        string
+	GenerationID     string
+	DispatchID       string
+	AttemptID        string
+	RequestID        string
+	TraceID          string
+	ReplayKey        string
+	WorkIDs          []string
 }
 
 // SessionObserver receives one detached Provider-owned session identity
@@ -185,12 +246,34 @@ func (value ReasoningEffort) Canonical() (string, bool) {
 // Clone returns a detached execute-request copy.
 func (request ExecuteRequest) Clone() ExecuteRequest {
 	cloned := request
+	cloned.Correlation.WorkIDs = append([]string(nil), request.Correlation.WorkIDs...)
+	cloned.InputBindings = cloneStringSliceMap(request.InputBindings)
+	cloned.Args = append([]string(nil), request.Args...)
+	cloned.RequiredCapabilities = append([]string(nil), request.RequiredCapabilities...)
 	cloned.EnvVars = cloneStringMap(request.EnvVars)
 	if request.ProcessEnvironment != nil {
 		cloned.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	}
 	if request.InputTokens != nil {
 		cloned.InputTokens = append([]any(nil), request.InputTokens...)
+	}
+	if request.ModelBindings != nil {
+		cloned.ModelBindings = cloneModelOperationBindings(request.ModelBindings)
+	}
+	return cloned
+}
+
+func cloneModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		cloned[index] = ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  value.Source,
+			Content: work.CloneWorkContentParts(value.Content),
+		}
 	}
 	return cloned
 }
@@ -238,6 +321,8 @@ type ExecuteDiagnostics struct {
 	DurationMillis int64
 	Progress       []ExecuteProgress
 	Metadata       map[string]string
+	Command        *ExecuteCommandDiagnostics
+	Panic          *ExecutePanicDiagnostics
 	// ProgressAlreadyObserved reports that every fact in Progress was already
 	// delivered through ExecuteRequest.ProgressObserver, in this exact order,
 	// while the attempt was still live. A caller that published those live
@@ -245,6 +330,28 @@ type ExecuteDiagnostics struct {
 	// Adapters that do not stream leave this false and Progress remains the
 	// only delivery.
 	ProgressAlreadyObserved bool
+}
+
+// ExecuteCommandDiagnostics carries detached, already-sanitized process facts
+// reported by a provider adapter. It deliberately contains no live process or
+// command-runner object.
+type ExecuteCommandDiagnostics struct {
+	Command    string
+	Args       []string
+	Env        map[string]string
+	Stdin      string
+	Stdout     string
+	Stderr     string
+	ExitCode   int
+	TimedOut   bool
+	DurationMS int64
+	WorkingDir string
+}
+
+// ExecutePanicDiagnostics carries bounded panic facts from an adapter.
+type ExecutePanicDiagnostics struct {
+	Message string
+	Stack   string
 }
 
 // Clone returns a detached diagnostics copy.
@@ -255,12 +362,23 @@ func (diagnostics ExecuteDiagnostics) Clone() ExecuteDiagnostics {
 		diagnostics.Progress[i] = progress[i].Clone()
 	}
 	diagnostics.Metadata = cloneStringMap(diagnostics.Metadata)
+	if diagnostics.Command != nil {
+		command := *diagnostics.Command
+		command.Args = append([]string(nil), diagnostics.Command.Args...)
+		command.Env = cloneStringMap(diagnostics.Command.Env)
+		diagnostics.Command = &command
+	}
+	if diagnostics.Panic != nil {
+		panicDiagnostics := *diagnostics.Panic
+		diagnostics.Panic = &panicDiagnostics
+	}
 	return diagnostics
 }
 
 // ExecuteResult is the detached result of one normalized provider attempt.
 type ExecuteResult struct {
 	Content     string
+	Outcome     ExecuteOutcome
 	SessionRef  *SessionRef
 	Diagnostics *ExecuteDiagnostics
 }
@@ -286,6 +404,17 @@ func cloneStringMap(values map[string]string) map[string]string {
 	cloned := make(map[string]string, len(values))
 	for key, value := range values {
 		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string][]string, len(values))
+	for key, items := range values {
+		cloned[key] = append([]string(nil), items...)
 	}
 	return cloned
 }

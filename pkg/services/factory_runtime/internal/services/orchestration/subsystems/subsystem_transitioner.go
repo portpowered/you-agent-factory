@@ -303,7 +303,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Reason:                      completedDispatchReason(resolved),
 		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		FailureMetadata:             failureMetadata,
-		ProviderSession:             workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		ProviderSession:             (result.Continuation).SessionMetadata(),
 		EndTime:                     endTime,
 		ConsumedTokens:              factorytoken.CloneSlice(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(

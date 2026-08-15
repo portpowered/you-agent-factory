@@ -145,7 +145,8 @@ func TestWorkerExecutorRequestAdapterPreservesResolvedContinuation(t *testing.T)
 	executor := &poolBoundaryResolvedExecutor{}
 	adapter := workerExecutorRequestAdapter{executors: map[string]WorkerExecutor{"swe": executor}}
 	request := poolBoundaryDispatchRequest("dispatch-resume", "transition-resume", "swe")
-	request.ResumeSession = &reference
+	continuation := reference.ContinuationRef()
+	request.Continuation = &continuation
 
 	result, err := adapter.Execute(context.Background(), request)
 
@@ -155,8 +156,12 @@ func TestWorkerExecutorRequestAdapterPreservesResolvedContinuation(t *testing.T)
 	if result.Outcome != OutcomeAccepted {
 		t.Fatalf("Execute() result = %#v, want accepted resolved path", result)
 	}
-	if executor.request.ResumeSession == nil || *executor.request.ResumeSession != reference {
-		t.Fatalf("resolved request ResumeSession = %#v, want %#v", executor.request.ResumeSession, reference)
+	if executor.request.Continuation == nil {
+		t.Fatalf("resolved request Continuation = nil, want %#v", reference)
+	}
+	resolved, resolveErr := executor.request.Continuation.ToSessionRef()
+	if resolveErr != nil || resolved != reference {
+		t.Fatalf("resolved request Continuation = %#v (%v), want %#v", executor.request.Continuation, resolveErr, reference)
 	}
 }
 

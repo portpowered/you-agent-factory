@@ -18,11 +18,12 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -1088,17 +1089,14 @@ func (p *sequentialBlockingProvider) Execute(
 	p.mu.Unlock()
 
 	if call == 1 {
+		continuation := (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef()
 		response := workerexecution.InferenceResponse{
-			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "mock",
-				Kind:     "session_id",
-				ID:       "live-provider-session-1",
-			},
+			Content:      fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
+			Continuation: continuation,
 		}
 		return workerexecution.InvocationResult{
 			Response: response, Attempt: input.Attempt,
-			ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+			Continuation: (response.Continuation).ClonePtr(),
 		}, nil
 	}
 
@@ -1115,17 +1113,14 @@ func (p *sequentialBlockingProvider) Execute(
 		return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
 	}
 
+	continuation := (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}).ContinuationRef()
 	response := workerexecution.InferenceResponse{
-		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-2",
-		},
+		Content:      fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
+		Continuation: continuation,
 	}
 	return workerexecution.InvocationResult{
 		Response: response, Attempt: input.Attempt,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+		Continuation: (response.Continuation).ClonePtr(),
 	}, nil
 }
 

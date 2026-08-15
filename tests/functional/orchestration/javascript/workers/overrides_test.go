@@ -29,6 +29,14 @@ const (
 	mockedChildPrompt            = "mocked child prompt"
 	passthroughChildPrompt       = "passthrough child prompt"
 	unknownOverrideModelProvider = "Not_A_Provider"
+	liveProviderChildWorkflow    = `return (async function () {
+  return await agent.run({
+    prompt: "use the live provider command edge",
+    label: "live-provider-child",
+    modelProvider: "codex",
+    model: "live-child-model",
+  });
+})();`
 
 	perChildProviderModelWorkflow = `return (async function () {
   const codexChild = await agent.run({
@@ -71,6 +79,49 @@ const (
 	mockWorkerAcceptedOutput = "mock worker accepted"
 	livePassthroughChildText = "passthrough child provider output"
 )
+
+// TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess proves the
+// live provider-invocation route is assembled from the Providers root and
+// reaches the injected command edge when no mock-worker or provider override
+// is present.
+func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+	runner := support.NewRecordingCommandRunner("live provider output")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startOverridesWorkflow(t, server.URL(), "javascript-live-provider-root", liveProviderChildWorkflow)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner call count = %d, want one live child invocation", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want one live provider child", len(dispatches.Dispatches))
+	}
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED ||
+		dispatch.ModelProvider == nil || *dispatch.ModelProvider != "codex" ||
+		dispatch.Model == nil || *dispatch.Model != "live-child-model" {
+		t.Fatalf("live provider dispatch = %#v, want completed codex/live-child-model dispatch", dispatch)
+	}
+}
 
 // TestJavaScriptChildrenSelectDifferentProvidersAndModels proves a JavaScript
 // Factory with multiple child dispatches can select distinct per-child provider

@@ -12,19 +12,16 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspection(t *testing.T) {
 	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
-		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Content:      `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef(),
 	})
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-preset-child.workflow.js", "agent-run-preset-child")
 	service := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
@@ -488,12 +485,8 @@ func (m *parallelLiveChildMockProvider) Execute(
 		return fixtureInvocationFailure(input.Attempt, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	response := workerexecution.InferenceResponse{
-		Content: `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-" + req.Dispatch.DispatchID,
-		},
+		Content:      `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-" + req.Dispatch.DispatchID}).ContinuationRef(),
 	}
 	return fixtureInvocationSuccess(input.Attempt, response), nil
 }
@@ -503,9 +496,9 @@ func fixtureInvocationSuccess(
 	response workerexecution.InferenceResponse,
 ) workerexecution.InvocationResult {
 	return workerexecution.InvocationResult{
-		Response:        response,
-		Attempt:         attempt,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+		Response:     response,
+		Attempt:      attempt,
+		Continuation: (response.Continuation).ClonePtr(),
 	}
 }
 
@@ -859,12 +852,8 @@ func assertDispatchStatusTransitions(t *testing.T, got []fse.DispatchStatus, wan
 func TestJavaScriptRuntimeService_ChildExecutorModes_CoexistOnSameWorkflowSource(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
-		Content: `{"text":"live child output"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Content:      `{"text":"live child output"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef(),
 	})
 
 	fakeService := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{

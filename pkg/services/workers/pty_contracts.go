@@ -62,17 +62,6 @@ const (
 	PTYKindConPTY
 )
 
-func (kind PTYKind) String() string {
-	switch kind {
-	case PTYKindPOSIX:
-		return "posix"
-	case PTYKindConPTY:
-		return "conpty"
-	default:
-		return "unknown"
-	}
-}
-
 // PTYAllocator opens a platform PTY for one supervised child process.
 type PTYAllocator interface {
 	Allocate(context.Context, PTYProcessLaunch, PTYSessionConfig) (PTYSession, error)

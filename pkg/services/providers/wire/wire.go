@@ -27,19 +27,35 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// NewAgyPTYAllocator constructs the Providers-owned PTY implementation behind
-// the Workers root allocation port.
-func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (workers.PTYAllocator, error) {
+// CommandRunner is the Providers-owned subprocess effect accepted at the
+// composition boundary. Workers-specific runners are projected into this
+// contract by pkg/wire.
+type CommandRunner = providerservice.CommandRunner
+type CommandRequest = providerservice.CommandRequest
+type CommandResult = providerservice.CommandResult
+type OutputChunkObserver = providerservice.OutputChunkObserver
+type PTYAllocator = providerservice.PTYAllocator
+type PTYSession = providerservice.PTYSession
+type PTYSessionConfig = providerservice.PTYSessionConfig
+type PTYProcessLaunch = providerservice.PTYProcessLaunch
+type PTYSessionResult = providerservice.PTYSessionResult
+
+const (
+	OutputStreamStdout = providerservice.OutputStreamStdout
+	OutputStreamStderr = providerservice.OutputStreamStderr
+)
+
+// NewAgyPTYAllocator constructs the Providers-owned PTY implementation.
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (PTYAllocator, error) {
 	return executionwire.NewAgyPTYAllocator(host, clock)
 }
 
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
-	Allocator workers.PTYAllocator
+	Allocator any
 	Locator   platformprocess.ExecutableLocator
 	Inspector platformfilesystem.PathInspector
 }
@@ -67,17 +83,16 @@ type Option interface {
 }
 
 type wireOptions struct {
-	catalog              []catalogwire.Option
-	commandRunner        platformprocess.CommandRunner
-	workersCommandRunner workers.CommandRunner
-	agyCommandRunner     workers.CommandRunner
-	agyCommandClock      workers.Clock
-	agyPTYPlatform       AgyPTYPlatformDependencies
-	acpIntegrations      []providers.ACPIntegration
-	commandFactory       platformprocess.CommandFactory
-	executableLocator    platformprocess.ExecutableLocator
-	registrations        ProviderRegistrations
-	logger               logging.Logger
+	catalog           []catalogwire.Option
+	commandRunner     providerservice.CommandRunner
+	agyCommandRunner  providerservice.CommandRunner
+	agyCommandClock   platformclock.Source
+	agyPTYPlatform    AgyPTYPlatformDependencies
+	acpIntegrations   []providers.ACPIntegration
+	commandFactory    platformprocess.CommandFactory
+	executableLocator platformprocess.ExecutableLocator
+	registrations     ProviderRegistrations
+	logger            logging.Logger
 }
 
 type registrationsOption struct {
@@ -170,7 +185,7 @@ type commandRunnerOption struct {
 }
 
 func (o commandRunnerOption) apply(opts *wireOptions) {
-	opts.commandRunner = o.runner
+	opts.commandRunner = executionwire.AdaptPlatformCommandRunner(o.runner)
 }
 
 // WithCommandRunner injects the shared streaming subprocess runner used by
@@ -179,43 +194,38 @@ func WithCommandRunner(runner platformprocess.CommandRunner) Option {
 	return commandRunnerOption{runner: runner}
 }
 
-type workersCommandRunnerOption struct {
-	runner workers.CommandRunner
+type commandEffectRunnerOption struct {
+	runner providerservice.CommandRunner
 }
 
-func (o workersCommandRunnerOption) apply(opts *wireOptions) {
-	opts.workersCommandRunner = o.runner
-}
-
-// WithWorkersCommandRunner injects the shared Workers subprocess runner used
-// by built-in Codex and Claude command effects without losing dispatch
-// correlation required by mock-worker interception.
-func WithWorkersCommandRunner(runner workers.CommandRunner) Option {
-	return workersCommandRunnerOption{runner: runner}
+func (o commandEffectRunnerOption) apply(opts *wireOptions) {
+	opts.commandRunner = o.runner
 }
 
 type agyCommandRunnerOption struct {
-	runner workers.CommandRunner
+	runner any
 }
 
-func (o agyCommandRunnerOption) apply(opts *wireOptions) { opts.agyCommandRunner = o.runner }
+func (o agyCommandRunnerOption) apply(opts *wireOptions) {
+	opts.agyCommandRunner = providerservice.AdaptCommandRunner(o.runner)
+}
 
 // WithAgyCommandRunner injects the Providers command-runner effect used by
 // canonical AGY print-mode execution. The PTY option remains available for
 // direct compatibility tests and hosts that intentionally select that seam.
-func WithAgyCommandRunner(runner workers.CommandRunner) Option {
+func WithAgyCommandRunner(runner any) Option {
 	return agyCommandRunnerOption{runner: runner}
 }
 
 type agyCommandClockOption struct {
-	clock workers.Clock
+	clock platformclock.Source
 }
 
 func (o agyCommandClockOption) apply(opts *wireOptions) { opts.agyCommandClock = o.clock }
 
 // WithAgyCommandClock injects the timing source used by AGY command
 // diagnostics and duration facts.
-func WithAgyCommandClock(clock workers.Clock) Option {
+func WithAgyCommandClock(clock platformclock.Source) Option {
 	return agyCommandClockOption{clock: clock}
 }
 
@@ -231,6 +241,13 @@ func (o agyPTYPlatformOption) apply(opts *wireOptions) {
 // execution adapter.
 func WithAgyPTY(platform AgyPTYPlatformDependencies) Option {
 	return agyPTYPlatformOption{platform: platform}
+}
+
+// WithWorkersCommandRunner is retained as a source-compatible migration
+// option. Its value is projected immediately into the Providers command
+// effect and is never stored as a Workers contract.
+func WithWorkersCommandRunner(runner any) Option {
+	return commandEffectRunnerOption{runner: providerservice.AdaptCommandRunner(runner)}
 }
 
 type loggerOption struct {
@@ -274,13 +291,9 @@ func NewService(options ...Option) (providers.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	if config.agyCommandClock == nil {
-		config.agyCommandClock = platformclock.Real{}
-	}
-	return newRoot(
+	return newRootWithOptions(
 		catalogService,
 		config.commandRunner,
-		config.workersCommandRunner,
 		config.agyCommandRunner,
 		config.agyCommandClock,
 		config.agyPTYPlatform,
@@ -335,12 +348,82 @@ func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegrat
 	return packaged.ACPIntegrations(), nil
 }
 
-func newRoot(
+// newRoot preserves the pre-cutover test construction shape while the typed
+// production constructor below owns Providers effects. The compatibility
+// parser is intentionally local to wire and is not part of providers.Service.
+func newRoot(catalogService catalog.Service, args ...any) (providers.Service, error) {
+	if len(args) >= 9 {
+		var commandRunner platformprocess.CommandRunner
+		if value, ok := args[0].(platformprocess.CommandRunner); ok {
+			commandRunner = value
+		}
+		var platform AgyPTYPlatformDependencies
+		if value, ok := args[4].(AgyPTYPlatformDependencies); ok {
+			platform = value
+		}
+		var integrations []providers.ACPIntegration
+		if value, ok := args[5].([]providers.ACPIntegration); ok {
+			integrations = value
+		}
+		var factory platformprocess.CommandFactory
+		if value, ok := args[6].(platformprocess.CommandFactory); ok {
+			factory = value
+		}
+		var locator platformprocess.ExecutableLocator
+		if value, ok := args[7].(platformprocess.ExecutableLocator); ok {
+			locator = value
+		}
+		var logger logging.Logger
+		if value, ok := args[8].(logging.Logger); ok {
+			logger = value
+		}
+		registrations := registrationsFromValues(args[9:])
+		return newRootWithOptions(
+			catalogService,
+			executionwire.AdaptPlatformCommandRunner(commandRunner),
+			providerservice.AdaptCommandRunner(args[2]),
+			asPlatformClock(args[3]),
+			platform,
+			integrations,
+			factory,
+			locator,
+			logger,
+			registrations...,
+		)
+	}
+	var commandRunner providerservice.CommandRunner
+	if value, ok := argsValue(args, 0).(providerservice.CommandRunner); ok {
+		commandRunner = value
+	}
+	var agyCommandRunner providerservice.CommandRunner
+	if value, ok := argsValue(args, 1).(providerservice.CommandRunner); ok {
+		agyCommandRunner = value
+	}
+	clock := asPlatformClock(argsValue(args, 2))
+	platform, _ := argsValue(args, 3).(AgyPTYPlatformDependencies)
+	integrations, _ := argsValue(args, 4).([]providers.ACPIntegration)
+	factory, _ := argsValue(args, 5).(platformprocess.CommandFactory)
+	locator, _ := argsValue(args, 6).(platformprocess.ExecutableLocator)
+	logger, _ := argsValue(args, 7).(logging.Logger)
+	return newRootWithOptions(
+		catalogService,
+		commandRunner,
+		agyCommandRunner,
+		clock,
+		platform,
+		integrations,
+		factory,
+		locator,
+		logger,
+		registrationsFromValues(args[8:])...,
+	)
+}
+
+func newRootWithOptions(
 	catalogService catalog.Service,
-	commandRunner platformprocess.CommandRunner,
-	workersCommandRunner workers.CommandRunner,
-	agyCommandRunner workers.CommandRunner,
-	agyCommandClock workers.Clock,
+	commandRunner providerservice.CommandRunner,
+	agyCommandRunner providerservice.CommandRunner,
+	agyCommandClock platformclock.Source,
 	agyPTYPlatform AgyPTYPlatformDependencies,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
@@ -351,10 +434,7 @@ func newRoot(
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	if workersCommandRunner == nil && commandRunner != nil {
-		workersCommandRunner = workers.AdaptCommandRunner(commandRunner)
-	}
-	registrations := executionserviceRegistrations(workersCommandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
+	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
 	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator)
 	if err != nil {
 		return nil, err
@@ -469,7 +549,7 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 			result := providers.ExecuteResult{
 				Content: writer.completion.Response.Content,
 				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
-					workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+					"completion_evidence": "provider_response",
 				}},
 			}
 			if writer.progress > 0 {
@@ -497,18 +577,21 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion Comple
 }
 
 func executionserviceRegistrations(
-	workersCommandRunner workers.CommandRunner,
-	agyCommandRunner workers.CommandRunner,
-	agyCommandClock workers.Clock,
+	commandRunner providerservice.CommandRunner,
+	agyCommandRunner providerservice.CommandRunner,
+	agyCommandClock platformclock.Source,
 	agyPTYPlatform AgyPTYPlatformDependencies,
 ) []execution.Registration {
-	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromWorkersRunner(
-		workersCommandRunner,
+	if agyCommandClock == nil {
+		agyCommandClock = platformclock.Real{}
+	}
+	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromCommandRunner(
+		commandRunner,
 		executionwire.BuiltInRunnerPlatformDependencies{
 			AgyCommandRunner: agyCommandRunner,
 			AgyCommandClock:  agyCommandClock,
 			AgyPTY: executionwire.AgyPTYPlatformDependencies{
-				Allocator: agyPTYPlatform.Allocator,
+				Allocator: providerservice.AdaptPTYAllocator(agyPTYPlatform.Allocator),
 				Locator:   agyPTYPlatform.Locator,
 				Inspector: agyPTYPlatform.Inspector,
 			},
@@ -558,6 +641,28 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}
+}
+
+func argsValue(args []any, index int) any {
+	if index < 0 || index >= len(args) {
+		return nil
+	}
+	return args[index]
+}
+
+func asPlatformClock(value any) platformclock.Source {
+	clock, _ := value.(platformclock.Source)
+	return clock
+}
+
+func registrationsFromValues(values []any) []Registration {
+	registrations := make([]Registration, 0, len(values))
+	for _, value := range values {
+		if registration, ok := value.(Registration); ok {
+			registrations = append(registrations, registration)
+		}
+	}
+	return registrations
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.

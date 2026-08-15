@@ -133,7 +133,8 @@ func (s *Service) InvokeModel(
 		return modelinference.Result{}, classifyModelInvocationError(err, failureContext)
 	}
 	selection, err := resolveRuntimeRunnerSelection(
-		s.providerRegistry,
+		ctx,
+		s.providers,
 		"",
 		s.factoryRunnerID,
 		workerDef.ModelProvider,

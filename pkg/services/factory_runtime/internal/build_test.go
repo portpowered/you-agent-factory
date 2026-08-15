@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -573,7 +574,7 @@ func (*testRuntimeOpeningStub) ReplayClock(*recordings.ReplayArtifact) recording
 
 func (*testRuntimeOpeningStub) ReplayExecution(
 	*recordings.ReplayArtifact,
-) (workers.Provider, workers.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error) {
+) (providers.Service, workers.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error) {
 	return nil, nil, nil, nil, nil
 }
 

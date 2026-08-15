@@ -19,7 +19,6 @@ import (
 	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
-	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
@@ -42,7 +41,7 @@ func NewRuntime(
 	runWorktree string,
 	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	now func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -100,7 +99,7 @@ func NewRuntime(
 		return nil, err
 	}
 	runtimeService.modelsScope = modelsScope
-	assembly, err := newRuntimeAssembly(nil)
+	assembly, err := newRuntimeAssembly(providersService)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +127,7 @@ func NewConfiguredRuntime(
 	runWorktree string,
 	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	now func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -150,8 +149,7 @@ func NewConfiguredRuntime(
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
 	providersLifecycleOwned bool,
-	providerRegistry workers.ProviderRegistry,
-	providerRegistryRebinder ProviderRegistryRebinder,
+	providersRebinder ProvidersRebinder,
 	statelessExecute workers.Service,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
@@ -175,28 +173,14 @@ func NewConfiguredRuntime(
 	if providersLifecycleOwned {
 		service.providerLifecycles.Add(providersService)
 	}
-	service.providerRegistry = providerRegistry
-	service.providerRegistryRebinder = providerRegistryRebinder
-	if providerRegistry != nil {
-		assembly, assemblyErr := newRuntimeAssembly(providerRegistry)
-		if assemblyErr != nil {
-			return nil, assemblyErr
-		}
-		service.Root = service.Root.ReplaceRuntimeAssembly(assembly)
-		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
-			service.executorBuilder = builder.
-				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
-				WithProviderIdentityResolution(providerRegistry.CanonicalIdentity).
-				WithProviderRegistry(providerRegistry)
-		}
-	}
+	service.providersRebinder = providersRebinder
 	return service, nil
 }
 
 func newRuntimeAssembly(
-	registry workers.ProviderRegistry,
+	providersService providers.Service,
 ) (runtimeassembly.Service, error) {
-	registrations, err := runtimeAssemblyRegistrations(registry)
+	registrations, err := runtimeAssemblyRegistrations(providersService)
 	if err != nil {
 		return nil, err
 	}
@@ -238,21 +222,23 @@ func (runtimeAssemblyRunner) Execute(
 }
 
 func runtimeAssemblyRegistrations(
-	registry workers.ProviderRegistry,
+	providersService providers.Service,
 ) ([]runners.Registration, error) {
 	implementation := runtimeAssemblyRunner{}
-	if registry != nil {
-		identities := registry.RunnerIdentities()
-		registrations := make([]runners.Registration, 0, len(identities))
-		for _, identity := range identities {
-			metadata, err := registry.RunnerMetadata(identity)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"construct Workers Runtime Assembly runner metadata %q: %w",
-					identity,
-					err,
-				)
+	if providersService != nil {
+		listed, err := providersService.ListProviders(
+			context.Background(),
+			providers.ListProvidersRequest{},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("list Providers for runtime assembly: %w", err)
+		}
+		registrations := make([]runners.Registration, 0, len(listed.Providers))
+		for _, descriptor := range listed.Providers {
+			if descriptor.Availability != providers.AvailabilitySelectable {
+				continue
 			}
+			metadata := runnerMetadataFromProvider(descriptor)
 			registrations = append(registrations, runners.Registration{
 				Identity: metadata.ID,
 				Metadata: metadata,
@@ -290,7 +276,7 @@ func BuildRuntimeExecutors(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	progressPublisher workers.ProgressPublisher,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
