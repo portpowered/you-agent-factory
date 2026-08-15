@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestTransitionerPreservesNoArcDiagnosticWhileContextIsActive(t *testing.T) {
+	net := workerBatchTestNet()
+	net.Transitions["t1"].FailureArcs = nil
+	snapshot := workerBatchSnapshot("")
+	snapshot.Results[0].Outcome = workerexecution.OutcomeFailed
+	snapshot.Results[0].Error = "ordinary failure"
+	transitioner := NewTransitioner(
+		net, nil, testSubsystemNow, testTokenTransformer(net), nil, nil, nil,
+		testWorkPropagationPolicy(),
+	)
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err == nil || !strings.Contains(err.Error(), "transition t1 has no arcs for outcome FAILED") {
+		t.Fatalf("Execute() = (%#v, %v), want the existing no-arc diagnostic", result, err)
+	}
+	if result != nil {
+		t.Fatalf("Execute() result = %#v, want nil on an unroutable live failure", result)
+	}
+}
 
 func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T) {
 	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
