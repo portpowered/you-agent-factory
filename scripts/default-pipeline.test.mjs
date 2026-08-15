@@ -60,7 +60,7 @@ async function createHarness(t, failMatch = "") {
 	return { harnessEnv, logPath, toolPaths };
 }
 
-function runMake(harness, extraArgs = []) {
+function runMakeTarget(harness, target, extraArgs = []) {
 	const args = [
 		"--no-print-directory",
 		"-f",
@@ -74,13 +74,17 @@ function runMake(harness, extraArgs = []) {
 		"YOU_EXPECTED_CONCURRENT_LANES=4",
 		"LINT_TARGETS=lint-sentinel",
 		...extraArgs,
-		"default",
+		target,
 	];
 	return spawnSync(platform === "win32" ? "make.exe" : "make", args, {
 		cwd: repositoryRoot,
 		env: harness.harnessEnv,
 		encoding: "utf8",
 	});
+}
+
+function runMake(harness, extraArgs = []) {
+	return runMakeTarget(harness, "default", extraArgs);
 }
 
 async function toolEvents(logPath) {
@@ -177,4 +181,31 @@ test("make -n default emits all phases without running tool or nested-make proce
 	]) {
 		assert.ok(result.stdout.includes(marker), `dry run omitted ${marker}`);
 	}
+});
+
+test("local build and install use an overridable VCS build flag", async (t) => {
+	if (!requireMake(t)) return;
+
+	const defaultHarness = await createHarness(t);
+	for (const target of ["build", "install"]) {
+		const result = runMakeTarget(defaultHarness, target, ["GO_BUILD_FLAGS=-a"]);
+		assert.equal(result.status, 0, `${target}: ${result.stdout}\n${result.stderr}`);
+		const buildEvents = (await toolEvents(defaultHarness.logPath)).filter((event) =>
+			event.startsWith("go|build "),
+		);
+		const buildEvent = buildEvents.at(-1) ?? "";
+		assert.match(buildEvent, /^go\|build -a -buildvcs=false -o .+ \.\/cmd\/factory\/$/);
+		if (target === "build") {
+			const binaryName = platform === "win32" ? "you.exe" : "you";
+			assert.match(buildEvent, new RegExp(` -o bin/${binaryName.replace(".", "\\.")} `));
+		}
+	}
+
+	const stampedHarness = await createHarness(t);
+	const stamped = runMakeTarget(stampedHarness, "build", ["GO_LOCAL_BUILD_FLAGS=-buildvcs=true"]);
+	assert.equal(stamped.status, 0, `${stamped.stdout}\n${stamped.stderr}`);
+	assert.match(
+		(await toolEvents(stampedHarness.logPath)).find((event) => event.startsWith("go|build ")) ?? "",
+		/-buildvcs=true/,
+	);
 });

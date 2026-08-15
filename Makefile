@@ -89,9 +89,12 @@ ifeq ($(OS),Windows_NT)
 endif
 
 # Go's build cache is content-addressed and already includes the inputs that
-# determine a package's compiled output. Keep the default cache-enabled for
-# worktrees; callers can set GO_BUILD_FLAGS=-a for an explicit comparison.
+# determine a package's compiled output. Local CLI builds do not consume Go's
+# repository VCS metadata, so skip that probe by default. Keep this option
+# separate from GO_BUILD_FLAGS so callers can restore stamping explicitly with
+# GO_LOCAL_BUILD_FLAGS=-buildvcs=true without changing other build flags.
 GO_BUILD_FLAGS ?=
+GO_LOCAL_BUILD_FLAGS ?= -buildvcs=false
 
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
@@ -255,10 +258,10 @@ coverage-help:
 	$(info A build or typecheck alone does not replace either completed coverage run.)
 
 build:
-	$(GO) build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	$(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 install:
-	$(GO) build $(GO_BUILD_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	$(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 bundle-api:
 	$(NODE) scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml

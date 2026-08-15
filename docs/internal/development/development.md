@@ -81,6 +81,24 @@ make ui-storybook
 make ui-test-storybook
 ```
 
+### Local build provenance
+
+`make build` and `make install` use `GO_LOCAL_BUILD_FLAGS`, which defaults to
+`-buildvcs=false`. This avoids Go's repository metadata probe on repeated local
+CLI builds because the maintained `cmd/` and `pkg/` code does not consume
+`vcs.revision`, `vcs.time`, or `vcs.modified`; the CLI's development version
+fallback only reads the main module version. The option is independent of
+`GO_BUILD_FLAGS`, and `GO_LOCAL_BUILD_FLAGS=-buildvcs=true` restores local VCS
+stamping when it is needed for a comparison.
+
+The local verification aggregators that call `make build`—including
+`make build-all`, `make backend-verification`, `make verify-build`, and
+`make release-surface-smoke`—inherit the unstamped local default. Shipped
+provenance remains unchanged: GoReleaser runs `.goreleaser.yml` directly,
+`make acp-baseline-self` performs its own direct `go build`, and the published
+`go install` smoke paths invoke `go install` directly. Those paths do not use
+`GO_LOCAL_BUILD_FLAGS` and remain stamped by their existing Go tooling.
+
 `make backend-dependency-graph` writes the direct production-import graph for
 repository packages under `cmd/` and `pkg/` to
 `.artifacts/backend-dependency-graph/backend-dependency-graph.dot`. When
