@@ -25,6 +25,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -37,7 +38,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 // Edges aggregates replaceable external-effect ports for process construction
@@ -179,7 +179,7 @@ type Edges struct {
 	}
 
 	Clock                            platformclock.Source
-	ACPWireRecorder                  acp.WireRecorder
+	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
 	WorkerRecordingWriter            recordings.WorkerRecordingWriter

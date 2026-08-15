@@ -11,6 +11,16 @@ type Recorder interface {
 	Record(conn string, peer Peer, direction Direction, stream Stream, line []byte) error
 }
 
+// WireTranscript is one open per-connection recording of wire traffic.
+type WireTranscript interface {
+	Recorder
+	Path() string
+	Close() error
+}
+
+// WireRecorder opens a transcript for one connection.
+type WireRecorder func(connectionID string) (WireTranscript, error)
+
 // OutboundReservation is a transcript record that has been made visible before
 // the corresponding wire write. A failed or short write rolls the reservation
 // back so the transcript never claims bytes crossed the wire when they did not.
