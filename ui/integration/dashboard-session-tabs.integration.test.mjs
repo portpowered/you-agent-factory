@@ -372,6 +372,66 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           })
           .toBe("Loading factory events...");
 
+        const sessionControls = browserPage.page.getByRole("article", {
+          name: "Session controls",
+        });
+        await sessionControls.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Live" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const pauseButton = sessionControls.getByRole("button", {
+          name: "Pause live dashboard updates for root",
+        });
+        await pauseButton.focus();
+        await pauseButton.press("Enter");
+        await sessionControls
+          .getByRole("status", { name: "Live dashboard updates paused" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await sessionControls
+          .getByRole("button", {
+            name: "Resume live dashboard updates for root",
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const timelineSlider = sessionControls.getByRole("slider", {
+          name: "Timeline tick",
+        });
+        await timelineSlider.focus();
+        await timelineSlider.press("ArrowLeft");
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Historical" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        expect(
+          await sessionControls
+            .getByText("Factory Session paused", { exact: true })
+            .count(),
+        ).toBe(0);
+
+        await browserPage.page.setViewportSize({ width: 360, height: 800 });
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Historical" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await browserPage.page.setViewportSize({ width: 1280, height: 900 });
+
+        const resumeButton = sessionControls.getByRole("button", {
+          name: "Resume live dashboard updates for root",
+        });
+        await resumeButton.focus();
+        await resumeButton.press("Enter");
+        await sessionControls
+          .getByRole("button", {
+            name: "Pause live dashboard updates for root",
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await timelineSlider.press("ArrowRight");
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Live" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
         expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(rootTab),
         );

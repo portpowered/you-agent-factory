@@ -1,10 +1,15 @@
 import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
+import {
+  DashboardStatusPill,
+  type DashboardStatusPillTone,
+} from "../../../components/ui/dashboard-status-pill";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import type { DashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
 import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
-import { getHeaderControlsMessages } from "../messages/header-controls";
+import { getDashboardSessionControlsMessages } from "../messages/dashboard-session-controls";
 
 interface DashboardSessionControlsProps {
+  factoryLifecycleStatus?: string | null;
   isExportDialogOpen: boolean;
   locale: string;
   onOpenExportDialog: () => void;
@@ -12,6 +17,7 @@ interface DashboardSessionControlsProps {
 }
 
 export function DashboardSessionControls({
+  factoryLifecycleStatus,
   isExportDialogOpen,
   locale,
   onOpenExportDialog,
@@ -19,29 +25,56 @@ export function DashboardSessionControls({
 }: DashboardSessionControlsProps) {
   const activeSession = sessionTabsState.activeSession;
   const exportMessages = getExportDialogMessages(locale);
-  const headerMessages = getHeaderControlsMessages(locale);
+  const sessionControlMessages = getDashboardSessionControlsMessages(locale);
+  const isSessionStreamPaused = activeSession
+    ? sessionTabsState.isSessionStreamPaused(activeSession.id)
+    : false;
+  const streamToggleLabel = activeSession
+    ? sessionStreamToggleLabel(
+        activeSession,
+        isSessionStreamPaused,
+        sessionControlMessages,
+      )
+    : null;
+  const lifecycleStatus = factoryLifecycleStatusLabel(
+    factoryLifecycleStatus,
+    sessionControlMessages,
+  );
 
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      {lifecycleStatus ? (
+        <DashboardStatusPill
+          aria-label={lifecycleStatus.label}
+          role="status"
+          size="compact"
+          tone={lifecycleStatus.tone}
+        >
+          {lifecycleStatus.label}
+        </DashboardStatusPill>
+      ) : null}
+      {isSessionStreamPaused ? (
+        <DashboardStatusPill
+          aria-label={sessionControlMessages.liveDashboardUpdatesPausedLabel}
+          role="status"
+          size="compact"
+          tone="warning"
+        >
+          {sessionControlMessages.liveDashboardUpdatesPausedLabel}
+        </DashboardStatusPill>
+      ) : null}
       {activeSession ? (
         <DashboardActionButton
-          aria-label={sessionStreamToggleLabel(
-            activeSession,
-            sessionTabsState.isSessionStreamPaused(activeSession.id),
-            headerMessages,
-          )}
-          aria-pressed={sessionTabsState.isSessionStreamPaused(
-            activeSession.id,
-          )}
+          aria-label={streamToggleLabel ?? undefined}
+          aria-pressed={isSessionStreamPaused}
           iconOnly
           onClick={() => {
             sessionTabsState.toggleSessionStreamPaused(activeSession.id);
           }}
+          title={streamToggleLabel ?? undefined}
           tone="outline"
         >
-          <SessionStreamToggleIcon
-            paused={sessionTabsState.isSessionStreamPaused(activeSession.id)}
-          />
+          <SessionStreamToggleIcon paused={isSessionStreamPaused} />
         </DashboardActionButton>
       ) : null}
       <DashboardActionButton
@@ -56,6 +89,26 @@ export function DashboardSessionControls({
       </DashboardActionButton>
     </div>
   );
+}
+
+function factoryLifecycleStatusLabel(
+  status: string | null | undefined,
+  messages: ReturnType<typeof getDashboardSessionControlsMessages>,
+): { label: string; tone: DashboardStatusPillTone } | null {
+  switch (status?.trim().toUpperCase()) {
+    case "PAUSED":
+      return {
+        label: messages.factoryLifecyclePausedLabel,
+        tone: "warning",
+      };
+    case "RUNNING":
+      return {
+        label: messages.factoryLifecycleRunningLabel,
+        tone: "success",
+      };
+    default:
+      return null;
+  }
 }
 
 function ExportButtonIcon() {

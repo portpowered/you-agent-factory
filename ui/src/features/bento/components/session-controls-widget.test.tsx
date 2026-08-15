@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionControlsWidget } from "./session-controls-widget";
+
+let sessionStreamPaused = false;
 
 const sessionTabsState = {
   activeSession: {
@@ -12,7 +14,7 @@ const sessionTabsState = {
     project: "factory",
     target: { kind: "default" as const },
   },
-  isSessionStreamPaused: () => false,
+  isSessionStreamPaused: () => sessionStreamPaused,
   toggleSessionStreamPaused: vi.fn(),
 };
 
@@ -38,6 +40,10 @@ vi.mock("../../header/components/tick-slider-control", () => ({
 }));
 
 describe("SessionControlsWidget", () => {
+  beforeEach(() => {
+    sessionStreamPaused = false;
+  });
+
   it("renders timeline actions in portable bento card chrome with body inset", () => {
     render(<SessionControlsWidget locale="en" />);
 
@@ -51,8 +57,31 @@ describe("SessionControlsWidget", () => {
     expect(cardBody?.className).toContain("pb-4");
     expect(screen.getByRole("slider", { name: "Timeline tick" })).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Pause factory updates" }),
+      screen.getByRole("button", {
+        name: "Pause live dashboard updates for factory",
+      }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Export PNG" })).toBeTruthy();
+  });
+
+  it("keeps client update pause separate from a running Factory Session", () => {
+    sessionStreamPaused = true;
+
+    render(
+      <SessionControlsWidget factoryLifecycleStatus="RUNNING" locale="en" />,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Factory Session running" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Live dashboard updates paused" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
+        name: "Resume live dashboard updates for factory",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Factory Session paused")).toBeNull();
   });
 });

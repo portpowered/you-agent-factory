@@ -455,6 +455,9 @@ function buildSingletonWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <SessionControlsWidget
+            factoryLifecycleStatus={
+              snapshot.runtime.session.bracket?.lifecycle_control_status
+            }
             headerAction={headerAction}
             locale={locale}
             widgetId={layoutItem.id}
