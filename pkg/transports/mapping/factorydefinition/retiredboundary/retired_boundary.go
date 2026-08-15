@@ -7,41 +7,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-type Field struct {
-	Key         string
-	Replacement string
-}
+type Field = interfaces.RetiredFieldAlias
 
-var factoryFields = []Field{
-	{Key: "project", Replacement: "use id"},
-	{Key: "factoryDir", Replacement: "use factoryDirectory"},
-	{Key: "factory_dir", Replacement: "use factoryDirectory"},
-	{Key: "resourceManifest", Replacement: "use supportingFiles"},
-	{Key: "resource_manifest", Replacement: "use supportingFiles"},
-	{Key: "workflowId", Replacement: "remove workflowId"},
-	{Key: "workflow_id", Replacement: "remove workflowId"},
-}
-
-var workerFields = []Field{
-	{Key: "model_provider", Replacement: "use modelProvider"},
-	{Key: "sessionId", Replacement: "remove sessionId; provider sessions are runtime-owned"},
-	{Key: "session_id", Replacement: "remove sessionId; provider sessions are runtime-owned"},
-	{Key: "concurrency", Replacement: "remove concurrency; use resources to limit concurrent work"},
-}
-
-var workstationFields = []Field{
-	{Key: "kind", Replacement: "use behavior"},
-	{Key: "runtimeType", Replacement: "use type"},
-	{Key: "runtime_type", Replacement: "use type"},
-	{Key: "resourceUsage", Replacement: "use resources"},
-	{Key: "resource_usage", Replacement: "use resources"},
-	{Key: "resource-usage", Replacement: "use resources"},
-	{Key: "stopToken", Replacement: "use stopWords"},
-	{Key: "stop_token", Replacement: "use stopWords"},
-	{Key: "runtimeStopWords", Replacement: "use stopWords"},
-	{Key: "runtime_stop_words", Replacement: "use stopWords"},
-	{Key: "timeout", Replacement: "use limits.maxExecutionTime"},
-}
+var factoryFields = interfaces.RetiredFactoryFieldAliases()
+var workerFields = interfaces.RetiredWorkerFieldAliases()
+var workstationFields = interfaces.RetiredWorkstationFieldAliases()
 
 func RejectFanInField(data []byte) error {
 	var payload struct {
@@ -193,10 +163,7 @@ func RejectCronBoundaryAliases(raw any, path string) error {
 	if !ok {
 		return nil
 	}
-	return RejectFields(cron, path, []Field{
-		{Key: "trigger_at_start", Replacement: "use triggerAtStart"},
-		{Key: "expiry_window", Replacement: "use expiryWindow"},
-	})
+	return RejectFields(cron, path, interfaces.RetiredCronFieldAliases())
 }
 
 func RejectFields(container map[string]any, path string, fields []Field) error {
