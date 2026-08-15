@@ -2,6 +2,7 @@ package oneshot_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -90,42 +91,113 @@ func TestBTRCP0OneShotCancellationCharacterization(t *testing.T) {
 	}
 }
 
-var btrcOneShotCanceledEventOrders = [][]interfaces.FactoryEventType{
-	{
-		interfaces.FactoryEventTypeRunRequest,
-		interfaces.FactoryEventTypeInitialStructureRequest,
-		interfaces.FactoryEventTypeSessionStarted,
-		interfaces.FactoryEventTypeFactoryStateResponse,
-		interfaces.FactoryEventTypeWorkRequest,
-		interfaces.FactoryEventTypeDispatchRequest,
-		interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
-		interfaces.FactoryEventTypeModelRequest,
-		interfaces.FactoryEventTypeModelResponse,
-		interfaces.FactoryEventTypeFactoryStateResponse,
-		interfaces.FactoryEventTypeRunResponse,
-		interfaces.FactoryEventTypeSessionResultUpdated,
-		interfaces.FactoryEventTypeSessionCompleted,
-	},
-	{
-		interfaces.FactoryEventTypeRunRequest,
-		interfaces.FactoryEventTypeInitialStructureRequest,
-		interfaces.FactoryEventTypeSessionStarted,
-		interfaces.FactoryEventTypeFactoryStateResponse,
-		interfaces.FactoryEventTypeWorkRequest,
-		interfaces.FactoryEventTypeDispatchRequest,
-		interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
-		interfaces.FactoryEventTypeModelRequest,
-		interfaces.FactoryEventTypeFactoryStateResponse,
-		interfaces.FactoryEventTypeModelResponse,
-		interfaces.FactoryEventTypeRunResponse,
-		interfaces.FactoryEventTypeSessionResultUpdated,
-		interfaces.FactoryEventTypeSessionCompleted,
-	},
+func TestBTRCOneShotCanceledEventOrderForcesModelResponseInterleavings(t *testing.T) {
+	cases := []struct {
+		name  string
+		types []interfaces.FactoryEventType
+	}{
+		{
+			name: "before-first-terminal-event",
+			types: []interfaces.FactoryEventType{
+				interfaces.FactoryEventTypeRunRequest,
+				interfaces.FactoryEventTypeInitialStructureRequest,
+				interfaces.FactoryEventTypeSessionStarted,
+				interfaces.FactoryEventTypeFactoryStateResponse,
+				interfaces.FactoryEventTypeWorkRequest,
+				interfaces.FactoryEventTypeDispatchRequest,
+				interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+				interfaces.FactoryEventTypeModelRequest,
+				interfaces.FactoryEventTypeModelResponse,
+				interfaces.FactoryEventTypeAgentRunResponse,
+				interfaces.FactoryEventTypeFactoryStateResponse,
+				interfaces.FactoryEventTypeRunResponse,
+				interfaces.FactoryEventTypeSessionResultUpdated,
+				interfaces.FactoryEventTypeSessionCompleted,
+			},
+		},
+		{
+			name: "between-factory-state-and-run-response",
+			types: []interfaces.FactoryEventType{
+				interfaces.FactoryEventTypeRunRequest,
+				interfaces.FactoryEventTypeInitialStructureRequest,
+				interfaces.FactoryEventTypeSessionStarted,
+				interfaces.FactoryEventTypeFactoryStateResponse,
+				interfaces.FactoryEventTypeWorkRequest,
+				interfaces.FactoryEventTypeDispatchRequest,
+				interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+				interfaces.FactoryEventTypeModelRequest,
+				interfaces.FactoryEventTypeFactoryStateResponse,
+				interfaces.FactoryEventTypeAgentRunResponse,
+				interfaces.FactoryEventTypeModelResponse,
+				interfaces.FactoryEventTypeRunResponse,
+				interfaces.FactoryEventTypeSessionResultUpdated,
+				interfaces.FactoryEventTypeSessionCompleted,
+			},
+		},
+		{
+			name: "after-session-completed",
+			types: []interfaces.FactoryEventType{
+				interfaces.FactoryEventTypeRunRequest,
+				interfaces.FactoryEventTypeInitialStructureRequest,
+				interfaces.FactoryEventTypeSessionStarted,
+				interfaces.FactoryEventTypeFactoryStateResponse,
+				interfaces.FactoryEventTypeWorkRequest,
+				interfaces.FactoryEventTypeDispatchRequest,
+				interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+				interfaces.FactoryEventTypeModelRequest,
+				interfaces.FactoryEventTypeFactoryStateResponse,
+				interfaces.FactoryEventTypeRunResponse,
+				interfaces.FactoryEventTypeSessionResultUpdated,
+				interfaces.FactoryEventTypeSessionCompleted,
+				interfaces.FactoryEventTypeAgentRunResponse,
+				interfaces.FactoryEventTypeModelResponse,
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assertBTRCOneShotCanceledEventOrder(t, btrcOneShotCanceledEvents(testCase.types))
+		})
+	}
+}
+
+func btrcOneShotCanceledEvents(types []interfaces.FactoryEventType) []interfaces.FactoryEvent {
+	events := make([]interfaces.FactoryEvent, len(types))
+	for index, eventType := range types {
+		events[index] = interfaces.FactoryEvent{
+			Type: eventType,
+			Id:   fmt.Sprintf("canceled-event-%d", index),
+			Context: interfaces.FactoryEventContext{
+				Sequence: index,
+			},
+		}
+	}
+	return events
+}
+
+var btrcOneShotCanceledEventOrder = []interfaces.FactoryEventType{
+	interfaces.FactoryEventTypeRunRequest,
+	interfaces.FactoryEventTypeInitialStructureRequest,
+	interfaces.FactoryEventTypeSessionStarted,
+	interfaces.FactoryEventTypeFactoryStateResponse,
+	interfaces.FactoryEventTypeWorkRequest,
+	interfaces.FactoryEventTypeDispatchRequest,
+	interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	interfaces.FactoryEventTypeModelRequest,
+	interfaces.FactoryEventTypeFactoryStateResponse,
+	interfaces.FactoryEventTypeRunResponse,
+	interfaces.FactoryEventTypeSessionResultUpdated,
+	interfaces.FactoryEventTypeSessionCompleted,
 }
 
 func assertBTRCOneShotCanceledEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 	t.Helper()
 	types := make([]interfaces.FactoryEventType, 0, len(events))
+	modelRequestCount := 0
+	modelRequestIndex := -1
+	modelResponseCount := 0
+	modelResponseIndex := -1
 	for index, event := range events {
 		if event.Context.Sequence != index {
 			t.Fatalf("canceled event[%d] sequence = %d, want %d", index, event.Context.Sequence, index)
@@ -133,19 +205,35 @@ func assertBTRCOneShotCanceledEventOrder(t *testing.T, events []interfaces.Facto
 		if strings.TrimSpace(event.Id) == "" {
 			t.Fatalf("canceled event[%d] id is empty", index)
 		}
-		// Agent-run responses are emitted only if cancellation loses the race
-		// with the detached run. Exclude that optional observation so this
-		// characterization asserts the deterministic lifecycle ordering.
-		if event.Type != interfaces.FactoryEventTypeAgentRunResponse {
+		switch event.Type {
+		case interfaces.FactoryEventTypeModelRequest:
+			modelRequestCount++
+			modelRequestIndex = index
+			types = append(types, event.Type)
+		case interfaces.FactoryEventTypeModelResponse:
+			modelResponseCount++
+			modelResponseIndex = index
+		case interfaces.FactoryEventTypeAgentRunResponse:
+			// AGENT_RUN_RESPONSE is emitted by detached-run cleanup, while
+			// MODEL_RESPONSE is emitted while the provider unwinds cancellation.
+			// Both observations race the invocation terminal lifecycle, so
+			// neither belongs in its canonical order comparison.
+		default:
 			types = append(types, event.Type)
 		}
 	}
-	for _, want := range btrcOneShotCanceledEventOrders {
-		if reflect.DeepEqual(types, want) {
-			return
-		}
+	if modelRequestCount != 1 {
+		t.Fatalf("canceled MODEL_REQUEST count = %d, want exactly one", modelRequestCount)
 	}
-	t.Fatalf("canceled canonical event order = %v, want one of %v", types, btrcOneShotCanceledEventOrders)
+	if modelResponseCount != 1 {
+		t.Fatalf("canceled MODEL_RESPONSE count = %d, want exactly one", modelResponseCount)
+	}
+	if modelResponseIndex <= modelRequestIndex {
+		t.Fatalf("canceled MODEL_RESPONSE index = %d, want strictly after MODEL_REQUEST index %d", modelResponseIndex, modelRequestIndex)
+	}
+	if !reflect.DeepEqual(types, btrcOneShotCanceledEventOrder) {
+		t.Fatalf("canceled canonical event order = %v, want %v", types, btrcOneShotCanceledEventOrder)
+	}
 }
 
 type btrcBlockingProvider struct {
