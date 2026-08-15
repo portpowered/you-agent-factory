@@ -44,8 +44,8 @@ export function useCurrentActivityEditableGraph({
   });
   const documentDraft: CurrentActivityEditableGraphDocumentDraft = {
     baseDocument: editableGraph.draftState.baseDocument,
-    canRedoLayout: editableGraph.layoutDraftState.canRedoLayout,
-    canUndoLayout: editableGraph.layoutDraftState.canUndoLayout,
+    canRedoLayout: editableGraph.pendingState.canRedoLayout,
+    canUndoLayout: editableGraph.pendingState.canUndoLayout,
     dirtyState: editableGraph.pendingState.dirtyState,
     graph: editableGraph.draftState.graph,
     hasChanges: editableGraph.pendingState.hasPortableDocumentChanges,

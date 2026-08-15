@@ -27,6 +27,39 @@ export type {
   FactoryWorkType,
 };
 
+export type FactoryGraphNodeFieldUpdate =
+  | {
+      field: "capacity";
+      kind: "resource";
+      name: string;
+      value: FactoryResource["capacity"];
+    }
+  | {
+      field: "model";
+      kind: "worker";
+      name: string;
+      value: FactoryWorker["model"];
+    }
+  | {
+      field: "type";
+      kind: "work-state";
+      stateName: string;
+      value: FactoryWorkState["type"];
+      workTypeName: string;
+    }
+  | {
+      field: "body" | "worker";
+      kind: "workstation";
+      name: string;
+      value: string;
+    }
+  | {
+      field: "behavior";
+      kind: "workstation";
+      name: string;
+      value: FactoryWorkstation["behavior"];
+    };
+
 export type FactoryGraphNodeKind =
   | "doc"
   | "resource"
@@ -150,6 +183,8 @@ export interface FactoryGraphDraft {
     additions: FactoryGraphDraftEdgeChange[];
     removals: FactoryGraphDraftEdgeChange[];
   };
+  /** Canonical field updates, kept separate from disposable graph projections. */
+  fieldChanges?: FactoryGraphNodeFieldUpdate[];
   removals: {
     docs: string[];
     resources: string[];
@@ -205,6 +240,7 @@ export function createEmptyFactoryGraphDraft(): FactoryGraphDraft {
       additions: [],
       removals: [],
     },
+    fieldChanges: [],
     removals: {
       docs: [],
       resources: [],
@@ -226,6 +262,7 @@ export function hasFactoryGraphDraftChanges(draft: FactoryGraphDraft): boolean {
       draft.additions.workstations.length ||
       draft.edgeChanges.additions.length ||
       draft.edgeChanges.removals.length ||
+      draft.fieldChanges?.length ||
       draft.removals.docs.length ||
       draft.removals.resources.length ||
       draft.removals.workers.length ||

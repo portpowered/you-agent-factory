@@ -1,4 +1,5 @@
 import { isFactoryBundledDocTargetPath } from "../../../workflow-activity/lib/factory-bundled-docs";
+import { applyFactoryGraphNodeFieldChanges } from "./factory-graph-draft-field-apply";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -74,6 +75,11 @@ export function buildDraftAppliedFactoryDefinition(
       draft,
     );
   }
+
+  applyFactoryGraphNodeFieldChanges(
+    nextFactoryDefinition,
+    draft.fieldChanges ?? [],
+  );
 
   return nextFactoryDefinition;
 }

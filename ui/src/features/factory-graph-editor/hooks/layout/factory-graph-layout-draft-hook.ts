@@ -155,6 +155,10 @@ interface LayoutDraftStoreState {
 interface UseFactoryGraphLayoutDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   factoryDocumentScopeKey?: string | null;
+  onCommit?: (input: {
+    nextLayout: FactoryLayout;
+    previousLayout: FactoryLayout;
+  }) => void;
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates layout draft session state with typed undo history.
@@ -163,6 +167,7 @@ export function useFactoryGraphLayoutDraftState(
 ): FactoryGraphLayoutDraftDerivedState {
   const currentFactoryDocument = options.currentFactoryDocument;
   const factoryDocumentScopeKey = options.factoryDocumentScopeKey ?? null;
+  const onCommit = options.onCommit;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
   const isApplyingHistoryRef = useRef(false);
   const [store, setStore] = useState<LayoutDraftStoreState>(() => ({
@@ -196,6 +201,13 @@ export function useFactoryGraphLayoutDraftState(
             ? pushFactoryLayoutHistoryCommand(currentStore.history, command)
             : currentStore.history;
 
+        if (command && !isApplyingHistoryRef.current) {
+          onCommit?.({
+            nextLayout: layout,
+            previousLayout: currentLayout,
+          });
+        }
+
         return {
           history,
           sessionState: {
@@ -205,7 +217,7 @@ export function useFactoryGraphLayoutDraftState(
         };
       });
     },
-    [documentBaseLayout],
+    [documentBaseLayout, onCommit],
   );
 
   useEffect(() => {

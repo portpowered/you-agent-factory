@@ -1,14 +1,20 @@
-import { useCallback, useMemo, useState } from "react";
+// biome-ignore lint/style/noExcessiveLinesPerFile: this hook is the compatibility composition boundary for the document, layout, and save controllers.
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { buildPendingFactoryDefinition } from "../lib/draft/factory-graph-draft-apply";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
 } from "../lib/draft/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import { createFactoryGraphWorkstationResolver } from "../lib/editor/factory-graph-editor-connections";
 import { resolveFactoryGraphEditorDirtyState } from "../lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
 import { updateFactoryGraphNodeField } from "../lib/editor-runtime/factory-graph-field-operations";
-import { resolveProjectedLayoutPositions } from "../lib/layout/factory-graph-layout-operations";
+import {
+  factoryLayoutFromDefinition,
+  resolveProjectedLayoutPositions,
+} from "../lib/layout/factory-graph-layout-operations";
 import {
   addFactoryGraphNode,
   buildFactoryGraphState,
@@ -26,6 +32,7 @@ import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "./use-editable-factory-graph-types";
+import { useFactoryGraphDocumentHistory } from "./use-factory-graph-document-history";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes draft, layout, projection, and save controllers for the editor.
 export function useEditableFactoryGraph(
@@ -36,7 +43,26 @@ export function useEditableFactoryGraph(
   const [blockedOperation, setBlockedOperation] =
     useState<FactoryGraphOperationResult<never> | null>(null);
   const draftState = useFactoryGraphDraftState(options);
-  const layoutDraftState = useFactoryGraphLayoutDraftState(options);
+  const documentHistory = useFactoryGraphDocumentHistory({
+    draft: draftState.draft,
+    layout: factoryLayoutFromDefinition(options.currentFactoryDocument),
+  });
+  const layoutDraftState = useFactoryGraphLayoutDraftState({
+    ...options,
+    onCommit: ({ nextLayout }) => {
+      documentHistory.recordLayout(nextLayout);
+    },
+  });
+  const currentDocumentSnapshot = useMemo(
+    () => ({
+      draft: draftState.draft,
+      layout: layoutDraftState.layout,
+    }),
+    [draftState.draft, layoutDraftState.layout],
+  );
+  useEffect(() => {
+    documentHistory.reconcile(currentDocumentSnapshot);
+  }, [currentDocumentSnapshot, documentHistory.reconcile]);
   const baseFactoryDefinition =
     draftState.latestDocument ?? draftState.baseDocument ?? null;
   const graphState = useEditableFactoryGraphState({
@@ -84,17 +110,55 @@ export function useEditableFactoryGraph(
   });
   const mutationActions = useEditableFactoryGraphMutationActions({
     baseFactoryDefinition,
+    commitDraft: (draft) => {
+      documentHistory.recordDraft(draft);
+      draftState.replaceDraft(draft);
+    },
     draftState,
     layoutDraftState,
     locale: options.locale,
     setBlockedOperation,
   });
+  const undoDocument = useCallback(() => {
+    const snapshot = documentHistory.undo();
+    if (!snapshot) {
+      return;
+    }
+
+    draftState.replaceDraft(snapshot.draft);
+    layoutDraftState.replaceLayout(snapshot.layout);
+  }, [documentHistory, draftState, layoutDraftState]);
+  const redoDocument = useCallback(() => {
+    const snapshot = documentHistory.redo();
+    if (!snapshot) {
+      return;
+    }
+
+    draftState.replaceDraft(snapshot.draft);
+    layoutDraftState.replaceLayout(snapshot.layout);
+  }, [documentHistory, draftState, layoutDraftState]);
+  const resetLayout = useCallback(
+    (resetOptions?: { recordHistory?: boolean }) => {
+      layoutDraftState.resetLayout(resetOptions);
+      if (resetOptions?.recordHistory === false) {
+        documentHistory.reset({
+          draft: documentHistory.present.draft,
+          layout: layoutDraftState.baseLayout,
+        });
+      }
+    },
+    [documentHistory, layoutDraftState],
+  );
   const discard = useCallback(() => {
+    documentHistory.reset({
+      draft: createEmptyFactoryGraphDraft(),
+      layout: layoutDraftState.baseLayout,
+    });
     draftState.resetDraft();
     layoutDraftState.resetLayout({ recordHistory: false });
     setBlockedOperation(null);
     saveController.resetSaveState();
-  }, [draftState, layoutDraftState, saveController]);
+  }, [documentHistory, draftState, layoutDraftState, saveController]);
   const dirtyState = useMemo(
     () =>
       resolveFactoryGraphEditorDirtyState({
@@ -127,10 +191,10 @@ export function useEditableFactoryGraph(
       resetLayoutNodeSize: layoutDraftState.resetNodeSize,
       removeNode: mutationActions.removeNode,
       removeSelection: mutationActions.removeSelection,
-      resetLayout: layoutDraftState.resetLayout,
-      redoLayout: layoutDraftState.redoLayout,
+      resetLayout,
+      redoLayout: redoDocument,
       save: saveController.save,
-      undoLayout: layoutDraftState.undoLayout,
+      undoLayout: undoDocument,
       updateLayoutViewport: layoutDraftState.updateViewport,
       createVisualGroup: layoutDraftState.createVisualGroup,
       fitVisualGroup: layoutDraftState.fitVisualGroup,
@@ -148,8 +212,8 @@ export function useEditableFactoryGraph(
     graphState,
     layoutDraftState,
     pendingState: {
-      canRedoLayout: layoutDraftState.canRedoLayout,
-      canUndoLayout: layoutDraftState.canUndoLayout,
+      canRedoLayout: documentHistory.canRedo,
+      canUndoLayout: documentHistory.canUndo,
       dirtyState,
       hasChanges: hasPortableDocumentChanges,
       hasLayoutChanges: dirtyState.layoutDirty,
@@ -201,12 +265,14 @@ function useEditableFactoryGraphState({
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: groups editable graph draft mutation actions behind one controller seam.
 function useEditableFactoryGraphMutationActions({
   baseFactoryDefinition,
+  commitDraft,
   draftState,
   layoutDraftState,
   locale,
   setBlockedOperation,
 }: {
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
+  commitDraft: (draft: FactoryGraphDraft) => void;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   locale?: string | null;
@@ -220,14 +286,14 @@ function useEditableFactoryGraphMutationActions({
     ): FactoryGraphOperationResult<FactoryGraphDraft> => {
       const result = operation();
       if (result.ok) {
-        draftState.replaceDraft(result.value);
+        commitDraft(result.value);
         setBlockedOperation(null);
       } else {
         setBlockedOperation(result as FactoryGraphOperationResult<never>);
       }
       return result;
     },
-    [draftState, setBlockedOperation],
+    [commitDraft, setBlockedOperation],
   );
   const addNode = useCallback(
     (node: FactoryGraphAddEntityDraft) =>
@@ -324,6 +390,9 @@ function useEditableFactoryGraphMutationActions({
   );
   const updateNodeField = useUpdateNodeFieldAction({
     baseFactoryDefinition,
+    commitDraft,
+    draft: draftState.draft,
+    locale,
     setBlockedOperation,
   });
 
@@ -406,9 +475,15 @@ function useDisconnectEdgeAction({
 
 function useUpdateNodeFieldAction({
   baseFactoryDefinition,
+  commitDraft,
+  draft,
+  locale,
   setBlockedOperation,
 }: {
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
+  commitDraft: (draft: FactoryGraphDraft) => void;
+  draft: FactoryGraphDraft;
+  locale?: string | null;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -423,16 +498,28 @@ function useUpdateNodeFieldAction({
         return result;
       }
 
+      const currentFactoryDefinition =
+        buildPendingFactoryDefinition(baseFactoryDefinition, draft, locale) ??
+        baseFactoryDefinition;
       const result = updateFactoryGraphNodeField({
-        baseFactoryDefinition,
+        baseFactoryDefinition: currentFactoryDefinition,
         update,
       });
+      if (result.ok) {
+        commitDraft({
+          ...draft,
+          fieldChanges: [
+            ...(draft.fieldChanges ?? []),
+            structuredClone(update),
+          ],
+        });
+      }
       setBlockedOperation(
         result.ok ? null : (result as FactoryGraphOperationResult<never>),
       );
       return result;
     },
-    [baseFactoryDefinition, setBlockedOperation],
+    [baseFactoryDefinition, commitDraft, draft, locale, setBlockedOperation],
   );
 }
 
