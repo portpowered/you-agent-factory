@@ -11,6 +11,10 @@ const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultPipelineBanner = "Bare make runs: generate-api, ui-deps, ui-build, build, test, lint.";
 const binaryOnlyGuidance = "For only the Go binary, run: make build.";
 
+function makeArgumentPath(path) {
+	return path.replaceAll("\\", "/");
+}
+
 async function createHarness(t, failMatch = "") {
 	const root = await mkdtemp(join(os.tmpdir(), "you-default-pipeline-"));
 	const bin = join(root, "bin");
@@ -30,7 +34,7 @@ async function createHarness(t, failMatch = "") {
 		].join("\n") + "\n",
 	);
 
-	const toolNames = ["go", "node", "npm", "make"];
+	const toolNames = ["go", "node", "npm", "nested-make"];
 	const toolPaths = {};
 	for (const tool of toolNames) {
 		const filename = platform === "win32" ? `${tool}.cmd` : tool;
@@ -61,10 +65,10 @@ function runMake(harness, extraArgs = []) {
 		"--no-print-directory",
 		"-f",
 		join(repositoryRoot, "Makefile"),
-		`GO=${harness.toolPaths.go}`,
-		`NODE=${harness.toolPaths.node}`,
-		`NPM=${harness.toolPaths.npm}`,
-		`MAKE=${harness.toolPaths.make}`,
+		`GO=${makeArgumentPath(harness.toolPaths.go)}`,
+		`NODE=${makeArgumentPath(harness.toolPaths.node)}`,
+		`NPM=${makeArgumentPath(harness.toolPaths.npm)}`,
+		`MAKE=${makeArgumentPath(harness.toolPaths["nested-make"])}`,
 		"BUN_BIN=",
 		"YOU_LOGICAL_CPUS=4",
 		"YOU_EXPECTED_CONCURRENT_LANES=4",
@@ -91,7 +95,7 @@ async function toolEvents(logPath) {
 
 function phaseForEvent(event) {
 	const [tool, command = ""] = event.split("|", 2);
-	if (tool === "make") return "nested-make";
+	if (tool === "nested-make") return "nested-make";
 	if (tool === "node" && (command.includes("bundle:rest") || command.includes("generate-openapi-types"))) return "generate-api";
 	if (tool === "npm" && command.startsWith("exec --package")) return "generate-api";
 	if (tool === "go" && command.startsWith("generate ")) return "generate-api";
