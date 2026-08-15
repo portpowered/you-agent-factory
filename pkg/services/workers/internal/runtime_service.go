@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
@@ -30,6 +31,7 @@ type Service struct {
 	models                            models.Service
 	modelsScope                       models.RuntimeScopeRef
 	providers                         providers.Service
+	runnerRegistry                    runners.Service
 	scriptFactory                     *workerexecutor.ScriptFactory
 	executorBuilder                   workerconstruction.Builder
 	providerCommandRunner             workers.CommandRunner

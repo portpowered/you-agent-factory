@@ -100,6 +100,9 @@ func NewRuntime(
 		return nil, err
 	}
 	runtimeService.modelsScope = modelsScope
+	if err := installSharedRunnerRegistry(runtimeService); err != nil {
+		return nil, err
+	}
 	assembly, err := newRuntimeAssembly(nil)
 	if err != nil {
 		return nil, err
@@ -109,6 +112,93 @@ func NewRuntime(
 		workstationswire.NewService(logging.NewZapLogger(logger, verbose)),
 	)
 	return runtimeService, nil
+}
+
+// installSharedRunnerRegistry composes the production Agent, Script, and
+// Inference strategies once for the compatibility runtime. Their request
+// adapters still live at the runtime-assembly/workstation boundary, but all
+// supported execution now enters the same immutable Workers registry.
+func installSharedRunnerRegistry(service *Service) error {
+	if service == nil || service.providers == nil {
+		// ProviderOverride-only compatibility construction does not have the
+		// Providers root required by the production Agent strategy. The
+		// canonical Workers service handles that override directly; preserve the
+		// older direct runtime path until that compatibility role is removed.
+		return nil
+	}
+	registry, err := runnerswire.NewProductionRegistry(
+		runners.AgentDependencies{
+			Providers:         service.providers,
+			Publish:           service.progressPublisher,
+			DecisionEnvelopes: service.decisionEnvelopes,
+		},
+		runners.ScriptConfig{RequestSelected: true},
+		runners.ScriptDependencies{
+			CommandRunner: sharedScriptCommandRunner(service.scriptCommandRunner),
+			FactoryDocs:   service.factoryDocs,
+			Now:           service.clock,
+			Publish:       service.progressPublisher,
+			Record:        func(workers.ScriptEvent) {},
+		},
+		runners.InferenceConfig{
+			Worker: models.LocalWorker{
+				Name: "request-selected-inference",
+				Type: factorydefinitions.WorkerTypeInference,
+			},
+			Scope: service.modelsScope,
+		},
+		runners.InferenceDependencies{Models: service.models},
+	)
+	if err != nil {
+		return fmt.Errorf("construct Workers shared runner registry: %w", err)
+	}
+	service.runnerRegistry = registry
+	service.scriptFactory = service.scriptFactory.WithRegistry(registry)
+	if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
+		service.executorBuilder = builder.WithRunnerRegistry(registry)
+	}
+	return nil
+}
+
+func sharedScriptCommandRunner(runner workers.CommandRunner) workers.CommandRunner {
+	if _, ok := runner.(interface {
+		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
+	}); ok {
+		return runner
+	}
+	return compatibilityStreamingCommandRunner{runner: runner}
+}
+
+// compatibilityStreamingCommandRunner keeps the legacy runtime's permissive
+// command edge compatible with the Script Runner's required streaming seam.
+// Production process edges already implement RunStreaming and pass through
+// unchanged; deterministic package-local fakes receive one complete chunk.
+type compatibilityStreamingCommandRunner struct {
+	runner workers.CommandRunner
+}
+
+func (runner compatibilityStreamingCommandRunner) Run(
+	ctx context.Context,
+	request workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return runner.runner.Run(ctx, request)
+}
+
+func (runner compatibilityStreamingCommandRunner) RunStreaming(
+	ctx context.Context,
+	request workers.CommandRequest,
+	observer workers.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, request)
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observer(workers.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if len(result.Stderr) > 0 {
+			observer(workers.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	return result, err
 }
 
 // NewConfiguredRuntime constructs the legacy runtime compatibility role while preserving

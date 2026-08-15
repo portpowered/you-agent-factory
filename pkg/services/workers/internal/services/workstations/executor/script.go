@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 // ScriptExecutor adapts the private runners.Service.Execute result onto the
@@ -43,6 +44,7 @@ type ScriptFactory struct {
 	commandRunner CommandRunner
 	commandClock  workerprocess.Clock
 	factoryDocs   workers.FactoryDocsLoader
+	registry      runners.Service
 }
 
 // NewScriptFactory validates the command edge selected by process composition.
@@ -94,6 +96,7 @@ func (f *ScriptFactory) New(
 		record,
 		now,
 		f.factoryDocs,
+		f.registry,
 	)
 }
 
@@ -105,7 +108,25 @@ func (f *ScriptFactory) WithCommandRunner(runner CommandRunner) (*ScriptFactory,
 	if runner == nil {
 		return f, nil
 	}
-	return NewScriptFactory(runner, f.commandClock, f.factoryDocs)
+	replacement, err := NewScriptFactory(runner, f.commandClock, f.factoryDocs)
+	if err != nil {
+		return nil, err
+	}
+	replacement.registry = f.registry
+	return replacement, nil
+}
+
+// WithRegistry returns a copy that resolves Script dispatches through the
+// caller-supplied immutable registry. The three-argument constructor remains
+// available for package-local compatibility tests while runtime composition
+// migrates onto the shared production registry.
+func (f *ScriptFactory) WithRegistry(registry runners.Service) *ScriptFactory {
+	if f == nil {
+		return nil
+	}
+	clone := *f
+	clone.registry = registry
+	return &clone
 }
 
 func newScriptExecutor(
@@ -117,21 +138,35 @@ func newScriptExecutor(
 	record workers.ScriptEventRecorder,
 	now func() time.Time,
 	factoryDocs workers.FactoryDocsLoader,
+	registries ...runners.Service,
 ) (*ScriptExecutor, error) {
 	if definition == nil {
 		return nil, errors.New("construct script worker: definition is required")
 	}
-	registry, err := resolveScriptRegistry(
-		definition,
-		commandRunner,
-		factoryDirectory,
-		publish,
-		record,
-		now,
-		factoryDocs,
-	)
-	if err != nil {
-		return nil, err
+	if publish == nil {
+		publish = func(workers.ProgressFragment) {}
+	}
+	if record == nil {
+		record = func(workers.ScriptEvent) {}
+	}
+	var registry runners.Service
+	if len(registries) > 0 {
+		registry = registries[0]
+	}
+	if registry == nil {
+		var err error
+		registry, err = resolveScriptRegistry(
+			definition,
+			commandRunner,
+			factoryDirectory,
+			publish,
+			record,
+			now,
+			factoryDocs,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &ScriptExecutor{
 		Command:       definition.Command,
@@ -201,9 +236,22 @@ func (se *ScriptExecutor) Execute(
 			return outputSchemaConfigurationFailure(request, err), nil
 		}
 	}
+	ctx = workerexecution.WithProgressPublisher(ctx, se.Publish)
+	ctx = workerexecution.WithScriptEventRecorder(ctx, se.recorder)
+	ctx = workerexecution.WithCommandRunnerOverride(ctx, se.CommandRunner)
+	attempt := scriptRunnerRequest(request)
+	if strings.TrimSpace(attempt.Command) == "" {
+		attempt.Command = se.Command
+	}
+	if len(attempt.Args) == 0 {
+		attempt.Args = append([]string(nil), se.Args...)
+	}
+	if strings.TrimSpace(attempt.FactoryDirectory) == "" {
+		attempt.FactoryDirectory = se.FactoryDir
+	}
 	result, executionErr := se.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity: runners.ScriptIdentity,
-		Attempt:  scriptRunnerRequest(request),
+		Attempt:  attempt,
 	})
 	return attachStructuredResult(request, scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr)), nil
 }
@@ -221,6 +269,16 @@ func (se *ScriptExecutor) ExecuteWithWorker(
 	}
 	if definition != nil && definition.Command == se.Command && slices.Equal(definition.Args, se.Args) {
 		return se.Execute(ctx, request)
+	}
+	if se.registry != nil {
+		if definition == nil {
+			return workers.WorkResult{}, errors.New("construct script worker: definition is required")
+		}
+		effective := workers.CloneWorkstationExecutionRequest(request)
+		effective.Command = definition.Command
+		effective.Args = append([]string(nil), definition.Args...)
+		effective.FactoryDirectory = se.FactoryDir
+		return se.Execute(ctx, effective)
 	}
 	interpolated, err := newScriptExecutor(
 		definition,
@@ -256,6 +314,9 @@ func scriptRunnerRequest(request workers.WorkstationExecutionRequest) workers.Ru
 		Worktree:           request.Worktree,
 		WorkingDirectory:   request.WorkingDirectory,
 		SessionID:          request.FactorySessionID,
+		Command:            request.Command,
+		Args:               append([]string(nil), request.Args...),
+		FactoryDirectory:   request.FactoryDirectory,
 	}
 }
 

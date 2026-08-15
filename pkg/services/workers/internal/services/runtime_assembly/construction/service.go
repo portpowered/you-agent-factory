@@ -67,21 +67,22 @@ type Result struct {
 
 // Service is a stateless worker executor constructor.
 type Service struct {
-	providers                         providers.Service
-	scriptFactory                     *workerexecutor.ScriptFactory
-	interpolation                     interfaces.InvocationInterpolationService
-	executionPolicy                   interfaces.WorkstationExecutionPolicyService
-	decisionEnvelopes                 interfaces.DecisionEnvelopeService
-	factoryDocs                       workers.FactoryDocsLoader
-	worktreePreparer                  workers.FactoryWorktreePreparer
-	runWorktree                       string
-	runReasoningEffort                string
-	agentRunHarness                   workeragentrun.HarnessAdapter
-	retryRandom                       platformrandom.Source
-	workstationFiles                  platformfilesystem.ReadFileInspector
-	resolveRunner                     workers.RunnerSelectionResolver
-	resolveProvider                   workers.ProviderIdentityResolver
-	providerRegistry                  workers.ProviderRegistry
+	providers          providers.Service
+	scriptFactory      *workerexecutor.ScriptFactory
+	runnerRegistry     runners.Service
+	interpolation      interfaces.InvocationInterpolationService
+	executionPolicy    interfaces.WorkstationExecutionPolicyService
+	decisionEnvelopes  interfaces.DecisionEnvelopeService
+	factoryDocs        workers.FactoryDocsLoader
+	worktreePreparer   workers.FactoryWorktreePreparer
+	runWorktree        string
+	runReasoningEffort string
+	agentRunHarness    workeragentrun.HarnessAdapter
+	retryRandom        platformrandom.Source
+	workstationFiles   platformfilesystem.ReadFileInspector
+	resolveRunner      workers.RunnerSelectionResolver
+	resolveProvider    workers.ProviderIdentityResolver
+	providerRegistry   workers.ProviderRegistry
 }
 
 // New constructs a worker executor service from process-owned factories.
@@ -170,6 +171,22 @@ func (s *Service) WithProviderRegistry(registry workers.ProviderRegistry) *Servi
 	return &clone
 }
 
+// WithRunnerRegistry returns a service copy that routes Agent, Inference, and
+// Script construction through the shared immutable Workers registry. A nil
+// registry preserves the legacy compatibility path used by older package-local
+// callers while process composition completes its migration.
+func (s *Service) WithRunnerRegistry(registry runners.Service) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.runnerRegistry = registry
+	if registry != nil && clone.scriptFactory != nil {
+		clone.scriptFactory = clone.scriptFactory.WithRegistry(registry)
+	}
+	return &clone
+}
+
 // WithExecutionFactories returns a service copy that uses replacement provider
 // and script factories while preserving registry-backed runner selection and
 // provider-identity resolution wiring.
@@ -186,6 +203,9 @@ func (s *Service) WithExecutionFactories(
 	}
 	if scriptFactory != nil {
 		clone.scriptFactory = scriptFactory
+		if clone.runnerRegistry != nil {
+			clone.scriptFactory = clone.scriptFactory.WithRegistry(clone.runnerRegistry)
+		}
 	}
 	return &clone
 }
@@ -338,12 +358,41 @@ func (s *Service) agentRunner(
 	if providerOverride != nil && !usesNamedExecutorProvider {
 		return workerexecutor.RunnerFromProvider(providerOverride), nil
 	}
+	if s != nil && s.runnerRegistry != nil {
+		identity := runners.AgentIdentity
+		if def != nil && def.Type == interfaces.WorkerTypeInference {
+			identity = runners.InferenceIdentity
+		}
+		return registryRunner{registry: s.runnerRegistry, identity: identity}, nil
+	}
 	return s.resolveRegisteredAgentRunner(
 		runtimeConfig,
 		logger,
 		effectiveSkipPermissions,
 		inferenceProgressPublisher,
 	)
+}
+
+type registryRunner struct {
+	registry runners.Service
+	identity string
+}
+
+func (runner registryRunner) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	if runner.registry == nil {
+		return workers.RunnerExecutionResult{}, fmt.Errorf("shared runner registry is required")
+	}
+	if runner.identity == runners.InferenceIdentity {
+		request.RunnerID = runners.InferenceIdentity
+	}
+	return runner.registry.Execute(ctx, runners.ExecuteRequest{
+		Identity:             runner.identity,
+		RequiredCapabilities: request.RequiredOptionalCapabilities,
+		Attempt:              request,
+	})
 }
 
 func (s *Service) resolveRegisteredAgentRunner(
