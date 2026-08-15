@@ -107,6 +107,7 @@ sleep 2
 		fmt.Sprintf("FUNCTIONAL_TEST_BUDGET=%s", "0.1s"),
 		"FUNCTIONAL_TEST_TIER=pr-short",
 		"FUNCTIONAL_TEST_TRIGGER=pull_request",
+		"FUNCTIONAL_SHORT=true",
 		fmt.Sprintf("MAKE_BIN=%s", makePath),
 	)
 	if err == nil {
