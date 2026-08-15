@@ -8,12 +8,14 @@ import { getHeaderControlsMessages } from "../../header/messages/header-controls
 import { DashboardWidgetFrame } from "./dashboard-widget-frame/dashboard-widget-frame";
 
 export interface SessionControlsWidgetProps {
+  factoryLifecycleStatus?: string | null;
   headerAction?: ReactNode;
   locale?: string;
   widgetId?: string;
 }
 
 export function SessionControlsWidget({
+  factoryLifecycleStatus,
   headerAction,
   locale,
   widgetId = "session-controls",
@@ -38,6 +40,7 @@ export function SessionControlsWidget({
       <div className="flex min-w-0 w-full items-center gap-1.5">
         <TickSliderControl locale={locale} />
         <DashboardSessionControls
+          factoryLifecycleStatus={factoryLifecycleStatus}
           isExportDialogOpen={isExportDialogOpen}
           locale={locale ?? "en"}
           onOpenExportDialog={openExportDialog}

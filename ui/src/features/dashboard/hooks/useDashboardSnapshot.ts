@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 import {
   type FactoryTimelineCheckpoint,
   useFactoryTimelineStore,
 } from "../../timeline/state/factoryTimelineStore";
-import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 import {
   clearTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
@@ -39,6 +39,32 @@ export interface DashboardSnapshotResult {
 }
 
 type DashboardPreflightStatus = "loading" | "non-recoverable" | "success";
+
+function dashboardSnapshotTargetKey({
+  effectiveSessionID,
+  rawSessionID,
+  refreshToken,
+  streamIdentity,
+}: {
+  effectiveSessionID: string | null;
+  rawSessionID: string | null;
+  refreshToken: number;
+  streamIdentity: TimelineCheckpointStreamIdentity | null;
+}): string {
+  return JSON.stringify([
+    rawSessionID?.trim() ?? "",
+    effectiveSessionID?.trim() ?? "",
+    refreshToken,
+    streamIdentity
+      ? [
+          streamIdentity.backendScopeID,
+          streamIdentity.factorySessionID,
+          streamIdentity.logicalSessionKeyID,
+          streamIdentity.streamGenerationID,
+        ]
+      : null,
+  ]);
+}
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
 export function useDashboardSnapshot({
@@ -115,6 +141,18 @@ export function useDashboardSnapshot({
   }, [activateTimelineEntry, streamIdentity]);
 
   const effectiveSessionID = resolvedSessionID ?? rawSessionID;
+  const snapshotTargetKey = useMemo(
+    () =>
+      dashboardSnapshotTargetKey({
+        effectiveSessionID,
+        rawSessionID,
+        refreshToken,
+        streamIdentity,
+      }),
+    [effectiveSessionID, rawSessionID, refreshToken, streamIdentity],
+  );
+  const snapshotTargetKeyRef = useRef(snapshotTargetKey);
+  snapshotTargetKeyRef.current = snapshotTargetKey;
 
   if (
     resolvedSessionID != null &&
@@ -162,12 +200,15 @@ export function useDashboardSnapshot({
   );
 
   const handleInvalidReconnectCursor = useCallback(() => {
+    if (snapshotTargetKeyRef.current !== snapshotTargetKey) {
+      return;
+    }
     reconnectCursorInvalidatedRef.current = true;
     if (streamIdentity) {
       resetTimelineEntry(streamIdentity);
     }
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
-  }, [resetTimelineEntry, streamIdentity]);
+  }, [resetTimelineEntry, snapshotTargetKey, streamIdentity]);
 
   const checkpointSyncIdentity = useMemo(() => {
     if (
@@ -199,6 +240,9 @@ export function useDashboardSnapshot({
 
   const appendStreamEvents = useCallback(
     (events: FactoryEvent[]) => {
+      if (snapshotTargetKeyRef.current !== snapshotTargetKey) {
+        return;
+      }
       if (streamIdentity) {
         appendEventsForEntry(streamIdentity, events);
         return;
@@ -211,6 +255,7 @@ export function useDashboardSnapshot({
       appendEvents,
       appendEventsForEntry,
       debugOptions.disableTimelineCheckpoint,
+      snapshotTargetKey,
       streamIdentity,
     ],
   );
@@ -236,6 +281,7 @@ export function useDashboardSnapshot({
     onEvents: appendStreamEvents,
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
+    sessionAliasID: rawSessionID,
     sessionID: effectiveSessionID,
     streamIdentity,
   });

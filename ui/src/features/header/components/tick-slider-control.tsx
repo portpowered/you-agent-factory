@@ -1,6 +1,8 @@
 import { type ChangeEvent, useId, useMemo } from "react";
+import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
 import { cn } from "../../../lib/cn";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { getDashboardSessionControlsMessages } from "../messages/dashboard-session-controls";
 import {
   getHeaderControlsMessages,
   HEADER_CURRENT_TICK_TOKEN,
@@ -68,6 +70,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
     Object.keys(state.worldViewCache),
   );
   const latestTick = useFactoryTimelineStore((state) => state.latestTick);
+  const mode = useFactoryTimelineStore((state) => state.mode);
   const selectTick = useFactoryTimelineStore((state) => state.selectTick);
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   const setCurrentMode = useFactoryTimelineStore(
@@ -85,6 +88,11 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
     bounds.maxTick,
   );
   const messages = getHeaderControlsMessages(locale);
+  const sessionControlMessages = getDashboardSessionControlsMessages(locale);
+  const isLive = mode === "current";
+  const timelineModeLabel = isLive
+    ? sessionControlMessages.timelineModeLiveLabel
+    : sessionControlMessages.timelineModeHistoricalLabel;
   const sliderValueText = isDisabled
     ? messages.waitingForMoreTicks
     : formatCurrentTickStatus(
@@ -143,7 +151,15 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
         />
       </label>
 
-      <div className="ml-auto flex items-center">
+      <div className="ml-auto flex items-center gap-2">
+        <DashboardStatusPill
+          aria-label={`${sessionControlMessages.timelineModeLabel}: ${timelineModeLabel}`}
+          role="status"
+          size="compact"
+          tone={isLive ? "success" : "neutral"}
+        >
+          {timelineModeLabel}
+        </DashboardStatusPill>
         <output
           className="whitespace-nowrap text-xs font-medium tabular-nums text-on-surface-variant"
           id={tickStatusID}

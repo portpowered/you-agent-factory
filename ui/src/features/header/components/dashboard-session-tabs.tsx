@@ -2,6 +2,7 @@ import { Dialog } from "@you-agent-factory/components/overlays";
 import { Button, Text } from "@you-agent-factory/components/primitives";
 import {
   type DragEvent as ReactDragEvent,
+  useCallback,
   useId,
   useRef,
   useState,
@@ -9,7 +10,10 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { AlertPanel } from "../../../components/ui/alert-panel";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import {
+  getDashboardStreamStateForSession,
+  useDashboardStreamStore,
+} from "../../dashboard/state/dashboardStreamStore";
 import { useDashboardSessionTabFocus } from "../hooks/use-dashboard-session-tab-focus";
 import {
   type DashboardSessionTabsState,
@@ -41,6 +45,26 @@ export function DashboardSessionTabs({
   return <DashboardSessionTabsView locale={locale} state={sessionTabsState} />;
 }
 
+function useDashboardStreamStateForSession(locale: string) {
+  const sessionStreamStates = useDashboardStreamStore(
+    (storeState) => storeState.sessionStreamStates,
+  );
+  const sessionStreamStateKeysBySessionID = useDashboardStreamStore(
+    (storeState) => storeState.sessionStreamStateKeysBySessionID,
+  );
+
+  return useCallback(
+    (sessionID: string) =>
+      getDashboardStreamStateForSession(
+        sessionID,
+        sessionStreamStates,
+        sessionStreamStateKeysBySessionID,
+        locale,
+      ),
+    [locale, sessionStreamStateKeysBySessionID, sessionStreamStates],
+  );
+}
+
 function DashboardSessionTabsView({
   locale,
   state,
@@ -50,9 +74,7 @@ function DashboardSessionTabsView({
 }) {
   const messages = getHeaderControlsMessages(locale);
   const dialogTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const streamStatus = useDashboardStreamStore(
-    (storeState) => storeState.streamState.status,
-  );
+  const streamStateForSession = useDashboardStreamStateForSession(locale);
   const {
     activeSession,
     closeError,
@@ -115,7 +137,7 @@ function DashboardSessionTabsView({
             onReorderSession={moveSessionTab}
             onSelectSession={setActiveSessionID}
             sessions={sessions}
-            streamStatus={streamStatus}
+            streamStateForSession={streamStateForSession}
           />
         </div>
         {completedJourney ? (
@@ -184,7 +206,7 @@ function SessionTabsContent({
   onRetry,
   onSelectSession,
   sessions,
-  streamStatus,
+  streamStateForSession,
 }: {
   activeSession: FactorySessionSummary | null;
   closingSessionID: string | null;
@@ -199,7 +221,7 @@ function SessionTabsContent({
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
-  streamStatus: DashboardStreamState["status"];
+  streamStateForSession: (sessionID: string) => DashboardStreamState;
 }) {
   const sessionTabsID = useId();
   const [draggedSessionID, setDraggedSessionID] = useState<string | null>(null);
@@ -384,7 +406,7 @@ function SessionTabsContent({
                 onCloseSession(session.id);
               }}
               session={session}
-              streamStatus={streamStatus}
+              streamState={streamStateForSession(session.id)}
               tabID={sessionTabID(sessionTabsID, session.id)}
             />
           ))}

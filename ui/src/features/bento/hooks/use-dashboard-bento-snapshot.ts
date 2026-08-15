@@ -1,6 +1,8 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
+import type { DashboardCardStateContext } from "../../dashboard/lib/dashboard-card-state";
+import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   factoryTimelineEntryKey,
   useFactoryTimelineStore,
@@ -10,6 +12,11 @@ import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-id
 export interface DashboardWorkOutcomeStream {
   identity: StreamDerivedCacheIdentity | null;
   status: "loading" | "ready";
+}
+
+export interface DashboardBentoCardStateContext
+  extends DashboardCardStateContext {
+  workOutcomeHydrationStatus: DashboardWorkOutcomeStream["status"];
 }
 
 interface WorkOutcomeTimelineSelectionState {
@@ -91,12 +98,24 @@ export function useDashboardBentoSnapshot(
     (state) =>
       selectDashboardWorkOutcomeInput(state, workOutcomeStream).hydrationStatus,
   );
+  const hasRestoredCheckpoint = useFactoryTimelineStore(
+    (state) => state.currentReplayCheckpoint != null,
+  );
+  const timelineMode = useFactoryTimelineStore(
+    (state) => state.mode ?? "current",
+  );
+  const streamStatus = useDashboardStreamStore((state) => state.streamState);
   const workstationRequestsByDispatchID = useFactoryTimelineStore(
     (state) =>
       state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID,
   );
   const selectedSnapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
+  );
+  const hasAuthoritativeSnapshot = useFactoryTimelineStore(
+    (state) =>
+      state.worldViewCache[state.selectedTick] != null &&
+      (state.events.length > 0 || state.currentReplayCheckpoint != null),
   );
   const snapshot = selectedSnapshot ?? EMPTY_DASHBOARD_SNAPSHOT;
   const currentSelection = useCurrentSelection({
@@ -110,6 +129,14 @@ export function useDashboardBentoSnapshot(
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
+    dashboardCardStateContext: {
+      hasAuthoritativeSnapshot,
+      recoveryPending:
+        hasRestoredCheckpoint || workOutcomeHydrationStatus === "loading",
+      streamStatus: streamStatus.status,
+      timelineMode,
+      workOutcomeHydrationStatus,
+    } satisfies DashboardBentoCardStateContext,
     workOutcomeHydrationStatus,
   };
 }

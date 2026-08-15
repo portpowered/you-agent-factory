@@ -51,6 +51,7 @@ export interface UseFactoryEventStreamOptions {
   openStream?: typeof openFactoryEventStream;
   probeRecovery?: typeof probeFactoryEventStreamRecovery;
   refreshToken?: number;
+  sessionAliasID?: string | null;
   sessionID: string | null;
   streamIdentity?: StreamDerivedCacheIdentity | null;
   validateReconnectCursor?: (
@@ -60,10 +61,11 @@ export interface UseFactoryEventStreamOptions {
 }
 
 interface DashboardStreamConnectionOptions {
+  isCurrentStreamTarget: (targetKey: string) => boolean;
   debugOptions: ReturnType<typeof readFactoryTimelineDebugOptions>;
   enabled: boolean;
   flushHandleRef: RefObject<number | null>;
-  flushQueuedEvents: () => void;
+  flushQueuedEvents: (expectedTargetKey?: string) => void;
   initialReconnectCursor?: FactoryEventReconnectCursor;
   initialCursorFreeReplayCorrelationToken?: string | null;
   locale?: string | null;
@@ -74,7 +76,7 @@ interface DashboardStreamConnectionOptions {
   queuedEventsRef: RefObject<FactoryEvent[]>;
   refreshToken: number;
   resetTimeline: () => void;
-  scheduleQueuedFlush: () => void;
+  scheduleQueuedFlush: (targetKey: string) => void;
   sessionID: string | null;
   setStreamState: (
     streamState: ReturnType<
@@ -83,6 +85,7 @@ interface DashboardStreamConnectionOptions {
   ) => void;
   streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
+  streamTargetKey: string;
   validateReconnectCursor: (
     sessionID?: string | null,
     reconnect?: FactoryEventReconnectCursor,
@@ -103,6 +106,22 @@ function resolveStreamSessionID(
   return isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : sessionID;
+}
+
+function streamIdentityBelongsToSession(
+  streamIdentity: StreamDerivedCacheIdentity | null,
+  streamSessionID: string,
+  sessionAliasID: string | null,
+): boolean {
+  if (!streamIdentity || streamIdentity.factorySessionID !== streamSessionID) {
+    return streamIdentity == null;
+  }
+  const normalizedAlias = sessionAliasID?.trim() ?? "";
+  return (
+    normalizedAlias.length === 0 ||
+    normalizedAlias === streamSessionID ||
+    isDefaultFactorySessionID(normalizedAlias)
+  );
 }
 
 function reconnectCursorFromEvent(
@@ -175,6 +194,7 @@ function useDashboardStreamConnection({
   flushQueuedEvents,
   initialReconnectCursor,
   initialCursorFreeReplayCorrelationToken,
+  isCurrentStreamTarget,
   locale,
   onInvalidReconnectCursor,
   openStream,
@@ -188,6 +208,7 @@ function useDashboardStreamConnection({
   setStreamState,
   streamIdentity,
   streamSessionID,
+  streamTargetKey,
   validateReconnectCursor,
 }: DashboardStreamConnectionOptions) {
   const refs = useDashboardStreamConnectionRefs();
@@ -195,6 +216,19 @@ function useDashboardStreamConnection({
 
   // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the effect owns one stream lifecycle with coordinated reconnect paths.
   useEffect(() => {
+    const capturedStreamTargetKey = streamTargetKey;
+    const disposed = { current: false };
+    const isActive = () =>
+      !disposed.current && isCurrentStreamTarget(capturedStreamTargetKey);
+    const applyStreamState = (
+      streamState: Parameters<
+        DashboardStreamConnectionOptions["setStreamState"]
+      >[0],
+    ) => {
+      if (isActive()) {
+        setStreamState(streamState);
+      }
+    };
     const sessionKey = dashboardSessionKey(sessionID, refreshToken);
     const previousSessionKey = refs.lastSessionKeyRef.current;
     const sessionSelectionChanged = sessionKey !== previousSessionKey;
@@ -208,14 +242,16 @@ function useDashboardStreamConnection({
         queuedEventsRef,
         refreshToken,
         sessionID,
-        setStreamState,
+        setStreamState: applyStreamState,
       })
     ) {
       return;
     }
 
-    const disposed = { current: false };
     const handleStreamEvent = (event: FactoryEvent) => {
+      if (!isActive()) {
+        return;
+      }
       refs.cursorFreeReplayPendingRef.current = false;
       refs.staleCursorRecoveryAttemptedRef.current = false;
       invalidReconnectRecoveryUsedRef.current = false;
@@ -229,10 +265,13 @@ function useDashboardStreamConnection({
       queuedEventsRef.current.push(
         compactFactoryEventForTimeline(event, debugOptions),
       );
-      scheduleQueuedFlush();
+      scheduleQueuedFlush(capturedStreamTargetKey);
     };
 
     const openDashboardStream = (reconnect?: FactoryEventReconnectCursor) => {
+      if (!isActive()) {
+        return;
+      }
       const validationAttempt = ++refs.reconnectValidationAttemptRef.current;
       void (async () => {
         if (reconnect != null) {
@@ -241,6 +280,7 @@ function useDashboardStreamConnection({
             reconnect,
           );
           if (
+            !isActive() ||
             validationAttempt !== refs.reconnectValidationAttemptRef.current
           ) {
             return;
@@ -264,7 +304,7 @@ function useDashboardStreamConnection({
               openDashboardStream(undefined);
               return;
             }
-            setStreamState({
+            applyStreamState({
               message: validation.message,
               status: "offline",
             });
@@ -272,13 +312,13 @@ function useDashboardStreamConnection({
           }
         }
 
-        if (disposed.current) {
+        if (!isActive()) {
           return;
         }
         refs.streamRef.current?.close();
         const stream = openStream(
           handleStreamEvent,
-          (status, message) => setStreamState({ status, message }),
+          (status, message) => applyStreamState({ status, message }),
           streamSessionID,
           reconnect,
         );
@@ -296,16 +336,22 @@ function useDashboardStreamConnection({
         }
         const previousOnOpen = stream.onopen;
         stream.onopen = (openEvent) => {
+          if (!isActive()) {
+            return;
+          }
           refs.cursorFreeReplayPendingRef.current = false;
           previousOnOpen?.call(stream, openEvent);
         };
         const previousOnError = stream.onerror;
         stream.onerror = (errorEvent) => {
+          if (!isActive()) {
+            return;
+          }
           previousOnError?.call(stream, errorEvent);
           if (refs.cursorFreeReplayPendingRef.current) {
             refs.cursorFreeReplayPendingRef.current = false;
             refs.recoveringRef.current = false;
-            setStreamState(recoveryFailedStreamState(locale));
+            applyStreamState(recoveryFailedStreamState(locale));
             return;
           }
           const cursor = refs.reconnectCursorRef.current;
@@ -327,7 +373,7 @@ function useDashboardStreamConnection({
             queuedEventsRef,
             refs,
             resetTimeline,
-            setStreamState,
+            setStreamState: applyStreamState,
             streamIdentity,
             streamSessionID,
           });
@@ -346,11 +392,18 @@ function useDashboardStreamConnection({
     invalidReconnectRecoveryUsedRef.current = false;
     openDashboardStream(initialReconnectCursor);
     return () => {
+      const targetRemainsCurrent = isCurrentStreamTarget(
+        capturedStreamTargetKey,
+      );
       disposed.current = true;
       refs.reconnectValidationAttemptRef.current += 1;
       clearReconnectTimeout(refs.reconnectTimeoutRef);
       clearQueuedFlush(flushHandleRef);
-      flushQueuedEvents();
+      if (targetRemainsCurrent) {
+        flushQueuedEvents(capturedStreamTargetKey);
+      } else {
+        queuedEventsRef.current = [];
+      }
       refs.streamRef.current?.close();
       refs.streamRef.current = null;
     };
@@ -361,6 +414,7 @@ function useDashboardStreamConnection({
     flushQueuedEvents,
     initialReconnectCursor,
     initialCursorFreeReplayCorrelationToken,
+    isCurrentStreamTarget,
     locale,
     onInvalidReconnectCursor,
     openStream,
@@ -375,10 +429,12 @@ function useDashboardStreamConnection({
     setStreamState,
     streamIdentity,
     streamSessionID,
+    streamTargetKey,
     validateReconnectCursor,
   ]);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: stream target identity and queued delivery wiring stay together at the hook boundary.
 export function useFactoryEventStream({
   enabled,
   initialReconnectCursor,
@@ -390,6 +446,7 @@ export function useFactoryEventStream({
   openStream = openFactoryEventStream,
   probeRecovery = probeFactoryEventStreamRecovery,
   refreshToken = 0,
+  sessionAliasID,
   sessionID,
   streamIdentity = null,
   validateReconnectCursor = validateFactoryEventReconnectCursor,
@@ -406,8 +463,8 @@ export function useFactoryEventStream({
     }
     resetAllTimelines();
   }, [resetAllTimelines, resetTimelineEntry, streamIdentity]);
-  const setStreamState = useDashboardStreamStore(
-    (state) => state.setStreamState,
+  const setSessionStreamState = useDashboardStreamStore(
+    (state) => state.setSessionStreamState,
   );
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
@@ -416,37 +473,100 @@ export function useFactoryEventStream({
     () => resolveStreamSessionID(sessionID, streamIdentity),
     [sessionID, streamIdentity],
   );
+  const streamTargetKey = useMemo(
+    () =>
+      JSON.stringify([
+        sessionAliasID?.trim() ?? "",
+        streamSessionID,
+        refreshToken,
+        streamIdentity
+          ? [
+              streamIdentity.backendScopeID,
+              streamIdentity.factorySessionID,
+              streamIdentity.logicalSessionKeyID,
+              streamIdentity.streamGenerationID,
+            ]
+          : null,
+      ]),
+    [refreshToken, sessionAliasID, streamIdentity, streamSessionID],
+  );
+  const streamTargetKeyRef = useRef(streamTargetKey);
+  streamTargetKeyRef.current = streamTargetKey;
+  const isCurrentStreamTarget = useCallback(
+    (targetKey: string) => streamTargetKeyRef.current === targetKey,
+    [],
+  );
+  const setStreamState = useCallback(
+    (
+      streamState: ReturnType<
+        typeof useDashboardStreamStore.getState
+      >["streamState"],
+    ) => {
+      const streamStateSessionID = sessionAliasID ?? streamSessionID;
+      const ownedStreamIdentity = streamIdentityBelongsToSession(
+        streamIdentity,
+        streamSessionID,
+        sessionAliasID ?? null,
+      )
+        ? streamIdentity
+        : null;
+      setSessionStreamState(
+        streamStateSessionID,
+        ownedStreamIdentity,
+        streamState,
+        sessionAliasID && sessionAliasID !== streamStateSessionID
+          ? [sessionAliasID]
+          : undefined,
+      );
+    },
+    [sessionAliasID, setSessionStreamState, streamIdentity, streamSessionID],
+  );
 
-  const flushQueuedEvents = useCallback(() => {
-    flushHandleRef.current = null;
-    if (queuedEventsRef.current.length === 0) {
-      return;
-    }
-    const events = queuedEventsRef.current;
-    queuedEventsRef.current = [];
-    if (onEvents) {
-      onEvents(events);
-      return;
-    }
-    for (const event of events) {
-      onEvent(event);
-    }
-  }, [onEvent, onEvents]);
+  const flushQueuedEvents = useCallback(
+    (expectedTargetKey?: string) => {
+      if (
+        expectedTargetKey != null &&
+        !isCurrentStreamTarget(expectedTargetKey)
+      ) {
+        return;
+      }
+      flushHandleRef.current = null;
+      if (queuedEventsRef.current.length === 0) {
+        return;
+      }
+      const events = queuedEventsRef.current;
+      queuedEventsRef.current = [];
+      if (onEvents) {
+        onEvents(events);
+        return;
+      }
+      for (const event of events) {
+        onEvent(event);
+      }
+    },
+    [isCurrentStreamTarget, onEvent, onEvents],
+  );
 
-  const scheduleQueuedFlush = useCallback(() => {
-    if (flushHandleRef.current !== null) {
-      return;
-    }
-    if (typeof window.requestAnimationFrame === "function") {
-      flushHandleRef.current = window.requestAnimationFrame(() => {
-        flushQueuedEvents();
-      });
-      return;
-    }
-    flushHandleRef.current = window.setTimeout(() => {
-      flushQueuedEvents();
-    }, 16);
-  }, [flushQueuedEvents]);
+  const scheduleQueuedFlush = useCallback(
+    (expectedTargetKey: string) => {
+      if (!isCurrentStreamTarget(expectedTargetKey)) {
+        return;
+      }
+      if (flushHandleRef.current !== null) {
+        return;
+      }
+      if (typeof window.requestAnimationFrame === "function") {
+        flushHandleRef.current = window.requestAnimationFrame(() => {
+          flushQueuedEvents(expectedTargetKey);
+        });
+        return;
+      }
+      flushHandleRef.current = window.setTimeout(() => {
+        flushQueuedEvents(expectedTargetKey);
+      }, 16);
+    },
+    [flushQueuedEvents, isCurrentStreamTarget],
+  );
 
   useEffect(() => {
     return () => {
@@ -461,6 +581,7 @@ export function useFactoryEventStream({
     flushQueuedEvents,
     initialReconnectCursor,
     initialCursorFreeReplayCorrelationToken,
+    isCurrentStreamTarget,
     locale,
     onInvalidReconnectCursor,
     openStream,
@@ -474,6 +595,7 @@ export function useFactoryEventStream({
     setStreamState,
     streamIdentity,
     streamSessionID,
+    streamTargetKey,
     validateReconnectCursor,
   });
 }

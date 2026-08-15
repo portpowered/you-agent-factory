@@ -1,14 +1,8 @@
 import "../../../testing/vitest-dom-capabilities.setup";
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "bun:test";
 import type { PropsWithChildren } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
@@ -61,6 +55,36 @@ const RESOLVED_DEFAULT_SESSION_UUID = DEFAULT_RUNTIME_FACTORY_SESSION_ID;
 const STALE_FACTORY_SESSION_UUID = "66666666-6666-4666-8666-666666666666";
 const BETA_FACTORY_SESSION_UUID = "77777777-7777-4777-8777-777777777777";
 const REMAPPED_FACTORY_SESSION_UUID = "88888888-8888-4888-8888-888888888888";
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function factoryStateEvent(id: string, state: string, tick: number) {
+  return {
+    context: {
+      eventTime: `2026-07-01T12:00:0${tick}Z`,
+      sequence: tick,
+      tick,
+    },
+    id,
+    payload: {
+      previousState: "IDLE",
+      reason: "session isolation test",
+      state,
+    },
+    type: FACTORY_EVENT_TYPES.factoryStateResponse,
+  };
+}
 
 function defaultStreamIdentity(
   factorySessionID = RESOLVED_DEFAULT_SESSION_UUID,
@@ -425,6 +449,108 @@ describe("useDashboardSnapshot composer", () => {
         defaultStreamIdentity("session-beta"),
       );
     });
+  });
+
+  it("keeps a selected session stable when its predecessor resolves late", async () => {
+    const sessionA =
+      createDeferred<factorySessionsAPI.FactorySessionSyncPreflightResponse>();
+    const sessionB =
+      createDeferred<factorySessionsAPI.FactorySessionSyncPreflightResponse>();
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: "session-a",
+    });
+    getFactorySessionSyncPreflightSpy.mockImplementation((sessionID) => {
+      if (sessionID === "session-a") {
+        return sessionA.promise;
+      }
+      return sessionB.promise;
+    });
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
+        "session-a",
+        undefined,
+        { signal: expect.any(AbortSignal) },
+      );
+    });
+
+    act(() => {
+      useDashboardSessionStore.getState().setSelectedSessionID("session-b");
+    });
+    await waitFor(() => {
+      expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
+        "session-b",
+        undefined,
+        { signal: expect.any(AbortSignal) },
+      );
+    });
+
+    await act(async () => {
+      sessionB.resolve(
+        buildSyncPreflightResponse({
+          factorySessionId: "session-b",
+          logicalSessionKeyId: "logical-session-b",
+          requestedSessionId: "session-b",
+          streamGenerationId: "generation-session-b",
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.workOutcomeStreamIdentity).toEqual({
+        backendScopeID: DEFAULT_BACKEND_SCOPE_ID,
+        factorySessionID: "session-b",
+        logicalSessionKeyID: "logical-session-b",
+        streamGenerationID: "generation-session-b",
+      });
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+
+    const sessionBStream = replayHarness.getStreams()[0];
+    if (!sessionBStream) {
+      throw new Error("expected session B stream to be opened");
+    }
+    act(() => {
+      sessionBStream.emitOpen();
+      sessionBStream.emit(
+        "message",
+        factoryStateEvent("session-b-live", "RUNNING", 1),
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.snapshot?.factory_state).toBe("RUNNING");
+    });
+    const sessionBEventIDs = useFactoryTimelineStore
+      .getState()
+      .events.map((event) => event.id);
+
+    await act(async () => {
+      sessionA.resolve(
+        buildSyncPreflightResponse({
+          factorySessionId: "session-a",
+          logicalSessionKeyId: "logical-session-a",
+          requestedSessionId: "session-a",
+          streamGenerationId: "generation-session-a",
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(result.current.workOutcomeStreamIdentity).toEqual({
+      backendScopeID: DEFAULT_BACKEND_SCOPE_ID,
+      factorySessionID: "session-b",
+      logicalSessionKeyID: "logical-session-b",
+      streamGenerationID: "generation-session-b",
+    });
+    expect(result.current.snapshot?.factory_state).toBe("RUNNING");
+    expect(
+      useFactoryTimelineStore.getState().events.map((event) => event.id),
+    ).toEqual(sessionBEventIDs);
+    expect(replayHarness.getStreams()).toHaveLength(1);
   });
 
   it("routes streamed events through the composer into timeline state", async () => {

@@ -3,12 +3,12 @@ import { useEffect, useRef, useState } from "react";
 
 import type { DashboardStreamState } from "../../../../api/dashboard/types";
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
+import { deletePersistedTimelineCheckpoint } from "../../../timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
+import type { FactoryTimelineCheckpoint } from "../../../timeline/state/timeline/storeState";
 import {
   clearTimelineCheckpointsForSession,
   type TimelineCheckpointStreamIdentity,
 } from "../../../timeline/state/timelineCheckpointPersistence";
-import { deletePersistedTimelineCheckpoint } from "../../../timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
-import type { FactoryTimelineCheckpoint } from "../../../timeline/state/timeline/storeState";
 import {
   isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
@@ -72,6 +72,11 @@ interface DashboardCheckpointPreflightCoreOptions
   effects?: DashboardCheckpointPreflightEffects;
   queryClient: QueryClient;
   remapSelectedSessionID: (sessionID: string) => void;
+  setSessionStreamState?: (
+    sessionID: string,
+    streamIdentity: TimelineCheckpointStreamIdentity | null,
+    streamState: DashboardStreamState,
+  ) => void;
   setStreamState: (streamState: DashboardStreamState) => void;
 }
 
@@ -162,10 +167,14 @@ export function useDashboardCheckpointPreflight(
   const setStreamState = useDashboardStreamStore(
     (state) => state.setStreamState,
   );
+  const setSessionStreamState = useDashboardStreamStore(
+    (state) => state.setSessionStreamState,
+  );
   return useDashboardCheckpointPreflightCore({
     ...options,
     queryClient,
     remapSelectedSessionID,
+    setSessionStreamState,
     setStreamState,
   });
 }
@@ -179,6 +188,7 @@ export function useDashboardCheckpointPreflightCore({
   rawSessionID,
   remapSelectedSessionID,
   restoreCheckpoint,
+  setSessionStreamState,
   setStreamState,
 }: DashboardCheckpointPreflightCoreOptions): UseDashboardCheckpointPreflightResult {
   const [checkpointHydratedKey, setCheckpointHydratedKey] = useState<
@@ -296,10 +306,16 @@ export function useDashboardCheckpointPreflightCore({
 
       if (resolution.kind === "error") {
         setPreflightError(resolution.error);
-        setStreamState({
+        const streamState = {
           message: resolution.error.message,
           status: "offline",
-        });
+        } as const;
+        setStreamState(streamState);
+        setSessionStreamState?.(
+          resolution.requestedSessionId,
+          null,
+          streamState,
+        );
         return;
       }
       if (resolution.kind === "recovery") {
@@ -360,6 +376,7 @@ export function useDashboardCheckpointPreflightCore({
     rawSessionID,
     remapSelectedSessionID,
     restoreCheckpoint,
+    setSessionStreamState,
     setStreamState,
   ]);
 
