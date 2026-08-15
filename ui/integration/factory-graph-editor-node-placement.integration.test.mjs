@@ -515,6 +515,75 @@ async function beginSaveActivationTrace(page) {
           button.getAttribute("aria-label") === "Saving...",
       );
 
+    const findReactFiber = (element) => {
+      const fiberKey = Object.getOwnPropertyNames(element).find((key) =>
+        key.startsWith("__reactFiber$"),
+      );
+      return fiberKey ? element[fiberKey] : null;
+    };
+
+    const readEditorState = () => {
+      const toolbar = document.querySelector("[data-toolbar-editor-controls]");
+      let fiber = toolbar ? findReactFiber(toolbar) : null;
+      let sessionID = null;
+      let factoryDocumentScopeKey = null;
+      let editorMode = null;
+
+      while (fiber) {
+        const props = fiber.memoizedProps ?? fiber.pendingProps;
+        if (props && typeof props === "object") {
+          const sessionCandidate =
+            props.sessionID ?? props.sessionId ?? props.viewModel?.sessionID;
+          if (sessionID === null && typeof sessionCandidate === "string") {
+            sessionID = sessionCandidate;
+          }
+          if (
+            factoryDocumentScopeKey === null &&
+            typeof props.factoryDocumentScopeKey === "string"
+          ) {
+            factoryDocumentScopeKey = props.factoryDocumentScopeKey;
+          }
+
+          const editorControls =
+            props.editorControls ?? props.viewModel?.editorControls;
+          if (
+            editorMode === null &&
+            typeof editorControls?.isEditing === "boolean"
+          ) {
+            editorMode = editorControls.isEditing;
+          }
+          if (
+            editorMode === null &&
+            typeof props.editModeToggle?.editorMode === "boolean"
+          ) {
+            editorMode = props.editModeToggle.editorMode;
+          }
+        }
+        fiber = fiber.return;
+      }
+
+      const networkSessionIDs = [
+        ...new Set(
+          performance
+            .getEntriesByType("resource")
+            .map((entry) => {
+              const match = entry.name.match(
+                /\/factory-sessions\/([^/]+)(?:\/|$)/,
+              );
+              return match ? decodeURIComponent(match[1]) : null;
+            })
+            .filter((value) => value != null),
+        ),
+      ];
+
+      return {
+        editorMode,
+        factoryDocumentScopeKey,
+        networkSessionIDs,
+        sessionID: sessionID ?? networkSessionIDs.at(-1) ?? null,
+      };
+    };
+
     const describe = () => {
       const saveButton = findSaveButton();
       const activeElement = document.activeElement;
@@ -544,6 +613,7 @@ async function beginSaveActivationTrace(page) {
           };
         },
       );
+      const editorState = readEditorState();
       const buttonBounds = saveButton?.getBoundingClientRect();
       const buttonStyles = saveButton
         ? window.getComputedStyle(saveButton)
@@ -571,6 +641,7 @@ async function beginSaveActivationTrace(page) {
             }
           : null,
         dialogs,
+        editorState,
         elapsedMs: Math.round(performance.now() - trace.startedAt),
       };
     };
@@ -686,6 +757,39 @@ async function endSaveActivationTrace(
         return null;
       }
       entry.observer.disconnect();
+      const activationRecords = [
+        entry.trace.activationPoints.beforeEnter,
+        ...entry.trace.records,
+        entry.trace.activationPoints.afterEnter,
+      ].filter(Boolean);
+      const sessionIDs = [
+        ...new Set(
+          activationRecords
+            .map((record) => record.editorState?.sessionID)
+            .filter((sessionID) => sessionID != null),
+        ),
+      ];
+      const factoryDocumentScopeKeys = [
+        ...new Set(
+          activationRecords
+            .map((record) => record.editorState?.factoryDocumentScopeKey)
+            .filter((scopeKey) => scopeKey != null),
+        ),
+      ];
+      const editorModeStates = [
+        ...new Set(
+          activationRecords
+            .map((record) => record.editorState?.editorMode)
+            .filter((mode) => typeof mode === "boolean"),
+        ),
+      ];
+      entry.trace.activationSessionIDs = sessionIDs;
+      entry.trace.activationScopeKeys = factoryDocumentScopeKeys;
+      entry.trace.activationEditorModeStates = editorModeStates;
+      entry.trace.scopeChangedBetweenActivation =
+        sessionIDs.length > 1 || factoryDocumentScopeKeys.length > 1;
+      entry.trace.editorModeLostBetweenActivation =
+        editorModeStates.includes(true) && editorModeStates.includes(false);
       entry.trace.confirmButtonPollCount = confirmButtonPollCount;
       entry.trace.dialogPollCount = dialogPollCount;
       entry.trace.enabledPollCount = enabledPollCount;
