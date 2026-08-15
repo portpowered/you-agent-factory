@@ -36,6 +36,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
   pendingAdditionNodeIds: ReadonlySet<string>;
   pendingRemovalEdgeIds: ReadonlySet<string>;
   pendingRemovalNodeIds: ReadonlySet<string>;
+  placeTokenCountsByNodeId?: ReadonlyMap<string, number>;
   topology: FactoryGraphTopology;
   validationProjection?: FactoryValidationGraphProjection;
   workstations?: readonly FactoryWorkstation[];
@@ -62,6 +63,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
     locale: input.locale,
     mode: "editor",
     runtime: {
+      placeTokenCountsByNodeId: input.placeTokenCountsByNodeId,
       workerStatusByName: input.workerStatusByName,
     },
     topology: input.topology,

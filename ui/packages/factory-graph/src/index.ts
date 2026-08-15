@@ -21,6 +21,24 @@ export {
   resolveFactoryGraphGroupRegionColor,
 } from "./group-region-presentation.js";
 export {
+  type AssertFactoryGraphHostParityInput,
+  assertFactoryGraphHostParity,
+  FACTORY_GRAPH_HOST_PARITY_HANDLE_CONTRACT,
+  FACTORY_GRAPH_HOST_PARITY_HOSTS,
+  type FactoryGraphHostParityComparison,
+  type FactoryGraphHostParityDimensions,
+  type FactoryGraphHostParityField,
+  type FactoryGraphHostParityGroup,
+  type FactoryGraphHostParityHandle,
+  type FactoryGraphHostParityHost,
+  type FactoryGraphHostParityNode,
+  type FactoryGraphHostParityNodeInput,
+  type FactoryGraphHostParityProjection,
+  type FactoryGraphHostParityWorkProgress,
+  type FactoryGraphHostParityWorkstationSemantics,
+  projectFactoryGraphHostParity,
+} from "./host-parity.js";
+export {
   FACTORY_GRAPH_NODE_FAMILIES,
   FACTORY_GRAPH_NODE_FAMILY_ROLES,
   type FactoryGraphNodeDimensionBounds,
