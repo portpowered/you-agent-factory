@@ -170,10 +170,11 @@ export function FactoryGraphEditorToolbar({
       return;
     }
 
-    // The browser normally synthesizes a click for Enter. Under the loaded
-    // graph-editor render path that default dispatch can be dropped after the
-    // keydown reaches this still-enabled button, so make the user action
-    // atomic at the button boundary and avoid a duplicate native click.
+    // Enter normally causes the browser to synthesize a click. The before-fix
+    // trace observed keydown without a subsequent click or save-handler call,
+    // but did not establish why synthesis was absent. Handle Enter at the
+    // button boundary so activation is deterministic and cannot duplicate a
+    // native click.
     event.preventDefault();
     onSave();
   };
