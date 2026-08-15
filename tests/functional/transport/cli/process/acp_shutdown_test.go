@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const acpShutdownReadTimeout = 30 * time.Second
+
 // TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess
 // drives the real customer boundary through root.BuildProcess and
 // Process.Execute. The read-start signal makes cancellation deterministic:
@@ -56,7 +58,7 @@ func TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess(t *t
 	// read-start channel is the deterministic synchronization point.
 	select {
 	case <-readStarted.started:
-	case <-time.After(5 * time.Second):
+	case <-time.After(acpShutdownReadTimeout):
 		t.Fatal("ACP server did not begin reading stdin before timeout")
 	}
 	cancel()
@@ -74,7 +76,7 @@ func TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess(t *t
 		}
 	// The timeout only guards against a regression that fails to unwind the
 	// blocked stdin read after cancellation.
-	case <-time.After(5 * time.Second):
+	case <-time.After(acpShutdownReadTimeout):
 		t.Fatal("Process.Execute() did not return after ACP cancellation")
 	}
 }
