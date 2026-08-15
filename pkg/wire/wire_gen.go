@@ -766,6 +766,48 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	return workersService, nil
 }
 
+// BuildMockStatelessWorkers composes the explicit mock-feature Workers root.
+// It shares the detached production construction ports while opting into the
+// mock registration only when the caller supplies mock configuration.
+func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWorkers *workers.MockWorkersConfig) (workers.Service, error) {
+	service, err := provideProvidersService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	modelsService, err := provideModelsService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
+	if err != nil {
+		return nil, err
+	}
+	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
+	clock := provideFactoryRuntimeClock(edges2)
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	factoryWorktreePreparer, err := provideWorkersWorktree(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
+	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
+	v3 := provideFactoryRuntimeProviderOverride(edges2)
+	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
+	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
+	if err != nil {
+		return nil, err
+	}
+	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
+	workersService, err := provideMockStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService, mockWorkers)
+	if err != nil {
+		return nil, err
+	}
+	return workersService, nil
+}
+
 // wire.go:
 
 var platformSet = wire5.NewSet(logging.NewDefaultLogger)
@@ -988,6 +1030,23 @@ var statelessWorkersSet = wire5.NewSet(
 	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
 	provideStatelessWorkersService,
+)
+
+var mockStatelessWorkersSet = wire5.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
+	provideMockStatelessWorkersService,
 )
 
 var cliCommandOperationsSet = wire5.NewSet(
