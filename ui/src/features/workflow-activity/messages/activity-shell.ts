@@ -6,6 +6,9 @@ import {
 export interface WorkflowActivityShellMessages {
   emptyMessage: string;
   emptyTitle: string;
+  rendererErrorMessage: string;
+  rendererErrorTitle: string;
+  rendererRetryLabel: string;
   selectDocLabel: (docName: string) => string;
   selectStateLabel: (placeLabel: string) => string;
   selectResourceLabel: (resourceName: string) => string;
@@ -21,6 +24,10 @@ const workflowActivityShellMessagesByLocale = {
   en: {
     emptyMessage: "The factory has not published any workstation graph yet.",
     emptyTitle: "No workflow topology loaded",
+    rendererErrorMessage:
+      "This graph could not be rendered safely. The rest of the dashboard is still available.",
+    rendererErrorTitle: "Graph rendering needs recovery",
+    rendererRetryLabel: "Retry graph",
     selectDocLabel: (docName) => `Select ${docName} doc`,
     selectStateLabel: (placeLabel) => `Select ${placeLabel} state`,
     selectResourceLabel: (resourceName) => `Select ${resourceName} resource`,
@@ -35,6 +42,9 @@ const workflowActivityShellMessagesByLocale = {
   "zh-CN": {
     emptyMessage: "这个工厂还没有发布任何工作站图。",
     emptyTitle: "尚未加载工作流拓扑",
+    rendererErrorMessage: "此图表无法安全渲染。仪表板的其他内容仍可用。",
+    rendererErrorTitle: "图表渲染需要恢复",
+    rendererRetryLabel: "重试图表",
     selectDocLabel: (docName) => `选择 ${docName} 文档`,
     selectStateLabel: (placeLabel) => `选择 ${placeLabel} 状态`,
     selectResourceLabel: (resourceName) => `选择 ${resourceName} 资源`,
