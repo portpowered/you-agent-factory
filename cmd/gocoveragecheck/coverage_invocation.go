@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,6 +23,32 @@ type coverageInvocationPlan struct {
 	invocations  []commandInvocation
 	profilePaths []string
 	cleanup      func() error
+}
+
+type coverageTestFailureError struct {
+	err                  error
+	failedTestCount      int
+	failedTestCountKnown bool
+}
+
+func (err *coverageTestFailureError) Error() string {
+	return err.err.Error()
+}
+
+func (err *coverageTestFailureError) Unwrap() error {
+	return err.err
+}
+
+func writeCoverageTestFailureWarning(err error) {
+	var testFailureErr *coverageTestFailureError
+	if !errors.As(err, &testFailureErr) {
+		return
+	}
+	if testFailureErr.failedTestCountKnown {
+		fmt.Fprintf(stderrWriter, "coverage not evaluated: %d failed tests observed; package floors were NOT checked because the coverage test run failed\n", testFailureErr.failedTestCount)
+		return
+	}
+	fmt.Fprintln(stderrWriter, "coverage not evaluated: package floors were NOT checked because the coverage test run failed; failed-test count unavailable")
 }
 
 func buildCoverageTestArgs(commonArgs []string, profilePath string, timingEnabled bool, testPackages []string) []string {
@@ -307,6 +334,9 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	var stderr strings.Builder
 	var laneErr error
 	succeeded := make([]bool, len(plan.invocations))
+	testFailureObserved := false
+	failedTestCount := 0
+	failedTestCountKnown := true
 	for index, invocation := range plan.invocations {
 		batchStdout, batchStderr, commandErr := runCommand(invocation)
 		appendCoverageOutput(&stdout, batchStdout)
@@ -314,6 +344,11 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		if commandErr == nil {
 			succeeded[index] = true
 			continue
+		}
+		if count, known, observed := coverageTestFailureDetails(commandErr, batchStdout, batchStderr); observed {
+			testFailureObserved = true
+			failedTestCount += count
+			failedTestCountKnown = failedTestCountKnown && known
 		}
 
 		detail := mergeGoTestFailureDetail(batchStderr, batchStdout)
@@ -347,7 +382,53 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		}
 	}
 
-	return errors.Join(laneErr, timingWriteErr, mergeErr, plan.cleanup())
+	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, plan.cleanup())
+	if !testFailureObserved {
+		return runErr
+	}
+	return &coverageTestFailureError{
+		err:                  runErr,
+		failedTestCount:      failedTestCount,
+		failedTestCountKnown: failedTestCountKnown && failedTestCount > 0,
+	}
+}
+
+func coverageTestFailureDetails(commandErr error, stdout string, stderr string) (int, bool, bool) {
+	if !isCoverageTestProcessFailure(commandErr) {
+		return 0, false, false
+	}
+	count := countObservedGoTestFailures(stdout, stderr)
+	return count, count > 0, true
+}
+
+func isCoverageTestProcessFailure(commandErr error) bool {
+	var exitErr *exec.ExitError
+	if errors.As(commandErr, &exitErr) {
+		return true
+	}
+	return strings.HasPrefix(commandErr.Error(), "exit status ")
+}
+
+func countObservedGoTestFailures(stdout string, stderr string) int {
+	count := 0
+	for _, output := range []string{stdout, stderr} {
+		for _, line := range strings.Split(output, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "--- FAIL:") {
+				count++
+				continue
+			}
+			if !strings.HasPrefix(trimmed, "{") {
+				continue
+			}
+
+			var event goTestTimingEvent
+			if err := json.Unmarshal([]byte(trimmed), &event); err == nil && event.Action == timingOutcomeFail && event.Test != "" {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func buildFunctionalCoverageInvocationPlan(commonArgs []string, groups []coverageRunGroup, profilePath string, timingEnabled bool, targetOS string) (coverageInvocationPlan, error) {

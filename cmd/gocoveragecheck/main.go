@@ -117,6 +117,7 @@ type coverageResult struct {
 	zeroCoveragePackages         []string
 	packageMinimumFailures       []string
 	packageMinimumWarnings       []string
+	unmeasuredPackageDiagnostics []string
 }
 
 type packageCoverageTotals struct {
@@ -148,6 +149,7 @@ func execute(cfg config) error {
 	}
 	result, err := run(cfg)
 	if err != nil {
+		writeCoverageTestFailureWarning(err)
 		var validationErr *coverageManifestValidationError
 		if errors.As(err, &validationErr) {
 			writePackageCoverageSummaries(result.packageSummaries)
@@ -174,9 +176,7 @@ func execute(cfg config) error {
 	if err := writeCoverageSummaryJSON(cfg.jsonOutput, result); err != nil {
 		return err
 	}
-	for _, warning := range result.packageMinimumWarnings {
-		fmt.Fprintln(stderrWriter, warning)
-	}
+	writeCoverageDiagnostics(result)
 
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "\n"))
@@ -397,6 +397,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 			return coverageResult{}, err
 		}
 		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
+		result.unmeasuredPackageDiagnostics = formatUnmeasuredCoverageManifestDiagnostics(manifest, result.packageTotals)
 		result.packageGates = packageGatesFromManifest(manifest)
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)

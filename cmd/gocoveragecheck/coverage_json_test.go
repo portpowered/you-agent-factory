@@ -264,8 +264,9 @@ func TestExecuteJSONReportsMeasurementExceptionFromManifest(t *testing.T) {
 	if summary.Packages[0].PackageFloor == nil || *summary.Packages[0].PackageFloor != 100.0 {
 		t.Fatalf("pkg/config packageFloor = %v, want 100", summary.Packages[0].PackageFloor)
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	wantDiagnostic := "coverage not evaluated: package=" + initializerPackage + " lane=unit (no measurement in profile)\n"
+	if got := stderr.String(); got != wantDiagnostic {
+		t.Fatalf("execute() stderr = %q, want unmeasured-package diagnostic %q", got, wantDiagnostic)
 	}
 }
 
@@ -395,8 +396,9 @@ func TestExecuteWritesJSONWhenPackageFloorFails(t *testing.T) {
 	if strings.Contains(stdout.String(), "meets minimum") {
 		t.Fatalf("execute() stdout = %q, did not expect success message", stdout.String())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	wantDiagnostic := "coverage not evaluated: package=" + configPackage + " lane=unit (no measurement in profile)\n"
+	if got := stderr.String(); got != wantDiagnostic {
+		t.Fatalf("execute() stderr = %q, want unmeasured-package diagnostic %q", got, wantDiagnostic)
 	}
 }
 

@@ -315,6 +315,21 @@ func checkCoverageManifest(manifest coverageManifest, totals map[string]packageC
 	return failures
 }
 
+func formatUnmeasuredCoverageManifestDiagnostics(manifest coverageManifest, measuredTotals map[string]packageCoverageTotals) []string {
+	diagnostics := make([]string, 0)
+	for _, entry := range manifest.Packages {
+		if _, measured := measuredTotals[entry.Package]; measured {
+			continue
+		}
+		diagnostics = append(diagnostics, fmt.Sprintf(
+			"coverage not evaluated: package=%s lane=%s (no measurement in profile)",
+			entry.Package,
+			manifest.Lane,
+		))
+	}
+	return diagnostics
+}
+
 func checkCoverageManifestWithEpsilon(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string, epsilon float64) ([]string, []string) {
 	return checkCoverageManifestWithEpsilonAndBlocks(manifest, totals, manifestPath, epsilon, nil)
 }

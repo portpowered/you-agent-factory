@@ -147,6 +147,58 @@ func TestExecuteReportsPackageSummariesForCompleteManifest(t *testing.T) {
 	}
 }
 
+func TestExecuteReportsManifestPackagesWithoutProfileMeasurement(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	configPackage := modulePath + "/pkg/config"
+	initializerPackage := modulePath + "/pkg/initializer"
+	servicePackage := modulePath + "/pkg/service"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{importPath: configPackage, minimum: "0.00"},
+		{importPath: initializerPackage, exception: unitUnmeasurableMeasurementException()},
+		{importPath: servicePackage, exception: unitUnmeasurableMeasurementException()},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandWithMeasuredZeroConfig
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        strings.Join([]string{configPackage, initializerPackage, servicePackage}, ","),
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v", err)
+	}
+
+	wantStderr := strings.Join([]string{
+		"coverage not evaluated: package=" + initializerPackage + " lane=unit (no measurement in profile)",
+		"coverage not evaluated: package=" + servicePackage + " lane=unit (no measurement in profile)",
+		"",
+	}, "\n")
+	if got := stderr.String(); got != wantStderr {
+		t.Fatalf("execute() stderr = %q, want deterministic unmeasured diagnostics %q", got, wantStderr)
+	}
+	if strings.Contains(stderr.String(), "package="+configPackage) {
+		t.Fatalf("execute() stderr = %q, did not report measured package as unmeasured", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Go coverage 0.0% meets minimum 0.0%.") {
+		t.Fatalf("execute() stdout = %q, want unchanged successful gate result", stdout.String())
+	}
+}
+
 func TestExecuteReportsUncoveredBlocksForManifestRegression(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -268,8 +320,11 @@ func TestExecuteDoesNotReportPackageSummariesWhenMeasurementFails(t *testing.T) 
 	if stdout.Len() != 0 {
 		t.Fatalf("execute() stdout = %q, want no package summaries without a valid measurement", stdout.String())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	if got := stderr.String(); !strings.Contains(got, "coverage not evaluated") || !strings.Contains(got, "package floors were NOT checked") {
+		t.Fatalf("execute() stderr = %q, want skipped-floor diagnostic", got)
+	}
+	if strings.Contains(stderr.String(), "failed tests observed") {
+		t.Fatalf("execute() stderr = %q, did not expect an invented failure count", stderr.String())
 	}
 }
 
@@ -414,6 +469,7 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 		command      commandRunnerFunc
 		wantFailure  string
 		rejectText   string
+		wantStderr   string
 	}{
 		{
 			name:         "aggregate pass cannot mask package regression",
@@ -421,6 +477,7 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 			aggregateMin: 0,
 			command:      fakeGoCoverageCommand,
 			wantFailure:  "package coverage regression: package=" + modulePath + "/pkg/config lane=unit expected-minimum=1.00%",
+			wantStderr:   "coverage not evaluated: package=" + modulePath + "/pkg/config lane=unit (no measurement in profile)\n",
 		},
 		{
 			name:         "package pass cannot mask aggregate regression",
@@ -454,8 +511,8 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 			if tc.rejectText != "" && strings.Contains(err.Error(), tc.rejectText) {
 				t.Fatalf("execute() error = %q, did not expect %q", err.Error(), tc.rejectText)
 			}
-			if stderr.Len() != 0 {
-				t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+			if got := stderr.String(); got != tc.wantStderr {
+				t.Fatalf("execute() stderr = %q, want %q", got, tc.wantStderr)
 			}
 		})
 	}
