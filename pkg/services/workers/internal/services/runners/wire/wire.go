@@ -33,6 +33,50 @@ func NewProductionRegistry(
 	inferenceConfig runners.InferenceConfig,
 	inferenceDependencies runners.InferenceDependencies,
 ) (runners.Service, error) {
+	return newProductionRegistry(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+		nil,
+		runners.MockDependencies{},
+	)
+}
+
+// NewMockProductionRegistry constructs the explicit Workers mock-feature
+// graph. It uses the same immutable registry as production composition, with
+// one additional request-selected mock registration. Production composition
+// must continue to call NewProductionRegistry so mock is absent there.
+func NewMockProductionRegistry(
+	agentDependencies runners.AgentDependencies,
+	scriptConfig runners.ScriptConfig,
+	scriptDependencies runners.ScriptDependencies,
+	inferenceConfig runners.InferenceConfig,
+	inferenceDependencies runners.InferenceDependencies,
+	mockConfig runners.MockConfig,
+	mockDependencies runners.MockDependencies,
+) (runners.Service, error) {
+	return newProductionRegistry(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+		&mockConfig,
+		mockDependencies,
+	)
+}
+
+func newProductionRegistry(
+	agentDependencies runners.AgentDependencies,
+	scriptConfig runners.ScriptConfig,
+	scriptDependencies runners.ScriptDependencies,
+	inferenceConfig runners.InferenceConfig,
+	inferenceDependencies runners.InferenceDependencies,
+	mockConfig *runners.MockConfig,
+	mockDependencies runners.MockDependencies,
+) (runners.Service, error) {
 	agentImplementation, err := agentImplementation(agentDependencies)
 	if err != nil {
 		return nil, err
@@ -48,7 +92,7 @@ func NewProductionRegistry(
 	if err != nil {
 		return nil, err
 	}
-	return NewService([]runners.Registration{
+	registrations := []runners.Registration{
 		{
 			Identity: runners.AgentIdentity,
 			Metadata: agentMetadata(),
@@ -64,7 +108,22 @@ func NewProductionRegistry(
 			Metadata: inferenceMetadata(),
 			Runner:   inferenceImplementation,
 		},
-	})
+	}
+	if mockConfig != nil {
+		mockImplementation, mockErr := mock.New(
+			mock.Config{WorkersConfig: mockConfig.WorkersConfig},
+			mock.Dependencies{Next: mockDependencies.Next},
+		)
+		if mockErr != nil {
+			return nil, mockErr
+		}
+		registrations = append(registrations, runners.Registration{
+			Identity: runners.MockIdentity,
+			Metadata: mockMetadata(),
+			Runner:   mockImplementation,
+		})
+	}
+	return NewService(registrations)
 }
 
 // NewScriptRegistry constructs one Script Runner from explicit effects and

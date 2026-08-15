@@ -41,6 +41,8 @@ type ScriptConfig = runners.ScriptConfig
 type ScriptDependencies = runners.ScriptDependencies
 type InferenceConfig = runners.InferenceConfig
 type InferenceDependencies = runners.InferenceDependencies
+type MockConfig = runners.MockConfig
+type MockDependencies = runners.MockDependencies
 
 // NewService constructs an inert Workers root from construction ports. It
 // composes the private runner registry once and installs a request-scoped
@@ -104,6 +106,84 @@ func NewService(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
+	}
+	return workersinternal.NewRoot(
+		runtimeAssembly,
+		workstationswire.NewService(logger),
+		executeService,
+	)
+}
+
+// NewMockService constructs the explicit Workers mock-feature root. The mock
+// strategy is registered only in this opt-in composition path; ordinary
+// NewService construction remains a production registry with no mock entry.
+// The returned root uses the same Execute normalization, observations,
+// cleanup, and Worktree behavior as production Workers.
+func NewMockService(
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
+	mockWorkers *workers.MockWorkersConfig,
+	mockDependencies MockDependencies,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
+	providerOverrides ...workers.Provider,
+) (workers.Service, error) {
+	if mockWorkers == nil {
+		return nil, fmt.Errorf("construct mock Workers: mock workers config is required")
+	}
+	if err := validateConstructionPorts(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+	); err != nil {
+		return nil, err
+	}
+	runnerRegistry, err := runnerswire.NewMockProductionRegistry(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+		MockConfig{WorkersConfig: mockWorkers},
+		mockDependencies,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct mock Workers: %w", err)
+	}
+	var providerOverride workers.Provider
+	if len(providerOverrides) > 0 {
+		providerOverride = providerOverrides[0]
+	}
+	runtimeAssembly, err := runtimeassemblywire.NewService(runnerRegistry, defaultBindingAssembler)
+	if err != nil {
+		return nil, err
+	}
+	executeService, err := executeservice.NewWithProviderOverride(
+		runnerRegistry,
+		agentDependencies.Providers,
+		observe,
+		logger,
+		clock,
+		worktree,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
+		agentDependencies.DecisionEnvelopes,
+		scriptDependencies.FactoryDocs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
 	return workersinternal.NewRoot(
 		runtimeAssembly,
