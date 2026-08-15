@@ -36,6 +36,7 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 				"--dir", dir,
 				"--continuously",
 				"--server", "http://127.0.0.1:1",
+				"--with-server",
 				"--with-mock-workers",
 				"--runtime-log-dir", logDir,
 				"--quiet",

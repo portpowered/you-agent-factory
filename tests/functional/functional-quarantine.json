@@ -20,13 +20,6 @@
       "followUp": "Repair bootstrap portability readiness and remove this entry after the exact selector passes"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/providers",
-      "test": "TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers",
-      "bucket": "GENUINELY FAILING",
-      "reason": "Timed out waiting for the process API server in the model and script worker variants; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair command-runner worker readiness and remove this entry after the exact selector passes"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/providers/agy",
       "test": "TestAgyLiveSmoke",
       "bucket": "ENVIRONMENT-DEPENDENT",
