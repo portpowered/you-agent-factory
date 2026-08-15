@@ -4,11 +4,17 @@ import "../../../testing/vitest-dom-capabilities.setup";
 import { act, renderHook } from "@testing-library/react";
 
 import {
+  readStoredDashboardLayout,
+  writeStoredDashboardLayout,
+} from "./storage/dashboardLayoutStorage";
+import {
+  createDashboardLayoutScope,
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
   DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
+  getDashboardLayoutStorageKey,
   reloadDashboardLayoutFromStorage,
   useDashboardLayout,
 } from "./useDashboardLayout";
@@ -122,6 +128,102 @@ describe("useDashboardLayout core migrations", () => {
             item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
         ),
       ),
+    );
+  });
+});
+
+describe("useDashboardLayout scoped persistence", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("keeps layouts isolated for sessions of the same Factory", () => {
+    const firstScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-alpha",
+    );
+    const secondScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-beta",
+    );
+    const firstLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 13 }
+        : item,
+    );
+    const secondLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 6 }
+        : item,
+    );
+
+    writeStoredDashboardLayout(firstLayout, firstScope);
+    writeStoredDashboardLayout(secondLayout, secondScope);
+
+    expect(
+      readStoredDashboardLayout(firstScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 13 });
+    expect(
+      readStoredDashboardLayout(secondScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 6 });
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(getDashboardLayoutStorageKey(firstScope)) ??
+          "{}",
+      ),
+    ).toMatchObject({
+      schemaVersion: 3,
+      scope: firstScope,
+    });
+  });
+
+  it("migrates the legacy global layout once without making it a live mirror", () => {
+    const firstScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-alpha",
+    );
+    const secondScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-beta",
+    );
+    const legacyLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 7 }
+        : item,
+    );
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify(legacyLayout),
+    );
+
+    expect(
+      readStoredDashboardLayout(firstScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 7 });
+
+    const firstUpdatedLayout = legacyLayout.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 11 }
+        : item,
+    );
+    writeStoredDashboardLayout(firstUpdatedLayout, firstScope);
+
+    expect(
+      readStoredDashboardLayout(secondScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 7 });
+    expect(
+      readStoredDashboardLayout(firstScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 11 });
+    expect(window.localStorage.getItem(DASHBOARD_LAYOUT_STORAGE_KEY)).toBe(
+      JSON.stringify(legacyLayout),
     );
   });
 });

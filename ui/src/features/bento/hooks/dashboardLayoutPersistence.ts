@@ -1,7 +1,6 @@
 import type { AgentBentoLayoutItem } from "../components/agent-bento";
 import {
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
-  DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
   getDefaultInlineAddWidgetLayout,
@@ -32,39 +31,6 @@ export function mergeDashboardLayout(
   );
 
   return [...mergedBaseLayout, ...additionalItems];
-}
-
-export function readStoredDashboardLayout(): AgentBentoLayoutItem[] {
-  try {
-    const storedLayout = window.localStorage.getItem(
-      DASHBOARD_LAYOUT_STORAGE_KEY,
-    );
-    if (!storedLayout) {
-      return DEFAULT_DASHBOARD_LAYOUT;
-    }
-
-    const parsedLayout: unknown = JSON.parse(storedLayout);
-    if (!Array.isArray(parsedLayout)) {
-      return DEFAULT_DASHBOARD_LAYOUT;
-    }
-
-    return mergeDashboardLayout(parsedLayout as AgentBentoLayoutItem[]);
-  } catch {
-    return DEFAULT_DASHBOARD_LAYOUT;
-  }
-}
-
-export function writeStoredDashboardLayout(
-  layout: AgentBentoLayoutItem[],
-): void {
-  try {
-    window.localStorage.setItem(
-      DASHBOARD_LAYOUT_STORAGE_KEY,
-      JSON.stringify(layout),
-    );
-  } catch {
-    // Layout persistence is a convenience; dashboard interaction should keep working without it.
-  }
 }
 
 function isFiniteNumber(value: unknown): value is number {

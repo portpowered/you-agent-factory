@@ -322,6 +322,10 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     workOutcomeChart: "work-outcome-chart",
     workTotals: "work-totals",
   },
+  createDashboardLayoutScope: (factoryID: string, sessionID: string) => ({
+    factoryID,
+    sessionID,
+  }),
   getRenderableDashboardLayout: (layout: unknown) => layout,
   useDashboardLayout: () => {
     const [dashboardLayout, setDashboardLayout] =

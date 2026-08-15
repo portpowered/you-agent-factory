@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { useAppLocale } from "../../../i18n";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
@@ -14,6 +15,7 @@ import {
   useDashboardBentoSnapshot,
 } from "../hooks/use-dashboard-bento-snapshot";
 import {
+  createDashboardLayoutScope,
   getRenderableDashboardLayout,
   useDashboardLayout,
 } from "../hooks/useDashboardLayout";
@@ -50,12 +52,6 @@ export function DashboardBento({
   workOutcomeStream,
 }: DashboardBentoProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
-  const {
-    addDashboardWidget,
-    dashboardLayout,
-    persistDashboardLayout,
-    removeDashboardWidget,
-  } = useDashboardLayout();
   const now = useDashboardNow();
   const {
     incrementRefreshToken,
@@ -63,7 +59,7 @@ export function DashboardBento({
     selectedTraceID,
     setSelectedTraceID,
   } = useDashboardBentoSelectionState();
-  const { rawSessionID, sessionID } = useDashboardSession();
+  const { factoryPath, rawSessionID, sessionID } = useDashboardSession();
   const {
     currentSelection,
     dashboardCardStateContext,
@@ -73,6 +69,16 @@ export function DashboardBento({
     snapshot,
     workOutcomeHydrationStatus,
   } = useDashboardBentoSnapshot(sessionID, workOutcomeStream);
+  const layoutScope = createDashboardLayoutScope(
+    resolveDashboardLayoutFactoryID(snapshot, factoryPath),
+    sessionID,
+  );
+  const {
+    addDashboardWidget,
+    dashboardLayout,
+    persistDashboardLayout,
+    removeDashboardWidget,
+  } = useDashboardLayout(layoutScope);
   const importController = useCurrentActivityImportController({
     currentFactoryDefinition: snapshot.factory,
     locale: resolvedLocale,
@@ -224,4 +230,22 @@ function createDashboardImportPreviewConfirmHandler(
   return (input: FactoryImportConfirmInput) => {
     void importController.activateImport(input);
   };
+}
+
+function resolveDashboardLayoutFactoryID(
+  snapshot: DashboardSnapshot,
+  factoryPath: string,
+): string {
+  const candidates = [
+    snapshot.factory?.id,
+    snapshot.runtime.session.bracket?.factory_id,
+    snapshot.factory?.factoryDirectory,
+    snapshot.factory?.sourceDirectory,
+    factoryPath,
+  ];
+  const factoryID = candidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.trim().length > 0,
+  );
+  return factoryID?.trim() ?? factoryPath;
 }

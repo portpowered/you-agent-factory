@@ -5,7 +5,41 @@ const INLINE_ADD_WIDGET_INSTANCE_SLOT = "inline-add";
 export const WORK_OUTCOME_CHART_MIN_GRID_HEIGHT = 4;
 export const WORK_OUTCOME_CHART_MIN_GRID_WIDTH = 4;
 
+/** The pre-scope key is retained as a one-time migration source only. */
 export const DASHBOARD_LAYOUT_STORAGE_KEY = "agent-factory.dashboard.layout.v2";
+export const DASHBOARD_LAYOUT_STORAGE_VERSION = 3 as const;
+export const DASHBOARD_LAYOUT_STORAGE_KEY_PREFIX = `agent-factory.dashboard.layout.v${DASHBOARD_LAYOUT_STORAGE_VERSION}`;
+
+export interface DashboardLayoutScope {
+  factoryID: string;
+  sessionID: string;
+}
+
+export interface DashboardLayoutStorageEnvelope {
+  layout: AgentBentoLayoutItem[];
+  schemaVersion: typeof DASHBOARD_LAYOUT_STORAGE_VERSION;
+  scope: DashboardLayoutScope;
+}
+
+export function createDashboardLayoutScope(
+  factoryID: string,
+  sessionID: string,
+): DashboardLayoutScope {
+  return {
+    factoryID: factoryID.trim(),
+    sessionID: sessionID.trim(),
+  };
+}
+
+export function getDashboardLayoutStorageKey(
+  scope: DashboardLayoutScope,
+): string {
+  return [
+    DASHBOARD_LAYOUT_STORAGE_KEY_PREFIX,
+    encodeURIComponent(scope.factoryID),
+    encodeURIComponent(scope.sessionID),
+  ].join(":");
+}
 
 export const DASHBOARD_WIDGET_IDS = {
   addWidget: "add-widget",

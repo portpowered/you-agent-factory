@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
 
 import type { AgentBentoLayoutItem } from "../components/agent-bento";
@@ -6,19 +7,29 @@ import {
   addDashboardWidgetToLayout,
   removeDashboardWidgetFromLayout,
 } from "./dashboardLayoutMutations";
+import { mergeDashboardLayout } from "./dashboardLayoutPersistence";
 import {
-  mergeDashboardLayout,
+  DASHBOARD_LAYOUT_STORAGE_KEY,
+  type DashboardLayoutScope,
+  DEFAULT_DASHBOARD_LAYOUT,
+  getDashboardLayoutStorageKey,
+} from "./dashboardLayoutSchema";
+import {
   readStoredDashboardLayout,
   writeStoredDashboardLayout,
-} from "./dashboardLayoutPersistence";
+} from "./storage/dashboardLayoutStorage";
 
 export {
+  createDashboardLayoutScope,
   createDashboardWidgetInstanceID,
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
   DASHBOARD_LAYOUT_STORAGE_KEY,
+  DASHBOARD_LAYOUT_STORAGE_KEY_PREFIX,
+  DASHBOARD_LAYOUT_STORAGE_VERSION,
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
+  getDashboardLayoutStorageKey,
   getRenderableDashboardLayout,
 } from "./dashboardLayoutSchema";
 
@@ -29,56 +40,141 @@ export interface UseDashboardLayoutResult {
   removeDashboardWidget: (widgetInstanceID: string) => void;
 }
 
+export type { DashboardLayoutScope } from "./dashboardLayoutSchema";
+
 interface DashboardLayoutStoreState {
-  addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
-  dashboardLayout: AgentBentoLayoutItem[];
-  persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
-  removeDashboardWidget: (widgetInstanceID: string) => void;
+  addDashboardWidget: (
+    scope: DashboardLayoutScope | null | undefined,
+    widgetType: DashboardWidgetPickerWidgetType,
+  ) => void;
+  layoutsByStorageKey: Record<string, AgentBentoLayoutItem[]>;
+  loadDashboardLayout: (scope: DashboardLayoutScope | null | undefined) => void;
+  persistDashboardLayout: (
+    scope: DashboardLayoutScope | null | undefined,
+    layout: AgentBentoLayoutItem[],
+  ) => void;
+  removeDashboardWidget: (
+    scope: DashboardLayoutScope | null | undefined,
+    widgetInstanceID: string,
+  ) => void;
 }
 
 const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
-  addDashboardWidget: (widgetType) => {
+  addDashboardWidget: (scope, widgetType) => {
     set((state) => {
-      const nextLayout = addDashboardWidgetToLayout(
-        state.dashboardLayout,
-        widgetType,
-      );
-      writeStoredDashboardLayout(nextLayout);
-      return { dashboardLayout: nextLayout };
+      const storageKey = getStorageKey(scope);
+      const currentLayout =
+        state.layoutsByStorageKey[storageKey] ??
+        readStoredDashboardLayout(scope);
+      const nextLayout = addDashboardWidgetToLayout(currentLayout, widgetType);
+      writeStoredDashboardLayout(nextLayout, scope);
+      return {
+        layoutsByStorageKey: {
+          ...state.layoutsByStorageKey,
+          [storageKey]: nextLayout,
+        },
+      };
     });
   },
-  dashboardLayout: readStoredDashboardLayout(),
-  persistDashboardLayout: (layout) => {
+  layoutsByStorageKey: {
+    [getStorageKey(undefined)]: readStoredDashboardLayout(),
+  },
+  loadDashboardLayout: (scope) => {
     set((state) => {
-      const nextLayout = mergeDashboardLayout(layout, state.dashboardLayout);
-      writeStoredDashboardLayout(nextLayout);
-      return { dashboardLayout: nextLayout };
+      const storageKey = getStorageKey(scope);
+      return {
+        layoutsByStorageKey: {
+          ...state.layoutsByStorageKey,
+          [storageKey]: readStoredDashboardLayout(scope),
+        },
+      };
     });
   },
-  removeDashboardWidget: (widgetInstanceID) => {
+  persistDashboardLayout: (scope, layout) => {
     set((state) => {
+      const storageKey = getStorageKey(scope);
+      const currentLayout =
+        state.layoutsByStorageKey[storageKey] ??
+        readStoredDashboardLayout(scope);
+      const nextLayout = mergeDashboardLayout(layout, currentLayout);
+      writeStoredDashboardLayout(nextLayout, scope);
+      return {
+        layoutsByStorageKey: {
+          ...state.layoutsByStorageKey,
+          [storageKey]: nextLayout,
+        },
+      };
+    });
+  },
+  removeDashboardWidget: (scope, widgetInstanceID) => {
+    set((state) => {
+      const storageKey = getStorageKey(scope);
+      const currentLayout =
+        state.layoutsByStorageKey[storageKey] ??
+        readStoredDashboardLayout(scope);
       const nextLayout = removeDashboardWidgetFromLayout(
-        state.dashboardLayout,
+        currentLayout,
         widgetInstanceID,
       );
-      writeStoredDashboardLayout(nextLayout);
-      return { dashboardLayout: nextLayout };
+      writeStoredDashboardLayout(nextLayout, scope);
+      return {
+        layoutsByStorageKey: {
+          ...state.layoutsByStorageKey,
+          [storageKey]: nextLayout,
+        },
+      };
     });
   },
 }));
 
-export function useDashboardLayout(): UseDashboardLayoutResult {
-  const addDashboardWidget = useDashboardLayoutStore(
-    (state) => state.addDashboardWidget,
+export function useDashboardLayout(
+  scope?: DashboardLayoutScope | null,
+): UseDashboardLayoutResult {
+  const factoryID = scope?.factoryID;
+  const sessionID = scope?.sessionID;
+  const normalizedScope = useMemo(
+    () =>
+      factoryID === undefined || sessionID === undefined
+        ? null
+        : { factoryID, sessionID },
+    [factoryID, sessionID],
+  );
+  const storageKey = getStorageKey(normalizedScope);
+  const loadDashboardLayout = useDashboardLayoutStore(
+    (state) => state.loadDashboardLayout,
   );
   const dashboardLayout = useDashboardLayoutStore(
-    (state) => state.dashboardLayout,
+    (state) =>
+      state.layoutsByStorageKey[storageKey] ?? DEFAULT_DASHBOARD_LAYOUT,
   );
-  const persistDashboardLayout = useDashboardLayoutStore(
-    (state) => state.persistDashboardLayout,
+
+  useEffect(() => {
+    loadDashboardLayout(normalizedScope);
+  }, [loadDashboardLayout, normalizedScope]);
+
+  const addDashboardWidget = useCallback(
+    (widgetType: DashboardWidgetPickerWidgetType) => {
+      useDashboardLayoutStore
+        .getState()
+        .addDashboardWidget(normalizedScope, widgetType);
+    },
+    [normalizedScope],
   );
-  const removeDashboardWidget = useDashboardLayoutStore(
-    (state) => state.removeDashboardWidget,
+  const persistDashboardLayout = useCallback(
+    (layout: AgentBentoLayoutItem[]) => {
+      useDashboardLayoutStore
+        .getState()
+        .persistDashboardLayout(normalizedScope, layout);
+    },
+    [normalizedScope],
+  );
+  const removeDashboardWidget = useCallback(
+    (widgetInstanceID: string) => {
+      useDashboardLayoutStore
+        .getState()
+        .removeDashboardWidget(normalizedScope, widgetInstanceID);
+    },
+    [normalizedScope],
   );
 
   return {
@@ -89,8 +185,14 @@ export function useDashboardLayout(): UseDashboardLayoutResult {
   };
 }
 
-export function reloadDashboardLayoutFromStorage(): void {
-  useDashboardLayoutStore.setState({
-    dashboardLayout: readStoredDashboardLayout(),
-  });
+export function reloadDashboardLayoutFromStorage(
+  scope?: DashboardLayoutScope | null,
+): void {
+  useDashboardLayoutStore.getState().loadDashboardLayout(scope);
+}
+
+function getStorageKey(scope?: DashboardLayoutScope | null): string {
+  return scope
+    ? getDashboardLayoutStorageKey(scope)
+    : DASHBOARD_LAYOUT_STORAGE_KEY;
 }
