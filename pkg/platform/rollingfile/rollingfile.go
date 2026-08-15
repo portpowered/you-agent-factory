@@ -44,7 +44,175 @@ type Writer struct {
 	now  func() time.Time
 }
 
+// Checkpoint is a reversible position in the active rolling file. It is used
+// by callers that publish a related external effect only after a transcript
+// record has been made visible.
+type Checkpoint struct {
+	filename      string
+	size          int64
+	active        bool
+	existed       bool
+	rotatedBackup string
+}
+
 var _ io.WriteCloser = (*Writer)(nil)
+
+// Prepare makes room for one write and returns a checkpoint that can restore
+// the pre-write state. If the write would cross a rolling boundary, the
+// existing file is moved to its backup and a fresh active file is opened before
+// the related external effect is published. Rollback can then restore the
+// original active file without leaving a speculative frame behind.
+func (w *Writer) Prepare(writeLen int) (any, error) {
+	if w == nil {
+		return nil, errors.New("rolling file writer is nil")
+	}
+	if writeLen < 0 {
+		return nil, errors.New("rolling file write length cannot be negative")
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	maxSize := w.maxSize()
+	if int64(writeLen) > maxSize {
+		return nil, fmt.Errorf("write length %d exceeds maximum file size %d", writeLen, maxSize)
+	}
+	checkpoint := Checkpoint{filename: w.Filename, active: w.file != nil, size: w.size}
+	if w.file != nil {
+		if w.size+int64(writeLen) <= maxSize {
+			return checkpoint, nil
+		}
+		backupPath, err := w.rotateForReservation()
+		if err != nil {
+			return nil, err
+		}
+		checkpoint.rotatedBackup = backupPath
+		return checkpoint, nil
+	}
+
+	info, err := os.Stat(w.Filename)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := w.openNew(); err != nil {
+			return nil, err
+		}
+		return checkpoint, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error getting log file info: %w", err)
+	}
+	checkpoint.existed = true
+	checkpoint.size = info.Size()
+	if info.Size()+int64(writeLen) <= maxSize {
+		file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, fmt.Errorf("can't open existing logfile: %w", err)
+		}
+		w.file = file
+		w.size = info.Size()
+		return checkpoint, nil
+	}
+
+	backupPath, err := w.rotateForReservation()
+	if err != nil {
+		return nil, err
+	}
+	checkpoint.rotatedBackup = backupPath
+	return checkpoint, nil
+}
+
+// Rollback restores a checkpoint created by Prepare.
+func (w *Writer) Rollback(value any) error {
+	if w == nil {
+		return errors.New("rolling file writer is nil")
+	}
+	checkpoint, ok := value.(Checkpoint)
+	if !ok || checkpoint.filename != w.Filename {
+		return errors.New("invalid rolling file checkpoint")
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if checkpoint.rotatedBackup != "" {
+		return w.rollbackRotation(checkpoint)
+	}
+	if w.file != nil {
+		return w.rollbackOpenFile(checkpoint)
+	}
+	if checkpoint.active {
+		return w.rollbackClosedActiveFile(checkpoint)
+	}
+	w.size = 0
+	return nil
+}
+
+func (w *Writer) rollbackOpenFile(checkpoint Checkpoint) error {
+	if checkpoint.active {
+		return w.rollbackOpenActiveFile(checkpoint)
+	}
+	if err := w.file.Close(); err != nil {
+		return err
+	}
+	w.file = nil
+	w.size = 0
+	if !checkpoint.existed {
+		return os.Remove(w.Filename)
+	}
+	return os.Truncate(w.Filename, checkpoint.size)
+}
+
+func (w *Writer) rollbackOpenActiveFile(checkpoint Checkpoint) error {
+	if err := w.file.Close(); err != nil {
+		return err
+	}
+	w.file = nil
+	if err := os.Truncate(w.Filename, checkpoint.size); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("can't reopen rolled back logfile: %w", err)
+	}
+	w.file = file
+	w.size = checkpoint.size
+	return nil
+}
+
+func (w *Writer) rollbackClosedActiveFile(checkpoint Checkpoint) error {
+	file, err := os.OpenFile(w.Filename, os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if err := file.Truncate(checkpoint.size); err != nil {
+		return err
+	}
+	w.size = 0
+	return nil
+}
+
+func (w *Writer) rollbackRotation(checkpoint Checkpoint) error {
+	if w.file != nil {
+		if err := w.file.Close(); err != nil {
+			return err
+		}
+		w.file = nil
+	}
+	w.size = 0
+	if err := os.Remove(w.Filename); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(checkpoint.rotatedBackup, w.Filename); err != nil {
+		return err
+	}
+	if !checkpoint.active {
+		return nil
+	}
+	file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("can't reopen rolled back logfile: %w", err)
+	}
+	w.file = file
+	w.size = checkpoint.size
+	return nil
+}
 
 // Write appends p to the active file, rotating before the write when the
 // configured size limit would be exceeded.
@@ -147,16 +315,51 @@ func (w *Writer) openNew() error {
 		}
 	}
 
+	if err := w.openFile(mode); err != nil {
+		return err
+	}
+	// Retention is intentionally synchronous and errors are diagnostic-only;
+	// they must not turn a successful log write into a runtime failure.
+	_ = w.cleanBackups()
+	return nil
+}
+
+func (w *Writer) openFile(mode os.FileMode) error {
 	file, err := os.OpenFile(w.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return fmt.Errorf("can't open new logfile: %w", err)
 	}
 	w.file = file
 	w.size = 0
-	// Retention is intentionally synchronous and errors are diagnostic-only;
-	// they must not turn a successful log write into a runtime failure.
-	_ = w.cleanBackups()
 	return nil
+}
+
+func (w *Writer) rotateForReservation() (string, error) {
+	if err := w.close(); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(w.Filename)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := w.openNew(); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("error getting log file info: %w", err)
+	}
+	backupPath, err := w.nextBackupPath()
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(w.Filename, backupPath); err != nil {
+		return "", fmt.Errorf("can't rename log file: %w", err)
+	}
+	if err := w.openFile(info.Mode()); err != nil {
+		_ = os.Rename(backupPath, w.Filename)
+		return "", err
+	}
+	return backupPath, nil
 }
 
 func (w *Writer) nextBackupPath() (string, error) {

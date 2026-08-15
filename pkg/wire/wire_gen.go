@@ -607,7 +607,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	targetExecutionService := provideACPServerFactoryTargetService(v93)
 	v94 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, eventsService, loggingLogger)
 	responseBridge := provideACPServerResponseBridge(v94)
-	wireRecorder, err := provideACPWireRecorder(reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
+	wireRecorder, err := provideACPWireRecorder(edges2, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
 	if err != nil {
 		return nil, err
 	}

@@ -3,12 +3,16 @@ package wiretranscript_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 )
 
@@ -224,6 +228,221 @@ func TestTeeWriterPassesBytesThroughUnchanged(t *testing.T) {
 	}
 }
 
+func TestTeeWriterRollsBackRejectedFrameWithRollingTranscript(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	rolling := &rollingfile.Writer{Filename: path, MaxSize: 1}
+	writer := wiretranscript.NewWriter(rolling, testClock{})
+	tee := wiretranscript.TeeWriter(shortWriteSink{}, writer, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+
+	frame := []byte(`{"id":1}` + "\n")
+	n, err := tee.Write(frame)
+	if err != nil {
+		t.Fatalf("TeeWriter.Write() error = %v, want the sink result", err)
+	}
+	if n != len(frame)-1 {
+		t.Fatalf("TeeWriter.Write() bytes = %d, want %d", n, len(frame)-1)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("writer.Close() error = %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("rejected frame left transcript file, stat error = %v", err)
+	}
+}
+
+func TestTeeWriterPublishesAfterRollingRotationRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	const maxBytes = 1024 * 1024
+	seed := bytes.Repeat([]byte("x"), maxBytes-1)
+	if err := os.WriteFile(path, seed, 0o600); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+	rolling := &rollingfile.Writer{
+		Filename: path,
+		MaxSize:  1,
+	}
+	writer := wiretranscript.NewWriter(rolling, testClock{})
+	sink := &rotationObservingSink{path: path, want: []byte(`"frame":{"id":1}`)}
+	tee := wiretranscript.TeeWriter(sink, writer, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+	frame := []byte(`{"id":1}` + "\n")
+
+	n, err := tee.Write(frame)
+	if err != nil {
+		t.Fatalf("TeeWriter.Write() error = %v", err)
+	}
+	if n != len(frame) || string(sink.out.Bytes()) != string(frame) {
+		t.Fatalf("published bytes = (%d, %q), want (%d, %q)", n, sink.out.Bytes(), len(frame), frame)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("writer.Close() error = %v", err)
+	}
+	active, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(active): %v", err)
+	}
+	if !bytes.Contains(active, sink.want) {
+		t.Fatalf("active transcript = %q, want the outbound record", active)
+	}
+	backups, err := filepath.Glob(filepath.Join(filepath.Dir(path), "transcript-*.jsonl"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("rotation backups = (%v, %v), want one backup", backups, err)
+	}
+	if got, err := os.ReadFile(backups[0]); err != nil || !bytes.Equal(got, seed) {
+		t.Fatalf("rotation backup = (%q, %v), want the prefilled seed", got, err)
+	}
+}
+
+func TestTeeWriterRollsBackErroringOutboundWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	rolling := &rollingfile.Writer{Filename: path, MaxSize: 1}
+	writer := wiretranscript.NewWriter(rolling, testClock{})
+	sinkErr := errors.New("sink failed")
+	tee := wiretranscript.TeeWriter(errorSink{err: sinkErr}, writer, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+
+	n, err := tee.Write([]byte(`{"id":1}` + "\n"))
+	if n != 0 || !errors.Is(err, sinkErr) {
+		t.Fatalf("TeeWriter.Write() = (%d, %v), want (0, %v)", n, err, sinkErr)
+	}
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatalf("writer.Close() error = %v", closeErr)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("erroring write left transcript, stat error = %v", statErr)
+	}
+}
+
+func TestTeeWriterCommitsAcceptedTrailingBytes(t *testing.T) {
+	recorder := &testOutboundRecorder{}
+	sink := &partialTeeSink{}
+	tee := wiretranscript.TeeWriter(sink, recorder, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+
+	first := []byte(`{"prefix":1`)
+	second := []byte("}\ntrailing")
+	third := []byte("ailing\n")
+	if _, err := tee.Write(first); err != nil {
+		t.Fatalf("first Write() error = %v", err)
+	}
+	if _, err := tee.Write(second); err != nil {
+		t.Fatalf("second Write() error = %v", err)
+	}
+	if _, err := tee.Write(third); err != nil {
+		t.Fatalf("third Write() error = %v", err)
+	}
+	if got := string(sink.out.Bytes()); got != string(append(append(first, second[:4]...), third...)) {
+		t.Fatalf("sink bytes = %q, want accepted bytes", got)
+	}
+	if len(recorder.lines) != 2 || string(recorder.lines[0]) != string(append(first, second[:2]...)) || string(recorder.lines[1]) != "trailing\n" {
+		t.Fatalf("recorded lines = %q, want complete prefix and trailing lines", recorder.lines)
+	}
+}
+
+func TestTeeWriterSurfacesCommitAndRollbackErrors(t *testing.T) {
+	commitErr := errors.New("commit failed")
+	commitRecorder := &testOutboundRecorder{commitErr: commitErr}
+	commitSink := &bytes.Buffer{}
+	commitTee := wiretranscript.TeeWriter(commitSink, commitRecorder, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+	frame := []byte(`{"id":1}` + "\n")
+	if n, err := commitTee.Write(frame); n != len(frame) || !errors.Is(err, commitErr) {
+		t.Fatalf("commit Write() = (%d, %v), want accepted bytes and %v", n, err, commitErr)
+	}
+
+	rollbackErr := errors.New("rollback failed")
+	rollbackRecorder := &testOutboundRecorder{rollbackErr: rollbackErr}
+	rollbackTee := wiretranscript.TeeWriter(shortWriteSink{}, rollbackRecorder, "c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout)
+	if n, err := rollbackTee.Write(frame); n != len(frame)-1 || !errors.Is(err, rollbackErr) {
+		t.Fatalf("rollback Write() = (%d, %v), want short write and %v", n, err, rollbackErr)
+	}
+	if len(rollbackRecorder.lines) != 0 {
+		t.Fatalf("rolled-back lines = %q, want none", rollbackRecorder.lines)
+	}
+}
+
+type shortWriteSink struct{}
+
+func (shortWriteSink) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return len(p) - 1, nil
+}
+
+type errorSink struct{ err error }
+
+func (s errorSink) Write([]byte) (int, error) { return 0, s.err }
+
+type rotationObservingSink struct {
+	path string
+	want []byte
+	out  bytes.Buffer
+}
+
+func (s *rotationObservingSink) Write(p []byte) (int, error) {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return 0, err
+	}
+	if !bytes.Contains(data, s.want) {
+		return 0, errors.New("outbound bytes exposed before rotation transcript record")
+	}
+	return s.out.Write(p)
+}
+
+type partialTeeSink struct {
+	out   bytes.Buffer
+	calls int
+}
+
+func (s *partialTeeSink) Write(p []byte) (int, error) {
+	s.calls++
+	n := len(p)
+	if s.calls == 2 {
+		n = 4
+	}
+	_, _ = s.out.Write(p[:n])
+	return n, nil
+}
+
+type testOutboundRecorder struct {
+	lines       [][]byte
+	commitErr   error
+	rollbackErr error
+}
+
+func (r *testOutboundRecorder) Record(_ string, _ wiretranscript.Peer, _ wiretranscript.Direction, _ wiretranscript.Stream, line []byte) error {
+	r.lines = append(r.lines, append([]byte(nil), line...))
+	return nil
+}
+
+func (r *testOutboundRecorder) BeginOutbound(_ string, _ wiretranscript.Peer, _ wiretranscript.Stream, line []byte) (wiretranscript.OutboundReservation, error) {
+	r.lines = append(r.lines, append([]byte(nil), line...))
+	return &testOutboundReservation{recorder: r, index: len(r.lines) - 1}, nil
+}
+
+type testOutboundReservation struct {
+	recorder *testOutboundRecorder
+	index    int
+	done     bool
+}
+
+func (r *testOutboundReservation) Commit() error {
+	if r.done {
+		return nil
+	}
+	r.done = true
+	return r.recorder.commitErr
+}
+
+func (r *testOutboundReservation) Rollback() error {
+	if r.done {
+		return nil
+	}
+	r.done = true
+	r.recorder.lines = append(r.recorder.lines[:r.index], r.recorder.lines[r.index+1:]...)
+	return r.recorder.rollbackErr
+}
+
 // TestNilRecorderIsATotalNoOp keeps "recording disabled" from needing a second
 // code path at every call site.
 func TestNilRecorderIsATotalNoOp(t *testing.T) {
@@ -273,8 +492,162 @@ func TestEnvelopeDoesNotEscapeHTML(t *testing.T) {
 	}
 }
 
+func TestOpenerDefaultsAndValidatesInputs(t *testing.T) {
+	if got := wiretranscript.Root("/home/andre"); got != filepath.Join("/home/andre", ".you-agent-factory", "acp-wire") {
+		t.Fatalf("Root() = %q, want ACP wire root", got)
+	}
+	if got := wiretranscript.DefaultConfig(); got.MaxSizeMB != 32 || got.MaxBackups != 4 || got.MaxAgeDays != 7 || !got.Compress {
+		t.Fatalf("DefaultConfig() = %+v, want documented defaults", got)
+	}
+
+	if opener, err := wiretranscript.NewOpener(nil, testClock{}); opener != nil || err == nil {
+		t.Fatalf("NewOpener(nil paths) = (%v, %v), want error", opener, err)
+	}
+	paths := &staticPathReserver{}
+	if opener, err := wiretranscript.NewOpener(paths, nil); opener != nil || err == nil {
+		t.Fatalf("NewOpener(nil clock) = (%v, %v), want error", opener, err)
+	}
+	opener, err := wiretranscript.NewOpener(paths, testClock{})
+	if err != nil {
+		t.Fatalf("NewOpener() error = %v", err)
+	}
+	if _, err := opener.Open(wiretranscript.OpeningRequest{ConnectionID: "c1"}); err == nil {
+		t.Fatal("Open(empty root) error = nil, want validation error")
+	}
+	if _, err := opener.Open(wiretranscript.OpeningRequest{RootDirectory: "root"}); err == nil {
+		t.Fatal("Open(empty connection) error = nil, want validation error")
+	}
+	var nilOpener *wiretranscript.Opener
+	if _, err := nilOpener.Open(wiretranscript.OpeningRequest{}); err == nil {
+		t.Fatal("nil Opener.Open() error = nil, want validation error")
+	}
+	var nilSink *wiretranscript.Sink
+	if got := nilSink.Path(); got != "" {
+		t.Fatalf("nil Sink.Path() = %q, want empty", got)
+	}
+}
+
+func TestOpenerCreatesReadableTranscriptSink(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	paths := &staticPathReserver{path: path}
+	opener, err := wiretranscript.NewOpener(paths, testClock{})
+	if err != nil {
+		t.Fatalf("NewOpener() error = %v", err)
+	}
+	sink, err := opener.Open(wiretranscript.OpeningRequest{
+		RootDirectory: t.TempDir(), ConnectionID: "c1", StartTimeUTC: time.Time{},
+		Config: wiretranscript.Config{},
+	})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	if sink.Path() != path || paths.root == "" || paths.kind != wiretranscript.ArtifactKind || paths.suffix != "c1" {
+		t.Fatalf("Open() path request = %+v, want configured transcript reservation", paths)
+	}
+	if err := sink.Record("c1", wiretranscript.PeerClient, wiretranscript.DirectionIn, wiretranscript.StreamStdin, []byte(`{"id":1}`+"\n")); err != nil {
+		t.Fatalf("Record() error = %v", err)
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !bytes.Contains(data, []byte(`"id":1`)) {
+		t.Fatalf("transcript = %q, want recorded frame", data)
+	}
+}
+
+func TestOutboundReservationLifecycleRejectsUnsupportedAndClosedWriters(t *testing.T) {
+	var nilWriter *wiretranscript.Writer
+	if _, err := nilWriter.BeginOutbound("c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout, []byte("{}\n")); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("nil BeginOutbound() error = %v, want %v", err, io.ErrClosedPipe)
+	}
+	unsupported := wiretranscript.NewWriter(&bytes.Buffer{}, testClock{})
+	if _, err := unsupported.BeginOutbound("c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout, []byte("{}\n")); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("unsupported BeginOutbound() error = %v, want %v", err, io.ErrClosedPipe)
+	}
+
+	commitPath := filepath.Join(t.TempDir(), "commit.jsonl")
+	commitWriter := wiretranscript.NewWriter(&rollingfile.Writer{Filename: commitPath, MaxSize: 1}, testClock{})
+	reservation, err := commitWriter.BeginOutbound("c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout, []byte(`{"id":1}`+"\n"))
+	if err != nil {
+		t.Fatalf("BeginOutbound(commit) error = %v", err)
+	}
+	if err := reservation.Commit(); err != nil {
+		t.Fatalf("Commit() error = %v", err)
+	}
+	if err := reservation.Commit(); err != nil {
+		t.Fatalf("second Commit() error = %v", err)
+	}
+	if err := reservation.Rollback(); err != nil {
+		t.Fatalf("Rollback(after Commit) error = %v", err)
+	}
+	if err := commitWriter.Close(); err != nil {
+		t.Fatalf("commitWriter.Close() error = %v", err)
+	}
+
+	rollbackPath := filepath.Join(t.TempDir(), "rollback.jsonl")
+	rollbackWriter := wiretranscript.NewWriter(&rollingfile.Writer{Filename: rollbackPath, MaxSize: 1}, testClock{})
+	reservation, err = rollbackWriter.BeginOutbound("c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout, []byte(`{"id":2}`+"\n"))
+	if err != nil {
+		t.Fatalf("BeginOutbound(rollback) error = %v", err)
+	}
+	if err := reservation.Rollback(); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if err := reservation.Rollback(); err != nil {
+		t.Fatalf("second Rollback() error = %v", err)
+	}
+	if err := rollbackWriter.Close(); err != nil {
+		t.Fatalf("rollbackWriter.Close() error = %v", err)
+	}
+	if _, err := os.Stat(rollbackPath); !os.IsNotExist(err) {
+		t.Fatalf("rolled-back writer path exists, stat error = %v", err)
+	}
+
+	closedPath := filepath.Join(t.TempDir(), "closed.jsonl")
+	closedWriter := wiretranscript.NewWriter(&rollingfile.Writer{Filename: closedPath, MaxSize: 1}, testClock{})
+	if err := closedWriter.Close(); err != nil {
+		t.Fatalf("closedWriter.Close() error = %v", err)
+	}
+	if _, err := closedWriter.BeginOutbound("c1", wiretranscript.PeerAgent, wiretranscript.StreamStdout, []byte("{}\n")); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("closed BeginOutbound() error = %v, want %v", err, io.ErrClosedPipe)
+	}
+}
+
+func TestOpenerPropagatesReservationError(t *testing.T) {
+	reserveErr := errors.New("reservation failed")
+	opener, err := wiretranscript.NewOpener(&staticPathReserver{err: reserveErr}, testClock{})
+	if err != nil {
+		t.Fatalf("NewOpener() error = %v", err)
+	}
+	_, err = opener.Open(wiretranscript.OpeningRequest{RootDirectory: "root", ConnectionID: "c1"})
+	if !errors.Is(err, reserveErr) {
+		t.Fatalf("Open() error = %v, want %v", err, reserveErr)
+	}
+}
+
 // testClock is a fixed clock; these cells assert structure and ordering, never
 // wall-clock values.
 type testClock struct{}
 
 func (testClock) Now() time.Time { return time.Unix(1700000000, 0).UTC() }
+
+type staticPathReserver struct {
+	path   string
+	err    error
+	root   string
+	at     time.Time
+	kind   string
+	suffix string
+}
+
+func (r *staticPathReserver) Reserve(root string, at time.Time, kind, suffix string) (string, error) {
+	r.root, r.at, r.kind, r.suffix = root, at, kind, suffix
+	if r.err != nil {
+		return "", r.err
+	}
+	return r.path, nil
+}

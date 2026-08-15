@@ -1,6 +1,7 @@
 package rollingfile
 
 import (
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"io"
@@ -272,6 +273,204 @@ func TestWriterCloseReopensExistingFile(t *testing.T) {
 	}
 	if string(data) != "first\nsecond\n" {
 		t.Fatalf("reopened contents = %q, want %q", data, "first\nsecond\n")
+	}
+}
+
+func TestWriterPrepareRollsBackAcrossActiveRotation(t *testing.T) {
+	path, original, _, writer := newActiveRotationWriter(t)
+	checkpoint, err := writer.Prepare(8)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte("rejected")); err != nil {
+		t.Fatalf("Write() before rollback: %v", err)
+	}
+	if err := writer.Rollback(checkpoint); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("rolled-back active file = (%q, %v), want original payload", got, err)
+	}
+	if got := writer.size; got != int64(len(original)) || writer.file == nil {
+		t.Fatalf("rolled-back writer state = (size %d, active %t), want (%d, true)", got, writer.file != nil, len(original))
+	}
+}
+
+func TestWriterPrepareRollsBackActiveFileWithoutRotation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	writer := &Writer{Filename: path, MaxSize: 1}
+	const original = "original"
+	if _, err := writer.Write([]byte(original)); err != nil {
+		t.Fatalf("initial Write(): %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+
+	checkpoint, err := writer.Prepare(len(" rejected"))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte(" rejected")); err != nil {
+		t.Fatalf("Write() before rollback: %v", err)
+	}
+	if err := writer.Rollback(checkpoint); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	if got, err := os.ReadFile(path); err != nil || string(got) != original {
+		t.Fatalf("rolled-back active file = (%q, %v), want %q", got, err, original)
+	}
+	if writer.file == nil || writer.size != int64(len(original)) {
+		t.Fatalf("rolled-back writer state = (file %v, size %d), want active file at size %d", writer.file != nil, writer.size, len(original))
+	}
+}
+
+func TestWriterPrepareCommitsAcrossActiveRotation(t *testing.T) {
+	path, original, at, writer := newActiveRotationWriter(t)
+	_, err := writer.Prepare(len("kept") + 1)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte("kept")); err != nil {
+		t.Fatalf("Write() after rotation: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close(): %v", err)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "kept" {
+		t.Fatalf("active file after committed rotation = (%q, %v), want kept payload", got, err)
+	}
+	backup := writer.backupPath(at)
+	if got, err := os.ReadFile(backup); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("rotation backup = (%q, %v), want original payload", got, err)
+	}
+}
+
+func newActiveRotationWriter(t *testing.T) (string, []byte, time.Time, *Writer) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	const maxBytes = 1024 * 1024
+	original := bytes.Repeat([]byte("x"), maxBytes-4)
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+	at := time.Date(2026, time.August, 15, 12, 13, 14, 0, time.UTC)
+	writer := &Writer{Filename: path, MaxSize: 1, now: func() time.Time { return at }}
+	if _, err := writer.Write(nil); err != nil {
+		t.Fatalf("open existing file: %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+	return path, original, at, writer
+}
+
+func TestWriterPrepareRollsBackExistingInactiveFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	original := []byte("existing")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+	writer := &Writer{Filename: path, MaxSize: 1}
+	checkpoint, err := writer.Prepare(len(" appended"))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte(" appended")); err != nil {
+		t.Fatalf("Write() before rollback: %v", err)
+	}
+	if err := writer.Rollback(checkpoint); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("rolled-back existing file = (%q, %v), want original payload", got, err)
+	}
+	if writer.file != nil || writer.size != 0 {
+		t.Fatalf("rolled-back inactive writer state = (file %v, size %d), want inactive", writer.file, writer.size)
+	}
+}
+
+func TestWriterPrepareRollsBackInactiveRotation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	const maxBytes = 1024 * 1024
+	original := bytes.Repeat([]byte("x"), maxBytes-1)
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+	writer := &Writer{Filename: path, MaxSize: 1}
+	checkpoint, err := writer.Prepare(2)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte("new")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := writer.Rollback(checkpoint); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, original) {
+		t.Fatalf("rolled-back inactive rotation = (%q, %v), want original payload", got, err)
+	}
+	if writer.file != nil || writer.size != 0 {
+		t.Fatalf("rolled-back inactive rotation state = (file %v, size %d), want inactive", writer.file, writer.size)
+	}
+}
+
+func TestWriterPrepareCreatesAndRollsBackNewFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.log")
+	writer := &Writer{Filename: path, MaxSize: 1}
+	checkpoint, err := writer.Prepare(4)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if _, err := writer.Write([]byte("new")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if err := writer.Rollback(checkpoint); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("rolled-back new file exists, stat error = %v", err)
+	}
+}
+
+func TestWriterPrepareAndRollbackValidateInputs(t *testing.T) {
+	var nilWriter *Writer
+	if _, err := nilWriter.Prepare(1); err == nil {
+		t.Fatal("nil Prepare() error = nil, want error")
+	}
+	if err := nilWriter.Rollback(nil); err == nil {
+		t.Fatal("nil Rollback() error = nil, want error")
+	}
+	writer := &Writer{Filename: filepath.Join(t.TempDir(), "runtime.log"), MaxSize: 1}
+	if _, err := writer.Prepare(-1); err == nil {
+		t.Fatal("negative Prepare() error = nil, want error")
+	}
+	if err := writer.Rollback(struct{}{}); err == nil {
+		t.Fatal("invalid Rollback() error = nil, want error")
+	}
+
+	filePath := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(filePath, []byte("file"), 0o600); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+	if _, err := (&Writer{Filename: filepath.Join(filePath, "child"), MaxSize: 1}).Prepare(1); err == nil {
+		t.Fatal("Prepare(stat failure) error = nil, want error")
+	}
+}
+
+func TestWriterRejectsNilAndOversizedWrites(t *testing.T) {
+	var nilWriter *Writer
+	if _, err := nilWriter.Write([]byte("x")); err == nil {
+		t.Fatal("nil Write() error = nil, want error")
+	}
+	writer := &Writer{Filename: filepath.Join(t.TempDir(), "runtime.log"), MaxSize: 1}
+	if _, err := writer.Write(bytes.Repeat([]byte("x"), 1024*1024+1)); err == nil {
+		t.Fatal("oversized Write() error = nil, want error")
+	}
+}
+
+func TestWriterPrepareRejectsOversizedWrite(t *testing.T) {
+	writer := &Writer{Filename: filepath.Join(t.TempDir(), "runtime.log"), MaxSize: 1}
+	if _, err := writer.Prepare(1024*1024 + 1); err == nil {
+		t.Fatal("Prepare() error = nil, want oversized write rejection")
 	}
 }
 

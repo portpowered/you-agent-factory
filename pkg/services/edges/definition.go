@@ -25,6 +25,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -178,6 +179,7 @@ type Edges struct {
 	}
 
 	Clock                            platformclock.Source
+	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
 	WorkerRecordingWriter            recordings.WorkerRecordingWriter
@@ -524,6 +526,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock
+	}
+	if replacements.ACPWireRecorder != nil {
+		defaults.ACPWireRecorder = replacements.ACPWireRecorder
 	}
 	if replacements.SubmissionRecorder != nil {
 		defaults.SubmissionRecorder = replacements.SubmissionRecorder

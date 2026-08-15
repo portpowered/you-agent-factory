@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+	"strings"
+	"sync"
+	"testing"
+
 	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
@@ -14,10 +20,6 @@ import (
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
-	"math"
-	"strings"
-	"sync"
-	"testing"
 )
 
 func TestAttachmentCacheResumeAttachmentID(t *testing.T) {
@@ -521,6 +523,49 @@ func (t *capturingTranscript) Record(
 	return nil
 }
 
+func (t *capturingTranscript) BeginOutbound(
+	conn string,
+	peer wiretranscript.Peer,
+	stream wiretranscript.Stream,
+	line []byte,
+) (wiretranscript.OutboundReservation, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	index := len(t.records)
+	t.records = append(t.records, wiretranscript.Record{
+		Conn: conn, Peer: peer, Direction: wiretranscript.DirectionOut, Stream: stream,
+		Bytes: len(line), Text: string(line),
+	})
+	return &capturingOutboundReservation{transcript: t, index: index}, nil
+}
+
+type capturingOutboundReservation struct {
+	transcript *capturingTranscript
+	index      int
+	done       bool
+}
+
+func (r *capturingOutboundReservation) Commit() error {
+	if r != nil {
+		r.done = true
+	}
+	return nil
+}
+
+func (r *capturingOutboundReservation) Rollback() error {
+	if r == nil || r.done {
+		return nil
+	}
+	r.transcript.mu.Lock()
+	defer r.transcript.mu.Unlock()
+	if r.index < len(r.transcript.records) {
+		copy(r.transcript.records[r.index:], r.transcript.records[r.index+1:])
+		r.transcript.records = r.transcript.records[:len(r.transcript.records)-1]
+	}
+	r.done = true
+	return nil
+}
+
 func (t *capturingTranscript) Path() string { return "/dev/null/transcript" }
 
 func (t *capturingTranscript) Close() error {
@@ -534,6 +579,77 @@ func (t *capturingTranscript) snapshot() ([]wiretranscript.Record, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return append([]wiretranscript.Record(nil), t.records...), t.closed
+}
+
+// transcriptObservingWriter models a client reading the server's output as
+// soon as the underlying writer accepts it. The ACP wire contract requires
+// the corresponding outbound transcript record to be observable first.
+type transcriptObservingWriter struct {
+	transcript *capturingTranscript
+	output     strings.Builder
+}
+
+func (w *transcriptObservingWriter) Write(payload []byte) (int, error) {
+	records, _ := w.transcript.snapshot()
+	for _, record := range records {
+		if record.Direction == wiretranscript.DirectionOut {
+			return w.output.Write(payload)
+		}
+	}
+	return 0, errors.New("outbound bytes exposed before transcript record")
+}
+
+// TestServePublishesOutboundBytesAfterTranscriptRecord proves the causal
+// boundary that callers rely on: when an ACP response becomes readable, its
+// wire-transcript record already exists. The observing writer makes this
+// assertion without sleeping, retrying, or waiting for a later lifecycle
+// event.
+func TestServePublishesOutboundBytesAfterTranscriptRecord(t *testing.T) {
+	t.Parallel()
+
+	transcript := &capturingTranscript{}
+	out := &transcriptObservingWriter{transcript: transcript}
+	server := New(nil, nil, nil, nil, nil, nil, nil,
+		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }))
+
+	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), out); err != nil {
+		t.Fatalf("Serve() error = %v, want the response to remain observable", err)
+	}
+	if !strings.Contains(out.output.String(), "Parse error") {
+		t.Fatalf("stdout = %q, want the ordinary parse-error frame", out.output.String())
+	}
+}
+
+func TestServeDoesNotRetainUnwrittenOutboundTranscriptFrames(t *testing.T) {
+	t.Parallel()
+
+	writeErr := errors.New("stdio test write failed")
+	tests := []struct {
+		name   string
+		writer io.Writer
+		want   error
+	}{
+		{name: "short write", writer: shortWriter{}, want: io.ErrShortWrite},
+		{name: "write error", writer: &countingErrorWriter{err: writeErr}, want: writeErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transcript := &capturingTranscript{}
+			server := New(nil, nil, nil, nil, nil, nil, nil,
+				acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }))
+
+			err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), tt.writer)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Serve() error = %v, want %v", err, tt.want)
+			}
+			records, _ := transcript.snapshot()
+			for _, record := range records {
+				if record.Direction == wiretranscript.DirectionOut {
+					t.Fatalf("failed outbound write left transcript record %+v", record)
+				}
+			}
+		})
+	}
 }
 
 // TestServeRecordsBothDirectionsIncludingRejectedFrames proves the recorder
