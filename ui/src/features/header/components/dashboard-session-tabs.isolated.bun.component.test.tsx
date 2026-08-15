@@ -12,13 +12,15 @@ import {
 } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import {
   factorySessionFieldTarget,
   factorySessionTargetTarget,
 } from "../../../testing/factory-validation-target-fixtures";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import {
+  resetDashboardSessionStore,
+  useDashboardSessionStore,
+} from "../../dashboard/state/dashboardSessionStore";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   SESSION_TAB_PATH_MAX_LENGTH,
@@ -71,10 +73,7 @@ describe("DashboardSessionTabs", () => {
     closeFactorySession.mockReset();
     vi.unstubAllGlobals();
     useDashboardStreamStore.getState().resetStreamState("en");
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
-    });
+    resetDashboardSessionStore();
   });
 
   it("renders loading and then the active session tabs", async () => {
