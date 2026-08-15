@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -19,6 +20,7 @@ import (
 )
 
 type agentMockProvider struct {
+	testutil.ProviderServiceAdapter
 	response  workerexecution.InferenceResponse
 	err       error
 	responses []workerexecution.InferenceResponse
@@ -191,6 +193,44 @@ func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.Provide
 		return authoritativeTestResponse(response), err
 	}
 	return authoritativeTestResponse(m.response), m.err
+}
+
+func (m *agentMockProvider) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if request.Identity == "" {
+		request.Identity = "codex"
+	}
+	return m.ProviderServiceAdapter.ResolveIdentity(ctx, request)
+}
+
+func (m *agentMockProvider) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if request.ID == "" {
+		request.ID = providers.IDCodex
+	}
+	return m.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
+}
+
+func (m *agentMockProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	adapter := m.ProviderServiceAdapter
+	adapter.InferFunc = m.Infer
+	return adapter.Execute(ctx, request)
+}
+
+func (m *agentMockProvider) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	adapter := m.ProviderServiceAdapter
+	adapter.InferFunc = m.Infer
+	return adapter.Continue(ctx, request)
 }
 
 func authoritativeTestResponse(response workerexecution.InferenceResponse) workerexecution.InferenceResponse {

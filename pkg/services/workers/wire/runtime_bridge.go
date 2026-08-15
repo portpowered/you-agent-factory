@@ -38,7 +38,7 @@ func NewConfiguredRuntime(
 	runWorktree string,
 	workerReasoningEffort string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	now func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -116,7 +116,7 @@ func BuildRuntimeExecutors(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	progressPublisher workers.ProgressPublisher,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
@@ -254,7 +254,7 @@ func NewProviderFromCommandRunner(
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.Provider, error) {
+) (providers.Service, error) {
 	return workersinternal.NewProviderFromService(providersService)
 }
 

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -436,7 +435,7 @@ func (value *WorkResult) UnmarshalJSON(data []byte) error {
 }
 
 // ProviderSessionMetadata carries a stable provider rollout/session identity.
-type ProviderSessionMetadata = providersessions.Metadata
+type ProviderSessionMetadata = providers.SessionMetadata
 
 // CanonicalProviderSessionProvider maps provider-session identities onto the
 // stable backend-facing names used for loading, events, and persisted

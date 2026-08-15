@@ -32,7 +32,7 @@ type Builder interface {
 		*workerexecution.Context,
 		logging.Logger,
 		*bool,
-		workers.Provider,
+		providers.Service,
 		workers.ProgressPublisher,
 		workerexecutor.ScriptEventRecorder,
 		workers.InferenceEventRecorder,
@@ -213,7 +213,7 @@ func (s *Service) Build(
 	workflowContext *workerexecution.Context,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	inferenceProgressPublisher workers.ProgressPublisher,
 	scriptRecorder workerexecutor.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
@@ -345,7 +345,7 @@ func (s *Service) agentRunner(
 	def *interfaces.FactoryWorkerConfig,
 	logger logging.Logger,
 	effectiveSkipPermissions bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	inferenceProgressPublisher workers.ProgressPublisher,
 ) (workers.Runner, error) {
 	usesNamedExecutorProvider := def != nil && workers.UsesNamedProvider(def.ExecutorProvider, def.ModelProvider)

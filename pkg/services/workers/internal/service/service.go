@@ -19,7 +19,7 @@ import (
 type Service struct {
 	runners          runners.Service
 	providers        providers.Service
-	providerOverride workers.Provider
+	providerOverride providers.Service
 	observe          workers.ObservationSink
 	logger           logging.Logger
 	clock            func() time.Time
@@ -78,7 +78,7 @@ func NewWithProviderOverride(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	agentRunHarness agentrun.HarnessAdapter,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	factoryDocs ...workers.FactoryDocsLoader,
@@ -108,7 +108,7 @@ func newService(
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	agentRunHarness agentrun.HarnessAdapter,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	factoryDocs ...workers.FactoryDocsLoader,

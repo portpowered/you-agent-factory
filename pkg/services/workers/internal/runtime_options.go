@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
@@ -28,7 +29,7 @@ func (s *Service) BuildRuntimeExecutors(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	inferenceProgressPublisher workers.ProgressPublisher,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
@@ -53,6 +54,14 @@ func (s *Service) BuildRuntimeExecutors(
 	}
 	if err := s.rebindProvidersCommandRunner(logger); err != nil {
 		return nil, err
+	}
+	// A session-scoped command runner rebuilds the Providers root together with
+	// its catalog projection. Keep runtime worker construction on that rebound
+	// root even when the caller supplied the process root as the default
+	// provider argument; otherwise mock/replay command edges are bypassed by
+	// authored Workers.
+	if s.providerCommandInjected && s.providers != nil {
+		providerOverride = s.providers
 	}
 	now := clock
 	if now == nil {

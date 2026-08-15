@@ -8,6 +8,7 @@ import (
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
@@ -105,7 +106,7 @@ func (b *pollerOmissionBuilder) Build(
 	*workers.Context,
 	logging.Logger,
 	*bool,
-	workers.Provider,
+	providers.Service,
 	workers.ProgressPublisher,
 	workerexecutor.ScriptEventRecorder,
 	workers.InferenceEventRecorder,

@@ -117,21 +117,45 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 	providerID := request.Provider.String()
 	dispatch := workDispatch(request)
 	infer := workers.ProviderInferenceRequest{
-		Dispatch:           dispatch,
-		WorkerType:         strings.TrimSpace(request.WorkerType),
-		WorkstationType:    strings.TrimSpace(request.WorkstationName),
-		Model:              strings.TrimSpace(request.Model),
-		ReasoningEffort:    canonicalReasoningEffort(request.ReasoningEffort),
-		ModelProvider:      modelProviderForProviderIdentity(providerID),
-		SystemPrompt:       request.SystemPrompt,
-		UserMessage:        request.UserMessage,
-		InputTokens:        cloneInputTokens(request.InputTokens),
-		OutputSchema:       request.OutputSchema,
-		WorkingDirectory:   request.WorkingDirectory,
-		Worktree:           request.Worktree,
-		EnvVars:            cloneMetadata(request.EnvVars),
-		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
-		SkipPermissions:    request.SkipPermissions,
+		Dispatch: dispatch,
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			GenerationID:     request.Correlation.GenerationID,
+			DispatchID:       request.Correlation.DispatchID,
+			AttemptID:        request.Correlation.AttemptID,
+			RequestID:        request.Correlation.RequestID,
+			TraceID:          request.Correlation.TraceID,
+		},
+		RunnerID:                     strings.TrimSpace(request.RunnerID),
+		ProjectID:                    strings.TrimSpace(request.ProjectID),
+		WorkerType:                   strings.TrimSpace(request.WorkerType),
+		WorkstationType:              strings.TrimSpace(request.WorkstationName),
+		Model:                        strings.TrimSpace(request.Model),
+		ModelLocality:                strings.TrimSpace(request.ModelLocality),
+		ReasoningEffort:              canonicalReasoningEffort(request.ReasoningEffort),
+		ModelProvider:                modelProviderForProviderIdentity(providerID),
+		SystemPrompt:                 request.SystemPrompt,
+		UserMessage:                  request.UserMessage,
+		InputTokens:                  cloneInputTokens(request.InputTokens),
+		OutputSchema:                 request.OutputSchema,
+		ToolExecutionMode:            workers.RunnerToolExecutionMode(request.ToolExecutionMode),
+		RequiredOptionalCapabilities: runnerOptionalCapabilities(request.RequiredCapabilities),
+		Command:                      request.Command,
+		Args:                         append([]string(nil), request.Args...),
+		FactoryDirectory:             request.FactoryDirectory,
+		OutputContract:               request.OutputContract,
+		OutputFormat:                 request.OutputFormat,
+		StopToken:                    request.StopToken,
+		DecisionEnvelope:             request.DecisionEnvelope,
+		GoalRoutingDecisionEnvelope:  request.GoalRoutingDecisionEnvelope,
+		SessionID:                    request.SessionID,
+		WorkingDirectory:             request.WorkingDirectory,
+		Worktree:                     request.Worktree,
+		EnvVars:                      cloneMetadata(request.EnvVars),
+		ProcessEnvironment:           append([]string(nil), request.ProcessEnvironment...),
+		SkipPermissions:              request.SkipPermissions,
+		ExecutionLogger:              request.ExecutionLogger,
 	}
 	return infer
 }
@@ -139,6 +163,17 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 func canonicalReasoningEffort(value string) string {
 	canonical, _ := providers.ReasoningEffort(value).Canonical()
 	return canonical
+}
+
+func runnerOptionalCapabilities(values []string) []workers.RunnerOptionalCapability {
+	if len(values) == 0 {
+		return nil
+	}
+	capabilities := make([]workers.RunnerOptionalCapability, len(values))
+	for index, value := range values {
+		capabilities[index] = workers.RunnerOptionalCapability(value)
+	}
+	return capabilities
 }
 
 func modelProviderForProviderIdentity(providerID string) string {
@@ -155,10 +190,24 @@ func modelProviderForProviderIdentity(providerID string) string {
 }
 
 func workDispatch(request providers.ExecuteRequest) work.WorkDispatch {
+	dispatchID := strings.TrimSpace(request.Correlation.DispatchID)
+	if dispatchID == "" {
+		dispatchID = strings.TrimSpace(request.AttemptID)
+	}
 	dispatch := work.WorkDispatch{
-		DispatchID:      strings.TrimSpace(request.AttemptID),
+		DispatchID:      dispatchID,
+		TransitionID:    strings.TrimSpace(request.TransitionID),
 		WorkerType:      strings.TrimSpace(request.WorkerType),
 		WorkstationName: strings.TrimSpace(request.WorkstationName),
+		ProjectID:       strings.TrimSpace(request.ProjectID),
+		InputTokens:     cloneInputTokens(request.InputTokens),
+		InputBindings:   cloneStringSliceMap(request.InputBindings),
+		Execution: work.ExecutionMetadata{
+			RequestID: request.Correlation.RequestID,
+			ReplayKey: request.Correlation.ReplayKey,
+			TraceID:   request.Correlation.TraceID,
+			WorkIDs:   append([]string(nil), request.Correlation.WorkIDs...),
+		},
 	}
 	return dispatch
 }
@@ -187,6 +236,15 @@ func executeResult(
 		result.Diagnostics = &providers.ExecuteDiagnostics{
 			Metadata: metadata,
 		}
+		if response.Diagnostics.Command != nil {
+			result.Diagnostics.Command = providersCommandDiagnostics(response.Diagnostics.Command)
+		}
+		if response.Diagnostics.Panic != nil {
+			result.Diagnostics.Panic = &providers.ExecutePanicDiagnostics{
+				Message: response.Diagnostics.Panic.Message,
+				Stack:   response.Diagnostics.Panic.Stack,
+			}
+		}
 		if duration := metadata[workers.ProviderResponseMetadataDurationMS]; duration != "" {
 			if millis, err := strconv.ParseInt(duration, 10, 64); err == nil {
 				result.Diagnostics.DurationMillis = millis
@@ -194,6 +252,24 @@ func executeResult(
 		}
 	}
 	return result
+}
+
+func providersCommandDiagnostics(command *workers.CommandDiagnostic) *providers.ExecuteCommandDiagnostics {
+	if command == nil {
+		return nil
+	}
+	return &providers.ExecuteCommandDiagnostics{
+		Command:    command.Command,
+		Args:       append([]string(nil), command.Args...),
+		Env:        cloneMetadata(command.Env),
+		Stdin:      command.Stdin,
+		Stdout:     command.Stdout,
+		Stderr:     command.Stderr,
+		ExitCode:   command.ExitCode,
+		TimedOut:   command.TimedOut,
+		DurationMS: command.Duration.Milliseconds(),
+		WorkingDir: command.WorkingDir,
+	}
 }
 
 func mapExecuteError(err error) error {
@@ -246,6 +322,15 @@ func executeFailureFromProvider(err error) (providers.ExecuteFailure, bool) {
 			)
 		}
 		failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: metadata}
+		if providerErr.Diagnostics.Command != nil {
+			failure.Diagnostics.Command = providersCommandDiagnostics(providerErr.Diagnostics.Command)
+		}
+		if providerErr.Diagnostics.Panic != nil {
+			failure.Diagnostics.Panic = &providers.ExecutePanicDiagnostics{
+				Message: providerErr.Diagnostics.Panic.Message,
+				Stack:   providerErr.Diagnostics.Panic.Stack,
+			}
+		}
 	}
 	return failure, true
 }
@@ -288,6 +373,17 @@ func cloneInputTokens(values []any) []any {
 		return nil
 	}
 	return append([]any(nil), values...)
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string][]string, len(values))
+	for key, items := range values {
+		cloned[key] = append([]string(nil), items...)
+	}
+	return cloned
 }
 
 func mergeMetadata(base, overlay map[string]string) map[string]string {

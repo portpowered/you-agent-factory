@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -773,6 +774,7 @@ type statelessTestProviders struct {
 }
 
 type statelessProviderOverride struct {
+	testutil.ProviderServiceAdapter
 	calls   atomic.Int32
 	request workers.ProviderInferenceRequest
 	content string
@@ -796,6 +798,44 @@ func (provider *statelessProviderOverride) Infer(
 			ID:       "session-attempt-override",
 		},
 	}, nil
+}
+
+func (provider *statelessProviderOverride) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if request.Identity == "" {
+		request.Identity = "codex"
+	}
+	return provider.ProviderServiceAdapter.ResolveIdentity(ctx, request)
+}
+
+func (provider *statelessProviderOverride) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if request.ID == "" {
+		request.ID = providers.IDCodex
+	}
+	return provider.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
+}
+
+func (provider *statelessProviderOverride) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	adapter := provider.ProviderServiceAdapter
+	adapter.InferFunc = provider.Infer
+	return adapter.Execute(ctx, request)
+}
+
+func (provider *statelessProviderOverride) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	adapter := provider.ProviderServiceAdapter
+	adapter.InferFunc = provider.Infer
+	return adapter.Continue(ctx, request)
 }
 
 func (provider *statelessTestProviders) SetContent(content string) {

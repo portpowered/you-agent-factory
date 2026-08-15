@@ -41,7 +41,7 @@ var _ WorkstationRequestExecutor = (*AgentExecutor)(nil)
 // NewAgentExecutor creates an AgentExecutor from runtime-loaded config and a Provider.
 func NewAgentExecutor(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	provider workerexecution.Provider,
+	provider providers.Service,
 	logger logging.Logger,
 	clock func() time.Time,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
@@ -66,9 +66,7 @@ func NewAgentExecutorWithRunner(
 ) *AgentExecutor {
 	return newAgentExecutor(
 		runtimeConfig,
-		workerinvocation.NewProviderExecutor(
-			runnerProviderAdapter{inner: runner},
-		),
+		workerinvocation.NewRunnerExecutor(runner),
 		logger,
 		clock,
 		firstDecisionEnvelopeService(decisionEnvelopes),
@@ -731,24 +729,10 @@ type providerRunnerAdapter struct {
 	executor workerexecution.InvocationExecutor
 }
 
-type runnerProviderAdapter struct {
-	inner workerexecution.Runner
-}
-
-func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	if a.inner == nil {
-		return workerexecution.InferenceResponse{}, workerexecution.NewProviderError(
-			workerexecution.WorkFailureTypeMisconfigured,
-			"runner requires an implementation",
-			nil,
-		)
-	}
-	return a.inner.Execute(ctx, request)
-}
-
-// RunnerFromProvider adapts a legacy provider implementation onto the shared
-// runner execution contract.
-func RunnerFromProvider(provider workerexecution.Provider) workerexecution.Runner {
+// RunnerFromProvider adapts the Providers root onto the shared runner
+// execution contract. The adapter is a composition edge; it does not define
+// a provider protocol or retain provider/session state in Workers.
+func RunnerFromProvider(provider providers.Service) workerexecution.Runner {
 	return providerRunnerAdapter{executor: workerinvocation.NewExecutor(provider)}
 }
 

@@ -3,7 +3,6 @@ package workers
 import (
 	"strings"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -45,7 +44,7 @@ type ProgressFragment struct {
 	// response-stream metadata projection; Worker Sessions must use this field
 	// when it associates a resumable execution before forwarding output.
 	ProviderSessionReference       *providers.SessionRef
-	ProviderSessionRef             *providersessions.Metadata
+	ProviderSessionRef             *providers.SessionMetadata
 	ExternalEventType              string
 	Metadata                       map[string]string
 	CanonicalDraft                 any

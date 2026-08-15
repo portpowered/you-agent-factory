@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -205,7 +206,9 @@ func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testin
 	}
 }
 
-type providerStub struct{}
+type providerStub struct {
+	testutil.ProviderServiceAdapter
+}
 
 type runnerFunc func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
 

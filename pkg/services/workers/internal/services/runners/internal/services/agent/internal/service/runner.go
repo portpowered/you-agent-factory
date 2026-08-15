@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -688,6 +689,26 @@ func runnerResult(
 				ResponseMetadata: cloneMetadata(metadata),
 			},
 			Metadata: metadata,
+		}
+		if result.Diagnostics.Command != nil {
+			response.Diagnostics.Command = &workers.CommandDiagnostic{
+				Command:    result.Diagnostics.Command.Command,
+				Args:       append([]string(nil), result.Diagnostics.Command.Args...),
+				Env:        cloneMetadata(result.Diagnostics.Command.Env),
+				Stdin:      result.Diagnostics.Command.Stdin,
+				Stdout:     result.Diagnostics.Command.Stdout,
+				Stderr:     result.Diagnostics.Command.Stderr,
+				ExitCode:   result.Diagnostics.Command.ExitCode,
+				TimedOut:   result.Diagnostics.Command.TimedOut,
+				Duration:   time.Duration(result.Diagnostics.Command.DurationMS) * time.Millisecond,
+				WorkingDir: result.Diagnostics.Command.WorkingDir,
+			}
+		}
+		if result.Diagnostics.Panic != nil {
+			response.Diagnostics.Panic = &workers.PanicDiagnostic{
+				Message: result.Diagnostics.Panic.Message,
+				Stack:   result.Diagnostics.Panic.Stack,
+			}
 		}
 	}
 	return response

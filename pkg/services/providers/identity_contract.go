@@ -36,6 +36,15 @@ const (
 // identifiers emitted by Execute and consumed by Provider Sessions.
 const SessionIDKind = "session_id"
 
+// SessionMetadata is the detached, provider-owned compatibility projection of
+// a provider session identity. It is intentionally limited to identity facts;
+// transcript, storage, and inspection state remain owned by Provider Sessions.
+type SessionMetadata struct {
+	Provider string `json:"provider,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	ID       string `json:"id,omitempty"`
+}
+
 // Validate checks that the provider ID is non-empty after trimming.
 func (id ID) Validate() error {
 	if strings.TrimSpace(string(id)) == "" {

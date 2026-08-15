@@ -567,8 +567,8 @@ type ExecutionInput struct {
 	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
 	// ports for detached execution, such as Recordings replay. They are never
 	// serialized or retained by the process-scoped Workers service.
-	ProviderOverride      Provider      `json:"-"`
-	CommandRunnerOverride CommandRunner `json:"-"`
+	ProviderOverride      providers.Service `json:"-"`
+	CommandRunnerOverride CommandRunner     `json:"-"`
 	// PreparedRequestObserver receives the detached request after Workers has
 	// prepared request-scoped resources and before the runner starts. Runtime
 	// uses it to record the effective execution target without moving resource

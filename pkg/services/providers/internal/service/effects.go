@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // CommandRunner is the Providers-owned subprocess effect used by provider
@@ -44,6 +47,8 @@ type CommandRequest struct {
 	AttemptID       string
 	WorkerType      string
 	WorkstationName string
+	Execution       work.ExecutionMetadata
+	ExecutionLogger logging.Logger
 }
 
 // CommandResult is the observable result of one provider subprocess effect.
@@ -172,6 +177,8 @@ func reflectedRequest(target reflect.Type, request CommandRequest) (reflect.Valu
 	copyReflectedField(value, "AttemptID", request.AttemptID)
 	copyReflectedField(value, "WorkerType", request.WorkerType)
 	copyReflectedField(value, "WorkstationName", request.WorkstationName)
+	copyReflectedField(value, "Execution", request.Execution)
+	copyReflectedField(value, "ExecutionLogger", request.ExecutionLogger)
 	return value, nil
 }
 

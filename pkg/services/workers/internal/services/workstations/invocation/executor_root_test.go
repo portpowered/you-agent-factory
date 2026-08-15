@@ -7,7 +7,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
@@ -154,7 +157,33 @@ func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *te
 	}
 }
 
+func TestProviderExecutorContinuationUsesProvidersReferenceWithoutFreshExecute(t *testing.T) {
+	provider := &continuationExecutionTestProvider{}
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: "thread", ID: "opaque-session"}
+	result, err := workerinvocation.NewProviderExecutor(provider).Execute(
+		context.Background(),
+		workerexecution.InvocationInput{Request: workerexecution.ProviderInferenceRequest{
+			ModelProvider: string(providers.IDCodex),
+			Dispatch:      work.WorkDispatch{DispatchID: "attempt-continue"},
+			ResumeSession: &reference,
+		}},
+	)
+	if err != nil {
+		t.Fatalf("Execute continuation: %v", err)
+	}
+	if provider.continueCalls != 1 || provider.executeCalls != 0 {
+		t.Fatalf("provider calls = continue:%d execute:%d, want continuation only", provider.continueCalls, provider.executeCalls)
+	}
+	if provider.reference != reference {
+		t.Fatalf("continued reference = %#v, want %#v", provider.reference, reference)
+	}
+	if result.Response.Content != "continued" {
+		t.Fatalf("continuation content = %q, want continued", result.Response.Content)
+	}
+}
+
 type executionTestProvider struct {
+	testutil.ProviderServiceAdapter
 	response workerexecution.InferenceResponse
 	err      error
 	calls    int
@@ -165,10 +194,77 @@ func (p *executionTestProvider) Infer(context.Context, workerexecution.ProviderI
 	return p.response, p.err
 }
 
+func (p *executionTestProvider) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if strings.TrimSpace(request.Identity) == "" {
+		request.Identity = string(modelprovider.ProviderCodex)
+	}
+	return p.ProviderServiceAdapter.ResolveIdentity(ctx, request)
+}
+
+func (p *executionTestProvider) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if strings.TrimSpace(request.ID.String()) == "" {
+		request.ID = providers.IDCodex
+	}
+	return p.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
+}
+
+func (p *executionTestProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	adapter := p.ProviderServiceAdapter
+	adapter.InferFunc = p.Infer
+	return adapter.Execute(ctx, request)
+}
+
+func (p *executionTestProvider) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	adapter := p.ProviderServiceAdapter
+	adapter.InferFunc = p.Infer
+	return adapter.Continue(ctx, request)
+}
+
 type blockingExecutionTestProvider struct {
+	testutil.ProviderServiceAdapter
 	started chan struct{}
 	mu      sync.Mutex
 	calls   int
+}
+
+type continuationExecutionTestProvider struct {
+	testutil.ProviderServiceAdapter
+	executeCalls  int
+	continueCalls int
+	reference     providers.SessionRef
+}
+
+func (provider *continuationExecutionTestProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	provider.executeCalls++
+	return providers.ExecuteResult{Content: "ordinary"}, nil
+}
+
+func (provider *continuationExecutionTestProvider) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	provider.continueCalls++
+	provider.reference = request.Reference
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    providers.ExecuteResult{Content: "continued"},
+	}, nil
 }
 
 func newBlockingExecutionTestProvider() *blockingExecutionTestProvider {
@@ -184,6 +280,44 @@ func (p *blockingExecutionTestProvider) Infer(ctx context.Context, _ workerexecu
 	p.mu.Unlock()
 	<-ctx.Done()
 	return workerexecution.InferenceResponse{}, ctx.Err()
+}
+
+func (p *blockingExecutionTestProvider) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if strings.TrimSpace(request.Identity) == "" {
+		request.Identity = string(modelprovider.ProviderCodex)
+	}
+	return p.ProviderServiceAdapter.ResolveIdentity(ctx, request)
+}
+
+func (p *blockingExecutionTestProvider) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	if strings.TrimSpace(request.ID.String()) == "" {
+		request.ID = providers.IDCodex
+	}
+	return p.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
+}
+
+func (p *blockingExecutionTestProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	adapter := p.ProviderServiceAdapter
+	adapter.InferFunc = p.Infer
+	return adapter.Execute(ctx, request)
+}
+
+func (p *blockingExecutionTestProvider) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	adapter := p.ProviderServiceAdapter
+	adapter.InferFunc = p.Infer
+	return adapter.Continue(ctx, request)
 }
 
 func (p *blockingExecutionTestProvider) callCount() int {
