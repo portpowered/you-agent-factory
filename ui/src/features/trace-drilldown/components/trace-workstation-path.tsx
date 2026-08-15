@@ -1,6 +1,7 @@
 import "@xyflow/react/dist/style.css";
 
 import { applyNodeChanges, type NodeChange, ReactFlow } from "@xyflow/react";
+import { FACTORY_GRAPH_NODE_TYPES } from "@you-agent-factory/factory-graph";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import {
@@ -19,7 +20,6 @@ import { applyTraceFactoryGraphLayoutToNode } from "../lib/trace-factory-graph-l
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
-import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "./trace-dispatch-factory-graph-node";
 
 const GRAPH_SHELL_STYLE = { height: 320, minHeight: 256 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
@@ -155,7 +155,7 @@ function TraceWorkstationReactFlow({
       minZoom={0.35}
       nodes={nodes}
       nodesDraggable={true}
-      nodeTypes={TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES}
+      nodeTypes={FACTORY_GRAPH_NODE_TYPES}
       onNodesChange={onNodesChange}
       onError={failOnTraceReactFlowError}
       panOnDrag

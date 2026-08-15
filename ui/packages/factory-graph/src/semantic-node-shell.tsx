@@ -9,6 +9,10 @@ import {
   factoryGraphNodeFamilyRole,
 } from "./node-family.js";
 import {
+  type FactoryGraphNodeInteractionOverlay,
+  FactoryGraphNodeInteractionOverlayView,
+} from "./node-interaction-overlay.js";
+import {
   FactoryGraphNodeResizeControls,
   type FactoryGraphNodeResizeControlsProps,
 } from "./node-resize-controls.js";
@@ -49,6 +53,7 @@ export interface FactoryGraphNodeShellProps {
   children: ReactNode;
   className?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   nodeType: "workstation" | FactoryGraphPlaceNodeType;
   resizeControls?: FactoryGraphNodeResizeControlsProps;
   visualState?: Omit<FactoryGraphVisualStateInput, "family">;
@@ -60,6 +65,7 @@ export function FactoryGraphNodeShell({
   children,
   className = "",
   handles,
+  interactionOverlay,
   nodeType,
   resizeControls,
   visualState: visualStateInput,
@@ -83,7 +89,9 @@ export function FactoryGraphNodeShell({
       <GraphNodeShell
         aria-invalid={visualState.validation === "error" || undefined}
         className={classNames(
+          "shadow-none",
           className,
+          interactionOverlayClassName(interactionOverlay?.draftStatus),
           factoryGraphNodeVisualStateClassName(visualState),
         )}
         data-current-activity-node-type={nodeType}
@@ -102,11 +110,17 @@ export function FactoryGraphNodeShell({
         data-graph-visual-surface={visualState.surface}
         data-graph-visual-treatment={visualState.statusTreatment}
         data-graph-visual-validation={visualState.validation}
+        data-graph-draft-status={
+          interactionOverlay?.draftStatus === "none"
+            ? undefined
+            : interactionOverlay?.draftStatus
+        }
         handles={packageHandles}
         nodeKind={nodeType}
         showStateIndicator={false}
       >
         {children}
+        <FactoryGraphNodeInteractionOverlayView overlay={interactionOverlay} />
       </GraphNodeShell>
       {resizeControls ? (
         <FactoryGraphNodeResizeControls {...resizeControls} />
@@ -130,6 +144,19 @@ function classNames(
   ...values: Array<string | false | null | undefined>
 ): string {
   return values.filter(Boolean).join(" ");
+}
+
+function interactionOverlayClassName(
+  draftStatus: FactoryGraphNodeInteractionOverlay["draftStatus"],
+): string | undefined {
+  switch (draftStatus) {
+    case "addition":
+      return "ring-2 ring-af-warning-border";
+    case "removal":
+      return "ring-2 ring-af-danger-border";
+    default:
+      return undefined;
+  }
 }
 
 export function factoryGraphHandleToneFromId(

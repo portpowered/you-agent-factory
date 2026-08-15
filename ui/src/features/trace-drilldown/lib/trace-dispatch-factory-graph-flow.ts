@@ -1,20 +1,20 @@
 import { type Node, Position } from "@xyflow/react";
 import type {
-  DashboardTraceDispatch,
-  DashboardWorkstationNode,
-} from "../../../api/dashboard/types";
+  FactoryGraphNodeHandle,
+  FactoryGraphWorkstationNodeData,
+} from "@you-agent-factory/factory-graph";
+import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
-import type { WorkstationNodeData } from "../../graphs/components/workstation-node-view";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
 } from "./trace-dispatch-factory-graph";
 
-export type TraceDispatchFlowNodeData = WorkstationNodeData &
+export type TraceDispatchFlowNodeData = FactoryGraphWorkstationNodeData &
   TraceDispatchNodeOverlay & {
     factoryNodeId: string;
     locale?: string;
@@ -45,16 +45,18 @@ export function buildTraceDispatchFactoryGraphFlow(
     mode: "observer",
     topology: traceProjection.topology,
   });
-  const nodes: TraceDispatchFlowNode[] = [];
-
-  for (const node of factoryProjection.nodes) {
+  const nodes = factoryProjection.nodes.map((node) => {
     const overlay = traceProjection.overlaysByNodeId.get(node.id);
     if (!overlay) {
       throw new Error(`Missing trace overlay for factory node ${node.id}.`);
     }
 
     const dispatchId = overlay.dispatchId;
-    nodes.push({
+    const handles = node.data.handles.map((handle) => ({
+      ...handle,
+      hidden: true,
+    }));
+    return {
       ...node,
       data: {
         ...overlay,
@@ -62,14 +64,12 @@ export function buildTraceDispatchFactoryGraphFlow(
         activeFlow: false,
         executions: [],
         factoryNodeId: node.id,
-        handles: node.data.connectionAnchors.map((handle) => ({
-          ...handle,
-          hidden: true,
-        })),
+        handles,
         kind: "workstation",
         locale,
         muted: false,
         now: 0,
+        runtimeStatus: overlay.outcome,
         selectedWorkID: null,
         selectedWorkstation: false,
         summaryOnly: true,
@@ -80,21 +80,42 @@ export function buildTraceDispatchFactoryGraphFlow(
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       type: "workstation",
-    });
-  }
+    } satisfies TraceDispatchFlowNode;
+  });
 
-  const edges = factoryProjection.edges.map((edge) => ({
-    ...edge,
-    data:
-      edge.data?.kind === "workstation-on-continue"
-        ? {
-            ...edge.data,
-            label: "",
-          }
-        : edge.data,
-    source: traceProjection.dispatchIdByNodeId.get(edge.source) ?? edge.source,
-    target: traceProjection.dispatchIdByNodeId.get(edge.target) ?? edge.target,
-  }));
+  const nodesByID = new Map(nodes.map((node) => [node.id, node]));
+
+  const edges = factoryProjection.edges.map((edge) => {
+    const source =
+      traceProjection.dispatchIdByNodeId.get(edge.source) ?? edge.source;
+    const target =
+      traceProjection.dispatchIdByNodeId.get(edge.target) ?? edge.target;
+    const sourceNode = nodesByID.get(source);
+    const targetNode = nodesByID.get(target);
+
+    return {
+      ...edge,
+      data:
+        edge.data?.kind === "workstation-on-continue"
+          ? {
+              ...edge.data,
+              label: "",
+            }
+          : edge.data,
+      source,
+      sourceHandle: resolveTraceEdgeHandle(
+        edge.sourceHandle,
+        sourceNode?.data.handles,
+        "source",
+      ),
+      target,
+      targetHandle: resolveTraceEdgeHandle(
+        edge.targetHandle,
+        targetNode?.data.handles,
+        "target",
+      ),
+    };
+  });
 
   return {
     dispatchIdByNodeId: traceProjection.dispatchIdByNodeId,
@@ -104,9 +125,20 @@ export function buildTraceDispatchFactoryGraphFlow(
   };
 }
 
+function resolveTraceEdgeHandle(
+  requestedHandle: string | null | undefined,
+  handles: readonly FactoryGraphNodeHandle[] | undefined,
+  role: FactoryGraphNodeHandle["type"],
+): string | undefined {
+  return (
+    handles?.find((handle) => handle.id === requestedHandle)?.id ??
+    handles?.find((handle) => handle.type === role)?.id
+  );
+}
+
 function traceDispatchWorkstationNode(
   overlay: TraceDispatchNodeOverlay,
-): DashboardWorkstationNode {
+): FactoryGraphWorkstationNodeData["workstation"] {
   return {
     node_id: overlay.dispatchId,
     transition_id: overlay.displayLabel,

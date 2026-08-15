@@ -2,7 +2,9 @@ import { WorkstationKind, WorkstationType } from "@you-agent-factory/client";
 import { expect, test } from "vitest";
 
 import { projectFactoryGraphReplayFlow } from "./factory-graph-replay-surface.js";
+import type { FactoryGraphWorkstationNode } from "./semantic-workstation-node.js";
 import type { FactoryGraphSource } from "./source.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 
 test("projects Factory-authored layout, documents, and semantic runtime nodes together", () => {
   const source = {
@@ -168,6 +170,118 @@ test("keeps authored dimensions when replay advances to a later runtime tick", (
     measured: { height: 100, width: 260 },
     width: 260,
   });
+});
+
+test("keeps replay graph identity while selected-tick Work volume changes", () => {
+  const sourceForWorkItems = (workIds: string[], selectedTick: number) =>
+    ({
+      factory: {
+        layout: {
+          groups: [],
+          nodes: [
+            {
+              id: "workstation:review",
+              position: { x: 120, y: 80 },
+              size: { height: 160, width: 280 },
+            },
+          ],
+        },
+        name: "Work volume",
+        workstations: [
+          {
+            behavior: WorkstationKind.STANDARD,
+            id: "review",
+            inputs: [],
+            name: "Review",
+            type: WorkstationType.AGENT_RUN,
+            worker: "agent",
+          },
+        ],
+      },
+      runtime: {
+        activity: {
+          activeDispatchOverlays: [
+            {
+              connectionIds: [],
+              dispatchId: "dispatch-review",
+              evidence: {
+                resources: "unavailable",
+                route: "unavailable",
+                work: "known",
+                worker: "unavailable",
+                workstation: "known",
+              },
+              id: "overlay:dispatch-review",
+              startedTick: 4,
+              workIds,
+              workstationNodeId: "workstation:review",
+            },
+          ],
+          activeWorkstationNodeIds: ["workstation:review"],
+          issues: [],
+          resourceOccupancy: [],
+          selectedTick,
+        },
+        load: {
+          issues: [],
+          resourceOccupancy: [],
+          selectedTick,
+          workStateCounts: [],
+        },
+        topology: {
+          connections: [],
+          issues: [],
+          nodes: [
+            {
+              entityId: "review",
+              handles: [
+                { id: "workstation-input-target", role: "target" },
+                { id: "workstation-on-continue-source", role: "source" },
+              ],
+              id: "workstation:review",
+              kind: "workstation",
+              label: "Review",
+            },
+          ],
+          ok: true,
+          selectedTick,
+        },
+      },
+      selectedTick,
+    }) satisfies FactoryGraphSource;
+
+  const initial = projectFactoryGraphReplayFlow(
+    sourceForWorkItems(["work-1"], 4),
+  );
+  const updated = projectFactoryGraphReplayFlow(
+    sourceForWorkItems(["work-1", "work-2", "work-3", "work-4"], 5),
+  );
+  const projectNodeIdentity = (node: (typeof initial.nodes)[number]) => ({
+    dimensions: {
+      height: node.height,
+      initialHeight: node.initialHeight,
+      initialWidth: node.initialWidth,
+      measured: node.measured,
+      width: node.width,
+    },
+    handles: node.data.handles.map((handle) => handle.id),
+    id: node.id,
+    position: node.position,
+    type: node.type,
+  });
+
+  expect(updated.nodes.map(projectNodeIdentity)).toEqual(
+    initial.nodes.map(projectNodeIdentity),
+  );
+  const updatedWorkstation = updated.nodes.find(
+    (node): node is FactoryGraphWorkstationNode =>
+      node.type === "workstation" && node.id === "workstation:review",
+  );
+  expect(updatedWorkstation?.data.executions[0]?.work_items).toHaveLength(4);
+  expect(updatedWorkstation?.data.summaryOnly).toBe(false);
+  expect(
+    [1, 3, 4, 25].map((count) => factoryGraphWorkProgressMode(count)),
+  ).toEqual(["items", "items", "total", "total"]);
 });
 
 test("projects authored workstation semantics and id-based activity onto the graph node", () => {

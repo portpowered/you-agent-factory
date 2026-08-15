@@ -11,6 +11,7 @@ import {
   FACTORY_GRAPH_NODE_TYPES,
   type FactoryGraphNode,
 } from "./semantic-nodes.js";
+import type { FactoryGraphWorkstationNodeData } from "./semantic-workstation-node.js";
 import type { FactoryGraphSource } from "./source.js";
 import {
   type FactoryGraphWorkstationSemanticProjection,
@@ -234,19 +235,20 @@ function semanticNode(
     case "workstation": {
       const active =
         input.active || Boolean(input.workstationProjection?.activity.active);
+      const executions = replayExecutions(node.id, node.entityId, input.source);
       return {
         ...base,
         data: {
           active,
           activeFlow: active,
-          executions: [],
+          executions,
           factoryGraphNodeId: node.id,
           handles,
           muted: false,
-          now: 0,
+          now: input.source.selectedTick * 1000,
           selectedWorkID: null,
           selectedWorkstation: input.selected,
-          summaryOnly: true,
+          summaryOnly: executions.length === 0,
           workstationSemantics: input.workstationProjection,
           workstation: {
             node_id: node.id,
@@ -299,6 +301,27 @@ function replayActiveNodeIds(source: FactoryGraphSource): ReadonlySet<string> {
     for (const id of overlay.resourceNodeIds ?? []) ids.add(id);
   }
   return ids;
+}
+
+function replayExecutions(
+  nodeId: string,
+  entityId: string,
+  source: FactoryGraphSource,
+): FactoryGraphWorkstationNodeData["executions"] {
+  return source.runtime.activity.activeDispatchOverlays
+    .filter(
+      (overlay) =>
+        overlay.workstationNodeId === nodeId ||
+        overlay.workstationId === entityId,
+    )
+    .map((overlay) => ({
+      dispatch_id: overlay.dispatchId,
+      started_at: new Date(overlay.startedTick * 1000).toISOString(),
+      work_items: (overlay.workIds ?? []).map((workId) => ({
+        display_name: workId,
+        work_id: workId,
+      })),
+    }));
 }
 
 function resourceCount(nodeId: string, source: FactoryGraphSource): number {

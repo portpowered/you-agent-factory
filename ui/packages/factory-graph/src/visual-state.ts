@@ -174,8 +174,10 @@ function lifecycleRoleFromValue(
     case "IN_PROGRESS":
       return "processing";
     case "TERMINAL":
+    case "ACCEPTED":
     case "COMPLETED":
     case "COMPLETE":
+    case "CONTINUE":
     case "SUCCESS":
     case "SUCCEEDED":
     case "DONE":

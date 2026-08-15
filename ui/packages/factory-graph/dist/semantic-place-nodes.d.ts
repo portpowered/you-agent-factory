@@ -1,5 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 import type { FactoryGraphPlaceRef } from "./semantic-support-nodes.js";
@@ -14,6 +15,7 @@ export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
+    interactionOverlay?: FactoryGraphNodeInteractionOverlay;
     kind?: string;
     locale?: string;
     muted: boolean;

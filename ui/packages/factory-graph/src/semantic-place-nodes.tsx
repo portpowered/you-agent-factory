@@ -1,6 +1,7 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import {
   type FactoryGraphNodeHandle,
@@ -38,6 +39,7 @@ export interface FactoryGraphBasePlaceNodeData extends Record<string, unknown> {
   focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind?: string;
   locale?: string;
   muted: boolean;
@@ -134,6 +136,7 @@ function FactoryGraphPlaceNodeView({
     <FactoryGraphNodeShell
       className={classNames("justify-center text-left", className)}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType={nodeType}
       resizeControls={
         data.resizeControls

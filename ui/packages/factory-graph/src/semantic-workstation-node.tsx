@@ -1,5 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
@@ -52,11 +53,13 @@ export interface FactoryGraphWorkstationNodeData
   executions: FactoryGraphActiveExecution[];
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind?: "workstation";
   locale?: string;
   muted: boolean;
   now: number;
   progressOutcomeRouteWorkstation?: unknown;
+  runtimeStatus?: string | null;
   selectedWorkID: string | null;
   selectedWorkstation: boolean;
   resizeControls?: FactoryGraphNodeResizeControlsProps;
@@ -69,6 +72,7 @@ export interface FactoryGraphWorkstationNodeData
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  validationError?: boolean;
 }
 export type FactoryGraphWorkstationNode = Node<
   FactoryGraphWorkstationNodeData,
@@ -100,7 +104,9 @@ export function FactoryGraphWorkstationNodeView({
     focused: data.focused,
     lifecycle: data.active ? "PROCESSING" : undefined,
     muted: data.muted,
+    runtimeStatus: data.runtimeStatus,
     selected,
+    validation: data.validationError,
   });
   const className = classNames(
     factoryGraphNodeSurfaceClassName("workstation"),
@@ -115,6 +121,7 @@ export function FactoryGraphWorkstationNodeView({
     <FactoryGraphNodeShell
       className={className}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="workstation"
       resizeControls={
         data.resizeControls
@@ -126,7 +133,9 @@ export function FactoryGraphWorkstationNodeView({
         focused: data.focused,
         lifecycle: data.active ? "PROCESSING" : undefined,
         muted: data.muted,
+        runtimeStatus: data.runtimeStatus,
         selected,
+        validation: data.validationError,
       }}
       zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
@@ -366,6 +375,7 @@ function Header({
             ? "flex min-h-4 items-center"
             : "flex min-h-5 shrink-0 items-center"
         }
+        data-factory-entity-semantic-icon
         data-workstation-semantic-icon
         title={presentation.label}
       >
@@ -389,6 +399,7 @@ function Header({
               )
             : workstationTitleClassName(title)
         }
+        data-factory-entity-title
         data-workstation-title
       >
         {title}

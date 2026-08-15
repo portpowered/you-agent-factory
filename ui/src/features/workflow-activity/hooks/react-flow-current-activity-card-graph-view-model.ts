@@ -401,27 +401,21 @@ function useCurrentActivityGraphNodePresentation(
 
   const displayNodes = useMemo(
     () =>
-      baseNodes.map(
-        ({
-          initialHeight: _initialHeight,
-          initialWidth: _initialWidth,
-          ...node
-        }) => {
-          const resizedDimensions = dimensionsByNodeId.get(node.id);
-          return {
-            ...node,
-            ...(resizedDimensions
-              ? {
-                  height: resizedDimensions.height,
-                  measured: resizedDimensions,
-                  width: resizedDimensions.width,
-                }
-              : {}),
-            position: transientPositionsByNodeId.get(node.id) ?? node.position,
-            selected: graphSelection.isNodeSelected(node.id),
-          };
-        },
-      ),
+      baseNodes.map((node) => {
+        const resizedDimensions = dimensionsByNodeId.get(node.id);
+        return {
+          ...node,
+          ...(resizedDimensions
+            ? {
+                height: resizedDimensions.height,
+                measured: resizedDimensions,
+                width: resizedDimensions.width,
+              }
+            : {}),
+          position: transientPositionsByNodeId.get(node.id) ?? node.position,
+          selected: graphSelection.isNodeSelected(node.id),
+        };
+      }),
     [baseNodes, dimensionsByNodeId, graphSelection, transientPositionsByNodeId],
   );
 

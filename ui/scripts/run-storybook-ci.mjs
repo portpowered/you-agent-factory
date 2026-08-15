@@ -364,6 +364,10 @@ export async function runStorybookCI({
       serverExit,
     ]);
     await Promise.race([
+      runCommand(["run", "storybook:factory-graph-large-parity-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:header-responsive-check"]),
       serverExit,
     ]);

@@ -61,7 +61,7 @@ describe("factory graph React Flow projection", () => {
         label: "gpu",
       },
       position: { x: 0, y: 0 },
-      type: "factoryEntity",
+      type: "resource",
     });
     expect(projection.edges).toEqual(
       expect.arrayContaining([
@@ -176,7 +176,7 @@ describe("factory graph React Flow projection", () => {
     expect(
       projection.nodes
         .find((node) => node.id === "workstation:release-approval")
-        ?.data.connectionAnchors.map((anchor) => anchor.id),
+        ?.data.handles.map((anchor) => anchor.id),
     ).toEqual(
       expect.arrayContaining([
         "workstation-approval-source",
@@ -265,17 +265,17 @@ describe("factory graph React Flow projection", () => {
       expect.arrayContaining([
         expect.objectContaining({
           data: expect.objectContaining({
-            connectionAnchors: [],
+            handles: [],
             kind: "doc",
             kindLabel: "Doc",
             label: "factory/docs/guide.md",
           }),
           id: "doc:factory/docs/guide.md",
-          type: "factoryEntity",
+          type: "doc",
         }),
         expect.objectContaining({
           data: expect.objectContaining({
-            connectionAnchors: [],
+            handles: [],
             kind: "doc",
             label: "factory/scripts/setup-workspace.py",
           }),
@@ -499,11 +499,20 @@ describe("factory graph React Flow projection", () => {
         activeTool: "connect",
         canEditConnections: true,
         draftStatus: "addition",
+        interactionOverlay: {
+          connectionHint: expect.any(String),
+          draftStatus: "addition",
+          badges: [
+            expect.objectContaining({
+              tone: "warning",
+            }),
+          ],
+        },
         validationMessage: "Workstation body is required.",
       },
     });
     expect(
-      draftNode?.data.connectionAnchors.find(
+      draftNode?.data.handles.find(
         (anchor) => anchor.id === "workstation-output-source",
       ),
     ).toMatchObject({
@@ -512,7 +521,7 @@ describe("factory graph React Flow projection", () => {
       variant: "selected",
     });
     expect(
-      queuedNode?.data.connectionAnchors.find(
+      queuedNode?.data.handles.find(
         (anchor) => anchor.id === "work-state-input-target",
       ),
     ).toMatchObject({
@@ -678,7 +687,7 @@ describe("factory graph React Flow projection", () => {
     const anchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
 
     expect(anchorIds).toEqual(
@@ -780,11 +789,11 @@ describe("factory graph React Flow projection", () => {
     const logicalMoveAnchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:router")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const modelWorkstationAnchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
 
     expect(logicalMoveAnchorIds).not.toContain("worker-assignment-target");
     expect(modelWorkstationAnchorIds).toContain("worker-assignment-target");
@@ -839,7 +848,7 @@ describe("factory graph React Flow projection", () => {
     const anchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
 
     expect(anchorIds).toContain("workstation-on-continue-source");
@@ -896,7 +905,7 @@ describe("factory graph React Flow projection", () => {
     const anchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const progressOutcomeEdges = projection.edges.filter((edge) =>
       ["workstation-on-continue", "workstation-on-rejection"].includes(
         edge.data?.kind ?? "",
@@ -978,12 +987,12 @@ describe("factory graph React Flow projection", () => {
     expect(
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.some(
+        ?.data.handles.some(
           (anchor) => anchor.id === "workstation-on-continue-source",
         ),
     ).toBe(true);
     expect(
-      queuedNode?.data.connectionAnchors.find(
+      queuedNode?.data.handles.find(
         (anchor) => anchor.id === "work-state-input-target",
       ),
     ).toMatchObject({
@@ -1174,14 +1183,12 @@ describe("factory graph React Flow projection waypoint semantics", () => {
       }
 
       const sourceAnchorIds = new Set(
-        nodesById
-          .get(edge.source)
-          ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [],
+        nodesById.get(edge.source)?.data.handles.map((anchor) => anchor.id) ??
+          [],
       );
       const targetAnchorIds = new Set(
-        nodesById
-          .get(edge.target)
-          ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [],
+        nodesById.get(edge.target)?.data.handles.map((anchor) => anchor.id) ??
+          [],
       );
 
       expect(sourceAnchorIds.has(edge.sourceHandle)).toBe(true);

@@ -21,18 +21,22 @@ export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelec
         focused: data.focused,
         lifecycle: data.active ? "PROCESSING" : undefined,
         muted: data.muted,
+        runtimeStatus: data.runtimeStatus,
         selected,
+        validation: data.validationError,
     });
     const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected }, "primary"), "border-info-border", presentation.borderClassName, data.selectedWorkID !== null &&
         "border-info-border shadow-af-info-selected");
-    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, nodeType: "workstation", resizeControls: data.resizeControls
+    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workstation", resizeControls: data.resizeControls
             ? { ...data.resizeControls, isVisible: selected }
             : undefined, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             lifecycle: data.active ? "PROCESSING" : undefined,
             muted: data.muted,
+            runtimeStatus: data.runtimeStatus,
             selected,
+            validation: data.validationError,
         }, zAxisIncompleteHints: data.zAxisIncompleteHints, children: data.summaryOnly ? (_jsx(Summary, { data: data, presentation: presentation, title: title, visualState: visualState })) : (_jsx(ActiveContent, { data: data, entries: entries, presentation: presentation, title: title, visualState: visualState })) }));
 }
 function Summary({ data, presentation, title, visualState, }) {
@@ -71,9 +75,9 @@ function WorkItem({ data, execution, workItem, }) {
 function Header({ compact = false, presentation, title, visualState, }) {
     return (_jsxs(_Fragment, { children: [_jsx("span", { className: compact
                     ? "flex min-h-4 items-center"
-                    : "flex min-h-5 shrink-0 items-center", "data-workstation-semantic-icon": true, title: presentation.label, children: _jsx(GraphSemanticIcon, { className: classNames("h-4 w-4", factoryGraphNodeVisualIconClassName(visualState, presentation.className)), kind: presentation.iconKind, label: presentation.label }) }), _jsx("span", { className: compact
+                    : "flex min-h-5 shrink-0 items-center", "data-factory-entity-semantic-icon": true, "data-workstation-semantic-icon": true, title: presentation.label, children: _jsx(GraphSemanticIcon, { className: classNames("h-4 w-4", factoryGraphNodeVisualIconClassName(visualState, presentation.className)), kind: presentation.iconKind, label: presentation.label }) }), _jsx("span", { className: compact
                     ? factoryGraphNodeWrappedTextClassName("block font-mono text-[0.74rem] font-bold leading-tight text-on-surface")
-                    : workstationTitleClassName(title), "data-workstation-title": true, children: title }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"), "data-workstation-runtime-label": true, title: presentation.label, children: presentation.label }), presentation.schedulingLabel ? (_jsx("span", { className: factoryGraphNodeWrappedTextClassName("shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"), "data-workstation-scheduling-label": true, title: presentation.schedulingLabel, children: presentation.schedulingLabel })) : null] }));
+                    : workstationTitleClassName(title), "data-factory-entity-title": true, "data-workstation-title": true, children: title }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"), "data-workstation-runtime-label": true, title: presentation.label, children: presentation.label }), presentation.schedulingLabel ? (_jsx("span", { className: factoryGraphNodeWrappedTextClassName("shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"), "data-workstation-scheduling-label": true, title: presentation.schedulingLabel, children: presentation.schedulingLabel })) : null] }));
 }
 export function FactoryGraphWorkstationGuardedControlCard({ locale, presentation, }) {
     const control = presentation.guardedControl;

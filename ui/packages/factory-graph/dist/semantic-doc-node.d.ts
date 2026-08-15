@@ -1,4 +1,5 @@
 import type { Node, NodeProps } from "@xyflow/react";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 export interface FactoryGraphDocNodeData extends Record<string, unknown> {
@@ -8,6 +9,7 @@ export interface FactoryGraphDocNodeData extends Record<string, unknown> {
     factoryGraphNodeId?: string;
     fileType?: string;
     handles: FactoryGraphNodeHandle[];
+    interactionOverlay?: FactoryGraphNodeInteractionOverlay;
     kind: "doc";
     locale?: string;
     onSelectDoc?: (targetPath: string) => void;

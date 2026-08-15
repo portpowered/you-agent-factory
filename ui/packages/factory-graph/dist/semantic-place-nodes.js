@@ -44,7 +44,7 @@ function FactoryGraphPlaceNodeView({ data, selected: reactFlowSelected, }) {
         validation: data.validationError,
     });
     const content = stateNode ? (_jsx(FactoryGraphStatePositionContent, { locale: data.locale, place: data.place, tokenCount: data.tokenCount, visualState: visualState })) : (_jsx(FactoryGraphStaticPlaceContent, { locale: data.locale, place: data.place, tokenCount: data.tokenCount, visualState: visualState }));
-    return (_jsx(FactoryGraphNodeShell, { className: classNames("justify-center text-left", className), handles: data.handles, nodeType: nodeType, resizeControls: data.resizeControls
+    return (_jsx(FactoryGraphNodeShell, { className: classNames("justify-center text-left", className), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: nodeType, resizeControls: data.resizeControls
             ? { ...data.resizeControls, isVisible: selected }
             : undefined, visualState: {
             activeFlow: data.activeFlow,

@@ -48,7 +48,7 @@ function anchorIdsForWorkstation(
   const node = projection.nodes.find(
     (candidate) => candidate.id === `workstation:${workstationName}`,
   );
-  return node?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+  return node?.data.handles.map((anchor) => anchor.id) ?? [];
 }
 
 describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", () => {

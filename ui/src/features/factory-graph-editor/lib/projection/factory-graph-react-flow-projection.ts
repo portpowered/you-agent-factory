@@ -1,6 +1,12 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: React Flow projection keeps node, edge, and handle mapping together for one adapter seam.
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
 import {
+  type FACTORY_GRAPH_NODE_TYPES,
+  type FactoryGraphActiveExecution,
+  type FactoryGraphNodeHandle,
+  type FactoryGraphNodeInteractionOverlay,
+  type FactoryGraphSemanticPlaceRef,
+  type FactoryGraphWorkstationRef,
   type FactoryGraphWorkstationSemantics,
   resolveFactoryGraphNodeDimensions,
   resolveFactoryGraphWorkstationSemantics,
@@ -54,17 +60,23 @@ import {
 
 export type FactoryGraphReactFlowMode = "editor" | "observer";
 
+export type FactoryGraphReactFlowNodeType =
+  keyof typeof FACTORY_GRAPH_NODE_TYPES;
+
 export type FactoryGraphReactFlowNode = Node<
   {
     active: boolean;
     activeFlow: boolean;
     activeTool: "add" | "connect" | "delete" | null;
     canEditConnections: boolean;
-    connectionAnchors: ActivityGraphNodeHandle[];
+    /** @deprecated Use `handles`; retained for trace adapter compatibility. */
+    connectionAnchors: FactoryGraphNodeHandle[];
     connectionHint: string;
     defaultWorkTypeLabel?: string;
     draftStatus: "addition" | "none" | "removal";
     focused: boolean;
+    handles: FactoryGraphNodeHandle[];
+    interactionOverlay?: FactoryGraphNodeInteractionOverlay;
     isDefaultWorkType?: boolean;
     kind: FactoryGraphNodeKind;
     kindLabel: string;
@@ -73,8 +85,25 @@ export type FactoryGraphReactFlowNode = Node<
     pendingLabel: string;
     removingLabel: string;
     selectedWorkId: string | null;
-    tokenCount: number | null;
+    tokenCount: number;
+    activeItemLabels: string[];
+    displayLabel: string;
+    executions: FactoryGraphActiveExecution[];
+    fileType?: string;
+    place: FactoryGraphSemanticPlaceRef;
+    selectedDoc: boolean;
+    selectedResource: boolean;
+    selectedStateNode: boolean;
+    selectedWorker: boolean;
+    selectedWorkID: string | null;
+    selectedWorkType: boolean;
+    selectedWorkstation: boolean;
+    summaryOnly: boolean;
+    targetPath: string;
     validationMessage: string | null;
+    validationError: boolean;
+    now: number;
+    workstation: FactoryGraphWorkstationRef;
     workStateType?: FactoryGraphWorkStateType;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
     workerStatusLabel?: string;
@@ -82,7 +111,7 @@ export type FactoryGraphReactFlowNode = Node<
     workstationSemantics?: FactoryGraphWorkstationSemantics;
     zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   },
-  "factoryEntity"
+  FactoryGraphReactFlowNodeType
 >;
 
 export type FactoryGraphReactFlowEdge = Edge<{
@@ -225,10 +254,59 @@ function buildFactoryGraphReactFlowNode(input: {
   const column = COLUMN_BY_KIND[input.node.kind];
   const row = input.rowCounts.get(column) ?? 0;
   input.rowCounts.set(column, row + 1);
+  const context = resolveFactoryGraphReactFlowNodeContext(input);
+  return {
+    className: nodeClassName(input.node.id, input.input),
+    data: buildFactoryGraphReactFlowNodeData(input, context),
+    draggable: true,
+    height: context.dimensions.height,
+    id: input.node.id,
+    initialHeight: context.dimensions.height,
+    initialWidth: context.dimensions.width,
+    measured: {
+      height: context.dimensions.height,
+      width: context.dimensions.width,
+    },
+    position: input.input.layoutPositionsByNodeId?.get(input.node.id) ?? {
+      x: column * COLUMN_X,
+      y: row * ROW_Y,
+    },
+    type: factoryGraphReactFlowNodeType(input.node.kind),
+    width: context.dimensions.width,
+  } satisfies FactoryGraphReactFlowNode;
+}
+
+interface FactoryGraphReactFlowNodeContext {
+  active: boolean;
+  anchorContext: ReturnType<typeof resolveFactoryGraphConnectionAnchorContext>;
+  canEditConnections: boolean;
+  dimensions: ReturnType<
+    typeof resolveFactoryGraphNodeDimensions
+  >["resolvedDimensions"];
+  draftStatus: "addition" | "none" | "removal";
+  focused: boolean;
+  handles: FactoryGraphNodeHandle[];
+  isDefaultWorkType: boolean;
+  muted: boolean;
+  selectedWorkId: string | null;
+  tokenCount: number;
+  validationMessage: string | null;
+  workerStatus?: FactoryGraphWorkerRuntimeStatus;
+  workerStatusLabel?: string;
+  workStateType?: FactoryGraphWorkStateType;
+  workstationSemantics?: FactoryGraphWorkstationSemantics;
+}
+
+function resolveFactoryGraphReactFlowNodeContext(input: {
+  displayTopology: FactoryGraphTopology;
+  input: ProjectFactoryGraphToReactFlowOptions;
+  messages: ReturnType<typeof getFactoryGraphEditorMessages>;
+  node: FactoryGraphNode;
+  validationMessages: Map<string, string>;
+}): FactoryGraphReactFlowNodeContext {
   const workerStatus =
     input.node.kind === "worker"
-      ? (input.input.runtime?.workerStatusByName?.get(input.node.label) ??
-        "idle")
+      ? input.input.runtime?.workerStatusByName?.get(input.node.label)
       : undefined;
   const canEditConnections = input.input.editor?.canEditConnections ?? false;
   const anchorContext = resolveFactoryGraphConnectionAnchorContext(
@@ -267,68 +345,219 @@ function buildFactoryGraphReactFlowNode(input: {
       : undefined,
     content: [input.node.label],
   }).resolvedDimensions;
+  const active =
+    input.input.runtime?.activeNodeIds?.has(input.node.id) ?? false;
+  const focused =
+    input.input.runtime?.focusedNodeIds?.has(input.node.id) ?? false;
+  const muted = input.input.runtime?.mutedNodeIds?.has(input.node.id) ?? false;
+  const draftStatus = draftStatusForNode(input.node.id, input.input.editor);
+  const validationMessage = input.validationMessages.get(input.node.id) ?? null;
+  const handles = buildNodeHandles({
+    editor: input.input.editor,
+    locale: input.input.locale,
+    node: input.node,
+    topology: input.displayTopology,
+    workstationResolver: input.input.workstationResolver,
+  });
+  const selectedWorkId = input.input.runtime?.selectedWorkId ?? null;
+  const tokenCount =
+    input.input.runtime?.placeTokenCountsByNodeId?.get(input.node.id) ?? 0;
+  const workerStatusLabel = workerStatus
+    ? input.messages.workerStatusLabel(workerStatus)
+    : undefined;
   return {
-    className: nodeClassName(input.node.id, input.input),
-    data: {
-      active: input.input.runtime?.activeNodeIds?.has(input.node.id) ?? false,
-      activeFlow:
-        input.input.runtime?.activeNodeIds?.has(input.node.id) ?? false,
-      activeTool: input.input.editor?.activeTool ?? null,
-      canEditConnections,
-      connectionAnchors: buildNodeHandles({
-        editor: input.input.editor,
-        locale: input.input.locale,
-        node: input.node,
-        topology: input.displayTopology,
-        workstationResolver: input.input.workstationResolver,
-      }),
-      connectionHint: input.messages.flowConnectionHint,
-      ...(isDefaultWorkType
-        ? {
-            defaultWorkTypeLabel: input.messages.defaultWorkTypeLabel,
-            isDefaultWorkType: true,
-          }
-        : {}),
-      draftStatus: draftStatusForNode(input.node.id, input.input.editor),
-      focused: input.input.runtime?.focusedNodeIds?.has(input.node.id) ?? false,
-      kind: input.node.kind,
-      kindLabel: input.messages.kindLabel(input.node.kind),
-      label: input.node.label,
+    active,
+    anchorContext,
+    canEditConnections,
+    dimensions,
+    draftStatus,
+    focused,
+    handles,
+    isDefaultWorkType,
+    muted,
+    selectedWorkId,
+    tokenCount,
+    validationMessage,
+    workerStatus,
+    workerStatusLabel,
+    workStateType,
+    workstationSemantics,
+  };
+}
+
+function buildFactoryGraphReactFlowNodeData(
+  input: {
+    input: ProjectFactoryGraphToReactFlowOptions;
+    messages: ReturnType<typeof getFactoryGraphEditorMessages>;
+    node: FactoryGraphNode;
+  },
+  context: FactoryGraphReactFlowNodeContext,
+): FactoryGraphReactFlowNode["data"] {
+  const { node } = input;
+  return {
+    active: context.active,
+    activeFlow: context.active,
+    activeItemLabels: [],
+    activeTool: input.input.editor?.activeTool ?? null,
+    canEditConnections: context.canEditConnections,
+    connectionAnchors: context.handles,
+    connectionHint: input.messages.flowConnectionHint,
+    displayLabel: node.label.split("/").at(-1) ?? node.label,
+    ...(context.isDefaultWorkType
+      ? {
+          defaultWorkTypeLabel: input.messages.defaultWorkTypeLabel,
+          isDefaultWorkType: true,
+        }
+      : {}),
+    draftStatus: context.draftStatus,
+    executions: [],
+    focused: context.focused,
+    handles: context.handles,
+    interactionOverlay: buildFactoryGraphNodeInteractionOverlay(input, context),
+    kind: node.kind,
+    kindLabel: input.messages.kindLabel(node.kind),
+    label: node.label,
+    locale: input.input.locale,
+    muted: context.muted,
+    pendingLabel: input.messages.flowPendingLabel,
+    place: semanticPlaceForGraphNode(node, context.workStateType),
+    removingLabel: input.messages.flowRemovingLabel,
+    now: 0,
+    selectedDoc: false,
+    selectedResource: false,
+    selectedStateNode: false,
+    selectedWorker: false,
+    selectedWorkID: context.selectedWorkId,
+    selectedWorkId: context.selectedWorkId,
+    selectedWorkType: false,
+    selectedWorkstation: false,
+    summaryOnly: true,
+    targetPath: node.label,
+    tokenCount: context.tokenCount,
+    validationError: context.validationMessage !== null,
+    validationMessage: context.validationMessage,
+    ...(node.kind === "work-state"
+      ? { workStateType: context.workStateType }
+      : {}),
+    workerStatus: context.workerStatus,
+    workerStatusLabel: context.workerStatusLabel,
+    workstation: workstationRefForGraphNode(node),
+    ...(context.workstationSemantics
+      ? { workstationSemantics: context.workstationSemantics }
+      : {}),
+    zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
+      anchorContext: context.anchorContext,
+      canEditConnections: context.canEditConnections,
       locale: input.input.locale,
-      muted: input.input.runtime?.mutedNodeIds?.has(input.node.id) ?? false,
-      pendingLabel: input.messages.flowPendingLabel,
-      removingLabel: input.messages.flowRemovingLabel,
-      selectedWorkId: input.input.runtime?.selectedWorkId ?? null,
-      tokenCount:
-        input.input.runtime?.placeTokenCountsByNodeId?.get(input.node.id) ??
-        null,
-      validationMessage: input.validationMessages.get(input.node.id) ?? null,
-      ...(input.node.kind === "work-state" ? { workStateType } : {}),
-      workerStatus,
-      workerStatusLabel: workerStatus
-        ? input.messages.workerStatusLabel(workerStatus)
-        : undefined,
-      ...(workstationSemantics ? { workstationSemantics } : {}),
-      zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
-        anchorContext,
-        canEditConnections,
-        locale: input.input.locale,
-        nodeKind: input.node.kind,
-      }),
-    },
-    draggable: true,
-    height: dimensions.height,
-    id: input.node.id,
-    initialHeight: dimensions.height,
-    initialWidth: dimensions.width,
-    measured: { height: dimensions.height, width: dimensions.width },
-    position: input.input.layoutPositionsByNodeId?.get(input.node.id) ?? {
-      x: column * COLUMN_X,
-      y: row * ROW_Y,
-    },
-    type: "factoryEntity",
-    width: dimensions.width,
-  } satisfies FactoryGraphReactFlowNode;
+      nodeKind: node.kind,
+    }),
+  };
+}
+
+function buildFactoryGraphNodeInteractionOverlay(
+  input: {
+    input: ProjectFactoryGraphToReactFlowOptions;
+    messages: ReturnType<typeof getFactoryGraphEditorMessages>;
+  },
+  context: FactoryGraphReactFlowNodeContext,
+): FactoryGraphNodeInteractionOverlay {
+  return {
+    badges: [
+      ...(context.draftStatus === "addition"
+        ? [
+            {
+              label: input.messages.flowPendingLabel,
+              tone: "warning" as const,
+            },
+          ]
+        : []),
+      ...(context.draftStatus === "removal"
+        ? [
+            {
+              label: input.messages.flowRemovingLabel,
+              tone: "danger" as const,
+            },
+          ]
+        : []),
+      ...(context.workerStatus && context.workerStatusLabel
+        ? [
+            {
+              label: context.workerStatusLabel,
+              tone: workerStatusTone(context.workerStatus),
+            },
+          ]
+        : []),
+    ],
+    connectionHint: context.canEditConnections
+      ? input.messages.flowConnectionHint
+      : undefined,
+    draftStatus: context.draftStatus,
+  };
+}
+
+function semanticPlaceForGraphNode(
+  node: FactoryGraphNode,
+  workStateType?: FactoryGraphWorkStateType,
+): FactoryGraphSemanticPlaceRef {
+  switch (node.kind) {
+    case "resource":
+      return { kind: "resource", place_id: node.id, type_id: node.label };
+    case "work-state":
+      return {
+        kind: "work_state",
+        place_id: node.id,
+        state_category: workStateType,
+        state_value: node.label,
+      };
+    case "worker":
+      return { kind: "worker", place_id: node.id, state_value: node.label };
+    case "work-type":
+      return {
+        kind: "constraint",
+        place_id: node.id,
+        state_value: node.label,
+      };
+    default:
+      return { kind: "constraint", place_id: node.id };
+  }
+}
+
+function workstationRefForGraphNode(
+  node: FactoryGraphNode,
+): FactoryGraphWorkstationRef {
+  return {
+    node_id: node.id,
+    transition_id: node.label,
+    workstation_name: node.label,
+  };
+}
+
+function factoryGraphReactFlowNodeType(
+  kind: FactoryGraphNodeKind,
+): FactoryGraphReactFlowNodeType {
+  switch (kind) {
+    case "work-state":
+      return "statePosition";
+    case "work-type":
+      return "workType";
+    default:
+      return kind;
+  }
+}
+
+function workerStatusTone(
+  status: FactoryGraphWorkerRuntimeStatus,
+): "danger" | "neutral" | "success" | "warning" {
+  switch (status) {
+    case "active":
+      return "success";
+    case "errored":
+      return "danger";
+    case "idle":
+      return "neutral";
+    case "unavailable":
+      return "warning";
+  }
 }
 
 function authoredWorkstationForGraphNode(
@@ -394,10 +623,10 @@ function shouldIncludeFactoryGraphReactFlowEdge(
   }
 
   const sourceAnchorIds = new Set(
-    sourceNode.data.connectionAnchors.map((anchor) => anchor.id),
+    sourceNode.data.handles.map((anchor) => anchor.id),
   );
   const targetAnchorIds = new Set(
-    targetNode.data.connectionAnchors.map((anchor) => anchor.id),
+    targetNode.data.handles.map((anchor) => anchor.id),
   );
 
   return (
