@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -329,6 +330,40 @@ func TestNewMockServiceRequiresExplicitMockComposition(t *testing.T) {
 		nil,
 	); err == nil {
 		t.Fatal("NewMockService() error = nil, want explicit mock configuration error")
+	}
+}
+
+func TestNewServiceRejectsMockSelectionWithoutExplicitMockComposition(t *testing.T) {
+	t.Parallel()
+
+	fixture := newStatelessTestFixture(t)
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-production-mock",
+			RuntimeID:        "runtime-production-mock",
+			GenerationID:     "generation-production-mock",
+			DispatchID:       "dispatch-production-mock",
+			AttemptID:        "attempt-production-mock",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "mock-worker",
+			RunnerID:   runners.MockIdentity,
+		},
+		Input: workers.ExecutionInput{
+			MockWorkers: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+				WorkerName: "mock-worker",
+				RunType:    workers.MockWorkerRunTypeAccept,
+			}}},
+		},
+	}
+
+	result, err := fixture.service.Execute(context.Background(), request)
+	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {
+		t.Fatalf("production mock Execute() error = %v, want invalid execute request", err)
+	}
+	if result.Correlation != (workers.ExecutionCorrelation{}) ||
+		result.Outcome != "" || len(result.Output.Primary) != 0 || result.Failure != nil {
+		t.Fatalf("production mock result = %#v, want no started result", result)
 	}
 }
 
