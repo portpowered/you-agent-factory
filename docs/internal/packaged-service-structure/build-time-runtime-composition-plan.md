@@ -626,6 +626,12 @@ stable; and ACP delegation preserves session reuse, duplicate delivery
 idempotency, busy rejection, cancellation/close terminalization, and typed
 failure reporting.
 
+For operations exposed through more than one protocol, the owner result and
+typed failure facts are the parity source: CLI, HTTP, and MCP may format them
+differently, but they must not select different terminal outcomes or lose
+multi-part content. P5A's CLI/API equivalence corpus and P5B's generated HTTP
+and MCP contract cells are one acceptance set.
+
 This is a seam move because `pkg/transports/http/application.Handler.Bind`,
 `RuntimeHTTPServices`, `pkg/transports/mapping/composition`, the Sessions HTTP
 multi-service adapter, and `pkg/transports/mcp/stdio` still act as secondary
@@ -764,6 +770,12 @@ state; and a detached run never causes Runtime or Session opening. This
 packet covers the detached Workers/agent-run seam, not ACP conversation
 sequencing (P5B) or Runtime scheduling policy (P3).
 
+The detached root has no independent CLI or HTTP representation, so it does
+not invent a second CLI/API parity contract. When its `ExecuteResult` is
+projected through Runtime, Sessions, CLI, HTTP, or MCP, P5C must preserve the
+same correlation, outcome, failure facts, and content parts; P5A/P5B own the
+caller-specific presentation parity guards.
+
 The current tree already has the intended public boundary in
 `pkg/root/process.go:BuildStatelessWorkers`, `pkg/services/workers/wire`, and
 `workers.Service.Execute`, but private `WorkerExecutor`,
@@ -845,7 +857,7 @@ These are behavior tests, not checks that scan runner names or package paths.
 | --- | --- | --- |
 | The public detached root executes without opening Runtime/Session and returns a correlated terminal result. | `tests/functional/workers/agent/stateless_root_test.go:TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot`, `pkg/wire/session_runtime_providers_test.go:TestBuildStatelessWorkersExecutesBeforeRuntimeOpening`, and `pkg/services/workers/wire/stateless_execute_test.go:TestNewServiceExecuteRunsScriptInferenceAndAgentAttempts`. | Local Workers/root tests; PR root-process acceptance and Linux functional coverage lane. |
 | Detached agent-run preserves goal decision-envelope output and provider identity. | `pkg/services/workers/wire/stateless_execute_test.go:TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope`, `pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_MapsSuccessfulCompletionToWorkResult`, and `pkg/services/workers/internal/services/runners/agents/decision_envelope_test.go:TestAgentExecutor_ReviewWorkstation_ParsesDecisionEnvelopeAccepted`. | Local Workers package tests; PR backend unit and Linux functional coverage lanes. |
-| Agent-run failure, timeout, cancellation, and safe diagnostics retain typed observable outcomes. | `pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_HarnessFailureSurfacesAgentRunFailureClass`, `TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass`, `TestLibraryHarnessAdapter_CancellationStopsLoop`, and `failure_test.go:TestAgentRunFailureDiagnostics_ProviderFailurePreservesSafeType`. | Local focused tests and `go test -race` for cancellation; PR backend functional coverage lane. |
+| Agent-run failure, timeout, cancellation, and safe diagnostics retain typed observable outcomes. | `pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_HarnessFailureSurfacesAgentRunFailureClass`, `TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass`, `TestLibraryHarnessAdapter_CancellationStopsLoop`, and `pkg/services/workers/internal/services/workstations/executor/agentrun/failure_test.go:TestAgentRunFailureDiagnostics_ProviderFailurePreservesSafeType`. | Local focused tests and `go test -race` for cancellation; PR backend functional coverage lane. |
 | Worktree, temporary-file, and pre-start failure cleanup occurs on every direct attempt exit. | `pkg/wire/session_runtime_providers_test.go:TestCanonicalStatelessWorkersReleasesProductionWorktreeAfterSuccess`, `TestCanonicalStatelessWorkersReleasesProductionWorktreeAfterCancellation`, `TestCanonicalStatelessWorkersReleasesProductionWorktreeAfterPreStartFailure`, and `tests/functional/workers/inference/codex/worktree_workstation_test.go:TestCodexWorktreeReleaseRemovesCreatedCheckout`. | Local Workers/Wire tests; PR backend integration and Linux functional coverage lanes. |
 | Runtime dispatch reaches Workers root, accepts one result, and maps direct/child terminal outcomes identically. | `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_workers_root_boundary_test.go:TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary`, `TestFactoryImpl_PlannedDispatchAcceptsWorkersResultThroughRuntimeRoot`, and `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_terminal_semantics_test.go:TestFactoryImpl_DirectAndChildDispatchPreserveIdenticalTerminalOutcomeMapping`. | Local Runtime/Workers integration and race tests; PR backend integration and Linux functional coverage lanes. |
 | Runtime/ACP child agent-run response events retain identity and terminal publication. | `tests/functional/chat_sessions/root_composition/acp_worker_child_events_test.go` child-event assertions, `pkg/services/factory_sessions/internal/execution/javascript_runtime_result_test.go:TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput`, and `TestChildWorkerExecutor_InvocationErrorStillRecordsAFailedChild`; add a public root assertion if the moved path changes the observation boundary. | Local child/Chat Sessions tests; PR Linux functional coverage lane and pinned ACP evidence when ACP reaches this path. |
@@ -907,6 +919,6 @@ Story 001 is complete when this document is present and records:
   caller behavior that still lacks a characterization; and
 - the handoff rule that later packet authoring must preserve the audit evidence
   and not silently reinterpret P2A or the current ownership boundaries. Story
-  002 now owns the P3 and P4 packet definitions below.
+  002 and 003 now own the P3-P5 packet definitions below.
 
 No production source or generated contract is changed by this audit packet.
