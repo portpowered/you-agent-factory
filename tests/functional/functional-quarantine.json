@@ -3,21 +3,6 @@
   "suite": "functional",
   "entries": [
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
-      "test": "TestACPWorkerChildStreamSurvivesRetainedReplay",
-      "bucket": "GENUINELY FAILING",
-      "reason": "CANONICAL_EVENT_PUBLISH_FAILED: UPDATED is invalid for RUN/MESSAGE progress phases; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Fix the invalid progress publication and remove this entry after the exact selector passes",
-      "measurement": "flaky"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
-      "test": "TestTwoACPWorkersKeepChildStreamsAttributed",
-      "bucket": "GENUINELY FAILING",
-      "reason": "CANONICAL_EVENT_PUBLISH_FAILED: UPDATED is invalid for RUN/MESSAGE progress phases; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Fix the invalid progress publication and remove this entry after the exact selector passes"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
       "test": "TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution",
       "bucket": "GENUINELY FAILING",

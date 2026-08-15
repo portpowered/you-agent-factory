@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -116,6 +117,31 @@ func TestFunctionalQuarantineValidationFailsClosed(t *testing.T) {
 			name:    "package measurement requires test",
 			entries: []functionalQuarantineEntry{{Package: packagePath, Bucket: functionalBucketEnvironment, Reason: "package context", Measurement: functionalMeasurementPackageContext}},
 			want:    "requires a test selector",
+		},
+		{
+			name:    "repeated measurement requires test",
+			entries: []functionalQuarantineEntry{{Package: packagePath, Bucket: functionalBucketEnvironment, Reason: "repeated observation", Measurement: functionalMeasurementRepeatedIsolated, Attempts: 3}},
+			want:    "requires a test selector",
+		},
+		{
+			name:    "repeated measurement requires bounded attempts",
+			entries: []functionalQuarantineEntry{{Package: packagePath, Test: "TestKnown", Bucket: functionalBucketEnvironment, Reason: "repeated observation", Measurement: functionalMeasurementRepeatedIsolated}},
+			want:    "attempts=0 is invalid",
+		},
+		{
+			name:    "repeated measurement rejects too few attempts",
+			entries: []functionalQuarantineEntry{{Package: packagePath, Test: "TestKnown", Bucket: functionalBucketEnvironment, Reason: "repeated observation", Measurement: functionalMeasurementRepeatedIsolated, Attempts: 1}},
+			want:    "attempts=1 is invalid",
+		},
+		{
+			name:    "repeated measurement rejects too many attempts",
+			entries: []functionalQuarantineEntry{{Package: packagePath, Test: "TestKnown", Bucket: functionalBucketEnvironment, Reason: "repeated observation", Measurement: functionalMeasurementRepeatedIsolated, Attempts: functionalQuarantineMaxAttempts + 1}},
+			want:    "attempts=16 is invalid",
+		},
+		{
+			name:    "isolated measurement rejects attempts",
+			entries: []functionalQuarantineEntry{{Package: packagePath, Test: "TestKnown", Bucket: functionalBucketEnvironment, Reason: "single observation", Attempts: 3}},
+			want:    "requires \"repeated-isolated\" measurement",
 		},
 		{
 			name:    "empty reason",
@@ -386,7 +412,7 @@ func TestFunctionalQuarantineRatchetTreatsShortSkipAsUnmeasurableForFailureBucke
 	}
 }
 
-func TestFunctionalQuarantineRatchetTreatsFlakyPassAsUnmeasurable(t *testing.T) {
+func TestFunctionalQuarantineRatchetRepeatedMeasurementAllPassIsUnexpected(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter
 	t.Cleanup(func() {
@@ -394,20 +420,24 @@ func TestFunctionalQuarantineRatchetTreatsFlakyPassAsUnmeasurable(t *testing.T) 
 		stdoutWriter = originalStdout
 	})
 
-	packagePath := modulePath + "/tests/functional/flaky"
+	packagePath := modulePath + "/tests/functional/repeated"
 	entry := functionalQuarantineEntry{
 		Package:     packagePath,
 		Test:        "TestProbabilisticFailure",
 		Bucket:      functionalBucketFailure,
-		Reason:      "repeated Linux evidence shows isolated flakiness",
-		FollowUp:    "repair the flaky test and remove this entry",
-		Measurement: functionalMeasurementFlaky,
+		Reason:      "repeated Linux evidence shows an unreliable isolated outcome",
+		FollowUp:    "repair the unreliable test and remove this entry",
+		Measurement: functionalMeasurementRepeatedIsolated,
+		Attempts:    3,
 	}
 	var stdout bytes.Buffer
 	stdoutWriter = &stdout
-	var gotInvocation commandInvocation
+	invocations := 0
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
-		gotInvocation = invocation
+		invocations++
+		if !slices.Contains(invocation.args, "-run=^(?:TestProbabilisticFailure)$") {
+			t.Fatalf("repeated invocation = %v, want an exact isolated selector", invocation.args)
+		}
 		return marshalFunctionalTimingEvents(
 			goTestTimingEvent{Action: "start", Package: packagePath},
 			goTestTimingEvent{Action: "run", Package: packagePath, Test: entry.Test},
@@ -417,18 +447,85 @@ func TestFunctionalQuarantineRatchetTreatsFlakyPassAsUnmeasurable(t *testing.T) 
 	}
 
 	err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, false, t.TempDir())
-	if err != nil {
-		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want a flaky pass to remain unmeasurable", err)
+	if err == nil || !strings.Contains(err.Error(), "passed unexpectedly") {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want actionable repeated unexpected-pass failure", err)
 	}
-	if !slices.Contains(gotInvocation.args, "-run=^(?:TestProbabilisticFailure)$") {
-		t.Fatalf("flaky invocation = %v, want an exact isolated selector", gotInvocation.args)
+	if invocations != entry.Attempts {
+		t.Fatalf("repeated invocations = %d, want %d", invocations, entry.Attempts)
 	}
-	wantStatus := `bucket=GENUINELY FAILING expected=fail observed=pass status=unmeasurable measurement=flaky`
+	wantStatus := `bucket=GENUINELY FAILING expected=fail observed=pass status=unexpected-pass measurement=repeated-isolated attempts=3 pass=3 fail=0 skip=0`
 	if !strings.Contains(stdout.String(), wantStatus) {
 		t.Fatalf("ratchet stdout = %q, want substring %q", stdout.String(), wantStatus)
 	}
-	if strings.Contains(stdout.String(), "unexpected-pass") {
-		t.Fatalf("flaky pass was reported as unexpected-pass: %q", stdout.String())
+	if !strings.Contains(stdout.String(), "Functional quarantine ratchet: selectors=1 observed-pass=1 observed-fail=0 observed-skip=0 execution-errors=0") {
+		t.Fatalf("ratchet summary = %q, want aggregate pass summary", stdout.String())
+	}
+}
+
+func TestFunctionalQuarantineRatchetRepeatedMeasurementRetainsExpectedFailures(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/repeated"
+	entry := functionalQuarantineEntry{
+		Package:     packagePath,
+		Test:        "TestIntermittentFailure",
+		Bucket:      functionalBucketFailure,
+		Reason:      "repeated isolated measurements include an expected failure",
+		FollowUp:    "repair the test and remove this entry",
+		Measurement: functionalMeasurementRepeatedIsolated,
+		Attempts:    3,
+	}
+
+	for _, test := range []struct {
+		name     string
+		outcomes []string
+		want     string
+	}{
+		{name: "mixed pass and failure", outcomes: []string{functionalQuarantineOutcomePass, functionalQuarantineOutcomeFail, functionalQuarantineOutcomePass}, want: "pass=2 fail=1 skip=0"},
+		{name: "all failure", outcomes: []string{functionalQuarantineOutcomeFail, functionalQuarantineOutcomeFail, functionalQuarantineOutcomeFail}, want: "pass=0 fail=3 skip=0"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			stdoutWriter = &stdout
+			attempt := 0
+			commandRunner = func(invocation commandInvocation) (string, string, error) {
+				outcome := test.outcomes[attempt]
+				attempt++
+				if !slices.Contains(invocation.args, "-run=^(?:TestIntermittentFailure)$") {
+					t.Fatalf("repeated invocation = %v, want an exact isolated selector", invocation.args)
+				}
+				events := []goTestTimingEvent{
+					{Action: "start", Package: packagePath},
+					{Action: "run", Package: packagePath, Test: entry.Test},
+					{Action: outcome, Package: packagePath, Test: entry.Test},
+					{Action: outcome, Package: packagePath},
+				}
+				if outcome == functionalQuarantineOutcomeFail {
+					events[2].Output = "expected failure"
+					return marshalFunctionalTimingEvents(events...), "expected failure", errors.New("exit status 1")
+				}
+				return marshalFunctionalTimingEvents(events...), "", nil
+			}
+
+			if err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, false, t.TempDir()); err != nil {
+				t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want expected failure to retain the quarantine", err)
+			}
+			if attempt != entry.Attempts {
+				t.Fatalf("repeated invocations = %d, want %d", attempt, entry.Attempts)
+			}
+			wantStatus := `bucket=GENUINELY FAILING expected=fail observed=fail status=expected measurement=repeated-isolated attempts=3 ` + test.want
+			if !strings.Contains(stdout.String(), wantStatus) {
+				t.Fatalf("ratchet stdout = %q, want substring %q", stdout.String(), wantStatus)
+			}
+			if strings.Contains(stdout.String(), "unexpected-pass") {
+				t.Fatalf("expected failure sample was reported as unexpected-pass: %q", stdout.String())
+			}
+		})
 	}
 }
 
@@ -524,6 +621,85 @@ func TestFunctionalQuarantineRatchetRejectsInvalidMeasurementBeforeExecution(t *
 	err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, false, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "invalid measurement metadata") || !strings.Contains(err.Error(), "unsupported measurement") {
 		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want fail-closed invalid metadata diagnostic", err)
+	}
+}
+
+func TestFunctionalQuarantineRatchetRejectsInvalidRepeatedAttemptsBeforeExecution(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	stdoutWriter = &bytes.Buffer{}
+	commandRunner = func(commandInvocation) (string, string, error) {
+		t.Fatal("invalid repeated measurement unexpectedly executed go test")
+		return "", "", nil
+	}
+
+	for _, attempts := range []int{0, 1, functionalQuarantineMaxAttempts + 1} {
+		t.Run(fmt.Sprintf("attempts-%d", attempts), func(t *testing.T) {
+			entry := functionalQuarantineEntry{
+				Package:     modulePath + "/tests/functional/invalid-repeated-measurement",
+				Test:        "TestKnown",
+				Bucket:      functionalBucketFailure,
+				Reason:      "invalid repeated metadata fixture",
+				FollowUp:    "remove the invalid metadata",
+				Measurement: functionalMeasurementRepeatedIsolated,
+				Attempts:    attempts,
+			}
+			err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, false, t.TempDir())
+			if err == nil || !strings.Contains(err.Error(), "invalid measurement metadata") || !strings.Contains(err.Error(), fmt.Sprintf("attempts=%d is invalid", attempts)) {
+				t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want fail-closed attempts diagnostic", err)
+			}
+		})
+	}
+}
+
+func TestFunctionalQuarantineRatchetRepeatedMeasurementFailsClosedOnExecutionError(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/repeated-execution-error"
+	entry := functionalQuarantineEntry{
+		Package:     packagePath,
+		Test:        "TestKnown",
+		Bucket:      functionalBucketFailure,
+		Reason:      "execution error fixture",
+		FollowUp:    "repair the execution environment",
+		Measurement: functionalMeasurementRepeatedIsolated,
+		Attempts:    3,
+	}
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	attempt := 0
+	commandRunner = func(commandInvocation) (string, string, error) {
+		attempt++
+		if attempt == 2 {
+			return "", "compiler unavailable", errors.New("exit status 2")
+		}
+		return marshalFunctionalTimingEvents(
+			goTestTimingEvent{Action: "start", Package: packagePath},
+			goTestTimingEvent{Action: "run", Package: packagePath, Test: entry.Test},
+			goTestTimingEvent{Action: timingOutcomePass, Package: packagePath, Test: entry.Test},
+			goTestTimingEvent{Action: timingOutcomePass, Package: packagePath},
+		), "", nil
+	}
+
+	err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, false, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "execution error") || !strings.Contains(err.Error(), "attempt 2/3") || !strings.Contains(err.Error(), "compiler unavailable") {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want actionable repeated execution-error diagnostic", err)
+	}
+	if attempt != 2 {
+		t.Fatalf("repeated invocations = %d, want execution to fail closed on attempt 2", attempt)
+	}
+	if !strings.Contains(stdout.String(), "observed=execution-error status=fail-closed measurement=repeated-isolated") {
+		t.Fatalf("ratchet stdout = %q, want fail-closed execution diagnostic", stdout.String())
 	}
 }
 
