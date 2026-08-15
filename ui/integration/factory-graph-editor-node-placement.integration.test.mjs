@@ -492,210 +492,48 @@ async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
   };
 }
 
-async function beginSaveActivationTrace(page) {
-  await page.evaluate(() => {
-    const trace = {
-      records: [],
-      recordCount: 0,
-      startedAt: performance.now(),
-    };
-    let previousSignature = null;
-
-    const describe = () => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) =>
-          button.getAttribute("aria-label") === "Save changes" ||
-          button.getAttribute("aria-label") === "Saving...",
-      );
-      const activeElement = document.activeElement;
-      const dialogs = [...document.querySelectorAll('[role="dialog"]')].map(
-        (dialog) => {
-          const labelledBy = dialog.getAttribute("aria-labelledby");
-          const labelledElement = labelledBy
-            ? document.getElementById(labelledBy)
-            : null;
-          const bounds = dialog.getBoundingClientRect();
-          const styles = window.getComputedStyle(dialog);
-          return {
-            accessibleName: labelledElement?.textContent?.trim() ?? null,
-            ariaHidden: dialog.getAttribute("aria-hidden"),
-            connected: dialog.isConnected,
-            display: styles.display,
-            hidden: dialog.hidden,
-            role: dialog.getAttribute("role"),
-            visibility: styles.visibility,
-            visible:
-              !dialog.hidden &&
-              dialog.getAttribute("aria-hidden") !== "true" &&
-              styles.display !== "none" &&
-              styles.visibility !== "hidden" &&
-              bounds.width > 0 &&
-              bounds.height > 0,
-          };
-        },
-      );
-      const buttonBounds = saveButton?.getBoundingClientRect();
-      const buttonStyles = saveButton
-        ? window.getComputedStyle(saveButton)
-        : null;
-      return {
-        activeElement: activeElement
-          ? {
-              ariaLabel: activeElement.getAttribute("aria-label"),
-              connected: activeElement.isConnected,
-              tagName: activeElement.tagName,
-            }
-          : null,
-        button: saveButton
-          ? {
-              ariaBusy: saveButton.getAttribute("aria-busy"),
-              ariaLabel: saveButton.getAttribute("aria-label"),
-              connected: saveButton.isConnected,
-              disabled: saveButton.disabled,
-              display: buttonStyles?.display ?? null,
-              visible: Boolean(
-                buttonBounds &&
-                  buttonBounds.width > 0 &&
-                  buttonBounds.height > 0,
-              ),
-            }
-          : null,
-        dialogs,
-        elapsedMs: Math.round(performance.now() - trace.startedAt),
-      };
-    };
-
-    const record = () => {
-      const observation = describe();
-      const signature = JSON.stringify(observation);
-      if (signature === previousSignature) {
-        return;
-      }
-      previousSignature = signature;
-      trace.recordCount += 1;
-      if (trace.records.length < 80) {
-        trace.records.push(observation);
-      }
-    };
-
-    const observer = new MutationObserver(record);
-    observer.observe(document.body, {
-      attributes: true,
-      childList: true,
-      subtree: true,
-    });
-    record();
-    window.__graphSaveActivationTrace = { observer, trace };
-  });
-}
-
-async function endSaveActivationTrace(page, enabledPollCount) {
-  return await page.evaluate((pollCount) => {
-    const entry = window.__graphSaveActivationTrace;
-    if (!entry) {
-      return null;
-    }
-    entry.observer.disconnect();
-    entry.trace.enabledPollCount = pollCount;
-    entry.trace.finishedAt = performance.now();
-    delete window.__graphSaveActivationTrace;
-    return entry.trace;
-  }, enabledPollCount);
-}
-
-async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
-  const observations = [];
-  let previousSignature = null;
-  try {
-    await waitForStableFactoryGraphNodePlacement(
-      page,
-      nodeTestId,
-      uiInteractionTimeoutMs,
-      100,
-      (observation) => {
-        const signature = JSON.stringify({
-          nextSample: observation.nextSample,
-          stable: observation.stable,
-          withinViewport: observation.withinViewport,
-        });
-        if (signature !== previousSignature && observations.length < 80) {
-          observations.push(observation);
-          previousSignature = signature;
-        }
-      },
-    );
-  } catch (error) {
-    console.log(
-      `[graph-node-placement-trace] ${JSON.stringify({
-        nodeTestId,
-        observations,
-      })}`,
-    );
-    throw error;
-  }
-}
-
 async function saveGraphDraft(page, toolbar, expect) {
   const saveChangesButton = toolbar.getByRole("button", {
     name: "Save changes",
   });
-  let enabledPollCount = 0;
-  let failure = null;
-  await beginSaveActivationTrace(page);
-  try {
-    await expect
-      .poll(
-        async () => {
-          enabledPollCount += 1;
-          return await saveChangesButton.isEnabled();
-        },
-        {
-          timeout: uiInteractionTimeoutMs,
-        },
-      )
-      .toBe(true);
+  await expect
+    .poll(async () => await saveChangesButton.isEnabled(), {
+      timeout: uiInteractionTimeoutMs,
+    })
+    .toBe(true);
 
-    await saveChangesButton.focus();
-    await saveChangesButton.press("Enter");
-    const saveDialog = page.getByRole("dialog", {
-      name: "Save factory graph changes?",
-    });
-    await saveDialog.waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
-    const confirmButton = saveDialog
-      .getByRole("button", { name: /Save (topology|changes)/ })
-      .first();
-    await confirmButton.waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
-    const saveResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === "PUT" &&
-        response
-          .url()
-          .includes(
-            `/factory-sessions/${resolvedDefaultFactorySessionID}/factory`,
-          ),
-      { timeout: uiInteractionTimeoutMs },
+  await saveChangesButton.focus();
+  await saveChangesButton.press("Enter");
+  const saveDialog = page.getByRole("dialog", {
+    name: "Save factory graph changes?",
+  });
+  await saveDialog.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  const confirmButton = saveDialog
+    .getByRole("button", { name: /Save (topology|changes)/ })
+    .first();
+  await confirmButton.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  const saveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response
+        .url()
+        .includes(
+          `/factory-sessions/${resolvedDefaultFactorySessionID}/factory`,
+        ),
+    { timeout: uiInteractionTimeoutMs },
+  );
+  await confirmButton.click();
+  const saveResponse = await saveResponsePromise;
+  if (!saveResponse.ok()) {
+    throw new Error(
+      `Expected graph save response to succeed, received ${saveResponse.status()}: ${await saveResponse.text()} | request=${saveResponse.request().postData() ?? "<empty>"}`,
     );
-    await confirmButton.click();
-    const saveResponse = await saveResponsePromise;
-    if (!saveResponse.ok()) {
-      throw new Error(
-        `Expected graph save response to succeed, received ${saveResponse.status()}: ${await saveResponse.text()} | request=${saveResponse.request().postData() ?? "<empty>"}`,
-      );
-    }
-  } catch (error) {
-    failure = error;
-    throw error;
-  } finally {
-    const trace = await endSaveActivationTrace(page, enabledPollCount);
-    if (failure && trace) {
-      console.log(`[graph-save-activation-trace] ${JSON.stringify(trace)}`);
-    }
   }
 }
 
@@ -927,7 +765,7 @@ describe.concurrent("factory graph editor node placement browser integration", (
         const toolbar = await enterGraphEditor(browserPage.page);
         await addResource(browserPage.page, toolbar, { name: "extra-gpu" });
         const resourceTestId = "rf__node-resource:extra-gpu";
-        await waitForTrackedFactoryGraphNodePlacement(
+        await waitForStableFactoryGraphNodePlacement(
           browserPage.page,
           resourceTestId,
         );
@@ -995,7 +833,7 @@ describe.concurrent("factory graph editor node placement browser integration", (
           server,
         );
         await enterGraphEditor(browserPage.page);
-        await waitForTrackedFactoryGraphNodePlacement(
+        await waitForStableFactoryGraphNodePlacement(
           browserPage.page,
           resourceTestId,
         );
