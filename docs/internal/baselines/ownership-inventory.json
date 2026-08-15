@@ -1716,6 +1716,12 @@
     },
     {
       "fromOwner": "recordings",
+      "toOwner": "providers",
+      "class": "command",
+      "evidence": "pkg/services/recordings/internal/replay -> pkg/services/providers"
+    },
+    {
+      "fromOwner": "recordings",
       "toOwner": "transports",
       "class": "command",
       "bidirectional": true,

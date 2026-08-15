@@ -73,23 +73,6 @@ type ContinueReferenceResult struct {
 	Result    ExecuteResult
 }
 
-func continuationReferenceFailure(
-	kind ContinuationFailureKind,
-	message string,
-	ref ContinuationRef,
-) ContinuationFailure {
-	normalized := ref.Normalize()
-	return ContinuationFailure{
-		Kind:    kind,
-		Message: message,
-		Reference: SessionRef{
-			Provider: ID(normalized.Provider),
-			Kind:     normalized.Kind,
-			ID:       firstContinuationIdentity(normalized),
-		},
-	}
-}
-
 func firstContinuationIdentity(ref ContinuationRef) string {
 	if value := strings.TrimSpace(ref.ProviderSessionID); value != "" {
 		return value
