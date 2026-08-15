@@ -24,11 +24,11 @@ import (
 // MockInferenceProvider returns a typed provider override for functional tests
 // without requiring destination packages to import service implementation paths.
 func MockInferenceProvider(contents ...string) providers.Service {
-	responses := make([]workerexecution.InferenceResponse, len(contents))
+	responses := make([]providers.ExecuteResult, len(contents))
 	for index, content := range contents {
-		responses[index] = workerexecution.InferenceResponse{Content: content}
+		responses[index] = providers.ExecuteResult{Content: content}
 	}
-	return testutil.NewMockProvider(responses...)
+	return testutil.NewNativeMockProvider(responses...)
 }
 
 type inferenceProvider interface {
@@ -48,16 +48,16 @@ func ProviderServiceFromInference(provider inferenceProvider) providers.Service 
 	return adapter
 }
 
-// BlockingInferenceProvider blocks the first inference call until release is
+// BlockingInferenceProvider blocks the first provider call until release is
 // closed or the context is canceled, then completes subsequent calls immediately.
 func BlockingInferenceProvider(release <-chan struct{}) providers.Service {
-	provider := &blockingInferenceProvider{release: release}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider := &blockingProvider{release: release}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-type blockingInferenceProvider struct {
-	testutil.ProviderServiceAdapter
+type blockingProvider struct {
+	testutil.NativeProvider
 	release <-chan struct{}
 	mu      sync.Mutex
 	calls   int
@@ -70,10 +70,10 @@ const (
 	terminalObservationStableWindow
 )
 
-func (p *blockingInferenceProvider) Infer(
+func (p *blockingProvider) Execute(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -82,10 +82,10 @@ func (p *blockingInferenceProvider) Infer(
 		select {
 		case <-p.release:
 		case <-ctx.Done():
-			return workerexecution.InferenceResponse{}, ctx.Err()
+			return providers.ExecuteResult{}, ctx.Err()
 		}
 	}
-	return workerexecution.InferenceResponse{Content: "completed"}, nil
+	return providers.ExecuteResult{Content: "completed"}, nil
 }
 
 // RunFactoryToCompletion executes the customer daemon command through the
