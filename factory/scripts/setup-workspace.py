@@ -21,6 +21,7 @@ from pathlib import Path
 
 
 IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 
 
 def run_git(*args, cwd=None, check=True, env=None):
@@ -76,6 +77,40 @@ def require_git_output(result, description):
 def immutable_object_id(value):
     """Return True only for a complete SHA-1 or SHA-256 object identifier."""
     return bool(IMMUTABLE_OBJECT_ID.fullmatch(value))
+
+
+def snapshot_ref_name(snapshot_id):
+    """Return the private recovery ref for an immutable snapshot ID."""
+    return f"{SNAPSHOT_REF_PREFIX}{snapshot_id}"
+
+
+def anchor_snapshot(repo_path, snapshot_id):
+    """Keep a captured snapshot reachable without touching the stash stack."""
+    ref_name = snapshot_ref_name(snapshot_id)
+    result = run_git(
+        "update-ref", ref_name, snapshot_id, "",
+        cwd=repo_path, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"failed to anchor snapshot {snapshot_id} at {ref_name}: "
+            f"{command_failure_details(result)}"
+        )
+
+
+def remove_snapshot_anchor(repo_path, snapshot_id, scope_label):
+    """Delete only the expected private ref after a successful restore."""
+    ref_name = snapshot_ref_name(snapshot_id)
+    result = run_git(
+        "update-ref", "-d", ref_name, snapshot_id,
+        cwd=repo_path, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{scope_label} sync restored snapshot {snapshot_id}, but could "
+            f"not remove its private recovery ref {ref_name}; the snapshot "
+            f"remains anchored: {command_failure_details(result)}"
+        )
 
 
 def temporary_index_path():
@@ -190,7 +225,8 @@ def stash_local_changes(repo_path, label):
     The snapshot has a working-tree commit, an index commit, and, when needed,
     an untracked-files commit as its third parent. It is never added to the
     shared refs/stash stack, so its complete object ID remains stable while
-    other worktrees create ordinary stashes.
+    other worktrees create ordinary stashes. A private recovery ref keeps the
+    snapshot reachable until restoration succeeds.
     """
     if not working_tree_has_local_changes(repo_path):
         return None
@@ -222,6 +258,7 @@ def stash_local_changes(repo_path, label):
             )
             parents.append(untracked_commit)
         snapshot_id = commit_tree(repo_path, tracked_tree, parents, label)
+        anchor_snapshot(repo_path, snapshot_id)
     except (OSError, RuntimeError) as error:
         raise RuntimeError(
             f"failed to capture local changes as snapshot: {error}"
@@ -258,7 +295,7 @@ def verify_snapshot(repo_path, snapshot_id, scope_label):
 
 
 def restore_stashed_changes(repo_path, snapshot_id, scope_label):
-    """Restore a snapshot by object ID and preserve it on failure."""
+    """Restore a snapshot by object ID and preserve its recovery ref on failure."""
     if snapshot_id is None:
         return
 
@@ -295,6 +332,8 @@ def restore_stashed_changes(repo_path, snapshot_id, scope_label):
                 f"{snapshot_id} failed; the snapshot was preserved with the "
                 f"unrestored changes: {details}"
             )
+
+    remove_snapshot_anchor(repo_path, snapshot_id, scope_label)
 
 
 def read_prd(prd_path):
