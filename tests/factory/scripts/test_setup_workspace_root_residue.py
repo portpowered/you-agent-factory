@@ -11,9 +11,10 @@ the checked-out index and worktree along with ``main``.
 import contextlib
 import importlib.util
 import json
+import multiprocessing
+import queue
 import subprocess
 import tempfile
-import threading
 import unittest
 from pathlib import Path
 
@@ -167,6 +168,59 @@ def tree_report(module, repo_path):
 
 def report_message(label, report):
     return f"{label}: {json.dumps(report, sort_keys=True)}"
+
+
+def run_root_sync_process(
+    repo_path,
+    role,
+    owner_at_boundary,
+    competitor_attempted,
+    competitor_acquired,
+    owner_release,
+    competitor_release,
+    completed,
+    result_queue,
+):
+    """Run one sync invocation with process-safe ordering instrumentation."""
+    module = load_setup_workspace_module()
+    original_run_git = module.run_git
+    original_root_sync_lock = module.root_sync_lock
+
+    if role == "owner":
+        boundary_seen = False
+
+        def coordinate_owner(*args, **kwargs):
+            nonlocal boundary_seen
+            if not boundary_seen and args[:2] == ("pull", "--ff-only"):
+                boundary_seen = True
+                owner_at_boundary.set()
+                if not competitor_attempted.wait(10):
+                    raise RuntimeError("competitor did not attempt root sync")
+                if not owner_release.wait(10):
+                    raise RuntimeError("owner release was not signaled")
+            return original_run_git(*args, **kwargs)
+
+        module.run_git = coordinate_owner
+    elif role == "competitor":
+        @contextlib.contextmanager
+        def coordinate_competitor(repo):
+            competitor_attempted.set()
+            with original_root_sync_lock(repo):
+                competitor_acquired.set()
+                if not competitor_release.wait(10):
+                    raise RuntimeError("competitor release was not signaled")
+                yield
+
+        module.root_sync_lock = coordinate_competitor
+    else:
+        raise ValueError(f"unknown root sync process role: {role}")
+
+    try:
+        result_queue.put((role, "ok", module.sync_main(Path(repo_path))))
+    except BaseException as error:  # report child failures in the parent test
+        result_queue.put((role, "error", f"{type(error).__name__}: {error}"))
+    finally:
+        completed.set()
 
 
 class SetupWorkspaceRootResidueTest(unittest.TestCase):
@@ -683,8 +737,10 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         self.assertEqual(report["main"], remote_sha, report_message("setup", report))
         self.assertIn("merged.txt", report["porcelain"])
 
-    def test_controlled_overlapping_syncs_serialize_root_sync_and_preserve_state(self):
-        """A competing invocation waits for the owner's full restore cycle."""
+    def test_controlled_overlapping_process_syncs_serialize_root_sync_and_preserve_state(
+        self,
+    ):
+        """Separate setup processes cannot overlap root capture and restore."""
         local, _upstream, remote_sha = create_remote_repository(
             self.root / "overlap", remote_ahead=True,
         )
@@ -692,91 +748,112 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
             "operator data\n", encoding="utf-8",
         )
 
-        snapshot_captured = threading.Event()
-        competitor_attempted = threading.Event()
-        competitor_acquired = threading.Event()
-        release_owner = threading.Event()
-        owner_result = []
-        competitor_result = []
-        original_run_git = self.module.run_git
-        original_root_sync_lock = self.module.root_sync_lock
-
-        def coordinate_lock(repo_path):
-            lock_context = original_root_sync_lock(repo_path)
-            if threading.current_thread().name != "root-sync-competitor":
-                return lock_context
-
-            @contextlib.contextmanager
-            def instrumented_lock():
-                competitor_attempted.set()
-                with lock_context:
-                    competitor_acquired.set()
-                    yield
-
-            return instrumented_lock()
-
-        def coordinate_owner(*args, **kwargs):
-            if (
-                threading.current_thread().name == "root-sync-owner"
-                and args[:2] == ("pull", "--ff-only")
-            ):
-                snapshot_captured.set()
-                # These bounded waits are only deadlock guards.  The events,
-                # not elapsed time, determine the invocation ordering.
-                if not competitor_attempted.wait(10):
-                    raise RuntimeError("competitor did not attempt root sync")
-                if competitor_acquired.is_set():
-                    raise RuntimeError("competitor acquired root sync too early")
-                if not release_owner.wait(10):
-                    raise RuntimeError("owner release was not signaled")
-            return original_run_git(*args, **kwargs)
-
-        self.module.run_git = coordinate_owner
-        self.module.root_sync_lock = coordinate_lock
-
-        def owner_sync():
-            try:
-                owner_result.append(self.module.sync_main(local))
-            except BaseException as error:  # report thread failures in test
-                owner_result.append(error)
-
-        def competitor_sync():
-            try:
-                competitor_result.append(self.module.sync_main(local))
-            except BaseException as error:  # report thread failures in test
-                competitor_result.append(error)
-
-        owner = threading.Thread(target=owner_sync, name="root-sync-owner")
-        competitor = threading.Thread(
-            target=competitor_sync, name="root-sync-competitor",
+        context = multiprocessing.get_context("spawn")
+        owner_at_boundary = context.Event()
+        competitor_attempted = context.Event()
+        competitor_acquired = context.Event()
+        owner_release = context.Event()
+        competitor_release = context.Event()
+        owner_completed = context.Event()
+        competitor_completed = context.Event()
+        result_queue = context.Queue()
+        owner = context.Process(
+            target=run_root_sync_process,
+            args=(
+                str(local),
+                "owner",
+                owner_at_boundary,
+                competitor_attempted,
+                competitor_acquired,
+                owner_release,
+                competitor_release,
+                owner_completed,
+                result_queue,
+            ),
         )
-        owner.start()
+        competitor = context.Process(
+            target=run_root_sync_process,
+            args=(
+                str(local),
+                "competitor",
+                owner_at_boundary,
+                competitor_attempted,
+                competitor_acquired,
+                owner_release,
+                competitor_release,
+                competitor_completed,
+                result_queue,
+            ),
+        )
+
+        owner_started = False
+        competitor_started = False
         try:
+            owner.start()
+            owner_started = True
             self.assertTrue(
-                snapshot_captured.wait(10),
+                owner_at_boundary.wait(10),
                 "owner did not reach the capture/restore boundary",
             )
             competitor.start()
+            competitor_started = True
             self.assertTrue(
                 competitor_attempted.wait(10),
                 "competitor did not attempt to acquire root sync",
             )
-            self.assertFalse(competitor_acquired.is_set())
-            release_owner.set()
+            # The owner is held at an explicit Git boundary. This bounded
+            # event wait is only a deadlock guard; the event ordering, not a
+            # sleep, proves whether the competitor entered the critical
+            # section before the owner released it. Removing the OS lock makes
+            # competitor_acquired fire here even though the owner is held.
+            self.assertFalse(
+                competitor_acquired.wait(1),
+                "competitor entered root sync before the owner released it",
+            )
+            owner_release.set()
+            self.assertTrue(
+                owner_completed.wait(10),
+                "owner did not complete root sync after release",
+            )
+            self.assertTrue(
+                competitor_acquired.wait(10),
+                "competitor did not acquire root sync after owner completion",
+            )
+            competitor_release.set()
+            self.assertTrue(
+                competitor_completed.wait(10),
+                "competitor did not complete root sync after release",
+            )
         finally:
-            owner.join(10)
-            competitor.join(10)
-            self.module.run_git = original_run_git
-            self.module.root_sync_lock = original_root_sync_lock
+            owner_release.set()
+            competitor_release.set()
+            if owner_started:
+                owner.join(10)
+            if competitor_started:
+                competitor.join(10)
+            if owner_started and owner.is_alive():
+                owner.terminate()
+                owner.join(10)
+            if competitor_started and competitor.is_alive():
+                competitor.terminate()
+                competitor.join(10)
 
-        self.assertFalse(owner.is_alive(), "owner sync did not finish")
-        self.assertFalse(competitor.is_alive(), "competitor sync did not finish")
-        self.assertEqual(len(owner_result), 1)
-        if isinstance(owner_result[0], BaseException):
-            raise owner_result[0]
-        self.assertEqual(len(competitor_result), 1)
-        if isinstance(competitor_result[0], BaseException):
-            raise competitor_result[0]
+        if owner_started:
+            self.assertFalse(owner.is_alive(), "owner sync did not finish")
+        if competitor_started:
+            self.assertFalse(competitor.is_alive(), "competitor sync did not finish")
+
+        results = {}
+        for _ in range(2):
+            try:
+                role, status, detail = result_queue.get(timeout=2)
+            except queue.Empty as error:
+                self.fail(f"root sync process did not report a result: {error}")
+            results[role] = (status, detail)
+        result_queue.close()
+        result_queue.join_thread()
+        self.assertEqual(results["owner"][0], "ok", results)
+        self.assertEqual(results["competitor"][0], "ok", results)
 
         final_report = tree_report(self.module, local)
         self.assertEqual(final_report["head"], remote_sha, report_message("final", final_report))
