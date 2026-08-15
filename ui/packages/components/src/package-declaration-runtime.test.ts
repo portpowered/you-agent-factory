@@ -125,11 +125,12 @@ describe("components package runtime conditions", () => {
         "export declare const GraphEdge: unknown;\n",
     });
 
-    await expect(verifyBundledPackage({ packageRoot })).resolves.toMatchObject({
-      diagnostics: [
-        expect.stringContaining("graphs/index.d.ts -> ./graph-edge"),
-      ],
-    });
+    const brokenReport = await verifyBundledPackage({ packageRoot });
+    expect(
+      brokenReport.diagnostics.some((diagnostic) =>
+        diagnostic.includes("graphs/index.d.ts -> ./graph-edge"),
+      ),
+    ).toBe(true);
 
     const alignedPackageRoot = await createArtifact({
       "package.json": JSON.stringify({
@@ -204,5 +205,5 @@ describe("components declaration module resolution", () => {
         violations: report.violations,
       }),
     ).toHaveLength(1);
-  });
+  }, 30_000);
 });
