@@ -6,6 +6,11 @@ doc-id: agent-factory/plans/dashboard-ux-30-probe-results
 
 # Dashboard UX 30-Probe Results
 
+> **Current status — 2026-08-15:** The original probe markings in this
+> historical document are not current delivery status. See the [audited
+> dashboard UX delivery status](dashboard-ux-delivery-status.md) for the
+> verified 1-30 matrix, rollups, and remaining work.
+
 ## Outcome
 
 Thirty additional read-only probes decomposed the dashboard by bento card and
