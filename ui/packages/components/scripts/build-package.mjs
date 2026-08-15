@@ -1,13 +1,5 @@
 import { execFile } from "node:child_process";
-import {
-  access,
-  cp,
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,36 +80,6 @@ async function copyStyleDependency(sourcePath, copiedPaths = new Set()) {
   );
 }
 
-async function listFilesRecursively(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const nestedFiles = await Promise.all(
-    entries.map((entry) => {
-      const entryPath = path.join(directory, entry.name);
-      return entry.isDirectory()
-        ? listFilesRecursively(entryPath)
-        : [entryPath];
-    }),
-  );
-  return nestedFiles.flat();
-}
-
-async function ensureDeclarationRuntimeSiblings() {
-  const declarationPaths = (await listFilesRecursively(distRoot)).filter(
-    (filePath) => filePath.endsWith(".d.ts"),
-  );
-
-  await Promise.all(
-    declarationPaths.map(async (declarationPath) => {
-      const runtimePath = declarationPath.replace(/\.d\.ts$/, ".js");
-      try {
-        await access(runtimePath);
-      } catch {
-        await writeFile(runtimePath, "export {};\n");
-      }
-    }),
-  );
-}
-
 await rm(distRoot, { force: true, recursive: true });
 await mkdir(distRoot, { recursive: true });
 
@@ -132,6 +94,5 @@ await runPackageBin("typescript", "tsc", [
   "--pretty",
   "false",
 ]);
-await ensureDeclarationRuntimeSiblings();
 
 await copyStyleDependency(path.join(sourceRoot, "styles.css"));

@@ -30,13 +30,10 @@ export default defineConfig({
     outDir: "dist",
     rollupOptions: {
       external: isExternalPackage,
-      treeshake: false,
       output: {
         assetFileNames: "assets/[name][extname]",
         chunkFileNames: "chunks/[name].js",
         entryFileNames: "[name].js",
-        preserveModules: true,
-        preserveModulesRoot: "src",
       },
     },
     sourcemap: false,
