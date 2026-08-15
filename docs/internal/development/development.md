@@ -81,6 +81,24 @@ make ui-storybook
 make ui-test-storybook
 ```
 
+### Local build provenance
+
+`make build` and `make install` use `GO_LOCAL_BUILD_FLAGS`, which defaults to
+`-buildvcs=false`. This avoids Go's repository metadata probe on repeated local
+CLI builds because the maintained `cmd/` and `pkg/` code does not consume
+`vcs.revision`, `vcs.time`, or `vcs.modified`; the CLI's development version
+fallback only reads the main module version. The option is independent of
+`GO_BUILD_FLAGS`, and `GO_LOCAL_BUILD_FLAGS=-buildvcs=true` restores local VCS
+stamping when it is needed for a comparison.
+
+The local verification aggregators that call `make build`—including
+`make build-all`, `make backend-verification`, `make verify-build`, and
+`make release-surface-smoke`—inherit the unstamped local default. Shipped
+provenance remains unchanged: GoReleaser runs `.goreleaser.yml` directly,
+`make acp-baseline-self` performs its own direct `go build`, and the published
+`go install` smoke paths invoke `go install` directly. Those paths do not use
+`GO_LOCAL_BUILD_FLAGS` and remain stamped by their existing Go tooling.
+
 `make backend-dependency-graph` writes the direct production-import graph for
 repository packages under `cmd/` and `pkg/` to
 `.artifacts/backend-dependency-graph/backend-dependency-graph.dot`. When
@@ -166,6 +184,12 @@ that contain Go tests and disables `go test`'s duplicate implicit vet pass;
 The normal `make test` loop retains Go's content-addressed test cache, so
 unchanged packages do not relink and rerun on every local invocation. Use
 `make test-unit-fresh` when uncached `-count=1` evidence is explicitly needed.
+
+On Windows, the Makefile selects arithmetic compatible with GNU Make's
+effective shell: POSIX arithmetic for `sh.exe`/`bash.exe` and native `cmd.exe`
+arithmetic otherwise. The raw result is validated as a positive decimal before
+it becomes `GO_LANE_BUDGET`; malformed output produces a visible warning and
+falls back to 2 so the default test and lint flags remain numeric.
 `make test` is the compatibility entrypoint for `make test-unit`; `make
 test-full` remains the broad unshortened aggregate across every Go package.
 
