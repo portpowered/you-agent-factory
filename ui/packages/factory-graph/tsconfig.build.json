@@ -3,6 +3,17 @@
   "compilerOptions": {
     "declaration": true,
     "noEmit": false,
-    "outDir": "dist"
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@you-agent-factory/client": ["../client/dist/index.d.ts"],
+      "@you-agent-factory/components": ["../components/dist/index.d.ts"],
+      "@you-agent-factory/components/*": [
+        "../components/dist/*/index.d.ts"
+      ],
+      "@you-agent-factory/factory-replay": [
+        "../factory-replay/dist/index.d.ts"
+      ]
+    }
   }
 }
