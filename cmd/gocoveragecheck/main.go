@@ -117,6 +117,7 @@ type coverageResult struct {
 	zeroCoveragePackages         []string
 	packageMinimumFailures       []string
 	packageMinimumWarnings       []string
+	unmeasuredPackageDiagnostics []string
 }
 
 type packageCoverageTotals struct {
@@ -177,6 +178,9 @@ func execute(cfg config) error {
 	}
 	for _, warning := range result.packageMinimumWarnings {
 		fmt.Fprintln(stderrWriter, warning)
+	}
+	for _, diagnostic := range result.unmeasuredPackageDiagnostics {
+		fmt.Fprintln(stderrWriter, diagnostic)
 	}
 
 	if len(failures) > 0 {
@@ -410,6 +414,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 			return coverageResult{}, err
 		}
 		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
+		result.unmeasuredPackageDiagnostics = formatUnmeasuredCoverageManifestDiagnostics(manifest, result.packageTotals)
 		result.packageGates = packageGatesFromManifest(manifest)
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
