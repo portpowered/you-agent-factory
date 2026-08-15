@@ -10,6 +10,7 @@ into the worktree root, and prints a JSON result to stdout.
 Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = stage-specific error).
 """
 
+import contextlib
 import json
 import os
 import re
@@ -17,11 +18,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 
 IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
+ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
+_ROOT_SYNC_THREAD_LOCKS = {}
+_ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
 
 
 def run_git(*args, cwd=None, check=True, env=None):
@@ -111,6 +117,69 @@ def remove_snapshot_anchor(repo_path, snapshot_id, scope_label):
             f"not remove its private recovery ref {ref_name}; the snapshot "
             f"remains anchored: {command_failure_details(result)}"
         )
+
+
+def root_sync_lock_path(repo_path):
+    """Return the persistent lock path shared by root-sync invocations."""
+    common_dir = require_git_output(
+        run_git(
+            "rev-parse", "--git-common-dir", cwd=repo_path, check=False,
+        ),
+        "failed to resolve Git common directory for root sync lock",
+    )
+    common_path = Path(common_dir)
+    if not common_path.is_absolute():
+        common_path = Path(repo_path) / common_path
+    return common_path.resolve() / ROOT_SYNC_LOCK_FILENAME
+
+
+def root_sync_thread_lock(lock_path):
+    """Return the in-process lock for one repository's root sync path."""
+    lock_key = os.path.normcase(str(lock_path))
+    with _ROOT_SYNC_THREAD_LOCKS_GUARD:
+        return _ROOT_SYNC_THREAD_LOCKS.setdefault(lock_key, threading.Lock())
+
+
+@contextlib.contextmanager
+def root_sync_lock(repo_path):
+    """Own root synchronization across threads and setup-workspace processes."""
+    lock_path = root_sync_lock_path(repo_path)
+    thread_lock = root_sync_thread_lock(lock_path)
+    with thread_lock:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as lock_file:
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+
+            if os.name == "nt":
+                import msvcrt
+
+                while True:
+                    lock_file.seek(0)
+                    try:
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        time.sleep(0.05)
+            else:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+            try:
+                yield
+            finally:
+                if os.name == "nt":
+                    import msvcrt
+
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def temporary_index_path():
@@ -418,6 +487,12 @@ def confirm_ref_matches(repo_path, ref_name, expected_sha):
 
 
 def sync_checked_out_main_with_stash(repo_root, remote_sha):
+    """Own, sync, and restore a checked-out root ``main`` invocation."""
+    with root_sync_lock(repo_root):
+        return _sync_checked_out_main_with_stash(repo_root, remote_sha)
+
+
+def _sync_checked_out_main_with_stash(repo_root, remote_sha):
     """Temporarily snapshot local changes, sync main, then restore them."""
     snapshot_id = stash_local_changes(
         repo_root,
@@ -442,6 +517,12 @@ def sync_checked_out_main_with_stash(repo_root, remote_sha):
 
 
 def sync_main(repo_root):
+    """Own one complete root-main synchronization invocation."""
+    with root_sync_lock(repo_root):
+        return _sync_main(repo_root)
+
+
+def _sync_main(repo_root):
     """Best-effort root main sync without disturbing the working tree.
 
     Uses fetch plus refs/heads/main fast-forward when safe instead of git pull,
@@ -485,8 +566,8 @@ def sync_main(repo_root):
     if not can_fast_forward_main(repo_root, local_sha, remote_sha):
         return "skipped (local main is not a fast-forward behind origin/main)"
 
-    if current_branch(repo_root) == "main" and working_tree_has_local_changes(repo_root):
-        return sync_checked_out_main_with_stash(repo_root, remote_sha)
+    if current_branch(repo_root) == "main":
+        return _sync_checked_out_main_with_stash(repo_root, remote_sha)
 
     run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
     return (

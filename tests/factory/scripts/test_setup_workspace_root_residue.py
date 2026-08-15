@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Disposable-repository reproductions for root setup-workspace residue.
+"""Disposable-repository regressions for root setup-workspace synchronization.
 
-These tests intentionally characterize the pre-fix root-sync behavior.  The
-important ordering is observable Git state, not stash-stack identity:
-invocation A captures and clears local state, invocation B observes the
-temporarily clean checked-out ``main`` and takes the update-ref-only branch,
-then invocation A restores its untracked snapshot.  Updating the branch ref
-does not update the checked-out index or worktree, so HEAD can point at the
-new commit while the index still equals its parent.
+The scenarios retain the observable ordering that reproduced the incident:
+one invocation owns a temporarily cleared checked-out ``main`` while another
+invocation attempts to synchronize the same root.  The fixed behavior keeps
+the second invocation outside that capture-through-restore cycle and updates
+the checked-out index and worktree along with ``main``.
 """
 
+import contextlib
 import importlib.util
 import json
 import subprocess
@@ -182,21 +181,16 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
                 )
 
                 if label in {"clean", "stale-private-ref"}:
-                    # This is the preserved occurrence shape: refs and HEAD
-                    # are current, but the checked-out index/worktree remain
-                    # byte-identical to the parent and stage the merge-added
-                    # file as a deletion.
                     self.assertEqual(
-                        report["index_tree"], report["ancestor_tree"],
+                        report["index_tree"], report["head_tree"],
                         report_message(label, report),
                     )
                     self.assertEqual(
-                        report["worktree_tree"], report["ancestor_tree"],
+                        report["worktree_tree"], report["head_tree"],
                         report_message(label, report),
                     )
                     self.assertEqual(
-                        report["porcelain"], "D  merged.txt\n",
-                        report_message(label, report),
+                        report["porcelain"], "", report_message(label, report),
                     )
                     if label == "stale-private-ref":
                         self.assertNotIn(
@@ -285,8 +279,8 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         self.assertNotEqual(report["head_tree"], report["index_tree"])
         self.assertNotEqual(report["index_tree"], report["worktree_tree"])
 
-    def test_controlled_overlapping_syncs_reproduce_ancestor_staged_residue(self):
-        """Capture/clear A, update-ref-only B, then restore A deterministically."""
+    def test_controlled_overlapping_syncs_serialize_root_sync_and_preserve_state(self):
+        """A competing invocation waits for the owner's full restore cycle."""
         local, _upstream, remote_sha = create_remote_repository(
             self.root / "overlap", remote_ahead=True,
         )
@@ -295,10 +289,27 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         )
 
         snapshot_captured = threading.Event()
-        competitor_finished = threading.Event()
+        competitor_attempted = threading.Event()
+        competitor_acquired = threading.Event()
         release_owner = threading.Event()
         owner_result = []
+        competitor_result = []
         original_run_git = self.module.run_git
+        original_root_sync_lock = self.module.root_sync_lock
+
+        def coordinate_lock(repo_path):
+            lock_context = original_root_sync_lock(repo_path)
+            if threading.current_thread().name != "root-sync-competitor":
+                return lock_context
+
+            @contextlib.contextmanager
+            def instrumented_lock():
+                competitor_attempted.set()
+                with lock_context:
+                    competitor_acquired.set()
+                    yield
+
+            return instrumented_lock()
 
         def coordinate_owner(*args, **kwargs):
             if (
@@ -308,13 +319,16 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
                 snapshot_captured.set()
                 # These bounded waits are only deadlock guards.  The events,
                 # not elapsed time, determine the invocation ordering.
-                if not competitor_finished.wait(10):
-                    raise RuntimeError("competitor did not finish root sync")
+                if not competitor_attempted.wait(10):
+                    raise RuntimeError("competitor did not attempt root sync")
+                if competitor_acquired.is_set():
+                    raise RuntimeError("competitor acquired root sync too early")
                 if not release_owner.wait(10):
                     raise RuntimeError("owner release was not signaled")
             return original_run_git(*args, **kwargs)
 
         self.module.run_git = coordinate_owner
+        self.module.root_sync_lock = coordinate_lock
 
         def owner_sync():
             try:
@@ -322,50 +336,54 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
             except BaseException as error:  # report thread failures in test
                 owner_result.append(error)
 
+        def competitor_sync():
+            try:
+                competitor_result.append(self.module.sync_main(local))
+            except BaseException as error:  # report thread failures in test
+                competitor_result.append(error)
+
         owner = threading.Thread(target=owner_sync, name="root-sync-owner")
+        competitor = threading.Thread(
+            target=competitor_sync, name="root-sync-competitor",
+        )
         owner.start()
-        competitor_report = None
-        competitor_error = None
         try:
             self.assertTrue(
                 snapshot_captured.wait(10),
                 "owner did not reach the capture/restore boundary",
             )
-            try:
-                competitor_outcome = self.module.sync_main(local)
-                competitor_report = tree_report(self.module, local)
-            except BaseException as error:  # preserve cleanup before failing
-                competitor_error = error
-            finally:
-                competitor_finished.set()
-                release_owner.set()
+            competitor.start()
+            self.assertTrue(
+                competitor_attempted.wait(10),
+                "competitor did not attempt to acquire root sync",
+            )
+            self.assertFalse(competitor_acquired.is_set())
+            release_owner.set()
         finally:
             owner.join(10)
+            competitor.join(10)
             self.module.run_git = original_run_git
+            self.module.root_sync_lock = original_root_sync_lock
 
         self.assertFalse(owner.is_alive(), "owner sync did not finish")
-        if competitor_error is not None:
-            raise competitor_error
+        self.assertFalse(competitor.is_alive(), "competitor sync did not finish")
         self.assertEqual(len(owner_result), 1)
         if isinstance(owner_result[0], BaseException):
             raise owner_result[0]
-
-        self.assertEqual(competitor_report["head"], remote_sha)
-        self.assertEqual(competitor_report["main"], remote_sha)
-        self.assertEqual(competitor_report["index_tree"], competitor_report["ancestor_tree"])
-        self.assertEqual(competitor_report["worktree_tree"], competitor_report["ancestor_tree"])
-        self.assertEqual(competitor_report["porcelain"], "D  merged.txt\n")
+        self.assertEqual(len(competitor_result), 1)
+        if isinstance(competitor_result[0], BaseException):
+            raise competitor_result[0]
 
         final_report = tree_report(self.module, local)
         self.assertEqual(final_report["head"], remote_sha, report_message("final", final_report))
         self.assertEqual(final_report["main"], remote_sha, report_message("final", final_report))
         self.assertEqual(
-            final_report["index_tree"], final_report["ancestor_tree"],
+            final_report["index_tree"], final_report["head_tree"],
             report_message("final", final_report),
         )
         self.assertEqual(
             final_report["porcelain"],
-            "D  merged.txt\n?? overlap-untracked.txt\n",
+            "?? overlap-untracked.txt\n",
             report_message("final", final_report),
         )
         self.assertEqual(final_report["private_refs"], {})
