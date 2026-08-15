@@ -1,13 +1,12 @@
 # Build-Time/Runtime Composition Plan
 
-Status: story 003 transport and direct-execution packets published.
-P6-P7 remain deferred to the later stories in the authoring PRD.
+Status: final P3-P7 packet reconciliation complete; ready for review.
 
-Audit snapshot: 2026-08-14, with origin/main at 1be29c60d
-(Define in-flight semantics for throttled isolated lanes) and this worktree
-at 9cc6d1977 before the final synchronization pass. The audit uses the current
-main tree for implementation evidence. It does not treat a newer main commit
-as a reason to rewrite the historical packet sources.
+Audit snapshot: 2026-08-14, with the historical throttled-lane behavior guard
+at 1be29c60d. The authoring branch was synchronized to origin/main at
+f7310bfa8 before P5-P7 drafting; current symbols and behavior on that tree are
+the implementation evidence. The historical packet sources are retained for
+their row semantics and are not silently rewritten.
 
 ## Substantially delivered queued packets
 
@@ -298,7 +297,7 @@ the move. The following guards are named by observable behavior and tier:
 
 | Behavior to preserve | Guard before the move | Execution tier |
 | --- | --- | --- |
-| Runtime construction is inert and one root can serve isolated openings. | `pkg/services/factory_runtime/wire/wire_test.go:TestNewServiceConstructsInertRoot`, `pkg/root/root_test.go:TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions`, and `tests/functional/sessions/root_composition/build_process_inert_test.go:TestSessionsEffectsRemainInertThroughRootBuildProcess`. | Local `go test` for the focused packages; PR backend unit and root-process acceptance lanes. |
+| Runtime construction is inert and one root can serve isolated openings. | `pkg/services/factory_runtime/wire/wire_test.go:TestNewServiceConstructsInertRoot`, `pkg/root/root_test.go:TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions`, and `tests/functional/sessions/root_composition/build_process_inert_test.go:TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction`. | Local `go test` for the focused packages; PR backend unit and root-process acceptance lanes. |
 | Activation publishes only detached successful state, rejects duplicate identity, and retries after failed cleanup. | `pkg/services/factory_runtime/wire/runtime_activation_test.go:TestRuntimeRootActivationPublishesOnlyDetachedSuccessfulState`, `TestRuntimeRootActivationRejectsDuplicateAndConflictingIdentity`, `TestRuntimeRootActivationUnwindsFailedStartAndCanRetry`, and `TestRuntimeRootDeactivationRetainsStateUntilCleanupSucceeds`. | Local Runtime unit tests; PR backend unit coverage and required integration lane. |
 | Pause/resume/terminate preserve buffered results and terminal classification. | Existing `pkg/services/factory_runtime/wire/fold_behavior_preservation_test.go:TestWireFoldPreservesControlPauseResumeTerminateThroughPublishedRoot`, plus a planned root-level test that asserts one terminal result after cancellation races with a worker result. | Local focused Runtime tests; PR backend unit and functional short tier. |
 | A throttled in-flight dispatch is not treated as terminated before its observed result retires. | `pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests/termination_test.go:TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement` and `tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go:TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession`. | Local focused/runtime race test where practical; PR backend functional short tier. |
@@ -426,7 +425,7 @@ are:
 
 | Behavior to preserve | Guard before or during the move | Execution tier |
 | --- | --- | --- |
-| The reusable process constructs an inert graph and executes isolated sessions through the same root. | `tests/functional/sessions/root_composition/process_reuse_inert_test.go:TestRootBuildProcessIsInertAndReusableAcrossFactorySessions`, `tests/functional/sessions/root_composition/build_process_inert_test.go:TestSessionsEffectsRemainInertThroughRootBuildProcess`, and `pkg/root/root_test.go:TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions`. | Local focused Go tests; PR root-process acceptance and backend unit lanes. |
+| The reusable process constructs an inert graph and executes isolated sessions through the same root. | `tests/functional/sessions/root_composition/process_reuse_inert_test.go:TestRootBuildProcessIsInertAndReusableAcrossFactorySessions`, `tests/functional/sessions/root_composition/build_process_inert_test.go:TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction`, and `pkg/root/root_test.go:TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions`. | Local focused Go tests; PR root-process acceptance and backend unit lanes. |
 | Factory Session open/list/get/close preserves one stable identity and terminal state. | Existing `tests/functional/sessions/lifecycle/crud_test.go:TestAPIOpenListGetAndCloseFactorySession` plus a planned root-level characterization that exercises the same sequence through `Service` without HTTP-specific policy. | Local Sessions tests; PR backend functional short tier. |
 | CLI and API success, domain failure, and cancellation remain equivalent. | `tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunSuccessParityThroughRootProcess`, `TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess`, and `TestCLILocalAndRemoteRunCancellationParityThroughRootProcess`; add the missing `cmd/factory/main.go:runProcess` close-error/cancellation characterization. | Local focused functional cells; PR backend functional short tier and root-process acceptance. |
 | Durable asynchronous polling and synchronous invocation retain terminal result shape and not-ready behavior. | `pkg/services/factory_sessions/transports/mcp/execution_test.go:TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyResult` and `TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult`, plus the planned root `Invoke` contract test. | Local MCP/Sessions tests; PR backend contract and functional short lanes. |
@@ -457,9 +456,24 @@ P5B, and P5C depend on P4's stable root and must not be used to repair a P4
 break. P6 may delete only residue explicitly named by P3/P4 or its own
 secondary-graph audit; P7 proves the resulting behavior and race closure.
 
-## P5A — Cut the CLI over to owner operations
+## P5 — Converge transport and direct-execution callers
 
-### Outcome and preserved behavior
+P5 is a parallel packet family. P5A owns the CLI composition seam, P5B owns
+HTTP/MCP/ACP transport composition, and P5C owns detached Workers execution.
+They may proceed concurrently after P3/P4 publish the owner contracts, but
+shared paths remain with the named path-lease owner and no packet may repair a
+different packet's broken contract.
+
+Every P5 family follows the same migrate-then-delete order: build the owner
+adapter or request contract, characterize every caller, make the new path
+canonical while the old path only forwards, and delete the old path in a
+later slice. P5A-2, P5B-2/P5B-4, and P5C-2/P5C-3 are deletion slices; no
+family removes a behavior-preserving path in the slice that first introduces
+its successor.
+
+### P5A — Cut the CLI over to owner operations
+
+#### Outcome and preserved behavior
 
 P5A makes the CLI a protocol boundary. The top-level `pkg/transports/cli`
 package retains command-tree construction, generated-manifest projection,
@@ -490,7 +504,7 @@ contract plus Runtime and Recordings owner projections, not a renamed CLI
 facade. The transport-convergence audit's T4, T8, T15, and TC-05/TC-06
 dispositions are the authoritative direction for this packet.
 
-### Prerequisite contract and build first
+#### Prerequisite contract and build first
 
 P5A may start only after P4 has published a stable Sessions root and P3 has
 published the Runtime identity, observation, and terminal-result values. The
@@ -531,7 +545,7 @@ registered against it, and the legacy handler can only forward the untouched
 command values. A compatibility path that still performs input selection or
 terminal inference is not considered migrated.
 
-### Caller-by-caller migration
+#### Caller-by-caller migration
 
 The following caller set is exhaustive for the audited CLI seam. A newly
 found caller must be added here and characterized before it moves.
@@ -546,7 +560,7 @@ found caller must be added here and characterized before it moves.
 | `pkg/transports/cli/submit`, `batchload`, `work`, and `pkg/services/work/transports/cli` | Decode Work and batch input, apply admission/output policy, and render Work results. | Characterize success, validation, transport failure, and empty output; call the Work root and retain only CLI rendering. Work's service-local CLI adapter is the successor. |
 | `pkg/transports/cli/factory`, `workflow`, `dashboard`, and worker-session command families | Perform Factory policy, workflow validation, cross-domain dashboard projection, or worker-session presentation. | Definitions, Runtime, Visualization, and Worker Sessions adapters each receive their own raw command. Delete the cross-domain dashboard fallback and workflow policy from the top-level command path; the named owner adapters are the successors. |
 
-### Strangler sequence and deletion register
+#### Strangler sequence and deletion register
 
 P5A is split into independently mergeable slices. Each slice leaves the
 process usable and targets approximately 20 or fewer changed files.
@@ -564,7 +578,7 @@ Factory, stdin/positional conflict, clean/server-attached, cancellation, and
 text/JSON/NDJSON cases. A passing compile or CLI command inventory is not
 characterization.
 
-### Characterization and behavioral guards
+#### Characterization and behavioral guards
 
 | Behavior to preserve | Direct guard before or during the move | Execution tier |
 | --- | --- | --- |
@@ -587,7 +601,7 @@ functional coverage lane), `make api-smoke` for any API parity cell, and
 `make lint`; `backend-size`, `pkg-maint`, `pkg-file-count`, `pkg-structure`,
 and `vet` remain static gates, not behavioral acceptance.
 
-### P5A sizing, ownership, and dependency
+#### P5A sizing, ownership, and dependency
 
 P5A-1 through P5A-3 each target one concern, stay at or below approximately
 20 changed files, and leave `main` releasable. PSS-I03 owns shared
@@ -601,9 +615,9 @@ P5A depends on P3/P4 and may proceed independently of P5B/P5C after their
 owner contracts are stable. It must not use P5B's HTTP/MCP path or P5C's
 detached Workers path to repair a broken CLI Sessions contract.
 
-## P5B — Converge HTTP, MCP, and ACP transport cutovers
+### P5B — Converge HTTP, MCP, and ACP transport cutovers
 
-### Outcome and preserved behavior
+#### Outcome and preserved behavior
 
 P5B gives each protocol path one owner adapter and one canonical composition
 route. `pkg/transports/http` retains generated route registration, aggregate
@@ -641,7 +655,7 @@ TC-12 are the authoritative scope. P4's deletion of Sessions lifecycle
 facets happens first; P5B removes the remaining protocol-owned forwarding
 and mapping duplicates rather than reopening that contract.
 
-### Prerequisite contract and build first
+#### Prerequisite contract and build first
 
 P5B requires the P3 Runtime and P4 Sessions roots, Work admission/read
 operations, Definitions authored/packaged values, Recordings history/replay
@@ -675,7 +689,7 @@ unmigrated callers; no new route/tool or response policy may be added there.
 The original HTTP writer/request/path values and raw MCP argument bytes must
 reach the owner adapter unchanged.
 
-### Caller-by-caller migration
+#### Caller-by-caller migration
 
 | Caller | Current seam and observable behavior | Migration order and successor |
 | --- | --- | --- |
@@ -688,12 +702,16 @@ reach the owner adapter unchanged.
 | `pkg/services/factory_sessions/transports/mcp`, Work/Definitions/Runtime/Recordings MCP adapters | MCP tools expose sync/async start, result, controls, and inspection through mixed facets. | Route each tool to one owner root, preserve raw argument/schema/error envelopes, and delete cross-owner tool registries. Sessions MCP is the successor only for Session operations. |
 | `pkg/transports/acp`, `pkg/transports/cli/acp`, and `pkg/services/chat_sessions` callers | ACP command/stdio paths combine settings/provider configuration, target delegation, session reuse, controls, and response bridging. | Operator Settings and Providers own configuration; Chat Sessions owns conversation/target/control sequencing; Sessions owns Factory invocation. Delete `pkg/transports/cli/acp.Service` cross-root joins after the owner operations are live. |
 
-### Strangler sequence and deletion register
+#### Strangler sequence and deletion register
 
 P5B is divided by protocol/ownership seam so each slice is independently
 reviewable and mergeable after P4. Each slice targets approximately 20 or
 fewer changed files; a route family that exceeds that bound is split by
 owner, not by introducing another aggregate graph.
+
+P5B migrates and characterizes each route/tool family before P5B-2 through
+P5B-4 delete central forwarding, mapping, or transport-time construction.
+The P5B-1 owner adapters are canonical while the compatibility routes remain.
 
 | Slice | Focus and bound | Exact deletion endpoint or named successor |
 | --- | --- | --- |
@@ -711,7 +729,7 @@ agent-run regression is included when an ACP/Worker route reaches Workers;
 otherwise it is owned by P5C. Multi-part Work content is mandatory for any
 route that accepts or returns `WorkContentPart` values.
 
-### Characterization and behavioral guards
+#### Characterization and behavioral guards
 
 | Behavior to preserve | Direct guard before or during the move | Execution tier |
 | --- | --- | --- |
@@ -731,7 +749,7 @@ and `make typecheck` while iterating. Before merge run `make api-smoke`,
 OpenAPI/MCP generated artifacts must be regenerated only from their canonical
 sources; CI evidence belongs in PR comments, never in this plan or a commit.
 
-### P5B sizing, ownership, and dependency
+#### P5B sizing, ownership, and dependency
 
 PSS-I02 owns `api/` and `pkg/transports/http`; PSS-I03 owns shared CLI ACP
 registration; PSS-I04 owns `pkg/transports/mcp`; PSS-I05 owns event-boundary
@@ -746,9 +764,9 @@ owner contracts are available. It must not move a shared path leased to
 another integration packet without that packet's owner, and it must not leave
 a temporary adapter without a deletion row above or a named P6 successor.
 
-## P5C — Converge direct Workers execution and detached agent-run
+### P5C — Converge direct Workers execution and detached agent-run
 
-### Outcome and preserved behavior
+#### Outcome and preserved behavior
 
 P5C makes one detached Workers execution contract the canonical direct path.
 `root.BuildStatelessWorkers` remains a public composition boundary for a
@@ -786,7 +804,7 @@ WSE-06/WSE-09 stories are the authoritative execution vocabulary; P5C
 characterizes and cuts the direct path without reintroducing a Workers-to-
 Sessions or Workers-to-Runtime construction dependency.
 
-### Prerequisite contract and build first
+#### Prerequisite contract and build first
 
 P5C requires the P3 Runtime-to-Workers root call, P4 removal of per-session
 Workers construction/back-query, and detached values from Factory Definitions,
@@ -820,7 +838,7 @@ but no caller may construct them or use their service-shaped interfaces. The
 stateless root and Runtime path share the implementation; they differ only in
 the caller-provided request identity and Runtime-owned lifecycle policy.
 
-### Caller-by-caller migration
+#### Caller-by-caller migration
 
 | Caller | Current seam and observable behavior | Migration order and successor |
 | --- | --- | --- |
@@ -831,10 +849,16 @@ the caller-provided request identity and Runtime-owned lifecycle policy.
 | `pkg/services/factory_sessions/internal/execution` direct/child executor callers | JavaScript child and direct execution paths retain per-session worker callbacks and child-specific result wiring. | Move the child attempt through the Runtime/Workers request boundary, preserving child identity, provider continuation, response event, and resource lease behavior. The P3 Runtime + Workers root is the successor; Sessions keeps only customer projection. |
 | `tests/functional/workers/agent`, `tests/functional/workers/inference`, and `pkg/wire/session_runtime_providers_test.go` | Public detached and root-composition behavior, including cleanup and “before runtime opening” behavior. | Keep public root tests and add failure/cancellation/terminal response cases before deleting old paths. Functional scenarios use `root.BuildStatelessWorkers` and `edges.Edges`, not a private Workers wire graph. |
 
-### Strangler sequence and deletion register
+#### Strangler sequence and deletion register
 
 P5C is split into independently mergeable slices, each approximately 20 or
 fewer changed files and each leaving direct execution usable.
+
+P5C-1 builds and characterizes the detached Workers contract first. P5C-2
+and P5C-3 delete direct executor and callback callers only after every listed
+caller is on workers.Service.Execute and the Runtime result boundary. The
+P5C-4 cleanup is intentionally handed to P6-C, so P5C never introduces and
+removes the persistent graph in one slice.
 
 | Slice | Focus and bound | Exact deletion endpoint or named successor |
 | --- | --- | --- |
@@ -851,7 +875,7 @@ decision envelope and last-provider-turn behavior; the Runtime child guard
 must include response-event publication and exactly one terminal outcome.
 These are behavior tests, not checks that scan runner names or package paths.
 
-### Characterization and behavioral guards
+#### Characterization and behavioral guards
 
 | Behavior to preserve | Direct guard before or during the move | Execution tier |
 | --- | --- | --- |
@@ -868,7 +892,7 @@ cleanup changes, `make test-root-process-acceptance`, `make verify-fast`, and
 functional coverage lane, relevant provider/worktree specialty tests, and
 `make lint`; no CI/audit evidence is committed.
 
-### P5C sizing, ownership, and dependency
+#### P5C sizing, ownership, and dependency
 
 Workers owns `workers.Service.Execute` and its private runners; Factory Runtime
 owns active-attempt scheduling and result application; Work owns proposed
@@ -882,6 +906,288 @@ Workers construction, but is independently mergeable from P5A and P5B. P6-C
 is the named deletion successor for the final legacy pool/runtime-assembly
 retirement; until then every compatibility contract must list its remaining
 caller and retirement slice.
+
+## P6 — Retire the secondary composition graph
+
+### Outcome and preserved behavior
+
+P6 is the retirement packet after P3, P4, and all three P5 lanes have
+migrated their callers. Its outcome is one production composition path:
+pkg/root.BuildProcess is the caller-facing boundary, pkg/wire.InjectBundle is
+the only production construction graph, and pkg/initializer opens and unwinds
+already-constructed roles. No transport, service operation, or worker attempt
+may construct a second service graph, bind a service table at operation time,
+or recover a legacy owner through a type assertion.
+
+The P6 audit begins from the merged P5 heads and records each row as deleted,
+retained compatibility, or still blocking. The known secondary graph and
+compatibility candidates are:
+
+| Candidate residue | Current evidence and safe successor |
+| --- | --- |
+| HTTP application binding and central mapping | pkg/transports/http/application/handler.go:Handler.Bind and BindDurableExecution, plus pkg/transports/mapping/composition/http_binding.go:HTTPBinder.Bind. Successor: Wire-composed owner handlers with generated forwarding. |
+| Opened HTTP service bags and Sessions application roles | pkg/services/factory_sessions/contracts.go:RuntimeHTTPServices, pkg/services/factory_sessions/internal/roles/contracts.go, and pkg/services/factory_sessions/wire/application_graph.go. Successor: inert owner adapters built by Wire and activated by Initializer. |
+| Sessions runtime compatibility | pkg/services/factory_sessions/internal/service/root.go:ForRuntime, session-service runtime gateways, and any remaining ExecutionService or BindWorkerInvoker caller. Successor: the converged Factory Sessions root plus the P3 Runtime and P5C Workers contracts. |
+| Runtime legacy owner surface | pkg/services/factory_runtime/interfaces.go:APIFactory and any remaining hosting, legacy-snapshot, callback, or concrete-runtime caller. Successor: factoryruntime.Service detached values and Recordings for canonical history. |
+| Cross-owner projection fallbacks | pkg/services/factory_visualization/internal/service/runtime_source.go and pkg/services/work/internal/live_session_runtime.go type-assert or infer legacy runtime state. Successor: Runtime observation and Visualization/Work owner projections. |
+| Workers persistent execution graph | pkg/services/workers/internal/services/runtime_assembly, runtime construction helpers, AssembledRuntimeBinding, and workstation-pool boundary contracts. Successor: workers.Service.Execute with Runtime-owned active-attempt state. |
+
+P6 explicitly retains pkg/root.BuildStatelessWorkers, the Workers root
+contract, Runtime-owned opaque checkpoint recovery, Recordings canonical
+history/artifacts, and public protocol contracts. The DEC-RUN-REC-DURABILITY
+decision prohibits replacing Runtime-private checkpoint recovery with a second
+Recordings graph. P6 is not permission to delete a compatibility method whose
+caller has not moved or to repair a product behavior defect found during
+retirement.
+
+The preserved customer behavior is: process construction remains inert and
+reusable; activation failure closes every acquired role without masking the
+primary error; Factory Session control and result reads retain their identity
+and terminal shape; CLI, HTTP, MCP, and ACP retain their envelopes and
+terminal outcomes; detached agent-run remains outside Runtime/Session opening;
+canonical replay and live response streams remain distinct; throttled
+in-flight dispatches are not terminated before observed results retire; and
+two concurrent sessions cannot share attempt, response, or recording state.
+
+### Build first
+
+P6 must build the proof boundary before deleting any old graph:
+
+1. Reconcile the P3/P4/P5 deletion rows with current main and the merged
+   caller set. For each candidate above, record the exact remaining caller,
+   the owner contract already serving it, and the slice that will delete it.
+   A missing path is recorded as already deleted; it is not reintroduced.
+2. Make the canonical Wire registry and Initializer role set the only path
+   used by newly migrated callers. Construction tests must prove that
+   building a process performs no lifecycle, runtime-opening, worker-pool, or
+   protocol-binding effect.
+3. Migrate remaining callers to detached owner requests and projections.
+   Characterization must pass before the old method, adapter, constructor, or
+   type assertion is removed.
+4. Delete the compatibility path in a later slice, run the focused behavioral
+   guards, and only then remove unused tests, aliases, and imports. Generated
+   OpenAPI or Wire output is regenerated from canonical sources only when a
+   real contract change requires it.
+
+While a candidate and its successor coexist, the successor is canonical:
+new callers must use it, the old path may only forward, and the old path may
+not select policy, construct services, infer terminal state, or retain a
+second graph. P6 follows migrate, characterize, delete; a slice that
+introduces a replacement and removes the only behavior-preserving path in
+one step is not independently mergeable.
+
+### Caller-by-caller migration
+
+The post-P5 caller inventory is exhaustive for the retirement seam. A newly
+found caller stops deletion of its row until it has a characterization test
+and an owner-contract migration entry.
+
+| Caller | Behavior to characterize before moving | Migration order and successor |
+| --- | --- | --- |
+| cmd/factory/main.go:runProcess, cmd/clicontractsmoke/main.go:run, and functional process support | Root build, Execute, cancellation, Close, exit classification, and joined cleanup errors. | Keep root.BuildProcess and Process.Execute as the public path; move application intent and lifecycle ownership to Initializer, then delete any command-owned graph construction. |
+| pkg/transports/http/application and pkg/transports/mapping/composition | Generated route forwarding, status/content negotiation, stream/reconnect outcomes, and malformed-input errors. | Move each route to its owner adapter and precompose it in Wire; delete Handler.Bind, BindDurableExecution, RuntimeHTTPServices binding, HTTPBinding, and operational mapping constructors only after parity. |
+| pkg/services/factory_sessions/internal/service, internal/sessionservice, and factory_sessions/wire | Open/list/control/invoke/result identity, live/durable parity, response-event ownership, and runtime cleanup. | Use the converged Sessions root for customer session operations, Runtime for observation/control, and Recordings for canonical reads; delete ForRuntime, ExecutionService, or callback bridges only when their final caller is gone. |
+| pkg/services/factory_runtime/internal and factory_visualization/internal/service | Runtime activation, detached observations, status projection, dashboard availability, and legacy APIFactory fallbacks. | Route every caller through factoryruntime.Service and Visualization owner projections; delete legacy interfaces and type assertions after the P3/P5 characterization rows pass. |
+| pkg/services/work/internal and Recordings transports | Work admission/materialization, multi-part content, canonical event/replay reads, and historical workstation views. | Work owns Work policy and Recordings owns canonical history/artifacts; delete cross-owner projection and central mapping fallbacks after their transport parity cells pass. |
+| pkg/services/workers/internal, workers/wire, and Runtime child dispatch | Direct and child attempt identity, result correlation, cleanup, cancellation, and capacity. | Call workers.Service.Execute with detached values and keep active-attempt policy in Runtime; delete runtime_assembly, AssembledRuntimeBinding, and workstation-pool callers after P5C/P6-C conformance. |
+| CLI, HTTP, MCP, ACP, and generated-contract test callers | Public success, failure, cancellation, terminal response, replay, and stream-gap shapes. | Keep tests at the public or owner boundary, update only intentional contract changes, and remove fixtures that exercise a deleted compatibility path rather than preserving that path for tests. |
+
+### Strangler sequence and deletion register
+
+Each slice leaves main releasable and targets approximately 20 or fewer
+changed files. The deletion endpoint is deliberately later than caller
+migration and characterization.
+
+| Slice | Focus and bound | Exact deletion endpoint or named successor |
+| --- | --- | --- |
+| P6-A | Retire HTTP application binding and operational central mapping; 14–20 changed files. | Delete pkg/transports/http/application and pkg/transports/mapping/composition operational constructors after all generated routes forward to Wire-built owner handlers. Pure owner mappers are the successor and move beside their owner. |
+| P6-B | Retire Sessions runtime/application compatibility; 12–20 changed files. | Delete RuntimeHTTPServices application binding, ForRuntime/ExecutionService compatibility methods, and callback bridges with zero callers. Successor: the converged Sessions, Runtime, Recordings, and Initializer contracts. |
+| P6-C | Retire the Workers secondary graph named by P5C-4; 12–20 changed files. | Delete internal/services/runtime_assembly, BuildRuntime/BuildRuntimeExecutors callers, AssembledRuntimeBinding, and workstation-pool lifecycle contracts after workers.Service.Execute and Runtime active-attempt guards are green. |
+| P6-D | Retire residual Runtime/Visualization/Work legacy projections and close the deletion register; 8–16 changed files. | Delete APIFactory, legacy snapshot/callback adapters, and cross-owner projection fallbacks only where the P3-P5 owner rows show zero callers. Named successor: Runtime detached observation, Visualization projection, Work root, or Recordings root by concern. |
+
+P6-A through P6-D explicitly use migrate, characterize, then delete. A
+temporary adapter introduced by P3-P5 has exactly one row above; if the row is
+not safe to remove, the packet records retained compatibility and its
+remaining caller rather than claiming completion. No source-topology scan is
+a behavioral acceptance test.
+
+### Characterization and behavioral guards
+
+| Behavior to preserve | Direct guard before or during deletion | Execution tier |
+| --- | --- | --- |
+| One inert, reusable process graph serves isolated executions. | pkg/root/root_test.go:TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions, tests/functional/sessions/root_composition/process_reuse_inert_test.go:TestRootBuildProcessIsInertAndReusableAcrossFactorySessions, and tests/functional/sessions/root_composition/build_process_inert_test.go:TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction. | Local root and session tests; PR root-process acceptance and backend unit lanes. |
+| Activation failure unwinds acquired roles once and preserves the primary failure while close continues through later owners. | tests/functional/sessions/root_composition/application_opening_failure_test.go:TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable, pkg/initializer/lifecycle/manager_test.go:TestManagerUnwindsStartFailureAndJoinsCleanupErrors, and pkg/wire/session_runtime_providers_test.go:TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure. | Local lifecycle/root-composition tests; PR root-process acceptance and backend integration lanes. |
+| CLI and HTTP terminal output never reports success after cancellation or failure. | tests/functional/transport/cli/process/context_cancellation_test.go:TestCLIContextCancellationEmitsNoSuccessResult, tests/functional/transport/cli/output/ndjson_stream_test.go:TestCLINDJSONFailureEndsWithOneTerminalResult, and pkg/transports/http/contracttests/openapi_contract_response_events_test.go:TestOpenAPIContract_FactoryResponseEventPayloadUnionCoversAllVariants. | Local CLI/HTTP contract tests; PR API contract and Linux functional coverage lanes. |
+| Concurrent sessions remain isolated while canonical recording order and replay equivalence survive graph retirement. | tests/functional/transport/http/server/concurrent_requests_test.go:TestAPIConcurrentSessionRequestsRemainIsolated, pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopesKeepConcurrentSessionsIsolated, and pkg/services/recordings/internal/projection_query_contract_test.go:TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts. | Local integration/recording tests and go test -race; PR backend integration and functional coverage lanes. |
+| A throttled in-flight response remains observable until retirement and does not terminate another lane. | pkg/services/factory_runtime/internal/rootobservation/project_test.go:TestProject_ExcludesObservedDispatchResponseFromInFlightProjection, pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests/termination_test.go:TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement, and tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go:TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession. | Local Runtime tests with race coverage; PR backend functional coverage lane. |
+| Detached Workers execution remains outside Runtime/Session opening and releases effects on every exit. | tests/functional/workers/agent/stateless_root_test.go:TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot, pkg/wire/session_runtime_providers_test.go:TestBuildStatelessWorkersExecutesBeforeRuntimeOpening, and pkg/wire/session_runtime_providers_test.go:TestCanonicalStatelessWorkersReleasesProductionWorktreeAfterCancellation. | Local Workers/Wire tests; PR root-process acceptance and Linux functional coverage lanes. |
+
+P6 owners run focused package tests, go test -race for stream/attempt
+retirement, make verify-fast, make typecheck, make pkg-boundary,
+make pkg-structure, and make pkg-file-count while iterating. Before merge,
+run make verify-pr, make lint, vet, and the affected API/CLI/MCP/Linux
+functional lanes. Static gates support deletion review but do not replace
+the behavioral rows.
+
+### P6 sizing, ownership, and dependency
+
+PSS-I01 owns root/Wire/process composition, PSS-I02 owns HTTP, PSS-I03 owns
+shared CLI composition, PSS-I04 owns MCP composition, and PSS-I05 owns event
+boundary metadata. Runtime, Sessions, Work, Recordings, Visualization, and
+Workers own their root contracts and private implementation retirement.
+P6-C is the named successor for the final Workers deletion left by P5C.
+P6 depends on P3, P4, and all applicable P5 slices; each P6 slice is
+independently mergeable and must leave the public process releasable.
+
+## P7 — Close functional and concurrency races
+
+### Outcome and preserved behavior
+
+P7 is the final behavior-closure packet. It proves the P3-P6 composition
+against public process, CLI, HTTP, MCP, ACP, replay, and detached Workers
+callers after the secondary graph is retired. P7 does not introduce a new
+service, adapter, compatibility path, or alternate execution graph. It
+converts the audit's remaining behavior gaps into observable functional and
+race evidence.
+
+The preserved behavior is: failed activation closes each acquired role
+exactly once and retains the primary error; cancellation, timeout, provider
+failure, and worker completion produce one stable terminal outcome; terminal
+response events preserve identity, ordering, content parts, and reconnect
+classification; CLI/API parity holds for shared invocation contracts; ACP
+delegation reuses sessions, rejects duplicate/busy work, and terminalizes
+close/cancel/failure; detached agent-run preserves its last provider turn,
+goal decision envelope, safe diagnostics, and cleanup; replay is equivalent
+to retained canonical facts; and concurrent sessions, throttled lanes, and
+child dispatches remain isolated.
+
+P7 explicitly covers the audit gaps: full runProcess lifecycle and close-error
+joining, a public detached-worker caller guard, a public multi-part Work
+terminal response, and one cross-caller terminal-response corpus. A failing
+scenario is a product or owning-lane defect, not permission to weaken the
+assertion or add a source-inventory test.
+
+### Build first
+
+1. Freeze a behavior matrix keyed by customer operation and observable
+   outcome: activation, Work admission, direct/child dispatch, terminal
+   result, response stream, replay, cancellation, and cleanup. Record the
+   existing assertion and the owning package for every cell.
+2. Add or complete characterization at the public root or protocol boundary
+   before changing a behavior assertion. Use deterministic edges.Edges,
+   command-runner effects, retained event fixtures, and controlled clocks;
+   do not use sleeps or timeout padding as synchronization.
+3. Run the matrix through root.BuildProcess and Process.Execute for ordinary
+   application behavior, root.BuildStatelessWorkers for detached behavior,
+   and the protocol contract harnesses only for protocol-owned contracts.
+4. Run focused normal and race tests, investigate failures by owner, and
+   remove any temporary shadow/comparison fixture after the canonical path
+   proves parity. CI evidence is reported in PR comments, never committed.
+
+The canonical path is already the P6-retired graph: one Wire construction,
+Initializer lifecycle, owner roots, Runtime active attempts, Recordings
+history, and Workers request-scoped Execute. P7 cannot add a fallback to make
+a scenario pass. If a residual old path is found, P6 is the named deleting
+successor and P7 remains open until that deletion and its characterization
+are complete.
+
+### Caller-by-caller migration
+
+P7 does not move production callers, but it enumerates the caller corpus whose
+behavior must be observed after P6:
+
+| Caller | Observable scenario | Canonical path and closure evidence |
+| --- | --- | --- |
+| cmd/factory/main.go:runProcess and root.BuildProcess | Success, domain/provider failure, cancellation, Close, exit code, and cleanup-error joining. | Process.Execute plus Initializer lifecycle; root-process functional cells and lifecycle manager guards. |
+| HTTP generated server and SSE response-event routes | Content negotiation, malformed input, isolated concurrent requests, terminal envelopes, reconnect gaps, and active-stream close. | Wire-built owner handlers, Sessions ephemeral response events, and Recordings canonical reads; HTTP contract and functional cells. |
+| MCP stdio and service tools | Discovery, malformed arguments, sync/async/not-ready polling, controls, typed failure, and terminal result. | Wire-built raw tool registry and Initializer stdio intent; MCP contract and functional cells. |
+| ACP stdio, Chat Sessions, and CLI ACP delegation | Session reuse, redelivery idempotency, busy rejection, cancellation, close, provider failure, and child event identity. | Chat Sessions conversation/control context, Sessions invocation, Providers/Settings configuration, and ACP response bridge. |
+| root.BuildStatelessWorkers and detached agent-run | Script/inference/agent success, provider/model/harness failure, timeout/cancel, goal envelope, last-turn output, and resource release. | Workers Service.Execute with injected edges; detached root and Workers functional cells. |
+| Runtime direct/child dispatch and Worker Sessions | Exactly one result acceptance, duplicate callback idempotency, terminal mapping, response publication, replay, and unknown callback rejection. | Runtime active-attempt contract, Workers ExecuteResult, Worker Sessions identity, and Runtime integration/race cells. |
+| Work and Recordings public reads | Multi-part content order/type, materialization, canonical event order, replay equivalence, cursor/gap classification, and artifact references. | Work owns content policy; Recordings owns history/projection/replay; Work/Recordings contract and functional cells. |
+
+### Strangler sequence and deletion register
+
+P7 is a proof sequence rather than a seam replacement, so it has no
+production old path to retain. It still follows the strangler rule:
+
+| Slice | Focus and bound | Exact deletion endpoint or named successor |
+| --- | --- | --- |
+| P7-A | Public behavior matrix and pre-move gap characterization; 8–14 changed test files. | No production deletion. Any missing migration is returned to its named P6 deletion row; the canonical public test is the successor. |
+| P7-B | Terminal response, CLI/API parity, Work content, and protocol contract closure; 12–20 changed files. | Delete temporary shadow/comparison fixtures once the canonical owner assertions pass. No compatibility path may be added to satisfy a fixture. |
+| P7-C | Activation failure, cancellation, exactly-once unwind, Runtime/Workers acceptance, and replay races; 12–20 changed files. | Delete temporary race harnesses and one-shot dual-path probes after deterministic race evidence is green. Any old production path found here is deleted by P6, the named successor. |
+| P7-D | Final functional/race reruns and owner handoff; 8–16 changed files. | Remove stale test-only adapters and mark the P6 deletion register closed. P7 has no production cleanup endpoint beyond the P6 successor and cannot claim completion with an unnamed old path. |
+
+Every P7 slice leaves main releasable and is independently mergeable. A
+behavior assertion may be strengthened, but it may not be replaced by a
+source, route, command, registration, inventory, link, or asset scan.
+
+### Characterization and behavioral guards
+
+| Behavior to preserve | Direct guard | Execution tier |
+| --- | --- | --- |
+| Activation failure closes acquired Runtime/Visualization resources once and preserves the primary error; process close continues through every owner. | tests/functional/sessions/root_composition/application_opening_failure_test.go:TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable, pkg/initializer/lifecycle/manager_test.go:TestManagerUnwindsStartFailureAndJoinsCleanupErrors, and pkg/wire/session_runtime_providers_test.go:TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure. | Local root/lifecycle tests and go test -race where lifecycle state changes; PR root-process acceptance and backend integration lanes. |
+| CLI, HTTP, MCP, and ACP retain one terminal response with stable failure/cancellation shape. | tests/functional/transport/cli/process/context_cancellation_test.go:TestCLIContextCancellationEmitsNoSuccessResult, tests/functional/transport/cli/output/ndjson_stream_test.go:TestCLINDJSONFailureEndsWithOneTerminalResult, pkg/services/factory_sessions/transports/mcp/execution_test.go:TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult, and tests/functional/transport/acp/stdio/cli_serve_acp_controls_test.go:TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt. | Local protocol contract tests; PR API/MCP contract and Linux functional coverage lanes. |
+| Shared CLI/API invocation success, domain failure, and cancellation remain equivalent. | tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunSuccessParityThroughRootProcess, tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess, and tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunCancellationParityThroughRootProcess. | Local focused functional cells; PR backend functional short tier and root-process acceptance. |
+| HTTP response events and reconnect/replay retain typed ordered payloads and concurrent-session isolation. | pkg/transports/http/contracttests/openapi_contract_response_events_test.go:TestOpenAPIContract_FactoryResponseEventPayloadUnionCoversAllVariants, tests/functional/transport/http/server/concurrent_requests_test.go:TestAPIConcurrentSessionRequestsRemainIsolated, and tests/functional/events/response_events/terminal_outcomes_test.go:TestReadResponseEventStreamUntilTerminalRunOutcomes. | Local HTTP contract/SSE tests and go test -race; PR api-smoke and Linux functional coverage lanes. |
+| ACP redelivery, busy control, child attribution, and retained replay do not duplicate or cross streams. | tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go:TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch, tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go:TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch, tests/functional/chat_sessions/root_composition/acp_worker_child_events_test.go:TestACPWorkerChildStreamSurvivesRetainedReplay, and tests/functional/transport/acp/stdio/cli_serve_acp_controls_test.go:TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession. | Local Chat Sessions/ACP tests; PR Linux functional coverage and pinned ACP real-client lane. |
+| Detached agent-run preserves goal envelope, typed failure, cancellation, terminal output, and resource release without opening Runtime/Session. | tests/functional/workers/agent/stateless_root_test.go:TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot, pkg/services/workers/wire/stateless_execute_test.go:TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope, pkg/services/workers/internal/services/workstations/executor/agentrun/executor_test.go:TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass, and pkg/wire/session_runtime_providers_test.go:TestCanonicalStatelessWorkersReleasesProductionWorktreeAfterCancellation. | Local Workers/root tests and race tests for cancellation; PR root-process acceptance and Linux functional coverage lanes. |
+| Runtime accepts concurrent/duplicate completion exactly once, preserves terminal mapping, and does not terminate observed in-flight work early. | pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go:TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce, TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay, pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_terminal_semantics_test.go:TestFactoryImpl_DirectAndChildDispatchPreserveIdenticalTerminalOutcomeMapping, and pkg/services/factory_runtime/internal/services/orchestration/subsystems/terminationtests/termination_test.go:TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement. | Local Runtime integration and go test -race; PR backend integration, functional coverage, and race lane. |
+| Canonical replay and retained projections are equivalent and isolated across concurrent recording scopes. | pkg/services/recordings/internal/projection_query_contract_test.go:TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts and pkg/services/recordings/internal/projection_query_contract_test.go:TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes, plus pkg/services/recordings/internal/canonical_recording_lifecycle_test.go:TestRecordingScopesKeepConcurrentSessionsIsolated. | Local Recordings tests and race tests; PR backend integration and replay/functional lane. |
+| Multi-part Work content reaches a public terminal response without reordering or inventing success. | pkg/services/work/transports/http/admission_mapping_test.go:TestSubmitWorkResponseToAPI_EncodesDetachedResult, pkg/services/work/transports/http/read_mapping_test.go:TestWorkReadModelToAPI_EncodesDetachedReadModel, and tests/functional/sessions/root_composition/work_admission_response_stream_test.go:TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle. | Local Work/Session integration; PR API contract and Linux functional coverage lanes. |
+
+P7 owners run focused tests, go test -race for all attempt, stream, replay,
+and cleanup changes, make test-root-process-acceptance, make verify-fast,
+make typecheck, and the relevant API/MCP smoke targets. Before merge run
+make verify-pr, make test-functional, make lint, package structure/boundary
+gates, and the affected pinned ACP/provider/worktree lanes. Required CI
+evidence belongs in PR comments only.
+
+### P7 sizing, ownership, and dependency
+
+P7 owns cross-boundary functional and race evidence, not product ownership.
+PSS-I01 owns root-process fixtures, PSS-I02 HTTP/API contract cells, PSS-I04
+MCP cells, PSS-I05 response-event metadata, Chat Sessions owns ACP behavior,
+Runtime owns dispatch/termination, Recordings owns replay, Work owns content,
+and Workers owns detached execution. P7 depends on P6 and the completed P5
+lanes. Each slice is focused, approximately 20 or fewer changed files, and
+mergeable on its own; a discovered product defect is routed to its owning
+lane instead of being hidden in the closure packet.
+
+## Story 004 secondary-graph and race-closure packet closure
+
+Story 004 is complete when P6 and P7 each contain an outcome, build-first
+sequence, exhaustive caller migration, explicit deletion endpoint or named
+successor, observable behavioral acceptance, named guards with local and PR
+tiers, and bounded ownership/sizing. P6 must retire every P3-P5 temporary
+adapter exactly once, and P7 must prove activation failure, exactly-once
+unwind, terminal response preservation, replay, detached agent-run, ACP
+delegation, and affected concurrent behavior without a meta-test.
+
+## Final P3-P7 reconciliation
+
+The packet dependency order is P3 Runtime ownership, then P4 Factory Sessions
+lifecycle, then the independent P5A CLI, P5B HTTP/MCP/ACP, and P5C detached
+Workers slices, then P6 secondary-graph deletion, and finally P7 functional
+and race closure. No earlier packet depends on a later packet to restore
+behavior. P5A, P5B, and P5C name their shared path-lease owners; P6 is the
+single deleting successor for residual composition paths, and P7 introduces
+no production compatibility path.
+
+The packet definitions cite the authoritative runtime-opening matrix, P1
+deletion register, remaining-violations audit, transport-convergence audit,
+WSE plan, architecture vocabulary, and planning standard rather than
+rewriting them. The current-main audit disagreement and historical
+throttled-lane guard remain explicit. Every behavioral row names an observable
+guard and execution tier; no packet relies on a source, route, command,
+registration, inventory, link, or asset scan as acceptance.
+
+The authoring diff is documentation-only and contains only this owned plan.
+No Go, UI, generated contract, standard, workflow, quarantine, script, or
+other live-lane surface is changed. Final delivery requires the synchronized
+branch head to be pushed, an open PR to be created from this plan description,
+required CI to start on that head, and any blocking conversation to be
+addressed; terminal CI and merge remain review-stage responsibilities.
 
 ## Story 003 transport and direct-execution packet closure
 
@@ -919,6 +1225,6 @@ Story 001 is complete when this document is present and records:
   caller behavior that still lacks a characterization; and
 - the handoff rule that later packet authoring must preserve the audit evidence
   and not silently reinterpret P2A or the current ownership boundaries. Story
-  002 and 003 now own the P3-P5 packet definitions below.
+  002, 003, and 004 now own the P3-P7 packet definitions below.
 
 No production source or generated contract is changed by this audit packet.
