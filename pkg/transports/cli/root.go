@@ -1232,6 +1232,7 @@ func resolveSignatureRunFactoryPrompt(
 	}
 	cfg.InvocationNormalizedArguments = prepared.NormalizedArguments
 	cfg.PreparedInvocationInput = &prepared
+	cfg.InvocationArguments = work.RuntimeInvocationArguments(signature, prepared.NormalizedArguments)
 	return nil
 }
 
@@ -1256,6 +1257,13 @@ func resolveCompatibilityRunFactoryPrompt(
 		return nil
 	}
 	cfg.PreparedInvocationInput = &input
+	// Keep a non-nil, empty runtime argument set for compatibility input. It
+	// marks this as a one-shot invocation so Factory Definitions can resolve
+	// omitted exact placeholders to their normal runtime defaults, while the
+	// compatibility text itself remains in PreparedInvocationInput.
+	cfg.InvocationArguments = &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{},
+	}
 	assignCompatibilityInvocationInput(cfg, input)
 	return nil
 }

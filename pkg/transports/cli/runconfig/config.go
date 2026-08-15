@@ -48,6 +48,7 @@ type Config struct {
 	InvocationFileExplicit        bool
 	InvocationNormalizedArguments *work.NormalizedArguments
 	PreparedInvocationInput       *work.PreparedInvocationInput
+	InvocationArguments           *work.InvocationArguments
 	RunnerID                      string
 	ProviderOverride              string
 	ModelOverride                 string

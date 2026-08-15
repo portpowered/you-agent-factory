@@ -543,6 +543,7 @@ func invocationTarget(
 		WorkflowID:              cfg.Workflow,
 		MockWorkersConfig:       mockWorkersConfig,
 		SkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
+		InvocationArguments:     work.CloneInvocationArguments(cfg.InvocationArguments),
 	}
 }
 

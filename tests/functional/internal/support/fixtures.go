@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -35,6 +36,9 @@ func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
 	for _, ws := range workstations {
 		name, _ := ws["name"].(string)
 		if name == "" {
+			continue
+		}
+		if workstationType, _ := ws["type"].(string); strings.EqualFold(strings.TrimSpace(workstationType), interfaces.WorkstationTypeLogical) {
 			continue
 		}
 		WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n")

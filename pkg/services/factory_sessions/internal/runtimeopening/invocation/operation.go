@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
@@ -633,6 +634,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	config.FactoryDefinition.Directory = target.FactoryDir
 	config.FactoryDefinition.SourcePath = target.FactorySourcePath
 	config.FactoryDefinition.ExecutionBaseDir = target.ExecutionBaseDir
+	config.FactoryDefinition.InvocationArguments = work.CloneInvocationArguments(target.InvocationArguments)
 	config.OperatorDefaults = target.OperatorDefaults
 	config.FactoryRuntime.Mode = factorydefinitions.RuntimeModeService
 	config.FactoryRuntime.Verbose = target.Verbose

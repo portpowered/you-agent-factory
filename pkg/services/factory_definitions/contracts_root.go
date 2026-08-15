@@ -9,6 +9,7 @@ import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Root-owned aliases expose the Factory Definition vocabulary without making
@@ -526,6 +527,7 @@ type ResolveRuntimeSnapshotRequest struct {
 type RuntimeSnapshotInvocationContext struct {
 	FactorySessionID string
 	WorkflowID       string
+	Arguments        *work.InvocationArguments
 }
 
 // ResolveRuntimeSnapshotResult carries one detached Runtime input. Every
@@ -576,9 +578,13 @@ func (snapshot RuntimeSnapshot) Clone() (RuntimeSnapshot, error) {
 	}
 
 	cloned := RuntimeSnapshot{
-		FactoryDir:        snapshot.FactoryDir,
-		RuntimeBaseDir:    snapshot.RuntimeBaseDir,
-		Invocation:        snapshot.Invocation,
+		FactoryDir:     snapshot.FactoryDir,
+		RuntimeBaseDir: snapshot.RuntimeBaseDir,
+		Invocation: RuntimeSnapshotInvocationContext{
+			FactorySessionID: snapshot.Invocation.FactorySessionID,
+			WorkflowID:       snapshot.Invocation.WorkflowID,
+			Arguments:        work.CloneInvocationArguments(snapshot.Invocation.Arguments),
+		},
 		EffectiveFactory:  *config,
 		Workers:           make([]FactoryWorkerConfig, len(snapshot.Workers)),
 		Workstations:      make([]FactoryWorkstationConfig, len(snapshot.Workstations)),

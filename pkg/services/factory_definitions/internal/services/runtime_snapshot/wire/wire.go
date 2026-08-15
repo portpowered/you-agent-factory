@@ -15,8 +15,9 @@ func NewService(
 	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	workstationLoader func() factorydefinitions.WorkstationLoader,
+	readFile factorydefinitions.FileReader,
 ) (runtimesnapshot.Service, error) {
-	service, err := runtimesnapshotimpl.New(loadCanonical, loadFactory, workstationLoader)
+	service, err := runtimesnapshotimpl.New(loadCanonical, loadFactory, workstationLoader, readFile)
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions runtime snapshot resolver: %w", err)
 	}
