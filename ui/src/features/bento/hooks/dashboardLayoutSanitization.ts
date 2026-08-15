@@ -64,10 +64,7 @@ export function collectStoredLayoutDiagnostics(
       continue;
     }
 
-    if (
-      Object.hasOwn(candidate, "id") &&
-      !isAcceptedStoredWidgetID(candidate.id, widgetType)
-    ) {
+    if (!isAcceptedStoredWidgetID(candidate.id, widgetType)) {
       diagnostics.add("invalid-id");
     }
 

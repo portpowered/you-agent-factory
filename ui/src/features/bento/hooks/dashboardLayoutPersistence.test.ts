@@ -70,6 +70,27 @@ describe("sanitizeDashboardLayout", () => {
     ).toBe(true);
   });
 
+  it("reports and repairs a missing card identity", () => {
+    const { id: _missingID, ...itemWithoutID } = layoutItem(
+      DASHBOARD_WIDGET_IDS.workTotals,
+      "work-totals::instance-1",
+    );
+
+    const result = sanitizeDashboardLayout([itemWithoutID]);
+
+    expect(result.diagnostics).toContainEqual({
+      code: "invalid-id",
+      count: 1,
+      severity: "repair",
+    });
+    expect(result.layout).toContainEqual(
+      expect.objectContaining({
+        id: "work-totals::primary",
+        widgetType: DASHBOARD_WIDGET_IDS.workTotals,
+      }),
+    );
+  });
+
   it("repairs duplicate identities and singleton violations deterministically", () => {
     const duplicateID = "work-outcome-chart::instance-1";
     const result = sanitizeDashboardLayout([
