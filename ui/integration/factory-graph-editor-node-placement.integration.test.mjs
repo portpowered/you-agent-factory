@@ -12,6 +12,7 @@ import {
   selectLabeledComboboxOption,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForDurableCheckpoint,
   waitForFactoryGraphSelectionReady,
   waitForStableFactoryGraphNodePlacement,
   waitForStableFactoryGraphViewport,
@@ -495,18 +496,26 @@ async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
 async function beginSaveActivationTrace(page) {
   await page.evaluate(() => {
     const trace = {
+      activationEvents: [],
+      activationPoints: {},
+      handlerBinding: null,
+      handlerInvocations: [],
       records: [],
       recordCount: 0,
       startedAt: performance.now(),
     };
     let previousSignature = null;
+    const instrumentedButtons = new WeakSet();
 
-    const describe = () => {
-      const saveButton = [...document.querySelectorAll("button")].find(
+    const findSaveButton = () =>
+      [...document.querySelectorAll("button")].find(
         (button) =>
           button.getAttribute("aria-label") === "Save changes" ||
           button.getAttribute("aria-label") === "Saving...",
       );
+
+    const describe = () => {
+      const saveButton = findSaveButton();
       const activeElement = document.activeElement;
       const dialogs = [...document.querySelectorAll('[role="dialog"]')].map(
         (dialog) => {
@@ -565,7 +574,52 @@ async function beginSaveActivationTrace(page) {
       };
     };
 
+    const instrumentSaveButton = () => {
+      const saveButton = findSaveButton();
+      if (!saveButton || instrumentedButtons.has(saveButton)) {
+        return;
+      }
+
+      instrumentedButtons.add(saveButton);
+      const recordActivationEvent = (event) => {
+        trace.activationEvents.push({
+          activeElement: document.activeElement?.getAttribute("aria-label"),
+          buttonDisabled: saveButton.disabled,
+          buttonLabel: saveButton.getAttribute("aria-label"),
+          elapsedMs: Math.round(performance.now() - trace.startedAt),
+          eventPhase: event.eventPhase,
+          type: event.type,
+        });
+        if (trace.activationEvents.length > 32) {
+          trace.activationEvents.shift();
+        }
+      };
+      saveButton.addEventListener("click", recordActivationEvent, true);
+      saveButton.addEventListener("click", recordActivationEvent);
+      saveButton.addEventListener("keydown", recordActivationEvent, true);
+
+      const reactPropsKey = Object.getOwnPropertyNames(saveButton).find(
+        (key) => key.startsWith("__reactProps$") && key.length > 13,
+      );
+      const reactProps = reactPropsKey ? saveButton[reactPropsKey] : undefined;
+      if (reactProps && typeof reactProps.onClick === "function") {
+        const originalOnClick = reactProps.onClick;
+        reactProps.onClick = (...args) => {
+          trace.handlerInvocations.push({
+            activeElement: document.activeElement?.getAttribute("aria-label"),
+            buttonDisabled: saveButton.disabled,
+            elapsedMs: Math.round(performance.now() - trace.startedAt),
+          });
+          return originalOnClick(...args);
+        };
+        trace.handlerBinding = "react-onClick-wrapped";
+      } else {
+        trace.handlerBinding = "react-onClick-not-found";
+      }
+    };
+
     const record = () => {
+      instrumentSaveButton();
       const observation = describe();
       const signature = JSON.stringify(observation);
       if (signature === previousSignature) {
@@ -585,22 +639,61 @@ async function beginSaveActivationTrace(page) {
       subtree: true,
     });
     record();
-    window.__graphSaveActivationTrace = { observer, trace };
+    window.__graphSaveActivationTrace = { describe, observer, record, trace };
   });
 }
 
-async function endSaveActivationTrace(page, enabledPollCount) {
-  return await page.evaluate((pollCount) => {
+async function recordSaveActivationPoint(page, label) {
+  await page.evaluate((pointLabel) => {
     const entry = window.__graphSaveActivationTrace;
     if (!entry) {
-      return null;
+      return;
     }
-    entry.observer.disconnect();
-    entry.trace.enabledPollCount = pollCount;
-    entry.trace.finishedAt = performance.now();
-    delete window.__graphSaveActivationTrace;
-    return entry.trace;
-  }, enabledPollCount);
+    entry.trace.activationPoints[pointLabel] = entry.describe();
+    entry.record();
+  }, label);
+}
+
+async function endSaveActivationTrace(
+  page,
+  {
+    confirmButtonPollCount,
+    dialogPollCount,
+    enabledPollCount,
+    errorMessage,
+    outcome,
+  },
+) {
+  return await page.evaluate(
+    ({
+      confirmButtonPollCount,
+      dialogPollCount,
+      enabledPollCount,
+      errorMessage,
+      outcome,
+    }) => {
+      const entry = window.__graphSaveActivationTrace;
+      if (!entry) {
+        return null;
+      }
+      entry.observer.disconnect();
+      entry.trace.confirmButtonPollCount = confirmButtonPollCount;
+      entry.trace.dialogPollCount = dialogPollCount;
+      entry.trace.enabledPollCount = enabledPollCount;
+      entry.trace.errorMessage = errorMessage;
+      entry.trace.finishedAt = performance.now();
+      entry.trace.outcome = outcome;
+      delete window.__graphSaveActivationTrace;
+      return entry.trace;
+    },
+    {
+      confirmButtonPollCount,
+      dialogPollCount,
+      enabledPollCount,
+      errorMessage,
+      outcome,
+    },
+  );
 }
 
 async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
@@ -640,6 +733,8 @@ async function saveGraphDraft(page, toolbar, expect) {
     name: "Save changes",
   });
   let enabledPollCount = 0;
+  let dialogPollCount = 0;
+  let confirmButtonPollCount = 0;
   let failure = null;
   await beginSaveActivationTrace(page);
   try {
@@ -656,21 +751,31 @@ async function saveGraphDraft(page, toolbar, expect) {
       .toBe(true);
 
     await saveChangesButton.focus();
+    await recordSaveActivationPoint(page, "beforeEnter");
     await saveChangesButton.press("Enter");
+    await recordSaveActivationPoint(page, "afterEnter");
     const saveDialog = page.getByRole("dialog", {
       name: "Save factory graph changes?",
     });
-    await saveDialog.waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
+    await waitForDurableCheckpoint(
+      "save confirmation dialog activation",
+      async () => {
+        dialogPollCount += 1;
+        return await saveDialog.isVisible();
+      },
+      uiInteractionTimeoutMs,
+    );
     const confirmButton = saveDialog
       .getByRole("button", { name: /Save (topology|changes)/ })
       .first();
-    await confirmButton.waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
+    await waitForDurableCheckpoint(
+      "save confirmation action readiness",
+      async () => {
+        confirmButtonPollCount += 1;
+        return await confirmButton.isVisible();
+      },
+      uiInteractionTimeoutMs,
+    );
     const saveResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === "PUT" &&
@@ -692,8 +797,14 @@ async function saveGraphDraft(page, toolbar, expect) {
     failure = error;
     throw error;
   } finally {
-    const trace = await endSaveActivationTrace(page, enabledPollCount);
-    if (failure && trace) {
+    const trace = await endSaveActivationTrace(page, {
+      confirmButtonPollCount,
+      dialogPollCount,
+      enabledPollCount,
+      errorMessage: failure ? String(failure) : null,
+      outcome: failure ? "failure" : "success",
+    });
+    if (trace) {
       console.log(`[graph-save-activation-trace] ${JSON.stringify(trace)}`);
     }
   }
