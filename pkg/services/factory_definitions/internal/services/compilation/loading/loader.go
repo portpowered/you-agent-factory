@@ -43,6 +43,17 @@ type Loader struct {
 	splitRuntimeEntityExists func(string) bool
 }
 
+// ReadFile exposes the loader's already-selected filesystem read effect to
+// other Factory Definitions-owned operations. Keeping this projection here
+// makes invocation interpolation use the same filesystem boundary as source
+// loading without allowing runtime consumers to acquire a filesystem.
+func (l *Loader) ReadFile(path string) ([]byte, error) {
+	if l == nil || l.fileSystem == nil {
+		return nil, fmt.Errorf("Factory Definitions loading filesystem is required")
+	}
+	return l.fileSystem.ReadFile(path)
+}
+
 // New constructs the Factory Definitions loader from flat representation and
 // filesystem capabilities.
 func New(

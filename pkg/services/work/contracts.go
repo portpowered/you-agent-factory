@@ -677,7 +677,7 @@ func CloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
 // CloneInvocationArguments returns a detached copy of runtime-only invocation
 // argument metadata.
 func CloneInvocationArguments(args *InvocationArguments) *InvocationArguments {
-	if args == nil || len(args.Arguments) == 0 {
+	if args == nil {
 		return nil
 	}
 	clone := &InvocationArguments{Arguments: make(map[string]InvocationArgument, len(args.Arguments))}

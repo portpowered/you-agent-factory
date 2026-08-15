@@ -266,6 +266,7 @@ func attachFactoryDefinitionServices(
 		loader.LoadSourceFromCanonicalJSON,
 		loader.LoadSourceFromFactoryDir,
 		func() factorydefinitions.WorkstationLoader { return sessionHost.WorkstationLoader() },
+		factorydefinitions.FileReader(loader.ReadFile),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions runtime snapshot resolver: %w", err)

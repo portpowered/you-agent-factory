@@ -68,6 +68,7 @@ type InvocationTarget struct {
 	MockWorkersConfig                *workers.MockWorkersConfig
 	SkipPermissionsOverride          *bool
 	SkipRunnerPrerequisiteValidation bool
+	InvocationArguments              *work.InvocationArguments
 	// EventScopeID identifies owner-private Factory Event presentation state.
 	// It is the only invocation-time handle for transport event delivery.
 	EventScopeID OpeningScopeID

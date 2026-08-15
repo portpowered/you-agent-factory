@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimesnapshotwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
@@ -25,6 +26,7 @@ func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 			return source, nil
 		},
 		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -62,6 +64,58 @@ func TestResolveRuntimeSnapshotReturnsDetachedEffectiveValues(t *testing.T) {
 		t.Fatalf("ResolveRuntimeSnapshot(second) error = %v", err)
 	}
 	assertDetachedRuntimeSnapshot(t, second.Snapshot)
+}
+
+func TestResolveRuntimeSnapshotInterpolatesInvocationValuesBeforeDetaching(t *testing.T) {
+	t.Parallel()
+
+	source := newTestLoadedSource()
+	source.config.Workers[0].ModelProvider = "${provider}"
+	source.config.Workers[0].Body = "document=${document}"
+	var readPath string
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func(_ string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func() factorydefinitions.WorkstationLoader { return nil },
+		factorydefinitions.FileReader(func(path string) ([]byte, error) {
+			readPath = path
+			return []byte("resolved document"), nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	arguments := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"provider": {Values: []string{"codex"}},
+		"document": {
+			Values:    []string{"story.md"},
+			ValueMode: work.InvocationParameterValueModeFileContents,
+		},
+	}}
+	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical: []byte(`{"name":"detached"}`),
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			Arguments: arguments,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+	}
+	if readPath != "story.md" {
+		t.Fatalf("FILE_CONTENTS reader path = %q, want story.md", readPath)
+	}
+	worker := result.Snapshot.EffectiveFactory.Workers[0]
+	if worker.ModelProvider != "codex" || worker.Body != "document=resolved document" {
+		t.Fatalf("resolved worker = %#v, want concrete provider and interpolated body", worker)
+	}
+	if source.config.Workers[0].ModelProvider != "${provider}" || source.config.Workers[0].Body != "document=${document}" {
+		t.Fatalf("source worker was mutated: %#v", source.config.Workers[0])
+	}
 }
 
 func assertInitialRuntimeSnapshot(t *testing.T, snapshot factorydefinitions.RuntimeSnapshot) {
@@ -125,6 +179,7 @@ func TestResolveRuntimeSnapshotEquivalentRequestsProduceEquivalentValues(t *test
 			return source, nil
 		},
 		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -163,6 +218,7 @@ func TestResolveRuntimeSnapshotRejectsInvalidRequestBeforeLoading(t *testing.T) 
 			return nil, nil
 		},
 		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -192,6 +248,7 @@ func TestResolveRuntimeSnapshotPreservesTypedLoaderFailure(t *testing.T) {
 			return nil, cause
 		},
 		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

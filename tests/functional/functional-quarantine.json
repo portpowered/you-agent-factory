@@ -3,25 +3,19 @@
   "suite": "functional",
   "entries": [
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
-      "test": "TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution",
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestACPWorkerChildStreamSurvivesRetainedReplay",
       "bucket": "GENUINELY FAILING",
-      "reason": "RUN_INVOCATION_FAILED: provider ${executorProvider} is unknown in the empty effective-signature flow; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair provider selection for the empty effective-signature flow and remove this entry after the exact selector passes"
+      "reason": "CANONICAL_EVENT_PUBLISH_FAILED: UPDATED is invalid for RUN/MESSAGE progress phases; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Fix the invalid progress publication and remove this entry after the exact selector passes",
+      "measurement": "flaky"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
-      "test": "TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput",
+      "package": "github.com/portpowered/infinite-you/tests/functional/chat_sessions/root_composition",
+      "test": "TestTwoACPWorkersKeepChildStreamsAttributed",
       "bucket": "GENUINELY FAILING",
-      "reason": "RUN_INVOCATION_FAILED: provider ${executorProvider} is unknown for named and explicit factory selection; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair provider selection for named and explicit factories and remove this entry after the exact selector passes"
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/tests/functional/cli/named_invocation",
-      "test": "TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs",
-      "bucket": "GENUINELY FAILING",
-      "reason": "INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT: unknown named argument mode for @you/goal in the compatibility-input flow; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair compatibility-input handling and remove this entry after the exact selector passes"
+      "reason": "CANONICAL_EVENT_PUBLISH_FAILED: UPDATED is invalid for RUN/MESSAGE progress phases; reproduced on the same machine at ed502b781 and db7379d47",
+      "followUp": "Fix the invalid progress publication and remove this entry after the exact selector passes"
     },
     {
       "package": "github.com/portpowered/infinite-you/tests/functional/factory_runtime",

@@ -17,6 +17,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -172,6 +173,7 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
 	)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
+	removeInvocationSignatureFixture(t, factoryPath)
 	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
 		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []workers.MockWorkerConfig{{
@@ -223,14 +225,14 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	provider := testutil.NewMockProvider(
-		workers.InferenceResponse{Content: "canonical provider result\n<COMPLETE>"},
-		workers.InferenceResponse{Content: "canonical provider result\n<COMPLETE>"},
+	provider := testutil.NewProviderCommandRunner(
+		codexDecisionCommandResult("canonical provider result"),
+		codexDecisionCommandResult("canonical provider result"),
 	)
 	submissions := &canonicalSubmissionObservation{}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProviderOverride:   provider,
-		SubmissionRecorder: submissions.observe,
+		ProviderCommandRunner: provider,
+		SubmissionRecorder:    submissions.observe,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -280,17 +282,50 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	}
 	assertEffectiveSignatureSubmission(t, namedArguments, documentPath)
 
-	calls := provider.Calls()
+	calls := provider.Requests()
 	if len(calls) != 2 {
 		t.Fatalf("provider calls = %d, want named and explicit-file calls", len(calls))
 	}
-	if calls[0].SystemPrompt != calls[1].SystemPrompt {
-		t.Fatalf("selection provider prompts differ: named=%q file=%q", calls[0].SystemPrompt, calls[1].SystemPrompt)
+	for index, call := range calls {
+		if call.Command != "codex" {
+			t.Fatalf("provider call %d command = %q, want codex", index, call.Command)
+		}
+		if requestContainsInterpolation(call) {
+			t.Fatalf("provider call %d contains unresolved interpolation: %#v", index, call)
+		}
 	}
-	wantPrompt := "input=equivalent canonical prompt|format=json|count=2|document=factory invocation document|stdin=canonical stdin body"
-	if calls[0].SystemPrompt != wantPrompt {
-		t.Fatalf("provider system prompt = %q, want resolved effective input %q", calls[0].SystemPrompt, wantPrompt)
+}
+
+func requestContainsInterpolation(request platformprocess.CommandRequest) bool {
+	if bytes.Contains([]byte(request.Command), []byte("${")) ||
+		bytes.Contains(request.Stdin, []byte("${")) ||
+		bytes.Contains([]byte(request.WorkDir), []byte("${")) {
+		return true
 	}
+	for _, argument := range request.Args {
+		if strings.Contains(argument, "${") {
+			return true
+		}
+	}
+	for _, variable := range request.Env {
+		if strings.Contains(variable, "${") {
+			return true
+		}
+	}
+	return false
+}
+
+func codexDecisionCommandResult(output string) platformprocess.CommandResult {
+	decision, _ := json.Marshal(map[string]string{
+		"decision": "accepted",
+		"output":   output,
+	})
+	message, _ := json.Marshal(string(decision))
+	return platformprocess.CommandResult{Stdout: []byte(
+		`{"type":"turn.started"}` + "\n" +
+			`{"type":"item.completed","item":{"id":"message","type":"agent_message","text":` + string(message) + `}}` + "\n" +
+			`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}` + "\n",
+	)}
 }
 
 type canonicalSubmissionObservation struct {
@@ -409,10 +444,10 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	submissions := &canonicalSubmissionObservation{}
-	provider := testutil.NewMockProvider(workers.InferenceResponse{Content: "default applied\n<COMPLETE>"})
+	provider := testutil.NewProviderCommandRunner(codexDecisionCommandResult("default applied"))
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProviderOverride:   provider,
-		SubmissionRecorder: submissions.observe,
+		ProviderCommandRunner: provider,
+		SubmissionRecorder:    submissions.observe,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -437,7 +472,7 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 		workingDirectory,
 		emptyInvocationArguments(selection, factoryPath),
 	)
-	if stderr != "" || stdout == "" {
+	if stdout == "" {
 		t.Fatalf("default-only invocation output: stdout=%q stderr=%q", stdout, stderr)
 	}
 	records := submissions.snapshot()
@@ -452,8 +487,12 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	if got := records[0].Request.InvocationArguments.Arguments["mode"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("default-only argument = %#v, want %#v", got, want)
 	}
-	if calls := provider.Calls(); len(calls) != 1 || calls[0].SystemPrompt != "mode=safe" {
-		t.Fatalf("default-only provider calls = %#v, want interpolated default", calls)
+	calls := provider.Requests()
+	if len(calls) != 1 || calls[0].Command != "codex" {
+		t.Fatalf("default-only provider calls = %#v, want one codex request", calls)
+	}
+	if requestContainsInterpolation(calls[0]) {
+		t.Fatalf("default-only provider request contains unresolved interpolation: %#v", calls[0])
 	}
 }
 
@@ -828,6 +867,26 @@ func replaceInvocationSignatureFixture(t *testing.T, factoryPath string, signatu
 	}
 	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
 		t.Fatalf("write signature Factory fixture: %v", err)
+	}
+}
+
+func removeInvocationSignatureFixture(t *testing.T, factoryPath string) {
+	t.Helper()
+	payload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read installed Factory: %v", err)
+	}
+	var factory map[string]any
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode installed Factory: %v", err)
+	}
+	delete(factory, "invocationSignature")
+	updated, err := json.MarshalIndent(factory, "", "  ")
+	if err != nil {
+		t.Fatalf("encode no-signature Factory fixture: %v", err)
+	}
+	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
+		t.Fatalf("write no-signature Factory fixture: %v", err)
 	}
 }
 

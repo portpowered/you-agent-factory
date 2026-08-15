@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Service resolves authored or canonical sources through injected Definitions
@@ -17,6 +19,7 @@ type Service struct {
 	loadCanonical     factorydefinitions.CanonicalFactoryJSONLoader
 	loadFactory       factorydefinitions.LoadedFactoryLoader
 	workstationLoader func() factorydefinitions.WorkstationLoader
+	readFile          factorydefinitions.FileReader
 }
 
 // New constructs a snapshot resolver from the two source-loading forms used
@@ -25,6 +28,7 @@ func New(
 	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	workstationLoader func() factorydefinitions.WorkstationLoader,
+	readFile factorydefinitions.FileReader,
 ) (*Service, error) {
 	if loadCanonical == nil {
 		return nil, fmt.Errorf("canonical Factory loader is required")
@@ -36,6 +40,7 @@ func New(
 		loadCanonical:     loadCanonical,
 		loadFactory:       loadFactory,
 		workstationLoader: workstationLoader,
+		readFile:          readFile,
 	}, nil
 }
 
@@ -98,7 +103,7 @@ func (s *Service) ResolveRuntimeSnapshot(
 		return factorydefinitions.ResolveRuntimeSnapshotResult{}, canceled(err)
 	}
 
-	snapshot, err := detach(loaded, request.Invocation)
+	snapshot, err := detach(ctx, loaded, request.Invocation, s.readFile)
 	if err != nil {
 		return factorydefinitions.ResolveRuntimeSnapshotResult{}, invalidDefinition(
 			"effectiveFactory",
@@ -148,12 +153,27 @@ func factoryDirOrSourcePath(factoryDir, sourcePath string) string {
 }
 
 func detach(
+	ctx context.Context,
 	loaded factorydefinitions.MutableLoadedFactorySource,
 	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
+	readFile factorydefinitions.FileReader,
 ) (factorydefinitions.RuntimeSnapshot, error) {
 	config, err := cloneRuntimeSnapshotConfig(loaded.FactoryConfig())
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, err
+	}
+	if invocation.Arguments != nil {
+		resolved, err := workstationexecution.ResolveExecutionDefinition(ctx, factorydefinitions.ResolveExecutionCatalogRequest{
+			EffectiveDefinition: config,
+			Invocation: factorydefinitions.InvocationDefinitionContext{
+				Arguments: invocation.Arguments,
+				ReadFile:  readFile,
+			},
+		})
+		if err != nil {
+			return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf("resolve invocation-effective execution definition: %w", err)
+		}
+		config = resolved
 	}
 	snapshot := newRuntimeSnapshot(loaded, invocation, *config)
 	appendRuntimeSnapshotWorkersAndSources(&snapshot, *config)
@@ -195,6 +215,7 @@ func newRuntimeSnapshot(
 	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
 	config factorydefinitions.FactoryConfig,
 ) factorydefinitions.RuntimeSnapshot {
+	invocation.Arguments = work.CloneInvocationArguments(invocation.Arguments)
 	snapshot := factorydefinitions.RuntimeSnapshot{
 		FactoryDir:        loaded.FactoryDir(),
 		RuntimeBaseDir:    loaded.RuntimeBaseDir(),

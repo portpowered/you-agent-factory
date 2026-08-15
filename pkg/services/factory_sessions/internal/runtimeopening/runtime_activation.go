@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -89,6 +90,7 @@ func runtimeOpeningRequestFromActivation(
 			definitionDirectory,
 			request.Inputs.Definition.SourcePath,
 			executionBaseDir,
+			request.Snapshot.Invocation.Arguments,
 		),
 		FactoryRuntime: request.Runtime,
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
@@ -126,11 +128,15 @@ func runtimeOpeningRequestFromActivation(
 	}, nil
 }
 
-func factorydefinitionsRuntimeOpeningRequest(directory, sourcePath, executionBaseDir string) factorydefinitions.RuntimeOpeningRequest {
+func factorydefinitionsRuntimeOpeningRequest(
+	directory, sourcePath, executionBaseDir string,
+	invocationArguments *work.InvocationArguments,
+) factorydefinitions.RuntimeOpeningRequest {
 	return factorydefinitions.RuntimeOpeningRequest{
-		Directory:        directory,
-		SourcePath:       sourcePath,
-		ExecutionBaseDir: executionBaseDir,
+		Directory:           directory,
+		SourcePath:          sourcePath,
+		ExecutionBaseDir:    executionBaseDir,
+		InvocationArguments: work.CloneInvocationArguments(invocationArguments),
 	}
 }
 
@@ -389,6 +395,7 @@ func (f *Factory) resolveActivationDefinitionSnapshot(
 		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
 			FactorySessionID: sessionID,
 			WorkflowID:       opening.Recordings.WorkflowID,
+			Arguments:        work.CloneInvocationArguments(opening.FactoryDefinition.InvocationArguments),
 		},
 	})
 	if err != nil {
