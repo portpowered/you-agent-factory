@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,6 +29,42 @@ type controlledWorkstationBoundary struct {
 type countingWorkerExecutor struct {
 	calls atomic.Int32
 }
+
+type gatedRuntimeLogger struct {
+	armed       atomic.Bool
+	entered     chan struct{}
+	release     chan struct{}
+	releaseOnce sync.Once
+}
+
+func newGatedRuntimeLogger() *gatedRuntimeLogger {
+	return &gatedRuntimeLogger{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (l *gatedRuntimeLogger) arm() {
+	l.armed.Store(true)
+}
+
+func (l *gatedRuntimeLogger) releaseTick() {
+	l.releaseOnce.Do(func() { close(l.release) })
+}
+
+func (l *gatedRuntimeLogger) Debug(string, ...any) {}
+
+func (l *gatedRuntimeLogger) Info(message string, _ ...any) {
+	if message != "engine: [START] running engine tick" || !l.armed.CompareAndSwap(true, false) {
+		return
+	}
+	close(l.entered)
+	<-l.release
+}
+
+func (l *gatedRuntimeLogger) Warn(string, ...any)    {}
+func (l *gatedRuntimeLogger) Error(string, ...any)   {}
+func (l *gatedRuntimeLogger) Verbose(string, ...any) {}
 
 func (e *countingWorkerExecutor) Execute(
 	context.Context,
@@ -413,6 +450,59 @@ func TestFactoryImpl_RunCancellationPropagatesThroughWorkersBoundary(t *testing.
 	}
 	if state := impl.dispatchPlan.State(); state.Mode != "STOPPED" || state.StopReason != "CANCELLED" {
 		t.Fatalf("cancelled Runtime outbox state = %#v", state)
+	}
+}
+
+// TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult fixes the ordering
+// that previously routed a cancellation-induced result through the ordinary
+// FAILED transition path: the result is admitted, the engine tick is gated,
+// cancellation happens, and the result arrives before the transitioner runs.
+func TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult(t *testing.T) {
+	boundary := newControlledWorkstationBoundary()
+	logger := newGatedRuntimeLogger()
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNet()), withServiceMode(), withWorkerService(boundary),
+		withWorkerExecutor("mock", &passExecutor{}), withLogger(logger),
+	)
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	if _, err := submitWorkRequests(t.Context(), runtime, []work.SubmitRequest{{
+		WorkID: "work-cancel-gated", WorkTypeID: "task", TraceID: "trace-cancel-gated",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	defer logger.releaseTick()
+	runCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() { runDone <- runtime.Run(runCtx) }()
+	request := awaitCanonicalWorkersRequest(t, boundary.requests)
+	if request.Execution.Dispatch.TransitionID != "t-process" {
+		t.Fatalf("gated dispatch transition = %q, want t-process", request.Execution.Dispatch.TransitionID)
+	}
+	written := observeNextBufferedResult(t, runtime)
+	logger.arm()
+	impl.engine.NotifyResult()
+	select {
+	case <-logger.entered:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the gated cancellation tick")
+	}
+	cancel()
+	waitForBufferedResult(t, written)
+	logger.releaseTick()
+
+	err = <-runDone
+	if err != nil {
+		t.Fatalf("Run after deterministic late cancellation result = %v, want nil", err)
+	}
+	state := impl.dispatchPlan.State()
+	if state.Mode != "STOPPED" || state.StopReason != "CANCELLED" {
+		t.Fatalf("cancelled Runtime outbox state = %#v, want STOPPED/CANCELLED", state)
+	}
+	late, ok := impl.resultBuffer.Read()
+	if !ok || late.Outcome != workers.OutcomeFailed || late.Error == "" {
+		t.Fatalf("absorbed late cancellation result = (%#v, %t), want retained FAILED cancellation result", late, ok)
 	}
 }
 
