@@ -85,7 +85,7 @@ func TestAgyRootPTYExecutionEndToEnd(t *testing.T) {
 	})
 	root := newAgyRoot(t, effect)
 
-	continued, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
@@ -264,7 +264,7 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 	})
 	root := newAgyRoot(t, effect)
 
-	continued, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
@@ -314,7 +314,7 @@ func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
 	})
 	root := newAgyRoot(t, effect)
 
-	_, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
+	_, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,

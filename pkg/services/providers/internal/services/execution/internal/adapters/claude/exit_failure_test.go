@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -54,7 +55,7 @@ func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
-			})
+			}, platformclock.Real{})
 			_, err := newClaudeRoot(t, effect).Execute(t.Context(), claudeFailureRequest())
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {

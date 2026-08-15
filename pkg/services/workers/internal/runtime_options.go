@@ -93,6 +93,33 @@ func (s *Service) BuildRuntimeExecutors(
 		inferenceProgressPublisher,
 	)
 	executors := make(map[string]workers.WorkerExecutor, len(factoryConfig.Workers)+len(factoryConfig.Workstations))
+	if err := s.buildConfiguredRuntimeWorkers(
+		executors, runtimeConfig, factoryConfig, factoryRunnerID, workflowContext, logger,
+		invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher,
+		scriptRecorder, inferenceRecorder, agentRunRecorder, now, decorators,
+	); err != nil {
+		return nil, err
+	}
+	s.buildConfiguredLogicalWorkstations(executors, runtimeConfig, factoryConfig, factoryRunnerID, workflowContext, logger, now)
+	return executors, nil
+}
+
+func (s *Service) buildConfiguredRuntimeWorkers(
+	executors map[string]workers.WorkerExecutor,
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	factoryConfig *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	workflowContext *workerexecution.Context,
+	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
+	providerOverride providers.Service,
+	inferenceProgressPublisher workers.ProgressPublisher,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workers.InferenceEventRecorder,
+	agentRunRecorder workers.AgentRunEventRecorder,
+	now func() time.Time,
+	decorators []workerconstruction.RunnerDecorator,
+) error {
 	for _, configured := range factoryConfig.Workers {
 		definition, ok := runtimeConfig.Worker(configured.Name)
 		if !ok || definition == nil || definition.Type == "" {
@@ -110,13 +137,25 @@ func (s *Service) BuildRuntimeExecutors(
 			scriptRecorder, inferenceRecorder, agentRunRecorder, now, s.processEnvironment, s.currentWorkingDirectory, decorators,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("construct worker %q: %w", configured.Name, err)
+			return fmt.Errorf("construct worker %q: %w", configured.Name, err)
 		}
 		if result.Dispatch == nil {
-			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", configured.Name, definition.Type)
+			return fmt.Errorf("unsupported worker type for worker %q: %s", configured.Name, definition.Type)
 		}
 		executors[configured.Name] = result.Dispatch
 	}
+	return nil
+}
+
+func (s *Service) buildConfiguredLogicalWorkstations(
+	executors map[string]workers.WorkerExecutor,
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	factoryConfig *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	workflowContext *workerexecution.Context,
+	logger logging.Logger,
+	now func() time.Time,
+) {
 	for _, workstation := range factoryConfig.Workstations {
 		definition, ok := runtimeConfig.Workstation(workstation.Name)
 		if !ok || definition == nil || definition.Type != interfaces.WorkstationTypeLogical || definition.WorkerTypeName != "" {
@@ -127,7 +166,6 @@ func (s *Service) BuildRuntimeExecutors(
 		)
 		executors[workstation.Name] = result.Dispatch
 	}
-	return executors, nil
 }
 
 func (s *Service) rebindProvidersCommandRunner(logger logging.Logger) error {

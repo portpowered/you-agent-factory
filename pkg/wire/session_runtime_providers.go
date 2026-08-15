@@ -88,7 +88,9 @@ func provideApplicationProcessLifecycle(
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
 ) (initializerapplication.ProcessLifecycle, error) {
-	lifecycle, ok := service.(providers.Lifecycle)
+	lifecycle, ok := service.(interface {
+		Close(context.Context) error
+	})
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
 	}

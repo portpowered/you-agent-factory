@@ -69,7 +69,19 @@ func (adapter ProviderServiceAdapter) execute(
 	if dispatchID == "" {
 		dispatchID = request.AttemptID
 	}
-	response, err := adapter.InferFunc(ctx, workerexecution.ProviderInferenceRequest{
+	response, err := adapter.InferFunc(ctx, providerInferenceRequest(request, resume, dispatchID))
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	return providerExecuteResult(response), nil
+}
+
+func providerInferenceRequest(
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+	dispatchID string,
+) workerexecution.ProviderInferenceRequest {
+	return workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID:      dispatchID,
 			TransitionID:    request.TransitionID,
@@ -127,10 +139,10 @@ func (adapter ProviderServiceAdapter) execute(
 		SkipPermissions:              request.SkipPermissions,
 		PrintTimeout:                 request.PrintTimeout,
 		ExecutionLogger:              request.ExecutionLogger,
-	})
-	if err != nil {
-		return providers.ExecuteResult{}, err
 	}
+}
+
+func providerExecuteResult(response workerexecution.InferenceResponse) providers.ExecuteResult {
 	result := providers.ExecuteResult{
 		Content: response.Content,
 		Outcome: providers.ExecuteOutcome(response.Outcome),
@@ -169,7 +181,7 @@ func (adapter ProviderServiceAdapter) execute(
 			}
 		}
 	}
-	return result, nil
+	return result
 }
 
 func workerModelOperationBindings(values []providers.ResolvedModelOperationBinding) []workerexecution.ResolvedModelOperationBinding {
@@ -203,6 +215,60 @@ func (adapter ProviderServiceAdapter) Continue(ctx context.Context, request prov
 		return providers.ContinueResult{}, err
 	}
 	return providers.ContinueResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeResumed, Result: result}, nil
+}
+
+func (adapter ProviderServiceAdapter) ContinueReference(ctx context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, providerContinuationFailure(providers.ContinuationFailureKindInvalid, err.Error(), request.Reference)
+	}
+	canonical, err := adapter.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: reference.Provider.String()})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, providerContinuationFailure(providers.ContinuationFailureKindForeign, err.Error(), request.Reference)
+	}
+	reference.Provider = canonical.ID
+	attempt := request.Attempt.Clone()
+	if strings.TrimSpace(attempt.Provider.String()) == "" {
+		attempt.Provider = canonical.ID
+	} else {
+		attemptIdentity, resolveErr := adapter.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: attempt.Provider.String()})
+		if resolveErr != nil || attemptIdentity.ID != canonical.ID {
+			message := "attempt provider does not match continuation provider"
+			if resolveErr != nil {
+				message = resolveErr.Error()
+			}
+			return providers.ContinueReferenceResult{}, providerContinuationFailure(providers.ContinuationFailureKindForeign, message, request.Reference)
+		}
+		attempt.Provider = canonical.ID
+	}
+	continued, err := adapter.Continue(ctx, providers.ContinueRequest{Reference: reference, Attempt: attempt})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if strings.TrimSpace(continuedReference.Provider.String()) == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{Reference: resultReference, Outcome: continued.Outcome, Result: continued.Result}, nil
+}
+
+func providerContinuationFailure(kind providers.ContinuationFailureKind, message string, ref providers.ContinuationRef) providers.ContinuationFailure {
+	normalized := ref.Normalize()
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	return providers.ContinuationFailure{
+		Kind:    kind,
+		Message: message,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       identity,
+		},
+	}
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

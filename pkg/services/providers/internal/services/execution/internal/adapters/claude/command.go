@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -29,9 +29,9 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 
 // NewCommandEffect binds one streaming subprocess runner to the Claude adapter.
 
-func NewCommandEffect(candidate any) Effect {
+func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 	runner := providerservice.AdaptCommandRunner(candidate)
-	if runner == nil {
+	if runner == nil || clock == nil {
 		return nil
 	}
 	return EffectFunc(func(
@@ -39,13 +39,13 @@ func NewCommandEffect(candidate any) Effect {
 		request execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
-		started := time.Now()
+		started := clock.Now()
 		command, err := buildCommand(request)
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
 		result, runErr := runStreaming(ctx, runner, command, observe)
-		effectResult := EffectResult{DurationMillis: time.Since(started).Milliseconds()}
+		effectResult := EffectResult{DurationMillis: clock.Now().Sub(started).Milliseconds()}
 		if runErr != nil {
 			return effectResult, nativeCommandError(ctx, runErr)
 		}

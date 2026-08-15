@@ -420,7 +420,7 @@ func TestControlContract_Characterization_UnsupportedForEveryAction(t *testing.T
 		providers.ControlActionCancel,
 		providers.ControlActionTerminate,
 	} {
-		result, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
+		result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 			Provider:  providers.IDCodex,
 			AttemptID: "attempt-1",
 			Action:    action,
@@ -486,7 +486,7 @@ func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(
 		providers.Descriptor{ID: providers.IDCodex},
 	)
 
-	completed, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
+	completed, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "completed-attempt",
 		Action:    providers.ControlActionCancel,
@@ -498,7 +498,7 @@ func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(
 		t.Fatalf("ControlAttempt(completed).Outcome = %q, want completed", completed.Outcome)
 	}
 
-	unsupported, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
+	unsupported, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "unsupported-attempt",
 		Action:    providers.ControlActionCancel,
@@ -513,7 +513,7 @@ func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(
 		t.Fatal("completed and unsupported outcomes must be distinguishable typed values")
 	}
 
-	failed, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
+	failed, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "failing-attempt",
 		Action:    providers.ControlActionCancel,
@@ -587,56 +587,48 @@ func TestControlActionValidate(t *testing.T) {
 	}
 }
 func TestProviderExecutionContractsCloneAndObserveDetachedValues(t *testing.T) {
+	t.Run("request clone", assertExecuteRequestClone)
+	t.Run("observers", assertExecuteObservers)
+	t.Run("diagnostics and result clone", assertExecuteDiagnosticsClone)
+	t.Run("failure kinds", assertExecuteFailureKinds)
+	t.Run("reasoning and validation", assertExecuteReasoningAndValidation)
+}
+
+func assertExecuteRequestClone(t *testing.T) {
+	t.Helper()
 	metadata := map[string]any{"nested": []any{"before"}}
 	request := providers.ExecuteRequest{
-		Provider:  providers.IDCodex,
-		AttemptID: "attempt-1",
-		Correlation: providers.ExecuteCorrelation{
-			WorkIDs: []string{"work-1"},
-		},
-		InputBindings: map[string][]string{"prompt": {"hello"}},
-		Args:          []string{"--json"},
-		RequiredCapabilities: []string{
-			"structured_output",
-		},
-		EnvVars:            map[string]string{"TOKEN": "value"},
-		ProcessEnvironment: []string{"TOKEN=value"},
-		InputTokens:        []any{"token"},
-		ModelBindings:      []providers.ResolvedModelOperationBinding{{Slot: "prompt", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"answer":true}`), Metadata: metadata}}}},
+		Provider: providers.IDCodex, AttemptID: "attempt-1",
+		Correlation:   providers.ExecuteCorrelation{WorkIDs: []string{"work-1"}},
+		InputBindings: map[string][]string{"prompt": {"hello"}}, Args: []string{"--json"},
+		RequiredCapabilities: []string{"structured_output"}, EnvVars: map[string]string{"TOKEN": "value"},
+		ProcessEnvironment: []string{"TOKEN=value"}, InputTokens: []any{"token"},
+		ModelBindings: []providers.ResolvedModelOperationBinding{{Slot: "prompt", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"answer":true}`), Metadata: metadata}}}},
 	}
 	if err := request.Validate(); err != nil {
 		t.Fatalf("ExecuteRequest.Validate() = %v", err)
 	}
-	clonedRequest := request.Clone()
-	request.Correlation.WorkIDs[0] = "mutated"
-	request.InputBindings["prompt"][0] = "mutated"
-	request.Args[0] = "mutated"
-	request.RequiredCapabilities[0] = "mutated"
-	request.EnvVars["TOKEN"] = "mutated"
+	cloned := request.Clone()
+	request.Correlation.WorkIDs[0], request.InputBindings["prompt"][0] = "mutated", "mutated"
+	request.Args[0], request.RequiredCapabilities[0], request.EnvVars["TOKEN"] = "mutated", "mutated", "mutated"
 	request.ProcessEnvironment[0] = "mutated"
 	request.ModelBindings[0].Content[0].Metadata["nested"].([]any)[0] = "mutated"
-	if clonedRequest.Correlation.WorkIDs[0] != "work-1" ||
-		clonedRequest.InputBindings["prompt"][0] != "hello" ||
-		clonedRequest.Args[0] != "--json" ||
-		clonedRequest.RequiredCapabilities[0] != "structured_output" ||
-		clonedRequest.EnvVars["TOKEN"] != "value" ||
-		clonedRequest.ProcessEnvironment[0] != "TOKEN=value" ||
-		clonedRequest.ModelBindings[0].Content[0].Metadata["nested"].([]any)[0] != "before" {
-		t.Fatalf("ExecuteRequest.Clone() did not detach request values: %#v", clonedRequest)
+	if cloned.Correlation.WorkIDs[0] != "work-1" || cloned.InputBindings["prompt"][0] != "hello" || cloned.Args[0] != "--json" || cloned.RequiredCapabilities[0] != "structured_output" || cloned.EnvVars["TOKEN"] != "value" || cloned.ProcessEnvironment[0] != "TOKEN=value" || cloned.ModelBindings[0].Content[0].Metadata["nested"].([]any)[0] != "before" {
+		t.Fatalf("ExecuteRequest.Clone() did not detach request values: %#v", cloned)
 	}
+}
 
+func assertExecuteObservers(t *testing.T) {
+	t.Helper()
+	request := providers.ExecuteRequest{}
 	var observedSession providers.SessionRef
 	sessionObservations := 0
-	request.SessionObserver = func(reference providers.SessionRef) {
-		sessionObservations++
-		observedSession = reference
-	}
+	request.SessionObserver = func(reference providers.SessionRef) { sessionObservations++; observedSession = reference }
 	request.ObserveSession(providers.SessionRef{})
 	request.ObserveSession(providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"})
 	if sessionObservations != 1 || observedSession.ID != "session-1" {
 		t.Fatalf("ObserveSession() = %#v, observations %d; want one valid detached observation", observedSession, sessionObservations)
 	}
-
 	var observedProgress providers.ExecuteProgress
 	request.ProgressObserver = func(progress providers.ExecuteProgress) { observedProgress = progress }
 	progress := providers.ExecuteProgress{Phase: "running", Metadata: map[string]string{"step": "one"}}
@@ -645,7 +637,10 @@ func TestProviderExecutionContractsCloneAndObserveDetachedValues(t *testing.T) {
 	if observedProgress.Phase != "running" || observedProgress.Metadata["step"] != "one" {
 		t.Fatalf("ObserveProgress() = %#v, want detached progress", observedProgress)
 	}
+}
 
+func assertExecuteDiagnosticsClone(t *testing.T) {
+	t.Helper()
 	diagnostics := providers.ExecuteDiagnostics{
 		Progress: []providers.ExecuteProgress{{Phase: "done", Metadata: map[string]string{"result": "ok"}}},
 		Metadata: map[string]string{"safe": "yes"},
@@ -653,31 +648,27 @@ func TestProviderExecutionContractsCloneAndObserveDetachedValues(t *testing.T) {
 		Panic:    &providers.ExecutePanicDiagnostics{Message: "bounded", Stack: "bounded-stack"},
 	}
 	clonedDiagnostics := diagnostics.Clone()
-	diagnostics.Progress[0].Metadata["result"] = "mutated"
-	diagnostics.Metadata["safe"] = "mutated"
-	diagnostics.Command.Args[0] = "mutated"
-	diagnostics.Command.Env["KEY"] = "mutated"
-	diagnostics.Panic.Message = "mutated"
+	diagnostics.Progress[0].Metadata["result"], diagnostics.Metadata["safe"] = "mutated", "mutated"
+	diagnostics.Command.Args[0], diagnostics.Command.Env["KEY"], diagnostics.Panic.Message = "mutated", "mutated", "mutated"
 	if clonedDiagnostics.Progress[0].Metadata["result"] != "ok" || clonedDiagnostics.Metadata["safe"] != "yes" || clonedDiagnostics.Command.Args[0] != "--safe" || clonedDiagnostics.Command.Env["KEY"] != "value" || clonedDiagnostics.Panic.Message != "bounded" {
 		t.Fatalf("ExecuteDiagnostics.Clone() shares nested state: %#v", clonedDiagnostics)
 	}
-
 	result := providers.ExecuteResult{Content: "answer", SessionRef: &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-2"}, Diagnostics: &diagnostics}
 	clonedResult := result.Clone()
 	if clonedResult.SessionRef == result.SessionRef || clonedResult.Diagnostics == result.Diagnostics {
 		t.Fatal("ExecuteResult.Clone() shares mutable pointers")
 	}
+}
 
+func assertExecuteFailureKinds(t *testing.T) {
+	t.Helper()
+	result := providers.ExecuteResult{SessionRef: &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-2"}}
+	diagnostics := &providers.ExecuteDiagnostics{Metadata: map[string]string{"safe": "yes"}}
 	for _, testCase := range []struct {
 		kind providers.ExecuteFailureKind
 		want error
-	}{
-		{providers.ExecuteFailureKindCanceled, providers.ErrExecuteCancelled},
-		{providers.ExecuteFailureKindTimeout, providers.ErrExecuteTimeout},
-		{providers.ExecuteFailureKindCapabilityMismatch, providers.ErrCapabilityMismatch},
-		{providers.ExecuteFailureKindInvalidRequest, providers.ErrExecuteFailed},
-	} {
-		failure := providers.ExecuteFailure{Kind: testCase.kind, SessionRef: result.SessionRef, Diagnostics: &diagnostics}
+	}{{providers.ExecuteFailureKindCanceled, providers.ErrExecuteCancelled}, {providers.ExecuteFailureKindTimeout, providers.ErrExecuteTimeout}, {providers.ExecuteFailureKindCapabilityMismatch, providers.ErrCapabilityMismatch}, {providers.ExecuteFailureKindInvalidRequest, providers.ErrExecuteFailed}} {
+		failure := providers.ExecuteFailure{Kind: testCase.kind, SessionRef: result.SessionRef, Diagnostics: diagnostics}
 		if !errors.Is(failure, testCase.want) || !strings.Contains(failure.Error(), testCase.want.Error()) {
 			t.Fatalf("ExecuteFailure(%q) = %v, want errors.Is(%v)", testCase.kind, failure, testCase.want)
 		}
@@ -690,7 +681,10 @@ func TestProviderExecutionContractsCloneAndObserveDetachedValues(t *testing.T) {
 			t.Fatalf("ExecuteFailure(%q).Clone() shares pointers", testCase.kind)
 		}
 	}
+}
 
+func assertExecuteReasoningAndValidation(t *testing.T) {
+	t.Helper()
 	for _, effort := range []string{"", " minimal ", "low", "medium", "high", "xhigh", "max"} {
 		if _, ok := providers.ReasoningEffort(effort).Canonical(); !ok {
 			t.Fatalf("ReasoningEffort(%q).Canonical() rejected supported value", effort)
@@ -699,17 +693,12 @@ func TestProviderExecutionContractsCloneAndObserveDetachedValues(t *testing.T) {
 	if _, ok := providers.ReasoningEffort("unsupported").Canonical(); ok {
 		t.Fatal("ReasoningEffort(unsupported).Canonical() accepted an unsupported value")
 	}
-	for _, invalid := range []providers.ExecuteRequest{
-		{AttemptID: "attempt-1"},
-		{Provider: providers.IDCodex},
-		{Provider: providers.IDCodex, AttemptID: "attempt-1", ReasoningEffort: "unsupported"},
-	} {
+	for _, invalid := range []providers.ExecuteRequest{{AttemptID: "attempt-1"}, {Provider: providers.IDCodex}, {Provider: providers.IDCodex, AttemptID: "attempt-1", ReasoningEffort: "unsupported"}} {
 		if err := invalid.Validate(); err == nil {
 			t.Fatalf("ExecuteRequest.Validate(%#v) = nil, want validation error", invalid)
 		}
 	}
 }
-
 func TestProviderDescriptorClonePreservesNestedCatalogFacts(t *testing.T) {
 	maximum, defaultValue := int64(128), int64(16)
 	descriptor := providers.Descriptor{
@@ -735,8 +724,14 @@ func TestProviderDescriptorClonePreservesNestedCatalogFacts(t *testing.T) {
 		t.Fatalf("Descriptor.Clone() shares nested catalog state: %#v", descriptor)
 	}
 }
-
 func TestProviderContinuationReferenceContractNormalizesAndClones(t *testing.T) {
+	t.Run("normalize and session", assertContinuationReferenceNormalization)
+	t.Run("clone", assertContinuationReferenceClone)
+	t.Run("invalid", assertContinuationReferenceInvalid)
+}
+
+func assertContinuationReferenceNormalization(t *testing.T) {
+	t.Helper()
 	valid := providers.ContinuationRef{Provider: " codex ", ProviderSessionID: " provider-session ", ExternalRef: " external "}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("ContinuationRef.Validate() = %v", err)
@@ -745,6 +740,11 @@ func TestProviderContinuationReferenceContractNormalizesAndClones(t *testing.T) 
 	if normalized.Provider != "codex" || normalized.Kind != providers.SessionIDKind || normalized.ProviderSessionID != "provider-session" || normalized.ExternalRef != "external" {
 		t.Fatalf("ContinuationRef.Normalize() = %#v, want trimmed session-id reference", normalized)
 	}
+	assertContinuationReferenceSessions(t, valid)
+}
+
+func assertContinuationReferenceSessions(t *testing.T, valid providers.ContinuationRef) {
+	t.Helper()
 	session, err := valid.ToSessionRef()
 	if err != nil || session.Provider != providers.IDCodex || session.Kind != providers.SessionIDKind || session.ID != "provider-session" {
 		t.Fatalf("ContinuationRef.ToSessionRef() = %#v, %v", session, err)
@@ -754,13 +754,20 @@ func TestProviderContinuationReferenceContractNormalizesAndClones(t *testing.T) 
 	if err != nil || session.ID != "external-only" || session.Kind != "thread" {
 		t.Fatalf("external-only ToSessionRef() = %#v, %v", session, err)
 	}
-	fromSession := providers.ContinuationRefFromSession(providers.SessionRef{Provider: providers.IDClaude, Kind: "thread", ID: "session-claude"})
+	fromSession := (providers.SessionRef{Provider: providers.IDClaude, Kind: "thread", ID: "session-claude"}).ContinuationRef()
 	if fromSession.Provider != "claude" || fromSession.ProviderSessionID != "session-claude" || fromSession.ExternalRef != "session-claude" || fromSession.String() != "claude/thread/session-claude" {
 		t.Fatalf("ContinuationRefFromSession() = %#v, want exact identity", fromSession)
 	}
+}
+func assertContinuationReferenceClone(t *testing.T) {
+	t.Helper()
+	valid := providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session"}
 	if cloned := valid.Clone(); cloned != valid {
 		t.Fatalf("ContinuationRef.Clone() = %#v, want %#v", cloned, valid)
 	}
+}
+func assertContinuationReferenceInvalid(t *testing.T) {
+	t.Helper()
 	for _, invalid := range []providers.ContinuationRef{{}, {Provider: "codex"}, {ProviderSessionID: "session"}} {
 		if err := invalid.Validate(); !errors.Is(err, providers.ErrInvalidContinuationRef) {
 			t.Fatalf("ContinuationRef.Validate(%#v) = %v, want ErrInvalidContinuationRef", invalid, err)
@@ -770,82 +777,92 @@ func TestProviderContinuationReferenceContractNormalizesAndClones(t *testing.T) 
 		}
 	}
 }
-
 func TestProviderOptionalContinuationRoutingIsExplicit(t *testing.T) {
 	root := &providerContractCoverageRoot{identity: providers.IDCodex}
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}
-	unsupported, err := providers.Continue(context.Background(), root, providers.ContinueRequest{Reference: reference, Attempt: providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"}})
+	unsupported, err := root.Continue(context.Background(), providers.ContinueRequest{Reference: reference, Attempt: providers.ExecuteRequest{Provider: providers.IDCodex, AttemptID: "attempt-1"}})
 	if err != nil || unsupported.Outcome != providers.ContinuationOutcomeUnsupported || root.executeCalls != 0 {
 		t.Fatalf("Continue() = %#v, %v; want explicit unsupported without Execute", unsupported, err)
 	}
-	if _, err := providers.Continue(context.Background(), root, providers.ContinueRequest{Reference: reference}); !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+	if _, err := root.Continue(context.Background(), providers.ContinueRequest{Reference: reference}); !errors.Is(err, providers.ErrInvalidContinuationRequest) {
 		t.Fatalf("Continue(invalid attempt) = %v, want ErrInvalidContinuationRequest", err)
 	}
-	control, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{Provider: providers.IDCodex, AttemptID: "attempt-1", Action: providers.ControlActionCancel})
+	control, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{Provider: providers.IDCodex, AttemptID: "attempt-1", Action: providers.ControlActionCancel})
 	if err != nil || control.Outcome != providers.ControlOutcomeUnsupported {
 		t.Fatalf("ControlAttempt() = %#v, %v; want explicit unsupported", control, err)
 	}
 }
-
 func TestProviderOpaqueContinuationRoutesExactIdentityAndFailureKinds(t *testing.T) {
-	resumable := &providerContinuationCoverageRoot{
+	t.Run("resumes exact reference", assertOpaqueContinuationResumes)
+	t.Run("unsupported", assertOpaqueContinuationUnsupported)
+	t.Run("foreign", assertOpaqueContinuationForeign)
+	t.Run("unknown", assertOpaqueContinuationUnknown)
+	t.Run("invalid", assertOpaqueContinuationInvalid)
+	t.Run("nil service", assertOpaqueContinuationNil)
+}
+func newProviderContinuationCoverageRoot() *providerContinuationCoverageRoot {
+	return &providerContinuationCoverageRoot{
 		providerContractCoverageRoot: &providerContractCoverageRoot{
 			identity:   providers.IDCodex,
 			identities: map[string]providers.ID{"codex": providers.IDCodex, "claude": providers.IDClaude},
 		},
 		result: providers.ContinueResult{Outcome: providers.ContinuationOutcomeResumed, Result: providers.ExecuteResult{Content: "continued"}},
 	}
-	request := providers.ContinueReferenceRequest{
-		Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ExternalRef: "external-session"},
-		Attempt:   providers.ExecuteRequest{AttemptID: "attempt-continue"},
-	}
-	continued, err := providers.ContinueReference(context.Background(), resumable, request)
-	if err != nil || continued.Outcome != providers.ContinuationOutcomeResumed || continued.Result.Content != "continued" || continued.Reference.ExternalRef != "external-session" || resumable.request.Attempt.Provider != providers.IDCodex {
+}
+func assertOpaqueContinuationResumes(t *testing.T) {
+	t.Helper()
+	root := newProviderContinuationCoverageRoot()
+	continued, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ExternalRef: "external-session"}, Attempt: providers.ExecuteRequest{AttemptID: "attempt-continue"}})
+	if err != nil || continued.Outcome != providers.ContinuationOutcomeResumed || continued.Result.Content != "continued" || continued.Reference.ExternalRef != "external-session" || root.request.Attempt.Provider != providers.IDCodex {
 		t.Fatalf("ContinueReference() = %#v, %v; want exact resumed opaque identity", continued, err)
 	}
-	cloned := continued.Clone()
-	if cloned.Reference != continued.Reference || cloned.Result.Content != continued.Result.Content {
+	if cloned := continued.Clone(); cloned.Reference != continued.Reference || cloned.Result.Content != continued.Result.Content {
 		t.Fatalf("ContinueReferenceResult.Clone() = %#v, want detached equivalent", cloned)
 	}
+}
 
-	unsupported, err := providers.ContinueReference(context.Background(), &providerContractCoverageRoot{identity: providers.IDCodex}, providers.ContinueReferenceRequest{
-		Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session-unsupported"},
-		Attempt:   providers.ExecuteRequest{AttemptID: "attempt-unsupported"},
-	})
-	if err != nil || unsupported.Outcome != providers.ContinuationOutcomeUnsupported {
-		t.Fatalf("ContinueReference(unsupported) = %#v, %v; want typed unsupported", unsupported, err)
+func assertOpaqueContinuationUnsupported(t *testing.T) {
+	t.Helper()
+	root := &providerContractCoverageRoot{identity: providers.IDCodex}
+	result, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session-unsupported"}, Attempt: providers.ExecuteRequest{AttemptID: "attempt-unsupported"}})
+	if err != nil || result.Outcome != providers.ContinuationOutcomeUnsupported {
+		t.Fatalf("ContinueReference(unsupported) = %#v, %v; want typed unsupported", result, err)
 	}
+}
 
-	foreign, err := providers.ContinueReference(context.Background(), resumable, providers.ContinueReferenceRequest{
-		Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session-foreign"},
-		Attempt:   providers.ExecuteRequest{Provider: providers.IDClaude, AttemptID: "attempt-foreign"},
-	})
-	if err == nil || !errors.Is(err, providers.ErrContinuationForeign) || foreign != (providers.ContinueReferenceResult{}) {
-		t.Fatalf("ContinueReference(foreign) = %#v, %v; want typed foreign failure", foreign, err)
+func assertOpaqueContinuationForeign(t *testing.T) {
+	t.Helper()
+	root := newProviderContinuationCoverageRoot()
+	result, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session-foreign"}, Attempt: providers.ExecuteRequest{Provider: providers.IDClaude, AttemptID: "attempt-foreign"}})
+	var failure providers.ContinuationFailure
+	if err == nil || !errors.Is(err, providers.ErrContinuationForeign) || result != (providers.ContinueReferenceResult{}) || !errors.As(err, &failure) || failure.Kind != providers.ContinuationFailureKindForeign {
+		t.Fatalf("ContinueReference(foreign) = %#v, %v; want typed foreign failure", result, err)
 	}
-	var foreignFailure providers.ContinuationFailure
-	if !errors.As(err, &foreignFailure) || foreignFailure.Kind != providers.ContinuationFailureKindForeign {
-		t.Fatalf("foreign error = %#v, want foreign ContinuationFailure", err)
-	}
+}
 
-	unknown, err := providers.ContinueReference(context.Background(), &providerContractCoverageRoot{identity: providers.IDCodex, resolveErr: errors.New("unknown provider")}, providers.ContinueReferenceRequest{
-		Reference: providers.ContinuationRef{Provider: "unknown", Kind: "thread", ProviderSessionID: "session-unknown"},
-		Attempt:   providers.ExecuteRequest{AttemptID: "attempt-unknown"},
-	})
-	if err == nil || !errors.Is(err, providers.ErrContinuationForeign) || unknown != (providers.ContinueReferenceResult{}) {
-		t.Fatalf("ContinueReference(unknown) = %#v, %v; want foreign failure", unknown, err)
+func assertOpaqueContinuationUnknown(t *testing.T) {
+	t.Helper()
+	root := &providerContractCoverageRoot{identity: providers.IDCodex, resolveErr: errors.New("unknown provider")}
+	result, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Provider: "unknown", Kind: "thread", ProviderSessionID: "session-unknown"}, Attempt: providers.ExecuteRequest{AttemptID: "attempt-unknown"}})
+	if err == nil || !errors.Is(err, providers.ErrContinuationForeign) || result != (providers.ContinueReferenceResult{}) {
+		t.Fatalf("ContinueReference(unknown) = %#v, %v; want foreign failure", result, err)
 	}
+}
 
-	invalid, err := providers.ContinueReference(context.Background(), resumable, providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Kind: "thread", ExternalRef: "external-invalid"}})
-	if err == nil || !errors.Is(err, providers.ErrInvalidContinuationRequest) || invalid != (providers.ContinueReferenceResult{}) {
-		t.Fatalf("ContinueReference(invalid) = %#v, %v; want invalid failure", invalid, err)
+func assertOpaqueContinuationInvalid(t *testing.T) {
+	t.Helper()
+	root := newProviderContinuationCoverageRoot()
+	result, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Kind: "thread", ExternalRef: "external-invalid"}})
+	var failure providers.ContinuationFailure
+	if err == nil || !errors.Is(err, providers.ErrInvalidContinuationRequest) || result != (providers.ContinueReferenceResult{}) || !errors.As(err, &failure) || failure.Reference.ID != "external-invalid" {
+		t.Fatalf("ContinueReference(invalid) = %#v, %v; want invalid failure", result, err)
 	}
-	var invalidFailure providers.ContinuationFailure
-	if !errors.As(err, &invalidFailure) || invalidFailure.Reference.ID != "external-invalid" {
-		t.Fatalf("invalid error = %#v, want external reference preserved", err)
-	}
+}
 
-	if _, err := providers.ContinueReference(context.Background(), nil, providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session-nil"}}); !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+func assertOpaqueContinuationNil(t *testing.T) {
+	t.Helper()
+	var root *providerContractCoverageRoot
+	if _, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{Reference: providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "session-nil"}}); !errors.Is(err, providers.ErrInvalidContinuationRequest) {
 		t.Fatalf("ContinueReference(nil service) = %v, want invalid continuation failure", err)
 	}
 }
@@ -892,6 +909,27 @@ func (root *providerContractCoverageRoot) Execute(_ context.Context, _ providers
 	return providers.ExecuteResult{}, root.executeErr
 }
 
+func (root *providerContractCoverageRoot) ControlAttempt(_ context.Context, request providers.ControlAttemptRequest) (providers.ControlAttemptResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ControlAttemptResult{}, err
+	}
+	return providers.ControlAttemptResult{Provider: request.Provider, AttemptID: request.AttemptID, Action: request.Action, Outcome: providers.ControlOutcomeUnsupported}, nil
+}
+
+func (root *providerContractCoverageRoot) Continue(_ context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeUnsupported}, nil
+}
+
+func (root *providerContractCoverageRoot) ContinueReference(ctx context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	if root == nil {
+		return providers.ContinueReferenceResult{}, coverageContinuationFailure(providers.ContinuationFailureKindInvalid, "Providers service is required", request.Reference)
+	}
+	return coverageContinueReference(ctx, root, request)
+}
+
 func (root *providerContractCoverageRoot) canonicalIdentity() providers.ID {
 	if root.identity == "" {
 		return providers.IDCodex
@@ -908,4 +946,54 @@ type providerContinuationCoverageRoot struct {
 func (root *providerContinuationCoverageRoot) Continue(_ context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
 	root.request = request.Clone()
 	return root.result.Clone(), nil
+}
+
+func (root *providerContinuationCoverageRoot) ContinueReference(ctx context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	return coverageContinueReference(ctx, root, request)
+}
+
+func coverageContinueReference(ctx context.Context, service providers.Service, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, coverageContinuationFailure(providers.ContinuationFailureKindInvalid, err.Error(), request.Reference)
+	}
+	canonical, err := service.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: reference.Provider.String()})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, coverageContinuationFailure(providers.ContinuationFailureKindForeign, err.Error(), request.Reference)
+	}
+	reference.Provider = canonical.ID
+	attempt := request.Attempt.Clone()
+	if strings.TrimSpace(attempt.Provider.String()) == "" {
+		attempt.Provider = canonical.ID
+	} else {
+		attemptIdentity, resolveErr := service.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: attempt.Provider.String()})
+		if resolveErr != nil || attemptIdentity.ID != canonical.ID {
+			message := "attempt provider does not match continuation provider"
+			if resolveErr != nil {
+				message = resolveErr.Error()
+			}
+			return providers.ContinueReferenceResult{}, coverageContinuationFailure(providers.ContinuationFailureKindForeign, message, request.Reference)
+		}
+		attempt.Provider = canonical.ID
+	}
+	continued, err := service.Continue(ctx, providers.ContinueRequest{Reference: reference, Attempt: attempt})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if continuedReference.Provider == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{Reference: resultReference, Outcome: continued.Outcome, Result: continued.Result}, nil
+}
+
+func coverageContinuationFailure(kind providers.ContinuationFailureKind, message string, ref providers.ContinuationRef) providers.ContinuationFailure {
+	normalized := ref.Normalize()
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	return providers.ContinuationFailure{Kind: kind, Message: message, Reference: providers.SessionRef{Provider: providers.ID(normalized.Provider), Kind: normalized.Kind, ID: identity}}
 }

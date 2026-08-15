@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -264,6 +265,66 @@ func (s *SideEffects) Continue(ctx context.Context, request providers.ContinueRe
 		Outcome:   providers.ContinuationOutcomeResumed,
 		Result:    result,
 	}, nil
+}
+
+func (s *SideEffects) ContinueReference(ctx context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, replayContinuationFailure(providers.ContinuationFailureKindInvalid, err.Error(), request.Reference)
+	}
+	if s == nil {
+		return providers.ContinueReferenceResult{}, replayContinuationFailure(providers.ContinuationFailureKindInvalid, "Providers service is required", request.Reference)
+	}
+	canonical, err := s.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: reference.Provider.String()})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, replayContinuationFailure(providers.ContinuationFailureKindForeign, err.Error(), request.Reference)
+	}
+	if err := canonical.ID.Validate(); err != nil {
+		return providers.ContinueReferenceResult{}, replayContinuationFailure(providers.ContinuationFailureKindForeign, err.Error(), request.Reference)
+	}
+	reference.Provider = canonical.ID
+	attempt := request.Attempt.Clone()
+	if strings.TrimSpace(attempt.Provider.String()) == "" {
+		attempt.Provider = canonical.ID
+	} else {
+		attemptIdentity, resolveErr := s.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: attempt.Provider.String()})
+		if resolveErr != nil || attemptIdentity.ID != canonical.ID {
+			message := "attempt provider does not match continuation provider"
+			if resolveErr != nil {
+				message = resolveErr.Error()
+			}
+			return providers.ContinueReferenceResult{}, replayContinuationFailure(providers.ContinuationFailureKindForeign, message, request.Reference)
+		}
+		attempt.Provider = canonical.ID
+	}
+	continued, err := s.Continue(ctx, providers.ContinueRequest{Reference: reference, Attempt: attempt})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if strings.TrimSpace(continuedReference.Provider.String()) == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{Reference: resultReference, Outcome: continued.Outcome, Result: continued.Result}, nil
+}
+
+func replayContinuationFailure(kind providers.ContinuationFailureKind, message string, ref providers.ContinuationRef) providers.ContinuationFailure {
+	normalized := ref.Normalize()
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	return providers.ContinuationFailure{
+		Kind:    kind,
+		Message: message,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       identity,
+		},
+	}
 }
 
 func replayExecuteFailure(err error) error {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -53,7 +54,7 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
-			})
+			}, platformclock.Real{})
 			_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {

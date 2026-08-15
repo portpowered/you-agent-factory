@@ -497,7 +497,7 @@ func TestContinueReferenceRoutesExactOpaqueIdentity(t *testing.T) {
 			UserMessage: "continue without selecting a new session",
 		},
 	}
-	continued, err := providers.ContinueReference(context.Background(), root, request)
+	continued, err := root.ContinueReference(context.Background(), request)
 	if err != nil {
 		t.Fatalf("ContinueReference() error = %v", err)
 	}
@@ -550,7 +550,7 @@ func TestContinueReferenceUnsupportedNeverExecutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
-	continued, err := providers.ContinueReference(context.Background(), root, providers.ContinueReferenceRequest{
+	continued, err := root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{
 		Reference: providers.ContinuationRef{
 			Provider:          string(providers.IDCodex),
 			ProviderSessionID: "unsupported-session",
@@ -586,7 +586,7 @@ func TestContinueReferenceClassifiesForeignAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
-	_, err = providers.ContinueReference(context.Background(), root, providers.ContinueReferenceRequest{
+	_, err = root.ContinueReference(context.Background(), providers.ContinueReferenceRequest{
 		Reference: providers.ContinuationRef{
 			Provider:          string(providers.IDCodex),
 			ProviderSessionID: "session-foreign-attempt",

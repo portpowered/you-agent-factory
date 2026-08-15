@@ -56,7 +56,7 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	root := newCodexRoot(t, effect)
 
 	attempt := request.ExecuteRequest.Clone()
-	continued, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: *request.ResumeSession,
 		Attempt:   attempt,
 	})
@@ -71,7 +71,7 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Progress[2].Metadata["caller"] = "mutated"
-	secondContinued, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
+	secondContinued, err := root.Continue(t.Context(), providers.ContinueRequest{
 		Reference: *request.ResumeSession,
 		Attempt:   attempt,
 	})

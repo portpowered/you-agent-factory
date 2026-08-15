@@ -108,7 +108,9 @@ func (service Service) configure(ctx context.Context, document operatorsettings.
 }
 
 func (service Service) configureIntegrations(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
-	configurator, ok := service.Providers.(providers.ACPConfiguration)
+	configurator, ok := service.Providers.(interface {
+		ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+	})
 	if !ok {
 		return fmt.Errorf("Providers ACP configuration role is required")
 	}

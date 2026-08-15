@@ -500,3 +500,61 @@ func expectedArtifactVerificationError(
 func isASCIIAlpha(value byte) bool {
 	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }
+
+func (we *WorkstationExecutor) expectedArtifactDeclarations(
+	tokens []workerexecution.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+) []interfaces.ExpectedArtifactConfig {
+	if workstation == nil {
+		return nil
+	}
+	var declarations []interfaces.ExpectedArtifactConfig
+	if we != nil && we.RuntimeConfig != nil {
+		if factory := we.RuntimeConfig.FactoryConfig(); factory != nil {
+			seenWorkTypes := make(map[string]struct{})
+			for _, token := range tokens {
+				if token.Color.DataType == workerexecution.DataTypeResource {
+					continue
+				}
+				workTypeID := strings.TrimSpace(token.Color.WorkTypeID)
+				if workTypeID == "" {
+					continue
+				}
+				if _, seen := seenWorkTypes[workTypeID]; seen {
+					continue
+				}
+				seenWorkTypes[workTypeID] = struct{}{}
+				for _, workType := range factory.WorkTypes {
+					if workType.ID == workTypeID || workType.Name == workTypeID {
+						declarations = append(declarations, workType.ExpectedArtifacts...)
+						break
+					}
+				}
+			}
+		}
+	}
+	declarations = append(declarations, workstation.ExpectedArtifacts...)
+	return interfaces.NormalizeExpectedArtifactConfigs(declarations)
+}
+
+func (we *WorkstationExecutor) expectedArtifactFileSystem() platformfilesystem.GlobInspector {
+	if we == nil {
+		return nil
+	}
+	if we.ArtifactFileSystem != nil {
+		return we.ArtifactFileSystem
+	}
+	inspector, _ := we.FileSystem.(platformfilesystem.GlobInspector)
+	return inspector
+}
+
+func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch work.WorkDispatch) string {
+	if workstationDef != nil && workstationDef.WorkerTypeName != "" {
+		return workstationDef.WorkerTypeName
+	}
+	return dispatch.WorkerType
+}
+
+func workstationLookupKey(dispatch work.WorkDispatch) string {
+	return dispatch.WorkstationName
+}

@@ -341,6 +341,12 @@ func TestNewExecutorAbsentProviderYieldsNoExecutor(t *testing.T) {
 }
 
 func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
+	t.Run("success", assertRunnerExecutorSuccess)
+	t.Run("failure", assertRunnerExecutorFailure)
+}
+
+func assertRunnerExecutorSuccess(t *testing.T) {
+	t.Helper()
 	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"}
 	diagnostics := &workerexecution.WorkDiagnostics{
 		Provider: &workerexecution.ProviderDiagnostic{Provider: "codex", ResponseMetadata: map[string]string{"source": "runner"}},
@@ -371,7 +377,10 @@ func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
 	if runner.request.UserMessage != "hello" {
 		t.Fatalf("runner request = %#v, want forwarded request", runner.request)
 	}
+}
 
+func assertRunnerExecutorFailure(t *testing.T) {
+	t.Helper()
 	failure := errors.New("runner failed")
 	failed, runErr := workerinvocation.NewRunnerExecutor(&runnerExecutorTestDouble{err: failure}).Execute(
 		context.Background(), workerexecution.InvocationInput{Attempt: 4},
@@ -385,6 +394,11 @@ func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
 }
 
 func TestProviderExecutorMapsStructuredRequestAndProviderDiagnostics(t *testing.T) {
+	assertProviderExecutorStructuredRequest(t)
+}
+
+func assertProviderExecutorStructuredRequest(t *testing.T) {
+	t.Helper()
 	service := &invocationProviderServiceBase{
 		identity: providers.IDCodex,
 		result: providers.ExecuteResult{
@@ -428,13 +442,23 @@ func TestProviderExecutorMapsStructuredRequestAndProviderDiagnostics(t *testing.
 	result, err := workerinvocation.NewProviderExecutor(service).Execute(
 		context.Background(), workerexecution.InvocationInput{Request: request, Attempt: 2},
 	)
+	assertStructuredProviderResult(t, result, err)
+	assertStructuredProviderRequest(t, service.request, originalMetadata)
+	assertStructuredProviderDiagnostics(t, result)
+}
+
+func assertStructuredProviderResult(t *testing.T, result workerexecution.InvocationResult, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("provider Execute() = %v", err)
 	}
 	if result.Response.Content != "provider output" || result.ProviderSession == nil || result.ProviderSession.ID != "provider-session" {
 		t.Fatalf("provider result = %#v, want content and exact session metadata", result)
 	}
-	captured := service.request
+}
+
+func assertStructuredProviderRequest(t *testing.T, captured providers.ExecuteRequest, originalMetadata map[string]any) {
+	t.Helper()
 	if captured.Provider != providers.IDCodex || captured.AttemptID != "attempt-correlation" || captured.Correlation.ReplayKey != "replay-1" || captured.Correlation.WorkIDs[0] != "work-1" {
 		t.Fatalf("captured request = %#v, want canonical provider request correlation", captured)
 	}
@@ -448,12 +472,23 @@ func TestProviderExecutorMapsStructuredRequestAndProviderDiagnostics(t *testing.
 	if captured.ModelBindings[0].Content[0].Metadata["nested"].([]any)[0] != "before" {
 		t.Fatal("provider request model binding aliases caller metadata")
 	}
+}
+
+func assertStructuredProviderDiagnostics(t *testing.T, result workerexecution.InvocationResult) {
+	t.Helper()
 	if result.Response.Diagnostics == nil || result.Response.Diagnostics.Command == nil || result.Response.Diagnostics.Panic == nil {
 		t.Fatalf("provider diagnostics = %#v, want command and panic facts", result.Response.Diagnostics)
 	}
 }
 
 func TestProviderExecutorClassifiesProviderFailuresAndExactContinuationOutcomes(t *testing.T) {
+	assertProviderFailureKinds(t)
+	assertUnsupportedProviderContinuation(t)
+	assertInvalidProviderContinuation(t)
+}
+
+func assertProviderFailureKinds(t *testing.T) {
+	t.Helper()
 	failureKinds := []struct {
 		kind providers.ExecuteFailureKind
 		want workerexecution.WorkFailureType
@@ -487,7 +522,10 @@ func TestProviderExecutorClassifiesProviderFailuresAndExactContinuationOutcomes(
 			}
 		})
 	}
+}
 
+func assertUnsupportedProviderContinuation(t *testing.T) {
+	t.Helper()
 	unsupported := &invocationProviderServiceBase{identity: providers.IDCodex}
 	unsupportedResult, unsupportedErr := workerinvocation.NewProviderExecutor(unsupported).Execute(context.Background(), workerexecution.InvocationInput{
 		Request: workerexecution.ProviderInferenceRequest{
@@ -497,7 +535,10 @@ func TestProviderExecutorClassifiesProviderFailuresAndExactContinuationOutcomes(
 	if unsupportedErr == nil || unsupportedResult.FailureDetail == nil || unsupportedResult.FailureDetail.Reason != workerexecution.WorkFailureTypePermanentBadRequest || unsupported.executeCalls != 0 {
 		t.Fatalf("unsupported continuation = result %#v, err %v, want typed failure without Execute", unsupportedResult, unsupportedErr)
 	}
+}
 
+func assertInvalidProviderContinuation(t *testing.T) {
+	t.Helper()
 	invalid, invalidErr := workerinvocation.NewProviderExecutor(&invocationProviderServiceBase{identity: providers.IDCodex}).Execute(context.Background(), workerexecution.InvocationInput{
 		Request: workerexecution.ProviderInferenceRequest{Continuation: &workerexecution.ProviderContinuationRef{Provider: "codex"}},
 	})
@@ -565,6 +606,44 @@ func (service *invocationProviderServiceBase) Execute(_ context.Context, request
 	service.executeCalls++
 	service.request = request.Clone()
 	return service.result.Clone(), service.executeErr
+}
+
+func (service *invocationProviderServiceBase) Continue(_ context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeUnsupported}, nil
+}
+
+func (service *invocationProviderServiceBase) ControlAttempt(_ context.Context, request providers.ControlAttemptRequest) (providers.ControlAttemptResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ControlAttemptResult{}, err
+	}
+	return providers.ControlAttemptResult{Provider: request.Provider, AttemptID: request.AttemptID, Action: request.Action, Outcome: providers.ControlOutcomeUnsupported}, nil
+}
+
+func (service *invocationProviderServiceBase) ContinueReference(_ context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	if _, err := request.Reference.ToSessionRef(); err != nil {
+		return providers.ContinueReferenceResult{}, invocationContinuationFailure(providers.ContinuationFailureKindInvalid, err.Error(), request.Reference)
+	}
+	return providers.ContinueReferenceResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeUnsupported}, nil
+}
+
+func invocationContinuationFailure(kind providers.ContinuationFailureKind, message string, reference providers.ContinuationRef) providers.ContinuationFailure {
+	normalized := reference.Normalize()
+	identity := normalized.ProviderSessionID
+	if identity == "" {
+		identity = normalized.ExternalRef
+	}
+	return providers.ContinuationFailure{
+		Kind:    kind,
+		Message: message,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       identity,
+		},
+	}
 }
 
 func (service *invocationProviderServiceBase) canonicalIdentity() providers.ID {

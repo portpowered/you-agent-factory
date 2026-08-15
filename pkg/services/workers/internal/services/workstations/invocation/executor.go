@@ -108,45 +108,7 @@ func (e *Executor) Execute(
 	if err != nil {
 		return failedInvocationResult(attempt, err), err
 	}
-	var result providers.ExecuteResult
-	if input.Request.Continuation != nil {
-		continued, continueErr := providers.ContinueReference(ctx, e.provider, providers.ContinueReferenceRequest{
-			Reference: input.Request.Continuation.Clone(),
-			Attempt:   request,
-		})
-		err = continueErr
-		if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
-			reference, referenceErr := continued.Reference.ToSessionRef()
-			if referenceErr != nil {
-				err = referenceErr
-			} else {
-				err = unsupportedProviderContinuationError(reference)
-			}
-		}
-		result = continued.Result
-	} else if input.Request.ResumeSession != nil {
-		reference := input.Request.ResumeSession.Clone()
-		request.Provider = reference.Provider
-		continued, continueErr := providers.Continue(ctx, e.provider, providers.ContinueRequest{
-			Reference: reference,
-			Attempt:   request,
-		})
-		err = continueErr
-		if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
-			err = unsupportedProviderContinuationError(reference)
-		}
-		result = continued.Result
-	} else {
-		identity, identityErr := e.provider.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: request.Provider.String()})
-		if identityErr != nil {
-			return failedInvocationResult(attempt, identityErr), identityErr
-		}
-		request.Provider = identity.ID
-		if prerequisiteErr := e.provider.ValidatePrerequisites(ctx, providers.ValidatePrerequisitesRequest{ID: request.Provider}); prerequisiteErr != nil {
-			return failedInvocationResult(attempt, prerequisiteErr), prerequisiteErr
-		}
-		result, err = e.provider.Execute(ctx, request)
-	}
+	result, err := e.executeRequest(ctx, input.Request, request)
 	if err != nil {
 		normalized := normalizeProvidersFailure(err)
 		return failedInvocationResult(attempt, normalized), normalized
@@ -164,6 +126,72 @@ func (e *Executor) Execute(
 		ProviderSession: workers.CloneProviderSessionMetadata(response.ProviderSession),
 		Diagnostics:     workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
 	}, nil
+}
+
+func (e *Executor) executeRequest(
+	ctx context.Context,
+	input workers.ProviderInferenceRequest,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	if input.Continuation != nil {
+		return e.executeContinuationReference(ctx, input.Continuation, request)
+	}
+	if input.ResumeSession != nil {
+		return e.executeResumeSession(ctx, input.ResumeSession, request)
+	}
+	return e.executeFresh(ctx, request)
+}
+
+func (e *Executor) executeContinuationReference(
+	ctx context.Context,
+	reference *workers.ProviderContinuationRef,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	continued, err := e.provider.ContinueReference(ctx, providers.ContinueReferenceRequest{
+		Reference: reference.Clone(),
+		Attempt:   request,
+	})
+	if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
+		converted, convertErr := continued.Reference.ToSessionRef()
+		if convertErr != nil {
+			err = convertErr
+		} else {
+			err = unsupportedProviderContinuationError(converted)
+		}
+	}
+	return continued.Result, err
+}
+
+func (e *Executor) executeResumeSession(
+	ctx context.Context,
+	reference *providers.SessionRef,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	cloned := reference.Clone()
+	request.Provider = cloned.Provider
+	continued, err := e.provider.Continue(ctx, providers.ContinueRequest{
+		Reference: cloned,
+		Attempt:   request,
+	})
+	if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
+		err = unsupportedProviderContinuationError(cloned)
+	}
+	return continued.Result, err
+}
+
+func (e *Executor) executeFresh(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	identity, err := e.provider.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: request.Provider.String()})
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	request.Provider = identity.ID
+	if err := e.provider.ValidatePrerequisites(ctx, providers.ValidatePrerequisitesRequest{ID: request.Provider}); err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	return e.provider.Execute(ctx, request)
 }
 
 func providersRequest(request workers.ProviderInferenceRequest) (providers.ExecuteRequest, error) {

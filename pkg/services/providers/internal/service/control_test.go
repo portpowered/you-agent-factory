@@ -268,7 +268,7 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}
 
-	result, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
+	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "wired-attempt",
 		Action:    providers.ControlActionPause,

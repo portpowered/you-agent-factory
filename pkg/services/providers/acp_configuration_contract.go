@@ -1,9 +1,5 @@
 package providers
 
-import "context"
-
-// ACPConfiguration updates the effective operator-configured ACP integrations
-// on the singular Providers root without reconstructing the application graph.
-type ACPConfiguration interface {
-	ConfigureACPIntegrations(context.Context, []ACPIntegration) error
-}
+// ACP configuration is a structural role of the Providers root. Consumers
+// assert the ConfigureACPIntegrations method at the composition boundary so
+// the public Providers package has one named service interface.

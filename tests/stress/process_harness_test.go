@@ -44,6 +44,7 @@ func startStressProcess(
 ) *stressProcessHarness {
 	t.Helper()
 	ensureStressProviderDefinitions(t, dir)
+	providerService := testutil.ProviderServiceAdapter{InferFunc: provider.Infer}
 
 	var (
 		serverMu sync.Mutex
@@ -51,7 +52,7 @@ func startStressProcess(
 	)
 	ready := make(chan struct{})
 	edges := serviceedges.Edges{
-		ProviderOverride: provider,
+		ProviderOverride: providerService,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			started := httptest.NewServer(request.Handler)
 			serverMu.Lock()

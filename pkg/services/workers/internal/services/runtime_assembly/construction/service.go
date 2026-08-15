@@ -231,73 +231,137 @@ func (s *Service) Build(
 	if providerOverride != nil {
 		providersService = providerOverride
 	}
+	return s.buildConfiguredWorker(
+		runtimeConfig, def, factoryRunnerID, workflowContext, logger,
+		invocationSkipPermissionsOverride, providerOverride, providersService,
+		inferenceProgressPublisher, scriptRecorder, inferenceRecorder, agentRunRecorder,
+		clock, processEnvironment, currentWorkingDirectory, runnerDecorators,
+	)
+}
+
+func (s *Service) buildConfiguredWorker(
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	def *interfaces.FactoryWorkerConfig,
+	factoryRunnerID string,
+	workflowContext *workerexecution.Context,
+	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
+	providerOverride providers.Service,
+	providersService providers.Service,
+	inferenceProgressPublisher workers.ProgressPublisher,
+	scriptRecorder workerexecutor.ScriptEventRecorder,
+	inferenceRecorder workers.InferenceEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
+	clock func() time.Time,
+	processEnvironment func() []string,
+	currentWorkingDirectory func() (string, error),
+	runnerDecorators []RunnerDecorator,
+) (Result, error) {
 	switch def.Type {
 	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
-		effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
-		runner, err := s.agentRunner(
-			runtimeConfig, def, logger, effectiveSkipPermissions,
-			providerOverride, inferenceProgressPublisher,
+		return s.buildProviderWorker(
+			runtimeConfig, def, factoryRunnerID, workflowContext, logger,
+			invocationSkipPermissionsOverride, providerOverride, providersService,
+			inferenceProgressPublisher, inferenceRecorder, agentRunRecorder, clock,
+			processEnvironment, currentWorkingDirectory, runnerDecorators,
 		)
-		if err != nil {
-			return Result{}, err
-		}
-		runner = decorateProviderRunner(runner, def, runnerDecorators, effectiveSkipPermissions)
-		runner = recordProviderRunner(runner, inferenceRecorder, clock)
-		inference := workerexecutor.NewAgentExecutorWithRunner(
-			runtimeConfig,
-			runner,
-			logger,
-			clock,
-			s.decisionEnvelopes,
-		)
-		agentRun := workeragentrun.NewAgentRunExecutorWithDependencies(
-			runtimeConfig,
-			runner,
-			logger,
-			s.agentRunHarness,
-			agentRunRecorder,
-			clock,
-			s.decisionEnvelopes,
-		).WithProgressPublisher(inferenceProgressPublisher)
-		direct := &workerexecutor.WorkstationBehaviorRouter{
-			RuntimeConfig: runtimeConfig, InferenceExecutor: inference, AgentRunExecutor: agentRun,
-		}
-		return workstationResult(
-			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
-			providersService,
-			s.resolveRunner,
-			s.resolveProvider,
-		), nil
 	case interfaces.WorkstationTypeLogical:
-		return workstationResult(
-			runtimeConfig, factoryRunnerID, workflowContext, logger, nil,
-			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
-			providersService,
-			s.resolveRunner,
-			s.resolveProvider,
-		), nil
-	case interfaces.WorkerTypeScript:
-		if s == nil || s.scriptFactory == nil {
-			return Result{}, fmt.Errorf("script worker factory is required")
-		}
-		direct, err := s.scriptFactory.New(
-			def, logger, runtimeConfig.FactoryDir(),
-			inferenceProgressPublisher, scriptRecorder, clock,
+		return s.buildLogicalWorker(
+			runtimeConfig, factoryRunnerID, workflowContext, logger, providersService,
+			clock, processEnvironment, currentWorkingDirectory,
 		)
-		if err != nil {
-			return Result{}, err
-		}
-		return workstationResult(
-			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
-			providersService,
-			s.resolveRunner,
-			s.resolveProvider,
-		), nil
+	case interfaces.WorkerTypeScript:
+		return s.buildScriptWorker(
+			runtimeConfig, def, factoryRunnerID, workflowContext, logger, providersService,
+			inferenceProgressPublisher, scriptRecorder, clock, processEnvironment,
+			currentWorkingDirectory,
+		)
 	default:
 		return Result{}, nil
 	}
+}
+
+func (s *Service) buildProviderWorker(
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	def *interfaces.FactoryWorkerConfig,
+	factoryRunnerID string,
+	workflowContext *workerexecution.Context,
+	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
+	providerOverride providers.Service,
+	providersService providers.Service,
+	inferenceProgressPublisher workers.ProgressPublisher,
+	inferenceRecorder workers.InferenceEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
+	clock func() time.Time,
+	processEnvironment func() []string,
+	currentWorkingDirectory func() (string, error),
+	runnerDecorators []RunnerDecorator,
+) (Result, error) {
+	effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
+	runner, err := s.agentRunner(runtimeConfig, def, logger, effectiveSkipPermissions, providerOverride, inferenceProgressPublisher)
+	if err != nil {
+		return Result{}, err
+	}
+	runner = decorateProviderRunner(runner, def, runnerDecorators, effectiveSkipPermissions)
+	runner = recordProviderRunner(runner, inferenceRecorder, clock)
+	inference := workerexecutor.NewAgentExecutorWithRunner(runtimeConfig, runner, logger, clock, s.decisionEnvelopes)
+	agentRun := workeragentrun.NewAgentRunExecutorWithDependencies(
+		runtimeConfig, runner, logger, s.agentRunHarness, agentRunRecorder, clock, s.decisionEnvelopes,
+	).WithProgressPublisher(inferenceProgressPublisher)
+	direct := &workerexecutor.WorkstationBehaviorRouter{RuntimeConfig: runtimeConfig, InferenceExecutor: inference, AgentRunExecutor: agentRun}
+	return workstationResult(
+		runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
+		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
+		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
+		providersService, s.resolveRunner, s.resolveProvider,
+	), nil
+}
+
+func (s *Service) buildLogicalWorker(
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	factoryRunnerID string,
+	workflowContext *workerexecution.Context,
+	logger logging.Logger,
+	providersService providers.Service,
+	clock func() time.Time,
+	processEnvironment func() []string,
+	currentWorkingDirectory func() (string, error),
+) (Result, error) {
+	return workstationResult(
+		runtimeConfig, factoryRunnerID, workflowContext, logger, nil, s.interpolation,
+		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
+		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
+		providersService, s.resolveRunner, s.resolveProvider,
+	), nil
+}
+
+func (s *Service) buildScriptWorker(
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	def *interfaces.FactoryWorkerConfig,
+	factoryRunnerID string,
+	workflowContext *workerexecution.Context,
+	logger logging.Logger,
+	providersService providers.Service,
+	inferenceProgressPublisher workers.ProgressPublisher,
+	scriptRecorder workerexecutor.ScriptEventRecorder,
+	clock func() time.Time,
+	processEnvironment func() []string,
+	currentWorkingDirectory func() (string, error),
+) (Result, error) {
+	if s == nil || s.scriptFactory == nil {
+		return Result{}, fmt.Errorf("script worker factory is required")
+	}
+	direct, err := s.scriptFactory.New(def, logger, runtimeConfig.FactoryDir(), inferenceProgressPublisher, scriptRecorder, clock)
+	if err != nil {
+		return Result{}, err
+	}
+	return workstationResult(
+		runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
+		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
+		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
+		providersService, s.resolveRunner, s.resolveProvider,
+	), nil
 }
 
 // BuildLogical constructs the dispatch boundary for a workerless logical workstation.

@@ -192,11 +192,11 @@ func (ref ContinuationRef) ToSessionRef() (SessionRef, error) {
 	return session, nil
 }
 
-// ContinuationRefFromSession projects an exact Providers session identity onto
-// the detached continuation vocabulary. Both identity fields are populated so
-// a compatibility boundary that understands either spelling retains the same
+// ContinuationRef projects this exact Providers session identity onto the
+// detached continuation vocabulary. Both identity fields are populated so a
+// compatibility boundary that understands either spelling retains the same
 // exact session.
-func ContinuationRefFromSession(ref SessionRef) ContinuationRef {
+func (ref SessionRef) ContinuationRef() ContinuationRef {
 	return ContinuationRef{
 		Provider:          ref.Provider.String(),
 		Kind:              ref.Kind,

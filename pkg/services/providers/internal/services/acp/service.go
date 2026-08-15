@@ -11,7 +11,7 @@ import (
 // Service owns configured ACP peers and their protocol lifecycle. Execution
 // delegates ACP attempts here instead of constructing protocol adapters.
 type Service interface {
-	providers.Lifecycle
+	Close(context.Context) error
 	Configure(context.Context, []providers.ACPIntegration) error
 	Integrations() []providers.ACPIntegration
 	Resolve(providers.ID) (providers.ID, bool)

@@ -130,8 +130,8 @@ func BuiltInDependenciesFromCommandRunner(
 	}
 	return executionservice.BuiltInDependencies{
 		Antigravity: antigravity,
-		Codex:       codexadapter.NewCommandEffect(runner),
-		Claude:      claudeadapter.NewCommandEffect(runner),
+		Codex:       codexadapter.NewCommandEffect(runner, platformclock.Real{}),
+		Claude:      claudeadapter.NewCommandEffect(runner, platformclock.Real{}),
 	}
 }
 

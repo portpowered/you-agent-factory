@@ -76,20 +76,50 @@ func TestReplaySideEffectsSatisfyProvidersRootPorts(t *testing.T) {
 }
 
 func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFailures(t *testing.T) {
-	newEffects := func() *SideEffects {
-		t.Helper()
-		sideEffects, err := NewSideEffects(
-			testFactorySnapshotDecoder,
-			testRuntimeConfigDecoder,
-			replaySideEffectArtifact(t),
-		)
-		if err != nil {
-			t.Fatalf("NewSideEffects: %v", err)
-		}
-		return sideEffects
-	}
+	assertReplayCatalogBoundary(t)
+	assertReplayExecutionBoundary(t)
+	assertReplayContinuationBoundary(t)
+	assertReplayControlBoundary(t)
+	assertReplayFailureBoundary(t)
+	assertReplayDirectDiagnostics(t)
+	assertReplayClassifiedFailures(t)
+	assertReplayRecordedFailure(t)
+}
 
-	root := newEffects()
+func newReplayBoundaryEffects(t *testing.T) *SideEffects {
+	t.Helper()
+	sideEffects, err := NewSideEffects(
+		testFactorySnapshotDecoder,
+		testRuntimeConfigDecoder,
+		replaySideEffectArtifact(t),
+	)
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+	return sideEffects
+}
+
+func replayBoundaryProviderRequest() providers.ExecuteRequest {
+	return providers.ExecuteRequest{
+		AttemptID:       "provider-dispatch",
+		Provider:        providers.IDClaude,
+		WorkerType:      "worker-a",
+		WorkstationName: "process",
+		Model:           "claude-3-5-haiku-20241022",
+		SystemPrompt:    "system prompt",
+		UserMessage:     "user prompt",
+		InputBindings:   map[string][]string{"prompt": {"user prompt"}},
+		Correlation: providers.ExecuteCorrelation{
+			ReplayKey: "process/trace-1/work-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
+	}
+}
+
+func assertReplayCatalogBoundary(t *testing.T) {
+	t.Helper()
+	root := newReplayBoundaryEffects(t)
 	if listed, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{}); err != nil || listed.Providers != nil {
 		t.Fatalf("ListProviders() = %#v, %v; want empty replay catalog", listed, err)
 	}
@@ -107,6 +137,17 @@ func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFail
 	if _, err := root.ResolveIdentity(context.Background(), providers.ResolveIdentityRequest{}); !errors.Is(err, providers.ErrInvalidID) {
 		t.Fatalf("ResolveIdentity(empty) = %v, want ErrInvalidID", err)
 	}
+	assertReplaySelectionBoundary(t, root)
+	if err := root.ValidatePrerequisites(context.Background(), providers.ValidatePrerequisitesRequest{ID: providers.IDClaude}); err != nil {
+		t.Fatalf("ValidatePrerequisites() = %v", err)
+	}
+	if err := root.ValidatePrerequisites(context.Background(), providers.ValidatePrerequisitesRequest{}); !errors.Is(err, providers.ErrInvalidID) {
+		t.Fatalf("ValidatePrerequisites(empty) = %v, want ErrInvalidID", err)
+	}
+}
+
+func assertReplaySelectionBoundary(t *testing.T, root providers.Service) {
+	t.Helper()
 	for _, selection := range []struct {
 		request providers.ResolveSelectionRequest
 		want    providers.ID
@@ -123,52 +164,45 @@ func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFail
 	if _, err := root.ResolveSelection(context.Background(), providers.ResolveSelectionRequest{}); !errors.Is(err, providers.ErrInvalidID) {
 		t.Fatalf("ResolveSelection(empty) = %v, want ErrInvalidID", err)
 	}
-	if err := root.ValidatePrerequisites(context.Background(), providers.ValidatePrerequisitesRequest{ID: providers.IDClaude}); err != nil {
-		t.Fatalf("ValidatePrerequisites() = %v", err)
-	}
-	if err := root.ValidatePrerequisites(context.Background(), providers.ValidatePrerequisitesRequest{}); !errors.Is(err, providers.ErrInvalidID) {
-		t.Fatalf("ValidatePrerequisites(empty) = %v, want ErrInvalidID", err)
-	}
+}
 
-	providerRequest := providers.ExecuteRequest{
-		AttemptID:       "provider-dispatch",
-		Provider:        providers.IDClaude,
-		WorkerType:      "worker-a",
-		WorkstationName: "process",
-		Model:           "claude-3-5-haiku-20241022",
-		SystemPrompt:    "system prompt",
-		UserMessage:     "user prompt",
-		InputBindings:   map[string][]string{"prompt": {"user prompt"}},
-		Correlation: providers.ExecuteCorrelation{
-			ReplayKey: "process/trace-1/work-1",
-			TraceID:   "trace-1",
-			WorkIDs:   []string{"work-1"},
-		},
-	}
-	if _, err := newEffects().Execute(context.Background(), providers.ExecuteRequest{Provider: providers.IDClaude}); !errors.Is(err, providers.ErrExecuteFailed) {
+func assertReplayExecutionBoundary(t *testing.T) {
+	t.Helper()
+	providerRequest := replayBoundaryProviderRequest()
+
+	if _, err := newReplayBoundaryEffects(t).Execute(context.Background(), providers.ExecuteRequest{Provider: providers.IDClaude}); !errors.Is(err, providers.ErrExecuteFailed) {
 		t.Fatalf("Execute(invalid request) = %v, want ErrExecuteFailed", err)
 	}
-	executed, err := newEffects().Execute(context.Background(), providerRequest)
+	executed, err := newReplayBoundaryEffects(t).Execute(context.Background(), providerRequest)
 	if err != nil || executed.Content != "recorded provider output" || executed.Diagnostics == nil || executed.Diagnostics.Metadata[workers.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
 		t.Fatalf("Execute() = %#v, %v; want recorded content and safe diagnostics", executed, err)
 	}
+}
 
-	continued, err := newEffects().Continue(context.Background(), providers.ContinueRequest{
+func assertReplayContinuationBoundary(t *testing.T) {
+	t.Helper()
+	providerRequest := replayBoundaryProviderRequest()
+	continued, err := newReplayBoundaryEffects(t).Continue(context.Background(), providers.ContinueRequest{
 		Reference: providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "recorded-session"},
 		Attempt:   providerRequest,
 	})
 	if err != nil || continued.Outcome != providers.ContinuationOutcomeResumed || continued.Reference.ID != "recorded-session" || continued.Result.Content != "recorded provider output" {
 		t.Fatalf("Continue() = %#v, %v; want resumed recorded attempt", continued, err)
 	}
-	if _, err := newEffects().Continue(context.Background(), providers.ContinueRequest{Reference: providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "recorded-session"}}); !errors.Is(err, providers.ErrInvalidContinuationRequest) {
+	if _, err := newReplayBoundaryEffects(t).Continue(context.Background(), providers.ContinueRequest{Reference: providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "recorded-session"}}); !errors.Is(err, providers.ErrInvalidContinuationRequest) {
 		t.Fatalf("Continue(invalid) = %v, want ErrInvalidContinuationRequest", err)
 	}
-	if _, err := newEffects().Continue(context.Background(), providers.ContinueRequest{
+	if _, err := newReplayBoundaryEffects(t).Continue(context.Background(), providers.ContinueRequest{
 		Reference: providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "recorded-session"},
 		Attempt:   providers.ExecuteRequest{Provider: providers.IDClaude, AttemptID: "missing-dispatch", Correlation: providers.ExecuteCorrelation{ReplayKey: "missing-replay-key"}},
 	}); err == nil {
 		t.Fatal("Continue(unmatched) = nil, want replay execution failure")
 	}
+}
+
+func assertReplayControlBoundary(t *testing.T) {
+	t.Helper()
+	root := newReplayBoundaryEffects(t)
 	control, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{Provider: providers.IDClaude, AttemptID: "provider-dispatch", Action: providers.ControlActionCancel})
 	if err != nil || control.Outcome != providers.ControlOutcomeUnsupported {
 		t.Fatalf("ControlAttempt() = %#v, %v; want unsupported", control, err)
@@ -176,8 +210,12 @@ func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFail
 	if _, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{Provider: providers.IDClaude, Action: providers.ControlActionCancel}); !errors.Is(err, providers.ErrInvalidControlRequest) {
 		t.Fatalf("ControlAttempt(invalid) = %v, want ErrInvalidControlRequest", err)
 	}
+}
 
-	missing, missingErr := newEffects().Execute(context.Background(), providers.ExecuteRequest{
+func assertReplayFailureBoundary(t *testing.T) {
+	t.Helper()
+	providerRequest := replayBoundaryProviderRequest()
+	missing, missingErr := newReplayBoundaryEffects(t).Execute(context.Background(), providers.ExecuteRequest{
 		AttemptID: "missing-dispatch", Provider: providers.IDClaude,
 		Correlation: providers.ExecuteCorrelation{ReplayKey: "missing-replay-key"},
 	})
@@ -188,17 +226,20 @@ func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFail
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, canceledErr := newEffects().Execute(canceled, providerRequest)
+	_, canceledErr := newReplayBoundaryEffects(t).Execute(canceled, providerRequest)
 	if !errors.Is(canceledErr, providers.ErrExecuteCancelled) {
 		t.Fatalf("Execute(canceled) = %v, want ErrExecuteCancelled", canceledErr)
 	}
 	deadline, deadlineCancel := context.WithDeadline(context.Background(), time.Unix(0, 0))
 	defer deadlineCancel()
-	_, deadlineErr := newEffects().Execute(deadline, providerRequest)
+	_, deadlineErr := newReplayBoundaryEffects(t).Execute(deadline, providerRequest)
 	if !errors.Is(deadlineErr, providers.ErrExecuteTimeout) {
 		t.Fatalf("Execute(deadline) = %v, want ErrExecuteTimeout", deadlineErr)
 	}
+}
 
+func assertReplayDirectDiagnostics(t *testing.T) {
+	t.Helper()
 	direct := &SideEffects{records: []sideEffectRecord{{
 		dispatch: replayDispatch{
 			dispatchID: "dispatch-direct",
@@ -224,6 +265,10 @@ func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFail
 	if directErr != nil || directResult.Content != "direct provider output" || directResult.SessionRef == nil || directResult.SessionRef.ID != "direct-session" || directResult.Diagnostics == nil || directResult.Diagnostics.Command == nil || directResult.Diagnostics.Command.DurationMS != 1500 || directResult.Diagnostics.Panic == nil {
 		t.Fatalf("Execute(direct diagnostics) = %#v, %v; want detached session, command, and panic facts", directResult, directErr)
 	}
+}
+
+func assertReplayClassifiedFailures(t *testing.T) {
+	t.Helper()
 	for _, failureCase := range []struct {
 		workerType workers.WorkFailureType
 		provider   providers.ExecuteFailureKind
@@ -251,7 +296,10 @@ func TestReplaySideEffectsProvidersBoundaryPreservesSelectionContinuationAndFail
 			t.Fatalf("Execute(%s) = %v, want normalized %s failure", failureCase.workerType, failureErr, failureCase.provider)
 		}
 	}
+}
 
+func assertReplayRecordedFailure(t *testing.T) {
+	t.Helper()
 	failureArtifact := testReplayArtifact(
 		t,
 		replayDispatchCreatedEvent(t, work.WorkDispatch{

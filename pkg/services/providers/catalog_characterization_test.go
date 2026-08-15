@@ -111,6 +111,31 @@ func (fake *catalogPeerFake) Continue(
 	return providers.ContinueResult{}, providers.ErrExecuteFailed
 }
 
+func (fake *catalogPeerFake) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continued, err := fake.Continue(ctx, providers.ContinueRequest{Reference: reference, Attempt: request.Attempt})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if continuedReference.Provider == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
+}
+
 func hasCapability(descriptor providers.Descriptor, capability providers.Capability) bool {
 	return slices.Contains(descriptor.Capabilities, capability)
 }

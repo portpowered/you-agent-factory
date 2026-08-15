@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
@@ -18,7 +19,7 @@ func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -51,7 +52,7 @@ func TestCommandEffectRendersResumeSessionFlag(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -99,7 +100,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runner := testutil.NewProviderCommandRunner()
-			effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
+			effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner), platformclock.Real{})
 			_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:        providers.IDClaude,
 				AttemptID:       "claude-invalid-effort-dispatch",

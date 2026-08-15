@@ -48,6 +48,10 @@ func (providersRootPortProbe) Continue(_ context.Context, request providers.Cont
 	return providers.ContinueResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeUnsupported}, nil
 }
 
+func (providersRootPortProbe) ContinueReference(_ context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
+	return providers.ContinueReferenceResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeUnsupported}, nil
+}
+
 func (providersRootPortProbe) Run(
 	_ context.Context,
 	_ workers.CommandRequest,

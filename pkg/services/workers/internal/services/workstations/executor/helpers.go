@@ -971,30 +971,3 @@ func (we *WorkstationExecutor) workstationPromptSource(
 		IsTemplate: workstationDef.PromptSourceIsTemplate,
 	}
 }
-
-func promptSourceFailureResult(
-	dispatch work.WorkDispatch,
-	role string,
-	name string,
-	path string,
-	err error,
-	diagnostics *workerexecution.WorkDiagnostics,
-	duration time.Duration,
-) workerexecution.WorkResult {
-	return workerexecution.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      workerexecution.OutcomeFailed,
-		Error: fmt.Sprintf(
-			"%s %q prompt source %s: %v",
-			role,
-			name,
-			path,
-			err,
-		),
-		Diagnostics: diagnostics,
-		Metrics: workerexecution.WorkMetrics{
-			Duration: duration,
-		},
-	}
-}

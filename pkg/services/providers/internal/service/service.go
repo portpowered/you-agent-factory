@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -22,9 +23,13 @@ type Service struct {
 	execution   execution.Service
 	acp         acp.Service
 	packagedACP []providers.ACPIntegration
-	lifecycles  []providers.Lifecycle
+	lifecycles  []providerLifecycle
 	logger      logging.Logger
 	attempts    *liveAttemptRegistry
+}
+
+type providerLifecycle interface {
+	Close(context.Context) error
 }
 
 var _ providers.Service = (*Service)(nil)
@@ -46,7 +51,7 @@ func NewWithACP(
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
-	lifecycles ...providers.Lifecycle,
+	lifecycles ...providerLifecycle,
 ) (*Service, error) {
 	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
 }
@@ -57,7 +62,7 @@ func newService(
 	acpService acp.Service,
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
-	lifecycles []providers.Lifecycle,
+	lifecycles []providerLifecycle,
 ) (*Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
@@ -75,7 +80,7 @@ func newService(
 		execution:   executionService,
 		acp:         acpService,
 		packagedACP: cloneACPIntegrations(packagedACP),
-		lifecycles:  append([]providers.Lifecycle(nil), lifecycles...),
+		lifecycles:  append([]providerLifecycle(nil), lifecycles...),
 		logger:      logging.EnsureLogger(logger),
 		attempts:    newLiveAttemptRegistry(),
 	}, nil
@@ -436,6 +441,111 @@ func (s *Service) Continue(
 	}, nil
 }
 
+// ContinueReference is the Providers-root seam for Workers and Runtime
+// callers that carry only a detached continuation reference. It canonicalizes
+// the provider, verifies that an explicitly supplied attempt provider matches,
+// and delegates to Continue without ever falling back to Execute.
+func (s *Service) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindInvalid,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	if s == nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindInvalid,
+			"Providers service is required",
+			request.Reference,
+		)
+	}
+
+	canonical, err := s.ResolveIdentity(ctx, providers.ResolveIdentityRequest{
+		Identity: reference.Provider.String(),
+	})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindForeign,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	if err := canonical.ID.Validate(); err != nil {
+		return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+			providers.ContinuationFailureKindForeign,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	reference.Provider = canonical.ID
+
+	attempt := request.Attempt.Clone()
+	if strings.TrimSpace(attempt.Provider.String()) == "" {
+		attempt.Provider = canonical.ID
+	} else {
+		attemptIdentity, resolveErr := s.ResolveIdentity(ctx, providers.ResolveIdentityRequest{
+			Identity: attempt.Provider.String(),
+		})
+		if resolveErr != nil || attemptIdentity.ID != canonical.ID {
+			message := "attempt provider does not match continuation provider"
+			if resolveErr != nil {
+				message = resolveErr.Error()
+			}
+			return providers.ContinueReferenceResult{}, continuationReferenceFailure(
+				providers.ContinuationFailureKindForeign,
+				message,
+				request.Reference,
+			)
+		}
+		attempt.Provider = canonical.ID
+	}
+
+	continued, err := s.Continue(ctx, providers.ContinueRequest{
+		Reference: reference,
+		Attempt:   attempt,
+	})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if strings.TrimSpace(continuedReference.Provider.String()) == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
+}
+
+func continuationReferenceFailure(
+	kind providers.ContinuationFailureKind,
+	message string,
+	ref providers.ContinuationRef,
+) providers.ContinuationFailure {
+	normalized := ref.Normalize()
+	identity := strings.TrimSpace(normalized.ProviderSessionID)
+	if identity == "" {
+		identity = strings.TrimSpace(normalized.ExternalRef)
+	}
+	return providers.ContinuationFailure{
+		Kind:    kind,
+		Message: message,
+		Reference: providers.SessionRef{
+			Provider: providers.ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       identity,
+		},
+	}
+}
+
 // resolveContinuationProvider returns the canonical provider identity for
 // reference.Provider and whether that resolved provider truthfully
 // advertises CapabilitySessionResume, without invoking any provider adapter
@@ -685,7 +795,9 @@ func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	}
 }
 
-var _ providers.ACPConfiguration = (*Service)(nil)
+var _ interface {
+	ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+} = (*Service)(nil)
 
 // acpAttemptControl is the control handle bound for one live ACP provider
 // attempt. Unlike nativeAttemptControl, whether Cancel is truthfully

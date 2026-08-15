@@ -229,7 +229,7 @@ func (r *registry) prepareContinuation(
 	continuation.Execution.Dispatch.DispatchID = fmt.Sprintf("%s/resume/%d", previousDispatchID, supervision.resumeCount)
 	continuedReference := reference.Clone()
 	continuation.Execution.ResumeSession = &continuedReference
-	continuationRef := providers.ContinuationRefFromSession(continuedReference)
+	continuationRef := continuedReference.ContinuationRef()
 	continuation.Execution.Continuation = &continuationRef
 	supervision.dispatchID = continuation.Execution.Dispatch.DispatchID
 	delete(r.dispatchOwners, previousDispatchID)
