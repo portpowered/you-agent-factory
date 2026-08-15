@@ -676,23 +676,41 @@ async function beginSaveActivationTrace(page) {
         (key) => key.startsWith("__reactProps$") && key.length > 13,
       );
       const reactProps = reactPropsKey ? saveButton[reactPropsKey] : undefined;
-      if (
-        reactProps &&
-        typeof reactProps.onClick === "function" &&
-        wrappedReactProps.get(reactProps) !== reactProps.onClick
-      ) {
-        const originalOnClick = reactProps.onClick;
-        const wrappedOnClick = (...args) => {
+      if (!reactProps) {
+        trace.handlerBinding = "react-onClick-not-found";
+        return;
+      }
+
+      const wrappedHandlers = wrappedReactProps.get(reactProps) ?? {};
+      const handlerNames = ["onClick", "onKeyDown"];
+      const boundHandlerNames = [];
+      for (const handlerName of handlerNames) {
+        const handler = reactProps[handlerName];
+        if (typeof handler !== "function") {
+          continue;
+        }
+        if (wrappedHandlers[handlerName] === handler) {
+          boundHandlerNames.push(handlerName);
+          continue;
+        }
+
+        const wrappedHandler = (...args) => {
           trace.handlerInvocations.push({
             activeElement: document.activeElement?.getAttribute("aria-label"),
             buttonDisabled: saveButton.disabled,
             elapsedMs: Math.round(performance.now() - trace.startedAt),
+            handler: handlerName,
           });
-          return originalOnClick(...args);
+          return handler(...args);
         };
-        reactProps.onClick = wrappedOnClick;
-        wrappedReactProps.set(reactProps, wrappedOnClick);
-        trace.handlerBinding = "react-onClick-wrapped";
+        reactProps[handlerName] = wrappedHandler;
+        wrappedHandlers[handlerName] = wrappedHandler;
+        boundHandlerNames.push(handlerName);
+      }
+
+      if (boundHandlerNames.length > 0) {
+        wrappedReactProps.set(reactProps, wrappedHandlers);
+        trace.handlerBinding = `react-${boundHandlerNames.join("-and-")}-wrapped`;
       } else {
         trace.handlerBinding = "react-onClick-not-found";
       }

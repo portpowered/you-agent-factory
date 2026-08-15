@@ -4,7 +4,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
@@ -159,6 +159,25 @@ export function FactoryGraphEditorToolbar({
   });
   const deleteDisabled =
     toolbarButtonsDisabled || deleteAction.kind === "disabled";
+  const handleSaveKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.defaultPrevented ||
+      saveDisabled ||
+      isSaving ||
+      onSave === undefined
+    ) {
+      return;
+    }
+
+    // Enter normally causes the browser to synthesize a click. The before-fix
+    // trace observed keydown without a subsequent click or save-handler call,
+    // but did not establish why synthesis was absent. Handle Enter at the
+    // button boundary so activation is deterministic and cannot duplicate a
+    // native click.
+    event.preventDefault();
+    onSave();
+  };
 
   return (
     <FactoryGraphEditorFloatingSurface
@@ -280,6 +299,7 @@ export function FactoryGraphEditorToolbar({
                     disabled={saveDisabled}
                     executing={isSaving}
                     iconOnly
+                    onKeyDown={handleSaveKeyDown}
                     onClick={onSave}
                     placement="above"
                     tooltip={saveDisabledReason ?? messages.draftActionsSave}

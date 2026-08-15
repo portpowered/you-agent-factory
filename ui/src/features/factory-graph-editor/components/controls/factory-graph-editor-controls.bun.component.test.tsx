@@ -1,6 +1,6 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
 import { describe, expect, it, mock } from "bun:test";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
@@ -234,6 +234,58 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       within(dialog).getByRole("button", { name: "Delete review workstation" }),
     ).toBeTruthy();
+  });
+});
+
+describe("factory graph editor save activation fallback", () => {
+  it("activates from an Enter keydown when native click synthesis is absent", () => {
+    const onSave = vi.fn();
+
+    render(
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDiscard={true}
+        canInteract={true}
+        canSave={true}
+        onDiscard={() => {}}
+        onSave={onSave}
+        onSelectTool={() => {}}
+        visible={true}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    fireEvent.focus(saveButton);
+    const eventWasNotCanceled = fireEvent.keyDown(saveButton, {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+    });
+
+    expect(eventWasNotCanceled).toBe(false);
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps pointer activation on the existing click path", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDiscard={true}
+        canInteract={true}
+        canSave={true}
+        onDiscard={() => {}}
+        onSave={onSave}
+        onSelectTool={() => {}}
+        visible={true}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });
 
