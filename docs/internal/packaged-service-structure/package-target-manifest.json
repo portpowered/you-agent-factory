@@ -490,10 +490,8 @@
     "pkg/services/workers/internal/providercompat/commandenv",
     "pkg/services/workers/internal/providercompat/conductor",
     "pkg/services/workers/internal/providercompat/inferencecontract",
-    "pkg/services/workers/internal/providercompat/inferencecontract/testkit",
     "pkg/services/workers/internal/providercompat/providersroot",
     "pkg/services/workers/internal/providercompat/registry",
-    "pkg/services/workers/internal/providercompat/structured",
     "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/inference",
@@ -2842,11 +2840,6 @@
       "destination": "providers/internal/services/execution"
     },
     {
-      "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract/testkit",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/providercompat/providersroot",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
@@ -2855,11 +2848,6 @@
       "packagePath": "pkg/services/workers/internal/providercompat/registry",
       "disposition": "move",
       "destination": "providers/internal/services/catalog"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/structured",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
     },
     {
       "packagePath": "pkg/services/workers/internal/service",

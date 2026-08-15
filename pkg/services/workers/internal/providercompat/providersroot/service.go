@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/conductor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry"
-	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/structured"
 )
 
 // Config captures the per-worker effects projected into one Providers root.
@@ -96,15 +95,11 @@ func (s *Service) providerInstance() (inferencecontract.LegacyProvider, error) {
 	if s.provider != nil {
 		return s.provider, nil
 	}
-	var responseExecutor workerprovider.ResponseStreamExecutor
-	if s.config.Publish != nil {
-		responseExecutor = providerstructured.NewExecutor()
-	}
 	provider, err := s.config.Factory.New(
 		s.config.SkipPermissions,
 		logging.EnsureLogger(s.config.Logger),
 		s.config.Publish,
-		responseExecutor,
+		nil,
 	)
 	if err != nil {
 		return nil, err
