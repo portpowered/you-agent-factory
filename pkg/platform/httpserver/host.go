@@ -105,8 +105,9 @@ func isLoopbackHost(host string) bool {
 }
 
 // Serve owns one already-bound listener and the concrete net/http server until
-// cancellation or a terminal serve failure. Cancellation closes the server
-// and joins its serve loop before returning.
+// cancellation or a terminal serve failure. Cancellation gracefully shuts the
+// server down and joins its serve loop before returning so active handlers can
+// finish writing terminal responses.
 func Serve(
 	ctx context.Context,
 	handler http.Handler,
@@ -141,7 +142,7 @@ func Serve(
 	case err := <-exit:
 		return err
 	case <-ctx.Done():
-		closeErr := server.Close()
+		closeErr := server.Shutdown(context.Background())
 		serveErr := <-exit
 		return errors.Join(closeErr, serveErr)
 	}
