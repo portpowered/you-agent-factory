@@ -269,8 +269,11 @@ function FactoryGraphInitializationState({ nodeIds }: { nodeIds: string[] }) {
         continue;
       }
 
-      const width = node.measured?.width ?? node.width ?? node.initialWidth;
-      const height = node.measured?.height ?? node.height ?? node.initialHeight;
+      // React Flow's drag position calculation requires measured dimensions.
+      // Configured or initial dimensions are enough to render a node but do
+      // not mean that its internals are ready for pointer interaction.
+      const width = node.measured?.width;
+      const height = node.measured?.height;
       if (
         node.internals.handleBounds === undefined ||
         width === undefined ||

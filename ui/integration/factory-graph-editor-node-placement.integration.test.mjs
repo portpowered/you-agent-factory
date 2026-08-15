@@ -12,6 +12,7 @@ import {
   selectLabeledComboboxOption,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForFactoryGraphSelectionReady,
   waitForStableFactoryGraphNodePlacement,
   waitForStableFactoryGraphViewport,
 } from "./browser-test-harness.mjs";
@@ -376,13 +377,45 @@ function savedLayoutNodePosition(factory, nodeId) {
   );
 }
 
-async function readNodeScreenPosition(page, nodeTestId) {
-  const box = await page.getByTestId(nodeTestId).boundingBox();
-  if (!box) {
-    return null;
+async function draggableNodeStartPoint(page, nodeTestId, nodeBox) {
+  const point = await page.evaluate(
+    ({ box, testId }) => {
+      const target = [...document.querySelectorAll("[data-testid]")].find(
+        (element) => element.getAttribute("data-testid") === testId,
+      );
+      const flowNode = target?.closest(".react-flow__node");
+      if (!flowNode) {
+        throw new Error(`Expected React Flow node for ${testId}.`);
+      }
+
+      const rect = flowNode.getBoundingClientRect();
+      const candidates = [
+        { x: rect.right - 4, y: rect.top + rect.height / 2 },
+        { x: rect.left + 4, y: rect.top + rect.height / 2 },
+        { x: rect.left + rect.width / 2, y: rect.top + 4 },
+        { x: rect.left + rect.width / 2, y: rect.bottom - 4 },
+        { x: box.x + box.width - 4, y: box.y + box.height / 2 },
+      ];
+
+      for (const candidate of candidates) {
+        const hit = document.elementFromPoint(candidate.x, candidate.y);
+        if (hit && flowNode.contains(hit) && !hit.closest(".nodrag")) {
+          return candidate;
+        }
+      }
+
+      throw new Error(
+        `Expected a draggable surface inside ${testId}; all candidate points were nodrag controls.`,
+      );
+    },
+    { box: nodeBox, testId: nodeTestId },
+  );
+
+  if (!point) {
+    throw new Error(`Expected a draggable start point for ${nodeTestId}.`);
   }
 
-  return { x: box.x, y: box.y };
+  return point;
 }
 
 async function addResource(page, toolbar, { capacity = "1", name }) {
@@ -415,29 +448,48 @@ async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
     throw new Error(`Expected bounding boxes for ${nodeTestId} drag.`);
   }
 
-  const startX = nodeBox.x + nodeBox.width / 2;
-  const startY = nodeBox.y + nodeBox.height / 2;
-  await page.mouse.move(startX, startY);
+  const startPoint = await draggableNodeStartPoint(page, nodeTestId, nodeBox);
+  await page.mouse.move(startPoint.x, startPoint.y);
   await page.mouse.down();
-  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 16 });
+  await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
+    steps: 16,
+  });
+  const midDragFlowPosition = await readNodeFlowPosition(page, nodeTestId);
   await page.mouse.up();
 
-  const mouseFlowPosition = await readNodeFlowPosition(page, nodeTestId);
+  const postMouseUpFlowPosition = await readNodeFlowPosition(page, nodeTestId);
+  const midDragDistancePx = flowPositionDistance(
+    initialFlowPosition,
+    midDragFlowPosition,
+  );
+  const postMouseUpDistancePx = flowPositionDistance(
+    initialFlowPosition,
+    postMouseUpFlowPosition,
+  );
   if (
-    initialFlowPosition &&
-    mouseFlowPosition &&
-    !flowPositionsMatchWithinTolerance(initialFlowPosition, mouseFlowPosition)
+    midDragDistancePx === null ||
+    midDragDistancePx <= persistedFlowPositionTolerancePx ||
+    postMouseUpDistancePx === null ||
+    postMouseUpDistancePx <= persistedFlowPositionTolerancePx
   ) {
-    return;
+    throw new Error(
+      `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
+        {
+          initialFlowPosition,
+          midDragFlowPosition,
+          midDragDistancePx,
+          postMouseUpFlowPosition,
+          postMouseUpDistancePx,
+        },
+      )}`,
+    );
   }
 
-  await node.focus();
-  for (let step = 0; step < Math.ceil(Math.abs(deltaX) / 10); step += 1) {
-    await page.keyboard.press(deltaX > 0 ? "ArrowRight" : "ArrowLeft");
-  }
-  for (let step = 0; step < Math.ceil(Math.abs(deltaY) / 10); step += 1) {
-    await page.keyboard.press(deltaY > 0 ? "ArrowDown" : "ArrowUp");
-  }
+  return {
+    initialFlowPosition,
+    midDragFlowPosition,
+    postMouseUpFlowPosition,
+  };
 }
 
 async function saveGraphDraft(page, toolbar, expect) {
@@ -712,67 +764,33 @@ describe.concurrent("factory graph editor node placement browser integration", (
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await addResource(browserPage.page, toolbar, { name: "extra-gpu" });
-        await browserPage.page
-          .getByTestId("rf__node-resource:extra-gpu")
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-
-        const initialFlowPosition = await readNodeFlowPosition(
+        const resourceTestId = "rf__node-resource:extra-gpu";
+        await waitForStableFactoryGraphNodePlacement(
           browserPage.page,
-          "rf__node-resource:extra-gpu",
+          resourceTestId,
         );
-        const initialScreenPosition = await readNodeScreenPosition(
-          browserPage.page,
-          "rf__node-resource:extra-gpu",
-        );
-        expect(initialFlowPosition ?? initialScreenPosition).not.toBeNull();
+        await waitForFactoryGraphSelectionReady(browserPage.page);
 
-        await dragNodeByOffset(
+        const dragObservation = await dragNodeByOffset(
           browserPage.page,
-          "rf__node-resource:extra-gpu",
-          160,
+          resourceTestId,
           120,
+          80,
         );
-
-        await expect
-          .poll(
-            async () => {
-              const nextFlowPosition = await readNodeFlowPosition(
-                browserPage.page,
-                "rf__node-resource:extra-gpu",
-              );
-              const nextScreenPosition = await readNodeScreenPosition(
-                browserPage.page,
-                "rf__node-resource:extra-gpu",
-              );
-              if (!nextScreenPosition || !initialScreenPosition) {
-                return null;
-              }
-
-              const movedOnScreen =
-                Math.abs(nextScreenPosition.x - initialScreenPosition.x) >
-                  flowPositionTolerancePx ||
-                Math.abs(nextScreenPosition.y - initialScreenPosition.y) >
-                  flowPositionTolerancePx;
-              const movedInFlow =
-                initialFlowPosition &&
-                nextFlowPosition &&
-                !flowPositionsMatchWithinTolerance(
-                  initialFlowPosition,
-                  nextFlowPosition,
-                );
-
-              return movedOnScreen || movedInFlow
-                ? { flow: nextFlowPosition, screen: nextScreenPosition }
-                : null;
-            },
-            { timeout: uiInteractionTimeoutMs },
-          )
-          .not.toBeNull();
-
-        const draggedFlowPosition = await readNodeFlowPosition(
-          browserPage.page,
-          "rf__node-resource:extra-gpu",
-        );
+        const {
+          initialFlowPosition,
+          midDragFlowPosition,
+          postMouseUpFlowPosition: draggedFlowPosition,
+        } = dragObservation;
+        expect(initialFlowPosition).not.toBeNull();
+        expect(midDragFlowPosition).not.toBeNull();
+        expect(draggedFlowPosition).not.toBeNull();
+        expect(
+          flowPositionDistance(initialFlowPosition, midDragFlowPosition),
+        ).toBeGreaterThan(persistedFlowPositionTolerancePx);
+        expect(
+          flowPositionDistance(initialFlowPosition, draggedFlowPosition),
+        ).toBeGreaterThan(persistedFlowPositionTolerancePx);
 
         await saveGraphDraft(browserPage.page, toolbar, expect);
         await expect
@@ -801,9 +819,36 @@ describe.concurrent("factory graph editor node placement browser integration", (
             persistedFlowPositionTolerancePx,
           ),
         ).toBe(true);
-        // The mouse path currently reports no flow displacement and falls back to
-        // Arrow keys; verify initial-vs-persisted movement in
-        // thr-graph-editor-drag-observation-is-not-a-drag.
+        // This independent check rejects a save that restores the initial
+        // position, even when a nearer-but-wrong persisted position is within
+        // the dragged-position tolerance.
+        expect(
+          flowPositionDistance(initialFlowPosition, persistedPosition),
+        ).toBeGreaterThan(persistedFlowPositionTolerancePx);
+
+        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await waitForDashboardReady(
+          browserPage.page,
+          preview.previewURL,
+          server,
+        );
+        await enterGraphEditor(browserPage.page);
+        await waitForStableFactoryGraphNodePlacement(
+          browserPage.page,
+          resourceTestId,
+        );
+        await waitForFactoryGraphSelectionReady(browserPage.page);
+        const reloadedFlowPosition = await readNodeFlowPosition(
+          browserPage.page,
+          resourceTestId,
+        );
+        expect(
+          flowPositionsMatchWithinTolerance(
+            reloadedFlowPosition,
+            persistedPosition,
+            persistedFlowPositionTolerancePx,
+          ),
+        ).toBe(true);
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
