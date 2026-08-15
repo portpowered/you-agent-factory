@@ -148,8 +148,7 @@ export function FactoryGraphEditorToolbar({
   const showEditorControls = visible;
   const toolbarButtonsDisabled = !showEditorControls || !canInteract;
   const discardDisabled = !canDiscard;
-  const saveDisabled =
-    toolbarButtonsDisabled || !canSave || onSave === undefined;
+  const saveDisabled = !canSave;
   const deleteAction = resolveFactoryGraphEditorToolbarDeleteAction({
     canDeleteSelection,
     selectionState: graphSelectionToolbarState,
