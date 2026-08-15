@@ -4,9 +4,9 @@ Status: final P3-P7 packet reconciliation complete; ready for review.
 
 Audit snapshot: 2026-08-14, with the historical throttled-lane behavior guard
 at 1be29c60d. The authoring branch was synchronized to origin/main at
-f7310bfa8 before P5-P7 drafting; current symbols and behavior on that tree are
-the implementation evidence. The historical packet sources are retained for
-their row semantics and are not silently rewritten.
+165bf33a1 before the P6/P7 review pass; current symbols and behavior on that
+tree are the implementation evidence. The historical packet sources are
+retained for their row semantics and are not silently rewritten.
 
 ## Substantially delivered queued packets
 
@@ -939,6 +939,16 @@ decision prohibits replacing Runtime-private checkpoint recovery with a second
 Recordings graph. P6 is not permission to delete a compatibility method whose
 caller has not moved or to repair a product behavior defect found during
 retirement.
+
+Compatibility retention is explicit while the final callers are still being
+migrated: the Workers workstation admission/dispatch capability may remain
+behind the Workers root for authored workstation routes until P5C/P6-C proves
+that request-scoped `Execute` preserves capacity, cancellation, and terminal
+publication; detached `root.BuildStatelessWorkers` remains a public boundary;
+and Runtime checkpoint recovery remains Runtime-private. Those retained
+surfaces receive no new callers, are not a second composition graph, and have
+the P6-C or named durability successor above rather than an unnamed cleanup
+obligation.
 
 The preserved customer behavior is: process construction remains inert and
 reusable; activation failure closes every acquired role without masking the
