@@ -429,6 +429,21 @@ closed:
 	}
 }
 
+func TestFactoryEventHistory_NilSubscribeReturnsClosedStream(t *testing.T) {
+	var history *FactoryEventHistory
+
+	stream, err := history.Subscribe(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	if stream.Events == nil {
+		t.Fatal("Subscribe returned a nil event stream")
+	}
+	if _, ok := <-stream.Events; ok {
+		t.Fatal("nil history returned an open event stream")
+	}
+}
+
 func TestFactoryEventHistory_CloseLiveSubscriptionsEndsActiveStreams(t *testing.T) {
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
