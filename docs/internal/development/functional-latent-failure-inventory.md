@@ -85,20 +85,14 @@ The two historical passes had identical classifications: 21 failures at both
 commits, 14 passes at both commits, and one setup-incomparable skip at both
 commits. There was no test that failed at `ed502b781` and passed at
 `db7379d47`; no genuine tip-only regression was found. This lane repaired five
-alignment rows that had failed in that historical comparison, leaving 16
-same-machine failures as confirmed pre-existing candidates for the next
-quarantine story. The 14 CI failures that passed when isolated on both commits
-remain ambiguous/non-reproduced and must not be quarantined. The observability
-row is setup-incomparable because its Linux-only test files are not runnable on
-this Windows machine and must not be quarantined from this comparison.
-same-machine failures as confirmed pre-existing candidates for the next
-quarantine story. The service-command-runner parent and two nested rows are
-also repaired in this lane, leaving 13 same-machine failures as confirmed
-pre-existing candidates for the next quarantine story. The 14 CI failures that
-passed when isolated on both commits remain ambiguous/non-reproduced and must
-not be quarantined. The observability row is setup-incomparable because its
-Linux-only test files are not runnable on this Windows machine and must not be
-quarantined from this comparison.
+alignment rows that had failed in that historical comparison. The
+service-command-runner parent and two nested rows are also repaired in this
+lane, leaving 13 same-machine failures as confirmed pre-existing candidates
+for the next quarantine story. The 14 CI failures that passed when isolated on
+both commits remain ambiguous/non-reproduced and must not be quarantined. The
+observability row is setup-incomparable because its Linux-only test files are
+not runnable on this Windows machine and must not be quarantined from this
+comparison.
 
 | # | Package | Test identity | `ed502b781` | `db7379d47` | Verdict | Failure or comparison evidence |
 | ---: | --- | --- | --- | --- | --- | --- |
