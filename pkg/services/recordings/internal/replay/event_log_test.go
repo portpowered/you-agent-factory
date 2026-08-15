@@ -457,7 +457,7 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 	}
 
 	completion := reduced.Completions[0]
-	providerSession := providers.SessionMetadataFromContinuation(completion.result.Continuation)
+	providerSession := (completion.result.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "resp-no-diagnostics" {
 		t.Fatalf("provider session = %#v, want resp-no-diagnostics", providerSession)
 	}
@@ -583,7 +583,7 @@ func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompl
 	if completion.result.Output != "recorded provider output" {
 		t.Fatalf("completion output = %q, want recorded provider output", completion.result.Output)
 	}
-	providerSession := providers.SessionMetadataFromContinuation(completion.result.Continuation)
+	providerSession := (completion.result.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "resp-safe-123" {
 		t.Fatalf("provider session = %#v, want resp-safe-123", providerSession)
 	}

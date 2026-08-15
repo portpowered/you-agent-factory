@@ -31,11 +31,15 @@ func MockInferenceProvider(contents ...string) providers.Service {
 	return testutil.NewMockProvider(responses...)
 }
 
-// ProviderServiceFromInference bridges a retained Infer-shaped test provider
-// into the Providers-root edge used by root.BuildProcess. The adapter keeps
-// the compatibility fake unchanged while exposing the same Execute-shaped
+type inferenceProvider interface {
+	Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+}
+
+// ProviderServiceFromInference bridges an Infer-shaped test provider into the
+// Providers-root edge used by root.BuildProcess. The adapter keeps the
+// compatibility fake unchanged while exposing the same Execute-shaped
 // contract as native Providers test doubles.
-func ProviderServiceFromInference(provider workerexecution.Provider) providers.Service {
+func ProviderServiceFromInference(provider inferenceProvider) providers.Service {
 	if provider == nil {
 		return nil
 	}

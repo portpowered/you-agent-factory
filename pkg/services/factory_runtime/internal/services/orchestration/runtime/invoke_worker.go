@@ -789,7 +789,7 @@ func invokeWorkerResultFromDispatch(
 		Attempts:        attempts,
 	}
 	if session := providerSessionFromContinuation(result.Result.Continuation); session != nil {
-		invoked.Provider = providers.CanonicalProviderSessionProvider(session.Provider)
+		invoked.Provider = providers.ID(session.Provider).CanonicalSessionProvider()
 		if invoked.Provider == "" {
 			invoked.Provider = strings.TrimSpace(session.Provider)
 		}
@@ -963,7 +963,7 @@ func invokeWorkerResultFrom(
 		Attempts:        result.Attempts,
 	}
 	if session := providerSessionFromContinuation(result.Dispatch.Result.Continuation); session != nil {
-		invoked.Provider = providers.CanonicalProviderSessionProvider(session.Provider)
+		invoked.Provider = providers.ID(session.Provider).CanonicalSessionProvider()
 		if invoked.Provider == "" {
 			invoked.Provider = strings.TrimSpace(session.Provider)
 		}

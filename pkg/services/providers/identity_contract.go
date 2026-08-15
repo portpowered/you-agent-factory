@@ -50,9 +50,9 @@ type SessionMetadata struct {
 	ID       string `json:"id,omitempty"`
 }
 
-// CloneSessionMetadata returns a detached provider-session identity
-// projection. Session storage and transcript state remain outside this value.
-func CloneSessionMetadata(session *SessionMetadata) *SessionMetadata {
+// Clone returns a detached provider-session identity projection. Session
+// storage and transcript state remain outside this value.
+func (session *SessionMetadata) Clone() *SessionMetadata {
 	if session == nil {
 		return nil
 	}
@@ -60,10 +60,10 @@ func CloneSessionMetadata(session *SessionMetadata) *SessionMetadata {
 	return &clone
 }
 
-// CanonicalProviderSessionProvider maps legacy provider command names onto the
-// stable provider identity used by persisted diagnostics and event projections.
-func CanonicalProviderSessionProvider(provider string) string {
-	trimmed := strings.TrimSpace(provider)
+// CanonicalSessionProvider maps legacy provider command names onto the stable
+// provider identity used by persisted diagnostics and event projections.
+func (id ID) CanonicalSessionProvider() string {
+	trimmed := strings.TrimSpace(id.String())
 	switch trimmed {
 	case "", "cursor":
 		return trimmed
@@ -74,13 +74,13 @@ func CanonicalProviderSessionProvider(provider string) string {
 	}
 }
 
-// ContinuationFromSessionMetadata projects a detached session identity onto
-// the opaque continuation vocabulary used across Worker boundaries.
-func ContinuationFromSessionMetadata(session *SessionMetadata) *ContinuationRef {
+// ContinuationRef projects a detached session identity onto the opaque
+// continuation vocabulary used across Worker boundaries.
+func (session *SessionMetadata) ContinuationRef() *ContinuationRef {
 	if session == nil {
 		return nil
 	}
-	provider := CanonicalProviderSessionProvider(session.Provider)
+	provider := ID(session.Provider).CanonicalSessionProvider()
 	if strings.TrimSpace(provider) == "" || strings.TrimSpace(session.ID) == "" {
 		return nil
 	}
@@ -93,9 +93,9 @@ func ContinuationFromSessionMetadata(session *SessionMetadata) *ContinuationRef 
 	return &continuation
 }
 
-// SessionMetadataFromContinuation projects an opaque continuation onto the
-// detached identity shape required by canonical event and transport models.
-func SessionMetadataFromContinuation(reference *ContinuationRef) *SessionMetadata {
+// SessionMetadata projects an opaque continuation onto the detached identity
+// shape required by canonical event and transport models.
+func (reference *ContinuationRef) SessionMetadata() *SessionMetadata {
 	if reference == nil {
 		return nil
 	}
@@ -111,7 +111,7 @@ func SessionMetadataFromContinuation(reference *ContinuationRef) *SessionMetadat
 		return nil
 	}
 	return &SessionMetadata{
-		Provider: CanonicalProviderSessionProvider(normalized.Provider),
+		Provider: ID(normalized.Provider).CanonicalSessionProvider(),
 		Kind:     normalized.Kind,
 		ID:       identity,
 	}
@@ -265,7 +265,7 @@ func (ref ContinuationRef) ToSessionRef() (SessionRef, error) {
 // exact session.
 func (ref SessionRef) ContinuationRef() ContinuationRef {
 	return ContinuationRef{
-		Provider:          CanonicalProviderSessionProvider(ref.Provider.String()),
+		Provider:          ref.Provider.CanonicalSessionProvider(),
 		Kind:              ref.Kind,
 		ProviderSessionID: ref.ID,
 		ExternalRef:       ref.ID,
@@ -275,4 +275,13 @@ func (ref SessionRef) ContinuationRef() ContinuationRef {
 // Clone returns a detached continuation-reference copy.
 func (ref ContinuationRef) Clone() ContinuationRef {
 	return ref
+}
+
+// ClonePtr returns a detached pointer copy for optional continuation fields.
+func (ref *ContinuationRef) ClonePtr() *ContinuationRef {
+	if ref == nil {
+		return nil
+	}
+	clone := ref.Clone()
+	return &clone
 }

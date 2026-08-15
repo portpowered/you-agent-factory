@@ -341,5 +341,3 @@ func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenc
 	}
 	return calls
 }
-
-var _ workerexecution.Provider = (*modelTransportSmokeProvider)(nil)

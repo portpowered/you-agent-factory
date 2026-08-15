@@ -131,7 +131,7 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 	exitCode := 0
 	failureType := workerexecution.ScriptFailureTypeTimeout
 	providerSession := &providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "session-1"}
-	continuation := providers.ContinuationFromSessionMetadata(providerSession)
+	continuation := (providerSession).ContinuationRef()
 	diagnostics := json.RawMessage(`{"provider":{"provider":"codex","model":"gpt-5"}}`)
 	events := []interfaces.FactoryEvent{
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceRequest, context, workerexecution.InferenceRequestEventPayload{

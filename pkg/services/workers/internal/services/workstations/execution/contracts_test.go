@@ -44,7 +44,7 @@ func TestCanonicalProviderSessionProviderPreservesAliasesAndUnknowns(t *testing.
 		{input: "cursor-cli", want: "cursor"},
 		{input: "acme", want: "acme"},
 	} {
-		if got := providers.CanonicalProviderSessionProvider(tc.input); got != tc.want {
+		if got := providers.ID(tc.input).CanonicalSessionProvider(); got != tc.want {
 			t.Fatalf("CanonicalProviderSessionProvider(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
@@ -54,7 +54,7 @@ func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
 	t.Parallel()
 
 	original := &providers.SessionMetadata{Provider: "cursor", Kind: "session_id", ID: "session-1"}
-	clone := providers.CloneSessionMetadata(original)
+	clone := (original).Clone()
 	if clone == nil || clone == original {
 		t.Fatalf("CloneProviderSessionMetadata() = %#v, want a detached non-nil value", clone)
 	}
@@ -63,7 +63,7 @@ func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
 	if original.Provider != "cursor" || original.ID != "session-1" {
 		t.Fatalf("clone mutation changed original metadata: original = %#v", original)
 	}
-	if got := providers.CloneSessionMetadata(nil); got != nil {
+	if got := (*providers.SessionMetadata)(nil).Clone(); got != nil {
 		t.Fatalf("CloneProviderSessionMetadata(nil) = %#v, want nil", got)
 	}
 }
@@ -72,7 +72,7 @@ func TestProviderSessionMetadataFromGenerated_CanonicalizesLegacyCursorProvider(
 	t.Parallel()
 
 	metadata := providers.SessionMetadata{Provider: "agent", Kind: "session_id", ID: "cursor-session-123"}
-	metadata.Provider = providers.CanonicalProviderSessionProvider(metadata.Provider)
+	metadata.Provider = providers.ID(metadata.Provider).CanonicalSessionProvider()
 	if metadata.Provider != "cursor" || metadata.Kind != "session_id" || metadata.ID != "cursor-session-123" {
 		t.Fatalf("metadata = %#v, want canonical cursor session metadata", metadata)
 	}

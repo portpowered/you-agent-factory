@@ -821,10 +821,10 @@ func runnerFailureResult(
 	}
 	if response.Continuation == nil {
 		response.Continuation = &workers.ProviderContinuationRef{
-			Provider: providers.CanonicalProviderSessionProvider(request.RunnerID),
+			Provider: providers.ID(request.RunnerID).CanonicalSessionProvider(),
 		}
 	} else if strings.TrimSpace(response.Continuation.Provider) == "" {
-		response.Continuation.Provider = providers.CanonicalProviderSessionProvider(request.RunnerID)
+		response.Continuation.Provider = providers.ID(request.RunnerID).CanonicalSessionProvider()
 	}
 	return response
 }

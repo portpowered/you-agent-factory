@@ -21,7 +21,9 @@ import (
 func startRecoveryAPIServer(
 	t *testing.T,
 	factoryDir string,
-	provider workerexecution.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -185,8 +187,6 @@ type recoveryRedispatchBlockingProvider struct {
 	releaseOnce  sync.Once
 	mu           sync.Mutex
 }
-
-var _ workerexecution.Provider = (*recoveryRedispatchBlockingProvider)(nil)
 
 func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *recoveryRedispatchBlockingProvider {
 	provider := &recoveryRedispatchBlockingProvider{

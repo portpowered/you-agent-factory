@@ -114,7 +114,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
 		forwarded = append(forwarded, workers.ProgressFragment{
 			DispatchID:   fragment.DispatchID,
-			Continuation: workers.CloneContinuationReference(fragment.Continuation),
+			Continuation: (fragment.Continuation).ClonePtr(),
 		})
 	})
 
@@ -185,7 +185,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	// An incomplete opaque continuation remains visible to the response stream,
 	// but cannot be reconstructed into a resumable association.
 	legacy := workers.ProgressFragment{
-		DispatchID: "dispatch-legacy",
+		DispatchID:   "dispatch-legacy",
 		Continuation: &providers.ContinuationRef{Provider: reference.Provider.String(), Kind: reference.Kind},
 	}
 	publisher.Publish(legacy)
@@ -203,7 +203,7 @@ func TestProviderSessionObservationPublisher_AssociatesBeforeForwardingExactProg
 	first.err = errors.New("association rejected")
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID:   "dispatch-1",
-		Continuation: workers.CloneContinuationReference(forwarded[1].Continuation),
+		Continuation: (forwarded[1].Continuation).ClonePtr(),
 	})
 	if len(first.requests) != 4 || len(forwarded) != 3 {
 		t.Fatalf("rejected observation forwarded output: requests:%#v forwarded:%#v", first.requests, forwarded)

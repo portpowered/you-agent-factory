@@ -962,9 +962,9 @@ func TestStart_RetainsExactProviderSessionAssociationFromWorkerResult(t *testing
 				WorkstationName: req.WorkstationName,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
 				Result: workers.WorkResult{
-					DispatchID:      req.Execution.Dispatch.DispatchID,
-					Outcome:         workers.OutcomeAccepted,
-					Continuation:    continuationFromProviderMetadata(returnedReference),
+					DispatchID:   req.Execution.Dispatch.DispatchID,
+					Outcome:      workers.OutcomeAccepted,
+					Continuation: continuationFromProviderMetadata(returnedReference),
 				},
 			}, nil
 		},
@@ -1037,7 +1037,7 @@ func TestStart_ProviderProgressCommitsAssociationBeforeOutputAndEnablesResume(t 
 		forwarded = append(forwarded, workers.ProgressFragment{
 			DispatchID:   fragment.DispatchID,
 			Kind:         fragment.Kind,
-			Continuation: workers.CloneContinuationReference(fragment.Continuation),
+			Continuation: (fragment.Continuation).ClonePtr(),
 		})
 	})
 	publisher.Bind(registry)
@@ -1446,8 +1446,8 @@ func TestStart_InvalidProviderSessionResultRemainsExplicitlyUnassociated(t *test
 				WorkstationName: req.WorkstationName,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
 				Result: workers.WorkResult{
-					DispatchID: req.Execution.Dispatch.DispatchID,
-					Outcome:    workers.OutcomeAccepted,
+					DispatchID:   req.Execution.Dispatch.DispatchID,
+					Outcome:      workers.OutcomeAccepted,
 					Continuation: &providers.ContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: ""},
 				},
 			}, nil

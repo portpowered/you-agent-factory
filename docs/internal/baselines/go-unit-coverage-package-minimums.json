@@ -1725,27 +1725,27 @@
       "minimum": 50.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat",
       "minimum": 73.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/adapter",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter",
       "minimum": 85.32
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/adapter/testkit",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter/testkit",
       "minimum": 80.67
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/agy",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy",
       "minimum": 50.75
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/claude",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/claude",
       "minimum": 4.44
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/codex",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/codex",
       "minimum": 6.34
     },
     {
@@ -1753,27 +1753,27 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/conductor",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/conductor",
       "minimum": 87.76
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/inferencecontract",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract",
       "minimum": 89.13
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/inferencecontract/testkit",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract/testkit",
       "minimum": 76.30
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/providersroot",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/providersroot",
       "minimum": 2.50
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/registry",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry",
       "minimum": 82.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/providercompat/structured",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/structured",
       "minimum": 14.00
     },
     {

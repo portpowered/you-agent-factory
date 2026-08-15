@@ -270,5 +270,3 @@ func (p *dispatchPlanningCancellationProvider) cancellationCount() int {
 	defer p.mu.Unlock()
 	return p.cancellations
 }
-
-var _ workers.Provider = (*dispatchPlanningCancellationProvider)(nil)

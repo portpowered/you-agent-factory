@@ -21,7 +21,7 @@ import (
 func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspection(t *testing.T) {
 	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
 		Content:      `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}),
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef(),
 	})
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-preset-child.workflow.js", "agent-run-preset-child")
 	service := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
@@ -486,7 +486,7 @@ func (m *parallelLiveChildMockProvider) Execute(
 	}
 	response := workerexecution.InferenceResponse{
 		Content:      `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-" + req.Dispatch.DispatchID}),
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-" + req.Dispatch.DispatchID}).ContinuationRef(),
 	}
 	return fixtureInvocationSuccess(input.Attempt, response), nil
 }
@@ -498,7 +498,7 @@ func fixtureInvocationSuccess(
 	return workerexecution.InvocationResult{
 		Response:     response,
 		Attempt:      attempt,
-		Continuation: workerexecution.CloneContinuationReference(response.Continuation),
+		Continuation: (response.Continuation).ClonePtr(),
 	}
 }
 
@@ -853,7 +853,7 @@ func TestJavaScriptRuntimeService_ChildExecutorModes_CoexistOnSameWorkflowSource
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
 		Content:      `{"text":"live child output"}`,
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}),
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef(),
 	})
 
 	fakeService := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{

@@ -209,5 +209,3 @@ func (p *functionalWorldViewProvider) respond(response workerexecution.Inference
 	}
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
-
-var _ workerexecution.Provider = (*functionalWorldViewProvider)(nil)

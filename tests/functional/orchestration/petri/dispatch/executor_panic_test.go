@@ -78,7 +78,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 // proves: ScriptWrapProvider.Execute converts CommandRunner.Run's
 // (CommandResult, error) return into an ordinary *ProviderError branch on
 // err != nil or ExitCode != 0
-// (pkg/services/workers/providercompat/inference_provider.go:179-217),
+// (pkg/services/workers/internal/providercompat/inference_provider.go:179-217),
 // and everything downstream of that (invocation.Executor.Execute at
 // pkg/services/workers/internal/services/workstations/invocation/executor.go:51)
 // only calls deterministic, non-panicking string/format helpers on the

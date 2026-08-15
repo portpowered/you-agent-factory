@@ -95,7 +95,7 @@ func TestValidateFailsWhenResidualPackageRuleUnmapped(t *testing.T) {
 		inventory.NamedOwnerConfirmations[i].ResidualPackageRules = append(
 			inventory.NamedOwnerConfirmations[i].ResidualPackageRules,
 			ownershipinventory.ResidualPackageRule{
-				PackagePrefix: "pkg/services/workers/providercompat",
+				PackagePrefix: "pkg/services/workers/internal/providercompat",
 				Destination:   "workers",
 				Disposition:   ownershipinventory.DispositionRetain,
 				Note:          "intentionally wrong residual mapping for test",
@@ -150,4 +150,3 @@ func TestBuildInventoryIncludesNamedOwnerConfirmations(t *testing.T) {
 		t.Fatal("providers confirmation missing residual package rules")
 	}
 }
-

@@ -512,7 +512,7 @@ func replayInferenceAttemptFromEvent(event interfaces.FactoryEvent) (string, rep
 	if err != nil {
 		return "", replayInferenceAttempt{}, fmt.Errorf("decode inference response event %q: %w", event.Id, err)
 	}
-	providerSession := providers.SessionMetadataFromContinuation(payload.Continuation)
+	providerSession := (payload.Continuation).SessionMetadata()
 	if providerSession == nil {
 		// Replay accepts older public event artifacts whose response payload
 		// carried providerSession before canonical events switched to the opaque
@@ -524,7 +524,7 @@ func replayInferenceAttemptFromEvent(event interfaces.FactoryEvent) (string, rep
 		if decodeErr := json.Unmarshal(event.Payload, &legacy); decodeErr != nil {
 			return "", replayInferenceAttempt{}, fmt.Errorf("decode legacy inference response event %q: %w", event.Id, decodeErr)
 		}
-		providerSession = providers.CloneSessionMetadata(legacy.ProviderSession)
+		providerSession = (legacy.ProviderSession).Clone()
 	}
 	return stringValue(event.Context.DispatchID), replayInferenceAttempt{
 		attempt:         payload.Attempt,
@@ -565,7 +565,7 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
 			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(payload.ProviderFailure),
-			Continuation:                providers.ContinuationFromSessionMetadata(inference.providerSession),
+			Continuation:                (inference.providerSession).ContinuationRef(),
 			Metrics:                     replayWorkMetricsFromEvent(payload.Metrics),
 			Diagnostics:                 diagnostics,
 		},

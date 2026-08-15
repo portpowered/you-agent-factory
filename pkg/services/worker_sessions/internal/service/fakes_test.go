@@ -20,7 +20,7 @@ import (
 )
 
 func continuationFromProviderMetadata(metadata *providers.SessionMetadata) *providers.ContinuationRef {
-	return providers.ContinuationFromSessionMetadata(metadata)
+	return (metadata).ContinuationRef()
 }
 
 func continuationFromProviderReference(reference providers.SessionRef) *providers.ContinuationRef {

@@ -75,7 +75,9 @@ func namedFactorySmokeEnvironment(homeDir string) []string {
 func runFactoryThroughCustomerProcess(
 	t *testing.T,
 	dir string,
-	provider workers.Provider,
+	provider interface {
+		Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+	},
 ) factoryapi.StatusResponse {
 	t.Helper()
 	server := support.NewProcessAPIServer()

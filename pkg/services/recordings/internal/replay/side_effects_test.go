@@ -257,7 +257,7 @@ func TestSideEffects_InferProvidesCompletionEvidenceWhenReplayArtifactOmitsDiagn
 		resp.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
 		t.Fatalf("diagnostics = %#v, want safe completion evidence", resp.Diagnostics)
 	}
-	providerSession := providers.SessionMetadataFromContinuation(resp.Continuation)
+	providerSession := (resp.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "resp-no-diagnostics" {
 		t.Fatalf("provider session = %#v, want resp-no-diagnostics", providerSession)
 	}

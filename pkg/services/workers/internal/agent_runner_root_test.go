@@ -347,7 +347,7 @@ func assertServiceAgentFailureFacts(
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-1",
 	}
-	wantContinuation := providers.ContinuationFromSessionMetadata(wantSession)
+	wantContinuation := (wantSession).ContinuationRef()
 	if !reflect.DeepEqual(result.Continuation, wantContinuation) ||
 		!reflect.DeepEqual(providerErr.Continuation, wantContinuation) {
 		t.Fatalf("failure continuations = result:%#v error:%#v, want %#v", result.Continuation, providerErr.Continuation, wantContinuation)
@@ -362,7 +362,7 @@ func assertServiceAgentFailureFacts(
 }
 
 func cloneServiceProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
-	fragment.Continuation = workers.CloneContinuationReference(fragment.Continuation)
+	fragment.Continuation = (fragment.Continuation).ClonePtr()
 	if fragment.Metadata == nil {
 		return fragment
 	}

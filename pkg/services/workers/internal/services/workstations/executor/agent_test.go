@@ -195,76 +195,6 @@ func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.Provide
 	return authoritativeTestResponse(m.response), m.err
 }
 
-func (m *agentMockProvider) ResolveIdentity(
-	ctx context.Context,
-	request providers.ResolveIdentityRequest,
-) (providers.ResolveIdentityResult, error) {
-	if request.Identity == "" {
-		request.Identity = "codex"
-	}
-	return m.ProviderServiceAdapter.ResolveIdentity(ctx, request)
-}
-
-func (m *agentMockProvider) ValidatePrerequisites(
-	ctx context.Context,
-	request providers.ValidatePrerequisitesRequest,
-) error {
-	if request.ID == "" {
-		request.ID = providers.IDCodex
-	}
-	return m.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
-}
-
-func (m *agentMockProvider) Execute(
-	ctx context.Context,
-	request providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	adapter := m.ProviderServiceAdapter
-	adapter.InferFunc = m.Infer
-	return adapter.Execute(ctx, request)
-}
-
-func (m *agentMockProvider) Continue(
-	ctx context.Context,
-	request providers.ContinueRequest,
-) (providers.ContinueResult, error) {
-	adapter := m.ProviderServiceAdapter
-	adapter.InferFunc = m.Infer
-	return adapter.Continue(ctx, request)
-}
-
-func (m *agentMockProvider) ContinueReference(
-	ctx context.Context,
-	request providers.ContinueReferenceRequest,
-) (providers.ContinueReferenceResult, error) {
-	reference, err := request.Reference.ToSessionRef()
-	if err != nil {
-		return providers.ContinueReferenceResult{}, providers.ContinuationFailure{
-			Kind:      providers.ContinuationFailureKindInvalid,
-			Message:   err.Error(),
-			Reference: providers.SessionRef{},
-		}
-	}
-	continued, err := m.Continue(ctx, providers.ContinueRequest{
-		Reference: reference,
-		Attempt:   request.Attempt,
-	})
-	if err != nil {
-		return providers.ContinueReferenceResult{}, err
-	}
-	continuedReference := continued.Reference
-	if continuedReference.Provider == "" {
-		continuedReference = reference
-	}
-	resultReference := continuedReference.ContinuationRef()
-	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
-	return providers.ContinueReferenceResult{
-		Reference: resultReference,
-		Outcome:   continued.Outcome,
-		Result:    continued.Result,
-	}, nil
-}
-
 func authoritativeTestResponse(response workerexecution.InferenceResponse) workerexecution.InferenceResponse {
 	if response.Content == "" || response.Diagnostics != nil &&
 		(response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "" ||
@@ -631,11 +561,11 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 	provider := &agentMockProvider{
 		response: workerexecution.InferenceResponse{
 			Content: "The answer is 42.",
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: string(modelprovider.ProviderClaude),
 				Kind:     providerSessionKindSessionID,
 				ID:       "claude-session-123",
-			}),
+			}).ContinuationRef(),
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -659,14 +589,14 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation) == nil {
+	if (result.Continuation).SessionMetadata() == nil {
 		t.Fatal("expected provider session metadata on successful result")
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).Provider != string(modelprovider.ProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).Provider, modelprovider.ProviderClaude)
+	if (result.Continuation).SessionMetadata().Provider != string(modelprovider.ProviderClaude) {
+		t.Fatalf("provider session provider = %q, want %q", (result.Continuation).SessionMetadata().Provider, modelprovider.ProviderClaude)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).ID != "claude-session-123" {
-		t.Fatalf("provider session id = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).ID, "claude-session-123")
+	if (result.Continuation).SessionMetadata().ID != "claude-session-123" {
+		t.Fatalf("provider session id = %q, want %q", (result.Continuation).SessionMetadata().ID, "claude-session-123")
 	}
 }
 
@@ -814,8 +744,8 @@ func TestAgentExecutor_ProviderSessionInspectionFailureIsTerminalAndSafe(t *test
 	if result.Error != "provider error: unknown: provider session inspection reached its configured limit" {
 		t.Fatalf("result.Error = %q, want bounded inspection cause", result.Error)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation) == nil || providers.SessionMetadataFromContinuation(result.Continuation).ID != "rollout-inspection-limit" {
-		t.Fatalf("ProviderSession = %#v, want stable inspection session identity", providers.SessionMetadataFromContinuation(result.Continuation))
+	if (result.Continuation).SessionMetadata() == nil || (result.Continuation).SessionMetadata().ID != "rollout-inspection-limit" {
+		t.Fatalf("ProviderSession = %#v, want stable inspection session identity", (result.Continuation).SessionMetadata())
 	}
 	if strings.Contains(result.Error, "raw rollout") || strings.Contains(result.Error, "prompt") {
 		t.Fatalf("result.Error leaked untrusted inspection context: %q", result.Error)
@@ -837,11 +767,11 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 	provider := &agentMockProvider{
 		response: workerexecution.InferenceResponse{
 			Content: "The answer is 42.",
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: string(modelprovider.ProviderCodex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess_codex_123",
-			}),
+			}).ContinuationRef(),
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -861,11 +791,11 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation) == nil {
+	if (result.Continuation).SessionMetadata() == nil {
 		t.Fatal("expected provider session metadata on successful result")
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).ID != "sess_codex_123" {
-		t.Fatalf("provider session id = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).ID, "sess_codex_123")
+	if (result.Continuation).SessionMetadata().ID != "sess_codex_123" {
+		t.Fatalf("provider session id = %q, want %q", (result.Continuation).SessionMetadata().ID, "sess_codex_123")
 	}
 }
 
@@ -875,11 +805,11 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMe
 			workerexecution.WorkFailureTypeInternalServerError,
 			"Codex encountered a temporary server error.",
 			nil,
-			providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			(&providers.SessionMetadata{
 				Provider: string(modelprovider.ProviderCodex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess-codex-windows-4294967295",
-			}),
+			}).ContinuationRef(),
 		),
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
@@ -919,11 +849,11 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMe
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.FailureMetadata, decision)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation) == nil {
+	if (result.Continuation).SessionMetadata() == nil {
 		t.Fatal("expected provider session metadata on failed result")
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).ID != "sess-codex-windows-4294967295" {
-		t.Fatalf("provider session id = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).ID, "sess-codex-windows-4294967295")
+	if (result.Continuation).SessionMetadata().ID != "sess-codex-windows-4294967295" {
+		t.Fatalf("provider session id = %q, want %q", (result.Continuation).SessionMetadata().ID, "sess-codex-windows-4294967295")
 	}
 }
 
@@ -934,11 +864,11 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 				workerexecution.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
-				providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+				(&providers.SessionMetadata{
 					Provider: string(modelprovider.ProviderCodex),
 					Kind:     providerSessionKindSessionID,
 					ID:       "sess_codex_error_123",
-				}),
+				}).ContinuationRef(),
 			),
 		},
 	}
@@ -972,11 +902,11 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	if result.Metrics.RetryCount != 0 {
 		t.Fatalf("RetryCount = %d, want 0", result.Metrics.RetryCount)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation) == nil {
+	if (result.Continuation).SessionMetadata() == nil {
 		t.Fatal("expected provider session metadata on failed result")
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).ID != "sess_codex_error_123" {
-		t.Fatalf("provider session id = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).ID, "sess_codex_error_123")
+	if (result.Continuation).SessionMetadata().ID != "sess_codex_error_123" {
+		t.Fatalf("provider session id = %q, want %q", (result.Continuation).SessionMetadata().ID, "sess_codex_error_123")
 	}
 
 }
@@ -988,11 +918,11 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 				workerexecution.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
-				providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+				(&providers.SessionMetadata{
 					Provider: string(modelprovider.ProviderClaude),
 					Kind:     providerSessionKindSessionID,
 					ID:       "claude-session-123",
-				}),
+				}).ContinuationRef(),
 			),
 		},
 	}
@@ -1017,13 +947,13 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation) == nil {
+	if (result.Continuation).SessionMetadata() == nil {
 		t.Fatal("expected provider session metadata on failed result")
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).Provider != string(modelprovider.ProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).Provider, modelprovider.ProviderClaude)
+	if (result.Continuation).SessionMetadata().Provider != string(modelprovider.ProviderClaude) {
+		t.Fatalf("provider session provider = %q, want %q", (result.Continuation).SessionMetadata().Provider, modelprovider.ProviderClaude)
 	}
-	if providers.SessionMetadataFromContinuation(result.Continuation).ID != "claude-session-123" {
-		t.Fatalf("provider session id = %q, want %q", providers.SessionMetadataFromContinuation(result.Continuation).ID, "claude-session-123")
+	if (result.Continuation).SessionMetadata().ID != "claude-session-123" {
+		t.Fatalf("provider session id = %q, want %q", (result.Continuation).SessionMetadata().ID, "claude-session-123")
 	}
 }

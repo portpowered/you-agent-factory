@@ -1285,7 +1285,7 @@ func safeBoundaryResult(
 		Output:          "safe boundary output for " + workID,
 		Error:           errText,
 		FailureMetadata: providerFailure,
-		Continuation:    providers.ContinuationFromSessionMetadata(providerSession),
+		Continuation:    (providerSession).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-" + workID,
@@ -1917,7 +1917,7 @@ func assertDetachedModelResponseMetadata(t *testing.T, response *workers.ModelRe
 	if response.Outcome != workers.InferenceOutcomeSucceeded || response.ModelRequestID != "dispatch-1/model-request/1" || response.DurationMillis != 1500 {
 		t.Fatalf("recorded response = %#v, want successful detached model response", response)
 	}
-	providerSession := providers.SessionMetadataFromContinuation(response.Continuation)
+	providerSession := (response.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "session-1" {
 		t.Fatalf("recorded provider session = %#v, want session-1", providerSession)
 	}

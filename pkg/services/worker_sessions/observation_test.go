@@ -26,7 +26,7 @@ func testContinuationFromSessionRef(reference *providers.SessionRef) *providers.
 }
 
 func testContinuationFromMetadata(metadata *providers.SessionMetadata) *providers.ContinuationRef {
-	return providers.ContinuationFromSessionMetadata(metadata)
+	return (metadata).ContinuationRef()
 }
 
 func validObservationForTest(state State) Observation {
@@ -602,7 +602,7 @@ func TestPublisher_RuntimeFallbackForUnassociatedProgress(t *testing.T) {
 	publisher.Publish(workers.ProgressFragment{
 		DispatchID:   progress.DispatchID,
 		Kind:         workers.ProviderSessionObservedFragmentKind,
-		Continuation: workers.CloneContinuationReference(progress.Continuation),
+		Continuation: (progress.Continuation).ClonePtr(),
 	})
 	if len(forwarded) != 1 {
 		t.Fatalf("internal association hand-off forwarded=%#v, want suppressed", forwarded)

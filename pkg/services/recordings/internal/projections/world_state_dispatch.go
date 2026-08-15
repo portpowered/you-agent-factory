@@ -168,7 +168,7 @@ func (r *factoryWorldReducer) applyInferenceResponse(event interfaces.FactoryEve
 			Message: payload.FailureDetail.Message,
 		}
 	}
-	current.ProviderSession = providers.SessionMetadataFromContinuation(payload.Continuation)
+	current.ProviderSession = (payload.Continuation).SessionMetadata()
 	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload.Diagnostics)
 	if err != nil {
 		return err
@@ -193,7 +193,7 @@ func (r *factoryWorldReducer) applyModelResponse(event interfaces.FactoryEvent, 
 	current.Outcome = string(payload.Outcome)
 	current.Response = stringValue(payload.OutputPreview)
 	current.DurationMillis = payload.DurationMillis
-	current.ProviderSession = providers.SessionMetadataFromContinuation(payload.Continuation)
+	current.ProviderSession = (payload.Continuation).SessionMetadata()
 	current.FailureDetail = workerexecution.CloneFailureDetail(payload.FailureDetail)
 	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload.Diagnostics)
 	if err != nil {
@@ -465,7 +465,7 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		TransitionID:             payload.TransitionID,
 		WorkstationName:          dispatch.Workstation.Name,
 		Outcome:                  string(payload.Outcome),
-		ProviderSession:          *providers.CloneSessionMetadata(completion.ProviderSession),
+		ProviderSession:          *(completion.ProviderSession).Clone(),
 		WorkItemIDs:              completion.WorkItemIDs,
 		ConsumedInputs:           interfaces.CloneWorkstationInputs(completion.ConsumedInputs),
 		CurrentChainingTraceID:   completion.CurrentChainingTraceID,
@@ -596,7 +596,7 @@ func latestInferenceProviderSession(attempt *interfaces.FactoryWorldInferenceAtt
 	if attempt == nil {
 		return nil
 	}
-	return providers.CloneSessionMetadata(attempt.ProviderSession)
+	return (attempt.ProviderSession).Clone()
 }
 
 func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *workerdiagnostics.SafeWorkDiagnostics {

@@ -278,8 +278,6 @@ func traceAwareReviewResponse(content string) workerexecution.InferenceResponse 
 	}
 }
 
-var _ workerexecution.Provider = (*traceAwareReviewInferenceProvider)(nil)
-
 type seedIdea struct {
 	traceID string
 	title   string

@@ -417,7 +417,7 @@ func providerSessionFromContinuation(
 	}
 	normalized := continuation.Normalize()
 	return &providers.SessionMetadata{
-		Provider: providers.CanonicalProviderSessionProvider(normalized.Provider),
+		Provider: providers.ID(normalized.Provider).CanonicalSessionProvider(),
 		Kind:     normalized.Kind,
 		ID:       id,
 	}
@@ -790,7 +790,7 @@ func providerSessionFromExecuteResult(
 		return nil
 	}
 	return &providers.SessionMetadata{
-		Provider: providers.CanonicalProviderSessionProvider(provider),
+		Provider: providers.ID(provider).CanonicalSessionProvider(),
 		Kind:     providers.SessionIDKind,
 	}
 }

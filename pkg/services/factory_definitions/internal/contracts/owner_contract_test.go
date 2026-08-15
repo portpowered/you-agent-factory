@@ -94,12 +94,12 @@ const (
 
 var (
 	CloneProviderInferenceRequest             = workerexecution.CloneProviderInferenceRequest
-	CloneProviderSessionMetadata              = providers.CloneSessionMetadata
+	CloneProviderSessionMetadata              = func(session *providers.SessionMetadata) *providers.SessionMetadata { return session.Clone() }
 	CloneSubprocessExecutionRequest           = workerexecution.CloneSubprocessExecutionRequest
 	CloneWorkDispatch                         = work.CloneWorkDispatch
 	CloneWorkstationExecutionRequest          = workerexecution.CloneWorkstationExecutionRequest
 	CloneWorkFailureMetadata                  = workerexecution.CloneWorkFailureMetadata
-	CanonicalProviderSessionProvider          = providers.CanonicalProviderSessionProvider
+	CanonicalProviderSessionProvider          = func(provider string) string { return providers.ID(provider).CanonicalSessionProvider() }
 	BuiltInRunnerMetadata                     = workerexecution.BuiltInRunnerMetadata
 	GeneratedSafeWorkDiagnostics              = workerdiagnosticsmapping.GeneratedSafeWorkDiagnostics
 	NewRunnerCapabilities                     = workerexecution.NewCapabilities

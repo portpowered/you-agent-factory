@@ -668,11 +668,11 @@ func safeDiagnosticsWorkResult() workerexecution.WorkResult {
 		TransitionID: "build",
 		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "completed",
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+		Continuation: (&providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "response_id",
 			ID:       "resp-safe-123",
-		}),
+		}).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-123",

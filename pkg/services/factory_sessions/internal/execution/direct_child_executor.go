@@ -160,11 +160,11 @@ func (e *directChildExecutor) inferenceRequest(
 }
 
 func directChildProviderFields(result workers.InvocationResult) (string, string) {
-	metadata := providers.SessionMetadataFromContinuation(result.Continuation)
+	metadata := (result.Continuation).SessionMetadata()
 	if metadata == nil {
 		return "", ""
 	}
-	name := providers.CanonicalProviderSessionProvider(metadata.Provider)
+	name := providers.ID(metadata.Provider).CanonicalSessionProvider()
 	if name == "" {
 		name = strings.TrimSpace(metadata.Provider)
 	}

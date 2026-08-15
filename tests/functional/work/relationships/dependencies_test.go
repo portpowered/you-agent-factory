@@ -671,7 +671,9 @@ func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEve
 func startDependencyFactory(
 	t *testing.T,
 	dir string,
-	provider workerexecution.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) (baseURL string, daemon *support.ProcessCommand) {
 	t.Helper()
 
@@ -852,8 +854,6 @@ type fanInSecondFinisherGateProvider struct {
 	finisherCalls         int
 	starterCalls          int
 }
-
-var _ workerexecution.Provider = (*fanInSecondFinisherGateProvider)(nil)
 
 func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
 	provider := &fanInSecondFinisherGateProvider{

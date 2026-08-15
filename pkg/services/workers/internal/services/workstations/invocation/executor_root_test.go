@@ -19,9 +19,9 @@ import (
 func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	provider := &executionTestProvider{response: workerexecution.InferenceResponse{
 		Content: "done",
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+		Continuation: (&providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-1",
-		}),
+		}).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			Provider: &workerexecution.ProviderDiagnostic{Provider: "cursor", ResponseMetadata: map[string]string{"content_bytes": "4"}},
 			Command:  &workerexecution.CommandDiagnostic{Stdin: "secret prompt", Env: map[string]string{"API_KEY": "secret"}},
@@ -53,7 +53,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 		workerexecution.WorkFailureTypeThrottled,
 		"Provider capacity is temporarily unavailable.",
 		errors.New("exit status 1"),
-		providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-failed"}),
+		(&providers.SessionMetadata{Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-failed"}).ContinuationRef(),
 	)
 	provider := &executionTestProvider{err: providerErr}
 
@@ -372,7 +372,7 @@ func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
 
 func assertRunnerExecutorSuccess(t *testing.T) {
 	t.Helper()
-	providerContinuation := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"})
+	providerContinuation := (&providers.SessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"}).ContinuationRef()
 	diagnostics := &workerexecution.WorkDiagnostics{
 		Provider: &workerexecution.ProviderDiagnostic{Provider: "codex", ResponseMetadata: map[string]string{"source": "runner"}},
 	}

@@ -176,7 +176,7 @@ func runWorkersInferenceThroughRootProof(
 			fixture.model,
 		)
 	}
-	inferSession := providers.SessionMetadataFromContinuation(inferResponse.Continuation)
+	inferSession := (inferResponse.Continuation).SessionMetadata()
 	if inferSession == nil || inferSession.ID != "workers-root-boundary-session" {
 		t.Fatalf(
 			"inference provider session = %#v, want workers-root-boundary-session",
@@ -252,7 +252,7 @@ func (stub *workersRequestBoundaryStub) Execute(
 		Attempt: input.Attempt,
 		Response: workers.InferenceResponse{
 			Content:      "workers-root-boundary",
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}),
+			Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}).ContinuationRef(),
 		},
 	}, nil
 }
@@ -264,7 +264,7 @@ func (stub *workersRequestBoundaryStub) Infer(
 	stub.lastInference = request
 	return workers.InferenceResponse{
 		Content:      "workers-root-boundary",
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}),
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "workers-root-boundary-session"}).ContinuationRef(),
 	}, nil
 }
 

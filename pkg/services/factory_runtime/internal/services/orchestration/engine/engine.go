@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -205,7 +204,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 					Outcome:              r.Outcome,
 					Reason:               completedDispatchReasonFromResult(r),
 					ArtifactVerification: r.ArtifactVerification.Clone(),
-					ProviderSession:      providers.SessionMetadataFromContinuation(r.Continuation),
+					ProviderSession:      (r.Continuation).SessionMetadata(),
 					StartTime:            entry.StartTime,
 					EndTime:              now,
 					Duration:             now.Sub(entry.StartTime),

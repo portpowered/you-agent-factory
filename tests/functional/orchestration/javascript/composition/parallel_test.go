@@ -695,8 +695,6 @@ func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest)
 	return message
 }
 
-var _ workerexecution.Provider = (*gatedParallelChildProvider)(nil)
-
 type labelGatedParallelChildProvider struct {
 	testutil.ProviderServiceAdapter
 	mu              sync.Mutex
@@ -770,8 +768,6 @@ func (p *labelGatedParallelChildProvider) Infer(
 	}, nil
 }
 
-var _ workerexecution.Provider = (*labelGatedParallelChildProvider)(nil)
-
 type partialFailureParallelChildProvider struct {
 	testutil.ProviderServiceAdapter
 }
@@ -799,5 +795,3 @@ func (p *partialFailureParallelChildProvider) Infer(
 		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
 	}, nil
 }
-
-var _ workerexecution.Provider = (*partialFailureParallelChildProvider)(nil)

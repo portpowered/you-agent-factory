@@ -20,7 +20,7 @@ func TestExecuteProviderWithRetryCarriesSessionAndBoundsAttempts(t *testing.T) {
 		"provider temporarily unavailable",
 		nil,
 	)
-	providerErr.Continuation = providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", ID: "provider-session-1"})
+	providerErr.Continuation = (&providers.SessionMetadata{Provider: "codex", ID: "provider-session-1"}).ContinuationRef()
 
 	result, err := service.executeProviderWithRetry(
 		context.Background(),
@@ -90,8 +90,8 @@ func TestExecuteProviderWithRetryStopsAtMaximumAndHonorsCancellation(t *testing.
 func TestProviderContinuationForRetryPrefersErrorThenResult(t *testing.T) {
 	t.Parallel()
 
-	errorSession := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", ID: "error-session"})
-	resultSession := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", ID: "result-session"})
+	errorSession := (&providers.SessionMetadata{Provider: "codex", ID: "error-session"}).ContinuationRef()
+	resultSession := (&providers.SessionMetadata{Provider: "codex", ID: "result-session"}).ContinuationRef()
 	if got := providerContinuationForRetry(
 		workers.NewProviderErrorWithSession(workers.WorkFailureTypeThrottled, "busy", nil, errorSession),
 		workers.RunnerExecutionResult{Continuation: resultSession},

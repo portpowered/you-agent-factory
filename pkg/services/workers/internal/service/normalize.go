@@ -352,7 +352,7 @@ func continuationFromSession(
 	resume *workers.ProviderContinuationRef,
 ) *workers.ProviderContinuationRef {
 	if continuation != nil {
-		return workers.CloneContinuationReference(continuation)
+		return (continuation).ClonePtr()
 	}
 	if resume == nil {
 		return nil

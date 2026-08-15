@@ -965,7 +965,7 @@ func isLifecycleProvenance(draft workers.Draft) bool {
 }
 
 func canonicalProvider(value string) string {
-	return providers.CanonicalProviderSessionProvider(strings.TrimSpace(value))
+	return providers.ID(strings.TrimSpace(value)).CanonicalSessionProvider()
 }
 
 func sameProvider(left, right string) bool {

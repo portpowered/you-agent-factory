@@ -283,8 +283,6 @@ func (provider *packagedTTSFakeProvider) Infer(
 	}, nil
 }
 
-var _ workerexecution.Provider = (*packagedTTSFakeProvider)(nil)
-
 type packagedTTSFailingFakeProvider struct {
 	testutil.ProviderServiceAdapter
 	mu          sync.Mutex
@@ -325,8 +323,6 @@ func (provider *packagedTTSFailingFakeProvider) Infer(
 	}
 	return workerexecution.InferenceResponse{}, errors.New(provider.failMessage)
 }
-
-var _ workerexecution.Provider = (*packagedTTSFailingFakeProvider)(nil)
 
 // overwritePackagedTTSFactoryWithProviderFakeTopology keeps the installed
 // @you/tts layout but replaces authored topology with a cloud-backed inference

@@ -84,7 +84,7 @@ func factoryEventPayloadToAPI(event interfaces.FactoryEvent) ([]byte, error) {
 	if err := json.Unmarshal(continuationPayload, &continuation); err != nil {
 		return nil, err
 	}
-	if session := providers.SessionMetadataFromContinuation(&continuation); session != nil {
+	if session := (&continuation).SessionMetadata(); session != nil {
 		encoded, err := json.Marshal(session)
 		if err != nil {
 			return nil, err

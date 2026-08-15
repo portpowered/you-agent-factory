@@ -701,8 +701,6 @@ func newCountingProvider(calls *atomic.Int32) countingProvider {
 	return provider
 }
 
-var _ workers.Provider = countingProvider{}
-
 func (provider countingProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	provider.calls.Add(1)
 	return workers.InferenceResponse{}, nil

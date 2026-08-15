@@ -68,11 +68,11 @@ func TestAgentExecutor_RetryableFailureRetriesWithPreservedSession(t *testing.T)
 		workerexecution.WorkFailureTypeThrottled,
 		"temporarily unavailable",
 		nil,
-		providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+		(&providers.SessionMetadata{
 			Provider: string(modelprovider.ProviderKiro),
 			Kind:     providerSessionKindSessionID,
 			ID:       sessionID,
-		}),
+		}).ContinuationRef(),
 	)
 	provider := &agentMockProvider{
 		errors: []error{throttleErr, nil},

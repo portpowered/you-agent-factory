@@ -50,7 +50,7 @@ Implementation ownership:
 | PTY allocation, capture, cleaning, timeout, cleanup | new Agy-owned Go package under `pkg/services/workers/` (exact path chosen in Story 17; interface proposal in Story 003) |
 | Typed argv construction and workspace attachment | Agy provider adapter (Story 17) |
 | Process-tree supervision semantics | align with `pkg/services/workers/process` job-object (Windows) and process-group (POSIX) patterns |
-| Final-only response events and failure classification | `pkg/services/workers/providercompat` adapter kernel (Story 17+) |
+| Final-only response events and failure classification | `pkg/services/workers/internal/providercompat` adapter kernel (Story 17+) |
 
 ## Maintained behavior scope
 

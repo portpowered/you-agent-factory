@@ -2,6 +2,7 @@ package runtime_api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -18,7 +19,9 @@ type FunctionalServer struct {
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)
 
-func withProvider(provider workers.Provider) runtimeOption {
+func withProvider(provider interface {
+	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+}) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
 		cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
 	}

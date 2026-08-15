@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -304,7 +303,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Reason:                      completedDispatchReason(resolved),
 		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		FailureMetadata:             failureMetadata,
-		ProviderSession:             providers.SessionMetadataFromContinuation(result.Continuation),
+		ProviderSession:             (result.Continuation).SessionMetadata(),
 		EndTime:                     endTime,
 		ConsumedTokens:              factorytoken.CloneSlice(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(

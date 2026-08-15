@@ -550,5 +550,3 @@ func (p *concurrentSessionWorkersProvider) requests() []workers.ProviderInferenc
 func (p *concurrentSessionWorkersProvider) activeCount() int32 {
 	return p.active.Load()
 }
-
-var _ workers.Provider = (*concurrentSessionWorkersProvider)(nil)

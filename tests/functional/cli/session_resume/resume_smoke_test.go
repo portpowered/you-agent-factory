@@ -378,7 +378,9 @@ func newCLIResumeSmokeRunningHarness(t *testing.T) *cliResumeSmokeHarness {
 func startRootCLIResumeAPIServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerexecution.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) (string, cliResumeProcess) {
 	t.Helper()
 

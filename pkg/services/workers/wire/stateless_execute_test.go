@@ -792,11 +792,11 @@ func (provider *statelessProviderOverride) Infer(
 	}
 	return workers.InferenceResponse{
 		Content: content,
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+		Continuation: (&providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session-id",
 			ID:       "session-attempt-override",
-		}),
+		}).ContinuationRef(),
 	}, nil
 }
 

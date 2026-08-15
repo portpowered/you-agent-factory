@@ -22,7 +22,9 @@ import (
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workers.Provider,
+	provider interface {
+		Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+	},
 ) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 

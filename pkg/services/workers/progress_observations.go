@@ -41,6 +41,11 @@ type ProgressFragment struct {
 	Provider string
 	// Continuation is the opaque provider-owned identity used to associate a
 	// resumable execution before forwarding output.
+	// ProviderSessionReference and ProviderSessionRef retain the old detached
+	// projections for the compatibility subtree until its successor deletion
+	// lane removes them. New code uses Continuation.
+	ProviderSessionReference       *providers.SessionRef
+	ProviderSessionRef             *providers.SessionMetadata
 	Continuation                   *providers.ContinuationRef
 	ExternalEventType              string
 	Metadata                       map[string]string
@@ -51,9 +56,9 @@ type ProgressFragment struct {
 // ProgressPublisher receives transient Worker observations.
 type ProgressPublisher func(ProgressFragment)
 
-// CloneContinuationReference returns a detached copy of the opaque provider
-// continuation carried by a Workers progress fragment.
-func CloneContinuationReference(reference *providers.ContinuationRef) *providers.ContinuationRef {
+// CloneProviderSessionReference returns a detached compatibility copy of the
+// exact provider-session reference carried by a legacy progress fragment.
+func CloneProviderSessionReference(reference *providers.SessionRef) *providers.SessionRef {
 	if reference == nil {
 		return nil
 	}

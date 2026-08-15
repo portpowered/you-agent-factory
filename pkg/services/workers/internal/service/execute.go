@@ -292,7 +292,7 @@ func (s *Service) executeProviderWithRetry(
 
 		if continuation := providerContinuationForRetry(providerErr, result); continuation != nil {
 			if request.Continuation != nil {
-				request.Continuation = workers.CloneContinuationReference(continuation)
+				request.Continuation = (continuation).ClonePtr()
 				request.SessionID = ""
 			} else {
 				normalized := continuation.Normalize()
@@ -324,10 +324,10 @@ func providerContinuationForRetry(
 	result workers.RunnerExecutionResult,
 ) *workers.ProviderContinuationRef {
 	if providerErr != nil && providerErr.Continuation != nil {
-		return workers.CloneContinuationReference(providerErr.Continuation)
+		return (providerErr.Continuation).ClonePtr()
 	}
 	if result.Continuation != nil {
-		return workers.CloneContinuationReference(result.Continuation)
+		return (result.Continuation).ClonePtr()
 	}
 	return nil
 }

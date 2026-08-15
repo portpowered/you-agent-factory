@@ -468,14 +468,14 @@ func (p *resumeCoverageBlockingProvider) Execute(
 
 	if call == 1 {
 		session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}
-		continuation := providers.ContinuationFromSessionMetadata(session)
+		continuation := (session).ContinuationRef()
 		response := workerexecution.InferenceResponse{
 			Content:      `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
 			Continuation: continuation,
 		}
 		return workerexecution.InvocationResult{
 			Response: response, Attempt: input.Attempt,
-			Continuation: workerexecution.CloneContinuationReference(response.Continuation),
+			Continuation: (response.Continuation).ClonePtr(),
 		}, nil
 	}
 
@@ -492,14 +492,14 @@ func (p *resumeCoverageBlockingProvider) Execute(
 	}
 
 	session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}
-	continuation := providers.ContinuationFromSessionMetadata(session)
+	continuation := (session).ContinuationRef()
 	response := workerexecution.InferenceResponse{
 		Content:      `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
 		Continuation: continuation,
 	}
 	return workerexecution.InvocationResult{
 		Response: response, Attempt: input.Attempt,
-		Continuation: workerexecution.CloneContinuationReference(response.Continuation),
+		Continuation: (response.Continuation).ClonePtr(),
 	}, nil
 }
 

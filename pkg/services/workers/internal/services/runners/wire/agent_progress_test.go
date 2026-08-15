@@ -59,9 +59,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Type:       "planning",
 			Payload:    "first",
 			Provider:   string(providers.IDCodex),
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
-			}),
+			}).ContinuationRef(),
 			Metadata: map[string]string{"sequence": "1"},
 		},
 		{
@@ -70,9 +70,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Type:       "responding",
 			Payload:    "second",
 			Provider:   string(providers.IDCodex),
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
-			}),
+			}).ContinuationRef(),
 			Metadata: map[string]string{"sequence": "2"},
 		},
 		{
@@ -81,18 +81,18 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Type:       "message.completed",
 			Payload:    "fixture output",
 			Provider:   string(providers.IDCodex),
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
-			}),
+			}).ContinuationRef(),
 		},
 		{
 			DispatchID: "dispatch-agent-1",
 			Kind:       workers.CompletedFragmentKind,
 			Type:       "COMPLETED",
 			Provider:   string(providers.IDCodex),
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
-			}),
+			}).ContinuationRef(),
 			ExternalEventType: "STREAM_COMPLETED",
 		},
 	}
@@ -122,7 +122,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 }
 
 func cloneProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
-	fragment.Continuation = workers.CloneContinuationReference(fragment.Continuation)
+	fragment.Continuation = (fragment.Continuation).ClonePtr()
 	fragment.Metadata = cloneAgentProgressMetadata(fragment.Metadata)
 	return fragment
 }

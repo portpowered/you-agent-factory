@@ -149,9 +149,9 @@ var workersMappingCases = []packageMappingCase{
 		},
 	},
 	{
-		path: "pkg/services/workers/providercompat/codex",
+		path: "pkg/services/workers/internal/providercompat/codex",
 		wantMove: &ownershipinventory.PackageRow{
-			PackagePath:       "pkg/services/workers/providercompat/codex",
+			PackagePath:       "pkg/services/workers/internal/providercompat/codex",
 			Disposition:       ownershipinventory.DispositionMove,
 			Destination:       "providers",
 			DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -171,9 +171,9 @@ var workersMappingCases = []packageMappingCase{
 		},
 	},
 	{
-		path: "pkg/services/workers/providercompat_test",
+		path: "pkg/services/workers/internal/providercompat_test",
 		wantMove: &ownershipinventory.PackageRow{
-			PackagePath:       "pkg/services/workers/providercompat_test",
+			PackagePath:       "pkg/services/workers/internal/providercompat_test",
 			Disposition:       ownershipinventory.DispositionMove,
 			Destination:       "providers",
 			DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -182,9 +182,9 @@ var workersMappingCases = []packageMappingCase{
 		},
 	},
 	{
-		path: "pkg/services/workers/providercompat/registry",
+		path: "pkg/services/workers/internal/providercompat/registry",
 		wantMove: &ownershipinventory.PackageRow{
-			PackagePath:       "pkg/services/workers/providercompat/registry",
+			PackagePath:       "pkg/services/workers/internal/providercompat/registry",
 			Disposition:       ownershipinventory.DispositionMove,
 			Destination:       "providers",
 			DestinationKind:   ownershipinventory.DestinationKindOwner,

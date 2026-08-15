@@ -308,7 +308,7 @@ func assertAgentFailureFacts(
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-1",
 	}
-	wantContinuation := providers.ContinuationFromSessionMetadata(wantSession)
+	wantContinuation := (wantSession).ContinuationRef()
 	if !reflect.DeepEqual(result.Continuation, wantContinuation) ||
 		!reflect.DeepEqual(providerErr.Continuation, wantContinuation) {
 		t.Fatalf("failure continuations = result:%#v error:%#v, want %#v", result.Continuation, providerErr.Continuation, wantContinuation)

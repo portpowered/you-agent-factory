@@ -26,9 +26,12 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	providercompat "github.com/portpowered/infinite-you/pkg/services/workers/providercompat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+type inferenceProvider interface {
+	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+}
 
 type stressProcessHarness struct {
 	t       *testing.T
@@ -41,7 +44,7 @@ type stressProcessHarness struct {
 func startStressProcess(
 	t *testing.T,
 	dir string,
-	provider providercompat.LegacyProvider,
+	provider inferenceProvider,
 ) *stressProcessHarness {
 	t.Helper()
 	ensureStressProviderDefinitions(t, dir)

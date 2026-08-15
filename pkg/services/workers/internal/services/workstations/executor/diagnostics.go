@@ -64,8 +64,8 @@ func withInferenceResponseDiagnostics(base *workerexecution.WorkDiagnostics, res
 	}
 	diagnostics.Provider.ResponseMetadata["content_bytes"] = fmt.Sprintf("%d", len(resp.Content))
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
-	if session := providers.SessionMetadataFromContinuation(resp.Continuation); session != nil {
-		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = providers.CanonicalProviderSessionProvider(session.Provider)
+	if session := (resp.Continuation).SessionMetadata(); session != nil {
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = providers.ID(session.Provider).CanonicalSessionProvider()
 		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = session.Kind
 		diagnostics.Provider.ResponseMetadata["provider_session_id"] = session.ID
 	}

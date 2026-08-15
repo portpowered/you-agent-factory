@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -83,7 +82,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	cp := d
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
-	cp.ProviderSession = providers.CloneSessionMetadata(d.ProviderSession)
+	cp.ProviderSession = (d.ProviderSession).Clone()
 	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
 	if d.OutputMutations != nil {
 		cp.OutputMutations = make([]interfaces.TokenMutationRecord, len(d.OutputMutations))

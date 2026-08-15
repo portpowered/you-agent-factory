@@ -636,7 +636,7 @@ func fragmentProvider(fragment responsestream.Event) string {
 		return provider
 	}
 	if fragment.ProviderSessionRef != nil {
-		if provider := providers.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
+		if provider := providers.ID(fragment.ProviderSessionRef.Provider).CanonicalSessionProvider(); provider != "" {
 			return provider
 		}
 	}

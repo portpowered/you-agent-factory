@@ -91,7 +91,7 @@ func (e providerBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkD
 			WorkIDs:    append([]string(nil), dispatch.Execution.WorkIDs...),
 			Response: &workerexecution.InferenceResponseEventPayload{
 				Attempt: 1, Diagnostics: diagnostics, InferenceRequestID: dispatch.DispatchID + "/inference-request/1",
-				Outcome: workerexecution.InferenceOutcomeSucceeded, Continuation: providers.ContinuationFromSessionMetadata(session), Response: &response,
+				Outcome: workerexecution.InferenceOutcomeSucceeded, Continuation: (session).ContinuationRef(), Response: &response,
 			},
 		})
 	}
@@ -100,7 +100,7 @@ func (e providerBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkD
 		TransitionID: dispatch.TransitionID,
 		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       response,
-		Continuation: providers.ContinuationFromSessionMetadata(session),
+		Continuation: (session).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "mock", Model: "fixture-model",
 		}},

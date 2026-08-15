@@ -1660,13 +1660,13 @@
       "class": "command",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/workers/providercompat/agy -> pkg/services/factory_sessions"
+      "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/factory_sessions"
     },
     {
       "fromOwner": "providers",
       "toOwner": "models",
       "class": "command",
-      "evidence": "pkg/services/workers/providercompat/agy -> pkg/services/models"
+      "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/models"
     },
     {
       "fromOwner": "providers",
@@ -1694,7 +1694,7 @@
       "class": "command",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/workers/providercompat/adapter -> pkg/services/workers"
+      "evidence": "pkg/services/workers/internal/providercompat/adapter -> pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -2271,16 +2271,10 @@
           "note": "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root."
         },
         {
-          "packagePrefix": "pkg/services/workers/providercompat",
+          "packagePrefix": "pkg/services/workers/internal/providercompat",
           "destination": "providers",
           "disposition": "move",
           "note": "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners."
-        },
-        {
-          "packagePrefix": "pkg/services/workers/providercompat_test",
-          "destination": "providers",
-          "disposition": "move",
-          "note": "Provider test/support packages follow the Providers extraction successor."
         }
       ],
       "note": "Add Providers as the singular catalog+execution owner. Capabilities remain Catalog queries; native adapters remain responsibility clusters—not competing provider catalog/execution top-level abstractions."
@@ -2313,7 +2307,7 @@
     {
       "id": "behavior_test:provider-functionaltests",
       "kind": "behavior_test",
-      "surfacePath": "pkg/services/workers/providercompat/functionaltests",
+      "surfacePath": "pkg/services/workers/internal/providercompat/functionaltests",
       "replacementOwner": "providers",
       "note": "Provider compatibility/behavior tests follow the Providers Execution successor after cutover."
     },
@@ -5436,6 +5430,134 @@
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/workers/internal/providercompat",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/adapter",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/adapter/testkit",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/agy",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/agypty",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/claude",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/codex",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/commandenv",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/conductor",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/functionaltests",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract/testkit",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/paritytests",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/providersroot",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/registry",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/providercompat/structured",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/service",
       "disposition": "move",
       "destination": "workers",
@@ -5660,134 +5782,6 @@
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal",
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/adapter",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/adapter/testkit",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/agy",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/agypty",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/claude",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/codex",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/commandenv",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/conductor",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/functionaltests",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/inferencecontract",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/inferencecontract/testkit",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/paritytests",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/providersroot",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/registry",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/providercompat/structured",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
       "packagePath": "pkg/services/workers/wire",

@@ -75,7 +75,7 @@ func canonicalExecutionPayload(payload json.RawMessage) (json.RawMessage, error)
 	if err := json.Unmarshal(providerSessionPayload, &session); err != nil {
 		return nil, err
 	}
-	if continuation := providers.ContinuationFromSessionMetadata(&session); continuation != nil {
+	if continuation := (&session).ContinuationRef(); continuation != nil {
 		encoded, err := json.Marshal(continuation)
 		if err != nil {
 			return nil, err

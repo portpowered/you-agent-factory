@@ -436,7 +436,7 @@ func TestDetachedResultMaterializationPreservesFailureAndContinuationFacts(t *te
 		result.Result.FailureMetadata.Type != workers.WorkFailureTypeTimeout {
 		t.Fatalf("failure facts = %#v, want timeout metadata", result.Result)
 	}
-	providerSession := providers.SessionMetadataFromContinuation(result.Result.Continuation)
+	providerSession := (result.Result.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "provider-session-retry" {
 		t.Fatalf("provider session = %#v, want continuation identity", providerSession)
 	}

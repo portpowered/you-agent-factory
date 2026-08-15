@@ -259,7 +259,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 	if failed != nil {
 		return *failed, nil
 	}
-	executionRequest.Continuation = workerexecution.CloneContinuationReference(request.Continuation)
+	executionRequest.Continuation = (request.Continuation).ClonePtr()
 
 	result, err := we.executeInnerWorker(ctx, executionRequest, workerDef, workstationDef, start, logger)
 	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)

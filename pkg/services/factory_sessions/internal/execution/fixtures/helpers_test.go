@@ -1089,14 +1089,14 @@ func (p *sequentialBlockingProvider) Execute(
 	p.mu.Unlock()
 
 	if call == 1 {
-		continuation := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"})
+		continuation := (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef()
 		response := workerexecution.InferenceResponse{
 			Content:      fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
 			Continuation: continuation,
 		}
 		return workerexecution.InvocationResult{
 			Response: response, Attempt: input.Attempt,
-			Continuation: workerexecution.CloneContinuationReference(response.Continuation),
+			Continuation: (response.Continuation).ClonePtr(),
 		}, nil
 	}
 
@@ -1113,14 +1113,14 @@ func (p *sequentialBlockingProvider) Execute(
 		return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
 	}
 
-	continuation := providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"})
+	continuation := (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}).ContinuationRef()
 	response := workerexecution.InferenceResponse{
 		Content:      fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
 		Continuation: continuation,
 	}
 	return workerexecution.InvocationResult{
 		Response: response, Attempt: input.Attempt,
-		Continuation: workerexecution.CloneContinuationReference(response.Continuation),
+		Continuation: (response.Continuation).ClonePtr(),
 	}, nil
 }
 

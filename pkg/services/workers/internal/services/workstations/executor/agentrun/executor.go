@@ -282,7 +282,7 @@ func agentRunInferenceRequest(
 		Worktree:           request.Worktree,
 		WorkingDirectory:   request.WorkingDirectory,
 	}
-	req.Continuation = workerexecution.CloneContinuationReference(request.Continuation)
+	req.Continuation = (request.Continuation).ClonePtr()
 	if workerDef != nil {
 		req.Model = workerDef.Model
 		req.ModelProvider = workerDef.ModelProvider

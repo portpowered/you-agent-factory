@@ -156,10 +156,10 @@ func TestExecuteDetachedKeepsLastRunnerTurnAuthoritative(t *testing.T) {
 			Content:  `{"outcome":"COMPLETE","feedback":"ship it"}`,
 			Outcome:  workerexecution.WorkOutcome("COMPLETE"),
 			Feedback: "ship it",
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: "codex",
 				ID:       "provider-session-9",
-			}),
+			}).ContinuationRef(),
 		},
 	}}
 	harness := &inferencingHarnessStub{

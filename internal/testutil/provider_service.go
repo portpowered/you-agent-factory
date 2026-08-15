@@ -147,8 +147,12 @@ func providerExecuteResult(response workerexecution.InferenceResponse) providers
 		Content: response.Content,
 		Outcome: providers.ExecuteOutcome(response.Outcome),
 	}
-	if response.Continuation != nil {
-		if reference, err := response.Continuation.ToSessionRef(); err == nil {
+	continuation := response.Continuation
+	if continuation == nil {
+		continuation = (response.ProviderSession).ContinuationRef()
+	}
+	if continuation != nil {
+		if reference, err := continuation.ToSessionRef(); err == nil {
 			result.SessionRef = &reference
 		}
 	}

@@ -571,7 +571,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 			TransitionID: "t1",
 			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "done",
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "sess_codex_123"}),
+			Continuation: (&providers.SessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "sess_codex_123"}).ContinuationRef(),
 		}},
 	}
 

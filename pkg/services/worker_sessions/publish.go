@@ -153,8 +153,8 @@ func sessionRefFromContinuation(reference *providers.ContinuationRef) *providers
 
 func sameProviderIdentity(left, right string) bool {
 	return strings.EqualFold(
-		providers.CanonicalProviderSessionProvider(left),
-		providers.CanonicalProviderSessionProvider(right),
+		providers.ID(left).CanonicalSessionProvider(),
+		providers.ID(right).CanonicalSessionProvider(),
 	)
 }
 

@@ -54,7 +54,7 @@ func TestMapPackageMarksProcessEdgesAsArchitectureException(t *testing.T) {
 }
 
 func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
-	row, err := ownershipinventory.MapPackage("pkg/services/workers/providercompat/codex")
+	row, err := ownershipinventory.MapPackage("pkg/services/workers/internal/providercompat/codex")
 	if err != nil {
 		t.Fatalf("MapPackage() error = %v", err)
 	}

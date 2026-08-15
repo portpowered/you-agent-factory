@@ -31,9 +31,9 @@ func TestFactoryEventHistory_RecordInferenceEvent_OwnsEnvelopeAndPreservesPublic
 			DurationMillis:     125,
 			InferenceRequestID: "dispatch-inference/inference-request/1",
 			Outcome:            workerexecution.InferenceOutcomeSucceeded,
-			Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: "mock", Kind: "session_id", ID: "provider-session-1",
-			}),
+			}).ContinuationRef(),
 			Response: stringPtr("provider response"),
 		},
 	})

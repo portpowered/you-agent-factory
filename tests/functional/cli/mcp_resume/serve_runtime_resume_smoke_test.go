@@ -289,7 +289,9 @@ func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmoke
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerexecution.Provider,
+	provider interface {
+		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+	},
 ) (*stdioMCPClient, func()) {
 	t.Helper()
 

@@ -239,7 +239,7 @@ func liveSessionRunnerRequest(request workers.WorkstationDispatchRequest) worker
 		WorkingDirectory:   execution.WorkingDirectory,
 		Worktree:           execution.Worktree,
 		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
-		Continuation:       workers.CloneContinuationReference(execution.Continuation),
+		Continuation:       (execution.Continuation).ClonePtr(),
 	}
 }
 

@@ -50,10 +50,10 @@ var forbiddenCompositionImports = []string{
 }
 
 var forbiddenProviderImplementationImports = []string{
-	"github.com/portpowered/infinite-you/pkg/services/workers/providercompat/agy",
-	"github.com/portpowered/infinite-you/pkg/services/workers/providercompat/claude",
-	"github.com/portpowered/infinite-you/pkg/services/workers/providercompat/codex",
-	"github.com/portpowered/infinite-you/pkg/services/workers/providercompat/cursor",
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy",
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/claude",
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/codex",
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/cursor",
 }
 
 // Provider scenarios may import service-root contracts and these exact public

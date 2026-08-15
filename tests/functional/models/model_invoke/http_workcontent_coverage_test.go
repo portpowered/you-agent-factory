@@ -228,5 +228,3 @@ func (provider *httpWorkContentProvider) Infer(
 	defer provider.mu.Unlock()
 	return provider.response, nil
 }
-
-var _ workerexecution.Provider = (*httpWorkContentProvider)(nil)

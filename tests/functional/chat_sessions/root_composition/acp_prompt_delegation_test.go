@@ -56,7 +56,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	// ProviderOverride (an in-process workers.Provider fake) is used here
+	// ProviderOverride (an in-process Infer-shaped fake) is used here
 	// instead of the standards-preferred ProviderCommandRunner
 	// (platformprocess.CommandRunner, a subprocess-launch-shaped fake).
 	// ProviderCommandRunner *can* drive this exact @you/goal fixture --
@@ -571,7 +571,7 @@ func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
 	return responses
 }
 
-// acceptedGoalProvider is a workers.Provider that answers every inference
+// acceptedGoalProvider is an Infer-shaped provider that answers every inference
 // with the one decision envelope the seeded @you/goal packaged Factory's
 // `outcomeFormat: decision-envelope` executor contract accepts as complete,
 // so its goal loop reaches its authored `complete` terminal state.
@@ -599,7 +599,7 @@ func (acceptedGoalProvider) Infer(context.Context, workers.ProviderInferenceRequ
 	}, nil
 }
 
-// blockingProvider wraps a workers.Provider and blocks its first Infer call
+// blockingProvider wraps an Infer-shaped provider and blocks its first Infer call
 // until release is closed, closing started exactly once when that call
 // begins. A test uses this to deterministically observe that a Factory
 // dispatch's own inference call is genuinely in flight -- proving the
@@ -607,13 +607,17 @@ func (acceptedGoalProvider) Infer(context.Context, workers.ProviderInferenceRequ
 // before sending a concurrent request, with no sleep-based synchronization.
 type blockingProvider struct {
 	testutil.ProviderServiceAdapter
-	inner   workers.Provider
+	inner interface {
+		Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+	}
 	started chan struct{}
 	release chan struct{}
 	once    sync.Once
 }
 
-func newBlockingProvider(inner workers.Provider) *blockingProvider {
+func newBlockingProvider(inner interface {
+	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+}) *blockingProvider {
 	provider := &blockingProvider{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
 	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	return provider

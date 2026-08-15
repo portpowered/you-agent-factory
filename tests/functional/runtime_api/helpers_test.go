@@ -2,6 +2,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,7 +30,9 @@ func withClock(clock platformclock.Source) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
 }
 
-func withProvider(provider workers.Provider) runtimeOption {
+func withProvider(provider interface {
+	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+}) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
 		cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
 	}

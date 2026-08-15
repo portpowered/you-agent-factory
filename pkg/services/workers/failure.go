@@ -147,9 +147,12 @@ func adaptClassificationError(err error) error {
 
 // ProviderError is the public normalized Worker provider failure.
 type ProviderError struct {
-	Family                          WorkFailureFamily
-	Type                            WorkFailureType
-	Message                         string
+	Family  WorkFailureFamily
+	Type    WorkFailureType
+	Message string
+	// ProviderSession is retained for legacy Infer-shaped callers. Providers
+	// owns the detached identity; new code uses Continuation at this boundary.
+	ProviderSession                 *ProviderSessionMetadata
 	Continuation                    *ProviderContinuationRef
 	Diagnostics                     *WorkDiagnostics
 	Cause                           error
@@ -191,6 +194,9 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 	}
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) {
+		if providerErr != nil && providerErr.Continuation == nil {
+			providerErr.Continuation = (providerErr.ProviderSession).ContinuationRef()
+		}
 		return providerErr
 	}
 	if providerErr := normalizeProviderSessionError(err); providerErr != nil {
@@ -263,7 +269,8 @@ func normalizeProviderSessionError(err error) *ProviderError {
 		Family:          providerFailureFamily(failureType),
 		Type:            failureType,
 		Message:         message,
-		Continuation: continuation,
+		ProviderSession: (continuation).SessionMetadata(),
+		Continuation:    continuation,
 		Diagnostics:     diagnostics,
 		Cause:           err,
 	}
@@ -297,6 +304,7 @@ func NewProviderErrorWithSession(
 ) *ProviderError {
 	err := NewProviderError(failureType, message, cause)
 	err.Continuation = cloneContinuation(continuation)
+	err.ProviderSession = (err.Continuation).SessionMetadata()
 	return err
 }
 

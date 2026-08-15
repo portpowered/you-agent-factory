@@ -340,11 +340,11 @@ func agentRequest() workers.RunnerExecutionRequest {
 func expectedAgentResult() workers.RunnerExecutionResult {
 	return workers.RunnerExecutionResult{
 		Content: "fixture output",
-		Continuation: providers.ContinuationFromSessionMetadata(&providers.SessionMetadata{
+		Continuation: (&providers.SessionMetadata{
 			Provider: string(providers.IDCodex),
 			Kind:     providers.SessionIDKind,
 			ID:       "provider-session-1",
-		}),
+		}).ContinuationRef(),
 		Diagnostics: &workers.WorkDiagnostics{
 			Provider: &workers.ProviderDiagnostic{
 				Provider: string(providers.IDCodex),

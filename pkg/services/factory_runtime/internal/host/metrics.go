@@ -173,7 +173,7 @@ func (r *Bundle) runtimeWorkerDefinition(workerName string) (*interfaces.Factory
 }
 
 func normalizedRuntimeMetricProvider(provider string) string {
-	return providers.CanonicalProviderSessionProvider(strings.TrimSpace(provider))
+	return providers.ID(strings.TrimSpace(provider)).CanonicalSessionProvider()
 }
 
 func providerMetricProvider(diagnostics *workerexecution.WorkDiagnostics, workerDef *interfaces.FactoryWorkerConfig) string {
