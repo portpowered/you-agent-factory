@@ -6,6 +6,7 @@ import {
   browserScenarioTimeoutMs,
   expectNoBrowserErrors,
   loadReplayLines,
+  resolvedDefaultFactorySessionID,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
@@ -101,6 +102,11 @@ const openedFactoryDefinition = {
       worker: "review-writer",
     },
   ],
+};
+
+const betaFactoryDefinition = {
+  ...defaultFactoryDefinition,
+  name: "Beta Browser Session Harness Factory",
 };
 
 const betaSessionID = "session-beta";
@@ -643,6 +649,187 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
+    "keeps the selected beta session stable when alpha stream data arrives late",
+    async ({ expect, openBrowserPage, preview }) => {
+      const alphaLines = buildReplayLines(defaultFactoryDefinition);
+      const betaLines = buildReplayLines(betaFactoryDefinition);
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: defaultFactoryDefinition,
+        eventLines: alphaLines,
+        eventLinesBySessionID: {
+          [betaSessionID]: betaLines,
+        },
+        currentFactoryBySessionID: {
+          [betaSessionID]: betaFactoryDefinition,
+        },
+        sessions: [defaultSession, betaSession],
+      });
+      const browserPage = await openBrowserPage({
+        artifactLabel: "dashboard-late-session-result",
+      });
+      const delayedAlphaRoutes = [];
+      let alphaStreamAttempts = 0;
+
+      try {
+        await browserPage.page.route("**/events**", async (route) => {
+          const acceptHeader = route.request().headers().accept ?? "";
+          if (!acceptHeader.includes("text/event-stream")) {
+            await route.continue();
+            return;
+          }
+
+          const pathname = new URL(route.request().url()).pathname;
+          const alphaEventsPath = `/factory-sessions/${resolvedDefaultFactorySessionID}/events`;
+          if (pathname !== alphaEventsPath) {
+            await route.continue();
+            return;
+          }
+
+          alphaStreamAttempts += 1;
+          if (alphaStreamAttempts === 1) {
+            await route.fulfill({
+              body: alphaLines
+                .slice(0, 2)
+                .map((line) => `data: ${line}\n\n`)
+                .join(""),
+              contentType: "text/event-stream",
+              status: 200,
+            });
+            return;
+          }
+
+          delayedAlphaRoutes.push(route);
+        });
+
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await browserPage.page
+          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const rootTab = browserPage.page.getByRole("tab", { name: "root" });
+        const betaTab = browserPage.page.getByRole("tab", { name: "beta" });
+        await rootTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await betaTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await expect
+          .poll(() => delayedAlphaRoutes.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBeGreaterThan(0);
+
+        await betaTab.click();
+        await expect
+          .poll(() => betaTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("true");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Factory event stream connected.");
+
+        const sessionControls = browserPage.page.getByRole("article", {
+          name: "Session controls",
+        });
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Live" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const workTotalsState = browserPage.page
+          .locator('[data-bento-card-id="work-totals"]')
+          .getByRole("status");
+        await expect
+          .poll(
+            () =>
+              workTotalsState.getAttribute("data-dashboard-card-content-state"),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe("known-empty");
+        const betaCardText = await workTotalsState.textContent();
+        const betaCardFreshness = await workTotalsState.getAttribute(
+          "data-dashboard-card-freshness-state",
+        );
+
+        const timelineSlider = sessionControls.getByRole("slider", {
+          name: "Timeline tick",
+        });
+        await timelineSlider.focus();
+        await timelineSlider.press("ArrowLeft");
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Historical" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await timelineSlider.press("ArrowRight");
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Live" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const delayedAlphaRoute = delayedAlphaRoutes.at(-1);
+        if (!delayedAlphaRoute) {
+          throw new Error("Expected a delayed alpha event-stream request.");
+        }
+        await delayedAlphaRoute.fulfill({
+          body: alphaLines
+            .slice(2)
+            .map((line) => `data: ${line}\n\n`)
+            .join(""),
+          contentType: "text/event-stream",
+          status: 200,
+        });
+
+        await expect
+          .poll(() => betaTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("true");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Factory event stream connected.");
+        await expect
+          .poll(
+            () =>
+              workTotalsState.getAttribute("data-dashboard-card-content-state"),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe("known-empty");
+        await expect
+          .poll(
+            () =>
+              workTotalsState.getAttribute(
+                "data-dashboard-card-freshness-state",
+              ),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(betaCardFreshness);
+        expect(await workTotalsState.textContent()).toBe(betaCardText);
+        await sessionControls
+          .getByRole("status", { name: "Timeline mode: Live" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
