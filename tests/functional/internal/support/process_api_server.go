@@ -17,10 +17,17 @@ import (
 // this as a ceiling only: readiness still returns immediately on success.
 const processAPIServerReadyTimeout = 15 * time.Second
 
+// A missing server activation request should be diagnosed before the full
+// readiness ceiling, while still allowing the asynchronously started process
+// enough time to enter the injected starter while several functional
+// applications are being initialized concurrently.
+const processAPIServerStartGracePeriod = 5 * time.Second
+
 // ProcessAPIServer is an HTTP transport edge for a root-built process. It owns
 // only the external server boundary and never constructs application services.
 type ProcessAPIServer struct {
-	ready chan struct{}
+	startedSignal chan struct{}
+	ready         chan struct{}
 
 	mu           sync.Mutex
 	started      bool
@@ -29,7 +36,10 @@ type ProcessAPIServer struct {
 }
 
 func NewProcessAPIServer() *ProcessAPIServer {
-	return &ProcessAPIServer{ready: make(chan struct{})}
+	return &ProcessAPIServer{
+		startedSignal: make(chan struct{}),
+		ready:         make(chan struct{}),
+	}
 }
 
 // HoldShutdownUntilSignaled defers listener teardown, once the owning
@@ -69,6 +79,7 @@ func (server *ProcessAPIServer) Start(
 		return fmt.Errorf("process API server already started")
 	}
 	server.started = true
+	close(server.startedSignal)
 	httpServer := httptest.NewServer(request.Handler)
 	server.url = httpServer.URL
 	if request.OnBound != nil {
@@ -120,35 +131,60 @@ func (server *ProcessAPIServer) Ready() <-chan struct{} {
 // httptest URL.
 func (server *ProcessAPIServer) WaitForURL(t testing.TB) string {
 	t.Helper()
-	if server == nil {
-		t.Fatal("process API server is required")
+	baseURL, err := server.waitForURL(processAPIServerReadyTimeout)
+	if err != nil {
+		t.Fatal(err)
 	}
-	select {
-	case <-server.ready:
-	case <-time.After(processAPIServerReadyTimeout):
-		t.Fatal("timed out waiting for process API server")
-	}
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	if server.url == "" {
-		t.Fatal("process API server became ready without a URL")
-	}
-	return server.url
+	return baseURL
 }
 
 // WaitForBaseURL waits for the injected transport to start and returns its URL
 // or an error. It is safe to call from background goroutines.
 func (server *ProcessAPIServer) WaitForBaseURL(timeout time.Duration) (string, error) {
+	return server.waitForURL(timeout)
+}
+
+func (server *ProcessAPIServer) waitForURL(timeout time.Duration) (string, error) {
 	if server == nil {
 		return "", fmt.Errorf("process API server is required")
 	}
+
+	readyTimer := time.NewTimer(timeout)
+	defer readyTimer.Stop()
+	startWait := timeout
+	if startWait > processAPIServerStartGracePeriod {
+		startWait = processAPIServerStartGracePeriod
+	}
+	startTimer := time.NewTimer(startWait)
+	defer startTimer.Stop()
+
 	select {
 	case <-server.ready:
-	case <-time.After(timeout):
-		return "", fmt.Errorf("timed out waiting for process API server")
+	case <-server.startedSignal:
+		select {
+		case <-server.ready:
+		case <-readyTimer.C:
+			return "", fmt.Errorf("timed out waiting for process API server after starter was invoked")
+		}
+	case <-startTimer.C:
+		if server.wasStarted() {
+			select {
+			case <-server.ready:
+			case <-readyTimer.C:
+				return "", fmt.Errorf("timed out waiting for process API server after starter was invoked")
+			}
+		} else {
+			return "", fmt.Errorf("process API server starter was never invoked; --with-server was probably omitted")
+		}
 	}
 	if baseURL, ok := server.BaseURL(); ok {
 		return baseURL, nil
 	}
 	return "", fmt.Errorf("process API server became ready without a URL")
+}
+
+func (server *ProcessAPIServer) wasStarted() bool {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	return server.started
 }
