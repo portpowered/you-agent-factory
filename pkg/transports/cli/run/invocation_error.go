@@ -40,6 +40,7 @@ const (
 	InvocationOutputUnsupportedCode    = factoryruntimecli.InvocationOutputUnsupportedCode
 	RemoteLocalHostingConflictCode     = factoryruntimecli.RemoteLocalHostingConflictCode
 	ServerBindFailedCode               = factoryruntimecli.ServerBindFailedCode
+	ServerStartFailedCode              = factoryruntimecli.ServerStartFailedCode
 	InvocationOutputPrimaryResult      = factoryruntimecli.InvocationOutputPrimaryResult
 	InvocationOutputResponseStream     = factoryruntimecli.InvocationOutputResponseStream
 )
@@ -74,12 +75,6 @@ func WriteIncompleteDrainError(w io.Writer, err error) bool {
 // selection before they cross the public run-command error boundary.
 func MapCurrentFactoryFailure(err error) error {
 	return factoryruntimecli.MapCurrentFactoryFailure(err)
-}
-
-// MapServerFailure classifies terminal listener binding failures at the CLI
-// boundary while preserving all other errors for their owning mapper.
-func MapServerFailure(err error) error {
-	return factoryruntimecli.MapServerFailure(err)
 }
 
 // MapInvocationFailure preserves authored invocation errors and classifies

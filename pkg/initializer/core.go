@@ -40,6 +40,39 @@ type RuntimeHostBinding struct {
 // externally bound host to await, such as an in-process batch run.
 var ErrRuntimeHostReadinessUnavailable = errors.New("runtime host readiness is unavailable")
 
+// ErrRuntimeHostExitedBeforeReadiness identifies a hosted lifecycle that
+// ended before it published its externally reachable endpoint.
+var ErrRuntimeHostExitedBeforeReadiness = errors.New("runtime host exited before readiness")
+
+// RuntimeHostStartupError preserves the lifecycle cause when a hosted runtime
+// ends before readiness. Its Error method is intentionally safe and stable;
+// transport boundaries can inspect Unwrap without exposing arbitrary runtime
+// error text to operators.
+type RuntimeHostStartupError struct {
+	Cause error
+}
+
+func (err *RuntimeHostStartupError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return ErrRuntimeHostExitedBeforeReadiness.Error()
+}
+
+func (err *RuntimeHostStartupError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	if err.Cause == nil {
+		return ErrRuntimeHostExitedBeforeReadiness
+	}
+	return err.Cause
+}
+
+func (err *RuntimeHostStartupError) Is(target error) bool {
+	return err != nil && target == ErrRuntimeHostExitedBeforeReadiness
+}
+
 // OpenedApplication contains only lifecycle-ready process roles. Product
 // services retain their request and result contracts and adapt them to this
 // value at the composition boundary.

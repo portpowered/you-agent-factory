@@ -13,13 +13,6 @@
       "reason": "Linux build constraints leave this functional package without runnable Go test files"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/product/packaged_factory_portability",
-      "test": "TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity",
-      "bucket": "GENUINELY FAILING",
-      "reason": "Timed out waiting for the process API server and reported missing invocation input during shutdown; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair bootstrap portability readiness and remove this entry after the exact selector passes"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/providers/agy",
       "test": "TestAgyLiveSmoke",
       "bucket": "ENVIRONMENT-DEPENDENT",

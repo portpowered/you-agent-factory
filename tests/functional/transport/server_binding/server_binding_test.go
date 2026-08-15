@@ -252,6 +252,9 @@ func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *t
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("server bind-failure response = %#v, want SERVER_BIND_FAILED", response)
 	}
+	if !strings.Contains(response.Message, "requested server did not start") {
+		t.Fatalf("server bind-failure response message = %q, want requested-server diagnostic", response.Message)
+	}
 }
 
 func waitForListenerRelease(t *testing.T, address string) {

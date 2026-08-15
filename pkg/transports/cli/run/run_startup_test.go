@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -490,6 +491,59 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 	}
 	if observed.FilterMessage("named factory precedence selected").Len() != 1 {
 		t.Fatalf("named factory precedence logs = %d, want 1", observed.FilterMessage("named factory precedence selected").Len())
+	}
+}
+
+func TestRunServiceOutcomeLogsSafePreReadinessClassification(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	logRunServiceOutcome(
+		context.Background(),
+		RunConfig{Logger: logger, WithServer: true, Port: 7437},
+		&initializer.RuntimeHostStartupError{Cause: errors.New("credential=SECRET")},
+	)
+
+	entries := observed.FilterMessage("run service failed").All()
+	if len(entries) != 1 {
+		t.Fatalf("run service failure logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	for name, want := range map[string]any{
+		"operation":      "run.service",
+		"outcome":        "failure",
+		"hosting_intent": true,
+		"failure_class":  "runtime_startup_failed",
+		"error_code":     ServerStartFailedCode,
+	} {
+		if got := fields[name]; got != want {
+			t.Errorf("log field %s = %#v, want %#v", name, got, want)
+		}
+	}
+	if strings.Contains(entries[0].Message, "SECRET") {
+		t.Fatalf("structured failure log leaked raw cause: %q", entries[0].Message)
+	}
+}
+
+func TestRunServiceOutcomeLogsCancellationWithoutFailureClassification(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	core, observed := observer.New(zap.InfoLevel)
+	logRunServiceOutcome(ctx, RunConfig{Logger: zap.New(core), WithServer: true}, nil)
+
+	entries := observed.FilterMessage("run service completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("run service cancellation logs = %d, want one completion", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["outcome"] != runServiceOutcomeCancelled || fields["failure_class"] != runServiceFailureNone {
+		t.Fatalf("cancellation fields = %#v, want cancelled/none", fields)
+	}
+	if _, ok := fields["error_code"]; ok {
+		t.Fatalf("cancellation unexpectedly logged error code: %#v", fields)
 	}
 }
 

@@ -257,6 +257,152 @@ func TestHostObservingRunnerReportsBindingAfterUnderlyingRunCompletes(t *testing
 	}
 }
 
+func TestHostObservingRunnerClassifiesPreReadinessFailure(t *testing.T) {
+	cause := errors.New("runtime startup failed")
+	base := &hostReadinessRunner{
+		readinessConfigured: true,
+		bindingRelease:      make(chan struct{}),
+		runErr:              cause,
+	}
+	observed := make(chan initializer.RuntimeHostBinding, 1)
+	runner := WithRuntimeHostObserver(base, func(binding initializer.RuntimeHostBinding) {
+		observed <- binding
+	})
+
+	err := runner.Run(context.Background())
+	var startupErr *initializer.RuntimeHostStartupError
+	if !errors.As(err, &startupErr) {
+		t.Fatalf("Run() error = %v, want RuntimeHostStartupError", err)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatalf("Run() error = %v, want cause %v", err, cause)
+	}
+	select {
+	case binding := <-observed:
+		t.Fatalf("pre-readiness failure reported binding %#v", binding)
+	default:
+	}
+}
+
+func TestHostObservingRunnerPreservesFailureAfterReadiness(t *testing.T) {
+	cause := errors.New("runtime stopped after binding")
+	runRelease := make(chan struct{})
+	base := &hostReadinessRunner{
+		runStarted:          make(chan struct{}),
+		runRelease:          runRelease,
+		readinessConfigured: true,
+		binding:             initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 7437},
+		runErr:              cause,
+	}
+	observed := make(chan initializer.RuntimeHostBinding, 1)
+	runner := WithRuntimeHostObserver(base, func(binding initializer.RuntimeHostBinding) {
+		observed <- binding
+	})
+	completed := make(chan error, 1)
+	go func() { completed <- runner.Run(context.Background()) }()
+	select {
+	case binding := <-observed:
+		if binding.Port != 7437 {
+			t.Fatalf("observed binding port = %d, want 7437", binding.Port)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("readiness was not observed")
+	}
+	close(runRelease)
+	select {
+	case err := <-completed:
+		if !errors.Is(err, cause) {
+			t.Fatalf("Run() error = %v, want cause %v", err, cause)
+		}
+		var startupErr *initializer.RuntimeHostStartupError
+		if errors.As(err, &startupErr) {
+			t.Fatalf("post-readiness error = %v, must not be RuntimeHostStartupError", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("runner did not return after readiness failure")
+	}
+}
+
+func TestHostObservingRunnerHandlesBufferedReadinessWhenRunCompletesFirst(t *testing.T) {
+	tests := []struct {
+		name   string
+		runErr error
+	}{
+		{name: "successful run", runErr: nil},
+		{name: "failed run", runErr: errors.New("runtime stopped after binding")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			readyResult := make(chan runtimeHostResult, 1)
+			expected := initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 7437}
+			readyResult <- runtimeHostResult{binding: expected}
+			observed := make(chan initializer.RuntimeHostBinding, 1)
+			runner := hostObservingRunner{
+				runner: &hostReadinessRunner{readinessConfigured: true},
+				onReady: func(binding initializer.RuntimeHostBinding) {
+					observed <- binding
+				},
+			}
+			completed := make(chan error, 1)
+			go func() {
+				completed <- runner.finishAfterRunResult(
+					context.Background(),
+					tt.runErr,
+					readyResult,
+					func() {},
+				)
+			}()
+
+			select {
+			case err := <-completed:
+				if tt.runErr == nil {
+					if err != nil {
+						t.Fatalf("finishAfterRunResult() = %v, want nil", err)
+					}
+					break
+				}
+				if !errors.Is(err, tt.runErr) {
+					t.Fatalf("finishAfterRunResult() = %v, want %v", err, tt.runErr)
+				}
+				var startupErr *initializer.RuntimeHostStartupError
+				if errors.As(err, &startupErr) {
+					t.Fatalf("post-readiness error = %v, must not be RuntimeHostStartupError", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("finishAfterRunResult() blocked after consuming buffered readiness")
+			}
+			select {
+			case binding := <-observed:
+				if binding != expected {
+					t.Fatalf("observed binding = %#v, want %#v", binding, expected)
+				}
+			default:
+				t.Fatal("buffered readiness was not observed")
+			}
+		})
+	}
+}
+
+func TestHostObservingRunnerClassifiesPreReadinessCompletionFailure(t *testing.T) {
+	cause := errors.New("completion transport failed before binding")
+	runner := WithRuntimeHostObserver(
+		completionHostFailureRunner{err: cause},
+		func(initializer.RuntimeHostBinding) { t.Fatal("readiness callback ran before failure") },
+	)
+	completionRunner, ok := runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		t.Fatal("wrapped runner does not expose completion operation")
+	}
+	err := completionRunner.RunWithCompletion(context.Background(), func(context.Context) error {
+		t.Fatal("completion ran before readiness failure")
+		return nil
+	})
+	var startupErr *initializer.RuntimeHostStartupError
+	if !errors.As(err, &startupErr) || !errors.Is(err, cause) {
+		t.Fatalf("RunWithCompletion() error = %v, want pre-readiness startup failure %v", err, cause)
+	}
+}
+
 func TestHostObservingRunnerDelegatesUnsupportedCapabilities(t *testing.T) {
 	plain := &plainLocalRuntimeRunner{}
 	if got := WithRuntimeHostObserver(plain, func(initializer.RuntimeHostBinding) {}); got != plain {
@@ -345,6 +491,23 @@ func (runner *hostReadinessRunner) Stop(context.Context) error { return nil }
 type plainLocalRuntimeRunner struct{}
 
 func (*plainLocalRuntimeRunner) Run(context.Context) error { return nil }
+
+type completionHostFailureRunner struct {
+	err error
+}
+
+func (runner completionHostFailureRunner) Run(context.Context) error { return runner.err }
+
+func (runner completionHostFailureRunner) RunWithCompletion(context.Context, initializer.CompletionOperation) error {
+	return runner.err
+}
+
+func (completionHostFailureRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	<-ctx.Done()
+	return initializer.RuntimeHostBinding{}, ctx.Err()
+}
+
+func (completionHostFailureRunner) RuntimeHostReadinessConfigured() bool { return true }
 
 type hostObservingTestComponent struct {
 	started chan struct{}

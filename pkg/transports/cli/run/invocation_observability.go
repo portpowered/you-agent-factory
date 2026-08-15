@@ -14,9 +14,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -43,6 +45,156 @@ const (
 
 type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() runtimeartifact.Diagnostics
+}
+
+const (
+	runServiceOperation        = "run.service"
+	runServiceOutcomeSuccess   = "success"
+	runServiceOutcomeCancelled = "cancelled"
+	runServiceOutcomeFailure   = "failure"
+	runServiceFailureNone      = "none"
+	runServiceFailureBind      = "listener_bind"
+	runServiceFailureStartup   = "runtime_startup_failed"
+	runServiceFailureCoded     = "coded_failure"
+	runServiceFailureRuntime   = "runtime_failure"
+)
+
+func logRunServiceOutcome(ctx context.Context, cfg RunConfig, err error) {
+	if cfg.Logger == nil {
+		return
+	}
+	outcome := runServiceOutcomeSuccess
+	if errors.Is(err, context.Canceled) || (err == nil && ctx != nil && ctx.Err() != nil) {
+		outcome = runServiceOutcomeCancelled
+	} else if err != nil {
+		outcome = runServiceOutcomeFailure
+	}
+	failureClass, errorCode := runServiceFailureFields(err)
+	if outcome == runServiceOutcomeCancelled {
+		failureClass, errorCode = runServiceFailureNone, ""
+	}
+	fields := []zap.Field{
+		zap.String("operation", runServiceOperation),
+		zap.String("outcome", outcome),
+		zap.Bool("hosting_intent", cfg.WithServer || cfg.WithSite || cfg.Port > 0),
+		zap.String("failure_class", failureClass),
+	}
+	if errorCode != "" {
+		fields = append(fields, zap.String("error_code", errorCode))
+	}
+	if outcome == runServiceOutcomeFailure {
+		cfg.Logger.Error("run service failed", fields...)
+		return
+	}
+	cfg.Logger.Info("run service completed", fields...)
+}
+
+func runServiceFailureFields(err error) (string, string) {
+	if err == nil {
+		return runServiceFailureNone, ""
+	}
+	mapped := MapServerFailure(err)
+	var invocationErr *InvocationError
+	if errors.As(mapped, &invocationErr) {
+		switch invocationErr.Code {
+		case ServerBindFailedCode:
+			return runServiceFailureBind, invocationErr.Code
+		}
+		var startupErr *initializer.RuntimeHostStartupError
+		if errors.As(err, &startupErr) {
+			return runServiceFailureStartup, invocationErr.Code
+		}
+		return runServiceFailureCoded, invocationErr.Code
+	}
+	var startupErr *initializer.RuntimeHostStartupError
+	if errors.As(err, &startupErr) {
+		return runServiceFailureStartup, ""
+	}
+	return runServiceFailureRuntime, ""
+}
+
+// MapServerFailure classifies local hosting failures at the CLI boundary while
+// preserving all other errors for their owning mapper. Pre-readiness runtime
+// exits receive the same operator-facing context as listener bind failures.
+func MapServerFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	cause := err
+	var startupErr *initializer.RuntimeHostStartupError
+	if errors.As(err, &startupErr) {
+		cause = errors.Unwrap(startupErr)
+		if cause == nil {
+			cause = initializer.ErrRuntimeHostExitedBeforeReadiness
+		}
+	}
+
+	mapped := factoryruntimecli.MapServerFailure(cause)
+	var mappedInvocationErr *InvocationError
+	if errors.As(mapped, &mappedInvocationErr) && mappedInvocationErr.Code == ServerBindFailedCode {
+		return withRequestedServerMessage(mapped, err)
+	}
+	if startupErr == nil {
+		return mapped
+	}
+
+	if coded, ok := safeCLIError(cause); ok {
+		return &InvocationError{
+			Code:    coded.code,
+			Message: fmt.Sprintf("requested server did not start: %s: %s", coded.code, coded.message),
+			Cause:   err,
+		}
+	}
+	return &InvocationError{
+		Code:    ServerStartFailedCode,
+		Message: "requested server did not start: runtime startup failed (failure_class=runtime_startup_failed)",
+		Cause:   err,
+	}
+}
+
+type safeCLIErrorFields struct {
+	code    string
+	message string
+}
+
+func safeCLIError(err error) (safeCLIErrorFields, bool) {
+	if err == nil {
+		return safeCLIErrorFields{}, false
+	}
+	var coded clidiag.CodedError
+	if errors.As(err, &coded) {
+		fields := safeCLIErrorFields{
+			code:    strings.TrimSpace(coded.CLIErrorCode()),
+			message: strings.TrimSpace(coded.CLIErrorMessage()),
+		}
+		if fields.code != "" && fields.message != "" {
+			return fields, true
+		}
+	}
+	var invocation clidiag.InvocationCodedError
+	if errors.As(err, &invocation) {
+		fields := safeCLIErrorFields{
+			code:    strings.TrimSpace(invocation.InvocationErrorCode()),
+			message: strings.TrimSpace(invocation.InvocationErrorMessage()),
+		}
+		if fields.code != "" && fields.message != "" {
+			return fields, true
+		}
+	}
+	return safeCLIErrorFields{}, false
+}
+
+func withRequestedServerMessage(err error, cause error) error {
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) {
+		return err
+	}
+	return &InvocationError{
+		Code:    invocationErr.Code,
+		Message: fmt.Sprintf("requested server did not start: %s", strings.TrimSpace(invocationErr.Message)),
+		Cause:   cause,
+	}
 }
 
 const (

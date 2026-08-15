@@ -28,6 +28,7 @@ const (
 	InvocationOutputUnsupportedCode    = "INVOCATION_OUTPUT_UNSUPPORTED"
 	RemoteLocalHostingConflictCode     = "REMOTE_LOCAL_HOSTING_CONFLICT"
 	ServerBindFailedCode               = "SERVER_BIND_FAILED"
+	ServerStartFailedCode              = "SERVER_START_FAILED"
 )
 
 const (
