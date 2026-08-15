@@ -5,6 +5,7 @@ package factoryeventprojection
 import (
 	"encoding/json"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -51,9 +52,9 @@ func canonicalFactoryEvent(event factoryapi.FactoryEvent) (recordings.FactoryEve
 			return recordings.FactoryEvent{}, err
 		}
 		fields["payload"] = payload
-		return recordings.NewFactoryEvent(fields)
+		return factorydefinitions.NewFactoryEvent(fields)
 	}
-	return recordings.NewFactoryEvent(event)
+	return factorydefinitions.NewFactoryEvent(event)
 }
 
 func canonicalExecutionPayload(payload json.RawMessage) (json.RawMessage, error) {
