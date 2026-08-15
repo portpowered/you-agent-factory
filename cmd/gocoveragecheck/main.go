@@ -176,30 +176,13 @@ func execute(cfg config) error {
 	if err := writeCoverageSummaryJSON(cfg.jsonOutput, result); err != nil {
 		return err
 	}
-	for _, warning := range result.packageMinimumWarnings {
-		fmt.Fprintln(stderrWriter, warning)
-	}
-	for _, diagnostic := range result.unmeasuredPackageDiagnostics {
-		fmt.Fprintln(stderrWriter, diagnostic)
-	}
+	writeCoverageDiagnostics(result)
 
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "\n"))
 	}
 	fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
 	return nil
-}
-
-func writeCoverageTestFailureWarning(err error) {
-	var testFailureErr *coverageTestFailureError
-	if !errors.As(err, &testFailureErr) {
-		return
-	}
-	if testFailureErr.failedTestCountKnown {
-		fmt.Fprintf(stderrWriter, "coverage not evaluated: %d failed tests observed; package floors were NOT checked because the coverage test run failed\n", testFailureErr.failedTestCount)
-		return
-	}
-	fmt.Fprintln(stderrWriter, "coverage not evaluated: package floors were NOT checked because the coverage test run failed; failed-test count unavailable")
 }
 
 func parseConfig() config {
