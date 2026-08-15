@@ -26,10 +26,13 @@ export {
 
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
+  activeNodeIds?: ReadonlySet<string>;
   factoryDefinition?: CanonicalFactoryDefinition | null;
+  focusedNodeIds?: ReadonlySet<string>;
   layout?: FactoryLayout | null;
   layoutPositionsByNodeId?: ReadonlyMap<string, { x: number; y: number }>;
   locale?: string;
+  mutedNodeIds?: ReadonlySet<string>;
   onConnectionAnchorClick?: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
@@ -63,6 +66,9 @@ export function buildFactoryGraphEditorFlowModel(input: {
     locale: input.locale,
     mode: "editor",
     runtime: {
+      activeNodeIds: input.activeNodeIds,
+      focusedNodeIds: input.focusedNodeIds,
+      mutedNodeIds: input.mutedNodeIds,
       placeTokenCountsByNodeId: input.placeTokenCountsByNodeId,
       workerStatusByName: input.workerStatusByName,
     },

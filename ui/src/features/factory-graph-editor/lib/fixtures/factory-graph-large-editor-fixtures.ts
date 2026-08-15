@@ -23,6 +23,14 @@ export interface FactoryGraphLargeEditorFixture {
   topology: FactoryGraphTopology;
 }
 
+export interface FactoryGraphLargeEditorParityFixture {
+  authoredSizeByNodeId: ReadonlyMap<string, { height: number; width: number }>;
+  fixture: FactoryGraphLargeEditorFixture;
+  groups: NonNullable<FactoryLayout["groups"]>;
+  layout: FactoryLayout;
+  workStateNodeIds: readonly string[];
+}
+
 function workstationCountForTargetGraphNodeCount(targetGraphNodeCount: number) {
   return Math.max(1, Math.ceil((targetGraphNodeCount - 2) / 4));
 }
@@ -131,6 +139,67 @@ export function buildGridAutoLayoutPositionsByNodeId(
   }
 
   return positions;
+}
+
+/**
+ * Build one representative large graph for the visual and browser parity
+ * matrix. The layout metadata is authored state; runtime counts and emphasis
+ * are supplied by the host projection that consumes this fixture.
+ */
+export function buildLargeFactoryEditorParityFixture(
+  fixture: FactoryGraphLargeEditorFixture,
+): FactoryGraphLargeEditorParityFixture {
+  const authoredSizeByNodeId = new Map<
+    string,
+    { height: number; width: number }
+  >();
+  const layoutNodes = (fixture.layout.nodes ?? []).map((node, index) => {
+    const size = {
+      height: 96 + (index % 3) * 24,
+      width: 196 + (index % 3) * 48,
+    };
+    authoredSizeByNodeId.set(node.id, size);
+    return { ...node, size };
+  });
+  const topologyNodeIds = fixture.topology.nodes.map((node) => node.id);
+  const workStateNodeIds = fixture.topology.nodes
+    .filter((node) => node.kind === "work-state")
+    .map((node) => node.id);
+  const groups = [
+    {
+      bounds: { height: 760, width: 1_320, x: -64, y: -64 },
+      color: "info",
+      id: "large-parity-workflow",
+      label: "Workflow context",
+      nodeIds: topologyNodeIds.slice(0, 120),
+    },
+    {
+      bounds: { height: 760, width: 1_320, x: 840, y: 240 },
+      color: "warning",
+      id: "large-parity-review",
+      label: "Review lane",
+      nodeIds: topologyNodeIds.slice(120, 240),
+    },
+    {
+      bounds: { height: 760, width: 1_320, x: 1_744, y: 544 },
+      color: "success",
+      id: "large-parity-infrastructure",
+      label: "Infrastructure context",
+      nodeIds: topologyNodeIds.slice(240, 360),
+    },
+  ] satisfies NonNullable<FactoryLayout["groups"]>;
+
+  return {
+    authoredSizeByNodeId,
+    fixture,
+    groups,
+    layout: {
+      ...fixture.layout,
+      groups,
+      nodes: layoutNodes,
+    },
+    workStateNodeIds,
+  };
 }
 
 export const factoryGraphLargeEditorFixtures = {
