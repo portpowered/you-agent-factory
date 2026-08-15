@@ -413,16 +413,10 @@ func (s *Service) resolveRegisteredAgentRunner(
 	if err != nil {
 		return nil, fmt.Errorf("construct agent runner registry: %w", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{
-		Identity: runners.AgentIdentity,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("resolve agent runner: %w", err)
-	}
-	if binding.Runner == nil {
-		return nil, fmt.Errorf("resolve agent runner: runner is nil")
-	}
-	return binding.Runner, nil
+	return registryRunner{
+		registry: registry,
+		identity: runners.AgentIdentity,
+	}, nil
 }
 
 func agentProgressPublisherOrNoop(

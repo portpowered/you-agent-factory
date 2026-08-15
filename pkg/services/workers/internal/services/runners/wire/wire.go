@@ -2,6 +2,7 @@
 package wire
 
 import (
+	"context"
 	"errors"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -221,8 +222,9 @@ func agentImplementation(
 	)
 }
 
-// NewInferenceCompositionRunner resolves one registry-backed Inference Runner
-// that projects managed-runtime invocation ahead of the supplied delegate.
+// NewInferenceCompositionRunner constructs one registry-backed Inference
+// Runner that projects managed-runtime invocation ahead of the supplied
+// delegate. The returned adapter keeps execution behind Service.Execute.
 func NewInferenceCompositionRunner(
 	inner workers.Runner,
 	modelsService inference.LocalInvoker,
@@ -247,13 +249,35 @@ func NewInferenceCompositionRunner(
 	if err != nil {
 		return inner
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{
-		Identity: runners.InferenceIdentity,
-	})
-	if err != nil {
-		return inner
+	return registryExecutionRunner{
+		registry: registry,
+		identity: runners.InferenceIdentity,
 	}
-	return binding.Runner
+}
+
+// registryExecutionRunner keeps transitional callers behind the same service
+// execution seam as the Workers root. Resolution remains selection-only and
+// the implementation is never exposed to a caller for direct execution.
+type registryExecutionRunner struct {
+	registry runners.Service
+	identity string
+}
+
+func (runner registryExecutionRunner) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	if runner.registry == nil {
+		return workers.RunnerExecutionResult{}, errors.New("runner registry is required")
+	}
+	if runner.identity == runners.InferenceIdentity {
+		request.RunnerID = runners.InferenceIdentity
+	}
+	return runner.registry.Execute(ctx, runners.ExecuteRequest{
+		Identity:             runner.identity,
+		RequiredCapabilities: request.RequiredOptionalCapabilities,
+		Attempt:              request,
+	})
 }
 
 func snapshotInferenceWorker(worker models.LocalWorker) models.LocalWorker {
