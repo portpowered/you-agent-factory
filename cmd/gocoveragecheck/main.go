@@ -44,6 +44,7 @@ const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/baselines/go
 const defaultPackageCoverageMin = 80.0
 const defaultPackageFloorEpsilon = 0.25
 const defaultCoverageJobs = 2
+const maxUncoveredCoverageBlocks = 25
 
 var (
 	defaultCoveragePatterns                   = []string{"./pkg/..."}
@@ -110,6 +111,7 @@ type config struct {
 type coverageResult struct {
 	actual                       float64
 	insufficientCoveragePackages []packageCoverageSummary
+	coverageBlocks               map[string]coverageBlock
 	packageTotals                map[string]packageCoverageTotals
 	packageSummaries             []packageCoverageSummary
 	packageGates                 map[string]packageCoverageGate
@@ -403,7 +405,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 			}
 			return coverageResult{}, err
 		}
-		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilon(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon)
+		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
 		result.packageGates = packageGatesFromManifest(manifest)
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
@@ -615,10 +617,11 @@ func parseTotalCoverage(report string) (float64, string, error) {
 }
 
 func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, coverPackages []string, minCoverage float64, baselinePackages map[string]struct{}, packageGate ...bool) (coverageResult, string, error) {
-	packageTotals, err := readCoverageProfileTotals(profilePath, repoRoot)
+	coverageBlocks, err := readCoverageProfileBlocks(profilePath, repoRoot)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
+	packageTotals := coverageTotals(coverageBlocks)
 	actual, totalLine := calculateTotalCoverage(packageTotals, coverPackages)
 	packageGateEnabled := len(packageGate) == 0 || packageGate[0]
 	packageSummaries := summarizePackageCoverageFromTotals(packageTotals, coverPackages)
@@ -631,6 +634,7 @@ func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, c
 	return coverageResult{
 		actual:                       actual,
 		insufficientCoveragePackages: insufficientCoveragePackages,
+		coverageBlocks:               coverageBlocks,
 		packageTotals:                packageTotals,
 		packageSummaries:             packageSummaries,
 		zeroCoveragePackages:         zeroCoveragePackages,
@@ -655,6 +659,14 @@ func readPackageCoverageBaseline(path string) (map[string]struct{}, error) {
 }
 
 func readCoverageProfileTotals(profilePath string, repoRoot string) (map[string]packageCoverageTotals, error) {
+	coverageBlocks, err := readCoverageProfileBlocks(profilePath, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return coverageTotals(coverageBlocks), nil
+}
+
+func readCoverageProfileBlocks(profilePath string, repoRoot string) (map[string]coverageBlock, error) {
 	profile, err := os.Open(profilePath)
 	if err != nil {
 		return nil, fmt.Errorf("read go coverage profile: %w", err)
@@ -665,7 +677,7 @@ func readCoverageProfileTotals(profilePath string, repoRoot string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	return coverageTotals(coverageBlocks), nil
+	return coverageBlocks, nil
 }
 
 func calculateTotalCoverage(packageTotals map[string]packageCoverageTotals, coverPackages []string) (float64, string) {
@@ -967,6 +979,75 @@ func coverageImportPath(filePath string, repoRoot string) (string, error) {
 		return "", err
 	}
 	return path.Dir(canonicalFilePath), nil
+}
+
+func uncoveredCoverageBlocks(coverageBlocks map[string]coverageBlock, importPath string) []coverageBlock {
+	blocks := make([]coverageBlock, 0)
+	for _, block := range coverageBlocks {
+		if block.importPath != importPath || block.executionCount != 0 {
+			continue
+		}
+		blocks = append(blocks, block)
+	}
+	slices.SortFunc(blocks, compareCoverageBlocks)
+	return blocks
+}
+
+func compareCoverageBlocks(left coverageBlock, right coverageBlock) int {
+	if comparison := strings.Compare(left.canonicalPath, right.canonicalPath); comparison != 0 {
+		return comparison
+	}
+	leftLine, leftColumn := coverageBlockStartPosition(left)
+	rightLine, rightColumn := coverageBlockStartPosition(right)
+	if leftLine != rightLine {
+		return leftLine - rightLine
+	}
+	if leftColumn != rightColumn {
+		return leftColumn - rightColumn
+	}
+	return strings.Compare(left.rangeSpec, right.rangeSpec)
+}
+
+func coverageBlockStartPosition(block coverageBlock) (int, int) {
+	start := block.rangeSpec
+	if separator := strings.IndexByte(start, ','); separator >= 0 {
+		start = start[:separator]
+	}
+	separator := strings.IndexByte(start, '.')
+	if separator < 0 {
+		line, _ := strconv.Atoi(start)
+		return line, 0
+	}
+	line, _ := strconv.Atoi(start[:separator])
+	column, _ := strconv.Atoi(start[separator+1:])
+	return line, column
+}
+
+func formatUncoveredCoverageBlocks(coverageBlocks map[string]coverageBlock, importPath string) string {
+	blocks := uncoveredCoverageBlocks(coverageBlocks, importPath)
+	if len(blocks) == 0 {
+		return ""
+	}
+	limit := min(len(blocks), maxUncoveredCoverageBlocks)
+	entries := make([]string, 0, limit)
+	for _, block := range blocks[:limit] {
+		filePath := strings.TrimPrefix(block.canonicalPath, modulePath+"/")
+		statementLabel := "statements"
+		if block.statementCount == 1 {
+			statementLabel = "statement"
+		}
+		entries = append(entries, fmt.Sprintf("%s:%d (%d %s)", filePath, coverageBlockStartLine(block), block.statementCount, statementLabel))
+	}
+	detail := "uncovered blocks: " + strings.Join(entries, ", ")
+	if omitted := len(blocks) - limit; omitted > 0 {
+		detail += fmt.Sprintf(", ... and %d more", omitted)
+	}
+	return detail
+}
+
+func coverageBlockStartLine(block coverageBlock) int {
+	line, _ := coverageBlockStartPosition(block)
+	return line
 }
 
 func formatZeroCoverageFailure(packages []string) string {

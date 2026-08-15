@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -261,6 +262,115 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 				t.Fatalf("regression failures are not in stable package order: %v", failures)
 			}
 		})
+	}
+}
+
+func TestCheckCoverageManifestReportsOrderedPackageUncoveredBlocksWithCap(t *testing.T) {
+	t.Parallel()
+
+	importPath := modulePath + "/pkg/config"
+	otherImportPath := modulePath + "/pkg/service"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "unit",
+		Packages: []coverageManifestEntry{
+			{Package: importPath, Minimum: json.RawMessage("100.00")},
+		},
+	}
+	coverageBlocks := map[string]coverageBlock{
+		"z": {
+			canonicalPath:  modulePath + "/pkg/config/z.go",
+			importPath:     importPath,
+			rangeSpec:      "9.1,10.1",
+			statementCount: 3,
+		},
+		"a-late": {
+			canonicalPath:  modulePath + "/pkg/config/a.go",
+			importPath:     importPath,
+			rangeSpec:      "20.2,21.1",
+			statementCount: 2,
+		},
+		"a-early": {
+			canonicalPath:  modulePath + "/pkg/config/a.go",
+			importPath:     importPath,
+			rangeSpec:      "20.1,20.2",
+			statementCount: 1,
+		},
+		"covered": {
+			canonicalPath:  modulePath + "/pkg/config/covered.go",
+			importPath:     importPath,
+			rangeSpec:      "1.1,2.1",
+			statementCount: 4,
+			executionCount: 1,
+		},
+		"other-package": {
+			canonicalPath:  modulePath + "/pkg/service/other.go",
+			importPath:     otherImportPath,
+			rangeSpec:      "2.1,3.1",
+			statementCount: 7,
+		},
+	}
+
+	failures, warnings := checkCoverageManifestWithEpsilonAndBlocks(
+		manifest,
+		map[string]packageCoverageTotals{importPath: {coveredStatements: 5, totalStatements: 10}},
+		"minimums.json",
+		0,
+		coverageBlocks,
+	)
+	if len(warnings) != 0 || len(failures) != 1 {
+		t.Fatalf("checkCoverageManifestWithEpsilonAndBlocks() = failures %v, warnings %v; want one failure and no warnings", failures, warnings)
+	}
+
+	failure := failures[0]
+	wantDetail := "uncovered blocks: pkg/config/a.go:20 (1 statement), pkg/config/a.go:20 (2 statements), pkg/config/z.go:9 (3 statements)"
+	if !strings.Contains(failure, wantDetail) {
+		t.Fatalf("failure = %q, want ordered uncovered detail %q", failure, wantDetail)
+	}
+	if strings.Contains(failure, "covered.go") || strings.Contains(failure, "pkg/service/other.go") {
+		t.Fatalf("failure = %q, did not expect covered or other-package blocks", failure)
+	}
+	if !strings.Contains(failure, "restore coverage before running `go run ./cmd/gocoveragecheck") {
+		t.Fatalf("failure = %q, want existing remediation wording", failure)
+	}
+
+	tooManyBlocks := make(map[string]coverageBlock, maxUncoveredCoverageBlocks+2)
+	for index := 0; index < maxUncoveredCoverageBlocks+2; index++ {
+		tooManyBlocks[fmt.Sprintf("block-%d", index)] = coverageBlock{
+			canonicalPath:  fmt.Sprintf("%s/pkg/config/file-%02d.go", modulePath, index),
+			importPath:     importPath,
+			rangeSpec:      "1.1,2.1",
+			statementCount: 1,
+		}
+	}
+	failures, _ = checkCoverageManifestWithEpsilonAndBlocks(
+		manifest,
+		map[string]packageCoverageTotals{importPath: {coveredStatements: 1, totalStatements: 2}},
+		"minimums.json",
+		0,
+		tooManyBlocks,
+	)
+	if len(failures) != 1 || !strings.Contains(failures[0], "... and 2 more") {
+		t.Fatalf("capped failures = %v, want exact omitted-block tail", failures)
+	}
+	if got := strings.Count(failures[0], "(1 statement)"); got != maxUncoveredCoverageBlocks {
+		t.Fatalf("capped failure = %q, contains %d block entries; want %d", failures[0], got, maxUncoveredCoverageBlocks)
+	}
+
+	warningsManifest := manifest
+	warningsManifest.Packages = []coverageManifestEntry{{Package: importPath, Minimum: json.RawMessage("80.00")}}
+	failures, warnings = checkCoverageManifestWithEpsilonAndBlocks(
+		warningsManifest,
+		map[string]packageCoverageTotals{importPath: {coveredStatements: 79, totalStatements: 100}},
+		"minimums.json",
+		1,
+		coverageBlocks,
+	)
+	if len(failures) != 0 || len(warnings) != 1 {
+		t.Fatalf("tolerated result = failures %v, warnings %v; want no failure and one warning", failures, warnings)
+	}
+	if strings.Contains(warnings[0], "uncovered blocks") {
+		t.Fatalf("warning = %q, did not expect uncovered-block detail", warnings[0])
 	}
 }
 
