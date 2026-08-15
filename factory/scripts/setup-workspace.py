@@ -26,6 +26,7 @@ from pathlib import Path
 IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
+MAX_ANCESTOR_RESIDUE_PATHS = 20
 _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
 
@@ -486,6 +487,128 @@ def confirm_ref_matches(repo_path, ref_name, expected_sha):
         )
 
 
+def ancestor_commits(repo_path, head_sha):
+    """Return every commit reachable behind head_sha, excluding head_sha."""
+    result = run_git(
+        "rev-list", "--parents", head_sha,
+        cwd=repo_path, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"root main sync could not inspect ancestors of {head_sha}: "
+            f"{command_failure_details(result)}"
+        )
+
+    commits = []
+    for line in result.stdout.splitlines():
+        commit = line.split(maxsplit=1)[0] if line.strip() else ""
+        if commit and commit != head_sha:
+            commits.append(commit)
+    return commits
+
+
+def tree_for_revision(repo_path, revision, description):
+    """Return an immutable tree ID for a Git revision."""
+    return require_git_output(
+        run_git("rev-parse", f"{revision}^{{tree}}", cwd=repo_path, check=False),
+        description,
+    )
+
+
+def tracked_path_summary(repo_path, head_sha, ancestor_sha):
+    """Return a bounded path-only summary of the current/ancestor difference."""
+    result = run_git(
+        "diff", "--no-ext-diff", "--no-renames", "--name-status",
+        head_sha, ancestor_sha, cwd=repo_path, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"root main sync could not summarize ancestor residue between "
+            f"{head_sha} and {ancestor_sha}: {command_failure_details(result)}"
+        )
+
+    paths = [line for line in result.stdout.splitlines() if line]
+    if not paths:
+        return "tracked tree differs without a named path"
+    if len(paths) > MAX_ANCESTOR_RESIDUE_PATHS:
+        remaining = len(paths) - MAX_ANCESTOR_RESIDUE_PATHS
+        paths = [*paths[:MAX_ANCESTOR_RESIDUE_PATHS], f"... ({remaining} more paths)"]
+    return ", ".join(paths)
+
+
+def verify_no_ancestor_residue(repo_path):
+    """Reject tracked checkout state that exactly matches an ancestor tree."""
+    head_sha = require_git_output(
+        run_git("rev-parse", "HEAD", cwd=repo_path, check=False),
+        "root main sync could not resolve current HEAD",
+    )
+    head_tree = tree_for_revision(
+        repo_path, head_sha, "root main sync could not capture current HEAD tree",
+    )
+    index_tree = require_git_output(
+        run_git("write-tree", cwd=repo_path, check=False),
+        "root main sync could not capture the synchronized index tree",
+    )
+    worktree_tree = working_tree_tree(repo_path)
+
+    local_states = []
+    if index_tree != head_tree:
+        local_states.append(("index", index_tree))
+    if worktree_tree != head_tree:
+        local_states.append(("working tree", worktree_tree))
+    if not local_states:
+        return
+
+    ancestor_trees = [
+        (ancestor_sha, tree_for_revision(
+            repo_path,
+            ancestor_sha,
+            f"root main sync could not capture ancestor {ancestor_sha} tree",
+        ))
+        for ancestor_sha in ancestor_commits(repo_path, head_sha)
+    ]
+    findings = []
+    for state_name, state_tree in local_states:
+        for ancestor_sha, ancestor_tree in ancestor_trees:
+            if state_tree == ancestor_tree:
+                paths = tracked_path_summary(repo_path, head_sha, ancestor_sha)
+                findings.append(
+                    f"{state_name} tree {state_tree} matches ancestor "
+                    f"{ancestor_sha} (tree {ancestor_tree}); paths: {paths}"
+                )
+                break
+
+    if findings:
+        raise RuntimeError(
+            "root main post-sync ancestor-residue guard rejected tracked "
+            f"local state while HEAD is {head_sha}: {' | '.join(findings)}. "
+            "The checkout was not reset or cleaned; preserve it for recovery."
+        )
+
+
+def verify_root_after_restore(repo_root, snapshot_id):
+    """Run the root residue guard and preserve a snapshot when it rejects."""
+    try:
+        verify_no_ancestor_residue(repo_root)
+    except RuntimeError as error:
+        if snapshot_id is None:
+            raise RuntimeError(
+                f"{error}; no root snapshot was captured for automatic recovery"
+            ) from error
+
+        recovery_ref = snapshot_ref_name(snapshot_id)
+        try:
+            anchor_snapshot(repo_root, snapshot_id)
+        except RuntimeError as anchor_error:
+            raise RuntimeError(
+                f"{error}; could not preserve recovery snapshot {recovery_ref}: "
+                f"{anchor_error}"
+            ) from error
+        raise RuntimeError(
+            f"{error}; recovery snapshot preserved at {recovery_ref}"
+        ) from error
+
+
 def sync_checked_out_main_with_stash(repo_root, remote_sha):
     """Own, sync, and restore a checked-out root ``main`` invocation."""
     with root_sync_lock(repo_root):
@@ -507,6 +630,8 @@ def _sync_checked_out_main_with_stash(repo_root, remote_sha):
         confirm_ref_matches(repo_root, "refs/heads/main", remote_sha)
     finally:
         restore_stashed_changes(repo_root, snapshot_id, "root main")
+
+    verify_root_after_restore(repo_root, snapshot_id)
 
     if snapshot_id is None:
         return f"synced checked-out main to {remote_sha[:8]}"
@@ -561,6 +686,8 @@ def _sync_main(repo_root):
 
     local_sha = run_git("rev-parse", "refs/heads/main", cwd=repo_root).stdout.strip()
     if local_sha == remote_sha:
+        if current_branch(repo_root) == "main":
+            verify_root_after_restore(repo_root, None)
         return "already up to date"
 
     if not can_fast_forward_main(repo_root, local_sha, remote_sha):

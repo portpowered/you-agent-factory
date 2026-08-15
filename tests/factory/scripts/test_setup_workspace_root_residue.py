@@ -279,6 +279,152 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         self.assertNotEqual(report["head_tree"], report["index_tree"])
         self.assertNotEqual(report["index_tree"], report["worktree_tree"])
 
+    def test_guard_rejects_ancestor_equivalent_index_and_worktree_without_repairing(self):
+        """Reject a current HEAD whose tracked checkout exactly equals its parent."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "guard-residue", remote_ahead=True,
+        )
+        git(["reset", "--hard", remote_sha], local)
+        git(["read-tree", "--reset", "-u", "HEAD^"], local)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"root main post-sync ancestor-residue guard rejected tracked local state",
+        ) as raised:
+            self.module.verify_no_ancestor_residue(local)
+
+        report = tree_report(self.module, local)
+        self.assertEqual(report["head"], remote_sha, report_message("guard", report))
+        self.assertEqual(report["main"], remote_sha, report_message("guard", report))
+        self.assertEqual(
+            report["index_tree"], report["ancestor_tree"],
+            report_message("guard", report),
+        )
+        self.assertEqual(
+            report["worktree_tree"], report["ancestor_tree"],
+            report_message("guard", report),
+        )
+        self.assertIn("merged.txt", report["porcelain"])
+        self.assertIn("merged.txt", str(raised.exception))
+        self.assertIn(remote_sha, str(raised.exception))
+        self.assertIn(report["head"], str(raised.exception))
+        self.assertNotIn("latest merge", str(raised.exception))
+
+    def test_guard_accepts_current_content_and_legitimate_non_ancestor_edit(self):
+        """Current content and an ordinary edit do not look like old code."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "guard-legitimate", remote_ahead=True,
+        )
+        git(["reset", "--hard", remote_sha], local)
+
+        self.module.verify_no_ancestor_residue(local)
+
+        (local / "README.md").write_text("operator edit\n", encoding="utf-8")
+        self.module.verify_no_ancestor_residue(local)
+
+        report = tree_report(self.module, local)
+        self.assertEqual(report["head"], remote_sha, report_message("legitimate", report))
+        self.assertEqual(report["index_tree"], report["head_tree"])
+        self.assertNotEqual(report["worktree_tree"], report["head_tree"])
+        self.assertEqual(report["porcelain"], " M README.md\n")
+
+    def test_sync_guard_preserves_snapshot_anchor_when_restore_leaves_ancestor_residue(self):
+        """Guard failure keeps the captured snapshot available for recovery."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "guard-recovery", remote_ahead=True,
+        )
+        (local / "operator-untracked.txt").write_text(
+            "operator data\n", encoding="utf-8",
+        )
+
+        original_restore = self.module.restore_stashed_changes
+        captured_snapshot = []
+
+        def induce_residue(repo_path, snapshot_id, scope_label):
+            original_restore(repo_path, snapshot_id, scope_label)
+            captured_snapshot.append(snapshot_id)
+            git(["read-tree", "--reset", "-u", "HEAD^"], repo_path)
+
+        self.module.restore_stashed_changes = induce_residue
+        try:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"recovery snapshot preserved at refs/factory-snapshots/",
+            ) as raised:
+                self.module.sync_main(local)
+        finally:
+            self.module.restore_stashed_changes = original_restore
+
+        self.assertEqual(len(captured_snapshot), 1)
+        snapshot_id = captured_snapshot[0]
+        report = tree_report(self.module, local)
+        self.assertEqual(report["head"], remote_sha, report_message("recovery", report))
+        self.assertEqual(report["main"], remote_sha, report_message("recovery", report))
+        self.assertEqual(
+            report["private_refs"],
+            {self.module.snapshot_ref_name(snapshot_id): snapshot_id},
+            report_message("recovery", report),
+        )
+        self.assertIn("merged.txt", report["porcelain"])
+        self.assertIn(self.module.snapshot_ref_name(snapshot_id), str(raised.exception))
+
+    def test_sync_guard_checks_residue_when_main_is_already_current(self):
+        """A previous silent residue is rejected even when no fast-forward is needed."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "guard-current", remote_ahead=True,
+        )
+        git(["reset", "--hard", remote_sha], local)
+        git(["read-tree", "--reset", "-u", "HEAD^"], local)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"no root snapshot was captured for automatic recovery",
+        ):
+            self.module.sync_main(local)
+
+        report = tree_report(self.module, local)
+        self.assertEqual(report["head"], remote_sha, report_message("current", report))
+        self.assertEqual(report["main"], remote_sha, report_message("current", report))
+        self.assertIn("merged.txt", report["porcelain"])
+        self.assertEqual(report["private_refs"], {})
+
+    def test_setup_stops_before_lane_creation_on_ancestor_residue(self):
+        """The integrated guard fails before the requested lane is prepared."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "guard-setup", remote_ahead=True,
+        )
+        git(["reset", "--hard", remote_sha], local)
+        git(["read-tree", "--reset", "-u", "HEAD^"], local)
+
+        prd_name = "ancestor-residue-prd"
+        tasks_dir = local / "tasks" / "todo"
+        tasks_dir.mkdir(parents=True)
+        (tasks_dir / f"{prd_name}.json").write_text(
+            json.dumps({"branchName": prd_name}),
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["python3", str(SCRIPT_PATH), prd_name],
+            cwd=local,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Root sync failed:", result.stderr)
+        self.assertIn("ancestor-residue guard", result.stderr)
+        self.assertIn("merged.txt", result.stderr)
+        self.assertFalse(
+            (local / ".claude" / "worktrees" / prd_name).exists(),
+            result.stderr,
+        )
+        report = tree_report(self.module, local)
+        self.assertEqual(report["head"], remote_sha, report_message("setup", report))
+        self.assertEqual(report["main"], remote_sha, report_message("setup", report))
+        self.assertIn("merged.txt", report["porcelain"])
+
     def test_controlled_overlapping_syncs_serialize_root_sync_and_preserve_state(self):
         """A competing invocation waits for the owner's full restore cycle."""
         local, _upstream, remote_sha = create_remote_repository(
