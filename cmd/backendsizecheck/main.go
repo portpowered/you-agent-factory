@@ -76,6 +76,7 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		for _, difference := range budgetDifferences {
 			fmt.Fprintln(stderr, exemptionbudget.FormatDifference(difference))
 		}
+		fmt.Fprintf(stderr, "LINT_VIOLATION_COUNT: %d\n", len(budgetDifferences))
 		return fmt.Errorf("[agent-factory:backend-size] found %d exemption budget violation(s)", len(budgetDifferences))
 	}
 
@@ -95,6 +96,7 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stderr, "%s | function %s in %s has %d lines (limit %d)\n", finding.packagePath, finding.function, finding.filePath, finding.actual, finding.limit)
 	}
+	fmt.Fprintf(stderr, "LINT_VIOLATION_COUNT: %d\n", len(violations))
 	return fmt.Errorf("[agent-factory:backend-size] found %d size violation(s)", len(violations))
 }
 

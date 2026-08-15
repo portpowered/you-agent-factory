@@ -26,32 +26,23 @@ function normalizedStatus(value) {
 		: "fail";
 }
 
-function explicitViolationCount(output) {
-	const currentFindings = /current findings\s*:\s*(\d+)/i.exec(output);
-	if (currentFindings) {
-		return Number(currentFindings[1]);
+function machineReadableViolationCount(target) {
+	if (Number.isSafeInteger(target?.violationCount) && target.violationCount >= 0) {
+		return {
+			count: target.violationCount,
+			source: target.violationCountSource || "checker-report",
+		};
 	}
 
-	const matches = [
-		...output.matchAll(
-			/(?:found|reported|detected)\s+(\d+)\s+[^\n]*(?:violation|finding|error|issue)/gi,
-		),
-	];
-	if (matches.length > 0) {
-		return Number(matches.at(-1)[1]);
+	const matches = textValue(target?.output).match(/^\s*LINT_VIOLATION_COUNT:\s*(\d+)\s*$/gim) || [];
+	if (matches.length !== 1) {
+		return null;
 	}
-	return null;
-}
-
-function diagnosticLineCount(output) {
-	const lines = output
-		.split(/\r?\n/)
-		.map((line) => line.trim())
-		.filter((line) => line.length > 0)
-		.filter((line) => !line.startsWith("====="))
-		.filter((line) => !line.startsWith("command error:"))
-		.filter((line) => !/^exit status \d+$/i.test(line));
-	return Math.max(1, lines.length);
+	const count = Number(matches[0].replace(/^\s*LINT_VIOLATION_COUNT:\s*/i, ""));
+	if (!Number.isSafeInteger(count) || count < 0) {
+		return null;
+	}
+	return { count, source: "checker-marker" };
 }
 
 export function countViolations(target) {
@@ -59,12 +50,11 @@ export function countViolations(target) {
 		return { count: 0, source: "successful-check" };
 	}
 
-	const output = textValue(target?.output);
-	const explicit = explicitViolationCount(output);
-	if (explicit !== null) {
-		return { count: explicit, source: "checker-output" };
+	const measured = machineReadableViolationCount(target);
+	if (measured) {
+		return measured;
 	}
-	return { count: diagnosticLineCount(output), source: "diagnostic-lines" };
+	return { count: null, source: "unavailable" };
 }
 
 function reportErrorSummary(error, log) {
@@ -152,7 +142,7 @@ export function renderBackendLintSummary(summary) {
 	];
 	for (const target of summary.targets) {
 		lines.push(
-			`| ${target.name} | \`${target.status}\` | ${target.violationCount} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,
+			`| ${target.name} | \`${target.status}\` | ${target.violationCount ?? "unknown"} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,
 		);
 	}
 
@@ -179,7 +169,7 @@ export function renderBackendLintSummary(summary) {
 		lines.push("", "### Failed checker diagnostics", "");
 		for (const target of failedTargets) {
 			lines.push(
-				`<details><summary>${target.name}: ${target.violationCount} reported violation(s) (${target.policyStatus || "ungated"})</summary>`,
+				`<details><summary>${target.name}: ${target.violationCount ?? "unknown"} reported violation(s) (${target.policyStatus || "ungated"})</summary>`,
 				"",
 				"```text",
 				preview(target.output || target.error),

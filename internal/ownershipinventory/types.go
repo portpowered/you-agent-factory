@@ -252,6 +252,66 @@ type Report struct {
 	ReusedFND01Seed               bool
 }
 
+// ViolationCount returns the number of independently reported inventory
+// findings. Structured list entries count individually; boolean gate failures
+// count once each so a consolidated diagnostic cannot hide added debt.
+func (r Report) ViolationCount() int {
+	return countStrings(
+		r.MissingPackages,
+		r.UnexpectedPackages,
+		r.DuplicatePackages,
+		r.InvalidMappings,
+		r.MissingSeedServices,
+		r.MissingAdditionalRoots,
+		r.MissingOwnerRationales,
+		r.MissingNestedRationales,
+		r.InvalidRationaleFields,
+		r.MissingResponsibilityClusters,
+		r.MissingCrossServiceEdges,
+		r.UnexpectedCrossServiceEdges,
+		r.InvalidEdgeClassifications,
+		r.InvalidBidirectionalEdges,
+		r.MissingNamedOwners,
+		r.UnconfirmedNamedOwners,
+		r.InvalidNamedOwnerMaps,
+		r.MissingMisplacedGuards,
+		r.InvalidMisplacedGuards,
+		r.MissingPublicSurfaces,
+		r.InvalidPublicSurfaces,
+		r.MissingOwnedRoles,
+		r.InvalidOwnedRoles,
+	) + countFlags(
+		r.MissingCrossServiceEdgeTable,
+		r.MissingProcessEdgesException,
+		r.UnstableSort,
+		r.UnstableRationaleSort,
+		r.UnstableResponsibilitySort,
+		r.UnstableEdgeSort,
+		r.UnstableNamedOwnerSort,
+		r.UnstableMisplacedGuardSort,
+		r.UnstablePublicSurfaceSort,
+		r.UnstableOwnedRoleSort,
+	)
+}
+
+func countStrings(groups ...[]string) int {
+	count := 0
+	for _, group := range groups {
+		count += len(group)
+	}
+	return count
+}
+
+func countFlags(flags ...bool) int {
+	count := 0
+	for _, flag := range flags {
+		if flag {
+			count++
+		}
+	}
+	return count
+}
+
 // OK reports whether validation found no defects.
 func (r Report) OK() bool {
 	return len(r.MissingPackages) == 0 &&

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,11 +18,34 @@ type lintReport struct {
 }
 
 type lintReportTarget struct {
-	Name           string `json:"name"`
-	Status         string `json:"status"`
-	DurationMillis int64  `json:"durationMillis"`
-	Output         string `json:"output"`
-	Error          string `json:"error,omitempty"`
+	Name                 string `json:"name"`
+	Status               string `json:"status"`
+	DurationMillis       int64  `json:"durationMillis"`
+	Output               string `json:"output"`
+	Error                string `json:"error,omitempty"`
+	ViolationCount       *int   `json:"violationCount,omitempty"`
+	ViolationCountSource string `json:"violationCountSource,omitempty"`
+}
+
+const violationCountMarker = "LINT_VIOLATION_COUNT:"
+
+func checkerViolationCount(output string) (int, bool) {
+	var count *int
+	for _, line := range strings.Split(output, "\n") {
+		value, ok := strings.CutPrefix(strings.TrimSpace(line), violationCountMarker)
+		if !ok {
+			continue
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 0 || count != nil {
+			return 0, false
+		}
+		count = &parsed
+	}
+	if count == nil {
+		return 0, false
+	}
+	return *count, true
 }
 
 func writeReportFile(path string, jobs int, total time.Duration, results []targetResult) error {
@@ -45,6 +69,14 @@ func writeReportFile(path string, jobs int, total time.Duration, results []targe
 			Status:         reportStatus(result.err),
 			DurationMillis: result.duration.Milliseconds(),
 			Output:         result.output,
+		}
+		if result.err == nil {
+			count := 0
+			target.ViolationCount = &count
+			target.ViolationCountSource = "successful-check"
+		} else if count, ok := checkerViolationCount(result.output); ok {
+			target.ViolationCount = &count
+			target.ViolationCountSource = "checker-marker"
 		}
 		if result.err != nil {
 			target.Error = result.err.Error()

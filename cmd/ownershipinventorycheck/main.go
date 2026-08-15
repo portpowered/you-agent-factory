@@ -45,6 +45,7 @@ func run(root string, stdout, stderr io.Writer) int {
 		)
 		fmt.Fprintf(stderr, "[ownership-inventory-check] inventory report: %#v\n", report.Inventory)
 		fmt.Fprintf(stderr, "[ownership-inventory-check] path-lease report: %#v\n", report.PathLease)
+		fmt.Fprintf(stderr, "LINT_VIOLATION_COUNT: %d\n", report.Inventory.ViolationCount()+report.PathLease.ViolationCount())
 		return 1
 	}
 	fmt.Fprintln(stdout, "[ownership-inventory-check] ownership inventory and path-lease freeze verified")

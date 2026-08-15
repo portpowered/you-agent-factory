@@ -20,22 +20,22 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 		removalCondition: "Split the two oversized tests without changing the checker limit, then delete this allowance when hosted backend-size passes.",
 	},
 	"package-target-manifest-check": {
-		baselineViolationCount: 3,
-		reason: "The current package inventory omits the factory_definitions runtime_snapshot package entries.",
+		baselineViolationCount: 5,
+		reason: "The current package inventory omits five production package entries from the live tree, including the factory_definitions runtime_snapshot migration paths.",
 		ownerOrLane: "Factory Definitions package inventory remediation lane",
 		deadline: "2026-10-15",
 		removalCondition: "Reconcile the package inventory with the production tree, then delete this allowance when hosted package-target-manifest-check passes.",
 	},
 	"packaged-factory-consumption-check": {
-		baselineViolationCount: 4,
-		reason: "The migration-ledger matrix directly imports packaged-factories instead of using the catalog boundary.",
+		baselineViolationCount: 1,
+		reason: "The migration-ledger matrix has one direct packaged-factories import instead of using the catalog boundary.",
 		ownerOrLane: "Packaged-factory consumption-boundary remediation lane",
 		deadline: "2026-10-15",
 		removalCondition: "Route the matrix through the Factory Definitions catalog boundary, then delete this allowance when hosted packaged-factory-consumption-check passes.",
 	},
 	"ownership-inventory-check": {
-		baselineViolationCount: 5,
-		reason: "The 2026-08-08 packaged-service-structure migration debt leaves the ownership inventory and cross-service edges incomplete.",
+		baselineViolationCount: 16,
+		reason: "The 2026-08-08 packaged-service-structure migration debt has 9 missing package entries, 5 missing cross-service edges, and 2 unexpected edges.",
 		ownerOrLane: "Packaged-service structure migration / ownership inventory lane",
 		deadline: "2026-10-31",
 		removalCondition: "Reconcile the migrated package and edge inventory, then delete this allowance when hosted ownership-inventory-check passes.",
@@ -53,6 +53,9 @@ function allowanceStatus(target, allowance) {
 	if (target.status === "pass") {
 		return "clean";
 	}
+	if (!Number.isSafeInteger(target.violationCount) || target.violationCount < 0) {
+		return "unmeasured";
+	}
 	if (!allowance) {
 		return "new failure";
 	}
@@ -66,7 +69,11 @@ export function evaluateBackendLintPolicy(targets) {
 	const evaluatedTargets = targets.map((target) => {
 		const allowance = BACKEND_LINT_ALLOWANCES[target.name];
 		const status = allowanceStatus(target, allowance);
-		if (status === "new failure") {
+		if (status === "unmeasured") {
+			failures.push(
+				`${target.name} failed without a reliable machine-readable violation count; its baseline allowance cannot be applied.`,
+			);
+		} else if (status === "new failure") {
 			failures.push(
 				`${target.name} failed with ${target.violationCount} reported violation(s); no baseline allowance exists.`,
 			);

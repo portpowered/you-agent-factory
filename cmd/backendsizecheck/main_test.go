@@ -221,10 +221,9 @@ func TestRunRejectsAllUnregisteredDirectivesInDeterministicOrder(t *testing.T) {
 	want := strings.Join([]string{
 		"exemption budget rule=backendsizecheck:ignore-file target=pkg/zeta/z.go is unregistered; add a sorted docs/internal/baselines/backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
 		"exemption budget rule=backendsizecheck:ignore-function target=cmd/alpha/main.go#main is unregistered; add a sorted docs/internal/baselines/backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
-		"",
 	}, "\n")
-	if got := stderr.String(); got != want {
-		t.Fatalf("run() stderr = %q, want deterministic diagnostics %q", got, want)
+	if got := stderr.String(); !strings.HasPrefix(got, want+"\n") || !strings.HasSuffix(got, "LINT_VIOLATION_COUNT: 2\n") {
+		t.Fatalf("run() stderr = %q, want deterministic diagnostics followed by count marker", got)
 	}
 }
 

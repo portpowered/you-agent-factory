@@ -26,13 +26,13 @@ function report(overrides = {}) {
 				name: "broken-check",
 				status: "fail",
 				durationMillis: 3400,
-				output: "[agent-factory:broken] found 2 rule violation(s)\nfile.go:12",
+				output: "[agent-factory:broken] found 2 rule violation(s)\nLINT_VIOLATION_COUNT: 2\nfile.go:12",
 			},
 			{
 				name: "second-broken-check",
 				status: "fail",
 				durationMillis: 700,
-				output: "- first diagnostic\n- second diagnostic",
+				output: "- first diagnostic\nLINT_VIOLATION_COUNT: 2\n- second diagnostic",
 			},
 		],
 		...overrides,
@@ -78,7 +78,7 @@ test("a measured baseline failure is reported but allowed at its recorded count"
 		targets: baselineTargets({
 			"ui-deadcode": {
 				status: "fail",
-				output: "Frontend dead-code baseline drift detected; current findings: 12",
+				output: "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 12\ncurrent findings: 12",
 			},
 		}),
 	}));
@@ -95,7 +95,7 @@ test("baseline growth fails the gate instead of being hidden by an allowance", (
 		targets: baselineTargets({
 			"ui-deadcode": {
 				status: "fail",
-				output: "Frontend dead-code baseline drift detected; current findings: 13",
+				output: "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 13\ncurrent findings: 13",
 			},
 		}),
 	}));
@@ -112,7 +112,7 @@ test("a newly failing clean checker is gated immediately", () => {
 				name: "new-clean-check",
 				status: "fail",
 				durationMillis: 100,
-				output: "found 1 new violation(s)",
+				output: "found 1 new violation(s)\nLINT_VIOLATION_COUNT: 1",
 			},
 		],
 	}));
@@ -126,6 +126,38 @@ test("a successful checker always reports zero violations", () => {
 		countViolations({ status: "success", output: "found 99 stale words" }),
 		{ count: 0, source: "successful-check" },
 	);
+});
+
+test("a failed checker without a machine-readable count fails closed", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ownership-inventory-check": {
+				status: "fail",
+				output: "Report{MissingPackages:[]string{\"pkg/a\", \"pkg/b\"}}",
+			},
+		}),
+	}));
+
+	assert.equal(summary.ok, false);
+	assert.equal(summary.targets.find((target) => target.name === "ownership-inventory-check").violationCount, null);
+	assert.match(summary.failures.join("\n"), /without a reliable machine-readable violation count/);
+});
+
+test("structured finding growth exceeds the ownership allowance even on one diagnostic line", () => {
+	const ownershipTarget = (count) => ({
+		status: "fail",
+		output: `inventory report: Report{MissingPackages:[]string{${Array.from({ length: count }, (_, index) => `\"finding-${index}\"`).join(", ")}}}\nLINT_VIOLATION_COUNT: ${count}`,
+	});
+	const baseline = summarizeBackendLintReport(report({
+		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(16) }),
+	}));
+	const grown = summarizeBackendLintReport(report({
+		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(17) }),
+	}));
+
+	assert.equal(baseline.ok, true);
+	assert.equal(grown.ok, false);
+	assert.match(grown.failures.join("\n"), /ownership-inventory-check reported 17 violation\(s\), exceeding its baseline allowance of 16/);
 });
 
 test("missing or malformed hosted reports fail closed", () => {

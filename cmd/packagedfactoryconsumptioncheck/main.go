@@ -44,7 +44,7 @@ var allowedPackagedFactoriesImporters = map[string]struct{}{
 }
 
 var allowedCatalogLoaderFiles = map[string]struct{}{
-	"pkg/wire/profiles.go": {},
+	"pkg/wire/profiles.go":                   {},
 	"pkg/transports/http/handlers_models.go": {},
 	"pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go": {},
 }
@@ -74,7 +74,7 @@ func run(cfg config, stdout io.Writer) error {
 	}
 	sort.Strings(violations)
 	if len(violations) > 0 {
-		return fmt.Errorf("%s consumption boundary failed:\n- %s", diagnosticPrefix, strings.Join(violations, "\n- "))
+		return fmt.Errorf("%s consumption boundary failed:\nLINT_VIOLATION_COUNT: %d\n- %s", diagnosticPrefix, len(violations), strings.Join(violations, "\n- "))
 	}
 	fmt.Fprintf(
 		stdout,

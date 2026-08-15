@@ -33,6 +33,21 @@ func TestValidateFailsWhenProductionPackageMissing(t *testing.T) {
 	}
 }
 
+func TestViolationCountCountsStructuredFindingsIndividually(t *testing.T) {
+	report := ownershipinventory.Report{
+		MissingPackages:             []string{"pkg/a", "pkg/b"},
+		MissingCrossServiceEdges:    []string{"runtime->models", "recordings->events"},
+		UnexpectedCrossServiceEdges: []string{"workers->sessions"},
+	}
+	if got := report.ViolationCount(); got != 5 {
+		t.Fatalf("ViolationCount() = %d, want 5 structured findings", got)
+	}
+	report.MissingPackages = append(report.MissingPackages, "pkg/c")
+	if got := report.ViolationCount(); got != 6 {
+		t.Fatalf("ViolationCount() after one added package = %d, want 6", got)
+	}
+}
+
 func TestValidateFailsWhenPackageDuplicated(t *testing.T) {
 	inventory, packages := loadedInventoryAndPackages(t)
 	dup := inventory.Packages[0]

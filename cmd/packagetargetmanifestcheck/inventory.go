@@ -97,11 +97,11 @@ func validateInventory(repoRoot string, inventory []string) error {
 		missing, extra := diffStringSets(live, inventory)
 		switch {
 		case len(missing) > 0 && len(extra) > 0:
-			return fmt.Errorf("inventory does not match live production packages; missing example %q; extra example %q", missing[0], extra[0])
+			return fmt.Errorf("inventory does not match live production packages; missing example %q; extra example %q\nLINT_VIOLATION_COUNT: %d", missing[0], extra[0], len(missing)+len(extra))
 		case len(missing) > 0:
-			return fmt.Errorf("inventory is missing production package %q", missing[0])
+			return fmt.Errorf("inventory is missing production package %q\nLINT_VIOLATION_COUNT: %d", missing[0], len(missing))
 		case len(extra) > 0:
-			return fmt.Errorf("inventory contains unknown package %q", extra[0])
+			return fmt.Errorf("inventory contains unknown package %q\nLINT_VIOLATION_COUNT: %d", extra[0], len(extra))
 		default:
 			return fmt.Errorf("inventory order does not match stable-sorted live production packages")
 		}

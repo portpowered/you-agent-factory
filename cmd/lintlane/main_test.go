@@ -129,6 +129,7 @@ func TestRunWritesCompleteJSONReportWhenTargetsFail(t *testing.T) {
 	executeTarget = func(_, target string, stdout, _ io.Writer) error {
 		fmt.Fprintf(stdout, "diagnostic:%s\n", target)
 		if target == "broken" {
+			fmt.Fprintln(stdout, "LINT_VIOLATION_COUNT: 3")
 			return errors.New("controlled failure")
 		}
 		return nil
@@ -155,6 +156,30 @@ func TestRunWritesCompleteJSONReportWhenTargetsFail(t *testing.T) {
 	}
 	if report.Targets[1].Name != "broken" || report.Targets[1].Status != "fail" || report.Targets[1].Error != "controlled failure" {
 		t.Fatalf("broken target report = %+v", report.Targets[1])
+	}
+	if report.Targets[1].ViolationCount == nil || *report.Targets[1].ViolationCount != 3 || report.Targets[1].ViolationCountSource != "checker-marker" {
+		t.Fatalf("broken target violation count = %+v, want checker marker count 3", report.Targets[1])
+	}
+}
+
+func TestCheckerViolationCountRequiresOneNonnegativeMachineReadableMarker(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		text  string
+		count int
+		valid bool
+	}{
+		{name: "valid", text: "diagnostic\nLINT_VIOLATION_COUNT: 4\n", count: 4, valid: true},
+		{name: "missing", text: "diagnostic\n", valid: false},
+		{name: "duplicate", text: "LINT_VIOLATION_COUNT: 1\nLINT_VIOLATION_COUNT: 1\n", valid: false},
+		{name: "negative", text: "LINT_VIOLATION_COUNT: -1\n", valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			count, ok := checkerViolationCount(test.text)
+			if ok != test.valid || (ok && count != test.count) {
+				t.Fatalf("checkerViolationCount(%q) = (%d, %v), want (%d, %v)", test.text, count, ok, test.count, test.valid)
+			}
+		})
 	}
 }
 

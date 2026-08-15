@@ -103,6 +103,7 @@ process.stderr.write(
 process.stderr.write(
   "Remove the unused code or intentionally update the reviewed baseline.\n",
 );
+process.stderr.write(`LINT_VIOLATION_COUNT: ${added.length + removed.length}\n`);
 process.exit(1);
 
 function normalizeReport(report: KnipReport): NormalizedIssue[] {
