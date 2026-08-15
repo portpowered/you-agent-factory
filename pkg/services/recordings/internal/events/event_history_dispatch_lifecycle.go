@@ -67,6 +67,52 @@ func (subscription *eventHistorySubscription) releasePending() {
 	subscription.pendingMu.Unlock()
 }
 
+func (h *FactoryEventHistory) relayLiveSubscription(id int, subscription *eventHistorySubscription) {
+	defer close(subscription.drained)
+	defer func() {
+		h.mu.Lock()
+		delete(h.streams, id)
+		h.mu.Unlock()
+	}()
+	defer close(subscription.events)
+	for {
+		select {
+		case <-subscription.done:
+			return
+		case <-subscription.overflow:
+			return
+		case <-subscription.terminal:
+			for {
+				select {
+				case <-subscription.done:
+					return
+				case event := <-subscription.inbox:
+					select {
+					case <-subscription.done:
+						subscription.releasePending()
+						return
+					case subscription.events <- event.Clone():
+						subscription.releasePending()
+					}
+				default:
+					return
+				}
+			}
+		case event := <-subscription.inbox:
+			select {
+			case <-subscription.done:
+				subscription.releasePending()
+				return
+			case <-subscription.overflow:
+				subscription.releasePending()
+				return
+			case subscription.events <- event.Clone():
+				subscription.releasePending()
+			}
+		}
+	}
+}
+
 func cloneFactoryEventsForStream(
 	events []interfaces.FactoryEvent,
 	scope interfaces.FactoryEventReconnectScope,
