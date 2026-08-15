@@ -169,6 +169,9 @@ func classifyPaths(paths []string) classificationResult {
 		for _, lane := range selected {
 			plan := lanes[lane]
 			plan.ShouldRun = true
+			if plan.Reason == "" {
+				plan.Reason = laneSelectionReason(lane, path)
+			}
 			lanes[lane] = plan
 		}
 	}
@@ -262,7 +265,33 @@ func isLocalInferencePath(path string) bool {
 		path == "pkg/services/models/local_execution_contract.go" ||
 		path == "pkg/services/models/managed_runtime_contract.go" ||
 		strings.HasPrefix(path, "tests/functional/models/root_composition/inference_invoke") ||
-		strings.HasPrefix(path, "tests/functional/runtime_api/api_model_local_inference")
+		strings.HasPrefix(path, "tests/functional/runtime_api/api_model_local_inference") ||
+		isLocalInferencePublicationPath(path)
+}
+
+func isLocalInferencePublicationPath(path string) bool {
+	switch path {
+	case "pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go",
+		"pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go",
+		"pkg/services/workers/execution_requests.go",
+		"pkg/services/workers/internal/service/execute.go",
+		"pkg/services/workers/internal/services/runtime_assembly/construction/service.go",
+		"pkg/services/workers/wire/stateless_execute_test.go",
+		"tests/functional/runtime_api/api_inference_events_test.go":
+		return true
+	default:
+		return strings.HasPrefix(path, "pkg/services/workers/internal/services/workstations/execution/recording/")
+	}
+}
+
+func laneSelectionReason(lane, path string) string {
+	if lane == laneLocalInference {
+		if isLocalInferencePublicationPath(path) {
+			return fmt.Sprintf("Selected because publication-sensitive path %q changed.", path)
+		}
+		return fmt.Sprintf("Selected because managed local-inference path %q changed.", path)
+	}
+	return fmt.Sprintf("Selected because owned path %q changed.", path)
 }
 
 func newLanePlans() map[string]lanePlan {
