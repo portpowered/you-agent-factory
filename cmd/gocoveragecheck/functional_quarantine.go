@@ -14,10 +14,13 @@ import (
 )
 
 const (
-	functionalQuarantineVersion = 1
-	functionalSuiteName         = "functional"
-	functionalBucketEnvironment = "ENVIRONMENT-DEPENDENT"
-	functionalBucketFailure     = "GENUINELY FAILING"
+	functionalQuarantineVersion         = 1
+	functionalSuiteName                 = "functional"
+	functionalBucketEnvironment         = "ENVIRONMENT-DEPENDENT"
+	functionalBucketFailure             = "GENUINELY FAILING"
+	functionalMeasurementIsolated       = "isolated"
+	functionalMeasurementPackageContext = "package-context"
+	functionalMeasurementFlaky          = "flaky"
 )
 
 var functionalTestNamePattern = regexp.MustCompile(`^Test[A-Za-z0-9_]+$`)
@@ -29,11 +32,12 @@ type functionalQuarantine struct {
 }
 
 type functionalQuarantineEntry struct {
-	Package  string `json:"package"`
-	Test     string `json:"test,omitempty"`
-	Bucket   string `json:"bucket"`
-	Reason   string `json:"reason"`
-	FollowUp string `json:"followUp,omitempty"`
+	Package     string `json:"package"`
+	Test        string `json:"test,omitempty"`
+	Bucket      string `json:"bucket"`
+	Reason      string `json:"reason"`
+	FollowUp    string `json:"followUp,omitempty"`
+	Measurement string `json:"measurement,omitempty"`
 }
 
 type functionalTestInventory struct {
@@ -125,10 +129,11 @@ const (
 )
 
 type functionalQuarantineOutcomeResult struct {
-	Entry               functionalQuarantineEntry
-	Observed            string
-	Detail              string
-	TestFailureObserved bool
+	Entry                   functionalQuarantineEntry
+	Observed                string
+	Detail                  string
+	TestFailureObserved     bool
+	PackageTerminalObserved bool
 }
 
 func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.Duration, short bool, repoRoot string) error {
@@ -139,10 +144,17 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 	results := make([]functionalQuarantineOutcomeResult, 0, len(manifest.Entries))
 	var failures []error
 	for _, entry := range manifest.Entries {
+		measurement, measurementErr := functionalQuarantineMeasurement(entry)
+		if measurementErr != nil {
+			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has invalid measurement metadata (fail-closed): %w", functionalSelectorDisplay(entry), measurementErr))
+			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=validation-error status=fail-closed measurement=%q detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, entry.Measurement, compactFunctionalQuarantineDetail(measurementErr.Error()))
+			continue
+		}
+
 		result, err := runFunctionalQuarantineSelector(entry, timeout, short, repoRoot)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q execution error (fail-closed): %w", functionalSelectorDisplay(entry), err))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, compactFunctionalQuarantineDetail(err.Error()))
+			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=execution-error status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, measurement, compactFunctionalQuarantineDetail(err.Error()))
 			continue
 		}
 
@@ -150,12 +162,17 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 		expected, expectedErr := expectedFunctionalQuarantineOutcome(entry.Bucket)
 		if expectedErr != nil {
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q has no expected outcome for bucket %q: %w", functionalSelectorDisplay(entry), entry.Bucket, expectedErr))
-			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, compactFunctionalQuarantineDetail(expectedErr.Error()))
+			fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s observed=%s status=fail-closed measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, result.Observed, measurement, compactFunctionalQuarantineDetail(expectedErr.Error()))
 			continue
 		}
 
 		status := "expected"
 		switch {
+		case measurement == functionalMeasurementFlaky:
+			// A single isolated attempt cannot establish recovery for a test
+			// measured as probabilistic. Keep the observation visible, but do
+			// not turn either a pass or a failure into a bucket decision.
+			status = "unmeasurable"
 		case result.Observed == functionalQuarantineOutcomePass:
 			status = "unexpected-pass"
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q passed unexpectedly (bucket=%s); remove or narrow this quarantine entry", functionalSelectorDisplay(entry), entry.Bucket))
@@ -171,7 +188,7 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 			status = "unexpected-outcome"
 			failures = append(failures, fmt.Errorf("functional quarantine ratchet: selector %q observed %s, expected %s for bucket=%s; verify the quarantine bucket and precondition", functionalSelectorDisplay(entry), result.Observed, expected, entry.Bucket))
 		}
-		fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, compactFunctionalQuarantineDetail(result.Detail))
+		fmt.Fprintf(stdoutWriter, "Functional quarantine selector: selector=%q bucket=%s expected=%s observed=%s status=%s measurement=%s detail=%q\n", functionalSelectorDisplay(entry), entry.Bucket, expected, result.Observed, status, measurement, compactFunctionalQuarantineDetail(result.Detail))
 	}
 
 	passCount, failCount, skipCount := 0, 0, 0
@@ -190,12 +207,20 @@ func runFunctionalQuarantineRatchet(manifest functionalQuarantine, timeout time.
 }
 
 func runFunctionalQuarantineSelector(entry functionalQuarantineEntry, timeout time.Duration, short bool, repoRoot string) (functionalQuarantineOutcomeResult, error) {
+	measurement, err := functionalQuarantineMeasurement(entry)
+	if err != nil {
+		return functionalQuarantineOutcomeResult{}, err
+	}
+	return runFunctionalQuarantineSelectorWithMeasurement(entry, measurement, timeout, short, repoRoot)
+}
+
+func runFunctionalQuarantineSelectorWithMeasurement(entry functionalQuarantineEntry, measurement string, timeout time.Duration, short bool, repoRoot string) (functionalQuarantineOutcomeResult, error) {
 	args := []string{"test", "-json", "-count=1"}
 	if short {
 		args = append(args, "-short")
 	}
 	args = append(args, fmt.Sprintf("-timeout=%s", timeout))
-	if entry.Test != "" {
+	if entry.Test != "" && measurement != functionalMeasurementPackageContext {
 		args = append(args, "-run="+exactFunctionalTestRunPattern([]string{entry.Test}))
 	}
 	args = append(args, entry.Package)
@@ -213,7 +238,13 @@ func runFunctionalQuarantineSelector(entry functionalQuarantineEntry, timeout ti
 		}
 		return functionalQuarantineOutcomeResult{}, parseErr
 	}
+	if measurement == functionalMeasurementPackageContext && !result.PackageTerminalObserved {
+		return functionalQuarantineOutcomeResult{}, errors.New("package-context measurement produced no package terminal outcome; execution was incomplete")
+	}
 	if commandErr != nil && (result.Observed != functionalQuarantineOutcomeFail || !result.TestFailureObserved) {
+		if measurement == functionalMeasurementPackageContext && result.PackageTerminalObserved {
+			return result, nil
+		}
 		return functionalQuarantineOutcomeResult{}, fmt.Errorf("go test returned an execution error after observing %s without a failing test event: %s", result.Observed, compactFunctionalQuarantineDetail(mergeGoTestFailureDetail(stderr, stdout)))
 	}
 	return result, nil
@@ -223,6 +254,7 @@ func parseFunctionalQuarantineOutcome(jsonOutput string, entry functionalQuarant
 	var result functionalQuarantineOutcomeResult
 	result.Entry = entry
 	var terminal *goTestTimingEvent
+	var packageTerminal *goTestTimingEvent
 	for _, line := range strings.Split(jsonOutput, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -237,6 +269,16 @@ func parseFunctionalQuarantineOutcome(jsonOutput string, entry functionalQuarant
 		}
 		if event.Test != "" && event.Action == functionalQuarantineOutcomeFail {
 			result.TestFailureObserved = true
+		}
+		if event.Test == "" {
+			switch event.Action {
+			case functionalQuarantineOutcomePass, functionalQuarantineOutcomeFail, functionalQuarantineOutcomeSkip:
+				if packageTerminal != nil {
+					return functionalQuarantineOutcomeResult{}, fmt.Errorf("package %q reported duplicate terminal outcomes", entry.Package)
+				}
+				copy := event
+				packageTerminal = &copy
+			}
 		}
 		if entry.Test != "" && event.Test != entry.Test {
 			continue
@@ -258,7 +300,26 @@ func parseFunctionalQuarantineOutcome(jsonOutput string, entry functionalQuarant
 		return functionalQuarantineOutcomeResult{}, fmt.Errorf("selector %q produced no terminal outcome; it may be stale or execution was incomplete", functionalSelectorDisplay(entry))
 	}
 	result.Observed = terminal.Action
+	result.PackageTerminalObserved = packageTerminal != nil
 	return result, nil
+}
+
+func functionalQuarantineMeasurement(entry functionalQuarantineEntry) (string, error) {
+	switch entry.Measurement {
+	case "":
+		return functionalMeasurementIsolated, nil
+	case functionalMeasurementIsolated:
+		return functionalMeasurementIsolated, nil
+	case functionalMeasurementPackageContext:
+		if entry.Test == "" {
+			return "", errors.New("package-context measurement requires a test selector")
+		}
+		return functionalMeasurementPackageContext, nil
+	case functionalMeasurementFlaky:
+		return functionalMeasurementFlaky, nil
+	default:
+		return "", fmt.Errorf("unsupported measurement %q; expected %q, %q, or %q", entry.Measurement, functionalMeasurementIsolated, functionalMeasurementPackageContext, functionalMeasurementFlaky)
+	}
 }
 
 // unmeasurableFunctionalQuarantineOutcome reports whether a quarantined
@@ -466,6 +527,9 @@ func validateFunctionalQuarantineEntry(entry functionalQuarantineEntry, index in
 	}
 	if entry.Bucket != functionalBucketEnvironment && entry.Bucket != functionalBucketFailure {
 		return fmt.Errorf("validate functional quarantine: selector %q has unsupported bucket %q; expected %s or %s", functionalSelectorDisplay(entry), entry.Bucket, functionalBucketEnvironment, functionalBucketFailure)
+	}
+	if _, err := functionalQuarantineMeasurement(entry); err != nil {
+		return fmt.Errorf("validate functional quarantine: selector %q has invalid measurement metadata: %w", functionalSelectorDisplay(entry), err)
 	}
 	if strings.TrimSpace(entry.Reason) == "" {
 		return fmt.Errorf("validate functional quarantine: selector %q requires a non-empty reason", functionalSelectorDisplay(entry))
