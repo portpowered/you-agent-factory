@@ -10,7 +10,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
@@ -685,8 +684,6 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		WorkerType:         request.WorkerType,
 		WorkstationName:    request.WorkstationType,
 		Model:              request.Model,
-		ModelOperation:     request.ModelOperation,
-		ModelBindings:      providerModelOperationBindings(request.ModelBindings),
 		ReasoningEffort:    request.ReasoningEffort,
 		SkipPermissions:    request.SkipPermissions,
 		PrintTimeout:       request.PrintTimeout,
@@ -701,21 +698,6 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		ExecutionLogger:    request.ExecutionLogger,
 	}
 	return result
-}
-
-func providerModelOperationBindings(values []workers.ResolvedModelOperationBinding) []providers.ResolvedModelOperationBinding {
-	if values == nil {
-		return nil
-	}
-	converted := make([]providers.ResolvedModelOperationBinding, len(values))
-	for index, value := range values {
-		converted[index] = providers.ResolvedModelOperationBinding{
-			Slot:    value.Slot,
-			Source:  string(value.Source),
-			Content: work.CloneWorkContentParts(value.Content),
-		}
-	}
-	return converted
 }
 
 // providerIDForRunner translates stable Workers runner identities at the
