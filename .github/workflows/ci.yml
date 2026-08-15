@@ -274,9 +274,9 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      LINT_REPORT_FILE: ${{ runner.temp }}/backend-lint-report.json
-      LINT_LOG_FILE: ${{ runner.temp }}/backend-lint.log
-      LINT_COMMENT_FILE: ${{ runner.temp }}/backend-lint-comment.md
+      LINT_REPORT_FILE: .artifacts/backend-lint/report.json
+      LINT_LOG_FILE: .artifacts/backend-lint/lint.log
+      LINT_COMMENT_FILE: .artifacts/backend-lint/comment.md
     steps:
       - uses: actions/checkout@v4
         with:
@@ -299,6 +299,7 @@ jobs:
         shell: bash
         run: |
           set +e
+          mkdir -p .artifacts/backend-lint
           make LINT_REPORT_FILE="$LINT_REPORT_FILE" lint 2>&1 | tee "$LINT_LOG_FILE"
           status=${PIPESTATUS[0]}
           printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
@@ -317,9 +318,9 @@ jobs:
         with:
           name: backend-lint-diagnostics
           path: |
-            ${{ runner.temp }}/backend-lint-report.json
-            ${{ runner.temp }}/backend-lint.log
-            ${{ runner.temp }}/backend-lint-comment.md
+            .artifacts/backend-lint/report.json
+            .artifacts/backend-lint/lint.log
+            .artifacts/backend-lint/comment.md
           if-no-files-found: warn
           retention-days: 14
       - name: Publish Backend Lint inventory to the pull request
