@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -141,6 +142,42 @@ func TestMapServerFailureWritesDeclaredStandardError(t *testing.T) {
 	if response.Code != factoryapi.ErrorResponseCode(ServerBindFailedCode) ||
 		response.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("ErrorResponse = %#v", response)
+	}
+}
+
+func TestMapServerFailureDiagnosesPreReadinessFailureWithoutRawCause(t *testing.T) {
+	t.Parallel()
+
+	secretCause := errors.New("provider-token=SECRET")
+	mapped := MapServerFailure(&initializer.RuntimeHostStartupError{Cause: secretCause})
+	var invocationErr *InvocationError
+	if !errors.As(mapped, &invocationErr) {
+		t.Fatalf("mapped error = %T, want InvocationError", mapped)
+	}
+	if invocationErr.Code != ServerStartFailedCode {
+		t.Fatalf("mapped code = %q, want %q", invocationErr.Code, ServerStartFailedCode)
+	}
+	if !strings.Contains(invocationErr.Message, "requested server did not start") ||
+		!strings.Contains(invocationErr.Message, "failure_class=runtime_startup_failed") {
+		t.Fatalf("mapped message = %q, want safe startup classification", invocationErr.Message)
+	}
+	if strings.Contains(invocationErr.Message, "SECRET") {
+		t.Fatalf("mapped message = %q, must not expose raw startup cause", invocationErr.Message)
+	}
+}
+
+func TestMapServerFailurePreservesSafePreReadinessCause(t *testing.T) {
+	t.Parallel()
+
+	cause := &InvocationError{Code: InvocationErrorCodeFailed, Message: "required input is missing"}
+	mapped := MapServerFailure(&initializer.RuntimeHostStartupError{Cause: cause})
+	var invocationErr *InvocationError
+	if !errors.As(mapped, &invocationErr) {
+		t.Fatalf("mapped error = %T, want InvocationError", mapped)
+	}
+	if invocationErr.Code != cause.Code ||
+		invocationErr.Message != "requested server did not start: RUN_INVOCATION_FAILED: required input is missing" {
+		t.Fatalf("mapped error = %#v, want preserved safe cause", invocationErr)
 	}
 }
 

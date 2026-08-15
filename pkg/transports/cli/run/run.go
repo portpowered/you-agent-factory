@@ -657,6 +657,7 @@ func runFactoryServiceAndEmitResult(
 		recordCleanInvocationAttempt()
 	}
 	err := factorySvc.Run(ctx)
+	logRunServiceOutcome(ctx, cfg, err)
 	if err == nil {
 		reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath, cfg.RecordingsCLI)
 	}

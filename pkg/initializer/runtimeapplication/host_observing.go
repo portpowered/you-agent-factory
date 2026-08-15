@@ -63,27 +63,38 @@ func (runner hostObservingRunner) Run(ctx context.Context) error {
 	case result := <-readyResult:
 		if result.err == nil {
 			runner.onReady(result.binding)
+			return <-runResult
 		}
-		return <-runResult
+		err := <-runResult
+		if err == nil && !errors.Is(result.err, context.Canceled) {
+			err = result.err
+		}
+		return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
 	case err := <-runResult:
+		var readinessErr error
+		select {
+		case result := <-readyResult:
+			if result.err == nil {
+				runner.onReady(result.binding)
+				cancelReady()
+				return err
+			}
+			readinessErr = result.err
+		default:
+		}
 		cancelReady()
-		if err == nil {
-			if probe, ok := runner.runner.(runtimeHostReadinessProbe); ok && probe.RuntimeHostReadinessConfigured() {
-				result := <-readyResult
-				if result.err == nil {
-					runner.onReady(result.binding)
-				}
+		if readinessErr == nil && runner.runtimeHostReadinessConfigured() {
+			result := <-readyResult
+			if result.err == nil {
+				runner.onReady(result.binding)
 			} else {
-				select {
-				case result := <-readyResult:
-					if result.err == nil {
-						runner.onReady(result.binding)
-					}
-				default:
-				}
+				readinessErr = result.err
 			}
 		}
-		return err
+		if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
+			err = readinessErr
+		}
+		return runtimeHostStartupResult(ctx, runner.runtimeHostReadinessConfigured(), err)
 	case <-ctx.Done():
 		cancelReady()
 		// Let the managed lifecycle normalize ordinary cancellation after it
@@ -92,24 +103,51 @@ func (runner hostObservingRunner) Run(ctx context.Context) error {
 	}
 }
 
+func (runner hostObservingRunner) runtimeHostReadinessConfigured() bool {
+	probe, ok := runner.runner.(runtimeHostReadinessProbe)
+	if !ok {
+		return true
+	}
+	return probe.RuntimeHostReadinessConfigured()
+}
+
+func runtimeHostStartupResult(ctx context.Context, configured bool, err error) error {
+	if err == nil || errors.Is(err, context.Canceled) || !configured || (ctx != nil && ctx.Err() != nil) {
+		return err
+	}
+	return &initializer.RuntimeHostStartupError{Cause: err}
+}
+
 func (runner hostObservingRunner) RunWithCompletion(
 	ctx context.Context,
 	completion initializer.CompletionOperation,
 ) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
 	if !ok {
 		return runner.runner.Run(ctx)
 	}
-	return managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
-		binding, err := runner.runner.(runtimeHostReader).RuntimeHostBinding(completionCtx)
-		if err != nil && !isRuntimeHostUnavailable(err) {
-			return err
+	if !runner.runtimeHostReadinessConfigured() {
+		return managed.RunWithCompletion(ctx, completion)
+	}
+	readinessObserved := false
+	err := managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
+		binding, bindingErr := runner.runner.(runtimeHostReader).RuntimeHostBinding(completionCtx)
+		if bindingErr != nil && !isRuntimeHostUnavailable(bindingErr) {
+			return bindingErr
 		}
-		if err == nil {
+		if bindingErr == nil {
+			readinessObserved = true
 			runner.onReady(binding)
 		}
 		return completion(completionCtx)
 	})
+	if readinessObserved {
+		return err
+	}
+	return runtimeHostStartupResult(ctx, true, err)
 }
 
 func (runner hostObservingRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {

@@ -425,8 +425,10 @@ Current Factory selection reports `CURRENT_FACTORY_NOT_FOUND` or
 `CURRENT_FACTORY_INVALID`. Output selection conflicts report
 `INVOCATION_OUTPUT_CONFLICT`; unsupported output values or run shapes report
 `INVOCATION_OUTPUT_UNSUPPORTED`. Invocation execution failures report
-`RUN_INVOCATION_FAILED`, and local hosting failures report
-`SERVER_BIND_FAILED`.
+`RUN_INVOCATION_FAILED`. Local listener bind failures report
+`SERVER_BIND_FAILED`; other service-mode startup failures detected before
+listener readiness report `SERVER_START_FAILED` with a safe failure
+classification.
 
 Successful commands exit `0`; usage and runtime failures exit `1`. Cancelling
 `you run` or `you server` through the normal process interrupt exits `130`
