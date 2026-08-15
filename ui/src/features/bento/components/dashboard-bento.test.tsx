@@ -215,6 +215,7 @@ vi.mock("../../trace-drilldown/components/trace-drilldown-widget", () => ({
 vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
   useWorkOutcomeChart: () => ({
     chartState: { status: "ready" },
+    samples: [],
     status: "empty",
   }),
 }));

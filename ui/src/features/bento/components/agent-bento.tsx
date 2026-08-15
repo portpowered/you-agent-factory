@@ -9,7 +9,9 @@ import { ScrollArea } from "@you-agent-factory/components/overlays";
 import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
+import type { DashboardCardAsyncState } from "../../dashboard/lib/dashboard-card-state";
 import { getAgentBentoMessages } from "../messages/agent-bento";
+import { DashboardCardStateBanner } from "./card-state/dashboard-card-state-banner";
 
 export interface AgentBentoLayoutItem {
   h: number;
@@ -26,6 +28,7 @@ export interface AgentBentoLayoutItem {
 }
 
 export interface AgentBentoLayoutCard {
+  cardState?: DashboardCardAsyncState;
   children: ReactNode;
   id: string;
   widgetType: string;
@@ -288,7 +291,17 @@ export function AgentBentoLayout({
             id={card.id}
             key={card.id}
           >
-            {card.children}
+            {card.cardState ? (
+              <div className="flex h-full min-w-0 flex-col gap-1">
+                <DashboardCardStateBanner
+                  locale={locale}
+                  state={card.cardState}
+                />
+                <div className="min-h-0 min-w-0 flex-1">{card.children}</div>
+              </div>
+            ) : (
+              card.children
+            )}
           </div>
         ))}
       </GridLayout>

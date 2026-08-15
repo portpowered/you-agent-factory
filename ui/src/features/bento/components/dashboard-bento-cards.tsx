@@ -7,6 +7,14 @@ import { CurrentSelectionWidget } from "../../current-selection/components/widge
 import type { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import type { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
 import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
+import {
+  type DashboardCardAsyncState,
+  type DashboardCardContentState,
+  type DashboardCardStateContext,
+  dashboardSnapshotHasRecords,
+  resolveDashboardCardAsyncState,
+  resolveDashboardCardContentState,
+} from "../../dashboard/lib/dashboard-card-state";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { FactorySessionWidget } from "../../factory-session-detail/components/factory-session-widget";
 import { getFactorySessionWidgetMessages } from "../../factory-session-detail/messages/factory-session-widget";
@@ -41,6 +49,7 @@ import { SessionControlsWidget } from "./session-controls-widget";
 
 export interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
+  dashboardCardStateContext: DashboardCardStateContext;
   dashboardLayout: AgentBentoLayoutItem[];
   importController: ReturnType<typeof useCurrentActivityImportController>;
   isCurrent: boolean;
@@ -61,11 +70,13 @@ export interface DashboardCardBuilderArgs {
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
+  workOutcomeHydrationStatus: "loading" | "ready";
   workChartModel: ReturnType<typeof useWorkOutcomeChart>;
 }
 
 interface DashboardWidgetCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
+  dashboardCardStateContext: DashboardCardStateContext;
   importController: ReturnType<typeof useCurrentActivityImportController>;
   isCurrent: boolean;
   layoutItem: AgentBentoLayoutItem;
@@ -85,11 +96,13 @@ interface DashboardWidgetCardBuilderArgs {
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
+  workOutcomeHydrationStatus: "loading" | "ready";
   workChartModel: ReturnType<typeof useWorkOutcomeChart>;
 }
 
 export function buildDashboardCards({
   currentSelection,
+  dashboardCardStateContext,
   dashboardLayout,
   importController,
   isCurrent,
@@ -106,12 +119,13 @@ export function buildDashboardCards({
   setSelectedTraceID,
   snapshot,
   traceGridState,
+  workOutcomeHydrationStatus,
   workChartModel,
 }: DashboardCardBuilderArgs): AgentBentoLayoutCard[] {
   const pickerAvailability =
     getDashboardWidgetPickerAvailability(dashboardLayout);
 
-  return dashboardLayout.flatMap((layoutItem) => {
+  return dashboardLayout.flatMap((layoutItem): AgentBentoLayoutCard[] => {
     if (layoutItem.hidden) {
       return [];
     }
@@ -132,28 +146,174 @@ export function buildDashboardCards({
       ];
     }
 
+    const card = buildWidgetCard({
+      currentSelection,
+      dashboardCardStateContext,
+      importController,
+      isCurrent,
+      layoutItem,
+      locale,
+      now,
+      onRemoveDashboardWidget,
+      providerSessionState,
+      selectedSessionID,
+      selectedTrace,
+      selectedTraceID,
+      selectedWorkExecutionDetails,
+      selectedWorkRelationshipGraph,
+      setSelectedTraceID,
+      snapshot,
+      traceGridState,
+      workOutcomeHydrationStatus,
+      workChartModel,
+    });
+
     return [
-      buildWidgetCard({
-        currentSelection,
-        importController,
-        isCurrent,
-        layoutItem,
-        locale,
-        now,
-        onRemoveDashboardWidget,
-        providerSessionState,
-        selectedSessionID,
-        selectedTrace,
-        selectedTraceID,
-        selectedWorkExecutionDetails,
-        selectedWorkRelationshipGraph,
-        setSelectedTraceID,
-        snapshot,
-        traceGridState,
-        workChartModel,
-      }),
+      {
+        ...card,
+        cardState: resolveDashboardCardState({
+          currentSelection,
+          dashboardCardStateContext,
+          layoutItem,
+          providerSessionState,
+          selectedSessionID,
+          snapshot,
+          traceGridState,
+          workOutcomeHydrationStatus,
+          workChartModel,
+        }),
+      },
     ];
   });
+}
+
+function resolveDashboardCardState({
+  currentSelection,
+  dashboardCardStateContext,
+  layoutItem,
+  providerSessionState,
+  selectedSessionID,
+  snapshot,
+  traceGridState,
+  workOutcomeHydrationStatus,
+  workChartModel,
+}: Pick<
+  DashboardCardBuilderArgs,
+  | "currentSelection"
+  | "dashboardCardStateContext"
+  | "providerSessionState"
+  | "selectedSessionID"
+  | "snapshot"
+  | "traceGridState"
+  | "workOutcomeHydrationStatus"
+  | "workChartModel"
+> & {
+  layoutItem: AgentBentoLayoutItem;
+}): DashboardCardAsyncState {
+  const content = resolveDashboardCardContentStateForWidget({
+    currentSelection,
+    dashboardCardStateContext,
+    layoutItem,
+    providerSessionState,
+    selectedSessionID,
+    snapshot,
+    traceGridState,
+    workOutcomeHydrationStatus,
+    workChartModel,
+  });
+
+  return resolveDashboardCardAsyncState({
+    ...dashboardCardStateContext,
+    content,
+    hasRetainedData: content === "populated",
+  });
+}
+
+function resolveDashboardCardContentStateForWidget({
+  currentSelection,
+  dashboardCardStateContext,
+  layoutItem,
+  providerSessionState,
+  selectedSessionID,
+  snapshot,
+  traceGridState,
+  workOutcomeHydrationStatus,
+  workChartModel,
+}: Pick<
+  DashboardCardBuilderArgs,
+  | "currentSelection"
+  | "dashboardCardStateContext"
+  | "providerSessionState"
+  | "selectedSessionID"
+  | "snapshot"
+  | "traceGridState"
+  | "workOutcomeHydrationStatus"
+  | "workChartModel"
+> & {
+  layoutItem: AgentBentoLayoutItem;
+}): DashboardCardContentState {
+  const authoritative = dashboardCardStateContext.hasAuthoritativeSnapshot;
+  const snapshotContent = (hasRecords: boolean) =>
+    resolveDashboardCardContentState({
+      authoritative,
+      hasRecords,
+    });
+
+  switch (layoutItem.widgetType) {
+    case DASHBOARD_WIDGET_IDS.workTotals:
+      return snapshotContent(dashboardSnapshotHasRecords(snapshot));
+    case DASHBOARD_WIDGET_IDS.workGraph:
+      return snapshotContent(
+        snapshot.topology.edges.length > 0 ||
+          snapshot.topology.workstation_node_ids.length > 0,
+      );
+    case DASHBOARD_WIDGET_IDS.terminalWork:
+      return snapshotContent(
+        currentSelection.completedWorkItems.length > 0 ||
+          currentSelection.failedWorkItems.length > 0,
+      );
+    case DASHBOARD_WIDGET_IDS.workOutcomeChart:
+      return resolveDashboardCardContentState({
+        authoritative,
+        error: workChartModel.chartState?.status === "error",
+        hasRecords: workChartModel.samples.length > 0,
+        loading:
+          workOutcomeHydrationStatus === "loading" ||
+          workChartModel.chartState?.status === "loading",
+      });
+    case DASHBOARD_WIDGET_IDS.currentSelection:
+      return snapshotContent(currentSelection.selection != null);
+    case DASHBOARD_WIDGET_IDS.factorySession:
+      return snapshotContent((selectedSessionID?.trim().length ?? 0) > 0);
+    case DASHBOARD_WIDGET_IDS.sessionControls:
+      return snapshotContent(true);
+    case DASHBOARD_WIDGET_IDS.providerSession:
+      return snapshotContent(
+        providerSessionState.selectedProviderSession != null,
+      );
+    case DASHBOARD_WIDGET_IDS.submitWork:
+      return snapshotContent(
+        (snapshot.topology.submit_work_types?.length ?? 0) > 0,
+      );
+    case DASHBOARD_WIDGET_IDS.trace:
+      switch (traceGridState.status) {
+        case "error":
+          return "error";
+        case "loading":
+          return "loading";
+        case "ready":
+          return "populated";
+        case "empty":
+        case "idle":
+          return snapshotContent(false);
+        default:
+          return snapshotContent(false);
+      }
+    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
+      return snapshotContent(currentSelection.selectedWorkID != null);
+    default:
+      return snapshotContent(true);
+  }
 }
 
 function buildWidgetCard({

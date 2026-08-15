@@ -4,8 +4,8 @@ import { useAppLocale } from "../../../i18n";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import { DashboardImportPreviewDialog } from "../../import/components/dashboard-import-preview-dialog";
+import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
@@ -66,6 +66,7 @@ export function DashboardBento({
   const { rawSessionID, sessionID } = useDashboardSession();
   const {
     currentSelection,
+    dashboardCardStateContext,
     materializedWorkOutcomeState,
     selectedSnapshot,
     selectedTimelineTick,
@@ -107,6 +108,7 @@ export function DashboardBento({
   const cards = buildDashboardCardLayouts({
     addDashboardWidget,
     currentSelection,
+    dashboardCardStateContext,
     dashboardLayout,
     importController,
     isCurrent: selectedTimelineTick === snapshot.tick_count,
@@ -122,6 +124,7 @@ export function DashboardBento({
     setSelectedTraceID,
     snapshot,
     traceGridState,
+    workOutcomeHydrationStatus,
     workChartModel,
   });
   const renderableLayout = getRenderableDashboardLayout(
@@ -156,6 +159,7 @@ export function DashboardBento({
 function buildDashboardCardLayouts({
   addDashboardWidget,
   currentSelection,
+  dashboardCardStateContext,
   dashboardLayout,
   importController,
   isCurrent,
@@ -171,6 +175,7 @@ function buildDashboardCardLayouts({
   setSelectedTraceID,
   snapshot,
   traceGridState,
+  workOutcomeHydrationStatus,
   workChartModel,
 }: Omit<DashboardCardBuilderArgs, "onSelectInlineWidget"> & {
   addDashboardWidget: ReturnType<
@@ -179,6 +184,7 @@ function buildDashboardCardLayouts({
 }) {
   return buildDashboardCards({
     currentSelection,
+    dashboardCardStateContext,
     dashboardLayout,
     importController,
     isCurrent,
@@ -197,6 +203,7 @@ function buildDashboardCardLayouts({
     setSelectedTraceID,
     snapshot,
     traceGridState,
+    workOutcomeHydrationStatus,
     workChartModel,
   });
 }
