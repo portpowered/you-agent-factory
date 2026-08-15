@@ -1,4 +1,5 @@
 import {
+  DescriptionList,
   Table,
   TableBody,
   TableCaption,
@@ -7,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@you-agent-factory/components/data-display";
-import { Button } from "@you-agent-factory/components/primitives";
+import { Button, Code, Label } from "@you-agent-factory/components/primitives";
 import {
   WidgetEmptyState,
   WidgetEmptyStateText,
@@ -19,13 +20,11 @@ import type {
   DashboardTrace,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { DescriptionList } from "@you-agent-factory/components/data-display";
-import { Code, Label } from "@you-agent-factory/components/primitives";
-import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import {
   Collapsible,
   CollapsibleContent,
 } from "../../../components/ui/collapsible";
+import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import {
   formatDurationMillis,
   formatTraceOutcome,
@@ -307,7 +306,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             ))}
           </TableBody>
         </Table>
-      ) : (
+      ) : trace.relations && trace.relations.length > 0 ? null : (
         <WidgetEmptyState compact>
           <WidgetEmptyStateTitle>
             {messages.noTraceHistoryTitle}

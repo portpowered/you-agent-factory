@@ -103,6 +103,22 @@ export const PopulatedTrace = {
   },
 };
 
+export const RelationOnlyTrace = {
+  args: {
+    state: {
+      status: "ready",
+      trace: {
+        ...populatedTrace,
+        dispatches: [],
+        trace_id: "trace-relation-only-story",
+        transition_ids: [],
+        workstation_sequence: [],
+      },
+    },
+    widgetId: "trace-relation-only-story",
+  },
+};
+
 export const EmptyTrace = {
   args: {
     state: { status: "empty", workID: "work-missing" },

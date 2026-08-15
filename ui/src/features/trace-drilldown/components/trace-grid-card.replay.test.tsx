@@ -60,6 +60,7 @@ vi.mock("@xyflow/react", async () => ({
   ) => nodes,
 }));
 
+import type { DashboardTrace } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { parseReplayFixtureEvents } from "../../../testing/replay-fixtures";
 import { buildFactoryTimelineSnapshot } from "../../timeline/state/factoryTimelineStore";
@@ -79,6 +80,23 @@ const TRACE_WORKSTATION_PATH_REGRESSION_DISPATCH_IDS = [
   "74d8f3b3-d91b-4bcc-927d-b2643e71bc8a",
   "82d4be6a-68c3-4c94-ad3b-53fd53326015",
 ] as const;
+
+const RELATION_ONLY_TRACE: DashboardTrace = {
+  dispatches: [],
+  relations: [
+    {
+      source_work_id: "work-plan",
+      source_work_name: "Plan story",
+      target_work_id: "work-implement",
+      target_work_name: "Implement story",
+      type: "PARENT_CHILD",
+    },
+  ],
+  trace_id: "trace-relation-only",
+  transition_ids: [],
+  work_ids: ["work-plan", "work-implement"],
+  workstation_sequence: [],
+};
 
 function nodeIDsForFlow(flow: HTMLElement): string[] {
   return JSON.parse(flow.getAttribute("data-node-ids") ?? "[]") as string[];
@@ -140,5 +158,29 @@ describe("TraceGridBentoCard replayed world state", () => {
     expect(within(workstationFlow).getByText("plan")).toBeTruthy();
     expect(within(workstationFlow).getByText("setup-workspace")).toBeTruthy();
     expect(within(workstationFlow).getAllByText("process")).toHaveLength(5);
+  });
+
+  it("renders relation-only traces without the known-empty state", async () => {
+    render(
+      <TraceGridBentoCard
+        state={{ status: "ready", trace: RELATION_ONLY_TRACE }}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Trace drill-down" });
+    await waitFor(() => {
+      expect(
+        within(card).getByRole("region", { name: "Batch relation graph" }),
+      ).toBeTruthy();
+    });
+
+    expect(within(card).getByText("Plan story")).toBeTruthy();
+    expect(within(card).getByText("Implement story")).toBeTruthy();
+    expect(within(card).queryByText("Trace history unavailable")).toBeNull();
+    expect(
+      within(card).queryByText(
+        "No retained dispatch history is currently available for this work item.",
+      ),
+    ).toBeNull();
   });
 });
