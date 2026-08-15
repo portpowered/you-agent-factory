@@ -708,6 +708,9 @@ async function endSaveActivationTrace(
 async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
   const observations = [];
   let previousSignature = null;
+  let errorMessage = null;
+  let pollCount = 0;
+  let outcome = "success";
   try {
     await waitForStableFactoryGraphNodePlacement(
       page,
@@ -715,6 +718,7 @@ async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
       uiInteractionTimeoutMs,
       100,
       (observation) => {
+        pollCount = observation.pollCount;
         const signature = JSON.stringify({
           nextSample: observation.nextSample,
           stable: observation.stable,
@@ -727,13 +731,19 @@ async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
       },
     );
   } catch (error) {
+    errorMessage = String(error);
+    outcome = "failure";
+    throw error;
+  } finally {
     console.log(
       `[graph-node-placement-trace] ${JSON.stringify({
+        errorMessage,
         nodeTestId,
         observations,
+        outcome,
+        pollCount,
       })}`,
     );
-    throw error;
   }
 }
 
@@ -768,9 +778,12 @@ async function saveGraphDraft(page, toolbar, expect) {
     });
     await waitForDurableCheckpoint(
       "save confirmation dialog activation",
-      async () => {
-        dialogPollCount += 1;
-        return await saveDialog.isVisible();
+      {
+        dialogPresent: async () => {
+          dialogPollCount += 1;
+          return (await saveDialog.count()) > 0;
+        },
+        dialogVisible: async () => await saveDialog.isVisible(),
       },
       uiInteractionTimeoutMs,
     );
@@ -779,9 +792,12 @@ async function saveGraphDraft(page, toolbar, expect) {
       .first();
     await waitForDurableCheckpoint(
       "save confirmation action readiness",
-      async () => {
-        confirmButtonPollCount += 1;
-        return await confirmButton.isVisible();
+      {
+        confirmButtonPresent: async () => {
+          confirmButtonPollCount += 1;
+          return (await confirmButton.count()) > 0;
+        },
+        confirmButtonVisible: async () => await confirmButton.isVisible(),
       },
       uiInteractionTimeoutMs,
     );
