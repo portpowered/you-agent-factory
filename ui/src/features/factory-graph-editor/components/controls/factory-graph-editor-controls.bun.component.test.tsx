@@ -317,6 +317,33 @@ describe("factory graph editor save action keyboard behavior", () => {
 
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it("does not activate a saving action from the keyboard", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDiscard={true}
+        canInteract={true}
+        canSave={true}
+        isSaving={true}
+        onDiscard={() => {}}
+        onSave={onSave}
+        onSelectTool={() => {}}
+        visible={true}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Saving..." });
+    expect(saveButton.getAttribute("aria-busy")).toBe("true");
+    expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    saveButton.focus();
+    await user.keyboard("{Enter}");
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });
 
 describe("factory graph editor mode toggle controls", () => {
