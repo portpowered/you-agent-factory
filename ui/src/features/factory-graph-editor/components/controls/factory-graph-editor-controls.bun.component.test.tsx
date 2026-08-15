@@ -1,7 +1,7 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
+import { describe, expect, it, mock } from "bun:test";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, mock } from "bun:test";
 import { useState } from "react";
 
 const vi = { fn: mock };
@@ -234,6 +234,88 @@ describe("factory graph editor toolbar controls", () => {
     expect(
       within(dialog).getByRole("button", { name: "Delete review workstation" }),
     ).toBeTruthy();
+  });
+});
+
+describe("factory graph editor save action keyboard behavior", () => {
+  it("opens exactly one save confirmation dialog from Enter on an enabled save action", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    function SaveConfirmationHarness() {
+      const [isOpen, setIsOpen] = useState(false);
+
+      return (
+        <>
+          <FactoryGraphEditorToolbar
+            activeTool={null}
+            canDiscard={true}
+            canInteract={true}
+            canSave={true}
+            onDiscard={() => {}}
+            onSave={() => {
+              onSave();
+              setIsOpen(true);
+            }}
+            onSelectTool={() => {}}
+            visible={true}
+          />
+          <FactoryGraphEditorConfirmationDialog
+            cancelLabel="Keep editing"
+            confirmLabel="Save changes"
+            description="Save the pending graph changes."
+            isOpen={isOpen}
+            onCancel={() => setIsOpen(false)}
+            onConfirm={() => {}}
+            title="Save factory graph changes?"
+          />
+        </>
+      );
+    }
+
+    render(<SaveConfirmationHarness />);
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    saveButton.focus();
+    expect(document.activeElement).toBe(saveButton);
+
+    await user.keyboard("{Enter}");
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const dialogs = await screen.findAllByRole("dialog", {
+      name: "Save factory graph changes?",
+    });
+    expect(dialogs).toHaveLength(1);
+    expect(
+      within(dialogs[0] as HTMLElement).getByRole("button", {
+        name: "Keep editing",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("does not activate a disabled save action from the keyboard", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDiscard={false}
+        canInteract={true}
+        canSave={false}
+        onDiscard={() => {}}
+        onSave={onSave}
+        onSelectTool={() => {}}
+        visible={true}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    saveButton.focus();
+    await user.keyboard("{Enter}");
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 });
 
