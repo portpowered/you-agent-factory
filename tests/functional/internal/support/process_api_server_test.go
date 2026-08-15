@@ -68,6 +68,36 @@ func TestProcessAPIServerWaitForURLClassifiesInvokedButNotReady(t *testing.T) {
 	}
 }
 
+func TestProcessAPIServerWaitForURLAllowsDelayedStarterAfterInitialProbe(t *testing.T) {
+	server := NewProcessAPIServer()
+	ctx, cancel := context.WithCancel(t.Context())
+	startDone := make(chan error, 1)
+	defer func() {
+		cancel()
+		if err := <-startDone; err != nil {
+			t.Errorf("ProcessAPIServer.Start() error = %v, want nil", err)
+		}
+	}()
+
+	// This deliberately exceeds the former one-second classification window.
+	// The timer models delayed application startup; using it here proves that
+	// package-load variance does not turn a legitimate starter into a missing
+	// activation diagnosis.
+	time.AfterFunc(time.Second+50*time.Millisecond, func() {
+		startDone <- server.Start(ctx, platformhttpserver.StartRequest{
+			Handler: http.NotFoundHandler(),
+		})
+	})
+
+	baseURL, err := server.WaitForBaseURL(processAPIServerReadyTimeout)
+	if err != nil {
+		t.Fatalf("WaitForBaseURL() error = %v, want delayed starter URL", err)
+	}
+	if !strings.HasPrefix(baseURL, "http://") {
+		t.Fatalf("WaitForBaseURL() = %q, want httptest HTTP URL", baseURL)
+	}
+}
+
 func TestProcessAPIServerWaitForURLReturnsDynamicURLAfterStart(t *testing.T) {
 	server := NewProcessAPIServer()
 	ctx, cancel := context.WithCancel(t.Context())

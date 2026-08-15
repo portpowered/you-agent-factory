@@ -19,8 +19,9 @@ const processAPIServerReadyTimeout = 15 * time.Second
 
 // A missing server activation request should be diagnosed before the full
 // readiness ceiling, while still allowing the asynchronously started process
-// enough time to enter the injected starter under normal scheduler variance.
-const processAPIServerStartTimeout = time.Second
+// enough time to enter the injected starter while several functional
+// applications are being initialized concurrently.
+const processAPIServerStartGracePeriod = 5 * time.Second
 
 // ProcessAPIServer is an HTTP transport edge for a root-built process. It owns
 // only the external server boundary and never constructs application services.
@@ -151,8 +152,8 @@ func (server *ProcessAPIServer) waitForURL(timeout time.Duration) (string, error
 	readyTimer := time.NewTimer(timeout)
 	defer readyTimer.Stop()
 	startWait := timeout
-	if startWait > processAPIServerStartTimeout {
-		startWait = processAPIServerStartTimeout
+	if startWait > processAPIServerStartGracePeriod {
+		startWait = processAPIServerStartGracePeriod
 	}
 	startTimer := time.NewTimer(startWait)
 	defer startTimer.Stop()
