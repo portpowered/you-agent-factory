@@ -419,7 +419,7 @@ func TestControlContract_Characterization_UnsupportedForEveryAction(t *testing.T
 		providers.ControlActionCancel,
 		providers.ControlActionTerminate,
 	} {
-		result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+		result, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
 			Provider:  providers.IDCodex,
 			AttemptID: "attempt-1",
 			Action:    action,
@@ -485,7 +485,7 @@ func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(
 		providers.Descriptor{ID: providers.IDCodex},
 	)
 
-	completed, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+	completed, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "completed-attempt",
 		Action:    providers.ControlActionCancel,
@@ -497,7 +497,7 @@ func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(
 		t.Fatalf("ControlAttempt(completed).Outcome = %q, want completed", completed.Outcome)
 	}
 
-	unsupported, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+	unsupported, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "unsupported-attempt",
 		Action:    providers.ControlActionCancel,
@@ -512,7 +512,7 @@ func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(
 		t.Fatal("completed and unsupported outcomes must be distinguishable typed values")
 	}
 
-	failed, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+	failed, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "failing-attempt",
 		Action:    providers.ControlActionCancel,

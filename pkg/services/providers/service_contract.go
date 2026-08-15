@@ -36,12 +36,41 @@ type Service interface {
 	// Successful results and typed failures may carry an optional detached
 	// SessionRef for the provider session observed during the attempt.
 	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
+}
+
+// ControlService is the optional Providers capability for controlling one
+// in-flight attempt. Keeping it separate from Service lets ordinary provider
+// roots adopt control without breaking existing execution-only doubles.
+type ControlService interface {
 	// ControlAttempt requests pause, cancel, or terminate for one identified
 	// provider attempt. Invalid provider, attempt, or action input fails with
 	// ErrInvalidID or ErrInvalidControlRequest before any outcome is produced.
 	// Valid requests return a typed completed or unsupported outcome as a
 	// successful result; unsupported is not encoded as an error.
 	ControlAttempt(context.Context, ControlAttemptRequest) (ControlAttemptResult, error)
+}
+
+// ControlAttempt routes an attempt-control request when the supplied Providers
+// root implements the optional capability. Roots without it return the typed
+// unsupported outcome and never claim that a control action completed.
+func ControlAttempt(
+	ctx context.Context,
+	service Service,
+	request ControlAttemptRequest,
+) (ControlAttemptResult, error) {
+	if err := request.Validate(); err != nil {
+		return ControlAttemptResult{}, err
+	}
+	control, ok := service.(ControlService)
+	if !ok {
+		return ControlAttemptResult{
+			Provider:  request.Provider,
+			AttemptID: request.AttemptID,
+			Action:    request.Action,
+			Outcome:   ControlOutcomeUnsupported,
+		}, nil
+	}
+	return control.ControlAttempt(ctx, request)
 }
 
 // ContinuationService is the optional Providers capability for exact-session
