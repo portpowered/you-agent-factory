@@ -676,3 +676,65 @@ func TestAgentRunExecutor_PublishesFinalMessage(t *testing.T) {
 		t.Fatalf("final message payload = %#v, want trimmed done text", payload)
 	}
 }
+
+// TestAgentRunExecutor_PublishesOneCorrelatedTerminalEventAndFinalResponse
+// characterizes both observers of a successful detached AGENT_RUN attempt.
+// The event and final message are separate representations, but they must
+// retain one dispatch identity and the same terminal content.
+func TestAgentRunExecutor_PublishesOneCorrelatedTerminalEventAndFinalResponse(t *testing.T) {
+	t.Parallel()
+
+	var recorded []workerexecution.AgentRunResponseEvent
+	var fragments []workerexecution.ProgressFragment
+	executor := NewAgentRunExecutorWithDependencies(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			},
+		},
+		&stubRunner{response: "unused"},
+		nil,
+		&recordingHarnessAdapter{result: HarnessResult{FinalText: "detached answer"}},
+		func(event workerexecution.AgentRunResponseEvent) {
+			recorded = append(recorded, event)
+		},
+		func() time.Time { return time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC) },
+	).WithProgressPublisher(func(fragment workerexecution.ProgressFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "detached answer" {
+		t.Fatalf("result = %#v, want accepted detached answer", result)
+	}
+	if len(recorded) != 1 {
+		t.Fatalf("recorded terminal events = %d, want exactly one", len(recorded))
+	}
+	event := recorded[0]
+	if event.ID != "factory-event/agent-run-response/dispatch-1" ||
+		event.DispatchID != "dispatch-1" ||
+		event.Payload.AgentRunID != "dispatch-1/agent-run/1" ||
+		event.Payload.Outcome != string(workerexecution.OutcomeAccepted) {
+		t.Fatalf("terminal event = %#v, want dispatch-correlated accepted event", event)
+	}
+	if len(fragments) != 1 {
+		t.Fatalf("final response fragments = %d, want exactly one", len(fragments))
+	}
+	draft, ok := fragments[0].CanonicalDraft.(workerexecution.Draft)
+	if !ok {
+		t.Fatalf("final response draft type = %T, want workers.Draft", fragments[0].CanonicalDraft)
+	}
+	if draft.DispatchID != event.DispatchID || draft.ItemID != "dispatch-1-final-message" {
+		t.Fatalf("final response draft = %#v, want event-correlated dispatch-1 draft", draft)
+	}
+	var payload workerexecution.MessagePayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("decode final response payload: %v", err)
+	}
+	if len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != result.Output {
+		t.Fatalf("final response payload = %#v, want result content %q", payload, result.Output)
+	}
+}
