@@ -3,7 +3,13 @@
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
@@ -13,6 +19,7 @@ import {
   factorySessionTargetTarget,
 } from "../../../testing/factory-validation-target-fixtures";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   SESSION_TAB_PATH_MAX_LENGTH,
   sessionCloseLabel,
@@ -63,6 +70,7 @@ describe("DashboardSessionTabs", () => {
     openFactorySession.mockReset();
     closeFactorySession.mockReset();
     vi.unstubAllGlobals();
+    useDashboardStreamStore.getState().resetStreamState("en");
     useDashboardSessionStore.setState({
       pausedSessionIDs: [],
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
@@ -166,6 +174,76 @@ describe("DashboardSessionTabs", () => {
 
     expectSubtleActiveSessionTabShell(sessionTabShell(betaTab));
     expectMutedInactiveSessionTabShell(sessionTabShell(rootTab));
+  });
+
+  it("renders each session tab's own connection projection", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "session-root",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+    useDashboardStreamStore
+      .getState()
+      .setSessionStreamState("session-root", null, {
+        message: "Root event stream is live",
+        status: "live",
+      });
+    useDashboardStreamStore
+      .getState()
+      .setSessionStreamState("session-beta", null, {
+        message: "Beta event stream is offline",
+        status: "offline",
+      });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "beta" })).toBeTruthy();
+    });
+
+    expect(
+      screen.getByRole("img", { name: "Root event stream is live" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("img", { name: "Beta event stream is offline" }),
+    ).toBeTruthy();
+
+    act(() => {
+      useDashboardStreamStore
+        .getState()
+        .setSessionStreamState("session-beta", null, {
+          message: "Beta event stream is reconnecting",
+          status: "reconnecting",
+        });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("img", { name: "Beta event stream is reconnecting" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("img", { name: "Root event stream is live" }),
+    ).toBeTruthy();
   });
 
   it("supports keyboard navigation across session tabs with roving tab focus", async () => {

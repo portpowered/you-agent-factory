@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 import {
   type FactoryTimelineCheckpoint,
   useFactoryTimelineStore,
 } from "../../timeline/state/factoryTimelineStore";
-import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 import {
   clearTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
@@ -236,6 +236,7 @@ export function useDashboardSnapshot({
     onEvents: appendStreamEvents,
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
+    sessionAliasID: rawSessionID,
     sessionID: effectiveSessionID,
     streamIdentity,
   });

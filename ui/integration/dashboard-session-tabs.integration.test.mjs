@@ -361,6 +361,16 @@ describe.concurrent("dashboard session tabs browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           })
           .toBe("true");
+        await expect
+          .poll(() => readSessionTabStatusLabel(rootTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Factory event stream connected.");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Loading factory events...");
 
         expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(rootTab),
@@ -380,6 +390,31 @@ describe.concurrent("dashboard session tabs browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           })
           .toBe("false");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toMatch(/\S+/);
+        await expect
+          .poll(() => readSessionTabStatusLabel(rootTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toMatch(/\S+/);
+
+        await browserPage.page.setViewportSize({ width: 360, height: 800 });
+        await expect
+          .poll(
+            () =>
+              browserPage.page
+                .getByRole("navigation", { name: "factory sessions" })
+                .getAttribute("class"),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toMatch(/overflow-x-auto/);
+        await betaTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
 
         expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(betaTab),
@@ -410,6 +445,10 @@ async function readSessionTabShellClassName(tabLocator) {
     }
     return shell.className;
   });
+}
+
+async function readSessionTabStatusLabel(tabLocator) {
+  return tabLocator.getByRole("img").getAttribute("aria-label");
 }
 
 function expectSubtleActiveSessionTabShell(className) {

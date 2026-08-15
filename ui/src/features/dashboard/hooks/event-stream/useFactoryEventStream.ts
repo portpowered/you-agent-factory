@@ -51,6 +51,7 @@ export interface UseFactoryEventStreamOptions {
   openStream?: typeof openFactoryEventStream;
   probeRecovery?: typeof probeFactoryEventStreamRecovery;
   refreshToken?: number;
+  sessionAliasID?: string | null;
   sessionID: string | null;
   streamIdentity?: StreamDerivedCacheIdentity | null;
   validateReconnectCursor?: (
@@ -103,6 +104,22 @@ function resolveStreamSessionID(
   return isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : sessionID;
+}
+
+function streamIdentityBelongsToSession(
+  streamIdentity: StreamDerivedCacheIdentity | null,
+  streamSessionID: string,
+  sessionAliasID: string | null,
+): boolean {
+  if (!streamIdentity || streamIdentity.factorySessionID !== streamSessionID) {
+    return streamIdentity == null;
+  }
+  const normalizedAlias = sessionAliasID?.trim() ?? "";
+  return (
+    normalizedAlias.length === 0 ||
+    normalizedAlias === streamSessionID ||
+    isDefaultFactorySessionID(normalizedAlias)
+  );
 }
 
 function reconnectCursorFromEvent(
@@ -390,6 +407,7 @@ export function useFactoryEventStream({
   openStream = openFactoryEventStream,
   probeRecovery = probeFactoryEventStreamRecovery,
   refreshToken = 0,
+  sessionAliasID,
   sessionID,
   streamIdentity = null,
   validateReconnectCursor = validateFactoryEventReconnectCursor,
@@ -406,8 +424,8 @@ export function useFactoryEventStream({
     }
     resetAllTimelines();
   }, [resetAllTimelines, resetTimelineEntry, streamIdentity]);
-  const setStreamState = useDashboardStreamStore(
-    (state) => state.setStreamState,
+  const setSessionStreamState = useDashboardStreamStore(
+    (state) => state.setSessionStreamState,
   );
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
@@ -415,6 +433,31 @@ export function useFactoryEventStream({
   const streamSessionID = useMemo(
     () => resolveStreamSessionID(sessionID, streamIdentity),
     [sessionID, streamIdentity],
+  );
+  const setStreamState = useCallback(
+    (
+      streamState: ReturnType<
+        typeof useDashboardStreamStore.getState
+      >["streamState"],
+    ) => {
+      const streamStateSessionID = sessionAliasID ?? streamSessionID;
+      const ownedStreamIdentity = streamIdentityBelongsToSession(
+        streamIdentity,
+        streamSessionID,
+        sessionAliasID ?? null,
+      )
+        ? streamIdentity
+        : null;
+      setSessionStreamState(
+        streamStateSessionID,
+        ownedStreamIdentity,
+        streamState,
+        sessionAliasID && sessionAliasID !== streamStateSessionID
+          ? [sessionAliasID]
+          : undefined,
+      );
+    },
+    [sessionAliasID, setSessionStreamState, streamIdentity, streamSessionID],
   );
 
   const flushQueuedEvents = useCallback(() => {

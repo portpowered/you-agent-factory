@@ -85,7 +85,7 @@ export function SessionTabButton({
   onDrop,
   onKeyDown,
   session,
-  streamStatus,
+  streamState,
   tabID,
 }: {
   active: boolean;
@@ -104,11 +104,12 @@ export function SessionTabButton({
   onDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   session: FactorySessionSummary;
-  streamStatus: DashboardStreamState["status"];
+  streamState: DashboardStreamState;
   tabID: string;
 }) {
   const label = sessionTabLabel(session);
   const secondaryPath = sessionTabSecondaryPath(session.folderPath);
+  const streamStatusID = `${tabID}-stream-status`;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop is attached to the tab shell while the semantic tab control remains the inner button.
     <div
@@ -130,6 +131,7 @@ export function SessionTabButton({
     >
       <button
         aria-controls={controlsID}
+        aria-describedby={streamStatusID}
         aria-label={label}
         aria-selected={active}
         className={cn(
@@ -147,7 +149,11 @@ export function SessionTabButton({
         type="button"
       >
         <span className="flex min-w-0 items-center gap-2">
-          <SessionTabStatusIndicator status={streamStatus} />
+          <SessionTabStatusIndicator
+            id={streamStatusID}
+            message={streamState.message}
+            status={streamState.status}
+          />
           <span className="truncate text-sm font-semibold">{label}</span>
         </span>
         <span
@@ -176,30 +182,41 @@ export function SessionTabButton({
 }
 
 function SessionTabStatusIndicator({
+  id,
+  message,
   status,
 }: {
+  id: string;
+  message: string;
   status: DashboardStreamState["status"];
 }) {
   return (
-    <span aria-hidden="true" className="relative inline-flex size-2.5 shrink-0">
-      {status === "live" ? (
+    <>
+      <span
+        aria-hidden="true"
+        className="relative inline-flex size-2.5 shrink-0"
+      >
+        {status === "live" ? (
+          <span
+            className={cn(
+              "absolute -inset-1 animate-ping rounded-full",
+              "bg-[var(--color-af-session-live-ping)]",
+            )}
+            data-testid="dashboard-session-live-ping"
+          />
+        ) : null}
         <span
           className={cn(
-            "absolute -inset-1 animate-ping rounded-full",
-            "bg-[var(--color-af-session-live-ping)]",
+            "absolute inset-0 rounded-full",
+            status === "live" && "bg-success",
+            (status === "connecting" || status === "reconnecting") &&
+              "bg-primary",
+            (status === "offline" || status === "recovery_failed") &&
+              "bg-error",
           )}
-          data-testid="dashboard-session-live-ping"
         />
-      ) : null}
-      <span
-        className={cn(
-          "absolute inset-0 rounded-full",
-          status === "live" && "bg-success",
-          (status === "connecting" || status === "reconnecting") &&
-            "bg-primary",
-          (status === "offline" || status === "recovery_failed") && "bg-error",
-        )}
-      />
-    </span>
+      </span>
+      <span aria-label={message} className="sr-only" id={id} role="img" />
+    </>
   );
 }
