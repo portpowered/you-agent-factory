@@ -1,13 +1,13 @@
 export const BACKEND_LINT_BASELINE_SOURCE =
-	"Hosted Backend Lint run 31870641599 on 2026-08-15 (rebased current-main baseline head 925e9d74a7702bd6b562812fb8db4ac47348bb4f)";
+	"Hosted Backend Lint run 31873961077 on 2026-08-15 (semantic baseline observed on rebased head 3e625b9a10f3edc9550786d26798cce165d7adc6)";
 
 // These are measured current-main failures, not extra capacity. A failing
 // checker is allowed only while its observed count remains at or below the
 // recorded count; a clean checker and any unlisted failure remain gated.
 export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 	"ui-deadcode": {
-		baselineViolationCount: 12,
-		reason: "The hosted baseline found pre-existing unused frontend test-support fixtures.",
+		baselineViolationCount: 4,
+		reason: "The hosted semantic baseline found four pre-existing unused frontend test-support fixtures.",
 		ownerOrLane: "Frontend dead-code cleanup lane",
 		deadline: "2026-09-30",
 		removalCondition: "Remove the unused fixtures, then delete this allowance when hosted ui-deadcode reports zero violations.",

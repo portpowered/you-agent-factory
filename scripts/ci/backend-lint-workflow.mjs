@@ -19,33 +19,6 @@ export function selectBackendLint({
 	};
 }
 
-export async function executeLintInventory(targets, runTarget) {
-	if (!Array.isArray(targets) || typeof runTarget !== "function") {
-		throw new TypeError("lint inventory requires targets and a runner");
-	}
-
-	const results = await Promise.all(
-		targets.map(async (name) => {
-			try {
-				const result = await runTarget(name);
-				return { name, status: "pass", ...result };
-			} catch (error) {
-				return {
-					name,
-					status: "fail",
-					output: "",
-					error: String(error?.message || error),
-				};
-			}
-		}),
-	);
-
-	return {
-		targets: results,
-		failed: results.filter((result) => result.status !== "pass"),
-	};
-}
-
 export function upsertBackendLintComment(comments, body, options = {}) {
 	const botLogin = options.botLogin || "github-actions[bot]";
 	const marker = options.marker || BACKEND_LINT_COMMENT_MARKER;
