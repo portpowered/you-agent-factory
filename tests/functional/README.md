@@ -74,6 +74,12 @@ Package-plus-test entries become package-specific `-run` selectors, while
 package entries remove the whole package. Duplicate, malformed, stale, or
 overlapping selectors fail closed before the instrumented run, so a new
 functional package or test is selected automatically without a manifest edit.
+Entries normally use one isolated observation, while unreliable selectors may
+declare `"measurement": "repeated-isolated"` and an explicit `"attempts"`
+count from 2 through 15. Each repeated attempt starts a fresh exact-selector
+`go test` process; the ratchet reports aggregate pass, fail, and skip counts,
+rejects an all-pass sample as unexpected recovery, and retains a sample that
+contains the bucket's expected failure.
 Before the selected green run, CI executes every quarantine entry independently
 with `go test -json`: environment-dependent entries must still emit `skip`, and
 genuine-failure entries must still emit `fail`. A passing entry fails the gate
