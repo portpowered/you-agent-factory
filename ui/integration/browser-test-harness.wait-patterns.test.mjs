@@ -183,6 +183,149 @@ describe("factory graph wait helpers", () => {
     );
     expect(page.evaluate).toHaveBeenCalledTimes(3);
   });
+
+  it("can settle a saved flow position without requiring camera framing", async () => {
+    const sample = {
+      node: { height: 80, width: 20, x: 120, y: 400.57 },
+      nodeTransform: "translate(120px, 400.57px)",
+      viewport: { height: 408.31, width: 500, x: 0, y: 0 },
+      viewportTransform: "matrix(1, 0, 0, 1, 0, 0)",
+    };
+    const observations = [];
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(sample),
+    };
+
+    await expect(
+      waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-resource:extra-gpu",
+        500,
+        1,
+        (observation) => observations.push(observation),
+        { requireViewportVisibility: false },
+      ),
+    ).resolves.toEqual(sample);
+    expect(page.evaluate).toHaveBeenCalledTimes(2);
+    expect(observations.at(-1)).toMatchObject({
+      stable: true,
+      stableSampleCount: 2,
+      terminalDiagnostic: null,
+      withinViewport: false,
+    });
+  });
+});
+
+describe("settled graph node placement wait helper", () => {
+  it("fails fast with geometry when a settled node is outside the viewport", async () => {
+    const sample = {
+      node: { height: 80, width: 20, x: -80, y: 400.57 },
+      nodeTransform: "translate(-80px, 400.57px)",
+      viewport: { height: 408.31, width: 500, x: 0, y: 0 },
+      viewportTransform: "matrix(1, 0, 0, 1, 0, 0)",
+    };
+    const observations = [];
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(sample),
+    };
+    const startedAt = performance.now();
+    let thrownError;
+
+    try {
+      await waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-resource:extra-gpu",
+        10_000,
+        100,
+        (observation) => observations.push(observation),
+      );
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toContain(
+      "Settled graph node placement cannot satisfy viewport visibility for rf__node-resource:extra-gpu",
+    );
+    expect(thrownError.message).toContain("node center=(-70.00, 440.57)");
+    expect(thrownError.message).toContain(
+      "viewport edges={left=0.00, right=500.00, top=0.00, bottom=408.31}",
+    );
+    expect(thrownError.message).toContain(
+      "x left of left edge by 70.00px; y below bottom edge by 32.26px",
+    );
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+    expect(page.evaluate).toHaveBeenCalledTimes(3);
+    expect(observations).toHaveLength(3);
+    expect(observations.at(-1)).toMatchObject({
+      pollCount: 3,
+      stable: true,
+      stableSampleCount: 3,
+      terminalDiagnostic: thrownError.message,
+      viewportViolation: expect.objectContaining({
+        violations: expect.arrayContaining([
+          expect.objectContaining({ axis: "x", direction: "left of" }),
+          expect.objectContaining({ axis: "y", direction: "below" }),
+        ]),
+      }),
+      withinViewport: false,
+    });
+  });
+
+  it("keeps polling when the node geometry is missing", async () => {
+    const page = {
+      evaluate: vi.fn().mockResolvedValue(null),
+    };
+
+    await expect(
+      waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-resource:missing",
+        25,
+        1,
+      ),
+    ).rejects.toThrow(
+      "Timed out waiting for durable checkpoint: factory graph node placement: rf__node-resource:missing",
+    );
+    expect(page.evaluate.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("keeps polling while changing geometry has not settled", async () => {
+    const samples = [
+      {
+        node: { height: 80, width: 20, x: 100, y: 100 },
+        nodeTransform: "translate(100px, 100px)",
+        viewport: { height: 400, width: 500, x: 0, y: 0 },
+        viewportTransform: "matrix(1, 0, 0, 1, 0, 0)",
+      },
+      {
+        node: { height: 80, width: 20, x: 101, y: 100 },
+        nodeTransform: "translate(101px, 100px)",
+        viewport: { height: 400, width: 500, x: 0, y: 0 },
+        viewportTransform: "matrix(1, 0, 0, 1, 0, 0)",
+      },
+    ];
+    let sampleIndex = 0;
+    const page = {
+      evaluate: vi.fn().mockImplementation(async () => {
+        const sample = samples[sampleIndex % samples.length];
+        sampleIndex += 1;
+        return sample;
+      }),
+    };
+
+    await expect(
+      waitForStableFactoryGraphNodePlacement(
+        page,
+        "rf__node-resource:changing",
+        25,
+        1,
+      ),
+    ).rejects.toThrow(
+      "Timed out waiting for durable checkpoint: factory graph node placement: rf__node-resource:changing",
+    );
+    expect(page.evaluate.mock.calls.length).toBeGreaterThan(1);
+  });
 });
 
 describe("browser wait pattern helpers", () => {

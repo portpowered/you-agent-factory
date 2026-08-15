@@ -816,7 +816,11 @@ async function endSaveActivationTrace(
   );
 }
 
-async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
+async function waitForTrackedFactoryGraphNodePlacement(
+  page,
+  nodeTestId,
+  options,
+) {
   const observations = [];
   let previousSignature = null;
   let errorMessage = null;
@@ -833,6 +837,9 @@ async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
         const signature = JSON.stringify({
           nextSample: observation.nextSample,
           stable: observation.stable,
+          stableSampleCount: observation.stableSampleCount,
+          terminalDiagnostic: observation.terminalDiagnostic,
+          viewportViolation: observation.viewportViolation,
           withinViewport: observation.withinViewport,
         });
         if (signature !== previousSignature && observations.length < 80) {
@@ -840,6 +847,7 @@ async function waitForTrackedFactoryGraphNodePlacement(page, nodeTestId) {
           previousSignature = signature;
         }
       },
+      options,
     );
   } catch (error) {
     errorMessage = String(error);
@@ -1242,9 +1250,12 @@ describe.concurrent("factory graph editor node placement browser integration", (
           server,
         );
         await enterGraphEditor(browserPage.page);
+        // Shared-layout camera restoration is independent of the node's saved
+        // flow position; this barrier proves the latter after reload.
         await waitForTrackedFactoryGraphNodePlacement(
           browserPage.page,
           resourceTestId,
+          { requireViewportVisibility: false },
         );
         await waitForFactoryGraphSelectionReady(browserPage.page);
         const reloadedFlowPosition = await readNodeFlowPosition(
