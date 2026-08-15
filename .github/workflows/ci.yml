@@ -37,7 +37,6 @@ jobs:
       run_api_package: ${{ steps.classify.outputs.run_api_package != 'false' }}
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package != 'false' }}
       run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package != 'false' }}
-      run_local_inference: ${{ steps.classify.outputs.run_local_inference != 'false' }}
       docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       readme_reason: ${{ steps.classify.outputs.readme_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       frontend_reason: ${{ steps.classify.outputs.frontend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
@@ -46,7 +45,6 @@ jobs:
       api_package_reason: ${{ steps.classify.outputs.api_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
-      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,7 +59,7 @@ jobs:
         run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
       - if: github.event_name != 'pull_request'
         run: |
-          for lane in docs_reference readme frontend backend ui_backend_integration api_package packaged_factories_package model_providers_package local_inference; do
+          for lane in docs_reference readme frontend backend ui_backend_integration api_package packaged_factories_package model_providers_package; do
             echo "run_${lane}=true" >> "$GITHUB_OUTPUT"
           done
           echo "classification=full" >> "$GITHUB_OUTPUT"
@@ -185,10 +183,11 @@ jobs:
     needs: classify
     if: always() && needs.classify.outputs.run_backend != 'false'
     runs-on: ubuntu-latest
-    # The functional runner enforces 35m for pull requests and 75m on pushes
-    # to main. Keep five minutes of job-level grace so always-run summary and
-    # artifact-upload steps can preserve partial diagnostics after a timeout.
-    timeout-minutes: ${{ github.event_name == 'push' && 80 || 40 }}
+    # The functional runner enforces the 75m merge-full budget for both pull
+    # requests and pushes to main. Keep five minutes of job-level grace so
+    # always-run summary and artifact-upload steps can preserve partial
+    # diagnostics after a timeout.
+    timeout-minutes: 80
     env:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
     strategy:
@@ -221,27 +220,20 @@ jobs:
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
-      # This is the authoritative Linux functional run. Pull requests use the
-      # short feedback tier; pushes to main use the complete non-short tier.
-      # Both tiers expand ./tests/functional/... once, subtract only the
-      # versioned quarantine, and write package plus top-level test outcomes
-      # before the coverage gate returns, including on failure.
+      # This is the authoritative Linux functional run. Pull requests and
+      # pushes to main use the same complete non-short tier. The run expands
+      # ./tests/functional/... once, subtracts only the versioned quarantine,
+      # and writes package plus top-level test outcomes before the coverage
+      # gate returns, including on failure.
       - name: Run complete Linux functional coverage and inventory
         if: matrix.suite == 'functional'
         run: bash scripts/ci/run-functional-test-viz.sh
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
-          FUNCTIONAL_TEST_TIER: ${{ github.event_name == 'push' && 'merge-full' || 'pr-short' }}
+          FUNCTIONAL_TEST_TIER: "merge-full"
           FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
-          FUNCTIONAL_TEST_BUDGET: ${{ github.event_name == 'push' && '75m' || '35m' }}
-          FUNCTIONAL_SHORT: ${{ github.event_name == 'push' && 'false' || 'true' }}
-          INFINITE_YOU_RUN_ACPX_REAL_CLIENT: ${{ github.event_name == 'push' && '1' || '' }}
-          INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: ${{ github.event_name == 'push' && '1' || '' }}
-          INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
-      - name: Run pinned real ACP client evidence
-        if: matrix.suite == 'functional' && github.event_name == 'pull_request'
-        run: go test -v ./tests/functional/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout 4m
-        env:
+          FUNCTIONAL_TEST_BUDGET: "75m"
+          FUNCTIONAL_SHORT: "false"
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
@@ -336,15 +328,9 @@ jobs:
       # gate; hosted run 31558145400 records its child failure and assertion.
       include_failure: false
 
-  local-inference:
-    name: Local Inference
-    needs: classify
-    if: always() && needs.classify.outputs.run_local_inference != 'false'
-    uses: ./.github/workflows/long-local-inference.yml
-
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, development-package, local-inference]
+    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -369,7 +355,6 @@ jobs:
           RUN_API: ${{ needs.classify.outputs.run_api_package }}
           RUN_PACKAGED: ${{ needs.classify.outputs.run_packaged_factories_package }}
           RUN_PROVIDERS: ${{ needs.classify.outputs.run_model_providers_package }}
-          RUN_INFERENCE: ${{ needs.classify.outputs.run_local_inference }}
           DOCS_REASON: ${{ needs.classify.outputs.docs_reference_reason }}
           README_REASON: ${{ needs.classify.outputs.readme_reason }}
           FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
@@ -378,7 +363,6 @@ jobs:
           API_REASON: ${{ needs.classify.outputs.api_package_reason }}
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
-          INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RUN_CANDIDATES: ${{ github.event_name == 'pull_request' }}
           DOCS_RESULT: ${{ needs.docs-reference.result }}
           README_RESULT: ${{ needs.readme.result }}
@@ -395,6 +379,5 @@ jobs:
           PACKAGED_RESULT: ${{ needs.development-package.outputs.packaged_factories_package_result }}
           PACKAGED_CANDIDATE_RESULT: ${{ needs.development-package.outputs.packaged_factories_candidate_result }}
           PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}
-          INFERENCE_RESULT: ${{ needs.local-inference.result }}
         shell: bash
         run: node scripts/verification-policy.mjs

@@ -15,7 +15,6 @@ const laneNames = [
 	"API Package",
 	"Packaged Factories Package",
 	"Model Providers Package",
-	"Local Inference",
 ];
 
 function lane(name, selected = false, result = selected ? "success" : "skipped", options = {}) {
@@ -100,7 +99,6 @@ test("reusable package failure and missing selected candidate fail policy", () =
 				}),
 				lane("Packaged Factories Package"),
 				lane("Model Providers Package"),
-				lane("Local Inference"),
 			],
 		}),
 	);
@@ -134,7 +132,6 @@ test("unselected package outputs may be absent, but an unexpected unselected res
 				}),
 				lane("Packaged Factories Package"),
 				lane("Model Providers Package"),
-				lane("Local Inference"),
 			],
 		}),
 	);
@@ -169,7 +166,6 @@ test("an unselected package verification lane may omit its reusable-workflow out
 						},
 					],
 				}),
-				lane("Local Inference"),
 			],
 		}),
 	);

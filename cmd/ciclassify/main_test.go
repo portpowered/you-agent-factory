@@ -117,8 +117,6 @@ func TestClassifierOwnershipBoundaries(t *testing.T) {
 		{name: "generated client contract is API-owned", path: "ui/packages/client/src/generated/openapi.ts", lanes: []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{name: "UI inference is frontend-owned", path: "ui/src/features/timeline/state/timeline/replayWorldStateInference.test.ts", lanes: []string{laneFrontend}},
 		{name: "provider inference is backend-owned", path: "tests/functional/workers/inference/selection_test.go", lanes: []string{laneBackend, laneUIBackendIntegration}},
-		{name: "managed local runtime selects specialty lane", path: "pkg/services/models/internal/local/runtime.go", lanes: []string{laneBackend, laneLocalInference}},
-		{name: "OMNIVOICE command selects specialty lane", path: "cmd/omnivoice-llamacpp/main.go", lanes: []string{laneBackend, laneLocalInference}},
 		{name: "release script is backend-owned", path: "scripts/release/smoke-install.sh", lanes: []string{laneBackend, laneUIBackendIntegration}},
 	}
 	for _, tc := range cases {
@@ -185,7 +183,6 @@ func TestRunWritesNamedLaneOutputs(t *testing.T) {
 		"api_package_command=make api-package-verify",
 		"packaged_factories_package_command=make packaged-factory-package-verify",
 		"model_providers_package_command=make model-provider-package-verify",
-		"local_inference_command=make local-inference-verification",
 		"run_docs_reference=false",
 	} {
 		if !strings.Contains(string(contents), want) {

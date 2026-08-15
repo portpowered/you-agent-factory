@@ -860,10 +860,9 @@ under the current user's default model-cache directory.
 
 ### Maintainer Validation
 
-For real local OMNIVOICE coverage, run `make long-tests`. Set
-`INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`, ensure `omnivoice-llamacpp` is
-installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
-`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse a custom backend or managed cache.
+For managed local-model runtime coverage, run
+`make long-tests-managed-runtime`. This focused specialty lane exercises the
+managed runtime adapter with deterministic local test doubles.
 
 ## Related Contract Detail
 

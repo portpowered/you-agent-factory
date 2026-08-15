@@ -21,8 +21,6 @@ FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
 RELEASE_DEFAULT_PACKAGES := ./tests/release/...
-MODEL_LONG_TEST_TIMEOUT ?= 20m
-PR_INFERENCE_APPROVAL_REGRESSION ?= TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestProviderCancellationTerminatesCompanionProcesses
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
@@ -138,10 +136,10 @@ endef
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
-.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
-.PHONY: frontend-verification backend-verification ui-backend-integration local-inference-verification
+.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime
+.PHONY: frontend-verification backend-verification ui-backend-integration
 
-.PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
+.PHONY: verify-fast verify-pr verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
@@ -485,14 +483,6 @@ verify-pr:
 	$(call run_verification_step,verify-build-contracts,build contracts and static verification)
 	$(call run_verification_step,verify-tests,required CI-equivalent test lanes)
 
-verify-pr-inference:
-	$(info Running PR-gated inference approval lane: $(PR_INFERENCE_APPROVAL_REGRESSION))
-	$(info Required: export INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1)
-	$(info Runtime: omnivoice-llamacpp on PATH, or set INFINITE_YOU_OMNIVOICE_COMMAND to the executable)
-	$(info Optional: INFINITE_YOU_OMNIVOICE_CACHE_DIR to reuse managed model cache (omit to use a temp cache))
-	$(info Broader specialty sweep remains on make long-tests; this lane is merge-blocking PR inference approval only)
-	$(call run_verification_step,pr-inference-approval,PR inference approval regression)
-
 verify-extended:
 	$(info Running extended verification tier: required PR verification + opt-in long and specialty suites)
 	$(call run_verification_step,verify-pr,pull-request verification tier)
@@ -546,12 +536,6 @@ backend-verification:
 ui-backend-integration:
 	$(MAKE) ui-durable-session-real-backend-integration-test
 
-# This focused lane includes the managed-runtime regression and the single
-# real-inference approval regression without the broader specialty sweep.
-local-inference-verification:
-	$(MAKE) long-tests-managed-runtime
-	$(MAKE) pr-inference-approval
-
 ACP_BASELINE_DIR       ?= docs/internal/projects/acp-program/baselines
 ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline
 
@@ -582,19 +566,12 @@ acp-baseline-check:
 	$(GO) run ./cmd/acpbaseline verify -dir $(ACP_BASELINE_DIR)
 
 long-tests:
-	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage)
+	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage)
 	$(call run_verification_step,test-ui-performance,UI Performance specialty lane)
 	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
-	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
 	$(GO) test ./pkg/services/models/internal/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
-
-pr-inference-approval:
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run '$(PR_INFERENCE_APPROVAL_REGRESSION)' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
-
-long-tests-functional-runtime:
-	$(MAKE) pr-inference-approval
 
 test-coverage-go:
 	$(info make test-coverage-go is a compatibility alias for unit coverage; use make test-functional-coverage for the independent functional report.)

@@ -58,7 +58,6 @@ boolean outputs.
 | API package | `packages/api/**` and API package scripts | API package verification, frontend verification, backend verification, focused UI-backend integration |
 | Packaged Factories package | `packages/packaged-factories/**` and its package scripts | Packaged Factories package verification and backend verification |
 | Model Provider package | `packages/model-providers/**` and provider package scripts | Model Provider package verification and backend verification |
-| Local inference | managed-local model runtime, inference bindings, OMNIVOICE installers, local-inference workflow/tests | One Linux local-inference verification job that executes the managed-runtime and real-inference regression once |
 | CI/tooling | `.github/workflows/**`, CI scripts, `Makefile`, `go.mod`, `go.sum` | Full verification |
 | Unknown | any unowned path | Full verification |
 
