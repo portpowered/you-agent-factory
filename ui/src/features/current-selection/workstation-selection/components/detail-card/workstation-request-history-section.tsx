@@ -1,19 +1,31 @@
+import { Code } from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import type { DashboardWorkstationRequest } from "../../../../../api/dashboard/types";
+import type {
+  DashboardInferenceAttempt,
+  DashboardWorkstationRequest,
+} from "../../../../../api/dashboard/types";
 import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 import {
   formatDurationFromISO,
   formatDurationMillis,
   formatWorkItemLabel,
+  getLocalDateTimeDisplay,
 } from "../../../../../components/ui/formatters";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../../base/components/presentation/current-selection-supporting-text";
+import { getCurrentSelectionOperationalEnumMessages } from "../../../base/messages/operational/current-selection-operational-enums";
+import { getCurrentSelectionDetailMessages } from "../../../base/messages/shell/current-selection-detail";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../../history/components/current-selection-history-card";
 import type { WorkstationRequestHistorySectionProps } from "../../lib/keys/detail-card-types";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { WorkstationDispatchRow } from "./workstation-dispatch-row";
 
 export function WorkstationRequestHistorySection({
+  locale,
   messages,
   now,
   onSelectWorkID,
@@ -41,6 +53,7 @@ export function WorkstationRequestHistorySection({
           {requests.map((request) => (
             <WorkstationRequestHistoryRow
               key={request.dispatch_id}
+              locale={locale}
               messages={messages}
               now={now}
               onSelectWorkID={onSelectWorkID}
@@ -59,6 +72,7 @@ export function WorkstationRequestHistorySection({
 }
 
 function WorkstationRequestHistoryRow({
+  locale,
   messages,
   now,
   onSelectWorkID,
@@ -67,6 +81,7 @@ function WorkstationRequestHistoryRow({
   selectedRequest,
   selectedWorkID,
 }: {
+  locale?: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   now: number;
   onSelectWorkID?: WorkstationRequestHistorySectionProps["onSelectWorkID"];
@@ -75,11 +90,7 @@ function WorkstationRequestHistoryRow({
   selectedRequest?: WorkstationRequestHistorySectionProps["selectedRequest"];
   selectedWorkID?: WorkstationRequestHistorySectionProps["selectedWorkID"];
 }) {
-  const primaryWorkItem = request.work_items[0];
   const requestSelected = selectedRequest?.dispatch_id === request.dispatch_id;
-  const workLabel = primaryWorkItem
-    ? formatWorkItemLabel(primaryWorkItem)
-    : messages.unknownActiveWorkLabel;
   const totalDurationMillis =
     request.total_duration_millis ?? request.script_response?.duration_millis;
   const normalizedOutcome = (
@@ -99,13 +110,9 @@ function WorkstationRequestHistoryRow({
     <WorkstationDispatchRow
       actions={renderWorkstationRequestActions({
         messages,
-        onSelectWorkID,
         onSelectWorkstationRequest,
-        primaryWorkItem,
         request,
         requestSelected,
-        selectedWorkID,
-        workLabel,
       })}
       status={renderWorkstationRequestStatusPill({
         hasFailedOutcome,
@@ -115,52 +122,360 @@ function WorkstationRequestHistoryRow({
         totalDurationMillis,
       })}
       supportingContent={
-        requestSelected ? (
-          <CurrentSelectionSupportingText tone="status">
-            {messages.selectedRequestLabel(request.dispatch_id)}
-          </CurrentSelectionSupportingText>
-        ) : null
+        <div className="grid gap-3">
+          <WorkstationRequestWorkItems
+            messages={messages}
+            onSelectWorkID={onSelectWorkID}
+            request={request}
+            selectedWorkID={selectedWorkID}
+          />
+          <WorkstationRequestAttempts
+            locale={locale}
+            messages={messages}
+            request={request}
+          />
+          {requestSelected ? (
+            <CurrentSelectionSupportingText tone="status">
+              {messages.selectedRequestLabel(request.dispatch_id)}
+            </CurrentSelectionSupportingText>
+          ) : null}
+        </div>
       }
-      title={workLabel}
+      title={
+        <>
+          <span>{messages.projectedWorkstationRequestSummary}</span>{" "}
+          <Code>{request.request_id ?? request.dispatch_id}</Code>
+        </>
+      }
     />
+  );
+}
+
+function WorkstationRequestWorkItems({
+  messages,
+  onSelectWorkID,
+  request,
+  selectedWorkID,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  onSelectWorkID?: WorkstationRequestHistorySectionProps["onSelectWorkID"];
+  request: DashboardWorkstationRequest;
+  selectedWorkID?: WorkstationRequestHistorySectionProps["selectedWorkID"];
+}) {
+  if (request.work_items.length === 0) {
+    return (
+      <CurrentSelectionSupportingText tone="status">
+        {messages.unknownWorkLabel}
+      </CurrentSelectionSupportingText>
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      {request.work_items.map((workItem) => {
+        const workLabel = formatWorkItemLabel(workItem);
+        const selected = selectedWorkID === workItem.work_id;
+
+        return (
+          <CurrentSelectionHistoryCard
+            className="p-3"
+            key={`${request.dispatch_id}:${workItem.work_id}`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="grid min-w-0 gap-1">
+                <strong className="min-w-0 [overflow-wrap:anywhere]">
+                  {workLabel}
+                </strong>
+                <Code>
+                  {messages.workIdLabel}: {workItem.work_id}
+                </Code>
+              </div>
+              {onSelectWorkID ? (
+                <DashboardActionButton
+                  aria-label={messages.selectWorkItemLabel(workLabel)}
+                  aria-pressed={selected}
+                  onClick={() => onSelectWorkID(workItem.work_id)}
+                  type="button"
+                >
+                  {selected
+                    ? messages.workSelectedAction
+                    : messages.openWorkItemAction}
+                </DashboardActionButton>
+              ) : null}
+            </div>
+          </CurrentSelectionHistoryCard>
+        );
+      })}
+    </div>
+  );
+}
+
+function WorkstationRequestAttempts({
+  locale,
+  messages,
+  request,
+}: {
+  locale?: string;
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  request: DashboardWorkstationRequest;
+}) {
+  const inferenceAttempts = request.inference_attempts
+    .map((attempt, index) => ({ attempt, index }))
+    .sort(
+      (left, right) =>
+        left.attempt.attempt - right.attempt.attempt ||
+        left.index - right.index,
+    );
+  const hasScriptAttempt = Boolean(
+    request.script_request || request.script_response,
+  );
+
+  if (inferenceAttempts.length === 0 && !hasScriptAttempt) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {inferenceAttempts.map(({ attempt }) => (
+        <WorkstationInferenceAttemptCard
+          attempt={attempt}
+          key={`${request.dispatch_id}:inference:${attempt.inference_request_id}:${attempt.attempt}`}
+          locale={locale}
+          messages={messages}
+        />
+      ))}
+      {hasScriptAttempt ? (
+        <WorkstationScriptAttemptCard
+          key={`${request.dispatch_id}:script:${getScriptRequestID(request) ?? "dispatch"}`}
+          locale={locale}
+          messages={messages}
+          request={request}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WorkstationInferenceAttemptCard({
+  attempt,
+  locale,
+  messages,
+}: {
+  attempt: DashboardInferenceAttempt;
+  locale?: string;
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+}) {
+  const detailMessages = getCurrentSelectionDetailMessages(locale);
+  const enumMessages = getCurrentSelectionOperationalEnumMessages(locale);
+  const provider =
+    attempt.diagnostics?.provider?.provider ??
+    attempt.provider_session?.provider;
+  const model = attempt.diagnostics?.provider?.model;
+  const providerSummary = provider
+    ? messages.providerSummary(provider, model)
+    : model;
+  const requestTime = getLocalDateTimeDisplay(
+    attempt.request_time,
+    detailMessages.timestampUnavailable,
+    locale,
+  );
+  const responseTime = getLocalDateTimeDisplay(
+    attempt.response_time,
+    detailMessages.timestampUnavailable,
+    locale,
+  );
+  const outcome = enumMessages.localizeOutcome(
+    attempt.outcome ?? detailMessages.pendingOutcome,
+  );
+
+  return (
+    <CurrentSelectionHistoryCard className="p-3">
+      <CurrentSelectionHistoryCardHeader
+        identifier={attempt.inference_request_id}
+        subtitle={outcome}
+        title={detailMessages.attemptTitle(attempt.attempt)}
+      />
+      <div className="grid gap-1">
+        <WorkstationRequestAttemptDetail
+          label={detailMessages.providerLabel}
+          value={providerSummary}
+        />
+        <WorkstationRequestAttemptDetail
+          label={detailMessages.providerSessionLabel}
+          value={attempt.provider_session?.id}
+        />
+        <WorkstationRequestAttemptTimeDetail
+          label={detailMessages.requestTimeLabel}
+          timestamp={requestTime}
+        />
+        <WorkstationRequestAttemptDetail
+          label={detailMessages.elapsedTimeLabel}
+          value={
+            attempt.duration_millis !== undefined
+              ? formatDurationMillis(attempt.duration_millis, locale)
+              : undefined
+          }
+        />
+        <WorkstationRequestAttemptTimeDetail
+          label={detailMessages.responseTimeLabel}
+          timestamp={responseTime}
+          visible={Boolean(attempt.response_time)}
+        />
+      </div>
+    </CurrentSelectionHistoryCard>
+  );
+}
+
+function WorkstationScriptAttemptCard({
+  locale,
+  messages,
+  request,
+}: {
+  locale?: string;
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  request: DashboardWorkstationRequest;
+}) {
+  const detailMessages = getCurrentSelectionDetailMessages(locale);
+  const enumMessages = getCurrentSelectionOperationalEnumMessages(locale);
+  const scriptRequestID = getScriptRequestID(request);
+  const scriptIdentifier = scriptRequestID ?? request.dispatch_id;
+  const scriptResponse = request.script_response;
+  const outcome = enumMessages.localizeOutcome(
+    scriptResponse?.outcome ?? request.outcome ?? detailMessages.pendingOutcome,
+  );
+  const provider = request.provider ?? request.provider_session?.provider;
+  const providerSummary = provider
+    ? messages.providerSummary(provider, request.model)
+    : request.model;
+  const requestTime = getLocalDateTimeDisplay(
+    request.started_at ?? request.request_view?.started_at,
+    detailMessages.timestampUnavailable,
+    locale,
+  );
+  const responseTime = getLocalDateTimeDisplay(
+    request.response_view?.end_time,
+    detailMessages.timestampUnavailable,
+    locale,
+  );
+  const durationMillis =
+    scriptResponse?.duration_millis ?? scriptResponse?.durationMillis;
+
+  return (
+    <CurrentSelectionHistoryCard className="p-3">
+      <CurrentSelectionHistoryCardHeader
+        identifier={scriptIdentifier}
+        subtitle={outcome}
+        title={detailMessages.scriptAttemptLabel}
+      />
+      <div className="grid gap-1">
+        <WorkstationRequestAttemptDetail
+          label={
+            scriptRequestID
+              ? detailMessages.scriptRequestIdLabel
+              : detailMessages.dispatchIdLabel
+          }
+          value={scriptIdentifier}
+        />
+        <WorkstationRequestAttemptDetail
+          label={detailMessages.commandLabel}
+          value={request.script_request?.command}
+        />
+        <WorkstationRequestAttemptDetail
+          label={detailMessages.providerLabel}
+          value={providerSummary}
+        />
+        <WorkstationRequestAttemptTimeDetail
+          label={detailMessages.requestTimeLabel}
+          timestamp={requestTime}
+        />
+        <WorkstationRequestAttemptDetail
+          label={detailMessages.elapsedTimeLabel}
+          value={
+            durationMillis !== undefined
+              ? formatDurationMillis(durationMillis, locale)
+              : undefined
+          }
+        />
+        <WorkstationRequestAttemptTimeDetail
+          label={detailMessages.responseTimeLabel}
+          timestamp={responseTime}
+          visible={Boolean(request.response_view?.end_time)}
+        />
+      </div>
+    </CurrentSelectionHistoryCard>
+  );
+}
+
+function WorkstationRequestAttemptDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <CurrentSelectionSupportingText>
+      {label}: <Code>{value}</Code>
+    </CurrentSelectionSupportingText>
+  );
+}
+
+function WorkstationRequestAttemptTimeDetail({
+  label,
+  timestamp,
+  visible = true,
+}: {
+  label: string;
+  timestamp: ReturnType<typeof getLocalDateTimeDisplay>;
+  visible?: boolean;
+}) {
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <CurrentSelectionSupportingText>
+      {label}:{" "}
+      {timestamp.rawTimestamp ? (
+        <time dateTime={timestamp.rawTimestamp}>{timestamp.label}</time>
+      ) : (
+        timestamp.label
+      )}
+    </CurrentSelectionSupportingText>
+  );
+}
+
+function getScriptRequestID(
+  request: DashboardWorkstationRequest,
+): string | undefined {
+  return (
+    request.script_request?.script_request_id ??
+    request.script_request?.scriptRequestId ??
+    request.script_response?.script_request_id ??
+    request.script_response?.scriptRequestId
   );
 }
 
 function renderWorkstationRequestActions({
   messages,
-  onSelectWorkID,
   onSelectWorkstationRequest,
-  primaryWorkItem,
   request,
   requestSelected,
-  selectedWorkID,
-  workLabel,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  onSelectWorkID?: WorkstationRequestHistorySectionProps["onSelectWorkID"];
   onSelectWorkstationRequest?: WorkstationRequestHistorySectionProps["onSelectWorkstationRequest"];
-  primaryWorkItem:
-    | DashboardWorkstationRequest["work_items"][number]
-    | undefined;
   request: DashboardWorkstationRequest;
   requestSelected: boolean;
-  selectedWorkID?: WorkstationRequestHistorySectionProps["selectedWorkID"];
-  workLabel: string;
 }) {
-  const workAction =
-    primaryWorkItem && onSelectWorkID ? (
-      <DashboardActionButton
-        aria-label={messages.selectWorkItemLabel(workLabel)}
-        aria-pressed={selectedWorkID === primaryWorkItem.work_id}
-        onClick={() => onSelectWorkID(primaryWorkItem.work_id)}
-        type="button"
-      >
-        {selectedWorkID === primaryWorkItem.work_id
-          ? messages.workSelectedAction
-          : messages.openWorkItemAction}
-      </DashboardActionButton>
-    ) : null;
-  const requestAction = onSelectWorkstationRequest ? (
+  if (!onSelectWorkstationRequest) {
+    return undefined;
+  }
+
+  return (
     <DashboardActionButton
       aria-label={messages.selectWorkstationRequestLabel(request.dispatch_id)}
       aria-pressed={requestSelected}
@@ -171,17 +486,6 @@ function renderWorkstationRequestActions({
         ? messages.requestSelectedAction
         : messages.openRequestDetailsAction}
     </DashboardActionButton>
-  ) : null;
-
-  if (!workAction && !requestAction) {
-    return undefined;
-  }
-
-  return (
-    <>
-      {workAction}
-      {requestAction}
-    </>
   );
 }
 
