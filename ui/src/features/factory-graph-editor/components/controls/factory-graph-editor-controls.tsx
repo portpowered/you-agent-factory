@@ -1,9 +1,9 @@
+import { ActionRow } from "@you-agent-factory/components/layout";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
-import { ActionRow } from "@you-agent-factory/components/layout";
 import type { ReactNode } from "react";
 import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../lib/cn";
@@ -148,7 +148,8 @@ export function FactoryGraphEditorToolbar({
   const showEditorControls = visible;
   const toolbarButtonsDisabled = !showEditorControls || !canInteract;
   const discardDisabled = !canDiscard;
-  const saveDisabled = !canSave;
+  const saveDisabled =
+    toolbarButtonsDisabled || !canSave || onSave === undefined;
   const deleteAction = resolveFactoryGraphEditorToolbarDeleteAction({
     canDeleteSelection,
     selectionState: graphSelectionToolbarState,

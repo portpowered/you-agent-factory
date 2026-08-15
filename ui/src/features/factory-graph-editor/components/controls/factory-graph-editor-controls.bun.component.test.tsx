@@ -346,6 +346,54 @@ describe("factory graph editor save action keyboard behavior", () => {
   });
 });
 
+describe("factory graph editor save action readiness", () => {
+  it("does not expose an enabled save action while editor interaction is blocked", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDiscard={true}
+        canInteract={false}
+        canSave={true}
+        onDiscard={() => {}}
+        onSave={onSave}
+        onSelectTool={() => {}}
+        visible={true}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    saveButton.focus();
+    await user.keyboard("{Enter}");
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("does not expose an enabled save action without an activation handler", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDiscard={true}
+        canInteract={true}
+        canSave={true}
+        onDiscard={() => {}}
+        onSelectTool={() => {}}
+        visible={true}
+      />,
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(saveButton.getAttribute("disabled")).not.toBeNull();
+    saveButton.focus();
+    await user.keyboard("{Enter}");
+  });
+});
+
 describe("factory graph editor mode toggle controls", () => {
   it("applies warning styling when there are unsaved changes", () => {
     render(
