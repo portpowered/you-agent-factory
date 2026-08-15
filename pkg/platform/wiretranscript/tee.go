@@ -71,6 +71,12 @@ func (t *teeReader) drainCompleteLines() {
 
 // TeeWriter returns a writer that forwards bytes unchanged while recording
 // each complete newline-delimited line written through it.
+//
+// Recording deliberately happens before forwarding the bytes. A writer's
+// sink can make bytes readable by another goroutine before Write returns, so
+// forwarding first lets a consumer observe a complete response before its
+// transcript record exists. Record is synchronous and therefore acts as the
+// publication barrier for each complete outbound line.
 func TeeWriter(sink io.Writer, recorder Recorder, conn string, peer Peer, stream Stream) io.Writer {
 	if recorder == nil {
 		return sink
@@ -94,9 +100,8 @@ type teeWriter struct {
 }
 
 func (t *teeWriter) Write(p []byte) (int, error) {
-	n, err := t.sink.Write(p)
-	if n > 0 {
-		t.pending.Write(p[:n])
+	if len(p) > 0 {
+		t.pending.Write(p)
 		for {
 			buffered := t.pending.Bytes()
 			index := bytes.IndexByte(buffered, '\n')
@@ -108,7 +113,7 @@ func (t *teeWriter) Write(p []byte) (int, error) {
 			_ = t.recorder.Record(t.conn, t.peer, DirectionOut, t.stream, line)
 		}
 	}
-	return n, err
+	return t.sink.Write(p)
 }
 
 // ReadAll decodes every record in a transcript. It uses a Reader rather than a

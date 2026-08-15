@@ -536,6 +536,45 @@ func (t *capturingTranscript) snapshot() ([]wiretranscript.Record, bool) {
 	return append([]wiretranscript.Record(nil), t.records...), t.closed
 }
 
+// transcriptObservingWriter models a client reading the server's output as
+// soon as the underlying writer accepts it. The ACP wire contract requires
+// the corresponding outbound transcript record to be observable first.
+type transcriptObservingWriter struct {
+	transcript *capturingTranscript
+	output     strings.Builder
+}
+
+func (w *transcriptObservingWriter) Write(payload []byte) (int, error) {
+	records, _ := w.transcript.snapshot()
+	for _, record := range records {
+		if record.Direction == wiretranscript.DirectionOut {
+			return w.output.Write(payload)
+		}
+	}
+	return 0, errors.New("outbound bytes exposed before transcript record")
+}
+
+// TestServePublishesOutboundBytesAfterTranscriptRecord proves the causal
+// boundary that callers rely on: when an ACP response becomes readable, its
+// wire-transcript record already exists. The observing writer makes this
+// assertion without sleeping, retrying, or waiting for a later lifecycle
+// event.
+func TestServePublishesOutboundBytesAfterTranscriptRecord(t *testing.T) {
+	t.Parallel()
+
+	transcript := &capturingTranscript{}
+	out := &transcriptObservingWriter{transcript: transcript}
+	server := New(nil, nil, nil, nil, nil, nil, nil,
+		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }))
+
+	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), out); err != nil {
+		t.Fatalf("Serve() error = %v, want the response to remain observable", err)
+	}
+	if !strings.Contains(out.output.String(), "Parse error") {
+		t.Fatalf("stdout = %q, want the ordinary parse-error frame", out.output.String())
+	}
+}
+
 // TestServeRecordsBothDirectionsIncludingRejectedFrames proves the recorder
 // sees the inbound line even when the transport rejects it, and the outbound
 // error frame it produces. A frame the decoder refuses is exactly what a
