@@ -56,10 +56,12 @@ func (s *bridgeSequencer) AdvanceStreamHead(_ context.Context, req chatsessions.
 
 type bridgeTarget struct {
 	factorysessions.TargetExecutionService
-	cursor           *factorysessions.ResponseEventCursor
-	err              error
-	factoryEvents    *factorydefinitions.FactoryEventStream
-	factoryEventsErr error
+	cursor              *factorysessions.ResponseEventCursor
+	err                 error
+	factoryEvents       *factorydefinitions.FactoryEventStream
+	factoryEventsErr    error
+	factoryEventStreams []*factorydefinitions.FactoryEventStream
+	factoryEventIndex   *int
 }
 
 func (t bridgeTarget) SubscribeFactoryResponseEvents(_ context.Context, _ factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
@@ -67,6 +69,17 @@ func (t bridgeTarget) SubscribeFactoryResponseEvents(_ context.Context, _ factor
 }
 
 func (t bridgeTarget) SubscribeFactoryEventsForSession(_ context.Context, _ string, _ *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+	if len(t.factoryEventStreams) > 0 {
+		index := 0
+		if t.factoryEventIndex != nil {
+			index = *t.factoryEventIndex
+			*t.factoryEventIndex = *t.factoryEventIndex + 1
+		}
+		if index >= len(t.factoryEventStreams) {
+			index = len(t.factoryEventStreams) - 1
+		}
+		return t.factoryEventStreams[index], nil
+	}
 	return t.factoryEvents, t.factoryEventsErr
 }
 
@@ -466,6 +479,60 @@ func TestServiceRunSequencesAssociatedWorkerLifecycleLiveBeforeInvokeReturns(t *
 	assertAssociatedWorkerLifecycle(t, sequencer.sequences, workerSessionID)
 	if sequencer.sequences[2].Phase != workers.PhaseFailed {
 		t.Fatalf("terminal phase = %q, want FAILED", sequencer.sequences[2].Phase)
+	}
+}
+
+func TestServiceRunDefersUnknownDispatchResponseUntilWorkerAssociation(t *testing.T) {
+	const dispatchID = "dispatch-race"
+	const workerSessionID = "worker-race"
+
+	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
+	liveResponseSeen := make(chan struct{})
+	var liveResponseSeenOnce sync.Once
+	response := factorysessions.FactoryResponseEvent{
+		FactorySessionID: "factory-1", DispatchID: dispatchID, EventID: "child-response", Sequence: 1,
+		Kind: workers.KindMessage, Phase: workers.PhaseDelta,
+		Payload: json.RawMessage(`{"text":"child output"}`),
+	}
+	cursor := &factorysessions.ResponseEventCursor{
+		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			liveResponseSeenOnce.Do(func() { close(liveResponseSeen) })
+			if response.EventID != "" {
+				event := response
+				response.EventID = ""
+				return []factorysessions.FactoryResponseEvent{event}, nil
+			}
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		DrainEvents: func() ([]factorysessions.FactoryResponseEvent, error) {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		},
+		DetachCursor: func() {},
+	}
+	closed := make(chan factorydefinitions.FactoryEvent)
+	close(closed)
+	association := workerAssociationStream(t, dispatchID, workerSessionID)
+	firstFactoryStream := &factorydefinitions.FactoryEventStream{Events: closed}
+	target := bridgeTarget{
+		cursor:              cursor,
+		factoryEventStreams: []*factorydefinitions.FactoryEventStream{firstFactoryStream, association},
+		factoryEventIndex:   new(int),
+	}
+	workerEvents := &bridgeWorkerEvents{records: map[events.Topic][]events.Record{}}
+
+	_, err := New(sequencer, target, workerEvents, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 1, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			<-liveResponseSeen
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if len(sequencer.sequences) != 0 {
+		t.Fatalf("top-level response sequences = %d, want child response to be suppressed", len(sequencer.sequences))
 	}
 }
 

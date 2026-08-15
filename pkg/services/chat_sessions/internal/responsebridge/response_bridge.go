@@ -21,6 +21,8 @@ const (
 	responseBridgeOperation                    = "BridgeFactoryResponseEvents"
 )
 
+var errResponseEventAwaitingWorkerAssociation = errors.New("response event is awaiting worker association")
+
 // Sequencer is the narrow Chat Sessions capability the bridge uses to commit
 // source-native Factory response events and advance the aggregate head.
 type Sequencer interface {
@@ -187,6 +189,11 @@ type drainState struct {
 	chatItemIDByFactoryItemID map[string]string
 	childrenByWorkerSessionID map[string]*workerChild
 	workerSessionIDByDispatch map[string]string
+	// A response event and its Factory dispatch-to-Worker association travel
+	// on independent streams. Keep an event whose dispatch has not been
+	// associated yet out of the top-level Chat projection until the terminal
+	// association sweep can classify it.
+	pendingResponseEvents []factorysessions.FactoryResponseEvent
 }
 
 func (s *Service) drainLive(
@@ -204,7 +211,10 @@ func (s *Service) drainLive(
 			}
 			return nextErr
 		}
-		if err := s.sequenceBatch(deliveryCtx, chatSessionID, state, batch); err != nil {
+		if err := s.sequenceBatch(deliveryCtx, chatSessionID, state, batch, true); err != nil {
+			if errors.Is(err, errResponseEventAwaitingWorkerAssociation) {
+				return nil
+			}
 			return err
 		}
 	}
@@ -223,7 +233,25 @@ func (s *Service) drainTail(
 	if err != nil {
 		return err
 	}
-	return s.sequenceBatch(deliveryCtx, chatSessionID, state, batch)
+	if err := s.sequencePending(deliveryCtx, chatSessionID, state); err != nil {
+		return err
+	}
+	return s.sequenceBatch(deliveryCtx, chatSessionID, state, batch, false)
+}
+
+func (s *Service) sequencePending(
+	ctx context.Context,
+	chatSessionID string,
+	state *drainState,
+) error {
+	state.mu.Lock()
+	pending := append([]factorysessions.FactoryResponseEvent(nil), state.pendingResponseEvents...)
+	state.pendingResponseEvents = nil
+	state.mu.Unlock()
+	if len(pending) == 0 {
+		return nil
+	}
+	return s.sequenceBatch(ctx, chatSessionID, state, pending, false)
 }
 
 func (s *Service) sequenceBatch(
@@ -231,12 +259,23 @@ func (s *Service) sequenceBatch(
 	chatSessionID string,
 	state *drainState,
 	batch []factorysessions.FactoryResponseEvent,
+	deferUnknownWorkerDispatches bool,
 ) error {
-	for _, event := range batch {
+	// During live delivery, an unassociated dispatch is not yet safe to
+	// project as a top-level assistant item: it may be a Worker copy whose
+	// canonical parent is still arriving on the Factory Events stream. The
+	// caller stops live draining after this batch and the terminal sweep
+	// retries it after worker associations have been presented.
+	for index, event := range batch {
 		state.mu.Lock()
 		if carriedByWorkerSession(state, event) {
 			state.mu.Unlock()
 			continue
+		}
+		if deferUnknownWorkerDispatches && s.workerEvents != nil && hasUnknownDispatch(state, event) {
+			state.pendingResponseEvents = append(state.pendingResponseEvents, batch[index:]...)
+			state.mu.Unlock()
+			return errResponseEventAwaitingWorkerAssociation
 		}
 		version, err := s.sequence(ctx, chatSessionID, state.currentVersion, state.chatItemIDByFactoryItemID, event)
 		if err == nil {
@@ -248,6 +287,11 @@ func (s *Service) sequenceBatch(
 		}
 	}
 	return nil
+}
+
+func hasUnknownDispatch(state *drainState, event factorysessions.FactoryResponseEvent) bool {
+	dispatchID := strings.TrimSpace(event.DispatchID)
+	return dispatchID != "" && state.workerSessionIDByDispatch[dispatchID] == ""
 }
 
 // carriedByWorkerSession reports whether this Factory response event describes
