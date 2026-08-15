@@ -17,13 +17,13 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -173,7 +173,7 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
 	)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
-	removeInvocationSignatureFixture(t, factoryPath)
+	support.RemoveInvocationSignatureFixture(t, factoryPath)
 	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
 		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []workers.MockWorkerConfig{{
@@ -226,8 +226,8 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	provider := testutil.NewProviderCommandRunner(
-		codexDecisionCommandResult("canonical provider result"),
-		codexDecisionCommandResult("canonical provider result"),
+		support.CodexDecisionCommandResult("canonical provider result"),
+		support.CodexDecisionCommandResult("canonical provider result"),
 	)
 	submissions := &canonicalSubmissionObservation{}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
@@ -243,6 +243,7 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	addEffectiveSignatureFixture(t, factoryPath)
+	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
 	documentPath := filepath.Join(workingDirectory, "story.md")
 	if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
 		t.Fatalf("write FILE_CONTENTS fixture: %v", err)
@@ -286,46 +287,18 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	if len(calls) != 2 {
 		t.Fatalf("provider calls = %d, want named and explicit-file calls", len(calls))
 	}
+	wantPrompt := "input=equivalent canonical prompt|format=json|count=2|document=factory invocation document|stdin=canonical stdin body"
 	for index, call := range calls {
 		if call.Command != "codex" {
 			t.Fatalf("provider call %d command = %q, want codex", index, call.Command)
 		}
-		if requestContainsInterpolation(call) {
+		if support.RequestContainsInterpolation(call) {
 			t.Fatalf("provider call %d contains unresolved interpolation: %#v", index, call)
 		}
-	}
-}
-
-func requestContainsInterpolation(request platformprocess.CommandRequest) bool {
-	if bytes.Contains([]byte(request.Command), []byte("${")) ||
-		bytes.Contains(request.Stdin, []byte("${")) ||
-		bytes.Contains([]byte(request.WorkDir), []byte("${")) {
-		return true
-	}
-	for _, argument := range request.Args {
-		if strings.Contains(argument, "${") {
-			return true
+		if got := string(call.Stdin); !strings.Contains(got, wantPrompt) {
+			t.Fatalf("provider call %d prompt = %q, want resolved prompt fragment %q", index, got, wantPrompt)
 		}
 	}
-	for _, variable := range request.Env {
-		if strings.Contains(variable, "${") {
-			return true
-		}
-	}
-	return false
-}
-
-func codexDecisionCommandResult(output string) platformprocess.CommandResult {
-	decision, _ := json.Marshal(map[string]string{
-		"decision": "accepted",
-		"output":   output,
-	})
-	message, _ := json.Marshal(string(decision))
-	return platformprocess.CommandResult{Stdout: []byte(
-		`{"type":"turn.started"}` + "\n" +
-			`{"type":"item.completed","item":{"id":"message","type":"agent_message","text":` + string(message) + `}}` + "\n" +
-			`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}` + "\n",
-	)}
 }
 
 type canonicalSubmissionObservation struct {
@@ -444,7 +417,7 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	submissions := &canonicalSubmissionObservation{}
-	provider := testutil.NewProviderCommandRunner(codexDecisionCommandResult("default applied"))
+	provider := testutil.NewProviderCommandRunner(support.CodexDecisionCommandResult("default applied"))
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		ProviderCommandRunner: provider,
 		SubmissionRecorder:    submissions.observe,
@@ -463,7 +436,8 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 			"bindings": []any{map[string]any{"kind": "NAMED"}},
 		}},
 	})
-	replaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
+	support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
+	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
 
 	stdout, stderr := executeCustomerCommand(
 		t,
@@ -491,8 +465,11 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	if len(calls) != 1 || calls[0].Command != "codex" {
 		t.Fatalf("default-only provider calls = %#v, want one codex request", calls)
 	}
-	if requestContainsInterpolation(calls[0]) {
+	if support.RequestContainsInterpolation(calls[0]) {
 		t.Fatalf("default-only provider request contains unresolved interpolation: %#v", calls[0])
+	}
+	if got := string(calls[0].Stdin); !strings.Contains(got, "mode=safe") {
+		t.Fatalf("default-only provider prompt = %q, want resolved default", got)
 	}
 }
 
@@ -843,7 +820,7 @@ func addEffectiveSignatureFixture(t *testing.T, factoryPath string) {
 	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
 		t.Fatalf("write signature Factory fixture: %v", err)
 	}
-	replaceGoalWorkerInstructions(
+	support.ReplaceGoalWorkerInstructions(
 		t,
 		factoryPath,
 		"input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}",
@@ -867,43 +844,6 @@ func replaceInvocationSignatureFixture(t *testing.T, factoryPath string, signatu
 	}
 	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
 		t.Fatalf("write signature Factory fixture: %v", err)
-	}
-}
-
-func removeInvocationSignatureFixture(t *testing.T, factoryPath string) {
-	t.Helper()
-	payload, err := os.ReadFile(factoryPath)
-	if err != nil {
-		t.Fatalf("read installed Factory: %v", err)
-	}
-	var factory map[string]any
-	if err := json.Unmarshal(payload, &factory); err != nil {
-		t.Fatalf("decode installed Factory: %v", err)
-	}
-	delete(factory, "invocationSignature")
-	updated, err := json.MarshalIndent(factory, "", "  ")
-	if err != nil {
-		t.Fatalf("encode no-signature Factory fixture: %v", err)
-	}
-	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
-		t.Fatalf("write no-signature Factory fixture: %v", err)
-	}
-}
-
-func replaceGoalWorkerInstructions(t *testing.T, factoryPath, instructions string) {
-	t.Helper()
-	workerInstructions := filepath.Join(
-		filepath.Dir(factoryPath),
-		"workers",
-		"goal-executor",
-		"AGENTS.md",
-	)
-	if err := os.WriteFile(
-		workerInstructions,
-		[]byte(instructions),
-		0o600,
-	); err != nil {
-		t.Fatalf("write interpolated worker instructions: %v", err)
 	}
 }
 

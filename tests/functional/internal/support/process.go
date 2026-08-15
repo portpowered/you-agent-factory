@@ -108,6 +108,24 @@ func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 	return factoryDir
 }
 
+// InstallPackagedFactoryWithProcess materializes a packaged Factory through a
+// caller-owned root process and invocation-local environment.
+func InstallPackagedFactoryWithProcess(
+	t testing.TB,
+	process Process,
+	env []string,
+	workingDirectory string,
+	name string,
+) string {
+	t.Helper()
+	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
+	factoryDir := filepath.Join(namedFactoriesRoot, filepath.FromSlash(name))
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("initializer omitted packaged Factory %q at %s: %v", name, factoryDir, err)
+	}
+	return factoryDir
+}
+
 // CreateNamedFactory executes the customer-facing named Factory create command
 // through the root-built process and returns the persisted Factory directory.
 func CreateNamedFactory(
