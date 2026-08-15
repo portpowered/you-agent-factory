@@ -118,7 +118,7 @@ func (t *TransitionerSubsystem) TickGroup() TickGroup {
 // TODO: this thing needs more tests.
 // Execute reads results and raw dispatch snapshots from the RuntimeStateSnapshot
 // and produces marking mutations for token routing.
-func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+func (t *TransitionerSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 	if len(snapshot.Results) == 0 {
 		return nil, nil
 	}
@@ -130,7 +130,7 @@ func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.
 	var generatedBatches []work.GeneratedSubmissionBatch
 	var completedDispatches []interfaces.CompletedDispatch
 	for i := range results {
-		muts, completedDispatch, batchRecords, err := t.mapToCorrespondingTokenMutations(snapshot, &results[i])
+		muts, completedDispatch, batchRecords, err := t.mapToCorrespondingTokenMutations(ctx, snapshot, &results[i])
 		if err != nil {
 			t.logger.Error("transitioner: error processing result", "error", err, "transition", results[i].TransitionID)
 			return nil, fmt.Errorf("processing result for transition %s: %w", results[i].TransitionID, err)
@@ -155,7 +155,7 @@ func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.
 // arc set and creates new tokens with embedded history.
 // TODO: we should break out the logic here to be referentially transparent and testable independent of the subsystem. Right now its too reliant on internal state.
 // Break out dependency on ID generation as well as the logger/mocker.
-func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *workerexecution.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
+func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *workerexecution.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
 	currentTransition, ok := t.netDefinition.Transitions[result.TransitionID]
 	if !ok {
 		t.logger.Error("transitioner: unknown transition in result", "transitionID", result.TransitionID)
@@ -210,7 +210,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 	}
 	t.logArcSelection(result.TransitionID, resolved.outcome)
 	if len(arcs) == 0 {
-		return nil, interfaces.CompletedDispatch{}, nil, fmt.Errorf("transition %s has no arcs for outcome %s", result.TransitionID, resolved.outcome)
+		return nil, interfaces.CompletedDispatch{}, nil, transitionRoutingError(ctx, result.TransitionID, resolved.outcome)
 	}
 
 	var workstationDef *interfaces.FactoryWorkstationConfig
@@ -251,6 +251,13 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
 	return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), generatedBatches, nil
+}
+
+func transitionRoutingError(ctx context.Context, transitionID string, outcome workerexecution.WorkOutcome) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fmt.Errorf("transition %s has no arcs for outcome %s", transitionID, outcome)
 }
 
 func effectiveGeneratedWorkItemLimit(limits interfaces.WorkstationLimits, inputColors []factorytoken.Color) int {

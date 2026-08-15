@@ -52,15 +52,15 @@ func (l *gatedRuntimeLogger) releaseTick() {
 	l.releaseOnce.Do(func() { close(l.release) })
 }
 
-func (l *gatedRuntimeLogger) Debug(string, ...any) {}
-
-func (l *gatedRuntimeLogger) Info(message string, _ ...any) {
-	if message != "engine: [START] running engine tick" || !l.armed.CompareAndSwap(true, false) {
+func (l *gatedRuntimeLogger) Debug(message string, _ ...any) {
+	if message != "transitioner: processing results" || !l.armed.CompareAndSwap(true, false) {
 		return
 	}
 	close(l.entered)
 	<-l.release
 }
+
+func (l *gatedRuntimeLogger) Info(string, ...any) {}
 
 func (l *gatedRuntimeLogger) Warn(string, ...any)    {}
 func (l *gatedRuntimeLogger) Error(string, ...any)   {}
@@ -455,8 +455,8 @@ func TestFactoryImpl_RunCancellationPropagatesThroughWorkersBoundary(t *testing.
 
 // TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult fixes the ordering
 // that previously routed a cancellation-induced result through the ordinary
-// FAILED transition path: the result is admitted, the engine tick is gated,
-// cancellation happens, and the result arrives before the transitioner runs.
+// FAILED transition path: the result is admitted, the transitioner starts,
+// cancellation happens inside Execute, and routing then observes cancellation.
 func TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult(t *testing.T) {
 	boundary := newControlledWorkstationBoundary()
 	logger := newGatedRuntimeLogger()
@@ -482,14 +482,15 @@ func TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult(t *testing.T) {
 	}
 	written := observeNextBufferedResult(t, runtime)
 	logger.arm()
+	boundary.results <- canceledWorkersResult(request)
+	waitForBufferedResult(t, written)
 	impl.engine.NotifyResult()
 	select {
 	case <-logger.entered:
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for the gated cancellation tick")
+		t.Fatal("timed out waiting for the gated transitioner")
 	}
 	cancel()
-	waitForBufferedResult(t, written)
 	logger.releaseTick()
 
 	err = <-runDone
@@ -500,9 +501,10 @@ func TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult(t *testing.T) {
 	if state.Mode != "STOPPED" || state.StopReason != "CANCELLED" {
 		t.Fatalf("cancelled Runtime outbox state = %#v, want STOPPED/CANCELLED", state)
 	}
-	late, ok := impl.resultBuffer.Read()
-	if !ok || late.Outcome != workers.OutcomeFailed || late.Error == "" {
-		t.Fatalf("absorbed late cancellation result = (%#v, %t), want retained FAILED cancellation result", late, ok)
+	snapshot := impl.engine.GetRuntimeStateSnapshot()
+	if len(snapshot.Results) != 1 || snapshot.Results[0].Outcome != workers.OutcomeFailed ||
+		snapshot.Results[0].Error != workers.ErrWorkstationDispatchCanceled.Error() {
+		t.Fatalf("absorbed late cancellation results = %#v, want retained FAILED cancellation result", snapshot.Results)
 	}
 }
 

@@ -567,17 +567,7 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	completedDispatches := make(map[string]interfaces.CompletedDispatch)
 	e.logger.Info("engine: [START] running engine tick", "tick", e.runtimeState.TickCount)
 	for _, sub := range e.subsystems {
-		// Cancellation can arrive after beginTick admitted a late Worker
-		// result but before the transitioner observes it. Stop at this
-		// subsystem boundary so a cancellation-induced result is not routed
-		// through the ordinary FAILED arc set.
-		if err := ctx.Err(); err != nil {
-			return false, false, err
-		}
 		rtSnapshot = e.refreshSnapshotBeforeSubsystem(sub, rtSnapshot)
-		if err := ctx.Err(); err != nil {
-			return false, false, err
-		}
 		result, err := e.executeSubsystem(ctx, sub, &rtSnapshot)
 		if err != nil {
 			return false, false, fmt.Errorf("subsystem tick-group %d: %w", sub.TickGroup(), err)
