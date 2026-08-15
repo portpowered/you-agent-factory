@@ -10,6 +10,23 @@ export function isDefaultFactorySessionID(
   );
 }
 
+/** True when the default selector is replaced by its resolved runtime session identity. */
+export function isDefaultToRuntimeSessionAliasRemap(
+  previousSessionID: string | null,
+  sessionID: string | null,
+): boolean {
+  if (previousSessionID == null || sessionID == null) {
+    return false;
+  }
+  if (previousSessionID === sessionID) {
+    return false;
+  }
+  return (
+    isDefaultFactorySessionID(previousSessionID) &&
+    !isDefaultFactorySessionID(sessionID)
+  );
+}
+
 export function currentFactorySessionPath(
   sessionID: string | null | undefined,
 ): string {

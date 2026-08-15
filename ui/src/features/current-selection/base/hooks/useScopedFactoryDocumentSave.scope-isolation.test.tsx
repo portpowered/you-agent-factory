@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import {
   mockFactoryDocumentSave,
   mockPendingFactoryDocumentSave,
@@ -20,6 +21,43 @@ beforeEach(() => {
 });
 
 describe("useScopedFactoryDocumentSave scope isolation when scopeKey changes", () => {
+  it("preserves confirmation when the default session resolves to its runtime identity", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "idle" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { rerender, result } = renderHook(
+      ({ scopeKey }) =>
+        useScopedFactoryDocumentSave({
+          fallbackErrorMessage: "Unable to save the active factory.",
+          scopeKey,
+        }),
+      {
+        initialProps: { scopeKey: DEFAULT_FACTORY_SESSION_ID },
+        wrapper: createScopedFactoryDocumentSaveQueryClientWrapper(),
+      },
+    );
+
+    act(() => {
+      result.current.beginConfirmation();
+    });
+    expect(result.current.saveState).toEqual({ status: "confirming" });
+
+    rerender({ scopeKey: "runtime-default-session" });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "confirming" });
+    });
+
+    rerender({ scopeKey: "session-other" });
+
+    await waitFor(() => {
+      expect(result.current.saveState).toEqual({ status: "idle" });
+    });
+  });
+
   it("clears confirmation, success, warning, and error state when scopeKey changes", async () => {
     const saveMutation = mockFactoryDocumentSave({
       mode: "error",

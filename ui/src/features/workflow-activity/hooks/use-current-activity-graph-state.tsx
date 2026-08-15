@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import { isDefaultToRuntimeSessionAliasRemap } from "../../../api/session-routing";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
@@ -185,7 +186,12 @@ export function useCurrentActivityGraphState(
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;
     const previousScopeKey = lastFactoryDocumentScopeKeyRef.current;
     const scopeChanged =
-      previousScopeKey !== null && previousScopeKey !== normalizedScopeKey;
+      previousScopeKey !== null &&
+      previousScopeKey !== normalizedScopeKey &&
+      !isDefaultToRuntimeSessionAliasRemap(
+        previousScopeKey,
+        normalizedScopeKey,
+      );
     lastFactoryDocumentScopeKeyRef.current = normalizedScopeKey;
 
     if (!scopeChanged) {

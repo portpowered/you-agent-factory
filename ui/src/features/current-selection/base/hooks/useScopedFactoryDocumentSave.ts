@@ -14,6 +14,7 @@ import type {
   CurrentFactoryDocument,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
+import { isDefaultToRuntimeSessionAliasRemap } from "../../../../api/session-routing";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
@@ -98,10 +99,10 @@ export function useScopedFactoryDocumentSave<
     setSaveAttemptRevision,
   });
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
-  const hasScopeChanged = previousScopeKeyRef.current !== scopeKey;
-  if (hasScopeChanged) {
-    previousScopeKeyRef.current = scopeKey;
-  }
+  const hasScopeChanged =
+    previousScopeKeyRef.current !== scopeKey &&
+    !isDefaultToRuntimeSessionAliasRemap(previousScopeKeyRef.current, scopeKey);
+  previousScopeKeyRef.current = scopeKey;
   useResetSuccessfulSaveStateOnDraftChange({
     isDirty,
     scopeKey,
@@ -341,14 +342,20 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
 
   useEffect(() => {
-    if (previousScopeKeyRef.current !== scopeKey) {
+    const hasExitedScope =
+      previousScopeKeyRef.current !== scopeKey &&
+      !isDefaultToRuntimeSessionAliasRemap(
+        previousScopeKeyRef.current,
+        scopeKey,
+      );
+    if (hasExitedScope) {
       setIsConfirming(false);
       setLastFailedScope(null);
       setLastSuccessfulScopeKey(null);
       setLastSuccessfulSaveWasTopologyAffecting(false);
       setSaveAttemptRevision(0);
-      previousScopeKeyRef.current = scopeKey;
     }
+    previousScopeKeyRef.current = scopeKey;
   }, [
     scopeKey,
     setIsConfirming,
