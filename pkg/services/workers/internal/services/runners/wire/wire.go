@@ -21,13 +21,72 @@ func NewService(registrations []runners.Registration) (runners.Service, error) {
 	return internalservice.New(registrations)
 }
 
+// NewProductionRegistry constructs the three production strategies and
+// publishes them together through one immutable registry. Construction only
+// snapshots configuration and validates collaborators; it never resolves or
+// executes a strategy. The mock strategy is intentionally absent and is
+// composed only by the explicit Workers mock feature path.
+func NewProductionRegistry(
+	agentDependencies runners.AgentDependencies,
+	scriptConfig runners.ScriptConfig,
+	scriptDependencies runners.ScriptDependencies,
+	inferenceConfig runners.InferenceConfig,
+	inferenceDependencies runners.InferenceDependencies,
+) (runners.Service, error) {
+	agentImplementation, err := agentImplementation(agentDependencies)
+	if err != nil {
+		return nil, err
+	}
+	scriptImplementation, err := scriptImplementation(scriptConfig, scriptDependencies)
+	if err != nil {
+		return nil, err
+	}
+	inferenceImplementation, err := inferenceImplementation(
+		inferenceConfig,
+		inferenceDependencies,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return NewService([]runners.Registration{
+		{
+			Identity: runners.AgentIdentity,
+			Metadata: agentMetadata(),
+			Runner:   agentImplementation,
+		},
+		{
+			Identity: runners.ScriptIdentity,
+			Metadata: scriptMetadata(),
+			Runner:   scriptImplementation,
+		},
+		{
+			Identity: runners.InferenceIdentity,
+			Metadata: inferenceMetadata(),
+			Runner:   inferenceImplementation,
+		},
+	})
+}
+
 // NewScriptRegistry constructs one Script Runner from explicit effects and
 // publishes it through the immutable private registry.
 func NewScriptRegistry(
 	config runners.ScriptConfig,
 	dependencies runners.ScriptDependencies,
 ) (runners.Service, error) {
-	implementation, err := script.New(
+	implementation, err := scriptImplementation(config, dependencies)
+	service, registryErr := NewService([]runners.Registration{{
+		Identity: runners.ScriptIdentity,
+		Metadata: scriptMetadata(),
+		Runner:   implementation,
+	}})
+	return service, errors.Join(err, registryErr)
+}
+
+func scriptImplementation(
+	config runners.ScriptConfig,
+	dependencies runners.ScriptDependencies,
+) (workers.Runner, error) {
+	return script.New(
 		script.Config{
 			Command:          config.Command,
 			Args:             append([]string(nil), config.Args...),
@@ -42,12 +101,6 @@ func NewScriptRegistry(
 			Record:        dependencies.Record,
 		},
 	)
-	service, registryErr := NewService([]runners.Registration{{
-		Identity: runners.ScriptIdentity,
-		Metadata: scriptMetadata(),
-		Runner:   implementation,
-	}})
-	return service, errors.Join(err, registryErr)
 }
 
 // NewInferenceRegistry constructs one Inference Runner from explicit effects
@@ -56,7 +109,20 @@ func NewInferenceRegistry(
 	config runners.InferenceConfig,
 	dependencies runners.InferenceDependencies,
 ) (runners.Service, error) {
-	implementation, err := inference.New(
+	implementation, err := inferenceImplementation(config, dependencies)
+	service, registryErr := NewService([]runners.Registration{{
+		Identity: runners.InferenceIdentity,
+		Metadata: inferenceMetadata(),
+		Runner:   implementation,
+	}})
+	return service, errors.Join(err, registryErr)
+}
+
+func inferenceImplementation(
+	config runners.InferenceConfig,
+	dependencies runners.InferenceDependencies,
+) (workers.Runner, error) {
+	return inference.New(
 		inference.Config{
 			Worker: snapshotInferenceWorker(config.Worker),
 			Resources: append(
@@ -70,12 +136,6 @@ func NewInferenceRegistry(
 			Delegate: dependencies.Delegate,
 		},
 	)
-	service, registryErr := NewService([]runners.Registration{{
-		Identity: runners.InferenceIdentity,
-		Metadata: inferenceMetadata(),
-		Runner:   implementation,
-	}})
-	return service, errors.Join(err, registryErr)
 }
 
 // NewAgentRegistry constructs one inert Agent Runner over the singular
@@ -83,17 +143,23 @@ func NewInferenceRegistry(
 func NewAgentRegistry(
 	dependencies runners.AgentDependencies,
 ) (runners.Service, error) {
-	implementation, err := agentwire.NewService(
-		dependencies.Providers,
-		dependencies.Publish,
-		dependencies.DecisionEnvelopes,
-	)
+	implementation, err := agentImplementation(dependencies)
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.AgentIdentity,
 		Metadata: agentMetadata(),
 		Runner:   implementation,
 	}})
 	return service, errors.Join(err, registryErr)
+}
+
+func agentImplementation(
+	dependencies runners.AgentDependencies,
+) (workers.Runner, error) {
+	return agentwire.NewService(
+		dependencies.Providers,
+		dependencies.Publish,
+		dependencies.DecisionEnvelopes,
+	)
 }
 
 // NewMockRegistry constructs one mock Strategy for the Workers-owned testing

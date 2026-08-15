@@ -70,21 +70,15 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
-	agentRegistry, err := runnerswire.NewAgentRegistry(agentDependencies)
+	runnerRegistry, err := runnerswire.NewProductionRegistry(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
-	}
-	scriptRegistry, err := runnerswire.NewScriptRegistry(scriptConfig, scriptDependencies)
-	if err != nil {
-		return nil, fmt.Errorf("construct Workers: %w", err)
-	}
-	inferenceRegistry, err := runnerswire.NewInferenceRegistry(inferenceConfig, inferenceDependencies)
-	if err != nil {
-		return nil, fmt.Errorf("construct Workers: %w", err)
-	}
-	runnerRegistry, err := combineRunnerRegistries(agentRegistry, scriptRegistry, inferenceRegistry)
-	if err != nil {
-		return nil, err
 	}
 	var providerOverride workers.Provider
 	if len(providerOverrides) > 0 {
@@ -156,39 +150,6 @@ func validateConstructionPorts(
 		return fmt.Errorf("construct Workers: inference Models service is required")
 	}
 	return nil
-}
-
-func combineRunnerRegistries(
-	agentRegistry runners.Service,
-	scriptRegistry runners.Service,
-	inferenceRegistry runners.Service,
-) (runners.Service, error) {
-	registrations := make([]runners.Registration, 0, 3)
-	for _, entry := range []struct {
-		service  runners.Service
-		identity string
-	}{
-		{agentRegistry, runners.AgentIdentity},
-		{scriptRegistry, runners.ScriptIdentity},
-		{inferenceRegistry, runners.InferenceIdentity},
-	} {
-		binding, err := entry.service.Resolve(runners.ResolutionRequest{
-			Identity: entry.identity,
-		})
-		if err != nil {
-			return nil, fmt.Errorf(
-				"construct Workers runner registry: resolve %s runner: %w",
-				entry.identity,
-				err,
-			)
-		}
-		registrations = append(registrations, runners.Registration{
-			Identity: binding.Identity,
-			Metadata: binding.Metadata,
-			Runner:   binding.Runner,
-		})
-	}
-	return runnerswire.NewService(registrations)
 }
 
 func defaultBindingAssembler(
