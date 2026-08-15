@@ -151,16 +151,12 @@ func (s *Service) runtimeRunnerDecorators(
 			return registryCapabilityRunner{next: inner, providers: s.providerRegistry}
 		})
 	}
-	if s != nil && s.runnerRegistry == nil {
-		decorators = append(decorators,
-			func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
-				return resolveInferenceRunner(
-					inner, s.models, s.modelsScope, factoryCfg, definition,
-				)
-			},
-		)
-	}
 	return append(decorators,
+		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
+			return resolveInferenceRunner(
+				inner, s.models, s.modelsScope, factoryCfg, definition,
+			)
+		},
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
 			return modelrecording.NewRunner(inner, factoryCfg, definition, recorder, now)
 		},

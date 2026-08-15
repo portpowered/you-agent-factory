@@ -48,3 +48,24 @@ func BuildStatelessWorkers(
 	}
 	return service, nil
 }
+
+// BuildMockStatelessWorkers constructs the explicit mock-feature Workers root.
+// The mock registry is selected only by this opt-in root boundary; ordinary
+// BuildProcess and BuildStatelessWorkers composition remain production-only.
+func BuildMockStatelessWorkers(
+	ctx context.Context,
+	edges serviceedges.Edges,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("build mock stateless Workers: context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("build mock stateless Workers: %w", err)
+	}
+	service, err := wire.BuildMockStatelessWorkers(ctx, edges, mockWorkers)
+	if err != nil {
+		return nil, fmt.Errorf("build mock stateless Workers: %w", err)
+	}
+	return service, nil
+}

@@ -171,19 +171,16 @@ func (s *Service) WithProviderRegistry(registry workers.ProviderRegistry) *Servi
 	return &clone
 }
 
-// WithRunnerRegistry returns a service copy that routes Agent, Inference, and
-// Script construction through the shared immutable Workers registry. A nil
-// registry preserves the legacy compatibility path used by older package-local
-// callers while process composition completes its migration.
+// WithRunnerRegistry returns a service copy that routes Agent and Inference
+// construction through the shared immutable Workers registry. Script
+// construction remains on its retained compatibility factory until the
+// runtime-assembly migration removes that caller.
 func (s *Service) WithRunnerRegistry(registry runners.Service) *Service {
 	if s == nil {
 		return nil
 	}
 	clone := *s
 	clone.runnerRegistry = registry
-	if registry != nil && clone.scriptFactory != nil {
-		clone.scriptFactory = clone.scriptFactory.WithRegistry(registry)
-	}
 	return &clone
 }
 
@@ -203,9 +200,6 @@ func (s *Service) WithExecutionFactories(
 	}
 	if scriptFactory != nil {
 		clone.scriptFactory = scriptFactory
-		if clone.runnerRegistry != nil {
-			clone.scriptFactory = clone.scriptFactory.WithRegistry(clone.runnerRegistry)
-		}
 	}
 	return &clone
 }

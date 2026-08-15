@@ -66,8 +66,8 @@ func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
 	if configured.runnerRegistry != registry {
 		t.Fatal("WithRunnerRegistry() did not retain the injected registry")
 	}
-	if configured.scriptFactory == service.scriptFactory {
-		t.Fatal("WithRunnerRegistry() mutated or reused the original ScriptFactory")
+	if configured.scriptFactory != service.scriptFactory {
+		t.Fatal("WithRunnerRegistry() unexpectedly replaced the retained ScriptFactory")
 	}
 
 	providerRegistry := constructionProviderRegistry{}
@@ -84,8 +84,8 @@ func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
 		t.Fatalf("replacement NewScriptFactory() error = %v", err)
 	}
 	rebuilt := configured.WithExecutionFactories(nil, replacement)
-	if rebuilt.runnerRegistry != registry || rebuilt.scriptFactory == replacement {
-		t.Fatal("WithExecutionFactories() dropped or bypassed the retained registry")
+	if rebuilt.runnerRegistry != registry || rebuilt.scriptFactory != replacement {
+		t.Fatal("WithExecutionFactories() dropped the retained registry or replacement factory")
 	}
 }
 

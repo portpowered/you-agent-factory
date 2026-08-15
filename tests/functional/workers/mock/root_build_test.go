@@ -1,10 +1,13 @@
 package mock
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -96,5 +99,51 @@ func TestMockWorkerSelectedThroughCustomerProcess(t *testing.T) {
 	}
 	if got := support.StringPointerValue(dispatch.Response.Output); got != rootMockAcceptedOutput {
 		t.Fatalf("mock dispatch output = %q, want %q", got, rootMockAcceptedOutput)
+	}
+}
+
+// TestExplicitMockWorkersServiceExecutesThroughPublicWorkersRoot proves the
+// opt-in mock composition reaches the same public Workers Execute contract as
+// production composition. The customer Process path above exercises the
+// runtime's request-scoped mock command behavior; this case exercises the
+// explicit Workers mock feature root that owns the mock runner registration.
+func TestExplicitMockWorkersServiceExecutesThroughPublicWorkersRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := root.BuildMockStatelessWorkers(
+		t.Context(),
+		serviceedges.Edges{},
+		&workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName: "explicit-mock-worker",
+			RunType:    workers.MockWorkerRunTypeAccept,
+		}}},
+	)
+	if err != nil {
+		t.Fatalf("workerswire.NewMockService() error = %v", err)
+	}
+
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "functional-mock-session",
+			RuntimeID:        "functional-mock-runtime",
+			GenerationID:     "functional-mock-generation",
+			DispatchID:       "functional-mock-dispatch",
+			AttemptID:        "functional-mock-attempt",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "explicit-mock-worker",
+			RunnerID:   "mock",
+		},
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("mock Workers Execute() error = %v", err)
+	}
+	if result.Correlation != request.Correlation {
+		t.Fatalf("mock correlation = %#v, want %#v", result.Correlation, request.Correlation)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
+		result.Output.Primary[0].Text != rootMockAcceptedOutput {
+		t.Fatalf("mock result = %#v, want accepted canonical output", result)
 	}
 }

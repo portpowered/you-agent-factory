@@ -310,6 +310,23 @@ var statelessWorkersSet = wire.NewSet(
 	provideStatelessWorkersService,
 )
 
+var mockStatelessWorkersSet = wire.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
+	provideMockStatelessWorkersService,
+)
+
 var cliCommandOperationsSet = wire.NewSet(
 	provideCLIObserver,
 	provideNamedFactoryRootsResolver,
@@ -460,6 +477,20 @@ func BuildStatelessWorkers(
 ) (workers.Service, error) {
 	wire.Build(
 		statelessWorkersSet,
+	)
+	return nil, nil
+}
+
+// BuildMockStatelessWorkers composes the explicit mock-feature Workers root.
+// It shares the detached production construction ports while opting into the
+// mock registration only when the caller supplies mock configuration.
+func BuildMockStatelessWorkers(
+	ctx context.Context,
+	edges edges.Edges,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
+	wire.Build(
+		mockStatelessWorkersSet,
 	)
 	return nil, nil
 }

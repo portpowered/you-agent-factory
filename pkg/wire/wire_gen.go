@@ -607,11 +607,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	targetExecutionService := provideACPServerFactoryTargetService(v93)
 	v94 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, eventsService, loggingLogger)
 	responseBridge := provideACPServerResponseBridge(v94)
-	wireRecorder, err := provideACPWireRecorder(edges2, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
+	v95, err := provideACPWireRecorder(edges2, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
 	if err != nil {
 		return nil, err
 	}
-	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, wireRecorder)
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v95)
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -683,23 +683,23 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v95 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v72, workflowPreviewOperation)
+	v96 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v72, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v96 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v72)
-	v97, err := wire.NewStdioOpeningService(v68, v95, v96, openingPresentationOwner)
+	v97 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v72)
+	v98, err := wire.NewStdioOpeningService(v68, v96, v97, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v97, openingPresentationOwner)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v98, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
-	v98 := provideSystemInitializationInspectPath(edges2)
-	v99 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v37, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v98, v99, loggingLogger)
+	v99 := provideSystemInitializationInspectPath(edges2)
+	v100 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v37, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v99, v100, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -760,6 +760,48 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	}
 	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
 	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider, agentToolFileSystem, decisionEnvelopeService)
+	if err != nil {
+		return nil, err
+	}
+	return workersService, nil
+}
+
+// BuildMockStatelessWorkers composes the explicit mock-feature Workers root.
+// It shares the detached production construction ports while opting into the
+// mock registration only when the caller supplies mock configuration.
+func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWorkers *workers.MockWorkersConfig) (workers.Service, error) {
+	service, err := provideProvidersService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	modelsService, err := provideModelsService(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
+	if err != nil {
+		return nil, err
+	}
+	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
+	clock := provideFactoryRuntimeClock(edges2)
+	logger, err := logging.NewDefaultLogger()
+	if err != nil {
+		return nil, err
+	}
+	factoryWorktreePreparer, err := provideWorkersWorktree(edges2)
+	if err != nil {
+		return nil, err
+	}
+	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
+	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
+	provider := provideFactoryRuntimeProviderOverride(edges2)
+	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
+	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
+	if err != nil {
+		return nil, err
+	}
+	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
+	workersService, err := provideMockStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider, agentToolFileSystem, decisionEnvelopeService, mockWorkers)
 	if err != nil {
 		return nil, err
 	}
@@ -987,6 +1029,23 @@ var statelessWorkersSet = wire5.NewSet(
 	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
 	provideStatelessWorkersService,
+)
+
+var mockStatelessWorkersSet = wire5.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
+	provideMockStatelessWorkersService,
 )
 
 var cliCommandOperationsSet = wire5.NewSet(

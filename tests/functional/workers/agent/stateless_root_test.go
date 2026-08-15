@@ -48,6 +48,44 @@ func TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot(t *testing.T) {
 		t.Fatalf("stateless result = %#v, want accepted functional output", result)
 	}
 
+	promptTemplates, ok := service.(workers.PromptTemplates)
+	if !ok {
+		t.Fatal("stateless Workers root does not expose prompt template contracts")
+	}
+	contract := promptTemplates.BuildPromptTemplateContract(1, []string{"factory/docs/guide.md"})
+	if contract.InputCount != 1 || len(contract.AvailableVariables) == 0 {
+		t.Fatalf("prompt contract = %#v, want selected input variables", contract)
+	}
+	validation := promptTemplates.ValidatePromptTemplate("{{ .Context.Project }}", 1, nil)
+	if !validation.Valid || len(validation.Diagnostics) != 0 {
+		t.Fatalf("prompt validation = %#v, want valid detached template", validation)
+	}
+	fieldResolver, ok := service.(interface {
+		ResolveTemplateFields(
+			string,
+			map[string]string,
+			[]workers.Token,
+			*workers.Context,
+			string,
+		) (*workers.ResolvedTemplateFields, error)
+	})
+	if !ok {
+		t.Fatal("stateless Workers root does not expose template field resolution")
+	}
+	fields, err := fieldResolver.ResolveTemplateFields(
+		"{{.Context.WorkDir}}",
+		map[string]string{"TOKEN": "{{.Context.Project}}"},
+		nil,
+		&workers.Context{WorkDirectory: "/workspace", ProjectID: "project-1"},
+		"",
+	)
+	if err != nil || fields.WorkingDirectory != "/workspace" || fields.Env["TOKEN"] != "project-1" {
+		t.Fatalf("resolved fields = %#v, error = %v, want detached context values", fields, err)
+	}
+	if recorder, ok := service.(interface{ RuntimeOwnsModelEventRecording() bool }); !ok || !recorder.RuntimeOwnsModelEventRecording() {
+		t.Fatal("stateless Workers root does not own model event recording")
+	}
+
 	if service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
 		ProviderRegistrations: []providerswire.Registration{{
 			Manifest:    providerswire.Manifest{ID: "codex"},

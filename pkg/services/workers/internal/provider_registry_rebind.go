@@ -36,9 +36,6 @@ func applyReboundProviderRegistry(service *Service, registry workers.ProviderReg
 	if providerService != nil {
 		service.providers = providerService
 	}
-	if err := installSharedRunnerRegistry(service); err != nil {
-		return err
-	}
 	assembly, err := newRuntimeAssembly(registry)
 	if err != nil {
 		return err
