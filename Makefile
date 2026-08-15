@@ -177,7 +177,7 @@ define run_timed_step
 endef
 
 
-.PHONY: default build install bundle-api print-go-parallelism
+.PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
@@ -226,7 +226,13 @@ endef
 # Make implementation that still launched real work. These aggregators remain
 # serialized to preserve the old stop-on-failure behavior even with -j.
 .NOTPARALLEL: default test
-default: generate-api ui-deps ui-build build test lint
+# Bare `make` runs the complete generation, frontend, build, test, and lint
+# pipeline. Use `make build` when only the Go binary is needed.
+default: default-pipeline-banner generate-api ui-deps ui-build build test lint
+
+default-pipeline-banner:
+	@echo "Bare make runs: generate-api, ui-deps, ui-build, build, test, lint."
+	@echo "For only the Go binary, run: make build."
 
 # Print the derived values without starting a toolchain process. This is useful
 # for controlled host-capacity probes, for example:

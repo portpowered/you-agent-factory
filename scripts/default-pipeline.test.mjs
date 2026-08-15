@@ -8,6 +8,8 @@ import os from "node:os";
 import test from "node:test";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const defaultPipelineBanner = "Bare make runs: generate-api, ui-deps, ui-build, build, test, lint.";
+const binaryOnlyGuidance = "For only the Go binary, run: make build.";
 
 async function createHarness(t, failMatch = "") {
 	const root = await mkdtemp(join(os.tmpdir(), "you-default-pipeline-"));
@@ -130,6 +132,8 @@ test("bare make executes the six default phases once in order", async (t) => {
 	const harness = await createHarness(t);
 	const result = runMake(harness);
 	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+	assert.ok(result.stdout.includes(defaultPipelineBanner), `missing default pipeline banner: ${result.stdout}`);
+	assert.ok(result.stdout.includes(binaryOnlyGuidance), `missing binary-only guidance: ${result.stdout}`);
 	const events = await toolEvents(harness.logPath);
 	assertDefaultPhaseOrder(events);
 });
@@ -156,6 +160,8 @@ test("make -n default emits all phases without running tool or nested-make proce
 	const events = await toolEvents(harness.logPath);
 	assert.deepEqual(events, [], `dry run started attributable tools: ${events.join("\\n")}`);
 	for (const marker of [
+		defaultPipelineBanner,
+		binaryOnlyGuidance,
 		"bundle:rest",
 		"generate-openapi-types",
 		"install",
