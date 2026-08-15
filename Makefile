@@ -33,29 +33,60 @@ define decimal_remainder
 $(strip $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(1))))))))))))
 endef
 
+define nonzero_decimal
+$(strip $(subst 0,,$(1)))
+endef
+
 define positive_decimal
-$(if $(strip $(1)),$(if $(call decimal_remainder,$(1)),,$(if $(filter 0,$(strip $(1))),,$(strip $(1)))),)
+$(if $(strip $(1)),$(if $(call decimal_remainder,$(1)),,$(if $(call nonzero_decimal,$(1)),$(strip $(1)),)),)
 endef
 
 ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL))))
+# GNU Make uses the effective SHELL for $(shell), so use POSIX arithmetic when
+# Windows Make is running through sh.exe or bash.exe. Calling cmd.exe here
+# makes MSYS shells return the cmd banner and prompt instead of the result.
 define compute_go_lane_budget
-$(strip $(or $(shell cmd.exe /d /v:on /c "set /a result=$(1)/$(2) >nul & if !result! LSS 2 (echo 2) else (echo !result!)"),2))
+$(strip $(shell budget=$$(expr $(1) / $(2) 2>/dev/null); if test "$$budget" -ge 2 2>/dev/null; then printf '%s' "$$budget"; elif test "$$budget" = 0 || test "$$budget" = 1; then printf '2'; fi))
 endef
 else
+# The native Windows Make shell is cmd.exe when no POSIX shell is selected.
+# Keep the command's raw stdout for the validation guard below.
 define compute_go_lane_budget
-$(strip $(or $(shell budget=$$(expr $(1) / $(2) 2>/dev/null); if test -z "$$budget" || test "$$budget" -lt 2; then printf '2'; else printf '%s' "$$budget"; fi),2))
+$(strip $(shell cmd.exe /d /v:on /c "set /a result=$(1)/$(2) >nul & if !result! LSS 2 (echo 2) else (echo !result!)"))
+endef
+endif
+else
+define compute_go_lane_budget
+$(strip $(shell budget=$$(expr $(1) / $(2) 2>/dev/null); if test "$$budget" -ge 2 2>/dev/null; then printf '%s' "$$budget"; elif test "$$budget" = 0 || test "$$budget" = 1; then printf '2'; fi))
 endef
 endif
 
 ifndef GO_LANE_BUDGET
 ifneq ($(call positive_decimal,$(YOU_LOGICAL_CPUS)),)
 ifneq ($(call positive_decimal,$(YOU_EXPECTED_CONCURRENT_LANES)),)
-GO_LANE_BUDGET := $(call compute_go_lane_budget,$(YOU_LOGICAL_CPUS),$(YOU_EXPECTED_CONCURRENT_LANES))
+GO_LANE_BUDGET_COMPUTED ?= $(call compute_go_lane_budget,$(YOU_LOGICAL_CPUS),$(YOU_EXPECTED_CONCURRENT_LANES))
+ifneq ($(call positive_decimal,$(GO_LANE_BUDGET_COMPUTED)),)
+GO_LANE_BUDGET := $(call positive_decimal,$(GO_LANE_BUDGET_COMPUTED))
+else
+$(warning GO_LANE_BUDGET received invalid computed value '$(GO_LANE_BUDGET_COMPUTED)'; using 2)
+GO_LANE_BUDGET := 2
+endif
 else
 GO_LANE_BUDGET := 2
 endif
 else
 GO_LANE_BUDGET := 2
+endif
+endif
+
+ifdef GO_LANE_BUDGET
+GO_LANE_BUDGET_VALIDATED := $(call positive_decimal,$(GO_LANE_BUDGET))
+ifneq ($(GO_LANE_BUDGET_VALIDATED),)
+override GO_LANE_BUDGET := $(GO_LANE_BUDGET_VALIDATED)
+else
+$(warning GO_LANE_BUDGET received invalid override '$(GO_LANE_BUDGET)'; using 2)
+override GO_LANE_BUDGET := 2
 endif
 endif
 
@@ -453,7 +484,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)

@@ -184,6 +184,12 @@ that contain Go tests and disables `go test`'s duplicate implicit vet pass;
 The normal `make test` loop retains Go's content-addressed test cache, so
 unchanged packages do not relink and rerun on every local invocation. Use
 `make test-unit-fresh` when uncached `-count=1` evidence is explicitly needed.
+
+On Windows, the Makefile selects arithmetic compatible with GNU Make's
+effective shell: POSIX arithmetic for `sh.exe`/`bash.exe` and native `cmd.exe`
+arithmetic otherwise. The raw result is validated as a positive decimal before
+it becomes `GO_LANE_BUDGET`; malformed output produces a visible warning and
+falls back to 2 so the default test and lint flags remain numeric.
 `make test` is the compatibility entrypoint for `make test-unit`; `make
 test-full` remains the broad unshortened aggregate across every Go package.
 
