@@ -49,7 +49,11 @@ func (service *Service) Run(
 		logger = hosted.RuntimeLogger()
 	}
 
-	transportCtx, cancel := context.WithCancel(ctx)
+	// Keep the transport alive while cancellation is unwound through the
+	// runtime. Factory.Run records RUN_RESPONSE and drains live subscribers as
+	// part of runtime stop; inheriting ctx here would close the HTTP connection
+	// before that terminal frame can be written.
+	transportCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	var transport sync.WaitGroup
 	defer func() {
 		cancel()
@@ -76,8 +80,15 @@ func (service *Service) Run(
 		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
 	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
-	if err := runtime.WaitForRuntime(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("factory run: %w", err)
+	if err := runtime.WaitForRuntime(ctx); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("factory run: %w", err)
+		}
+		if stopErr := runtime.StopLifecycle(context.Background()); stopErr != nil &&
+			!errors.Is(stopErr, context.Canceled) &&
+			!errors.Is(stopErr, factoryruntime.ErrAlreadyStopped) {
+			return fmt.Errorf("stop Factory Session runtime: %w", stopErr)
+		}
 	}
 	return nil
 }

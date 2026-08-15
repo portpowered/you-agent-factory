@@ -44,13 +44,6 @@
       "reason": "Linux build constraints leave this functional package without runnable Go test files"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/runtime_api",
-      "test": "TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline",
-      "bucket": "GENUINELY FAILING",
-      "reason": "/events replay failed with unexpected EOF; reproduced on the same machine at ed502b781 and db7379d47",
-      "followUp": "Repair event replay framing and remove this entry after the exact selector passes"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "Linux build constraints leave this functional package without runnable Go test files"

@@ -28,7 +28,14 @@ func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEven
 	case <-subscription.overflow:
 		subscription.pendingMu.Unlock()
 		return true
+	case <-subscription.terminal:
+		subscription.pendingMu.Unlock()
+		return true
 	default:
+	}
+	if subscription.terminalClosed {
+		subscription.pendingMu.Unlock()
+		return true
 	}
 	if subscription.pending >= subscription.limit {
 		subscription.pendingMu.Unlock()
@@ -41,6 +48,8 @@ func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEven
 	case <-subscription.done:
 		subscription.releasePending()
 	case <-subscription.overflow:
+		subscription.releasePending()
+	case <-subscription.terminal:
 		subscription.releasePending()
 	case subscription.inbox <- event:
 	default:

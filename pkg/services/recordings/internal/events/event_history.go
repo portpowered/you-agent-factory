@@ -40,15 +40,19 @@ const (
 )
 
 type eventHistorySubscription struct {
-	events       chan interfaces.FactoryEvent
-	inbox        chan interfaces.FactoryEvent
-	done         <-chan struct{}
-	overflow     chan struct{}
-	overflowOnce sync.Once
-	dispatchID   string
-	limit        int
-	pendingMu    sync.Mutex
-	pending      int
+	events         chan interfaces.FactoryEvent
+	inbox          chan interfaces.FactoryEvent
+	done           <-chan struct{}
+	overflow       chan struct{}
+	overflowOnce   sync.Once
+	terminal       chan struct{}
+	terminalOnce   sync.Once
+	drained        chan struct{}
+	dispatchID     string
+	limit          int
+	pendingMu      sync.Mutex
+	pending        int
+	terminalClosed bool
 }
 
 func (subscription *eventHistorySubscription) signalOverflow() {
@@ -57,21 +61,34 @@ func (subscription *eventHistorySubscription) signalOverflow() {
 	})
 }
 
+func (subscription *eventHistorySubscription) signalTerminal() {
+	subscription.pendingMu.Lock()
+	subscription.terminalClosed = true
+	subscription.pendingMu.Unlock()
+	subscription.terminalOnce.Do(func() {
+		close(subscription.terminal)
+	})
+}
+
 // CloseLiveSubscriptions ends active live subscriptions without appending new
 // canonical events. Callers invoke this after terminal lifecycle events are
 // recorded so SSE clients observe the final timeline and then a closed stream.
+// It waits until each subscription has handed off all events accepted before
+// the terminal signal, while canceled subscribers are allowed to exit early.
 func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
+	h.liveClosed = true
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, subscription := range h.streams {
 		streams = append(streams, subscription)
+		subscription.signalTerminal()
 	}
 	h.mu.Unlock()
 	for _, subscription := range streams {
-		subscription.signalOverflow()
+		<-subscription.drained
 	}
 }
 
@@ -96,6 +113,7 @@ type FactoryEventHistory struct {
 	sessionStartedAt    time.Time
 	hasSessionStarted   bool
 	hasSessionCompleted bool
+	liveClosed          bool
 	sessionID           string
 	nextSessionSequence int
 }
@@ -189,6 +207,16 @@ func (h *FactoryEventHistory) Subscribe(
 		}
 		events = cloneFactoryEventsForStream(replayed, scope)
 	}
+	if h.liveClosed {
+		closed := make(chan interfaces.FactoryEvent)
+		close(closed)
+		h.mu.Unlock()
+		return interfaces.FactoryEventStream{
+			StreamGenerationID: streamGenerationID,
+			History:            events,
+			Events:             closed,
+		}, nil
+	}
 	bufferSize := scope.Limit
 	if bufferSize <= 0 {
 		bufferSize = eventHistoryStreamBufferSize
@@ -200,6 +228,8 @@ func (h *FactoryEventHistory) Subscribe(
 		inbox:      make(chan interfaces.FactoryEvent, bufferSize),
 		done:       ctx.Done(),
 		overflow:   make(chan struct{}),
+		terminal:   make(chan struct{}),
+		drained:    make(chan struct{}),
 		dispatchID: strings.TrimSpace(scope.DispatchID),
 		limit:      bufferSize,
 	}
@@ -207,18 +237,36 @@ func (h *FactoryEventHistory) Subscribe(
 	h.mu.Unlock()
 
 	go func() {
-		defer close(subscription.events)
+		defer close(subscription.drained)
 		defer func() {
 			h.mu.Lock()
 			delete(h.streams, id)
 			h.mu.Unlock()
 		}()
+		defer close(subscription.events)
 		for {
 			select {
 			case <-subscription.done:
 				return
 			case <-subscription.overflow:
 				return
+			case <-subscription.terminal:
+				for {
+					select {
+					case <-subscription.done:
+						return
+					case event := <-subscription.inbox:
+						select {
+						case <-subscription.done:
+							subscription.releasePending()
+							return
+						case subscription.events <- event.Clone():
+							subscription.releasePending()
+						}
+					default:
+						return
+					}
+				}
 			case event := <-subscription.inbox:
 				select {
 				case <-subscription.done:
@@ -700,14 +748,6 @@ func (h *FactoryEventHistory) appendEventWithValidation(
 	}
 	recorders := append([]func(interfaces.FactoryEvent){}, h.recorders...)
 	eventTypeRecorders := append([]func(interfaces.FactoryEventType){}, h.eventTypeRecorders...)
-	h.mu.Unlock()
-
-	for _, recorder := range recorders {
-		recorder(event.Clone())
-	}
-	for _, recorder := range eventTypeRecorders {
-		recorder(event.Type)
-	}
 	for _, stream := range streams {
 		if stream.dispatchID != "" && !factoryEventBelongsToDispatch(event, stream.dispatchID) {
 			continue
@@ -715,6 +755,14 @@ func (h *FactoryEventHistory) appendEventWithValidation(
 		if !stream.offer(event.Clone()) {
 			stream.signalOverflow()
 		}
+	}
+	h.mu.Unlock()
+
+	for _, recorder := range recorders {
+		recorder(event.Clone())
+	}
+	for _, recorder := range eventTypeRecorders {
+		recorder(event.Type)
 	}
 	return event.Clone(), nil
 }

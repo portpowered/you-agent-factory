@@ -583,8 +583,8 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	}
 	tick := f.engine.GetRuntimeStateSnapshot().TickCount
 	completedAt := f.clock.Now()
-	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
 	recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
+	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
 	closeRuntimeEventSubscriptions(f.eventHistory)
 
 	if errors.Is(runErr, context.Canceled) && stopErr == nil {

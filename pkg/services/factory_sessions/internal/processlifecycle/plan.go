@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
@@ -324,7 +325,11 @@ func (state *applicationRuntimeLifecycle) stopRuntime(ctx context.Context) error
 	if !shouldStop {
 		return nil
 	}
-	return state.runtime.Stop(ctx)
+	err := state.runtime.Stop(ctx)
+	if errors.Is(err, context.Canceled) || errors.Is(err, factoryruntime.ErrAlreadyStopped) {
+		return nil
+	}
+	return err
 }
 
 func isNil(value any) bool {
