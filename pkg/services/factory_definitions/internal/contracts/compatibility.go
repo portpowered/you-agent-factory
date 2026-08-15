@@ -77,6 +77,13 @@ func ExpectedWorkerBehaviorClassForWorkstation(workstation Workstation, workerTy
 	if workertaxonomy.IsPollerRunPublicWorkstationType(workstationType, workertaxonomy.WorkstationKind(workstation.Kind)) {
 		return WorkerWorkstationBehaviorPoller, true
 	}
+	if workertaxonomy.IsScheduledLegacyModelPair(
+		workstationType,
+		workerType,
+		workertaxonomy.WorkstationKind(workstation.Kind),
+	) {
+		return WorkerWorkstationBehaviorInference, true
+	}
 
 	switch workertaxonomy.PublicWorkstationTypeFromInternalRuntime(workstationType, workerType, workertaxonomy.WorkstationKind(workstation.Kind)) {
 	case workertaxonomy.WorkstationTypeInference:
@@ -147,6 +154,17 @@ func PublicWorkerTypeForFactoryUsage(worker workerconfig.Config, workstations []
 		return publicType
 	}
 	return workertaxonomy.PublicWorkerTypeFromInternal(worker.Type)
+}
+
+// IsScheduledLegacyModelPair reports the legacy model worker/workstation pair
+// whose scheduled behavior projects as inference while retaining the authored
+// workstation alias during the migration window.
+func IsScheduledLegacyModelPair(workstationType, workerType string, kind WorkstationKind) bool {
+	return workertaxonomy.IsScheduledLegacyModelPair(
+		workstationType,
+		workerType,
+		workertaxonomy.WorkstationKind(kind),
+	)
 }
 
 func publicWorkerTypeForBehaviorClass(class WorkerWorkstationBehaviorClass) string {

@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,18 +38,12 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 		return nil, err
 	}
 
-	rawFrontmatter, err := parseAgentsFrontmatterMap(frontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("parse worker frontmatter in %s: %w", sourcePath, err)
-	}
-	normalizeAgentsRuntimeResources(rawFrontmatter)
-	frontmatter, err = yaml.Marshal(rawFrontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("normalize worker frontmatter in %s: %w", sourcePath, err)
-	}
-
 	var parsed workerFrontmatterInput
-	if err := yaml.Unmarshal(frontmatter, &parsed); err != nil {
+	if err := decodeAgentsFrontmatter(
+		frontmatter,
+		&parsed,
+		retiredboundary.RetiredWorkerFieldAliases(),
+	); err != nil {
 		return nil, fmt.Errorf("parse worker frontmatter in %s: %w", sourcePath, err)
 	}
 
@@ -131,18 +126,12 @@ func ParseWorkstationConfig(data []byte, sourcePath string) (*factorydefinitions
 		return nil, err
 	}
 
-	rawFrontmatter, err := parseAgentsFrontmatterMap(frontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("parse workstation frontmatter in %s: %w", sourcePath, err)
-	}
-	normalizeAgentsRuntimeResources(rawFrontmatter)
-	frontmatter, err = yaml.Marshal(rawFrontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("normalize workstation frontmatter in %s: %w", sourcePath, err)
-	}
-
 	var cfg factorydefinitions.FactoryWorkstationConfig
-	if err := yaml.Unmarshal(frontmatter, &cfg); err != nil {
+	if err := decodeAgentsFrontmatter(
+		frontmatter,
+		&cfg,
+		retiredboundary.RetiredWorkstationFieldAliases(),
+	); err != nil {
 		return nil, fmt.Errorf("parse workstation frontmatter in %s: %w", sourcePath, err)
 	}
 	normalizeWorkstationPublicEnums(&cfg)

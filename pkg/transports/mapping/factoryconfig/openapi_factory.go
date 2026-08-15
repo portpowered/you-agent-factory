@@ -564,7 +564,11 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "runner", fmt.Sprintf("workstations[%d].runner", i), interfaces.StrictPublicFactoryRunnerID); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
+		if preserveScheduledLegacyModelWorkstationType(root, workstation) {
+			if interfaces.StrictPublicFactoryWorkstationType(stringValueFromFactoryInputMap(workstation, "type")) == "" {
+				return fmt.Errorf("workstations[%d].type: unsupported value %q", i, stringValueFromFactoryInputMap(workstation, "type"))
+			}
+		} else if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "outcomeFormat", fmt.Sprintf("workstations[%d].outcomeFormat", i), interfaces.StrictPublicFactoryWorkstationOutcomeFormat); err != nil {
@@ -585,6 +589,50 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		normalizeRuntimeResourceRequirements(workstation, "resources")
 	}
 	return nil
+}
+
+// preserveScheduledLegacyModelWorkstationType keeps the legacy workstation
+// alias available to the compatibility projector. The generated boundary
+// normally canonicalizes MODEL_WORKSTATION to AGENT_RUN before worker usage is
+// inspected; for the legacy MODEL_WORKER pair on a scheduled workstation that
+// loses the distinction needed to project the worker as INFERENCE_WORKER.
+func preserveScheduledLegacyModelWorkstationType(
+	root map[string]any,
+	workstation map[string]any,
+) bool {
+	if stringValueFromFactoryInputMap(workstation, "type") != interfaces.WorkstationTypeModel {
+		return false
+	}
+	behavior := stringValueFromFactoryInputMap(workstation, "behavior")
+	if !strings.EqualFold(behavior, string(interfaces.WorkstationKindRepeater)) &&
+		!strings.EqualFold(behavior, string(interfaces.WorkstationKindCron)) {
+		return false
+	}
+	workerName := stringValueFromFactoryInputMap(workstation, "worker")
+	if workerName == "" {
+		return false
+	}
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range workers {
+		worker, ok := item.(map[string]any)
+		if !ok || stringValueFromFactoryInputMap(worker, "name") != workerName {
+			continue
+		}
+		workerType := stringValueFromFactoryInputMap(worker, "type")
+		if !strings.EqualFold(workerType, interfaces.WorkerTypeModel) &&
+			!strings.EqualFold(workerType, interfaces.WorkerTypeInference) {
+			return false
+		}
+		return interfaces.IsScheduledLegacyModelPair(
+			interfaces.WorkstationTypeModel,
+			workerType,
+			interfaces.WorkstationKind(behavior),
+		)
+	}
+	return false
 }
 
 func normalizeFactoryWorkstationOperationBindings(workstation map[string]any, workstationIndex int) error {
