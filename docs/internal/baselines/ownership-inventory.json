@@ -2305,13 +2305,6 @@
   "misplacedGuards": [],
   "publicSurfaces": [
     {
-      "id": "behavior_test:provider-functionaltests",
-      "kind": "behavior_test",
-      "surfacePath": "pkg/services/workers/internal/providercompat/functionaltests",
-      "replacementOwner": "providers",
-      "note": "Provider compatibility/behavior tests follow the Providers Execution successor after cutover."
-    },
-    {
       "id": "behavior_test:workers-hosted-poller",
       "kind": "behavior_test",
       "surfacePath": "pkg/services/workers/services/hosted_logic",
@@ -5502,14 +5495,6 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/internal/providercompat/functionaltests",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract",
       "disposition": "move",
       "destination": "providers",
@@ -5519,14 +5504,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract/testkit",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/paritytests",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

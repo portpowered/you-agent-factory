@@ -1,3 +1,0 @@
-{"type":"step_start","timestamp":1783962000000,"sessionID":"parity-opencode-session","part":{"id":"step_parity","sessionID":"parity-opencode-session","messageID":"msg_parity","type":"step-start"}}
-{"type":"text","timestamp":1783962000002,"sessionID":"parity-opencode-session","part":{"id":"part_text_parity","sessionID":"parity-opencode-session","messageID":"msg_parity","type":"text","text":"Parity snapshot answer","time":{"start":1783962000001,"end":1783962000002}}}
-{"type":"step_finish","timestamp":1783962000005,"sessionID":"parity-opencode-session","part":{"id":"step_parity","sessionID":"parity-opencode-session","messageID":"msg_parity","type":"step-finish","tokens":{"input":12,"output":7},"reason":"stop"}}
