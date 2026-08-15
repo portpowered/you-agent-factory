@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree"
@@ -55,6 +56,11 @@ type WorkstationExecutor struct {
 	CurrentWorkingDirectory func() (string, error)
 	RuntimeConfig           interfaces.RuntimeConfigLookup
 	DefaultRunnerID         string
+	// Providers is the sole provider identity and selection authority used by
+	// the live workstation path. The resolver fields remain as a migration
+	// fallback for legacy same-package fixtures until runtime assembly is
+	// retired by its owning packet.
+	Providers               providers.Service
 	ResolveRunnerSelection  workerexecution.RunnerSelectionResolver
 	ResolveProviderIdentity workerexecution.ProviderIdentityResolver
 	WorkflowContext         *workerexecution.Context
@@ -209,6 +215,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 		}, nil
 	}
 	workerDef, failed := we.prepareWorkerDefinition(
+		ctx,
 		dispatch,
 		workerName,
 		workerConfig,
@@ -248,7 +255,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 		}
 	}
 
-	executionRequest, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
+	executionRequest, failed := we.buildWorkstationExecutionRequest(ctx, dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
 	if failed != nil {
 		return *failed, nil
 	}
@@ -269,16 +276,29 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 }
 
 func (we *WorkstationExecutor) resolveInvocationProvider(
+	ctx context.Context,
 	dispatch work.WorkDispatch,
 	worker *factorydefinitions.FactoryWorkerConfig,
 	diagnostics *workerexecution.WorkDiagnostics,
 	start time.Time,
 ) *workerexecution.WorkResult {
-	if we.ResolveProviderIdentity == nil || worker == nil ||
+	if worker == nil ||
 		strings.TrimSpace(worker.ModelProvider) == "" {
 		return nil
 	}
-	canonical, err := we.ResolveProviderIdentity(worker.ModelProvider)
+	var canonical string
+	var err error
+	if we.Providers != nil {
+		resolved, resolveErr := we.Providers.ResolveIdentity(ctx, providers.ResolveIdentityRequest{
+			Identity: worker.ModelProvider,
+		})
+		canonical = resolved.ID.String()
+		err = resolveErr
+	} else if we.ResolveProviderIdentity != nil {
+		canonical, err = we.ResolveProviderIdentity(worker.ModelProvider)
+	} else {
+		return nil
+	}
 	if err == nil {
 		worker.ModelProvider = canonical
 		return nil
@@ -478,7 +498,7 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	} else if identity != "" {
 		selectionIdentity = identity
 	}
-	selection, err := we.resolveRunnerSelection(selectionIdentity, workerDef.ModelProvider)
+	selection, err := we.resolveRunnerSelection(ctx, selectionIdentity, workerDef.ModelProvider)
 	if err != nil {
 		failed := worktree.FailedWorkResultFromPreparation(
 			dispatch.DispatchID,
@@ -617,7 +637,7 @@ func pathExists(fileSystem platformfilesystem.ReadFileInspector, value string) b
 	return err == nil || !errors.Is(err, fs.ErrNotExist)
 }
 
-func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.WorkDispatch, workerName string, workerDef *factorydefinitions.FactoryWorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (workerexecution.WorkstationExecutionRequest, *workerexecution.WorkResult) {
+func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Context, dispatch work.WorkDispatch, workerName string, workerDef *factorydefinitions.FactoryWorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (workerexecution.WorkstationExecutionRequest, *workerexecution.WorkResult) {
 	modelBindings, err := resolveModelOperationBindings(workstationDef, workerDef, requestContext.InputTokens)
 	if err != nil {
 		logger.Error("model operation binding resolution failed",
@@ -658,7 +678,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection, err := we.resolveRunnerSelection(workstationDef.Runner, workerDef.ModelProvider)
+	selection, err := we.resolveRunnerSelection(ctx, workstationDef.Runner, workerDef.ModelProvider)
 	if err != nil {
 		failed := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -701,9 +721,24 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 }
 
 func (we *WorkstationExecutor) resolveRunnerSelection(
+	ctx context.Context,
 	workstationRunner string,
 	workerModelProvider string,
 ) (workerexecution.ResolvedRunnerSelection, error) {
+	if we.Providers != nil {
+		resolved, err := we.Providers.ResolveSelection(ctx, providers.ResolveSelectionRequest{
+			Workstation:   workstationRunner,
+			Factory:       we.DefaultRunnerID,
+			ModelProvider: workerModelProvider,
+		})
+		if err != nil {
+			return workerexecution.ResolvedRunnerSelection{}, err
+		}
+		return workerexecution.ResolvedRunnerSelection{
+			RunnerID: providerRunnerID(resolved.Provider),
+			Source:   workerSelectionSource(resolved.Source),
+		}, nil
+	}
 	if we.ResolveRunnerSelection != nil {
 		return we.ResolveRunnerSelection(
 			workstationRunner,
@@ -716,6 +751,23 @@ func (we *WorkstationExecutor) resolveRunnerSelection(
 		we.DefaultRunnerID,
 		workerModelProvider,
 	), nil
+}
+
+func providerRunnerID(id providers.ID) string {
+	return strings.ToLower(strings.TrimSpace(id.String()))
+}
+
+func workerSelectionSource(source providers.SelectionSource) workerexecution.RunnerSelectionSource {
+	switch source {
+	case providers.SelectionSourceWorkstation:
+		return workerexecution.RunnerSelectionSourceWorkstation
+	case providers.SelectionSourceFactory:
+		return workerexecution.RunnerSelectionSourceFactory
+	case providers.SelectionSourceLegacyProvider:
+		return workerexecution.RunnerSelectionSourceLegacyProvider
+	default:
+		return workerexecution.RunnerSelectionSourceDefault
+	}
 }
 
 func processEnvironment(read func() []string) []string {

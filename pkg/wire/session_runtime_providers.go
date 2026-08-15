@@ -47,9 +47,7 @@ import (
 // the process Providers root in Wire's type graph. Both expose the same
 // Providers-owned operations; the distinction is composition metadata, not a
 // second provider contract.
-type providerOverrideService interface {
-	providers.Service
-}
+type providerOverrideService = factorysessionwire.ProviderOverrideService
 
 // compositeProcessLifecycle aggregates every inert service that retains
 // resources lazily while commands execute into the single ProcessLifecycle

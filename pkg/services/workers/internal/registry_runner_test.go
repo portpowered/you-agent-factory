@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -14,12 +15,12 @@ func TestRegistryCapabilityRunnerRejectsUnsupportedRequirement(t *testing.T) {
 	runner := registryCapabilityRunner{
 		next: next,
 		providers: registryTestCatalog{metadata: workers.RunnerMetadata{
-			ID: "codex",
+			ID: "test-provider",
 		}},
 	}
 
 	_, err := runner.Execute(t.Context(), workers.RunnerExecutionRequest{
-		RunnerID:                     "codex",
+		RunnerID:                     "test-provider",
 		RequiredOptionalCapabilities: []workers.RunnerOptionalCapability{workers.RunnerOptionalCapabilityImageInput},
 	})
 	if err == nil || !strings.Contains(err.Error(), "image input is not supported") {
@@ -35,7 +36,7 @@ func TestRegistryCapabilityRunnerDelegatesSupportedRequirement(t *testing.T) {
 	runner := registryCapabilityRunner{
 		next: next,
 		providers: registryTestCatalog{metadata: workers.RunnerMetadata{
-			ID: "codex",
+			ID: "test-provider",
 			Capabilities: workers.RunnerCapabilities{Optional: []workers.RunnerOptionalCapabilitySupport{{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusSupported,
@@ -44,7 +45,7 @@ func TestRegistryCapabilityRunnerDelegatesSupportedRequirement(t *testing.T) {
 	}
 
 	result, err := runner.Execute(t.Context(), workers.RunnerExecutionRequest{
-		RunnerID:                     "codex",
+		RunnerID:                     "test-provider",
 		RequiredOptionalCapabilities: []workers.RunnerOptionalCapability{workers.RunnerOptionalCapabilityImageInput},
 	})
 	if err != nil {
@@ -65,19 +66,37 @@ func (runner *registryTestRunner) Execute(context.Context, workers.RunnerExecuti
 	return runner.result, nil
 }
 
-type registryTestCatalog struct{ metadata workers.RunnerMetadata }
+type registryTestCatalog struct {
+	testutil.ProviderServiceAdapter
+	metadata workers.RunnerMetadata
+}
 
-func (catalog registryTestCatalog) UsesNativeRunner(string) bool { return true }
-func (catalog registryTestCatalog) CanonicalIdentity(identity string) (string, error) {
-	return identity, nil
+func (catalog registryTestCatalog) GetProvider(_ context.Context, request providers.GetProviderRequest) (providers.GetProviderResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.GetProviderResult{}, err
+	}
+	return providers.GetProviderResult{
+		Provider: providers.Descriptor{
+			ID:           providers.ID(catalog.metadata.ID),
+			Capabilities: providerCapabilities(catalog.metadata),
+		},
+	}, nil
 }
-func (catalog registryTestCatalog) RunnerIdentities() []string { return []string{catalog.metadata.ID} }
-func (catalog registryTestCatalog) RunnerMetadata(string) (workers.RunnerMetadata, error) {
-	return catalog.metadata, nil
-}
-func (registryTestCatalog) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
-	return nil
-}
-func (catalog registryTestCatalog) ResolveRunnerSelection(workstation, factory, model string) (workers.ResolvedRunnerSelection, error) {
-	return workers.ResolveRunnerSelection(workstation, factory, model), nil
+
+func providerCapabilities(metadata workers.RunnerMetadata) []providers.Capability {
+	capabilities := make([]providers.Capability, 0, len(metadata.Capabilities.Optional))
+	for _, optional := range metadata.Capabilities.Optional {
+		if optional.Status != workers.RunnerOptionalCapabilityStatusSupported {
+			continue
+		}
+		switch optional.Capability {
+		case workers.RunnerOptionalCapabilityImageInput:
+			capabilities = append(capabilities, providers.CapabilityImageInput)
+		case workers.RunnerOptionalCapabilitySessionResume:
+			capabilities = append(capabilities, providers.CapabilitySessionResume)
+		case workers.RunnerOptionalCapabilityStructuredOutput:
+			capabilities = append(capabilities, providers.CapabilityStructuredOutput)
+		}
+	}
+	return capabilities
 }

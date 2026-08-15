@@ -1,10 +1,12 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -14,6 +16,78 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
+
+func TestRuntimeRunnerPreflightUsesProvidersRoot(t *testing.T) {
+	provider := &runtimePreflightProvider{}
+
+	selection, err := resolveRuntimeRunnerSelection(
+		t.Context(),
+		provider,
+		"workstation-provider",
+		"factory-provider",
+		"model-provider",
+	)
+	if err != nil {
+		t.Fatalf("resolveRuntimeRunnerSelection() error = %v", err)
+	}
+	if selection.RunnerID != "antigravity" || selection.Source != workers.RunnerSelectionSourceWorkstation {
+		t.Fatalf("selection = %#v, want Providers-root selection", selection)
+	}
+	if provider.selection != (providers.ResolveSelectionRequest{
+		Workstation:   "workstation-provider",
+		Factory:       "factory-provider",
+		ModelProvider: "model-provider",
+	}) {
+		t.Fatalf("selection request = %#v", provider.selection)
+	}
+
+	if err := validateRuntimeRunnerIdentity(t.Context(), provider, "provider-alias"); err != nil {
+		t.Fatalf("validateRuntimeRunnerIdentity() error = %v", err)
+	}
+	if err := validateRuntimeRunnerPrerequisites(t.Context(), provider, nil, "provider-alias"); err != nil {
+		t.Fatalf("validateRuntimeRunnerPrerequisites() error = %v", err)
+	}
+	if len(provider.identities) != 2 || provider.identities[0] != "provider-alias" || provider.identities[1] != "provider-alias" {
+		t.Fatalf("identity requests = %#v", provider.identities)
+	}
+	if provider.prerequisite != providers.IDAntigravity {
+		t.Fatalf("prerequisite request = %q, want antigravity", provider.prerequisite)
+	}
+}
+
+type runtimePreflightProvider struct {
+	testutil.ProviderServiceAdapter
+	selection    providers.ResolveSelectionRequest
+	identities   []string
+	prerequisite providers.ID
+}
+
+func (provider *runtimePreflightProvider) ResolveSelection(
+	_ context.Context,
+	request providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	provider.selection = request
+	return providers.ResolveSelectionResult{
+		Provider: providers.IDAntigravity,
+		Source:   providers.SelectionSourceWorkstation,
+	}, nil
+}
+
+func (provider *runtimePreflightProvider) ResolveIdentity(
+	_ context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	provider.identities = append(provider.identities, request.Identity)
+	return providers.ResolveIdentityResult{ID: providers.IDAntigravity}, nil
+}
+
+func (provider *runtimePreflightProvider) ValidatePrerequisites(
+	_ context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	provider.prerequisite = request.ID
+	return nil
+}
 
 // TestBuildRuntimeExecutorsOmitsAutomationsOwnedPollerWorkers proves hosted and
 // poller Worker shapes never enter Workers executor construction, including the

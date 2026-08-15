@@ -153,7 +153,7 @@ func provideFactoryRuntimeClock(edges serviceedges.Edges) factoryruntime.Clock {
 	return platformclock.Real{}
 }
 
-func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) providerOverrideService {
+func provideFactoryRuntimeProviderOverride(edges serviceedges.Edges) factorysessionwire.ProviderOverrideService {
 	return edges.ProviderOverride
 }
 

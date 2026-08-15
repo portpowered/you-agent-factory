@@ -814,6 +814,7 @@ func (we *WorkstationExecutor) prepareWorkstationDefinition(
 }
 
 func (we *WorkstationExecutor) prepareWorkerDefinition(
+	ctx context.Context,
 	dispatch work.WorkDispatch,
 	workerName string,
 	workerDef *interfaces.FactoryWorkerConfig,
@@ -848,7 +849,7 @@ func (we *WorkstationExecutor) prepareWorkerDefinition(
 	if strings.TrimSpace(interpolated.Model) == "" {
 		interpolated.Model = interpolated.RuntimeDefaultModel
 	}
-	if failed := we.resolveInvocationProvider(dispatch, &interpolated, diagnostics, start); failed != nil {
+	if failed := we.resolveInvocationProvider(ctx, dispatch, &interpolated, diagnostics, start); failed != nil {
 		return nil, failed
 	}
 	return &interpolated, nil

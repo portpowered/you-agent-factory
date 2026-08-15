@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -344,6 +345,7 @@ func acpFailureDiagnostics(events []factoryapi.FactoryEvent) string {
 }
 
 type legacyProvider struct {
+	testutil.ProviderServiceAdapter
 	calls    atomic.Int32
 	response workers.InferenceResponse
 	err      error
@@ -362,6 +364,14 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 		}}
 	}
 	return response, p.err
+}
+
+func (p *legacyProvider) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return (testutil.ProviderServiceAdapter{InferFunc: p.Infer}).Execute(ctx, request)
+}
+
+func (p *legacyProvider) Continue(ctx context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
+	return (testutil.ProviderServiceAdapter{InferFunc: p.Infer}).Continue(ctx, request)
 }
 
 func TestACPAgentHelperProcess(t *testing.T) {

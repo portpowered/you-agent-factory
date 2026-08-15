@@ -239,6 +239,10 @@ func (s *Service) Build(
 	if !ok || def == nil {
 		return Result{}, nil
 	}
+	providersService := s.providers
+	if providerOverride != nil {
+		providersService = providerOverride
+	}
 	switch def.Type {
 	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
@@ -273,6 +277,7 @@ func (s *Service) Build(
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
 			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
+			providersService,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -280,6 +285,7 @@ func (s *Service) Build(
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, nil,
 			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
+			providersService,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -297,6 +303,7 @@ func (s *Service) Build(
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
 			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
+			providersService,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -335,6 +342,7 @@ func (s *Service) BuildLogical(
 		s.runWorktree,
 		s.runReasoningEffort,
 		s.workstationFiles,
+		s.providers,
 		s.resolveRunner,
 		s.resolveProvider,
 	)
@@ -509,6 +517,7 @@ func workstationResult(
 	runWorktree string,
 	runReasoningEffort string,
 	workstationFiles platformfilesystem.ReadFileInspector,
+	providersService providers.Service,
 	resolveRunner workers.RunnerSelectionResolver,
 	resolveProvider workers.ProviderIdentityResolver,
 ) Result {
@@ -520,6 +529,7 @@ func workstationResult(
 			ProcessEnvironment:      processEnvironment,
 			CurrentWorkingDirectory: currentWorkingDirectory,
 			RuntimeConfig:           runtimeConfig, DefaultRunnerID: factoryRunnerID,
+			Providers:               providersService,
 			ResolveRunnerSelection:  resolveRunner,
 			ResolveProviderIdentity: resolveProvider,
 			WorkflowContext:         workflowContext, Executor: direct,

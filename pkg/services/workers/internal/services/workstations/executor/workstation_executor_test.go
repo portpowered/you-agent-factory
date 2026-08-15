@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -46,7 +47,7 @@ func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T)
 		},
 	}
 
-	selection, err := executor.resolveRunnerSelection("agent", "codex")
+	selection, err := executor.resolveRunnerSelection(context.Background(), "agent", "codex")
 	if err != nil {
 		t.Fatalf("resolveRunnerSelection() error = %v", err)
 	}
@@ -61,6 +62,49 @@ func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T)
 			gotWorker,
 		)
 	}
+}
+
+func TestWorkstationExecutorUsesProvidersRootForSelection(t *testing.T) {
+	provider := &workstationSelectionProvider{}
+	executor := &WorkstationExecutor{
+		DefaultRunnerID: "factory-provider",
+		Providers:       provider,
+		ResolveRunnerSelection: func(string, string, string) (workerexecution.ResolvedRunnerSelection, error) {
+			t.Fatal("legacy runner selection resolver was called")
+			return workerexecution.ResolvedRunnerSelection{}, nil
+		},
+	}
+
+	selection, err := executor.resolveRunnerSelection(t.Context(), "agent", "model-provider")
+	if err != nil {
+		t.Fatalf("resolveRunnerSelection() error = %v", err)
+	}
+	if selection.RunnerID != "antigravity" || selection.Source != workerexecution.RunnerSelectionSourceWorkstation {
+		t.Fatalf("selection = %#v, want Providers-root selection", selection)
+	}
+	if provider.request != (providers.ResolveSelectionRequest{
+		Workstation:   "agent",
+		Factory:       "factory-provider",
+		ModelProvider: "model-provider",
+	}) {
+		t.Fatalf("Providers selection request = %#v", provider.request)
+	}
+}
+
+type workstationSelectionProvider struct {
+	testutil.ProviderServiceAdapter
+	request providers.ResolveSelectionRequest
+}
+
+func (provider *workstationSelectionProvider) ResolveSelection(
+	_ context.Context,
+	request providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	provider.request = request
+	return providers.ResolveSelectionResult{
+		Provider: providers.IDAntigravity,
+		Source:   providers.SelectionSourceWorkstation,
+	}, nil
 }
 
 func TestWorkstationExecutorPreservesExecutorProviderInDetachedRequest(t *testing.T) {
