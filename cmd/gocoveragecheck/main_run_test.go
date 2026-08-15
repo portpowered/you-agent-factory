@@ -193,6 +193,54 @@ func TestExecuteReportsUncoveredBlocksForManifestRegression(t *testing.T) {
 	}
 }
 
+func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	rootObservationPackage := modulePath + "/pkg/services/factory_runtime/internal/rootobservation"
+	manifestPath := writePackageMinimumManifest(t, "unit", rootObservationPackage, "100.00")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandWithRootObservationRegression
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        rootObservationPackage,
+		packages:        "./pkg/services/factory_runtime/internal/rootobservation",
+		packageManifest: manifestPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+
+	wantFailure := "package coverage regression: package=" + rootObservationPackage +
+		" lane=unit expected-minimum=100.00% actual=95.5556% delta=-4.4444 percentage-points covered=43/45 statements; " +
+		"uncovered blocks: pkg/services/factory_runtime/internal/rootobservation/project.go:21 (1 statement), " +
+		"pkg/services/factory_runtime/internal/rootobservation/project.go:41 (1 statement); " +
+		"restore coverage before running `go run ./cmd/gocoveragecheck -suite unit -profile <coverage-profile> -update-manifest " + manifestPath + "`"
+	if err.Error() != wantFailure {
+		t.Fatalf("execute() error = %q, want exact regression diagnostic %q", err, wantFailure)
+	}
+	if strings.Count(err.Error(), "uncovered blocks:") != 1 || strings.Count(err.Error(), "(1 statement)") != 2 {
+		t.Fatalf("execute() error = %q, want exactly two uncovered blocks", err)
+	}
+	if !strings.Contains(stdout.String(), rootObservationPackage+"\tcoverage: 95.6% of statements") {
+		t.Fatalf("execute() stdout = %q, want rootobservation package summary", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
 func TestExecuteDoesNotReportPackageSummariesWhenMeasurementFails(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter

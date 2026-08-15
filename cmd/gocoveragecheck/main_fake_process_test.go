@@ -18,6 +18,10 @@ func fakeGoCoverageCommandWithMeasuredZeroConfig(invocation commandInvocation) (
 	return fakeGoCommandByScenario("coverage-measured-zero-config", invocation.name, invocation.args...)
 }
 
+func fakeGoCoverageCommandWithRootObservationRegression(invocation commandInvocation) (string, string, error) {
+	return fakeGoCommandByScenario("coverage-rootobservation-regression", invocation.name, invocation.args...)
+}
+
 func fakeGoCoverageCommandPassing(invocation commandInvocation) (string, string, error) {
 	return fakeGoCommandByScenario("coverage-passing", invocation.name, invocation.args...)
 }
@@ -115,6 +119,20 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 					return "", "", err
 				}
 			}
+		case "coverage-rootobservation-regression":
+			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:51.1,52.1 8 1",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:41.1,42.1 1 0",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:1.1,2.1 10 1",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:21.1,22.1 1 0",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:61.1,62.1 6 1",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:31.3,32.1 7 1",
+				modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:11.1,12.1 12 1",
+				"",
+			}, "\n")); err != nil {
+				return "", "", err
+			}
 		case "coverage-with-coverpkg-ok-summary", "coverage-with-ok-summary", "coverage-default":
 			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
 				"mode: count",
@@ -131,6 +149,8 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 		switch scenario {
 		case "coverage-passing", "coverage-measured-zero-config":
 			return modulePath + "/pkg/config\t\tcoverage: 75.0% of statements\n", "", nil
+		case "coverage-rootobservation-regression":
+			return modulePath + "/pkg/services/factory_runtime/internal/rootobservation\t\tcoverage: 95.6% of statements\n", "", nil
 		case "coverage-temp-profile":
 			if err := writeTempProfileMarkerOrErr(profilePath); err != nil {
 				return "", "", err
