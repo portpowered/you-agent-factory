@@ -202,12 +202,6 @@ func (o commandEffectRunnerOption) apply(opts *wireOptions) {
 	opts.commandRunner = o.runner
 }
 
-// WithCommandEffectRunner injects a Providers-owned subprocess effect. Any
-// Workers-specific projection belongs in the application composition root.
-func WithCommandEffectRunner(runner providerservice.CommandRunner) Option {
-	return commandEffectRunnerOption{runner: runner}
-}
-
 type agyCommandRunnerOption struct {
 	runner any
 }
