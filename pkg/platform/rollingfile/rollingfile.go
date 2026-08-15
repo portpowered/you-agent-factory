@@ -134,44 +134,55 @@ func (w *Writer) Rollback(value any) error {
 		return w.rollbackRotation(checkpoint)
 	}
 	if w.file != nil {
-		if checkpoint.active {
-			if err := w.file.Close(); err != nil {
-				return err
-			}
-			w.file = nil
-			if err := os.Truncate(w.Filename, checkpoint.size); err != nil {
-				return err
-			}
-			file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
-			if err != nil {
-				return fmt.Errorf("can't reopen rolled back logfile: %w", err)
-			}
-			w.file = file
-			w.size = checkpoint.size
-			return nil
-		}
-		if err := w.file.Close(); err != nil {
-			return err
-		}
-		w.file = nil
-		w.size = 0
-		if !checkpoint.existed {
-			return os.Remove(w.Filename)
-		}
-		if err := os.Truncate(w.Filename, checkpoint.size); err != nil {
-			return err
-		}
-		return nil
+		return w.rollbackOpenFile(checkpoint)
 	}
 	if checkpoint.active {
-		file, err := os.OpenFile(w.Filename, os.O_WRONLY, 0o600)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		if err := file.Truncate(checkpoint.size); err != nil {
-			return err
-		}
+		return w.rollbackClosedActiveFile(checkpoint)
+	}
+	w.size = 0
+	return nil
+}
+
+func (w *Writer) rollbackOpenFile(checkpoint Checkpoint) error {
+	if checkpoint.active {
+		return w.rollbackOpenActiveFile(checkpoint)
+	}
+	if err := w.file.Close(); err != nil {
+		return err
+	}
+	w.file = nil
+	w.size = 0
+	if !checkpoint.existed {
+		return os.Remove(w.Filename)
+	}
+	return os.Truncate(w.Filename, checkpoint.size)
+}
+
+func (w *Writer) rollbackOpenActiveFile(checkpoint Checkpoint) error {
+	if err := w.file.Close(); err != nil {
+		return err
+	}
+	w.file = nil
+	if err := os.Truncate(w.Filename, checkpoint.size); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(w.Filename, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("can't reopen rolled back logfile: %w", err)
+	}
+	w.file = file
+	w.size = checkpoint.size
+	return nil
+}
+
+func (w *Writer) rollbackClosedActiveFile(checkpoint Checkpoint) error {
+	file, err := os.OpenFile(w.Filename, os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if err := file.Truncate(checkpoint.size); err != nil {
+		return err
 	}
 	w.size = 0
 	return nil

@@ -87,6 +87,7 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 			t.Fatalf("read response line: %v", readErr)
 		}
 		received = append(received, strings.TrimSpace(raw))
+		assertOutboundTranscriptVisible(t, home, len(received))
 	}
 	_ = stdinWrite.Close()
 
@@ -96,6 +97,20 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 	}
 
 	assertTranscriptMatchesTraffic(t, records, sent, received)
+}
+
+func assertOutboundTranscriptVisible(t *testing.T, home string, want int) {
+	t.Helper()
+	records := readWireTranscript(t, home)
+	got := 0
+	for _, record := range records {
+		if record.Direction == wiretranscript.DirectionOut {
+			got++
+		}
+	}
+	if got < want {
+		t.Fatalf("outbound transcript records visible after stdout response = %d, want at least %d", got, want)
+	}
 }
 
 // readWireTranscript locates and decodes the single transcript this connection
