@@ -61,6 +61,9 @@ func Continue(
 	service Service,
 	request ContinueRequest,
 ) (ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return ContinueResult{}, err
+	}
 	continuation, ok := service.(ContinuationService)
 	if !ok {
 		return ContinueResult{
