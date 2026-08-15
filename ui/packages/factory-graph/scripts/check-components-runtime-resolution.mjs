@@ -45,7 +45,7 @@ function assertSourceEntrypoints(tsconfig) {
 }
 
 function outputFrom(error) {
-  return [error.stdout, error.stderr].filter(Boolean).join("\n");
+  return [error.stdout, error.stderr, error.message].filter(Boolean).join("\n");
 }
 
 try {
