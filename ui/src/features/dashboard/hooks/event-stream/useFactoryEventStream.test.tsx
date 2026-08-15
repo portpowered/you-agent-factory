@@ -312,17 +312,16 @@ describe("useFactoryEventStream transport", () => {
     ).toMatchObject({ status: "live" });
     expect(receivedEvents).toEqual([]);
 
-    await act(async () => {
+    act(() => {
       sessionBStream.emit("message", {
         ...CANONICAL_SELECTED_TICK_EVENTS[0],
         id: "session-b-current",
       });
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, 20);
-      });
     });
 
-    expect(receivedEvents).toEqual(["session-b-current"]);
+    await waitFor(() => {
+      expect(receivedEvents).toEqual(["session-b-current"]);
+    });
   });
 
   it("does not open a stream when sessionID is null", () => {
