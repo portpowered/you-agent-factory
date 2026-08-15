@@ -20,14 +20,14 @@ later updates to this file.
 
 The raw structured reconciliation is 44 `fail` events: 36 named test events
 and 8 package-summary events. The named events initially produced 36 distinct
-package/test pairs across 8 packages. The alignment selector and the
-service-command-runner selector have since passed; their parent and nested
-rows were removed from the active inventory, leaving 28 distinct package/test
-pairs. Nested subtests remain separate rows; their slash-delimited identities
-are preserved exactly as emitted. The quarantine schema currently accepts only
-top-level test selectors, so later quarantine entries must use the
-corresponding top-level name while retaining these nested identities as
-evidence.
+package/test pairs across 8 packages. The alignment selector, the
+service-command-runner selector, and this lane's packaged Factory portability
+selector have since passed; their parent and nested rows were removed from the
+active inventory, leaving 27 distinct package/test pairs. Nested subtests
+remain separate rows; their slash-delimited identities are preserved exactly
+as emitted. The quarantine schema currently accepts only top-level test
+selectors, so later quarantine entries must use the corresponding top-level
+name while retaining these nested identities as evidence.
 
 ## Distinct authoritative package/test pairs
 
@@ -55,14 +55,13 @@ evidence.
 | `github.com/portpowered/infinite-you/tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs/signature-only_syntax_remains_literal_text` |
 | `github.com/portpowered/infinite-you/tests/functional/factory/packaged/cross` | `TestPackagedFactoryInvokedByCLICanBeInspectedByAPI` |
 | `github.com/portpowered/infinite-you/tests/functional/observability/verification` | `TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics` |
-| `github.com/portpowered/infinite-you/tests/functional/product/packaged_factory_portability` | `TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity` |
 | `github.com/portpowered/infinite-you/tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` |
 | `github.com/portpowered/infinite-you/tests/functional/providers/acp` | `TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` |
 
-**Active inventory count: 28 distinct package/test pairs.**
+**Active inventory count: 27 distinct package/test pairs.**
 
 ## Parent-versus-tip comparison
 
@@ -84,12 +83,13 @@ is `github.com/portpowered/infinite-you/` followed by the displayed value.
 The two historical passes had identical classifications: 21 failures at both
 commits, 14 passes at both commits, and one setup-incomparable skip at both
 commits. There was no test that failed at `ed502b781` and passed at
-`db7379d47`; no genuine tip-only regression was found. This lane repaired five
-alignment rows that had failed in that historical comparison. The
-service-command-runner parent and two nested rows are also repaired in this
-lane, leaving 13 same-machine failures as confirmed pre-existing candidates
-for the next quarantine story. The 14 CI failures that passed when isolated on
-both commits remain ambiguous/non-reproduced and must not be quarantined. The
+`db7379d47`; no genuine tip-only regression was found. The alignment selector
+and service-command-runner selector repaired in earlier lanes accounted for
+eight historical rows. This lane repaired one packaged Factory portability row
+that had also failed in that historical comparison, leaving 12 same-machine
+failures as confirmed pre-existing candidates for the next quarantine story.
+The 14 CI failures that passed when isolated on both commits remain
+ambiguous/non-reproduced and must not be quarantined. The
 observability row is setup-incomparable because its Linux-only test files are
 not runnable on this Windows machine and must not be quarantined from this
 comparison.
@@ -118,12 +118,11 @@ comparison.
 | 20 | `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs/signature-only_syntax_remains_literal_text` | FAIL (5.87s) | FAIL (3.98s) | CONFIRMED PRE-EXISTING | `INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT`: unknown named argument `mode` for `@you/goal`. |
 | 21 | `tests/functional/factory/packaged/cross` | `TestPackagedFactoryInvokedByCLICanBeInspectedByAPI` | PASS (4.93s) | PASS (4.32s) | AMBIGUOUS | Authoritative CI never observed a live session/status during CLI invocation; isolated replays passed at both commits. |
 | 22 | `tests/functional/observability/verification` | `TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics` | SETUP-SKIP (0.57s) | SETUP-SKIP (0.49s) | SETUP-INCOMPARABLE | The Linux test files are absent under Windows build constraints (`[no test files]`); the authoritative Linux assertion was not comparable. |
-| 23 | `tests/functional/product/packaged_factory_portability` | `TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity` | FAIL (20.40s) | FAIL (18.68s) | CONFIRMED PRE-EXISTING | Both replays timed out waiting for the process API server and reported missing invocation input during shutdown. |
-| 24 | `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | FAIL (6.97s) | FAIL (4.31s) | CONFIRMED PRE-EXISTING | Same-machine rejection/process failure reproduced at both commits; authoritative CI also failed the worker-session start path. |
-| 25 | `tests/functional/providers/acp` | `TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio` | PASS (10.71s) | PASS (5.47s) | AMBIGUOUS | Authoritative CI emitted a failure with only progress-publication warnings; isolated replays passed at both commits. |
-| 26 | `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | FAIL (22.50s) | FAIL (4.33s) | CONFIRMED PRE-EXISTING | `/events` replay failed with `unexpected EOF` at both commits. |
-| 27 | `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | FAIL (7.01s) | FAIL (3.99s) | CONFIRMED PRE-EXISTING | Provider sessions were absent from events; `sess-world-view-success` was missing at both commits. |
-| 28 | `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | FAIL (5.34s) | FAIL (4.61s) | CONFIRMED PRE-EXISTING | Event order stopped before the expected dispatch-created/inference-request/inference-response/dispatch-completed sequence at both commits. |
+| 23 | `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | FAIL (6.97s) | FAIL (4.31s) | CONFIRMED PRE-EXISTING | Same-machine rejection/process failure reproduced at both commits; authoritative CI also failed the worker-session start path. |
+| 24 | `tests/functional/providers/acp` | `TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio` | PASS (10.71s) | PASS (5.47s) | AMBIGUOUS | Authoritative CI emitted a failure with only progress-publication warnings; isolated replays passed at both commits. |
+| 25 | `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | FAIL (22.50s) | FAIL (4.33s) | CONFIRMED PRE-EXISTING | `/events` replay failed with `unexpected EOF` at both commits. |
+| 26 | `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | FAIL (7.01s) | FAIL (3.99s) | CONFIRMED PRE-EXISTING | Provider sessions were absent from events; `sess-world-view-success` was missing at both commits. |
+| 27 | `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | FAIL (5.34s) | FAIL (4.61s) | CONFIRMED PRE-EXISTING | Event order stopped before the expected dispatch-created/inference-request/inference-response/dispatch-completed sequence at both commits. |
 
 The exact command for each row is the per-row command pattern above with the
 row's full test identity and package substituted verbatim. The authoritative
@@ -132,7 +131,7 @@ parent-versus-tip behavior and do not replace that source failure set.
 
 ## Quarantine mapping
 
-The remaining 13 confirmed pre-existing failure rows map to 10 top-level selectors
+The remaining 12 confirmed pre-existing failure rows map to 9 top-level selectors
 because the quarantine schema intentionally matches top-level Go tests. A
 parent selector covers its independently recorded nested subtests; no broader
 package selector is used. Every entry below is `GENUINELY FAILING`, names the
@@ -146,13 +145,12 @@ observed failure, and records reproduction at both `ed502b781` and
 | `tests/functional/cli/named_invocation` | `TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution` | 15–17 | `RUN_INVOCATION_FAILED`: provider `${executorProvider}` is unknown | CLI named invocation / provider selection |
 | `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput` | 18 | `RUN_INVOCATION_FAILED`: provider `${executorProvider}` is unknown | CLI named invocation / provider selection |
 | `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs` | 19–20 | `INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT`: `mode` is unknown for `@you/goal` | CLI named invocation / compatibility inputs |
-| `tests/functional/product/packaged_factory_portability` | `TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstrapParity` | 23 | Process API server readiness timeout and missing invocation input during shutdown | Packaged factory portability / bootstrap |
-| `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | 24 | Same-machine rejection/process failure and worker-session start failure | Providers / mock-worker startup |
-| `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | 26 | `/events` replay failed with `unexpected EOF` | Runtime API / event replay framing |
-| `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | 27 | Provider sessions were absent from events; `sess-world-view-success` was missing | Runtime API / provider-session projection |
-| `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | 28 | Canonical event order stopped before the expected dispatch/inference sequence | Runtime API / inference event emission |
+| `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | 23 | Same-machine rejection/process failure and worker-session start failure | Providers / mock-worker startup |
+| `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | 25 | `/events` replay failed with `unexpected EOF` | Runtime API / event replay framing |
+| `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | 26 | Provider sessions were absent from events; `sess-world-view-success` was missing | Runtime API / provider-session projection |
+| `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | 27 | Canonical event order stopped before the expected dispatch/inference sequence | Runtime API / inference event emission |
 
-The 14 ambiguous/non-reproduced rows (1–3, 5–13, 21, and 25) and the one
+The 14 ambiguous/non-reproduced rows (1–3, 5–13, 21, and 24) and the one
 setup-incomparable Windows row (22) remain unquarantined. No failure that
 passed at `ed502b781` and failed at `db7379d47`, or otherwise indicated a
 tip-only regression, was found.
@@ -163,3 +161,7 @@ were removed after the exact selector passed. The service-command-runner
 selector also changed from observed-fail to observed-pass; its quarantine entry
 and three corresponding inventory rows were removed after the exact selector
 passed.
+
+The packaged Factory portability selector changed from observed-fail to
+observed-pass. Its quarantine entry and corresponding inventory rows were
+removed after the exact selector passed.
