@@ -59,6 +59,7 @@ export interface FactoryGraphWorkstationNodeData
   muted: boolean;
   now: number;
   progressOutcomeRouteWorkstation?: unknown;
+  runtimeStatus?: string | null;
   selectedWorkID: string | null;
   selectedWorkstation: boolean;
   resizeControls?: FactoryGraphNodeResizeControlsProps;
@@ -103,6 +104,7 @@ export function FactoryGraphWorkstationNodeView({
     focused: data.focused,
     lifecycle: data.active ? "PROCESSING" : undefined,
     muted: data.muted,
+    runtimeStatus: data.runtimeStatus,
     selected,
     validation: data.validationError,
   });
@@ -131,6 +133,7 @@ export function FactoryGraphWorkstationNodeView({
         focused: data.focused,
         lifecycle: data.active ? "PROCESSING" : undefined,
         muted: data.muted,
+        runtimeStatus: data.runtimeStatus,
         selected,
         validation: data.validationError,
       }}

@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { GraphNodeShell, } from "@you-agent-factory/components/graphs";
 import { factoryGraphNodeFamilyForShellType, factoryGraphNodeFamilyRole, } from "./node-family.js";
+import { FactoryGraphNodeInteractionOverlayView, } from "./node-interaction-overlay.js";
 import { FactoryGraphNodeResizeControls, } from "./node-resize-controls.js";
 import { factoryGraphNodeVisualStateClassName } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState, } from "./visual-state.js";
@@ -15,7 +16,7 @@ const Z_AXIS_INCOMPLETE_HINT_ANCHOR_IDS = [
     "workstation-on-rejection-source",
 ];
 /** Original semantic Factory node frame, including its typed connection rails. */
-export function FactoryGraphNodeShell({ children, className = "", handles, nodeType, resizeControls, visualState: visualStateInput, zAxisIncompleteHints = null, }) {
+export function FactoryGraphNodeShell({ children, className = "", handles, interactionOverlay, nodeType, resizeControls, visualState: visualStateInput, zAxisIncompleteHints = null, }) {
     const packageHandles = handles.map((handle) => ({
         ...handle,
         tone: handle.tone ?? factoryGraphHandleToneFromId(handle.id),
@@ -26,12 +27,24 @@ export function FactoryGraphNodeShell({ children, className = "", handles, nodeT
         family: familyRole.family,
         ...visualStateInput,
     });
-    return (_jsxs("div", { className: "relative h-full min-w-0 w-full", children: [_jsx(GraphNodeShell, { "aria-invalid": visualState.validation === "error" || undefined, className: classNames(className, factoryGraphNodeVisualStateClassName(visualState)), "data-current-activity-node-type": nodeType, "data-graph-node-family": familyRole.family, "data-graph-node-shape": familyRole.shape, "data-graph-visual-active-flow": visualState.activeFlow || undefined, "data-graph-visual-border": visualState.border, "data-graph-visual-emphasis": visualState.emphasis, "data-graph-visual-focus": visualState.focus, "data-graph-visual-glow": visualState.glow, "data-graph-visual-icon": visualState.icon, "data-graph-visual-lifecycle": visualState.lifecycle, "data-graph-visual-muted": visualState.muted || undefined, "data-graph-visual-selection": visualState.selection || undefined, "data-graph-visual-status": visualState.status, "data-graph-visual-surface": visualState.surface, "data-graph-visual-treatment": visualState.statusTreatment, "data-graph-visual-validation": visualState.validation, handles: packageHandles, nodeKind: nodeType, showStateIndicator: false, children: children }), resizeControls ? (_jsx(FactoryGraphNodeResizeControls, { ...resizeControls })) : null, activeHints
+    return (_jsxs("div", { className: "relative h-full min-w-0 w-full", children: [_jsxs(GraphNodeShell, { "aria-invalid": visualState.validation === "error" || undefined, className: classNames("shadow-none", className, interactionOverlayClassName(interactionOverlay?.draftStatus), factoryGraphNodeVisualStateClassName(visualState)), "data-current-activity-node-type": nodeType, "data-graph-node-family": familyRole.family, "data-graph-node-shape": familyRole.shape, "data-graph-visual-active-flow": visualState.activeFlow || undefined, "data-graph-visual-border": visualState.border, "data-graph-visual-emphasis": visualState.emphasis, "data-graph-visual-focus": visualState.focus, "data-graph-visual-glow": visualState.glow, "data-graph-visual-icon": visualState.icon, "data-graph-visual-lifecycle": visualState.lifecycle, "data-graph-visual-muted": visualState.muted || undefined, "data-graph-visual-selection": visualState.selection || undefined, "data-graph-visual-status": visualState.status, "data-graph-visual-surface": visualState.surface, "data-graph-visual-treatment": visualState.statusTreatment, "data-graph-visual-validation": visualState.validation, "data-graph-draft-status": interactionOverlay?.draftStatus === "none"
+                    ? undefined
+                    : interactionOverlay?.draftStatus, handles: packageHandles, nodeKind: nodeType, showStateIndicator: false, children: [children, _jsx(FactoryGraphNodeInteractionOverlayView, { overlay: interactionOverlay })] }), resizeControls ? (_jsx(FactoryGraphNodeResizeControls, { ...resizeControls })) : null, activeHints
                 ? workstationZAxisIncompleteHintSlots().map((slot) => (_jsx(ZAxisIncompleteHintOrb, { accessibleLabel: activeHints.accessibleLabel, anchorId: slot.anchorId, title: activeHints.title, top: slot.top }, slot.anchorId)))
                 : null] }));
 }
 function classNames(...values) {
     return values.filter(Boolean).join(" ");
+}
+function interactionOverlayClassName(draftStatus) {
+    switch (draftStatus) {
+        case "addition":
+            return "ring-2 ring-af-warning-border";
+        case "removal":
+            return "ring-2 ring-af-danger-border";
+        default:
+            return undefined;
+    }
 }
 export function factoryGraphHandleToneFromId(handleId) {
     if (handleId.includes("resource"))

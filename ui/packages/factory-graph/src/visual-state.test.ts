@@ -19,6 +19,8 @@ describe("resolveFactoryGraphVisualState", () => {
   it.each([
     ["INITIAL", "initial", "waiting", "waiting"],
     ["PROCESSING", "processing", "active", "processing"],
+    ["ACCEPTED", "terminal", "success", "completed"],
+    ["CONTINUE", "terminal", "success", "completed"],
     ["TERMINAL", "terminal", "success", "completed"],
     ["FAILED", "failed", "danger", "failed"],
   ] as const)(

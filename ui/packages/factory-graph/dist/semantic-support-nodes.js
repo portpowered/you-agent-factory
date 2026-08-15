@@ -17,19 +17,21 @@ export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, 
         focused: data.focused,
         muted: data.muted,
         selected,
+        validation: data.validationError,
     });
-    const content = (_jsxs("span", { "aria-label": label, className: "flex min-w-0 items-center gap-1.5 overflow-hidden", "data-worker-label-zone": true, role: "img", title: label, children: [_jsx("span", { className: "sr-only", children: label }), _jsx(GraphSemanticIcon, { className: classNames("h-3.5 w-3.5 shrink-0", factoryGraphNodeVisualIconClassName(visualState, "text-info")), kind: "worker", label: workerLabel }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName("block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info"), children: workerLabel }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.8rem] font-bold leading-tight text-on-surface"), children: workerName })] })] }));
+    const content = (_jsxs("span", { "aria-label": label, className: "flex min-w-0 items-center gap-1.5 overflow-hidden", "data-factory-entity-semantic-icon": true, "data-worker-label-zone": true, role: "img", title: label, children: [_jsx("span", { className: "sr-only", children: label }), _jsx(GraphSemanticIcon, { className: classNames("h-3.5 w-3.5 shrink-0", factoryGraphNodeVisualIconClassName(visualState, "text-info")), kind: "worker", label: workerLabel }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName("block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info"), children: workerLabel }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.8rem] font-bold leading-tight text-on-surface"), "data-factory-entity-title": true, title: workerName, children: workerName })] })] }));
     return (_jsx(FactoryGraphNodeShell, { className: classNames(factoryGraphNodeSurfaceClassName("info"), "justify-center text-left text-on-surface", factoryGraphNodeHoverClassName({
             activeFlow: data.activeFlow,
             muted: data.muted,
             selected,
-        })), handles: data.handles, nodeType: "worker", resizeControls: data.resizeControls
+        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "worker", resizeControls: data.resizeControls
             ? { ...data.resizeControls, isVisible: selected }
             : undefined, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             muted: data.muted,
             selected,
+            validation: data.validationError,
         }, children: selectable ? (_jsx(GraphNodeButton, { "aria-label": selectLabel("worker", workerName, data.locale), "aria-pressed": selected, className: "grid min-w-0 gap-0.5 overflow-hidden", "data-selected-worker": selected ? "true" : undefined, onClick: (event) => {
                 event.stopPropagation();
                 data.onSelectWorker?.(workerName);
@@ -56,7 +58,7 @@ export function FactoryGraphWorkTypeNodeView({ data, selected: reactFlowSelected
             muted: data.muted,
             selected,
             validationError: data.validationError,
-        })), handles: data.handles, nodeType: "workType", resizeControls: data.resizeControls
+        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workType", resizeControls: data.resizeControls
             ? { ...data.resizeControls, isVisible: selected }
             : undefined, visualState: {
             activeFlow: data.activeFlow,
@@ -81,19 +83,21 @@ export function FactoryGraphResourceNodeView({ data, selected: reactFlowSelected
         focused: data.focused,
         muted: data.muted,
         selected,
+        validation: data.validationError,
     });
     const content = (_jsx(FactoryGraphResourceNodeContent, { label: label, locale: data.locale, place: data.place, resourceLabel: resourceLabel, tokenCount: data.tokenCount, visualState: visualState }));
     return (_jsx(FactoryGraphNodeShell, { className: classNames(factoryGraphNodeSurfaceClassName("resource"), "justify-center text-left text-on-surface", factoryGraphNodeHoverClassName({
             activeFlow: data.activeFlow,
             muted: data.muted,
             selected,
-        })), handles: data.handles, nodeType: "resource", resizeControls: data.resizeControls
+        })), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "resource", resizeControls: data.resizeControls
             ? { ...data.resizeControls, isVisible: selected }
             : undefined, visualState: {
             activeFlow: data.activeFlow,
             focused: data.focused,
             muted: data.muted,
             selected,
+            validation: data.validationError,
         }, children: selectable ? (_jsx(GraphNodeButton, { "aria-label": selectLabel("resource", label, data.locale), "aria-pressed": selected, className: "flex min-w-0 w-full flex-col overflow-hidden", "data-selected-resource": selected ? "true" : undefined, onClick: (event) => {
                 event.stopPropagation();
                 data.onSelectResource?.(label);

@@ -1,6 +1,7 @@
 export { FactoryGraphReplaySurface, projectFactoryGraphReplayFlow, } from "./factory-graph-replay-surface.js";
-export { FACTORY_GRAPH_NODE_FAMILIES, FACTORY_GRAPH_NODE_FAMILY_ROLES, factoryGraphNodeFamilyDimensions, factoryGraphNodeFamilyForShellType, factoryGraphNodeFamilyRole, fitFactoryGraphNodeDimensions, resolveFactoryGraphNodeDimensions, resolveFactoryGraphNodeResizeDimensions, } from "./node-family.js";
 export { FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS, FactoryGraphGroupRegionLayer, factoryGraphGroupRegionColorStyle, isValidFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegions, resolveFactoryGraphGroupRegionColor, } from "./group-region-presentation.js";
+export { FACTORY_GRAPH_NODE_FAMILIES, FACTORY_GRAPH_NODE_FAMILY_ROLES, factoryGraphNodeFamilyDimensions, factoryGraphNodeFamilyForShellType, factoryGraphNodeFamilyRole, fitFactoryGraphNodeDimensions, resolveFactoryGraphNodeDimensions, resolveFactoryGraphNodeResizeDimensions, } from "./node-family.js";
+export { FactoryGraphNodeInteractionOverlayView, } from "./node-interaction-overlay.js";
 export { FactoryGraphNodeResizeControls, } from "./node-resize-controls.js";
 export { FactoryGraphDocNodeView, } from "./semantic-doc-node.js";
 export { GRAPH_SEMANTIC_ICON_KINDS, GraphSemanticIcon, graphSemanticIconLabel, } from "./semantic-icon.js";

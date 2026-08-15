@@ -28,7 +28,7 @@ export function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }) 
             }),
         ]
             .filter(Boolean)
-            .join(" "), handles: data.handles, nodeType: "doc", resizeControls: data.resizeControls
+            .join(" "), handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "doc", resizeControls: data.resizeControls
             ? { ...data.resizeControls, isVisible: selected }
             : undefined, visualState: {
             activeFlow: data.activeFlow,
@@ -42,7 +42,7 @@ export function FactoryGraphDocNodeView({ data, selected: reactFlowSelected, }) 
             }, children: _jsx(FactoryGraphDocNodeContent, { displayLabel: data.displayLabel, docLabel: docLabel, targetPath: data.targetPath, visualState: visualState }) })) : (_jsx(FactoryGraphDocNodeContent, { displayLabel: data.displayLabel, docLabel: docLabel, targetPath: data.targetPath, visualState: visualState })) }));
 }
 function FactoryGraphDocNodeContent({ displayLabel, docLabel, targetPath, visualState, }) {
-    return (_jsxs("div", { className: "grid min-w-0 gap-1 px-2 py-1", children: [_jsxs("div", { className: "flex min-w-0 items-center gap-1.5", children: [_jsx(GraphSemanticIcon, { className: factoryGraphNodeVisualIconClassName(visualState, "text-on-surface-variant"), kind: "doc", label: docLabel }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("block text-sm font-medium text-on-surface"), children: displayLabel })] }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("block text-xs text-on-surface-variant"), children: targetPath })] }));
+    return (_jsxs("div", { className: "grid min-w-0 gap-1 px-2 py-1", children: [_jsxs("div", { className: "flex min-w-0 items-center gap-1.5", children: [_jsx("span", { "data-factory-entity-semantic-icon": true, children: _jsx(GraphSemanticIcon, { className: factoryGraphNodeVisualIconClassName(visualState, "text-on-surface-variant"), kind: "doc", label: docLabel }) }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("block text-sm font-medium text-on-surface"), "data-factory-entity-title": true, children: displayLabel })] }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("block text-xs text-on-surface-variant"), children: targetPath })] }));
 }
 function selectDocLabel(displayLabel, locale) {
     return locale === "zh-CN"

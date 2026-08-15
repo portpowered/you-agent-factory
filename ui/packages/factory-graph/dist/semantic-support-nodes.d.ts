@@ -1,5 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 /** The portion of a Factory place needed by the original semantic node views. */
@@ -14,6 +15,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
+    interactionOverlay?: FactoryGraphNodeInteractionOverlay;
     kind: "worker";
     locale?: string;
     muted: boolean;
@@ -21,6 +23,7 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
     place: FactoryGraphPlaceRef;
     resizeControls?: FactoryGraphNodeResizeControlsProps;
     selectedWorker: boolean;
+    validationError?: boolean;
 }
 export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
 export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
@@ -28,6 +31,7 @@ export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
+    interactionOverlay?: FactoryGraphNodeInteractionOverlay;
     isDefaultWorkType?: boolean;
     kind: "work-type";
     locale?: string;
@@ -45,6 +49,7 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
     focused?: boolean;
     factoryGraphNodeId?: string;
     handles: FactoryGraphNodeHandle[];
+    interactionOverlay?: FactoryGraphNodeInteractionOverlay;
     kind: "resource";
     locale?: string;
     muted: boolean;
@@ -53,6 +58,7 @@ export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
     resizeControls?: FactoryGraphNodeResizeControlsProps;
     selectedResource: boolean;
     tokenCount: number;
+    validationError?: boolean;
 }
 export type FactoryGraphResourceNode = Node<FactoryGraphResourceNodeData, "resource">;
 /** Original Factory worker node, with host-owned worker selection. */
