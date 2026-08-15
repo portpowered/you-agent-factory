@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 )
@@ -55,5 +56,33 @@ func TestReconstructFactoryWorldState_PreservesEmptyInput(t *testing.T) {
 	}
 	if state.Tick != 4 || state.EventTime != (time.Time{}) {
 		t.Fatalf("empty state = %#v, want selected tick without event time", state)
+	}
+}
+
+func TestCanonicalFactoryEventProjectsProviderSessionToContinuation(t *testing.T) {
+	var event factoryapi.FactoryEvent
+	if err := json.Unmarshal([]byte(`{
+		"context":{"eventTime":"2026-07-16T03:00:00Z","sequence":1,"tick":1},
+		"id":"evt-model-response",
+		"payload":{"outcome":"FAILED","providerSession":{"provider":"antigravity","kind":"session_id","id":"session-1"}},
+		"schemaVersion":"agent-factory.event.v1",
+		"type":"MODEL_RESPONSE"
+	}`), &event); err != nil {
+		t.Fatalf("decode provider-session event: %v", err)
+	}
+
+	canonical, err := factoryeventprojection.CanonicalFactoryEvent(event)
+	if err != nil {
+		t.Fatalf("canonical event: %v", err)
+	}
+	var payload workerexecution.ModelResponseEventPayload
+	if err := canonical.DecodePayload(&payload); err != nil {
+		t.Fatalf("decode canonical model response: %v", err)
+	}
+	if payload.ProviderSession != nil {
+		t.Fatalf("canonical payload retained provider session = %#v", payload.ProviderSession)
+	}
+	if payload.Continuation == nil || payload.Continuation.Provider != "antigravity" || payload.Continuation.ProviderSessionID != "session-1" {
+		t.Fatalf("canonical continuation = %#v, want provider/session identity", payload.Continuation)
 	}
 }
