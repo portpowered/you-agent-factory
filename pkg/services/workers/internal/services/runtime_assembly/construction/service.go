@@ -479,33 +479,12 @@ func agentProgressPublisherOrNoop(
 	return func(_ workers.ProgressFragment) {}
 }
 
-// runnerProviderAdapter lets the provider-boundary recorder observe the final
-// decorated runner. Registry-selected conductor routes and retained native
-// routes therefore emit the same canonical inference events exactly once.
-type runnerProviderAdapter struct {
-	runner workers.Runner
-}
-
 func recordProviderRunner(
 	runner workers.Runner,
 	recorder workers.InferenceEventRecorder,
 	clock func() time.Time,
 ) workers.Runner {
 	return workerrecording.NewProviderRunner(runner, recorder, clock)
-}
-
-func (a runnerProviderAdapter) Infer(
-	ctx context.Context,
-	request workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	if a.runner == nil {
-		return workerexecution.InferenceResponse{}, workers.NewProviderError(
-			workerexecution.WorkFailureTypeMisconfigured,
-			"recording runner requires an implementation",
-			nil,
-		)
-	}
-	return a.runner.Execute(ctx, request)
 }
 
 // effectiveSkipPermissionsRunner installs invocation-local policy outside all
