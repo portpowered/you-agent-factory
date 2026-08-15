@@ -88,6 +88,7 @@ export function DashboardBento({
     currentSelection.selectedWorkID,
     selectedTraceID,
     resolvedLocale,
+    workOutcomeStream?.identity,
   );
   const providerSessionState =
     useSelectedProviderSessionState(currentSelection);

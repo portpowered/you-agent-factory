@@ -1,3 +1,4 @@
+import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import type { TraceGridState } from "../components/trace-grid-card";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { useDashboardTrace } from "./useTrace";
@@ -11,9 +12,14 @@ export function useTraceDrilldown(
   selectedWorkID: string | null,
   selectedTraceID?: string | null,
   locale?: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): UseTraceDrilldownResult {
   const messages = getTraceDrilldownMessages(locale);
-  const traceQuery = useDashboardTrace(selectedWorkID, selectedTraceID);
+  const traceQuery = useDashboardTrace(
+    selectedWorkID,
+    selectedTraceID,
+    streamIdentity,
+  );
   const selectedTrace = traceQuery.data;
   const traceUnavailable =
     selectedWorkID !== null &&
