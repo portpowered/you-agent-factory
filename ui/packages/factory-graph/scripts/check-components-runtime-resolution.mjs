@@ -11,7 +11,7 @@ const packageRoot = path.resolve(
 
 // Keep this probe relative to the factory-graph package so Bun loads this
 // package's tsconfig paths. An absolute UI test path would select the UI
-// tsconfig instead and could bypass the package-local runtime contract.
+// tsconfig instead and would not protect the package-local alias contract.
 const preloadPath = "../../src/testing/bun/component.setup.ts";
 const testPath =
   "../../src/features/factory-graph-editor/components/controls/factory-graph-editor-controls.bun.component.test.tsx";
