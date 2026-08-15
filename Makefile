@@ -15,8 +15,51 @@ UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
 UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
-FUNCTIONAL_DEFAULT_JOBS ?= 8
-UNIT_DEFAULT_JOBS ?= 32
+
+# Keep the default Go work claimed by each factory lane bounded when several
+# lanes share one host. GO_LANE_BUDGET is max(2, logical CPUs /
+# YOU_EXPECTED_CONCURRENT_LANES). Both inputs are overridable for controlled
+# probes and CI-specific capacity, while invalid detected values safely select
+# two jobs.
+YOU_EXPECTED_CONCURRENT_LANES ?= 4
+ifeq ($(OS),Windows_NT)
+YOU_LOGICAL_CPUS ?= $(strip $(NUMBER_OF_PROCESSORS))
+else
+YOU_LOGICAL_CPUS ?= $(strip $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || nproc 2>/dev/null))
+endif
+
+define decimal_remainder
+$(strip $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(1))))))))))))
+endef
+
+define positive_decimal
+$(if $(strip $(1)),$(if $(call decimal_remainder,$(1)),,$(if $(filter 0,$(strip $(1))),,$(strip $(1)))),)
+endef
+
+ifeq ($(OS),Windows_NT)
+define compute_go_lane_budget
+$(strip $(or $(shell cmd.exe /d /v:on /c "set /a result=$(1)/$(2) >nul & if !result! LSS 2 (echo 2) else (echo !result!)"),2))
+endef
+else
+define compute_go_lane_budget
+$(strip $(or $(shell budget=$$(expr $(1) / $(2) 2>/dev/null); if test -z "$$budget" || test "$$budget" -lt 2; then printf '2'; else printf '%s' "$$budget"; fi),2))
+endef
+endif
+
+ifndef GO_LANE_BUDGET
+ifneq ($(call positive_decimal,$(YOU_LOGICAL_CPUS)),)
+ifneq ($(call positive_decimal,$(YOU_EXPECTED_CONCURRENT_LANES)),)
+GO_LANE_BUDGET := $(call compute_go_lane_budget,$(YOU_LOGICAL_CPUS),$(YOU_EXPECTED_CONCURRENT_LANES))
+else
+GO_LANE_BUDGET := 2
+endif
+else
+GO_LANE_BUDGET := 2
+endif
+endif
+
+FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
+UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
@@ -88,7 +131,7 @@ LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_CHECKER_DRIVER ?=
 LINT_LANE_PACKAGE := ./cmd/lintlane
-LINT_JOBS ?= 4
+LINT_JOBS ?= $(GO_LANE_BUDGET)
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
 
 define run_lint_checker
@@ -129,7 +172,7 @@ define run_timed_step
 endef
 
 
-.PHONY: default build install bundle-api
+.PHONY: default build install bundle-api print-go-parallelism
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
@@ -179,6 +222,17 @@ default:
 	$(MAKE) build
 	$(MAKE) test
 	$(MAKE) lint
+
+# Print the derived values without starting a toolchain process. This is useful
+# for controlled host-capacity probes, for example:
+#   make -s print-go-parallelism YOU_LOGICAL_CPUS=24 YOU_EXPECTED_CONCURRENT_LANES=4
+print-go-parallelism:
+	@echo "YOU_LOGICAL_CPUS=$(YOU_LOGICAL_CPUS) YOU_EXPECTED_CONCURRENT_LANES=$(YOU_EXPECTED_CONCURRENT_LANES)"
+	@echo "GO_LANE_BUDGET=$(GO_LANE_BUDGET)"
+	@echo "UNIT_DEFAULT_JOBS=$(UNIT_DEFAULT_JOBS)"
+	@echo "FUNCTIONAL_DEFAULT_JOBS=$(FUNCTIONAL_DEFAULT_JOBS)"
+	@echo "LINT_JOBS=$(LINT_JOBS)"
+	@echo "UNITLANE_DEFAULT_JOBS=$(GO_LANE_BUDGET)"
 
 # Local pre-push guidance: run both independent Go coverage reports before
 # pushing. A build or typecheck does not substitute for either completed run.

@@ -64,7 +64,7 @@ func run() error {
 func parseConfig() config {
 	var cfg config
 	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
-	flag.IntVar(&cfg.jobs, "jobs", 32, "go test -p value")
+	flag.IntVar(&cfg.jobs, "jobs", defaultUnitLaneJobs(), "go test -p value")
 	flag.StringVar(&cfg.root, "root", "./pkg/...", "go list package pattern for unit test discovery")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
