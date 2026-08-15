@@ -41,6 +41,15 @@ def git(args, cwd, check=True):
     )
 
 
+def git_bytes(args, cwd, check=True):
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=check,
+        capture_output=True,
+    )
+
+
 def init_repository(repo_path):
     git(["init", "-b", "main"], repo_path)
     git(
@@ -80,6 +89,15 @@ def create_remote_repository(root, remote_ahead):
         git(["fetch", "origin"], local)
 
     return local, upstream, merge_sha
+
+
+def configure_operator_ignores(repo_path):
+    """Model the ignored operator paths that root sync must never remove."""
+    exclude_path = repo_path / ".git" / "info" / "exclude"
+    exclude_path.write_text(
+        "docs/temp/\ntasks/todo/\n/prd.json\n/progress.txt\n.claude/\n",
+        encoding="utf-8",
+    )
 
 
 def tree_report(module, repo_path):
@@ -278,6 +296,177 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         self.assertEqual(report["private_refs"], {}, report_message(outcome, report))
         self.assertNotEqual(report["head_tree"], report["index_tree"])
         self.assertNotEqual(report["index_tree"], report["worktree_tree"])
+
+    def test_sync_preserves_operator_bytes_and_ignored_files(self):
+        """Preserve every supported local state while checked-out main advances."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "preserve-operator-work", remote_ahead=True,
+        )
+        configure_operator_ignores(local)
+
+        staged_bytes = b"staged bytes\x00\xff\n"
+        unstaged_bytes = b"unstaged bytes\x01\xfe\n"
+        (local / "README.md").write_bytes(staged_bytes)
+        git(["add", "README.md"], local)
+        (local / "README.md").write_bytes(unstaged_bytes)
+
+        untracked_bytes = b"untracked bytes\x02\xfd\n"
+        (local / "operator-untracked.bin").write_bytes(untracked_bytes)
+
+        ignored_files = {
+            local / "docs" / "temp" / "operator-notes.bin": b"ignored docs\x03\xfc\n",
+            local / "tasks" / "todo" / "operator-prd.json": b"ignored tasks\x04\xfb\n",
+            local / "prd.json": b"ignored root prd\x05\xfa\n",
+            local / "progress.txt": b"ignored progress\x06\xf9\n",
+        }
+        for path, contents in ignored_files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(contents)
+
+        outcome = self.module.sync_main(local)
+        report = tree_report(self.module, local)
+
+        self.assertEqual(report["head"], remote_sha, report_message(outcome, report))
+        self.assertEqual(report["main"], remote_sha, report_message(outcome, report))
+        self.assertEqual(
+            git_bytes(["show", ":README.md"], local).stdout,
+            staged_bytes,
+            report_message(outcome, report),
+        )
+        self.assertEqual(
+            (local / "README.md").read_bytes(),
+            unstaged_bytes,
+            report_message(outcome, report),
+        )
+        self.assertEqual(
+            (local / "operator-untracked.bin").read_bytes(),
+            untracked_bytes,
+            report_message(outcome, report),
+        )
+        self.assertEqual(
+            report["porcelain"],
+            "MM README.md\n?? operator-untracked.bin\n",
+            report_message(outcome, report),
+        )
+        for path, contents in ignored_files.items():
+            self.assertEqual(path.read_bytes(), contents)
+        self.assertEqual(report["private_refs"], {})
+        self.assertEqual(git(["stash", "list"], local).stdout, "")
+
+    def test_sync_preserves_ignored_only_root_without_snapshot(self):
+        """Ignored operator files survive the no-local-snapshot sync path."""
+        local, _upstream, remote_sha = create_remote_repository(
+            self.root / "ignored-only", remote_ahead=True,
+        )
+        configure_operator_ignores(local)
+        ignored_files = {
+            local / "docs" / "temp" / "operator-notes.txt": b"docs temp\n",
+            local / "tasks" / "todo" / "operator-prd.json": b"tasks todo\n",
+            local / "prd.json": b"root prd\n",
+            local / "progress.txt": b"progress\n",
+        }
+        for path, contents in ignored_files.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(contents)
+
+        outcome = self.module.sync_main(local)
+        report = tree_report(self.module, local)
+
+        self.assertEqual(report["head"], remote_sha, report_message(outcome, report))
+        self.assertEqual(report["main"], remote_sha, report_message(outcome, report))
+        self.assertEqual(report["porcelain"], "", report_message(outcome, report))
+        self.assertEqual(report["private_refs"], {})
+        for path, contents in ignored_files.items():
+            self.assertEqual(path.read_bytes(), contents)
+
+    def test_lane_creation_and_reuse_follow_upstream_without_root_residue(self):
+        """Lane setup stays on its upstream branch after root synchronization."""
+        local, upstream, remote_sha = create_remote_repository(
+            self.root / "lane-behavior", remote_ahead=True,
+        )
+        configure_operator_ignores(local)
+        lane = "lane-preservation"
+        git(["checkout", "-b", lane], upstream)
+        (upstream / "lane.txt").write_text("lane base\n", encoding="utf-8")
+        git(["add", "lane.txt"], upstream)
+        git(["commit", "-m", "create lane branch"], upstream)
+        git(["push", "-u", "origin", lane], upstream)
+        git(["fetch", "origin"], local)
+
+        root_only_file = local / "root-only-untracked.txt"
+        root_only_file.write_bytes(b"root only\n")
+        tasks_dir = local / "tasks" / "todo"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        (tasks_dir / f"{lane}.json").write_text(
+            json.dumps({"branchName": lane}), encoding="utf-8",
+        )
+
+        first = subprocess.run(
+            ["python", str(SCRIPT_PATH), lane],
+            cwd=local,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(first.returncode, 0, first.stderr)
+        first_payload = json.loads(first.stdout)
+        worktree = Path(first_payload["worktree"])
+        lane_sha = git(["rev-parse", f"origin/{lane}"], local).stdout.strip()
+        self.assertEqual(git(["rev-parse", "HEAD"], worktree).stdout.strip(), lane_sha)
+        self.assertEqual(
+            git(["rev-parse", f"refs/heads/{lane}"], worktree).stdout.strip(),
+            lane_sha,
+        )
+        self.assertEqual(
+            git(["rev-parse", f"origin/{lane}"], worktree).stdout.strip(),
+            lane_sha,
+        )
+        self.assertFalse((worktree / root_only_file.name).exists())
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], local).stdout.strip(), remote_sha,
+        )
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], local).stdout.strip(),
+            remote_sha,
+        )
+
+        marker = worktree / "lane-local-marker.txt"
+        marker.write_bytes(b"keep lane marker\n")
+        (upstream / "lane-next.txt").write_bytes(b"lane next\n")
+        git(["add", "lane-next.txt"], upstream)
+        git(["commit", "-m", "advance lane branch"], upstream)
+        git(["push", "origin", lane], upstream)
+        git(["fetch", "origin"], local)
+
+        second = subprocess.run(
+            ["python", str(SCRIPT_PATH), lane],
+            cwd=local,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_payload = json.loads(second.stdout)
+        self.assertTrue(second_payload["reused"])
+        lane_next_sha = git(["rev-parse", f"origin/{lane}"], local).stdout.strip()
+        self.assertEqual(git(["rev-parse", "HEAD"], worktree).stdout.strip(), lane_next_sha)
+        self.assertEqual(
+            git(["rev-parse", f"refs/heads/{lane}"], worktree).stdout.strip(),
+            lane_next_sha,
+        )
+        self.assertEqual(
+            git(["rev-parse", f"origin/{lane}"], worktree).stdout.strip(),
+            lane_next_sha,
+        )
+        self.assertEqual(marker.read_bytes(), b"keep lane marker\n")
+        self.assertFalse((worktree / root_only_file.name).exists())
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], local).stdout.strip(), remote_sha,
+        )
+        self.assertEqual(
+            git(["status", "--porcelain"], local).stdout,
+            f"?? {root_only_file.name}\n",
+        )
 
     def test_guard_rejects_ancestor_equivalent_index_and_worktree_without_repairing(self):
         """Reject a current HEAD whose tracked checkout exactly equals its parent."""
