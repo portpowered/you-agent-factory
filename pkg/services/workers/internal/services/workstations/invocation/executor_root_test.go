@@ -339,3 +339,237 @@ func TestNewExecutorAbsentProviderYieldsNoExecutor(t *testing.T) {
 		t.Fatal("NewExecutor(provider) = nil, want a constructed invocation adapter")
 	}
 }
+
+func TestRunnerExecutorPreservesResultAndNormalizesFailures(t *testing.T) {
+	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "thread", ID: "runner-session"}
+	diagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{Provider: "codex", ResponseMetadata: map[string]string{"source": "runner"}},
+	}
+	runner := &runnerExecutorTestDouble{result: workerexecution.RunnerExecutionResult{
+		Content:         "runner output",
+		Outcome:         workerexecution.OutcomeAccepted,
+		ProviderSession: providerSession,
+		Diagnostics:     diagnostics,
+	}}
+
+	result, err := workerinvocation.NewRunnerExecutor(runner).Execute(
+		context.Background(),
+		workerexecution.InvocationInput{Attempt: 0, Request: workerexecution.ProviderInferenceRequest{UserMessage: "hello"}},
+	)
+	if err != nil {
+		t.Fatalf("runner Execute() = %v", err)
+	}
+	if result.Attempt != 1 || result.Response.Content != "runner output" || result.Response.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("runner result = %#v, want normalized attempt and output", result)
+	}
+	if result.ProviderSession == providerSession || result.Response.ProviderSession == providerSession {
+		t.Fatal("runner result shares ProviderSession pointer with the runner")
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["source"] != "runner" {
+		t.Fatalf("runner diagnostics = %#v, want preserved safe metadata", result.Diagnostics)
+	}
+	if runner.request.UserMessage != "hello" {
+		t.Fatalf("runner request = %#v, want forwarded request", runner.request)
+	}
+
+	failure := errors.New("runner failed")
+	failed, runErr := workerinvocation.NewRunnerExecutor(&runnerExecutorTestDouble{err: failure}).Execute(
+		context.Background(), workerexecution.InvocationInput{Attempt: 4},
+	)
+	if !errors.Is(runErr, failure) || failed.Attempt != 4 || failed.FailureDetail == nil || failed.FailureDetail.Reason != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("runner failure = result %#v, err %v; want attempt 4 and unknown failure", failed, runErr)
+	}
+	if workerinvocation.NewRunnerExecutor(nil) != nil {
+		t.Fatal("NewRunnerExecutor(nil) returned an executor")
+	}
+}
+
+func TestProviderExecutorMapsStructuredRequestAndProviderDiagnostics(t *testing.T) {
+	service := &invocationProviderServiceBase{
+		identity: providers.IDCodex,
+		result: providers.ExecuteResult{
+			Content:    "provider output",
+			SessionRef: &providers.SessionRef{Provider: providers.IDCodex, Kind: "thread", ID: "provider-session"},
+			Diagnostics: &providers.ExecuteDiagnostics{
+				Metadata: map[string]string{"request_id": "req-1"},
+				Command: &providers.ExecuteCommandDiagnostics{
+					Command: "codex", Args: []string{"exec"}, Env: map[string]string{"TOKEN": "redacted"},
+					ExitCode: 0, DurationMS: 17, WorkingDir: "C:\\factory",
+				},
+				Panic: &providers.ExecutePanicDiagnostics{Message: "bounded panic", Stack: "bounded stack"},
+			},
+		},
+	}
+	originalMetadata := map[string]any{"nested": []any{"before"}}
+	request := workerexecution.ProviderInferenceRequest{
+		Correlation: workerexecution.ExecutionCorrelation{
+			FactorySessionID: "factory-1", RuntimeID: "runtime-1", GenerationID: "generation-1",
+			DispatchID: "dispatch-correlation", AttemptID: "attempt-correlation", RequestID: "request-1", TraceID: "trace-1",
+		},
+		Dispatch: work.WorkDispatch{
+			DispatchID: "dispatch-fallback", TransitionID: "transition-1", WorkerType: "worker-type",
+			WorkstationName: "workstation", ProjectID: "project-1", InputBindings: map[string][]string{"slot": {"value"}},
+			Execution: work.ExecutionMetadata{RequestID: "request-fallback", TraceID: "trace-fallback", ReplayKey: "replay-1", WorkIDs: []string{"work-1"}},
+		},
+		WorkerType: "worker", WorkstationType: "workstation", RunnerID: "codex", ProjectID: "project-1",
+		Model: "model-1", ModelOperation: "TTS", ModelProvider: "codex", UserMessage: "hello",
+		ModelBindings: []workerexecution.ResolvedModelOperationBinding{{
+			Slot: "prompt", Source: workerexecution.ModelOperationBindingSourceInput,
+			Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"audio":"preserve"}`), Metadata: originalMetadata}},
+		}},
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilitySessionResume,
+			workerexecution.RunnerOptionalCapabilityStructuredOutput,
+		},
+		Args: []string{"--structured"}, EnvVars: map[string]string{"KEY": "value"},
+		ProcessEnvironment: []string{"KEY=value"}, InputTokens: []any{"token"},
+		OutputSchema: "schema", ToolExecutionMode: workerexecution.RunnerToolExecutionModeRequired,
+	}
+	result, err := workerinvocation.NewProviderExecutor(service).Execute(
+		context.Background(), workerexecution.InvocationInput{Request: request, Attempt: 2},
+	)
+	if err != nil {
+		t.Fatalf("provider Execute() = %v", err)
+	}
+	if result.Response.Content != "provider output" || result.ProviderSession == nil || result.ProviderSession.ID != "provider-session" {
+		t.Fatalf("provider result = %#v, want content and exact session metadata", result)
+	}
+	captured := service.request
+	if captured.Provider != providers.IDCodex || captured.AttemptID != "attempt-correlation" || captured.Correlation.ReplayKey != "replay-1" || captured.Correlation.WorkIDs[0] != "work-1" {
+		t.Fatalf("captured request = %#v, want canonical provider request correlation", captured)
+	}
+	if len(captured.ModelBindings) != 1 || captured.ModelBindings[0].Source != string(workerexecution.ModelOperationBindingSourceInput) || captured.ModelBindings[0].Content[0].JSON[0] != '{' {
+		t.Fatalf("captured model bindings = %#v, want structured binding", captured.ModelBindings)
+	}
+	if captured.RequiredCapabilities[0] != string(workerexecution.RunnerOptionalCapabilitySessionResume) || captured.ToolExecutionMode != string(workerexecution.RunnerToolExecutionModeRequired) {
+		t.Fatalf("captured capability mapping = %#v, want provider-neutral names", captured)
+	}
+	originalMetadata["nested"].([]any)[0] = "after"
+	if captured.ModelBindings[0].Content[0].Metadata["nested"].([]any)[0] != "before" {
+		t.Fatal("provider request model binding aliases caller metadata")
+	}
+	if result.Response.Diagnostics == nil || result.Response.Diagnostics.Command == nil || result.Response.Diagnostics.Panic == nil {
+		t.Fatalf("provider diagnostics = %#v, want command and panic facts", result.Response.Diagnostics)
+	}
+}
+
+func TestProviderExecutorClassifiesProviderFailuresAndExactContinuationOutcomes(t *testing.T) {
+	failureKinds := []struct {
+		kind providers.ExecuteFailureKind
+		want workerexecution.WorkFailureType
+	}{
+		{providers.ExecuteFailureKindCanceled, workerexecution.WorkFailureTypeUnknown},
+		{providers.ExecuteFailureKindTimeout, workerexecution.WorkFailureTypeTimeout},
+		{providers.ExecuteFailureKindAuthentication, workerexecution.WorkFailureTypeAuthFailure},
+		{providers.ExecuteFailureKindInvalidRequest, workerexecution.WorkFailureTypePermanentBadRequest},
+		{providers.ExecuteFailureKindCapabilityMismatch, workerexecution.WorkFailureTypePermanentBadRequest},
+		{providers.ExecuteFailureKindThrottled, workerexecution.WorkFailureTypeThrottled},
+		{providers.ExecuteFailureKindMisconfigured, workerexecution.WorkFailureTypeMisconfigured},
+		{providers.ExecuteFailureKindDependency, workerexecution.WorkFailureTypeUnknown},
+	}
+	for _, testCase := range failureKinds {
+		t.Run(string(testCase.kind), func(t *testing.T) {
+			ref := &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "failed-session"}
+			service := &invocationProviderServiceBase{
+				identity: providers.IDCodex,
+				executeErr: providers.ExecuteFailure{
+					Kind: testCase.kind, Message: "provider detail", SessionRef: ref,
+					Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{"safe": "yes"}},
+				},
+			}
+			result, err := workerinvocation.NewProviderExecutor(service).Execute(context.Background(), workerexecution.InvocationInput{Attempt: 3, Request: workerexecution.ProviderInferenceRequest{ModelProvider: "codex"}})
+			var providerErr *workerexecution.ProviderError
+			if err == nil || !errors.As(err, &providerErr) || result.FailureDetail == nil || result.FailureDetail.Reason != testCase.want {
+				t.Fatalf("result = %#v, err = %v, want %q provider failure", result, err, testCase.want)
+			}
+			if result.ProviderSession == nil || result.ProviderSession.ID != "failed-session" || result.Diagnostics == nil || result.Diagnostics.Provider == nil {
+				t.Fatalf("normalized failure = %#v, want session and safe diagnostics", result)
+			}
+		})
+	}
+
+	unsupported := &invocationProviderServiceBase{identity: providers.IDCodex}
+	unsupportedResult, unsupportedErr := workerinvocation.NewProviderExecutor(unsupported).Execute(context.Background(), workerexecution.InvocationInput{
+		Request: workerexecution.ProviderInferenceRequest{
+			Continuation: &workerexecution.ProviderContinuationRef{Provider: "codex", Kind: "thread", ProviderSessionID: "opaque-session"},
+		},
+	})
+	if unsupportedErr == nil || unsupportedResult.FailureDetail == nil || unsupportedResult.FailureDetail.Reason != workerexecution.WorkFailureTypePermanentBadRequest || unsupported.executeCalls != 0 {
+		t.Fatalf("unsupported continuation = result %#v, err %v, want typed failure without Execute", unsupportedResult, unsupportedErr)
+	}
+
+	invalid, invalidErr := workerinvocation.NewProviderExecutor(&invocationProviderServiceBase{identity: providers.IDCodex}).Execute(context.Background(), workerexecution.InvocationInput{
+		Request: workerexecution.ProviderInferenceRequest{Continuation: &workerexecution.ProviderContinuationRef{Provider: "codex"}},
+	})
+	if invalidErr == nil || invalid.FailureDetail == nil || invalid.FailureDetail.Reason != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("invalid continuation = result %#v, err %v, want typed invalid failure", invalid, invalidErr)
+	}
+}
+
+func TestProviderExecutorRejectsCanceledContextAndMissingProvider(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := workerinvocation.NewProviderExecutor(&invocationProviderServiceBase{identity: providers.IDCodex}).Execute(ctx, workerexecution.InvocationInput{Attempt: 7})
+	if !errors.Is(err, context.Canceled) || result.Attempt != 7 || result.FailureDetail == nil {
+		t.Fatalf("canceled context = result %#v, err %v, want canceled attempt", result, err)
+	}
+	missing, missingErr := workerinvocation.NewProviderExecutor(nil).Execute(context.Background(), workerexecution.InvocationInput{})
+	if missingErr == nil || missing.FailureDetail == nil || missing.FailureDetail.Reason != workerexecution.WorkFailureTypeMisconfigured {
+		t.Fatalf("missing provider = result %#v, err %v, want misconfigured failure", missing, missingErr)
+	}
+}
+
+type runnerExecutorTestDouble struct {
+	result  workerexecution.RunnerExecutionResult
+	err     error
+	request workerexecution.RunnerExecutionRequest
+}
+
+func (runner *runnerExecutorTestDouble) Execute(_ context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+	runner.request = request
+	return runner.result, runner.err
+}
+
+type invocationProviderServiceBase struct {
+	identity     providers.ID
+	result       providers.ExecuteResult
+	executeErr   error
+	request      providers.ExecuteRequest
+	executeCalls int
+}
+
+func (service *invocationProviderServiceBase) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{}, nil
+}
+
+func (service *invocationProviderServiceBase) GetProvider(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error) {
+	return providers.GetProviderResult{Provider: providers.Descriptor{ID: service.canonicalIdentity()}}, nil
+}
+
+func (service *invocationProviderServiceBase) ResolveIdentity(_ context.Context, request providers.ResolveIdentityRequest) (providers.ResolveIdentityResult, error) {
+	if strings.TrimSpace(request.Identity) == "" {
+		return providers.ResolveIdentityResult{}, providers.ErrInvalidID
+	}
+	return providers.ResolveIdentityResult{ID: service.canonicalIdentity()}, nil
+}
+
+func (service *invocationProviderServiceBase) ResolveSelection(context.Context, providers.ResolveSelectionRequest) (providers.ResolveSelectionResult, error) {
+	return providers.ResolveSelectionResult{Provider: service.canonicalIdentity()}, nil
+}
+
+func (service *invocationProviderServiceBase) ValidatePrerequisites(context.Context, providers.ValidatePrerequisitesRequest) error {
+	return nil
+}
+
+func (service *invocationProviderServiceBase) Execute(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	service.executeCalls++
+	service.request = request.Clone()
+	return service.result.Clone(), service.executeErr
+}
+
+func (service *invocationProviderServiceBase) canonicalIdentity() providers.ID {
+	if service.identity == "" {
+		return providers.IDCodex
+	}
+	return service.identity
+}
