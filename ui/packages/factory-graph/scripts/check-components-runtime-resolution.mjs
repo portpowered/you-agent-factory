@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -25,11 +26,34 @@ const bunArguments = [
   testPath,
 ];
 
+function assertSourceEntrypoints(tsconfig) {
+  const paths = tsconfig.compilerOptions?.paths ?? {};
+  const expectedPaths = {
+    "@you-agent-factory/components": ["../components/src/index.ts"],
+    "@you-agent-factory/components/*": ["../components/src/*"],
+  };
+
+  for (const [specifier, expected] of Object.entries(expectedPaths)) {
+    if (JSON.stringify(paths[specifier]) === JSON.stringify(expected)) {
+      continue;
+    }
+
+    throw new Error(
+      `[factory-graph-components-runtime] ${specifier} must resolve to ${expected[0]} in the package-local tsconfig; found ${JSON.stringify(paths[specifier]) ?? "missing"}.`,
+    );
+  }
+}
+
 function outputFrom(error) {
   return [error.stdout, error.stderr].filter(Boolean).join("\n");
 }
 
 try {
+  const tsconfig = JSON.parse(
+    await readFile(path.join(packageRoot, "tsconfig.json"), "utf8"),
+  );
+  assertSourceEntrypoints(tsconfig);
+
   const { stdout, stderr } = await execFileAsync(bunExecutable, bunArguments, {
     cwd: packageRoot,
     maxBuffer: 10 * 1024 * 1024,
