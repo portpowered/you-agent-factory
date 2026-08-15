@@ -185,7 +185,7 @@ describe("useScopedFactoryDocumentSave scope isolation for dirty drafts", () => 
   });
 });
 
-describe("useScopedFactoryDocumentSave scope isolation during in-flight save", () => {
+describe("useScopedFactoryDocumentSave alias remap during in-flight save", () => {
   it("completes an in-flight save across a default alias remap", async () => {
     const pendingSave = mockPendingFactoryDocumentSave();
     vi.spyOn(
@@ -247,7 +247,9 @@ describe("useScopedFactoryDocumentSave scope isolation during in-flight save", (
     expect(result.current.saveState).not.toEqual({ status: "confirming" });
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
+});
 
+describe("useScopedFactoryDocumentSave scope isolation during in-flight save", () => {
   it("does not apply success state or onSaved when scopeKey changes during an in-flight save", async () => {
     const pendingSave = mockPendingFactoryDocumentSave();
     vi.spyOn(

@@ -14,7 +14,7 @@ import type {
   CurrentFactoryDocument,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { areFactorySessionIDsEquivalent } from "../../../../api/session-routing";
+import { areFactorySessionIDsEquivalent as isSameLogicalScope } from "../../../../api/session-routing";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
@@ -99,7 +99,7 @@ export function useScopedFactoryDocumentSave<
     setSaveAttemptRevision,
   });
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
-  const hasScopeChanged = !areFactorySessionIDsEquivalent(
+  const hasScopeChanged = !isSameLogicalScope(
     previousScopeKeyRef.current,
     scopeKey,
   );
@@ -219,10 +219,7 @@ async function executeScopedFactoryDocumentSave<
 }) {
   if (
     activeScopeKeyRef.current == null ||
-    !areFactorySessionIDsEquivalent(
-      request.scopeKey,
-      activeScopeKeyRef.current,
-    ) ||
+    !isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current) ||
     saveInFlightRef.current
   ) {
     return;
@@ -239,12 +236,7 @@ async function executeScopedFactoryDocumentSave<
       baseVersion: request.baseVersion,
       factory: request.factory,
     });
-    if (
-      !areFactorySessionIDsEquivalent(
-        request.scopeKey,
-        activeScopeKeyRef.current,
-      )
-    ) {
+    if (!isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current)) {
       return;
     }
     request.onSaved?.(document);
@@ -262,12 +254,7 @@ async function executeScopedFactoryDocumentSave<
     setIsConfirming(false);
     setSubmittingScopeKey(null);
     setLastSuccessfulScopeKey(null);
-    if (
-      !areFactorySessionIDsEquivalent(
-        request.scopeKey,
-        activeScopeKeyRef.current,
-      )
-    ) {
+    if (!isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current)) {
       return;
     }
     setLastFailedScope({
@@ -279,12 +266,7 @@ async function executeScopedFactoryDocumentSave<
     });
   } finally {
     saveInFlightRef.current = false;
-    if (
-      !areFactorySessionIDsEquivalent(
-        request.scopeKey,
-        activeScopeKeyRef.current,
-      )
-    ) {
+    if (!isSameLogicalScope(request.scopeKey, activeScopeKeyRef.current)) {
       setSubmittingScopeKey(null);
     }
   }
@@ -309,7 +291,7 @@ function resolveDetailCardSaveState<
 }): FactoryDocumentSaveState<TFieldErrors> {
   if (
     submittingScopeKey !== null &&
-    areFactorySessionIDsEquivalent(submittingScopeKey, scopeKey)
+    isSameLogicalScope(submittingScopeKey, scopeKey)
   ) {
     return { status: "submitting" };
   }
@@ -322,7 +304,7 @@ function resolveDetailCardSaveState<
   if (
     lastFailedScope !== null &&
     scopeKey !== null &&
-    areFactorySessionIDsEquivalent(lastFailedScope.scopeKey, scopeKey)
+    isSameLogicalScope(lastFailedScope.scopeKey, scopeKey)
   ) {
     if (lastFailedScope.status === "warning") {
       return {
@@ -339,7 +321,7 @@ function resolveDetailCardSaveState<
   }
   if (
     lastSuccessfulScopeKey !== null &&
-    areFactorySessionIDsEquivalent(lastSuccessfulScopeKey, scopeKey)
+    isSameLogicalScope(lastSuccessfulScopeKey, scopeKey)
   ) {
     return { status: "success" };
   }
@@ -367,7 +349,7 @@ function useResetExitedSaveScope<TFieldErrors extends Record<string, string>>({
   const previousScopeKeyRef = useRef<string | null>(scopeKey);
 
   useEffect(() => {
-    const hasExitedScope = !areFactorySessionIDsEquivalent(
+    const hasExitedScope = !isSameLogicalScope(
       previousScopeKeyRef.current,
       scopeKey,
     );
@@ -405,9 +387,7 @@ function useResetSuccessfulSaveStateOnDraftChange({
   useEffect(() => {
     if (isDirty) {
       setLastSuccessfulScopeKey((currentScopeKey) =>
-        areFactorySessionIDsEquivalent(currentScopeKey, scopeKey)
-          ? null
-          : currentScopeKey,
+        isSameLogicalScope(currentScopeKey, scopeKey) ? null : currentScopeKey,
       );
       setLastSuccessfulSaveWasTopologyAffecting(false);
     }
