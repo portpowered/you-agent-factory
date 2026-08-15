@@ -55,7 +55,7 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	root := newClaudeRoot(t, effect)
 
 	attempt := request.ExecuteRequest.Clone()
-	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
+	continued, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
 		Reference: *request.ResumeSession,
 		Attempt:   attempt,
 	})
@@ -70,7 +70,7 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Progress[2].Metadata["caller"] = "mutated"
-	secondContinued, err := root.Continue(t.Context(), providers.ContinueRequest{
+	secondContinued, err := providers.Continue(t.Context(), root, providers.ContinueRequest{
 		Reference: *request.ResumeSession,
 		Attempt:   attempt,
 	})

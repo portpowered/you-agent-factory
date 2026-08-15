@@ -107,7 +107,22 @@ func (e *Executor) Execute(
 		return failedInvocationResult(attempt, err), err
 	}
 	var result providers.ExecuteResult
-	if input.Request.ResumeSession != nil {
+	if input.Request.Continuation != nil {
+		continued, continueErr := providers.ContinueReference(ctx, e.provider, providers.ContinueReferenceRequest{
+			Reference: input.Request.Continuation.Clone(),
+			Attempt:   request,
+		})
+		err = continueErr
+		if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
+			reference, referenceErr := continued.Reference.ToSessionRef()
+			if referenceErr != nil {
+				err = referenceErr
+			} else {
+				err = unsupportedProviderContinuationError(reference)
+			}
+		}
+		result = continued.Result
+	} else if input.Request.ResumeSession != nil {
 		reference := input.Request.ResumeSession.Clone()
 		request.Provider = reference.Provider
 		continued, continueErr := providers.Continue(ctx, e.provider, providers.ContinueRequest{
@@ -115,6 +130,9 @@ func (e *Executor) Execute(
 			Attempt:   request,
 		})
 		err = continueErr
+		if err == nil && continued.Outcome == providers.ContinuationOutcomeUnsupported {
+			err = unsupportedProviderContinuationError(reference)
+		}
 		result = continued.Result
 	} else {
 		identity, identityErr := e.provider.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: request.Provider.String()})
@@ -146,7 +164,13 @@ func (e *Executor) Execute(
 }
 
 func providersRequest(request workers.ProviderInferenceRequest) (providers.ExecuteRequest, error) {
-	provider := strings.TrimSpace(request.ModelProvider)
+	provider := ""
+	if request.Continuation != nil {
+		provider = strings.TrimSpace(request.Continuation.Provider)
+	}
+	if provider == "" {
+		provider = strings.TrimSpace(request.ModelProvider)
+	}
 	if provider == "" {
 		provider = strings.TrimSpace(request.RunnerID)
 	}
@@ -223,6 +247,17 @@ func providersRequest(request workers.ProviderInferenceRequest) (providers.Execu
 }
 
 func normalizeProvidersFailure(err error) error {
+	var continuation providers.ContinuationFailure
+	if errors.As(err, &continuation) {
+		normalized := workers.NewProviderError(
+			workers.WorkFailureTypePermanentBadRequest,
+			"provider session continuation was rejected",
+			err,
+		)
+		normalized.ProviderContinuationFailureKind = continuation.Kind
+		normalized.ProviderSession = providerSessionMetadata(&continuation.Reference)
+		return normalized
+	}
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
 		return err
@@ -234,6 +269,17 @@ func normalizeProvidersFailure(err error) error {
 	)
 	normalized.ProviderSession = providerSessionMetadata(failure.SessionRef)
 	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef)
+	return normalized
+}
+
+func unsupportedProviderContinuationError(reference providers.SessionRef) error {
+	normalized := workers.NewProviderError(
+		workers.WorkFailureTypePermanentBadRequest,
+		"provider session continuation is unsupported",
+		nil,
+	)
+	normalized.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
+	normalized.ProviderSession = providerSessionMetadata(&reference)
 	return normalized
 }
 

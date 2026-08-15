@@ -320,6 +320,8 @@ func continuationExecution(
 	continuation.Execution.UserMessage = followUpInput
 	continuedReference := reference.Clone()
 	continuation.Execution.ResumeSession = &continuedReference
+	continuationRef := providers.ContinuationRefFromSession(continuedReference)
+	continuation.Execution.Continuation = &continuationRef
 	return continuation
 }
 

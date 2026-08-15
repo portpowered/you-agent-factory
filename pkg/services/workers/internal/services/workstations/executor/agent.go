@@ -466,6 +466,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		Worktree:                     request.Worktree,
 		WorkingDirectory:             request.WorkingDirectory,
 		ResumeSession:                cloneResumeSession(request.ResumeSession),
+		Continuation:                 cloneContinuation(request.Continuation),
 	}
 	if workerDef != nil {
 		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
@@ -491,6 +492,14 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 }
 
 func cloneResumeSession(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	cloned := reference.Clone()
+	return &cloned
+}
+
+func cloneContinuation(reference *workerexecution.ProviderContinuationRef) *workerexecution.ProviderContinuationRef {
 	if reference == nil {
 		return nil
 	}

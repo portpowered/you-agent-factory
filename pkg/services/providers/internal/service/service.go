@@ -32,7 +32,7 @@ var _ providers.Service = (*Service)(nil)
 // New constructs an inert Providers root facade over its two private sibling
 // capabilities. logger is the direct, required operation-logging
 // abstraction; callers with no operation logging pass logging.NoopLogger{}.
-func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (providers.Service, error) {
+func New(catalogService catalog.Service, executionService execution.Service, logger logging.Logger) (*Service, error) {
 	return newService(catalogService, executionService, nil, nil, logger, nil)
 }
 
@@ -47,7 +47,7 @@ func NewWithACP(
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
 	lifecycles ...providers.Lifecycle,
-) (providers.Service, error) {
+) (*Service, error) {
 	return newService(catalogService, executionService, acpService, packagedACP, logger, lifecycles)
 }
 
@@ -58,7 +58,7 @@ func newService(
 	packagedACP []providers.ACPIntegration,
 	logger logging.Logger,
 	lifecycles []providers.Lifecycle,
-) (providers.Service, error) {
+) (*Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}

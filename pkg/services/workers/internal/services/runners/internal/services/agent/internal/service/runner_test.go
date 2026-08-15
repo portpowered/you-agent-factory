@@ -496,6 +496,39 @@ func TestExecuteExactContinuationRejectsMismatchedProviderResultBeforePublishing
 	}
 }
 
+func TestExecuteOpaqueContinuationPreservesKindAndIdentity(t *testing.T) {
+	t.Parallel()
+
+	fake := &providersFake{}
+	runner, err := New(fake, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := baseAgentRequest()
+	request.RunnerID = ""
+	request.Continuation = &workers.ProviderContinuationRef{
+		Provider:          string(providers.IDCodex),
+		Kind:              "provider-native-thread",
+		ProviderSessionID: "opaque-provider-session",
+		ExternalRef:       "opaque-provider-token",
+	}
+	result, err := runner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if fake.executeCalls != 0 || fake.continueCalls != 1 {
+		t.Fatalf("Providers calls execute=%d continue=%d, want execute=0 continue=1", fake.executeCalls, fake.continueCalls)
+	}
+	if fake.continuationReference == nil || fake.continuationReference.Kind != "provider-native-thread" ||
+		fake.continuationReference.ID != "opaque-provider-session" {
+		t.Fatalf("Providers continuation reference = %#v, want exact kind and session id", fake.continuationReference)
+	}
+	if result.ProviderSession == nil || result.ProviderSession.Kind != "provider-native-thread" ||
+		result.ProviderSession.ID != "opaque-provider-session" {
+		t.Fatalf("runner result ProviderSession = %#v, want exact continuation identity", result.ProviderSession)
+	}
+}
+
 func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	t.Parallel()
 
@@ -732,6 +765,16 @@ func (fake *providersFake) Continue(
 		Outcome:   outcome,
 		Result:    result,
 	}, nil
+}
+
+func (fake *providersFake) ResolveIdentity(
+	_ context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	if strings.TrimSpace(request.Identity) == "" {
+		return providers.ResolveIdentityResult{}, providers.ErrInvalidID
+	}
+	return providers.ResolveIdentityResult{ID: providers.ID(strings.TrimSpace(request.Identity))}, nil
 }
 
 func (*providersFake) ListProviders(

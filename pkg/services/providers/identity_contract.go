@@ -14,6 +14,11 @@ var ErrInvalidID = errors.New("provider id is invalid")
 // provider, kind, or id fields.
 var ErrInvalidSessionRef = errors.New("provider session ref is invalid")
 
+// ErrInvalidContinuationRef reports that a detached continuation reference is
+// missing the provider or exact provider-session identity required to resume
+// one prior attempt.
+var ErrInvalidContinuationRef = errors.New("provider continuation ref is invalid")
+
 // ID is the Providers-owned canonical provider identity. Peers enumerate and
 // select providers through this typed vocabulary rather than Workers provider
 // registry or manifest types.
@@ -119,5 +124,88 @@ func (ref SessionRef) Validate() error {
 
 // Clone returns a detached session-ref copy.
 func (ref SessionRef) Clone() SessionRef {
+	return ref
+}
+
+// ContinuationRef is the Providers-owned opaque continuation value carried
+// across Worker and Runtime boundaries. It contains only detached identity
+// facts; provider clients, transcripts, processes, and mutable session state
+// remain behind Providers and Provider Sessions.
+//
+// ProviderSessionID is the canonical provider-session identity. ExternalRef
+// preserves a provider-specific opaque reference when one is available. The
+// legacy session-ref adapter uses ProviderSessionID first and ExternalRef as a
+// compatibility fallback.
+type ContinuationRef struct {
+	Provider          string
+	Kind              string
+	ProviderSessionID string
+	ExternalRef       string
+}
+
+// Validate checks that a continuation has a provider and at least one exact
+// provider-session identity. An omitted Kind is accepted for persisted
+// compatibility and is normalized to SessionIDKind when adapted to SessionRef.
+func (ref ContinuationRef) Validate() error {
+	if strings.TrimSpace(ref.Provider) == "" {
+		return fmt.Errorf("%w: empty provider", ErrInvalidContinuationRef)
+	}
+	if strings.TrimSpace(ref.ProviderSessionID) == "" &&
+		strings.TrimSpace(ref.ExternalRef) == "" {
+		return fmt.Errorf("%w: empty provider session identity", ErrInvalidContinuationRef)
+	}
+	return nil
+}
+
+// Normalize returns a detached, trimmed continuation value and supplies the
+// compatibility session-id kind when older callers omitted it.
+func (ref ContinuationRef) Normalize() ContinuationRef {
+	ref.Provider = strings.TrimSpace(ref.Provider)
+	ref.Kind = strings.TrimSpace(ref.Kind)
+	if ref.Kind == "" {
+		ref.Kind = SessionIDKind
+	}
+	ref.ProviderSessionID = strings.TrimSpace(ref.ProviderSessionID)
+	ref.ExternalRef = strings.TrimSpace(ref.ExternalRef)
+	return ref
+}
+
+// ToSessionRef adapts a valid continuation into the Providers-owned exact
+// session identity used by the existing provider continuation capability.
+func (ref ContinuationRef) ToSessionRef() (SessionRef, error) {
+	if err := ref.Validate(); err != nil {
+		return SessionRef{}, err
+	}
+	normalized := ref.Normalize()
+	identity := normalized.ProviderSessionID
+	if identity == "" {
+		identity = normalized.ExternalRef
+	}
+	session := SessionRef{
+		Provider: ID(normalized.Provider),
+		Kind:     normalized.Kind,
+		ID:       identity,
+	}
+	if err := session.Validate(); err != nil {
+		return SessionRef{}, fmt.Errorf("%w: %v", ErrInvalidContinuationRef, err)
+	}
+	return session, nil
+}
+
+// ContinuationRefFromSession projects an exact Providers session identity onto
+// the detached continuation vocabulary. Both identity fields are populated so
+// a compatibility boundary that understands either spelling retains the same
+// exact session.
+func ContinuationRefFromSession(ref SessionRef) ContinuationRef {
+	return ContinuationRef{
+		Provider:          ref.Provider.String(),
+		Kind:              ref.Kind,
+		ProviderSessionID: ref.ID,
+		ExternalRef:       ref.ID,
+	}
+}
+
+// Clone returns a detached continuation-reference copy.
+func (ref ContinuationRef) Clone() ContinuationRef {
 	return ref
 }

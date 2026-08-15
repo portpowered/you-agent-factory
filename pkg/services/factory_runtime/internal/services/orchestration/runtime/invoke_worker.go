@@ -596,6 +596,7 @@ func continuationFromLegacySession(session *providers.SessionRef) *workers.Provi
 	}
 	return &workers.ProviderContinuationRef{
 		Provider:          provider,
+		Kind:              strings.TrimSpace(session.Kind),
 		ProviderSessionID: id,
 		ExternalRef:       id,
 	}

@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -66,6 +67,8 @@ func adaptRunnerRequest(
 		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
 		PrintTimeout:                 request.Target.Timeout,
 		SessionID:                    providerSessionID(request),
+		ResumeSession:                sessionRefFromContinuation(request.Input.Resume),
+		Continuation:                 cloneContinuation(request.Input.Resume),
 		ProjectID:                    context.projectID,
 		WorkflowContext:              context.workflow,
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
@@ -282,6 +285,29 @@ func providerSessionID(request workers.ExecuteRequest) string {
 		request.Input.Resume.ProviderSessionID,
 		request.Input.Resume.ExternalRef,
 	)
+}
+
+func sessionRefFromContinuation(
+	continuation *workers.ProviderContinuationRef,
+) *providers.SessionRef {
+	if continuation == nil {
+		return nil
+	}
+	reference, err := continuation.ToSessionRef()
+	if err != nil {
+		return nil
+	}
+	return &reference
+}
+
+func cloneContinuation(
+	continuation *workers.ProviderContinuationRef,
+) *workers.ProviderContinuationRef {
+	if continuation == nil {
+		return nil
+	}
+	clone := continuation.Clone()
+	return &clone
 }
 
 func inputTokensFromWorkInputs(inputs []workers.WorkInput) []workers.Token {

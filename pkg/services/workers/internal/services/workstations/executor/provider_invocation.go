@@ -118,6 +118,7 @@ func providerInvocationRequest(
 		ModelProvider:      request.ModelProvider,
 		ReasoningEffort:    request.ReasoningEffort,
 		ResumeSession:      cloneResumeSession(request.ResumeSession),
+		Continuation:       cloneContinuation(request.Continuation),
 		SkipPermissions:    request.SkipPermissions,
 	}
 }

@@ -356,6 +356,7 @@ func continuationFromSession(
 	if session != nil && strings.TrimSpace(session.ID) != "" {
 		return &workers.ProviderContinuationRef{
 			Provider:          workers.CanonicalProviderSessionProvider(session.Provider),
+			Kind:              session.Kind,
 			ProviderSessionID: session.ID,
 			ExternalRef:       session.ID,
 		}

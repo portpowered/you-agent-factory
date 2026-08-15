@@ -155,6 +155,8 @@ func workerSessionResolvedExecutionFromAPI(
 		if err := execution.ResumeSession.Validate(); err != nil {
 			return workers.WorkstationDispatchRequest{}, fmt.Errorf("%w: resumeSession: %v", workersessions.ErrInvalidExecutionRequest, err)
 		}
+		continuation := providers.ContinuationRefFromSession(*execution.ResumeSession)
+		execution.Continuation = &continuation
 	}
 	if value.ModelBindings != nil {
 		bindings, err := modelBindingsFromAPI(*value.ModelBindings)

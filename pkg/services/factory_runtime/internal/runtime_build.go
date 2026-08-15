@@ -843,6 +843,7 @@ func workstationDispatchRequestFromExecute(
 			WorkingDirectory:            request.Target.Environment.WorkingDirectory,
 			WorkingDirectoryAuthored:    request.Target.Environment.WorkingDirectorySet,
 			ResumeSession:               buildContinuationSession(request.Input.Resume),
+			Continuation:                cloneBuildContinuation(request.Input.Resume),
 			SkipPermissions:             request.Target.Permissions.SkipPermissions,
 		},
 	}
@@ -926,6 +927,7 @@ func continuationFromWorkstationSession(
 	}
 	return &workers.ProviderContinuationRef{
 		Provider:          session.Provider,
+		Kind:              session.Kind,
 		ProviderSessionID: session.ID,
 		ExternalRef:       session.ID,
 	}
@@ -975,9 +977,17 @@ func buildContinuationSession(value *workers.ProviderContinuationRef) *providers
 	if value == nil {
 		return nil
 	}
-	return &providers.SessionRef{
-		Provider: providers.ID(strings.TrimSpace(value.Provider)),
-		Kind:     providers.SessionIDKind,
-		ID:       strings.TrimSpace(value.ProviderSessionID),
+	reference, err := value.ToSessionRef()
+	if err != nil {
+		return nil
 	}
+	return &reference
+}
+
+func cloneBuildContinuation(value *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {
+	if value == nil {
+		return nil
+	}
+	clone := value.Clone()
+	return &clone
 }

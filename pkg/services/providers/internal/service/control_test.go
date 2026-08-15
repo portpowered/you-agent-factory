@@ -82,7 +82,7 @@ func assertNoUnsafeControlLogFields(t *testing.T, fields map[string]any) {
 	}
 }
 
-func mustControlRootService(t *testing.T, logger *recordingControlLogger) providers.Service {
+func mustControlRootService(t *testing.T, logger *recordingControlLogger) *providerservice.Service {
 	t.Helper()
 
 	catalogService, err := catalogwire.NewService()
@@ -268,7 +268,7 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}
 
-	result, err := root.ControlAttempt(context.Background(), providers.ControlAttemptRequest{
+	result, err := providers.ControlAttempt(context.Background(), root, providers.ControlAttemptRequest{
 		Provider:  providers.IDCodex,
 		AttemptID: "wired-attempt",
 		Action:    providers.ControlActionPause,

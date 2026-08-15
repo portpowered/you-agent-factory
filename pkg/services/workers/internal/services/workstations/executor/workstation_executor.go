@@ -260,6 +260,10 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 		return *failed, nil
 	}
 	executionRequest.ResumeSession = workerexecution.CloneProviderSessionReference(request.ResumeSession)
+	if request.ResumeSession != nil {
+		continuation := providers.ContinuationRefFromSession(*request.ResumeSession)
+		executionRequest.Continuation = &continuation
+	}
 
 	result, err := we.executeInnerWorker(ctx, executionRequest, workerDef, workstationDef, start, logger)
 	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)

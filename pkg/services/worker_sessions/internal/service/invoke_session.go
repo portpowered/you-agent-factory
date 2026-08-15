@@ -418,7 +418,25 @@ func openingSessionPayload(
 	if selection.RunnerID != "" || selection.Source != "" || selection.ExecutorProvider != "" || selection.ModelProvider != "" {
 		payload.ProviderSelection = &selection
 	}
-	if request.ResumeSession != nil {
+	if request.Continuation != nil {
+		continuationID := request.Continuation.ProviderSessionID
+		if strings.TrimSpace(continuationID) == "" {
+			continuationID = request.Continuation.ExternalRef
+		}
+		continuationKind := request.Continuation.Kind
+		if strings.TrimSpace(continuationKind) == "" {
+			continuationKind = request.Continuation.Normalize().Kind
+		}
+		continuation := workers.SessionContinuation{
+			Provider: request.Continuation.Provider,
+			Kind:     continuationKind,
+			ID:       continuationID,
+		}
+		if continuation.Provider != "" || continuation.Kind != "" || continuation.ID != "" {
+			payload.Continuation = &continuation
+			payload.AttemptReason = workers.AttemptReasonResume
+		}
+	} else if request.ResumeSession != nil {
 		continuation := workers.SessionContinuation{
 			Provider: string(request.ResumeSession.Provider),
 			Kind:     request.ResumeSession.Kind,
@@ -448,6 +466,9 @@ func providerIdentityForExecution(request workers.WorkstationExecutionRequest) s
 	}
 	if identity, err := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider); err == nil && strings.TrimSpace(identity) != "" {
 		return strings.TrimSpace(identity)
+	}
+	if request.Continuation != nil {
+		return strings.TrimSpace(request.Continuation.Provider)
 	}
 	if request.ResumeSession != nil {
 		return strings.TrimSpace(string(request.ResumeSession.Provider))

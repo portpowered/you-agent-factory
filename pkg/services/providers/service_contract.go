@@ -1,6 +1,10 @@
 package providers
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
+)
 
 // Service is the singular cross-service Providers root authority. Peer packages
 // depend on this one named interface for Providers-owned catalog enumeration,
@@ -101,4 +105,145 @@ func Continue(
 		}, nil
 	}
 	return continuation.Continue(ctx, request)
+}
+
+// ContinueReferenceRequest carries the detached continuation vocabulary to
+// the Providers root. It is intentionally separate from ContinueRequest so
+// Workers and Runtime do not need to construct or inspect a provider-owned
+// SessionRef while forwarding an opaque continuation.
+type ContinueReferenceRequest struct {
+	Reference ContinuationRef
+	Attempt   ExecuteRequest
+}
+
+// ContinueReferenceResult is the detached result of one opaque continuation
+// request. Reference echoes the canonical provider identity and exact session
+// kind/id while retaining any caller-supplied external reference.
+type ContinueReferenceResult struct {
+	Reference ContinuationRef
+	Outcome   ContinuationOutcome
+	Result    ExecuteResult
+}
+
+// ContinueReference resolves and routes one opaque continuation through the
+// Providers root. It never falls back to Execute: a missing continuation
+// capability is returned as the explicit unsupported outcome.
+func ContinueReference(
+	ctx context.Context,
+	service Service,
+	request ContinueReferenceRequest,
+) (ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return ContinueReferenceResult{}, continuationReferenceFailure(
+			ContinuationFailureKindInvalid,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	if service == nil {
+		return ContinueReferenceResult{}, continuationReferenceFailure(
+			ContinuationFailureKindInvalid,
+			"Providers service is required",
+			request.Reference,
+		)
+	}
+
+	canonical, err := service.ResolveIdentity(ctx, ResolveIdentityRequest{
+		Identity: reference.Provider.String(),
+	})
+	if err != nil {
+		return ContinueReferenceResult{}, continuationReferenceFailure(
+			ContinuationFailureKindForeign,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	if err := canonical.ID.Validate(); err != nil {
+		return ContinueReferenceResult{}, continuationReferenceFailure(
+			ContinuationFailureKindForeign,
+			err.Error(),
+			request.Reference,
+		)
+	}
+	reference.Provider = canonical.ID
+
+	attempt := request.Attempt.Clone()
+	if strings.TrimSpace(attempt.Provider.String()) == "" {
+		attempt.Provider = canonical.ID
+	} else {
+		attemptIdentity, resolveErr := service.ResolveIdentity(ctx, ResolveIdentityRequest{
+			Identity: attempt.Provider.String(),
+		})
+		if resolveErr != nil || attemptIdentity.ID != canonical.ID {
+			message := "attempt provider does not match continuation provider"
+			if resolveErr != nil {
+				message = resolveErr.Error()
+			}
+			return ContinueReferenceResult{}, continuationReferenceFailure(
+				ContinuationFailureKindForeign,
+				message,
+				request.Reference,
+			)
+		}
+		attempt.Provider = canonical.ID
+	}
+
+	continued, err := Continue(ctx, service, ContinueRequest{
+		Reference: reference,
+		Attempt:   attempt,
+	})
+	if err != nil {
+		return ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if strings.TrimSpace(continuedReference.Provider.String()) == "" {
+		continuedReference = reference
+	}
+	resultReference := ContinuationRefFromSession(continuedReference)
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
+}
+
+func continuationReferenceFailure(
+	kind ContinuationFailureKind,
+	message string,
+	ref ContinuationRef,
+) ContinuationFailure {
+	normalized := ref.Normalize()
+	return ContinuationFailure{
+		Kind:    kind,
+		Message: message,
+		Reference: SessionRef{
+			Provider: ID(normalized.Provider),
+			Kind:     normalized.Kind,
+			ID:       firstContinuationIdentity(normalized),
+		},
+	}
+}
+
+func firstContinuationIdentity(ref ContinuationRef) string {
+	if value := strings.TrimSpace(ref.ProviderSessionID); value != "" {
+		return value
+	}
+	return strings.TrimSpace(ref.ExternalRef)
+}
+
+// Clone returns a detached continuation-reference result.
+func (result ContinueReferenceResult) Clone() ContinueReferenceResult {
+	clone := result
+	clone.Reference = result.Reference.Clone()
+	clone.Result = result.Result.Clone()
+	return clone
+}
+
+// String returns a bounded identity useful for diagnostics without exposing
+// provider-specific request material.
+func (ref ContinuationRef) String() string {
+	normalized := ref.Normalize()
+	return fmt.Sprintf("%s/%s/%s", normalized.Provider, normalized.Kind, firstContinuationIdentity(normalized))
 }

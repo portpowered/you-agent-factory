@@ -447,3 +447,157 @@ func TestRootContinueConcurrentStaleAndResumedAttemptsStayIndependent(t *testing
 	}
 	wg.Wait()
 }
+
+func TestContinueReferenceRoutesExactOpaqueIdentity(t *testing.T) {
+	t.Parallel()
+
+	var received execution.ContinuationRequest
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency}
+			},
+			Continue: func(_ context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
+				received = request.Clone()
+				return providers.ExecuteResult{
+					Content: "opaque continuation reply",
+					SessionRef: &providers.SessionRef{
+						Provider: providers.IDCodex,
+						Kind:     providers.SessionIDKind,
+						ID:       "provider-session-99",
+					},
+				}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	request := providers.ContinueReferenceRequest{
+		Reference: providers.ContinuationRef{
+			Provider:          string(providers.IDCodex),
+			Kind:              providers.SessionIDKind,
+			ProviderSessionID: "provider-session-99",
+			ExternalRef:       "provider-opaque-token-99",
+		},
+		Attempt: providers.ExecuteRequest{
+			Provider:    providers.IDCodex,
+			AttemptID:   "attempt-opaque-99",
+			UserMessage: "continue without selecting a new session",
+		},
+	}
+	continued, err := providers.ContinueReference(context.Background(), root, request)
+	if err != nil {
+		t.Fatalf("ContinueReference() error = %v", err)
+	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed ||
+		continued.Result.Content != "opaque continuation reply" {
+		t.Fatalf("ContinueReference() = %#v, want resumed opaque result", continued)
+	}
+	if continued.Reference.Provider != string(providers.IDCodex) ||
+		continued.Reference.Kind != providers.SessionIDKind ||
+		continued.Reference.ProviderSessionID != "provider-session-99" ||
+		continued.Reference.ExternalRef != "provider-opaque-token-99" {
+		t.Fatalf("ContinueReference().Reference = %#v, want exact detached identity", continued.Reference)
+	}
+	if received.ResumeSession == nil || *received.ResumeSession != (providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-99",
+	}) {
+		t.Fatalf("provider continuation reference = %#v, want exact provider session", received.ResumeSession)
+	}
+}
+
+func TestContinueReferenceUnsupportedNeverExecutes(t *testing.T) {
+	t.Parallel()
+
+	adapterCalls := 0
+	catalogService := noResumeCapabilityCatalogStub{descriptor: providers.Descriptor{
+		ID:           providers.IDCodex,
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+	}}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{Content: "must not execute"}, nil
+			},
+			Continue: func(context.Context, execution.ContinuationRequest) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{Content: "must not continue"}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+	continued, err := providers.ContinueReference(context.Background(), root, providers.ContinueReferenceRequest{
+		Reference: providers.ContinuationRef{
+			Provider:          string(providers.IDCodex),
+			ProviderSessionID: "unsupported-session",
+		},
+		Attempt: providers.ExecuteRequest{
+			Provider:  providers.IDCodex,
+			AttemptID: "attempt-unsupported-opaque",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ContinueReference() error = %v", err)
+	}
+	if continued.Outcome != providers.ContinuationOutcomeUnsupported {
+		t.Fatalf("ContinueReference().Outcome = %q, want unsupported", continued.Outcome)
+	}
+	if adapterCalls != 0 {
+		t.Fatalf("provider adapter calls = %d, want 0", adapterCalls)
+	}
+}
+
+func TestContinueReferenceClassifiesForeignAttempt(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+	_, err = providers.ContinueReference(context.Background(), root, providers.ContinueReferenceRequest{
+		Reference: providers.ContinuationRef{
+			Provider:          string(providers.IDCodex),
+			ProviderSessionID: "session-foreign-attempt",
+		},
+		Attempt: providers.ExecuteRequest{
+			Provider:  providers.IDClaude,
+			AttemptID: "attempt-foreign-opaque",
+		},
+	})
+	var failure providers.ContinuationFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ContinuationFailureKindForeign {
+		t.Fatalf("ContinueReference() error = %#v, want foreign ContinuationFailure", err)
+	}
+}

@@ -75,7 +75,7 @@ func TestExecuteContract_Characterization_SuccessWithSessionRef(t *testing.T) {
 		Readiness:    providers.ReadinessReady,
 	})
 
-	var root providers.Service = service
+	root := service
 	result, err := root.Execute(context.Background(), providers.ExecuteRequest{
 		Provider:    providers.IDCodex,
 		AttemptID:   "attempt-1",
@@ -198,7 +198,7 @@ func TestContinuationContract_Characterization_ResumedVersusUnsupported(t *testi
 		Availability: providers.AvailabilitySelectable,
 		Readiness:    providers.ReadinessReady,
 	}
-	var root providers.Service = newExecutePeerFake("cancel-attempt", resumable, unresumable)
+	root := newExecutePeerFake("cancel-attempt", resumable, unresumable)
 
 	resumed, err := root.Continue(context.Background(), providers.ContinueRequest{
 		Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "prior-session"},
@@ -479,7 +479,7 @@ func (fake *controlPeerFake) ControlAttempt(
 func TestControlContract_Characterization_CompletedVersusUnsupportedVersusError(t *testing.T) {
 	t.Parallel()
 
-	var root providers.Service = newControlPeerFake(
+	root := newControlPeerFake(
 		"completed-attempt",
 		"failing-attempt",
 		providers.Descriptor{ID: providers.IDCodex},

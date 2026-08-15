@@ -291,7 +291,19 @@ func (s *Service) executeProviderWithRetry(
 		}
 
 		if session := providerSessionForRetry(providerErr, result); session != nil {
-			request.SessionID = strings.TrimSpace(session.ID)
+			if request.Continuation != nil {
+				continuation := workers.ProviderContinuationRef{
+					Provider:          strings.TrimSpace(session.Provider),
+					Kind:              strings.TrimSpace(session.Kind),
+					ProviderSessionID: strings.TrimSpace(session.ID),
+					ExternalRef:       strings.TrimSpace(session.ID),
+				}
+				request.Continuation = &continuation
+				request.ResumeSession = nil
+				request.SessionID = ""
+			} else {
+				request.SessionID = strings.TrimSpace(session.ID)
+			}
 			request.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
 				request.RequiredOptionalCapabilities,
 				workers.RunnerOptionalCapabilitySessionResume,
