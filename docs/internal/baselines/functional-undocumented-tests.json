@@ -587,10 +587,6 @@
       "name": "TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact"
     },
     {
-      "file": "runtime_api/api_model_local_inference_long_test.go",
-      "name": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
-    },
-    {
       "file": "runtime_api/api_model_transport_smoke_test.go",
       "name": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
     },

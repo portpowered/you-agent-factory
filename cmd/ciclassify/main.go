@@ -23,7 +23,6 @@ const (
 	laneAPIPackage               = "API Package"
 	lanePackagedFactoriesPackage = "Packaged Factories Package"
 	laneModelProvidersPackage    = "Model Providers Package"
-	laneLocalInference           = "Local Inference"
 )
 
 var allLaneNames = []string{
@@ -35,7 +34,6 @@ var allLaneNames = []string{
 	laneAPIPackage,
 	lanePackagedFactoriesPackage,
 	laneModelProvidersPackage,
-	laneLocalInference,
 }
 
 var (
@@ -169,9 +167,6 @@ func classifyPaths(paths []string) classificationResult {
 		for _, lane := range selected {
 			plan := lanes[lane]
 			plan.ShouldRun = true
-			if plan.Reason == "" {
-				plan.Reason = laneSelectionReason(lane, path)
-			}
 			lanes[lane] = plan
 		}
 	}
@@ -220,8 +215,6 @@ func classifyPath(path string) (string, []string) {
 		return "packaged-factories-package", []string{lanePackagedFactoriesPackage, laneBackend}
 	case strings.HasPrefix(path, "packages/model-providers/"), strings.HasPrefix(path, "scripts/model-provider"):
 		return "model-providers-package", []string{laneModelProvidersPackage, laneBackend}
-	case isLocalInferencePath(path):
-		return "local-inference", []string{laneBackend, laneLocalInference}
 	case strings.HasPrefix(path, "ui/"):
 		return "frontend", []string{laneFrontend}
 	case isBackendPath(path):
@@ -258,42 +251,6 @@ func isBackendPath(path string) bool {
 		strings.HasPrefix(path, "scripts/release/")
 }
 
-func isLocalInferencePath(path string) bool {
-	return strings.HasPrefix(path, "cmd/omnivoice-llamacpp/") ||
-		strings.HasPrefix(path, "pkg/services/models/local/") ||
-		strings.HasPrefix(path, "pkg/services/models/internal/") ||
-		path == "pkg/services/models/local_execution_contract.go" ||
-		path == "pkg/services/models/managed_runtime_contract.go" ||
-		strings.HasPrefix(path, "tests/functional/models/root_composition/inference_invoke") ||
-		strings.HasPrefix(path, "tests/functional/runtime_api/api_model_local_inference") ||
-		isLocalInferencePublicationPath(path)
-}
-
-func isLocalInferencePublicationPath(path string) bool {
-	switch path {
-	case "pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go",
-		"pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go",
-		"pkg/services/workers/execution_requests.go",
-		"pkg/services/workers/internal/service/execute.go",
-		"pkg/services/workers/internal/services/runtime_assembly/construction/service.go",
-		"pkg/services/workers/wire/stateless_execute_test.go",
-		"tests/functional/runtime_api/api_inference_events_test.go":
-		return true
-	default:
-		return strings.HasPrefix(path, "pkg/services/workers/internal/services/workstations/execution/recording/")
-	}
-}
-
-func laneSelectionReason(lane, path string) string {
-	if lane == laneLocalInference {
-		if isLocalInferencePublicationPath(path) {
-			return fmt.Sprintf("Selected because publication-sensitive path %q changed.", path)
-		}
-		return fmt.Sprintf("Selected because managed local-inference path %q changed.", path)
-	}
-	return fmt.Sprintf("Selected because owned path %q changed.", path)
-}
-
 func newLanePlans() map[string]lanePlan {
 	return map[string]lanePlan{
 		laneDocsReference:            {Name: laneDocsReference, Command: "make docs-reference-smoke"},
@@ -304,7 +261,6 @@ func newLanePlans() map[string]lanePlan {
 		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-package-verify"},
 		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
 		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-provider-package-verify"},
-		laneLocalInference:           {Name: laneLocalInference, Command: "make local-inference-verification"},
 	}
 }
 

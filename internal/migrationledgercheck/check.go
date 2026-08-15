@@ -75,9 +75,7 @@ type Ledger struct {
 var RequiredSpecialtyTargets = []string{
 	"api-smoke",
 	"cron-time-work-smoke",
-	"pr-inference-approval",
 	"long-tests-managed-runtime",
-	"long-tests-functional-runtime",
 	"artifact-contract-closeout",
 	"release-surface-smoke",
 	"docs-reference-smoke",

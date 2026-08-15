@@ -39,11 +39,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_model_transport_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -241,11 +236,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_javascript_sync_structured_input_test.go",
       "target": "TestNamedJavaScriptFactoryRunResolvesInvocationInputThroughCLI"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
-      "target": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
     },
     {
       "rule": "deprecated-runtime-api-test",

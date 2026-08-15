@@ -15,7 +15,6 @@ const laneNames = [
 	"API Package",
 	"Packaged Factories Package",
 	"Model Providers Package",
-	"Local Inference",
 ];
 
 function lane(name, selected = false, result = selected ? "success" : "skipped", options = {}) {
@@ -100,7 +99,6 @@ test("reusable package failure and missing selected candidate fail policy", () =
 				}),
 				lane("Packaged Factories Package"),
 				lane("Model Providers Package"),
-				lane("Local Inference"),
 			],
 		}),
 	);
@@ -134,7 +132,6 @@ test("unselected package outputs may be absent, but an unexpected unselected res
 				}),
 				lane("Packaged Factories Package"),
 				lane("Model Providers Package"),
-				lane("Local Inference"),
 			],
 		}),
 	);
@@ -169,7 +166,6 @@ test("an unselected package verification lane may omit its reusable-workflow out
 						},
 					],
 				}),
-				lane("Local Inference"),
 			],
 		}),
 	);
@@ -208,46 +204,4 @@ test("summary falls back to the classifier's global reason for a selected lane",
 	const summary = renderVerificationSummary({ ...input, evaluation });
 
 	assert.match(summary, /\| Docs Reference \| `run` \| Docs Reference: success \| Unknown paths require/);
-});
-
-test("summary reports a selected Local Inference lane with its classifier reason", () => {
-	const input = policy({
-		classification: "local-inference",
-		areas: "local-inference",
-		lanes: laneNames.map((name) =>
-			name === "Local Inference"
-				? lane(name, true, "success", {
-						reason: "Selected because publication-sensitive path changed.",
-				  })
-				: lane(name),
-		),
-	});
-	const evaluation = evaluateVerificationPolicy(input);
-	const summary = renderVerificationSummary({ ...input, evaluation });
-
-	assert.match(
-		summary,
-		/\| Local Inference \| `run` \| Local Inference: success \| Selected because publication-sensitive path changed\./,
-	);
-});
-
-test("summary reports a skipped Local Inference lane with an explicit reason", () => {
-	const input = policy({
-		classification: "backend",
-		areas: "backend",
-		lanes: laneNames.map((name) =>
-			name === "Local Inference"
-				? lane(name, false, "skipped", {
-						reason: "Skipped because no changed path selected this owned verification lane.",
-				  })
-				: lane(name),
-		),
-	});
-	const evaluation = evaluateVerificationPolicy(input);
-	const summary = renderVerificationSummary({ ...input, evaluation });
-
-	assert.match(
-		summary,
-		/\| Local Inference \| `skip` \| Local Inference: skipped \| Skipped because no changed path selected this owned verification lane\./,
-	);
 });

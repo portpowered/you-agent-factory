@@ -252,12 +252,6 @@ function policyInputFromEnvironment() {
 				"PROVIDERS_RESULT",
 				true,
 			),
-			directLane(
-				"Local Inference",
-				"RUN_INFERENCE",
-				"INFERENCE_REASON",
-				"INFERENCE_RESULT",
-			),
 		],
 	};
 }

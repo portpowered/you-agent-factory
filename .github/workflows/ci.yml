@@ -37,7 +37,6 @@ jobs:
       run_api_package: ${{ steps.classify.outputs.run_api_package != 'false' }}
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package != 'false' }}
       run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package != 'false' }}
-      run_local_inference: ${{ steps.classify.outputs.run_local_inference != 'false' }}
       docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       readme_reason: ${{ steps.classify.outputs.readme_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       frontend_reason: ${{ steps.classify.outputs.frontend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
@@ -46,7 +45,6 @@ jobs:
       api_package_reason: ${{ steps.classify.outputs.api_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
-      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,7 +59,7 @@ jobs:
         run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
       - if: github.event_name != 'pull_request'
         run: |
-          for lane in docs_reference readme frontend backend ui_backend_integration api_package packaged_factories_package model_providers_package local_inference; do
+          for lane in docs_reference readme frontend backend ui_backend_integration api_package packaged_factories_package model_providers_package; do
             echo "run_${lane}=true" >> "$GITHUB_OUTPUT"
           done
           echo "classification=full" >> "$GITHUB_OUTPUT"
@@ -336,15 +334,9 @@ jobs:
       # gate; hosted run 31558145400 records its child failure and assertion.
       include_failure: false
 
-  local-inference:
-    name: Local Inference
-    needs: classify
-    if: always() && needs.classify.outputs.run_local_inference != 'false'
-    uses: ./.github/workflows/long-local-inference.yml
-
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, development-package, local-inference]
+    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -369,7 +361,6 @@ jobs:
           RUN_API: ${{ needs.classify.outputs.run_api_package }}
           RUN_PACKAGED: ${{ needs.classify.outputs.run_packaged_factories_package }}
           RUN_PROVIDERS: ${{ needs.classify.outputs.run_model_providers_package }}
-          RUN_INFERENCE: ${{ needs.classify.outputs.run_local_inference }}
           DOCS_REASON: ${{ needs.classify.outputs.docs_reference_reason }}
           README_REASON: ${{ needs.classify.outputs.readme_reason }}
           FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
@@ -378,7 +369,6 @@ jobs:
           API_REASON: ${{ needs.classify.outputs.api_package_reason }}
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
-          INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
           RUN_CANDIDATES: ${{ github.event_name == 'pull_request' }}
           DOCS_RESULT: ${{ needs.docs-reference.result }}
           README_RESULT: ${{ needs.readme.result }}
@@ -395,6 +385,5 @@ jobs:
           PACKAGED_RESULT: ${{ needs.development-package.outputs.packaged_factories_package_result }}
           PACKAGED_CANDIDATE_RESULT: ${{ needs.development-package.outputs.packaged_factories_candidate_result }}
           PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}
-          INFERENCE_RESULT: ${{ needs.local-inference.result }}
         shell: bash
         run: node scripts/verification-policy.mjs

@@ -117,8 +117,6 @@ func TestClassifierOwnershipBoundaries(t *testing.T) {
 		{name: "generated client contract is API-owned", path: "ui/packages/client/src/generated/openapi.ts", lanes: []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{name: "UI inference is frontend-owned", path: "ui/src/features/timeline/state/timeline/replayWorldStateInference.test.ts", lanes: []string{laneFrontend}},
 		{name: "provider inference is backend-owned", path: "tests/functional/workers/inference/selection_test.go", lanes: []string{laneBackend, laneUIBackendIntegration}},
-		{name: "managed local runtime selects specialty lane", path: "pkg/services/models/internal/local/runtime.go", lanes: []string{laneBackend, laneLocalInference}},
-		{name: "OMNIVOICE command selects specialty lane", path: "cmd/omnivoice-llamacpp/main.go", lanes: []string{laneBackend, laneLocalInference}},
 		{name: "release script is backend-owned", path: "scripts/release/smoke-install.sh", lanes: []string{laneBackend, laneUIBackendIntegration}},
 	}
 	for _, tc := range cases {
@@ -128,38 +126,6 @@ func TestClassifierOwnershipBoundaries(t *testing.T) {
 			assertLaneSet(t, classifyPaths([]string{tc.path}), tc.lanes...)
 		})
 	}
-}
-
-func TestClassifierSelectsLocalInferenceForPR1938PublicationSeam(t *testing.T) {
-	t.Parallel()
-	paths := []string{
-		"pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go",
-		"pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go",
-		"pkg/services/workers/execution_requests.go",
-		"pkg/services/workers/internal/service/execute.go",
-		"pkg/services/workers/internal/services/runtime_assembly/construction/service.go",
-		"pkg/services/workers/internal/services/workstations/execution/recording/model_test.go",
-		"pkg/services/workers/internal/services/workstations/execution/recording/provider.go",
-		"pkg/services/workers/wire/stateless_execute_test.go",
-		"tests/functional/runtime_api/api_inference_events_test.go",
-	}
-
-	result := classifyPaths(paths)
-	assertLaneSet(t, result, laneBackend, laneLocalInference)
-	if got := result.Lanes[laneLocalInference].Reason; !strings.Contains(got, "publication-sensitive path") {
-		t.Fatalf("Local Inference reason = %q, want publication-sensitive explanation", got)
-	}
-
-	variantPaths := make([]string, 0, len(paths)*2)
-	for index := len(paths) - 1; index >= 0; index-- {
-		path := paths[index]
-		if index%2 == 0 {
-			path = `./` + strings.ReplaceAll(path, "/", `\`)
-		}
-		variantPaths = append(variantPaths, path, path)
-	}
-	variantResult := classifyPaths(variantPaths)
-	assertLaneSet(t, variantResult, laneBackend, laneLocalInference)
 }
 
 func assertLaneSet(t *testing.T, result classificationResult, want ...string) {
@@ -217,8 +183,6 @@ func TestRunWritesNamedLaneOutputs(t *testing.T) {
 		"api_package_command=make api-package-verify",
 		"packaged_factories_package_command=make packaged-factory-package-verify",
 		"model_providers_package_command=make model-provider-package-verify",
-		"local_inference_command=make local-inference-verification",
-		"local_inference_reason=Skipped because no changed path selected this owned verification lane.",
 		"run_docs_reference=false",
 	} {
 		if !strings.Contains(string(contents), want) {
@@ -231,44 +195,6 @@ func TestRunWritesNamedLaneOutputs(t *testing.T) {
 	}
 	if !strings.Contains(string(contents), "### Verification policy") {
 		t.Fatalf("summary missing policy: %q", contents)
-	}
-}
-
-func TestRunWritesPublicationInferenceSelectionReason(t *testing.T) {
-	tempDir := t.TempDir()
-	changed := filepath.Join(tempDir, "changed.txt")
-	if err := os.WriteFile(changed, []byte("pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	output, summary := filepath.Join(tempDir, "output.txt"), filepath.Join(tempDir, "summary.md")
-	t.Setenv("GITHUB_OUTPUT", output)
-	t.Setenv("GITHUB_STEP_SUMMARY", summary)
-	if err := run(config{changedFilesPath: changed}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatal(err)
-	}
-
-	outputContents, err := os.ReadFile(output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	outputText := string(outputContents)
-	for _, want := range []string{
-		"run_backend=true",
-		"run_local_inference=true",
-		"local_inference_reason=Selected because publication-sensitive path",
-	} {
-		if !strings.Contains(outputText, want) {
-			t.Errorf("output does not contain %q: %q", want, outputText)
-		}
-	}
-
-	summaryContents, err := os.ReadFile(summary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(summaryContents), "`Local Inference`: `run`") ||
-		!strings.Contains(string(summaryContents), "publication-sensitive path") {
-		t.Fatalf("summary does not explain selected Local Inference: %q", summaryContents)
 	}
 }
 

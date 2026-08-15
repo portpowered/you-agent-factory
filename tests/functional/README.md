@@ -14,25 +14,12 @@
 - Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `functional-timing-summary.json`, `coverage.out`, and `command.log` on success and failure when present. The timing artifact is produced by that same full `./tests/functional/...` run and reports discovered/observed package counts, every observed top-level test outcome, elapsed time, and concise failure-reason diagnostics; it does not use a one-test allow-list. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
 - Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
 - Opt-in long lane: `make test-functional-long`
-- Real local-inference lane: `make long-tests`
+- Managed-runtime specialty lane: `make long-tests-managed-runtime`
 
-`make long-tests` is the maintainer entrypoint for OMNIVOICE real local
-inference coverage. It first reruns the managed-local-model integration tests
-in `pkg/models/local`, then runs the tagged runtime API long test
-that exercises `POST /models/{model_name}/pull`, direct
-`/models/{model_name}/invocations`, and a factory-level `MODEL_INVOKE` path.
-The real-runtime test is opt-in: set `INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`
-and ensure the `omnivoice-llamacpp` command is available on `PATH`, or point
-`INFINITE_YOU_OMNIVOICE_COMMAND` at the executable explicitly. Set
-`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse an existing managed cache; when
-omitted, the long test pulls assets into a temporary managed cache directory.
-GitHub Actions automation for that lane lives in
-`.github/workflows/long-local-inference.yml`; it restores `.cache/managed-models`
-between runs, installs the runtime from per-platform
-`OMNIVOICE_COMMAND_URL_*` repository variables when available, and otherwise
-builds the real `ServeurpersoCom/omnivoice.cpp` `omnivoice-tts` backend from a
-pinned commit before building the repo-owned `cmd/omnivoice-llamacpp` adapter
-that speaks the shared subprocess contract used by the service and long tests.
+`make long-tests` is the maintainer entrypoint for opt-in UI performance and
+managed local-model runtime coverage. It reruns the managed-local-model
+integration tests in `pkg/services/models/internal/local`; the dedicated
+end-to-end long inference test and workflow have been retired.
 
 The default lane runs `go run ./cmd/functionallane`, which passes
 `./tests/functional/...` directly to one `go test -p 8 -short` command. It does
