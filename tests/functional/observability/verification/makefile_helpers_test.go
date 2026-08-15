@@ -45,6 +45,18 @@ func runMakefileTargetDryRun(repoRoot, makefilePath, target string) (string, err
 	return runMakefileTargetWithArgs(repoRoot, makefilePath, "-n", target)
 }
 
+// runMakefileTargetWithPrerequisitesMarkedOld keeps wrapper execution focused
+// on the target recipe. GNU Make merges prerequisites from the included rule
+// and appended stub, so -o is the test-local seam for neutralizing inherited
+// prerequisites during an invocation that must execute the stub.
+func runMakefileTargetWithPrerequisitesMarkedOld(repoRoot, makefilePath, target string, prerequisites ...string) (string, error) {
+	args := make([]string, 0, len(prerequisites)*2)
+	for _, prerequisite := range prerequisites {
+		args = append(args, "-o", prerequisite)
+	}
+	return runMakefileTargetWithArgs(repoRoot, makefilePath, target, args...)
+}
+
 func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...string) (string, error) {
 	makePath, err := exec.LookPath("make")
 	if err != nil {

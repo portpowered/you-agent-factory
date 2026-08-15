@@ -191,7 +191,13 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 		"test":               "@printf '%s\\n' 'stub:test'\n",
 	})
 
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	output, err := runMakefileTargetWithPrerequisitesMarkedOld(
+		repoRoot,
+		makefilePath,
+		"verify-fast",
+		"test-unit",
+		"test-ci-workflows",
+	)
 	if err == nil {
 		t.Fatalf("verify-fast unexpectedly succeeded:\n%s", output)
 	}
@@ -213,7 +219,13 @@ func TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites(t *testing.T) {
 		"test":               "@printf '%s\\n' 'stub:test'\n",
 	})
 
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	output, err := runMakefileTargetWithPrerequisitesMarkedOld(
+		repoRoot,
+		makefilePath,
+		"verify-fast",
+		"test-unit",
+		"test-ci-workflows",
+	)
 	if err == nil {
 		t.Fatalf("verify-fast unexpectedly succeeded:\n%s", output)
 	}
