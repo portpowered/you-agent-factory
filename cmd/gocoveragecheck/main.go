@@ -110,6 +110,7 @@ type config struct {
 type coverageResult struct {
 	actual                       float64
 	insufficientCoveragePackages []packageCoverageSummary
+	coverageBlocks               map[string]coverageBlock
 	packageTotals                map[string]packageCoverageTotals
 	packageSummaries             []packageCoverageSummary
 	packageGates                 map[string]packageCoverageGate
@@ -126,14 +127,6 @@ type packageCoverageTotals struct {
 type packageCoverageSummary struct {
 	importPath string
 	coverage   float64
-}
-
-type coverageBlock struct {
-	canonicalPath  string
-	importPath     string
-	rangeSpec      string
-	statementCount int
-	executionCount int
 }
 
 func main() {
@@ -403,7 +396,7 @@ func runCoverageProfile(cfg config, targetOS string, profilePath string) (covera
 			}
 			return coverageResult{}, err
 		}
-		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilon(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon)
+		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
 		result.packageGates = packageGatesFromManifest(manifest)
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
@@ -615,10 +608,11 @@ func parseTotalCoverage(report string) (float64, string, error) {
 }
 
 func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, coverPackages []string, minCoverage float64, baselinePackages map[string]struct{}, packageGate ...bool) (coverageResult, string, error) {
-	packageTotals, err := readCoverageProfileTotals(profilePath, repoRoot)
+	coverageBlocks, err := readCoverageProfileBlocks(profilePath, repoRoot)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
+	packageTotals := coverageTotals(coverageBlocks)
 	actual, totalLine := calculateTotalCoverage(packageTotals, coverPackages)
 	packageGateEnabled := len(packageGate) == 0 || packageGate[0]
 	packageSummaries := summarizePackageCoverageFromTotals(packageTotals, coverPackages)
@@ -631,6 +625,7 @@ func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, c
 	return coverageResult{
 		actual:                       actual,
 		insufficientCoveragePackages: insufficientCoveragePackages,
+		coverageBlocks:               coverageBlocks,
 		packageTotals:                packageTotals,
 		packageSummaries:             packageSummaries,
 		zeroCoveragePackages:         zeroCoveragePackages,
@@ -655,6 +650,14 @@ func readPackageCoverageBaseline(path string) (map[string]struct{}, error) {
 }
 
 func readCoverageProfileTotals(profilePath string, repoRoot string) (map[string]packageCoverageTotals, error) {
+	coverageBlocks, err := readCoverageProfileBlocks(profilePath, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return coverageTotals(coverageBlocks), nil
+}
+
+func readCoverageProfileBlocks(profilePath string, repoRoot string) (map[string]coverageBlock, error) {
 	profile, err := os.Open(profilePath)
 	if err != nil {
 		return nil, fmt.Errorf("read go coverage profile: %w", err)
@@ -665,7 +668,7 @@ func readCoverageProfileTotals(profilePath string, repoRoot string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	return coverageTotals(coverageBlocks), nil
+	return coverageBlocks, nil
 }
 
 func calculateTotalCoverage(packageTotals map[string]packageCoverageTotals, coverPackages []string) (float64, string) {

@@ -316,6 +316,10 @@ func checkCoverageManifest(manifest coverageManifest, totals map[string]packageC
 }
 
 func checkCoverageManifestWithEpsilon(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string, epsilon float64) ([]string, []string) {
+	return checkCoverageManifestWithEpsilonAndBlocks(manifest, totals, manifestPath, epsilon, nil)
+}
+
+func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string, epsilon float64, coverageBlocks map[string]coverageBlock) ([]string, []string) {
 	failures := make([]string, 0)
 	warnings := make([]string, 0)
 	for _, entry := range manifest.Packages {
@@ -339,9 +343,22 @@ func checkCoverageManifestWithEpsilon(manifest coverageManifest, totals map[stri
 			))
 			continue
 		}
-		failures = append(failures, fmt.Sprintf(
-			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points; restore coverage before running `go run ./cmd/gocoveragecheck -suite %s -profile <coverage-profile> -update-manifest %s`",
-			entry.Package, manifest.Lane, minimum.String(), actualPercent, actualPercent-expectedPercent, manifest.Lane, manifestPath,
+		diagnostic := fmt.Sprintf(
+			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points covered=%d/%d statements",
+			entry.Package,
+			manifest.Lane,
+			minimum.String(),
+			actualPercent,
+			actualPercent-expectedPercent,
+			actual.coveredStatements,
+			actual.totalStatements,
+		)
+		if uncovered := formatUncoveredCoverageBlocks(coverageBlocks, entry.Package); uncovered != "" {
+			diagnostic += "; " + uncovered
+		}
+		failures = append(failures, diagnostic+fmt.Sprintf(
+			"; restore coverage before running `go run ./cmd/gocoveragecheck -suite %s -profile <coverage-profile> -update-manifest %s`",
+			manifest.Lane, manifestPath,
 		))
 	}
 	return failures, warnings
