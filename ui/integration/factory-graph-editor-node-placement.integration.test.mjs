@@ -506,6 +506,7 @@ async function beginSaveActivationTrace(page) {
     };
     let previousSignature = null;
     const instrumentedButtons = new WeakSet();
+    const wrappedReactProps = new WeakMap();
 
     const findSaveButton = () =>
       [...document.querySelectorAll("button")].find(
@@ -576,35 +577,41 @@ async function beginSaveActivationTrace(page) {
 
     const instrumentSaveButton = () => {
       const saveButton = findSaveButton();
-      if (!saveButton || instrumentedButtons.has(saveButton)) {
+      if (!saveButton) {
         return;
       }
 
-      instrumentedButtons.add(saveButton);
-      const recordActivationEvent = (event) => {
-        trace.activationEvents.push({
-          activeElement: document.activeElement?.getAttribute("aria-label"),
-          buttonDisabled: saveButton.disabled,
-          buttonLabel: saveButton.getAttribute("aria-label"),
-          elapsedMs: Math.round(performance.now() - trace.startedAt),
-          eventPhase: event.eventPhase,
-          type: event.type,
-        });
-        if (trace.activationEvents.length > 32) {
-          trace.activationEvents.shift();
-        }
-      };
-      saveButton.addEventListener("click", recordActivationEvent, true);
-      saveButton.addEventListener("click", recordActivationEvent);
-      saveButton.addEventListener("keydown", recordActivationEvent, true);
+      if (!instrumentedButtons.has(saveButton)) {
+        instrumentedButtons.add(saveButton);
+        const recordActivationEvent = (event) => {
+          trace.activationEvents.push({
+            activeElement: document.activeElement?.getAttribute("aria-label"),
+            buttonDisabled: saveButton.disabled,
+            buttonLabel: saveButton.getAttribute("aria-label"),
+            elapsedMs: Math.round(performance.now() - trace.startedAt),
+            eventPhase: event.eventPhase,
+            type: event.type,
+          });
+          if (trace.activationEvents.length > 32) {
+            trace.activationEvents.shift();
+          }
+        };
+        saveButton.addEventListener("click", recordActivationEvent, true);
+        saveButton.addEventListener("click", recordActivationEvent);
+        saveButton.addEventListener("keydown", recordActivationEvent, true);
+      }
 
       const reactPropsKey = Object.getOwnPropertyNames(saveButton).find(
         (key) => key.startsWith("__reactProps$") && key.length > 13,
       );
       const reactProps = reactPropsKey ? saveButton[reactPropsKey] : undefined;
-      if (reactProps && typeof reactProps.onClick === "function") {
+      if (
+        reactProps &&
+        typeof reactProps.onClick === "function" &&
+        wrappedReactProps.get(reactProps) !== reactProps.onClick
+      ) {
         const originalOnClick = reactProps.onClick;
-        reactProps.onClick = (...args) => {
+        const wrappedOnClick = (...args) => {
           trace.handlerInvocations.push({
             activeElement: document.activeElement?.getAttribute("aria-label"),
             buttonDisabled: saveButton.disabled,
@@ -612,6 +619,8 @@ async function beginSaveActivationTrace(page) {
           });
           return originalOnClick(...args);
         };
+        reactProps.onClick = wrappedOnClick;
+        wrappedReactProps.set(reactProps, wrappedOnClick);
         trace.handlerBinding = "react-onClick-wrapped";
       } else {
         trace.handlerBinding = "react-onClick-not-found";
