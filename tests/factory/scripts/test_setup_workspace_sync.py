@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Regression tests for setup-workspace sync_main quiet-skip behavior."""
 
+import contextlib
+import io
 import importlib.util
 import json
 import subprocess
@@ -46,6 +48,10 @@ def git(args, cwd, check=True):
         capture_output=True,
         text=True,
     )
+
+
+def stash_list(repo_path):
+    return git(["stash", "list", "--format=%H"], repo_path).stdout.splitlines()
 
 
 def setup_repo_with_origin_main_ahead(local_repo, repo_root):
@@ -246,11 +252,314 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
                 for args in recorded
             )
         )
-        self.assertTrue(any(args[:2] == ("stash", "push") for args in recorded))
+        self.assertFalse(any(args[:2] == ("stash", "push") for args in recorded))
         self.assertTrue(any(args[:2] == ("stash", "apply") for args in recorded))
-        self.assertTrue(any(args[:2] == ("stash", "drop") for args in recorded))
+        self.assertFalse(any(args[:2] == ("stash", "drop") for args in recorded))
+        self.assertTrue(any(args and args[0] == "commit-tree" for args in recorded))
+        self.assertFalse(
+            any("stash@{" in str(argument) for args in recorded for argument in args)
+        )
         self.assertTrue(any(args[:2] == ("pull", "--ff-only") for args in recorded))
         self.assertEqual(head_before, local_main_sha_before)
+
+    def test_restores_owned_snapshot_when_another_stash_is_created_before_restore(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+        git(["checkout", "main"], local_repo)
+
+        (local_repo / "pre-existing.txt").write_text("pre-existing\n", encoding="utf-8")
+        git(
+            ["stash", "push", "--include-untracked", "--message", "pre-existing"],
+            local_repo,
+        )
+        stack_before = stash_list(local_repo)
+
+        (local_repo / "README.md").write_text("owned unstaged\n", encoding="utf-8")
+        (local_repo / "owned-staged.txt").write_text("owned staged\n", encoding="utf-8")
+        git(["add", "owned-staged.txt"], local_repo)
+        (local_repo / "owned-untracked.txt").write_text(
+            "owned untracked\n",
+            encoding="utf-8",
+        )
+        remote_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+
+        original_restore = self.module.restore_stashed_changes
+        interfering_stash = []
+
+        def create_interfering_stash(repo_path, snapshot_id, scope_label):
+            (repo_path / "interfering-only.txt").write_text(
+                "foreign stash\n",
+                encoding="utf-8",
+            )
+            git(
+                [
+                    "stash",
+                    "push",
+                    "--include-untracked",
+                    "--message",
+                    "interfering stash",
+                ],
+                repo_path,
+            )
+            interfering_stash.append(git(["rev-parse", "refs/stash"], repo_path).stdout.strip())
+            return original_restore(repo_path, snapshot_id, scope_label)
+
+        self.module.restore_stashed_changes = create_interfering_stash
+        try:
+            outcome = self.module.sync_checked_out_main_with_stash(local_repo, remote_sha)
+        finally:
+            self.module.restore_stashed_changes = original_restore
+
+        self.assertIn("restored", outcome)
+        self.assertEqual(len(interfering_stash), 1)
+        self.assertEqual(stash_list(local_repo), [interfering_stash[0], *stack_before])
+        self.assertEqual(
+            git(["diff", "--cached", "--name-status"], local_repo).stdout,
+            "A\towned-staged.txt\n",
+        )
+        self.assertEqual(
+            git(["diff", "--name-status"], local_repo).stdout,
+            "M\tREADME.md\n",
+        )
+        self.assertTrue((local_repo / "owned-untracked.txt").exists())
+        self.assertFalse((local_repo / "interfering-only.txt").exists())
+
+        restored_foreign = git(
+            ["stash", "apply", interfering_stash[0]],
+            local_repo,
+        )
+        self.assertEqual(restored_foreign.returncode, 0, restored_foreign.stderr)
+        self.assertEqual(
+            (local_repo / "interfering-only.txt").read_text(encoding="utf-8"),
+            "foreign stash\n",
+        )
+        self.assertEqual(stash_list(local_repo), [interfering_stash[0], *stack_before])
+
+    def test_setup_exits_nonzero_when_owned_snapshot_is_missing_before_restore(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+        git(["checkout", "main"], local_repo)
+
+        (local_repo / "pre-existing.txt").write_text(
+            "pre-existing\n",
+            encoding="utf-8",
+        )
+        git(
+            [
+                "stash",
+                "push",
+                "--include-untracked",
+                "--message",
+                "pre-existing",
+            ],
+            local_repo,
+        )
+        stack_before = stash_list(local_repo)
+
+        tasks_dir = local_repo / "tasks" / "todo"
+        tasks_dir.mkdir(parents=True)
+        (local_repo / ".git" / "info" / "exclude").write_text(
+            "tasks/\n",
+            encoding="utf-8",
+        )
+        prd_name = "missing-snapshot-prd"
+        (tasks_dir / f"{prd_name}.json").write_text(
+            json.dumps({"branchName": prd_name}),
+            encoding="utf-8",
+        )
+
+        (local_repo / "README.md").write_text("owned unstaged\n", encoding="utf-8")
+        staged_file = local_repo / "owned-staged.txt"
+        staged_file.write_text("owned staged\n", encoding="utf-8")
+        git(["add", "owned-staged.txt"], local_repo)
+        (local_repo / "owned-untracked.txt").write_text(
+            "owned untracked\n",
+            encoding="utf-8",
+        )
+
+        original_root = self.module.get_repo_root
+        original_restore = self.module.restore_stashed_changes
+        original_argv = self.module.sys.argv
+        captured_snapshot = []
+        interfering_stash = []
+
+        def invalidate_snapshot(repo_path, snapshot_id, scope_label):
+            captured_snapshot.append(snapshot_id)
+            (repo_path / "interfering-only.txt").write_text(
+                "foreign stash\n",
+                encoding="utf-8",
+            )
+            git(
+                [
+                    "stash",
+                    "push",
+                    "--include-untracked",
+                    "--message",
+                    "interfering stash",
+                ],
+                repo_path,
+            )
+            interfering_stash.append(
+                git(["rev-parse", "refs/stash"], repo_path).stdout.strip()
+            )
+            git(
+                [
+                    "update-ref",
+                    "-d",
+                    self.module.snapshot_ref_name(snapshot_id),
+                    snapshot_id,
+                ],
+                repo_path,
+            )
+            git(["prune", "--expire=now"], repo_path)
+            snapshot_check = git(
+                ["cat-file", "-e", f"{snapshot_id}^{{commit}}"],
+                repo_path,
+                check=False,
+            )
+            self.assertNotEqual(snapshot_check.returncode, 0)
+            return original_restore(repo_path, snapshot_id, scope_label)
+
+        self.module.get_repo_root = lambda: local_repo
+        self.module.restore_stashed_changes = invalidate_snapshot
+        self.module.sys.argv = ["setup-workspace.py", prd_name]
+        stderr = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as exit_context:
+                    self.module.main()
+        finally:
+            self.module.get_repo_root = original_root
+            self.module.restore_stashed_changes = original_restore
+            self.module.sys.argv = original_argv
+
+        self.assertEqual(exit_context.exception.code, 1)
+        self.assertEqual(len(captured_snapshot), 1)
+        self.assertEqual(len(interfering_stash), 1)
+        snapshot_id = captured_snapshot[0]
+        self.assertIn(
+            f"Root sync failed: root main sync could not verify snapshot {snapshot_id}",
+            stderr.getvalue(),
+        )
+        self.assertEqual(stash_list(local_repo), [interfering_stash[0], *stack_before])
+        self.assertFalse((local_repo / "interfering-only.txt").exists())
+
+        restored_foreign = git(
+            ["stash", "apply", interfering_stash[0]],
+            local_repo,
+        )
+        self.assertEqual(restored_foreign.returncode, 0, restored_foreign.stderr)
+        self.assertEqual(
+            (local_repo / "interfering-only.txt").read_text(encoding="utf-8"),
+            "foreign stash\n",
+        )
+        self.assertEqual(stash_list(local_repo), [interfering_stash[0], *stack_before])
+
+    def test_anchored_snapshot_survives_prune_and_is_removed_after_restore(self):
+        local_repo = self.repo_path / "local"
+        local_repo.mkdir()
+        init_local_repo(local_repo)
+
+        (local_repo / "README.md").write_text(
+            "owned unstaged\n",
+            encoding="utf-8",
+        )
+        staged_file = local_repo / "owned-staged.txt"
+        staged_file.write_text("owned staged\n", encoding="utf-8")
+        git(["add", "owned-staged.txt"], local_repo)
+        (local_repo / "owned-untracked.txt").write_text(
+            "owned untracked\n",
+            encoding="utf-8",
+        )
+
+        snapshot_id = self.module.stash_local_changes(local_repo, "anchor lifecycle")
+        snapshot_ref = self.module.snapshot_ref_name(snapshot_id)
+
+        self.assertEqual(
+            git(["show-ref", "--verify", "--hash", snapshot_ref], local_repo).stdout.strip(),
+            snapshot_id,
+        )
+        self.assertIn(
+            snapshot_ref,
+            git(
+                [
+                    "for-each-ref",
+                    "--format=%(refname)",
+                    "refs/factory-snapshots/",
+                ],
+                local_repo,
+            ).stdout.splitlines(),
+        )
+
+        git(["prune", "--expire=now"], local_repo)
+        self.assertEqual(
+            git(
+                ["cat-file", "-e", f"{snapshot_id}^{{commit}}"],
+                local_repo,
+                check=False,
+            ).returncode,
+            0,
+        )
+
+        self.module.restore_stashed_changes(local_repo, snapshot_id, "anchor lifecycle")
+
+        self.assertNotEqual(
+            git(["show-ref", "--verify", "--hash", snapshot_ref], local_repo, check=False).returncode,
+            0,
+        )
+        self.assertEqual(
+            git(["diff", "--cached", "--name-status"], local_repo).stdout,
+            "A\towned-staged.txt\n",
+        )
+        self.assertEqual(
+            git(["diff", "--name-status"], local_repo).stdout,
+            "M\tREADME.md\n",
+        )
+        self.assertEqual(
+            (local_repo / "owned-untracked.txt").read_text(encoding="utf-8"),
+            "owned untracked\n",
+        )
+
+    def test_failed_restore_keeps_snapshot_anchor_for_recovery(self):
+        local_repo = self.repo_path / "local"
+        local_repo.mkdir()
+        init_local_repo(local_repo)
+
+        owned_untracked = local_repo / "owned-untracked.txt"
+        owned_untracked.write_text("owned untracked\n", encoding="utf-8")
+        snapshot_id = self.module.stash_local_changes(local_repo, "failed restore")
+        snapshot_ref = self.module.snapshot_ref_name(snapshot_id)
+
+        owned_untracked.write_text("foreign conflicting file\n", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, f"snapshot {snapshot_id} failed"):
+            self.module.restore_stashed_changes(local_repo, snapshot_id, "failed restore")
+
+        self.assertEqual(
+            git(["show-ref", "--verify", "--hash", snapshot_ref], local_repo).stdout.strip(),
+            snapshot_id,
+        )
+        git(["prune", "--expire=now"], local_repo)
+        self.assertEqual(
+            git(
+                ["cat-file", "-e", f"{snapshot_id}^{{commit}}"],
+                local_repo,
+                check=False,
+            ).returncode,
+            0,
+        )
+
+        self.module.restore_stashed_changes(local_repo, snapshot_id, "failed restore recovery")
+        self.assertEqual(
+            owned_untracked.read_text(encoding="utf-8"),
+            "owned untracked\n",
+        )
+        self.assertNotEqual(
+            git(["show-ref", "--verify", "--hash", snapshot_ref], local_repo, check=False).returncode,
+            0,
+        )
 
     def test_sync_main_fast_forwards_main_without_pull_on_dirty_tree(self):
         local_repo = self.repo_path / "local"
@@ -437,10 +746,18 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
     def test_restore_stashed_changes_falls_back_when_index_apply_conflicts(self):
         recorded = []
         original_run_git = self.module.run_git
+        snapshot_id = "a" * 40
 
         def fake_run_git(*args, **kwargs):
             recorded.append(args)
-            if args == ("stash", "apply", "--index", "stash@{0}"):
+            if args == ("cat-file", "-e", f"{snapshot_id}^{{commit}}"):
+                return subprocess.CompletedProcess(
+                    ["git", *args],
+                    0,
+                    stdout="",
+                    stderr="",
+                )
+            if args == ("stash", "apply", "--index", snapshot_id):
                 return subprocess.CompletedProcess(
                     ["git", *args],
                     1,
@@ -450,18 +767,23 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
                         "Try without --index."
                     ),
                 )
-            if args == ("stash", "apply", "stash@{0}"):
+            if args == ("stash", "apply", snapshot_id):
                 return subprocess.CompletedProcess(
                     ["git", *args],
                     0,
                     stdout="applied\n",
                     stderr="",
                 )
-            if args == ("stash", "drop", "stash@{0}"):
+            if args == (
+                "update-ref",
+                "-d",
+                self.module.snapshot_ref_name(snapshot_id),
+                snapshot_id,
+            ):
                 return subprocess.CompletedProcess(
                     ["git", *args],
                     0,
-                    stdout="dropped\n",
+                    stdout="",
                     stderr="",
                 )
             return original_run_git(*args, **kwargs)
@@ -470,15 +792,24 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         try:
             self.module.restore_stashed_changes(
                 self.repo_path,
-                "stash@{0}",
+                snapshot_id,
                 "root main",
             )
         finally:
             self.module.run_git = original_run_git
 
-        self.assertEqual(recorded[0], ("stash", "apply", "--index", "stash@{0}"))
-        self.assertEqual(recorded[1], ("stash", "apply", "stash@{0}"))
-        self.assertEqual(recorded[2], ("stash", "drop", "stash@{0}"))
+        self.assertEqual(recorded[0], ("cat-file", "-e", f"{snapshot_id}^{{commit}}"))
+        self.assertEqual(recorded[1], ("stash", "apply", "--index", snapshot_id))
+        self.assertEqual(recorded[2], ("stash", "apply", snapshot_id))
+        self.assertEqual(
+            recorded[3],
+            (
+                "update-ref",
+                "-d",
+                self.module.snapshot_ref_name(snapshot_id),
+                snapshot_id,
+            ),
+        )
 
 
 if __name__ == "__main__":
