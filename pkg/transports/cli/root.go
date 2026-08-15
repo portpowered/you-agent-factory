@@ -1226,7 +1226,31 @@ func resolveSignatureRunFactoryPrompt(
 	signature *interfaces.InvocationSignatureConfig,
 	preparation work.InvocationInputPreparation,
 ) error {
-	prepared, err := prepareRunInvocationInputWithFile(cmd, promptArgs, signature, invocationFilePath(cfg), preparation)
+	if preparation == nil {
+		return fmt.Errorf("Work invocation-input preparation is required")
+	}
+	stdinText, err := collectRunInvocationStdin(
+		promptArgs,
+		cmd.InOrStdin(),
+		func() bool { return startupcli.StdinIsTTY(cmd.Context()) },
+	)
+	if err != nil {
+		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
+	}
+	// Service mode is a long-lived host, so signature defaults must not turn an
+	// absent command input into an invocation. Explicit raw input remains on
+	// the invocation path; WorkFile is handled later by the service runtime.
+	if cfg.Continuously && !continuousSignatureInvocationRequested(cfg, promptArgs, stdinText) {
+		return nil
+	}
+	prepared, err := prepareRunInvocationInputWithStdin(
+		cmd.Context(),
+		promptArgs,
+		signature,
+		invocationFilePath(cfg),
+		preparation,
+		stdinText,
+	)
 	if err != nil {
 		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
 	}
@@ -1234,6 +1258,17 @@ func resolveSignatureRunFactoryPrompt(
 	cfg.PreparedInvocationInput = &prepared
 	cfg.InvocationArguments = work.RuntimeInvocationArguments(signature, prepared.NormalizedArguments)
 	return nil
+}
+
+func continuousSignatureInvocationRequested(
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	stdinText *string,
+) bool {
+	if cfg != nil && cfg.InvocationFileExplicit {
+		return true
+	}
+	return len(promptArgs) > 0 || stdinText != nil
 }
 
 func resolveCompatibilityRunFactoryPrompt(
@@ -1295,7 +1330,28 @@ func prepareRunInvocationInputWithFile(
 	if err != nil {
 		return work.PreparedInvocationInput{}, err
 	}
-	return preparation.PrepareInvocationInput(cmd.Context(), work.InvocationInputPreparationRequest{
+	return prepareRunInvocationInputWithStdin(
+		cmd.Context(),
+		promptArgs,
+		signature,
+		filePath,
+		preparation,
+		stdinText,
+	)
+}
+
+func prepareRunInvocationInputWithStdin(
+	ctx context.Context,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	filePath *string,
+	preparation work.InvocationInputPreparation,
+	stdinText *string,
+) (work.PreparedInvocationInput, error) {
+	if preparation == nil {
+		return work.PreparedInvocationInput{}, fmt.Errorf("Work invocation-input preparation is required")
+	}
+	return preparation.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
 		Arguments: append([]string(nil), promptArgs...),
 		Signature: signature,
 		StdinText: stdinText,

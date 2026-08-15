@@ -124,6 +124,54 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	)
 }
 
+// TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable proves
+// a signature-bearing packaged Factory can enter continuous service mode with
+// no invocation input, bind its API, and remain idle without creating Work.
+func TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow packaged Factory continuous-service readiness")
+	}
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedGoalFactoryName)
+
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: server.Start})
+	support.CleanupProcess(t, process)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "run",
+		"--named", factorydefinitions.PackagedGoalFactoryName,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	inputs.Input.Env = isolatedHomeEnvironment(homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Stdin = strings.NewReader("")
+	stdinIsTTY := false
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	baseURL := server.WaitForURL(t)
+	support.GetDefaultSession(t, baseURL)
+	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	if len(listed.Results) != 0 {
+		t.Fatalf("continuous service startup created Work without invocation input: %#v", listed.Results)
+	}
+	select {
+	case <-command.Done():
+		t.Fatalf("continuous service command exited before a later API request: %v", command.Err())
+	default:
+	}
+}
+
 // TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree proves packaged @you/goal
 // CLI and API invocations agree on compatible public primary-outcome facts:
 // terminal status, primary-result text on success, and stable public error codes
@@ -1322,7 +1370,7 @@ func runPackagedGoalInvocationCLIWithMode(
 	cmdArgs = append(cmdArgs, sourceArgs...)
 	cmdArgs = append(
 		cmdArgs,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 	)
