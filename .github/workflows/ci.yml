@@ -277,6 +277,7 @@ jobs:
       LINT_REPORT_FILE: .artifacts/backend-lint/report.json
       LINT_LOG_FILE: .artifacts/backend-lint/lint.log
       LINT_COMMENT_FILE: .artifacts/backend-lint/comment.md
+      BACKEND_LINT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:

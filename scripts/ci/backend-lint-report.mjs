@@ -206,7 +206,7 @@ function runCli() {
 	const markdown = renderBackendLintSummary(summary);
 	appendFileSync(summaryPath, markdown);
 	writeFileSync(commentPath, renderBackendLintComment(summary, {
-		headSha: process.env.GITHUB_SHA,
+		headSha: process.env.BACKEND_LINT_HEAD_SHA || process.env.GITHUB_SHA,
 		runUrl: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
 			? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
 			: "",

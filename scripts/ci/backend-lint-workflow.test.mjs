@@ -13,6 +13,7 @@ test("Backend Lint is selected for pull requests and pushes to main", () => {
 		/if: github\.event_name == 'pull_request' \|\| github\.event_name == 'push'/,
 	);
 	assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+	assert.match(workflow, /BACKEND_LINT_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 });
 
 test("Backend Lint publishes the hosted inventory and feeds Verification Policy", () => {
