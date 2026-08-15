@@ -1,7 +1,6 @@
 package support
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,21 +11,24 @@ import (
 )
 
 // RequestContainsInterpolation reports whether a provider command edge saw an
-// unresolved definition variable in any subprocess field.
-func RequestContainsInterpolation(request platformprocess.CommandRequest) bool {
-	if bytes.Contains([]byte(request.Command), []byte("${")) ||
-		bytes.Contains(request.Stdin, []byte("${")) ||
-		bytes.Contains([]byte(request.WorkDir), []byte("${")) {
-		return true
-	}
-	for _, argument := range request.Args {
-		if strings.Contains(argument, "${") {
+// unresolved definition variable in a product-controlled field. Environment
+// entries are compared against the Factory-authored placeholders guarded by
+// the scenario because the process also inherits unrelated values.
+func RequestContainsInterpolation(
+	request platformprocess.CommandRequest,
+	placeholders ...string,
+) bool {
+	values := append([]string{request.Command, string(request.Stdin), request.WorkDir}, request.Args...)
+	for _, value := range values {
+		if strings.Contains(value, "${") {
 			return true
 		}
 	}
 	for _, variable := range request.Env {
-		if strings.Contains(variable, "${") {
-			return true
+		for _, placeholder := range placeholders {
+			if strings.Contains(variable, placeholder) {
+				return true
+			}
 		}
 	}
 	return false

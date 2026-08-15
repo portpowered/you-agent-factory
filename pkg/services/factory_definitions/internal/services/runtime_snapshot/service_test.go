@@ -118,6 +118,43 @@ func TestResolveRuntimeSnapshotInterpolatesInvocationValuesBeforeDetaching(t *te
 	}
 }
 
+func TestResolveRuntimeSnapshotAllowsLogicalWorkstationsDuringOneShotResolution(t *testing.T) {
+	t.Parallel()
+
+	source := newTestLoadedSource()
+	source.config.Workers = nil
+	source.config.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+		Name: "logical-failure",
+		Type: factorydefinitions.WorkstationTypeLogical,
+	}}
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func(_ string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical: []byte(`{"name":"logical"}`),
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			Arguments: &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+	}
+	if got := result.Snapshot.EffectiveFactory.Workstations[0].Type; got != factorydefinitions.WorkstationTypeLogical {
+		t.Fatalf("logical workstation type = %q, want %q", got, factorydefinitions.WorkstationTypeLogical)
+	}
+}
+
 func assertInitialRuntimeSnapshot(t *testing.T, snapshot factorydefinitions.RuntimeSnapshot) {
 	t.Helper()
 	if snapshot.FactoryDir != "/factories/alpha" {

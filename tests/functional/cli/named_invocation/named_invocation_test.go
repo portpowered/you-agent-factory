@@ -288,11 +288,12 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 		t.Fatalf("provider calls = %d, want named and explicit-file calls", len(calls))
 	}
 	wantPrompt := "input=equivalent canonical prompt|format=json|count=2|document=factory invocation document|stdin=canonical stdin body"
+	placeholders := []string{"${executorProvider}", "${executorModel}", "${input}", "${format}", "${count}", "${document}", "${body}", "${mode}"}
 	for index, call := range calls {
 		if call.Command != "codex" {
 			t.Fatalf("provider call %d command = %q, want codex", index, call.Command)
 		}
-		if support.RequestContainsInterpolation(call) {
+		if support.RequestContainsInterpolation(call, placeholders...) {
 			t.Fatalf("provider call %d contains unresolved interpolation: %#v", index, call)
 		}
 		if got := string(call.Stdin); !strings.Contains(got, wantPrompt) {
@@ -465,7 +466,7 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	if len(calls) != 1 || calls[0].Command != "codex" {
 		t.Fatalf("default-only provider calls = %#v, want one codex request", calls)
 	}
-	if support.RequestContainsInterpolation(calls[0]) {
+	if support.RequestContainsInterpolation(calls[0], "${mode}") {
 		t.Fatalf("default-only provider request contains unresolved interpolation: %#v", calls[0])
 	}
 	if got := string(calls[0].Stdin); !strings.Contains(got, "mode=safe") {
