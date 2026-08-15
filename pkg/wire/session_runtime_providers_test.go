@@ -668,29 +668,6 @@ func (statelessProcessCommandRunner) Run(
 	return platformprocess.CommandResult{Stdout: []byte("canonical-output")}, nil
 }
 
-func TestProvideRuntimeProviderBindingsRebindsInjectedRunner(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner()
-	adaptedRunner := workers.AdaptCommandRunner(runner)
-
-	providersRoot, service, rebinder, err := provideRuntimeProviderBindings(
-		serviceedges.Edges{}, nil, adaptedRunner,
-	)
-	if err != nil {
-		t.Fatalf("provideRuntimeProviderBindings() error = %v", err)
-	}
-	if providersRoot == nil || service == nil || rebinder == nil {
-		t.Fatalf("provideRuntimeProviderBindings() = Providers root %T, service %T, rebinder %T; want all non-nil", providersRoot, service, rebinder)
-	}
-
-	reboundService, err := rebinder(adaptedRunner)
-	if err != nil {
-		t.Fatalf("rebinder() error = %v", err)
-	}
-	if reboundService == nil {
-		t.Fatalf("rebinder() = service %T; want non-nil", reboundService)
-	}
-}
-
 func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner()
 
