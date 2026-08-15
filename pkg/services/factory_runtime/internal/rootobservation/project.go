@@ -92,11 +92,37 @@ func observationStatusFromRuntime(status interfaces.RuntimeStatus) factory.Obser
 }
 
 func projectCurrentlyInFlightDispatchCount(snap *legacysnapshot.Snapshot) int {
-	return factory.ProjectCurrentlyInFlightDispatchCount(
+	return reconcileInFlightDispatchCount(
 		snap.InFlightCount,
 		activeDispatchIDs(snap.Dispatches),
 		observedTerminalDispatchIDs(snap.Results, snap.DispatchHistory),
 	)
+}
+
+func reconcileInFlightDispatchCount(
+	reportedCount int,
+	activeDispatchIDs map[string]struct{},
+	completedDispatchIDs []string,
+) int {
+	if reportedCount <= 0 || len(activeDispatchIDs) == 0 {
+		return 0
+	}
+
+	completed := 0
+	seen := make(map[string]struct{}, len(completedDispatchIDs))
+	for _, dispatchID := range completedDispatchIDs {
+		if _, alreadySeen := seen[dispatchID]; alreadySeen {
+			continue
+		}
+		seen[dispatchID] = struct{}{}
+		if _, active := activeDispatchIDs[dispatchID]; active {
+			completed++
+		}
+	}
+	if completed >= reportedCount {
+		return 0
+	}
+	return reportedCount - completed
 }
 
 func activeDispatchIDs(dispatches map[string]*interfaces.DispatchEntry) map[string]struct{} {

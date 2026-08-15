@@ -214,7 +214,33 @@ func projectedSnapshotInFlightDispatchCount(
 			completed = append(completed, dispatch.DispatchID)
 		}
 	}
-	return factory.ProjectCurrentlyInFlightDispatchCount(snapshot.InFlightCount, active, completed)
+	return reconcileInFlightDispatchCount(snapshot.InFlightCount, active, completed)
+}
+
+func reconcileInFlightDispatchCount(
+	reportedCount int,
+	activeDispatchIDs map[string]struct{},
+	completedDispatchIDs []string,
+) int {
+	if reportedCount <= 0 || len(activeDispatchIDs) == 0 {
+		return 0
+	}
+
+	completed := 0
+	seen := make(map[string]struct{}, len(completedDispatchIDs))
+	for _, dispatchID := range completedDispatchIDs {
+		if _, alreadySeen := seen[dispatchID]; alreadySeen {
+			continue
+		}
+		seen[dispatchID] = struct{}{}
+		if _, active := activeDispatchIDs[dispatchID]; active {
+			completed++
+		}
+	}
+	if completed >= reportedCount {
+		return 0
+	}
+	return reportedCount - completed
 }
 
 func projectedSessionUsage(ctx ProjectionContext) RuntimeUsage {
