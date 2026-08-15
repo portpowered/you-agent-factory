@@ -185,7 +185,7 @@ func runScript(repoRoot string, scriptPath string, env ...string) (string, error
 		cmd = exec.Command(scriptPath)
 	}
 	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(minimalScriptEnvironment(), env...)
 
 	var output bytes.Buffer
 	cmd.Stdout = &output
@@ -193,6 +193,14 @@ func runScript(repoRoot string, scriptPath string, env ...string) (string, error
 
 	err := cmd.Run()
 	return output.String(), err
+}
+
+func minimalScriptEnvironment() []string {
+	path, ok := os.LookupEnv("PATH")
+	if !ok {
+		return []string{}
+	}
+	return []string{"PATH=" + path}
 }
 
 func assertOutputOrder(t *testing.T, output string, markers ...string) {
