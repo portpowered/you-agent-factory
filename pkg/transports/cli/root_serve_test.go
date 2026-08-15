@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/spf13/pflag"
 )
 
@@ -306,6 +308,51 @@ func TestServeACPCommand_CancellationPropagatesFromProcessContext(t *testing.T) 
 
 	if err := root.Execute(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestExecuteCommandResultPreservesCancellationIdentityAfterDiagnosticStateChanges(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		rendered bool
+	}{
+		{name: "unrendered", err: context.Canceled},
+		{name: "wrapped unrendered", err: fmt.Errorf("ACP server stopped: %w", context.Canceled)},
+		{name: "already rendered", err: fmt.Errorf("ACP server stopped: %w", context.Canceled), rendered: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stderr bytes.Buffer
+			diagnostics := clidiag.NewDiagnosticWriter(&stderr)
+			if tc.rendered {
+				if !clidiag.WriteFailure(diagnostics, &clidiag.Failure{
+					Code:    "ACP_TEST_FAILURE",
+					Message: "already rendered",
+				}) {
+					t.Fatal("WriteFailure() = false, want a rendered diagnostic")
+				}
+			}
+			beforeCancellation := stderr.String()
+
+			got := executeCommandResult(diagnostics, tc.err)
+			if got != context.Canceled {
+				t.Fatalf("executeCommandResult() = %T %v, want context.Canceled by identity", got, got)
+			}
+
+			if tc.rendered {
+				if stderr.String() != beforeCancellation {
+					t.Fatalf("already-rendered stderr changed from %q to %q, want no duplicate diagnostic", beforeCancellation, stderr.String())
+				}
+				return
+			}
+			if got := stderr.String(); got != "Error: context canceled\n" {
+				t.Fatalf("unrendered cancellation stderr = %q, want exact cancellation diagnostic", got)
+			}
+		})
 	}
 }
 
