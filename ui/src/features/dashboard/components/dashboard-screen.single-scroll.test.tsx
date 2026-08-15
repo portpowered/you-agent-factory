@@ -5,6 +5,7 @@ import { afterEach, beforeEach } from "vitest";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { dashboardSemanticSnapshotFixtures } from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import type { useDashboardBentoSnapshot } from "../../bento/hooks/use-dashboard-bento-snapshot";
 import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { DashboardScreen } from "./dashboard-screen";
 
@@ -56,52 +57,62 @@ vi.mock("../session/dashboard-session-provider", () => ({
 }));
 
 vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
-  useDashboardBentoSnapshot: vi.fn(() => {
-    const snapshot = dashboardSnapshotState.value.snapshot;
+  useDashboardBentoSnapshot: vi.fn(
+    (): ReturnType<typeof useDashboardBentoSnapshot> => {
+      const snapshot = dashboardSnapshotState.value.snapshot;
 
-    if (!snapshot) {
-      throw new Error("Expected a dashboard snapshot fixture for bento tests.");
-    }
+      if (!snapshot) {
+        throw new Error("Expected a dashboard snapshot fixture for bento tests.");
+      }
 
-    return {
-      currentSelection: {
-        canRedoSelection: false,
-        canUndoSelection: false,
-        clearSelectedWorkerIfMatching: vi.fn(),
-        completedWorkItems: [],
-        failedWorkItems: [],
-        openTerminalWorkDetail: vi.fn(),
-        redoSelection: vi.fn(),
-        selectedNode: null,
-        selectedNodeActiveExecutions: [],
-        selectedNodeProviderSessions: [],
-        selectedNodeWorkstationRequests: [],
-        selectedStateCurrentWorkItems: [],
-        selectedStatePlace: null,
-        selectedStateTerminalHistoryWorkItems: [],
-        selectedStateTokenCount: 0,
-        selectedWorkDispatchAttempts: [],
-        selectedWorkID: null,
-        selectedWorkProviderSessions: [],
-        selectedWorkRequestHistory: [],
-        selectedWorkWorkstationRequests: [],
-        selectedWorkstationRequest: null,
-        selection: null,
-        selectStateNode: vi.fn(),
-        selectStateWorkItem: vi.fn(),
-        selectWorkByID: vi.fn(),
-        selectWorkItem: vi.fn(),
-        selectWorkstation: vi.fn(),
-        selectWorkstationRequest: vi.fn(),
-        terminalWorkDetail: null,
-        undoSelection: vi.fn(),
-      },
-      materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
-      selectedSnapshot: snapshot,
-      selectedTimelineTick: snapshot.tick_count,
-      snapshot,
-    };
-  }),
+      return {
+        currentSelection: {
+          canRedoSelection: false,
+          canUndoSelection: false,
+          clearSelectedWorkerIfMatching: vi.fn(),
+          completedWorkItems: [],
+          failedWorkItems: [],
+          openTerminalWorkDetail: vi.fn(),
+          redoSelection: vi.fn(),
+          selectedNode: null,
+          selectedNodeActiveExecutions: [],
+          selectedNodeProviderSessions: [],
+          selectedNodeWorkstationRequests: [],
+          selectedStateCurrentWorkItems: [],
+          selectedStatePlace: null,
+          selectedStateTerminalHistoryWorkItems: [],
+          selectedStateTokenCount: 0,
+          selectedWorkDispatchAttempts: [],
+          selectedWorkID: null,
+          selectedWorkProviderSessions: [],
+          selectedWorkRequestHistory: [],
+          selectedWorkWorkstationRequests: [],
+          selectedWorkstationRequest: null,
+          selection: null,
+          selectStateNode: vi.fn(),
+          selectStateWorkItem: vi.fn(),
+          selectWorkByID: vi.fn(),
+          selectWorkItem: vi.fn(),
+          selectWorkstation: vi.fn(),
+          selectWorkstationRequest: vi.fn(),
+          terminalWorkDetail: null,
+          undoSelection: vi.fn(),
+        },
+        dashboardCardStateContext: {
+          hasAuthoritativeSnapshot: true,
+          recoveryPending: false,
+          streamStatus: dashboardSnapshotState.value.streamState.status,
+          timelineMode: "current" as const,
+          workOutcomeHydrationStatus: "ready" as const,
+        },
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+        selectedSnapshot: snapshot,
+        selectedTimelineTick: snapshot.tick_count,
+        snapshot,
+        workOutcomeHydrationStatus: "ready" as const,
+      };
+    },
+  ),
 }));
 
 vi.mock("../../bento/hooks/useDashboardLayout", async () => {
@@ -153,7 +164,16 @@ vi.mock("../../trace-drilldown/hooks/useTraceDrilldown", () => ({
 }));
 
 vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
-  useWorkOutcomeChart: () => ({ status: "empty" as const }),
+  useWorkOutcomeChart: () => ({
+    chartState: { status: "ready" as const },
+    delta: { completed: 0, failed: 0, inFlight: 0, queued: 0 },
+    failureGroups: [],
+    points: [],
+    rangeID: "session" as const,
+    rangeLabel: "Session",
+    samples: [],
+    series: [],
+  }),
 }));
 
 vi.mock(
