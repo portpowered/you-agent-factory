@@ -206,6 +206,12 @@ Rules:
 - Complex frontend plans **SHOULD** include operation tests, projection tests, hook or mutation tests, focused component tests, and a small number of integration tests for high-risk UI-library behavior when those layers are applicable.
 - Plans **SHOULD NOT** rely on mounted component tests as the only proof for domain mutations that can be tested as pure operations.
 - Plans involving third-party UI libraries **SHOULD** prove both the pure projected state and at least one user interaction path where the library dispatches the expected operation.
+- CI evidence cited by a plan **MUST** come from a run on the change's own pull request. Evidence from another branch, commit, or `main` **MUST NOT** substitute for that run.
+- A cited gate **MUST** emit property-specific output; absence of output about the property **MUST NOT** be treated as a pass. When a gate can fail before observing the property, the plan **MUST** require confirmation that measurement occurred before citing the result.
+- Counted-ratchet evidence **MUST** report the observed count against the recorded baseline; matching failing-target identity **MUST NOT** substitute for that comparison.
+- Acceptance criteria for instrument-specific metrics **MUST** name the instrument or lane that produces the relevant measurement.
+
+**Measurement and failure conditions:** A gate's measurement condition **MUST** equal its failure condition. A result cannot establish a passing property when the gate can fail before measuring it; this distinction addresses the silent and early-exit patterns that motivated this rule.
 
 ### 12. Keep Planning Output Clean and Actionable
 
