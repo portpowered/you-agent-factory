@@ -221,24 +221,6 @@ func agentImplementation(
 	)
 }
 
-// NewMockRegistry constructs one mock Strategy for the Workers-owned testing
-// feature path. It must not be composed into production Workers wire.
-func NewMockRegistry(
-	config runners.MockConfig,
-	dependencies runners.MockDependencies,
-) (runners.Service, error) {
-	implementation, err := mock.New(
-		mock.Config{WorkersConfig: config.WorkersConfig},
-		mock.Dependencies{Next: dependencies.Next},
-	)
-	service, registryErr := NewService([]runners.Registration{{
-		Identity: runners.MockIdentity,
-		Metadata: mockMetadata(),
-		Runner:   implementation,
-	}})
-	return service, errors.Join(err, registryErr)
-}
-
 // NewInferenceCompositionRunner resolves one registry-backed Inference Runner
 // that projects managed-runtime invocation ahead of the supplied delegate.
 func NewInferenceCompositionRunner(
