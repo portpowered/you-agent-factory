@@ -170,6 +170,7 @@ export function buildLargeFactoryEditorParityFixture(
       bounds: { height: 760, width: 1_320, x: -64, y: -64 },
       color: "info",
       id: "large-parity-workflow",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       label: "Workflow context",
       nodeIds: topologyNodeIds.slice(0, 120),
     },
@@ -177,6 +178,7 @@ export function buildLargeFactoryEditorParityFixture(
       bounds: { height: 760, width: 1_320, x: 840, y: 240 },
       color: "warning",
       id: "large-parity-review",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       label: "Review lane",
       nodeIds: topologyNodeIds.slice(120, 240),
     },
@@ -184,6 +186,7 @@ export function buildLargeFactoryEditorParityFixture(
       bounds: { height: 760, width: 1_320, x: 1_744, y: 544 },
       color: "success",
       id: "large-parity-infrastructure",
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       label: "Infrastructure context",
       nodeIds: topologyNodeIds.slice(240, 360),
     },

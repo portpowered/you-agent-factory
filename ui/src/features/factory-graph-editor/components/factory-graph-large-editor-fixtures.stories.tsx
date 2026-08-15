@@ -54,6 +54,17 @@ const largeParityWorkStateCounts = [1, 3, 4, 25] as const;
 
 function LargeFactoryVisualParityStory() {
   const [liveOverlay, setLiveOverlay] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [draggedNodePositions, setDraggedNodePositions] = useState<
+    ReadonlyMap<string, { x: number; y: number }>
+  >(new Map());
+  const layoutPositionsByNodeId = useMemo(() => {
+    const positions = new Map(largeParityLayoutPositions);
+    for (const [nodeId, position] of draggedNodePositions) {
+      positions.set(nodeId, position);
+    }
+    return positions;
+  }, [draggedNodePositions]);
   const workStateCounts = useMemo(
     () =>
       new Map(
@@ -81,7 +92,7 @@ function LargeFactoryVisualParityStory() {
         factoryDefinition: largeParityFixture.fixture.factoryDefinition,
         focusedNodeIds: activeNodeIds,
         layout: largeParityFixture.layout,
-        layoutPositionsByNodeId: largeParityLayoutPositions,
+        layoutPositionsByNodeId,
         mutedNodeIds: new Set<string>(),
         pendingAdditionEdgeIds: new Set<string>(),
         pendingConnectionSource: null,
@@ -91,7 +102,15 @@ function LargeFactoryVisualParityStory() {
         placeTokenCountsByNodeId: workStateCounts,
         topology: largeParityFixture.fixture.topology,
       }),
-    [activeNodeIds, workStateCounts],
+    [activeNodeIds, layoutPositionsByNodeId, workStateCounts],
+  );
+  const displayNodes = useMemo(
+    () =>
+      flowModel.nodes.map((node) => ({
+        ...node,
+        selected: node.id === selectedNodeId,
+      })),
+    [flowModel.nodes, selectedNodeId],
   );
 
   return (
@@ -118,8 +137,19 @@ function LargeFactoryVisualParityStory() {
           edges={flowModel.edges}
           fitView={false}
           nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
-          nodes={flowModel.nodes}
-          nodesDraggable={false}
+          nodes={displayNodes}
+          nodesDraggable
+          onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
+          onNodeDragStop={(_event, node) => {
+            setDraggedNodePositions((current) => {
+              const next = new Map(current);
+              next.set(node.id, {
+                x: node.position.x,
+                y: node.position.y,
+              });
+              return next;
+            });
+          }}
           onlyRenderVisibleElements={false}
         >
           <FactoryGraphGroupRegionLayer groups={largeParityFixture.groups} />

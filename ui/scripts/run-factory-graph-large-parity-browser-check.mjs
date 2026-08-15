@@ -57,11 +57,16 @@ try {
         );
       }
 
+      const authoredNodeId = "workstation:ws-0";
       const authoredNode = page.locator(
-        '.react-flow__node[data-id="workstation:ws-0"]',
+        `.react-flow__node[data-id="${authoredNodeId}"]`,
       );
       await authoredNode.waitFor({ state: "attached" });
       const initialSize = await readNodeSize(authoredNode);
+      const initialHandleIds = await readNodeHandleIds(authoredNode);
+      const viewport = page.locator(".react-flow__viewport");
+      await viewport.waitFor({ state: "attached" });
+      const initialViewportTransform = await readViewportTransform(viewport);
       const applyOverlayButton = page.getByRole("button", {
         name: "Apply live graph overlay",
       });
@@ -79,6 +84,16 @@ try {
         await applyOverlayButton.waitFor({ state: "visible" });
       }
       await applyOverlayButton.focus();
+      const applyButtonIsFocusVisible = await applyOverlayButton.evaluate(
+        (element) =>
+          element === document.activeElement &&
+          element.matches(":focus-visible"),
+      );
+      if (!applyButtonIsFocusVisible) {
+        throw new Error(
+          `Live graph overlay control did not retain visible keyboard focus at ${viewport.label}.`,
+        );
+      }
       await page.keyboard.press("Enter");
       await resetOverlayButton.waitFor({ state: "visible" });
 
@@ -129,6 +144,67 @@ try {
         );
       }
 
+      const afterOverlayHandleIds = await readNodeHandleIds(authoredNode);
+      if (
+        JSON.stringify(afterOverlayHandleIds) !==
+        JSON.stringify(initialHandleIds)
+      ) {
+        throw new Error(
+          `Rendered handles changed during the live overlay at ${viewport.label}: before=${JSON.stringify(initialHandleIds)} after=${JSON.stringify(afterOverlayHandleIds)}.`,
+        );
+      }
+      const afterOverlayViewportTransform =
+        await readViewportTransform(viewport);
+      if (afterOverlayViewportTransform !== initialViewportTransform) {
+        throw new Error(
+          `Viewport changed during the live overlay at ${viewport.label}: before=${initialViewportTransform} after=${afterOverlayViewportTransform}.`,
+        );
+      }
+
+      await authoredNode.click();
+      await assertNodeSelected(page, authoredNodeId, viewport.label);
+      const initialNodeTransform = await readNodeTransform(authoredNode);
+      await dragNodeByOffset(page, authoredNode, 28, 20);
+      await page.waitForFunction(
+        ({ id, initialTransform }) => {
+          const node = document.querySelector(
+            `.react-flow__node[data-id="${id}"]`,
+          );
+          return node?.style.transform !== initialTransform;
+        },
+        { id: authoredNodeId, initialTransform: initialNodeTransform },
+      );
+      await assertNodeSelected(page, authoredNodeId, viewport.label);
+
+      const pane = page.locator(".react-flow__pane");
+      const paneBox = await pane.boundingBox();
+      if (!paneBox) {
+        throw new Error(`Expected a graph pane at ${viewport.label}.`);
+      }
+      const panePoint = {
+        x: paneBox.x + paneBox.width - 24,
+        y: paneBox.y + paneBox.height - 24,
+      };
+      const beforePanTransform = await readViewportTransform(viewport);
+      await page.mouse.move(panePoint.x, panePoint.y);
+      await page.mouse.down();
+      await page.mouse.move(panePoint.x - 24, panePoint.y + 18, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForFunction(
+        ({ selector, before }) =>
+          document.querySelector(selector)?.getAttribute("style") !== before,
+        { selector: ".react-flow__viewport", before: beforePanTransform },
+      );
+      const beforeZoomTransform = await readViewportTransform(viewport);
+      await page.mouse.move(panePoint.x, panePoint.y);
+      await page.mouse.wheel(0, -180);
+      await page.waitForFunction(
+        ({ selector, before }) =>
+          document.querySelector(selector)?.getAttribute("style") !== before,
+        { selector: ".react-flow__viewport", before: beforeZoomTransform },
+      );
+      await assertNodeSelected(page, authoredNodeId, viewport.label);
+
       const resetButton = page.getByRole("button", {
         name: "Reset live graph overlay",
       });
@@ -157,6 +233,78 @@ async function readNodeSize(node) {
     height: element.style.height,
     width: element.style.width,
   }));
+}
+
+async function readNodeHandleIds(node) {
+  return node
+    .locator("[data-node-handle-badge]")
+    .evaluateAll((handles) =>
+      handles
+        .map((handle) => handle.getAttribute("data-node-handle-badge"))
+        .filter((id) => id !== null),
+    );
+}
+
+async function readNodeTransform(node) {
+  return node.evaluate((element) => element.style.transform);
+}
+
+async function readViewportTransform(viewport) {
+  return viewport.getAttribute("style");
+}
+
+async function assertNodeSelected(page, nodeId, viewportLabel) {
+  await page.waitForFunction(
+    (id) => {
+      const node = document.querySelector(`.react-flow__node[data-id="${id}"]`);
+      return (
+        node?.classList.contains("selected") ||
+        node?.querySelector('[data-graph-visual-selection="true"]') !== null
+      );
+    },
+    nodeId,
+    { timeout: browserCheckTimeoutMs },
+  );
+  const selected = await page.locator(`.react-flow__node[data-id="${nodeId}"]`);
+  if (!(await selected.isVisible())) {
+    throw new Error(`Selected graph node was not visible at ${viewportLabel}.`);
+  }
+}
+
+async function dragNodeByOffset(page, node, deltaX, deltaY) {
+  const box = await node.boundingBox();
+  if (!box) {
+    throw new Error("Expected an authored node bounding box for pointer drag.");
+  }
+  const point = await page.evaluate(
+    ({ box: nodeBox }) => {
+      const candidates = [
+        { x: nodeBox.x + nodeBox.width / 2, y: nodeBox.y + 4 },
+        { x: nodeBox.x + 4, y: nodeBox.y + nodeBox.height / 2 },
+        {
+          x: nodeBox.x + nodeBox.width - 4,
+          y: nodeBox.y + nodeBox.height / 2,
+        },
+      ];
+      for (const candidate of candidates) {
+        const hit = document.elementFromPoint(candidate.x, candidate.y);
+        if (hit && !hit.closest(".nodrag")) {
+          return candidate;
+        }
+      }
+      return null;
+    },
+    { box },
+  );
+  if (!point) {
+    throw new Error(
+      "Expected a draggable point outside nested graph controls.",
+    );
+  }
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + deltaX, point.y + deltaY, { steps: 12 });
+  await page.mouse.up();
 }
 
 function assertNoBrowserErrors(pageErrors, consoleErrors, viewportLabel) {

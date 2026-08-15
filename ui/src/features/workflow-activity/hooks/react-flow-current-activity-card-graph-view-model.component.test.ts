@@ -1,8 +1,19 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: graph view-model selection contract cases stay together.
-import { act, renderHook } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  renderHook,
+  waitFor,
+} from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import "@xyflow/react/dist/style.css";
+import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { FACTORY_GRAPH_NODE_TYPES } from "@you-agent-factory/factory-graph";
+import { createElement, useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
   baseFactoryDefinition,
@@ -13,7 +24,10 @@ import {
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
-import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-graph-view-model";
+import {
+  type CurrentActivityGraphViewModelResult,
+  useCurrentActivityGraphViewModel,
+} from "./react-flow-current-activity-card-graph-view-model";
 
 function createEditorStub(
   overrides: {
@@ -290,6 +304,208 @@ function snapshotWithGraphOverlay(
 
   return snapshot;
 }
+
+function MountedCurrentActivityGraph({
+  graphLayout,
+  onViewModel,
+  snapshot,
+}: {
+  graphLayout: GraphLayout;
+  onViewModel: (viewModel: CurrentActivityGraphViewModelResult) => void;
+  snapshot: DashboardSnapshot;
+}) {
+  const viewModel = useCurrentActivityGraphViewModel({
+    editor: {
+      activeTool: null,
+      canInteractWithEditor: true,
+      editorMode: false,
+      graphProjection: {
+        canonicalLayoutViewport: null,
+        displayFactoryDefinition: baseFactoryDefinition,
+        graphLayout,
+        pendingAdditionEdgeIds: new Set<string>(),
+        positionedGraphLayout: graphLayout,
+        renderedLayout: { schemaVersion: 1 },
+        visibleGraphEdges: graphLayout.edges,
+      },
+      handleConnectionAnchorClick: vi.fn(),
+      pendingConnectionSource: null,
+      selectedWaypointEdgeId: null,
+      validationTargets: [],
+    } as Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
+    now: 0,
+    onSelectDoc: vi.fn(),
+    onSelectResource: vi.fn(),
+    onSelectStateNode: vi.fn(),
+    onSelectWorkID: vi.fn(),
+    onSelectWorker: vi.fn(),
+    onSelectWorkType: vi.fn(),
+    onSelectWorkstation: vi.fn(),
+    selection: null,
+    snapshot,
+  });
+
+  useEffect(() => {
+    onViewModel(viewModel);
+  }, [onViewModel, viewModel]);
+
+  return createElement(
+    "div",
+    { style: { height: 640, width: 1200 } },
+    createElement(
+      ReactFlowProvider,
+      null,
+      createElement(ReactFlow, {
+        defaultViewport: { x: 24, y: 24, zoom: 0.8 },
+        edges: viewModel.edges,
+        fitView: false,
+        nodeTypes: FACTORY_GRAPH_NODE_TYPES,
+        nodes: viewModel.nodes,
+        onEdgesChange: viewModel.handleEdgesChange,
+        onNodesChange: viewModel.handleNodesChange,
+      }),
+    ),
+  );
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: mounted React Flow continuity is intentionally exercised across every live overlay transition.
+describe("mounted current activity graph continuity", () => {
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: mounted React Flow continuity is intentionally exercised across every live overlay transition.
+  it("keeps React Flow node elements, handles, measurements, selection, and viewport stable through live overlays", async () => {
+    const restoreBrowserTestShims = installDashboardBrowserTestShims();
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 160,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+      ],
+      width: 600,
+    };
+    const snapshots = [
+      snapshotWithGraphOverlay({ activeWorkItemCount: 1 }),
+      snapshotWithGraphOverlay({ activeWorkItemCount: 3 }),
+      snapshotWithGraphOverlay({ activeWorkItemCount: 4 }),
+      snapshotWithGraphOverlay({ activeWorkItemCount: 25 }),
+      snapshotWithGraphOverlay({ completedWorkCount: 4 }),
+      snapshotWithGraphOverlay({ failedWorkCount: 1 }),
+    ];
+    let latestViewModel: CurrentActivityGraphViewModelResult | null = null;
+    const viewModelProps = {
+      graphLayout,
+      onViewModel: (viewModel: CurrentActivityGraphViewModelResult) => {
+        latestViewModel = viewModel;
+      },
+      snapshot: snapshotWithGraphOverlay(),
+    };
+    const rendered = render(
+      createElement(MountedCurrentActivityGraph, viewModelProps),
+    );
+
+    try {
+      const nodeSelector = '.react-flow__node[data-id="workstation:review"]';
+      await waitFor(() => {
+        expect(rendered.container.querySelector(nodeSelector)).not.toBeNull();
+      });
+      const initialNode =
+        rendered.container.querySelector<HTMLElement>(nodeSelector);
+      const initialViewport = rendered.container.querySelector<HTMLElement>(
+        ".react-flow__viewport",
+      );
+      expect(initialNode).not.toBeNull();
+      expect(initialViewport).not.toBeNull();
+      if (!initialNode || !initialViewport) {
+        throw new Error("Expected the mounted graph host to render.");
+      }
+      const initialHandleIds = Array.from(
+        initialNode.querySelectorAll<HTMLElement>("[data-node-handle-badge]"),
+        (handle) => handle.dataset.nodeHandleBadge,
+      );
+      const initialNodeTransform = initialNode.style.transform;
+      const initialViewportStyle = initialViewport.getAttribute("style");
+      const initialNodeState = latestViewModel?.nodes.find(
+        (node) => node.id === "workstation:review",
+      );
+      expect(initialNodeState).toBeDefined();
+
+      act(() => {
+        latestViewModel?.handleGraphSelectionChange({
+          edges: [],
+          nodes: [{ id: "workstation:review" }],
+        });
+      });
+      await waitFor(() => {
+        expect(
+          latestViewModel?.nodes.find(
+            (node) => node.id === "workstation:review",
+          )?.selected,
+        ).toBe(true);
+      });
+
+      for (const snapshot of snapshots) {
+        rendered.rerender(
+          createElement(MountedCurrentActivityGraph, {
+            ...viewModelProps,
+            snapshot,
+          }),
+        );
+
+        await waitFor(() => {
+          expect(rendered.container.querySelector(nodeSelector)).toBe(
+            initialNode,
+          );
+        });
+        expect(rendered.container.querySelector(".react-flow__viewport")).toBe(
+          initialViewport,
+        );
+        expect(initialNode.style.transform).toBe(initialNodeTransform);
+        expect(
+          Array.from(
+            initialNode.querySelectorAll<HTMLElement>(
+              "[data-node-handle-badge]",
+            ),
+            (handle) => handle.dataset.nodeHandleBadge,
+          ),
+        ).toEqual(initialHandleIds);
+        expect(
+          rendered.container.querySelector<HTMLElement>(nodeSelector)
+            ?.isConnected,
+        ).toBe(true);
+        expect(
+          latestViewModel?.nodes.find(
+            (node) => node.id === "workstation:review",
+          ),
+        ).toMatchObject({
+          height: initialNodeState?.height,
+          initialHeight: initialNodeState?.initialHeight,
+          initialWidth: initialNodeState?.initialWidth,
+          measured: initialNodeState?.measured,
+          position: initialNodeState?.position,
+          selected: true,
+          width: initialNodeState?.width,
+        });
+        expect(
+          rendered.container
+            .querySelector<HTMLElement>(".react-flow__viewport")
+            ?.getAttribute("style"),
+        ).toBe(initialViewportStyle);
+      }
+    } finally {
+      rendered.unmount();
+      cleanup();
+      restoreBrowserTestShims();
+    }
+  });
+});
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: node position and selection contract cases stay together.
 describe("useCurrentActivityGraphViewModel node positions", () => {
