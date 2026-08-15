@@ -271,6 +271,62 @@ func TestServeCancellationWaitsForFlushedSSETerminalEvent(t *testing.T) {
 	}
 }
 
+func TestServeCancellationForceClosesNonReturningHandlerAfterGracePeriod(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	listenerClosed := make(chan struct{})
+	listener = &closeNotifyingListener{Listener: listener, closed: listenerClosed}
+
+	requestStarted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseHandler) }) }
+	t.Cleanup(release)
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		close(requestStarted)
+		<-releaseHandler
+	})
+
+	const testGracePeriod = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serveResult := make(chan error, 1)
+	go func() {
+		serveResult <- serve(ctx, handler, listener, zap.NewNop(), testGracePeriod)
+	}()
+	clientResult := make(chan error, 1)
+	go func() {
+		response, requestErr := http.Get("http://" + listener.Addr().String())
+		if requestErr != nil {
+			clientResult <- requestErr
+			return
+		}
+		_, readErr := io.Copy(io.Discard, response.Body)
+		closeErr := response.Body.Close()
+		clientResult <- errors.Join(readErr, closeErr)
+	}()
+
+	receiveBefore(t, requestStarted)
+	cancel()
+	receiveBefore(t, listenerClosed)
+	select {
+	case err := <-serveResult:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Serve cancellation error = %v, want bounded graceful-shutdown deadline", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve cancellation remained blocked after the graceful-shutdown deadline")
+	}
+
+	// The handler deliberately ignores request cancellation. Releasing it only
+	// after Serve returns proves forced connection close does not wait forever
+	// for a non-cooperative handler.
+	release()
+	_ = receiveBefore(t, clientResult)
+}
+
 func TestServeValidatesRequiredInputs(t *testing.T) {
 	listener := failingListener{err: errors.New("unused")}
 	tests := []struct {
