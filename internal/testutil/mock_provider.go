@@ -4,13 +4,15 @@ import (
 	"context"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// MockProvider implements provider.Provider for testing. It returns
+// MockProvider implements the Providers root contract for testing. It returns
 // predetermined InferenceResponses in sequence. When the sequence is
 // exhausted, it returns a default response.
 type MockProvider struct {
+	ProviderServiceAdapter
 	responses []workerexecution.InferenceResponse
 	errors    []error
 	calls     []workerexecution.ProviderInferenceRequest
@@ -24,24 +26,28 @@ type MockProvider struct {
 // slice. When the sequence is exhausted, returns a default InferenceResponse with
 // StopTokenFound=true (so MODEL_WORKER with stop tokens will ACCEPT by default).
 func NewMockProvider(responses ...workerexecution.InferenceResponse) *MockProvider {
-	return &MockProvider{
+	provider := &MockProvider{
 		responses: responses,
 		defaultR: workerexecution.InferenceResponse{
 			Content: "default mock response",
 		},
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 // NewMockProviderWithErrors creates a MockProvider with paired responses and errors.
 // The responses and errors slices must be the same length; a nil error means success.
 func NewMockProviderWithErrors(responses []workerexecution.InferenceResponse, errors []error) *MockProvider {
-	return &MockProvider{
+	provider := &MockProvider{
 		responses: responses,
 		errors:    errors,
 		defaultR: workerexecution.InferenceResponse{
 			Content: "default mock response",
 		},
 	}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 // Infer records the request and returns the next predetermined response.
@@ -111,4 +117,4 @@ func (m *MockProvider) LastCall() workerexecution.ProviderInferenceRequest {
 }
 
 // Compile-time check.
-var _ workerexecution.Provider = (*MockProvider)(nil)
+var _ providers.Service = (*MockProvider)(nil)

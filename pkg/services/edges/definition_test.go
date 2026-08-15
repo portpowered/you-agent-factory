@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -541,7 +542,10 @@ func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
 	}
 }
 
-type stubProvider struct{ id string }
+type stubProvider struct {
+	id string
+	testutil.ProviderServiceAdapter
+}
 
 type edgeDirectoryReplacementStore struct{}
 

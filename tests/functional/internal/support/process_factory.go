@@ -16,13 +16,14 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // MockInferenceProvider returns a typed provider override for functional tests
 // without requiring destination packages to import service implementation paths.
-func MockInferenceProvider(contents ...string) workerexecution.Provider {
+func MockInferenceProvider(contents ...string) providers.Service {
 	responses := make([]workerexecution.InferenceResponse, len(contents))
 	for index, content := range contents {
 		responses[index] = workerexecution.InferenceResponse{Content: content}
@@ -32,11 +33,14 @@ func MockInferenceProvider(contents ...string) workerexecution.Provider {
 
 // BlockingInferenceProvider blocks the first inference call until release is
 // closed or the context is canceled, then completes subsequent calls immediately.
-func BlockingInferenceProvider(release <-chan struct{}) workerexecution.Provider {
-	return &blockingInferenceProvider{release: release}
+func BlockingInferenceProvider(release <-chan struct{}) providers.Service {
+	provider := &blockingInferenceProvider{release: release}
+	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	return provider
 }
 
 type blockingInferenceProvider struct {
+	testutil.ProviderServiceAdapter
 	release <-chan struct{}
 	mu      sync.Mutex
 	calls   int
@@ -73,7 +77,7 @@ func (p *blockingInferenceProvider) Infer(
 func RunFactoryToCompletion(
 	t testing.TB,
 	dir string,
-	provider workerexecution.Provider,
+	provider providers.Service,
 	timeout time.Duration,
 ) factoryapi.FactorySession {
 	return RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{

@@ -31,7 +31,7 @@ type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFa
 type runtimeWorkersServiceWithProgress struct {
 	workers.Service
 	publisher             workers.ProgressPublisher
-	providerOverride      workers.Provider
+	providerOverride      providers.Service
 	commandRunnerOverride workers.CommandRunner
 	replayCommandRunner   workers.CommandRunner
 	clock                 workers.Clock
@@ -146,7 +146,7 @@ func NewRuntimeBuild(
 	workflowID string,
 	defaultSessionID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,

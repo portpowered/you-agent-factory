@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -33,7 +34,7 @@ func openRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	baseLogger *zap.Logger,
 	clockEdge factoryruntime.Clock,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,

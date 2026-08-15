@@ -61,6 +61,17 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
+func cloneStringSliceMap(in map[string][]string) map[string][]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(in))
+	for key, values := range in {
+		out[key] = append([]string(nil), values...)
+	}
+	return out
+}
+
 func sortedWorkerNames(workers map[string]interfaces.FactoryWorkerConfig) []string {
 	names := make([]string, 0, len(workers))
 	for name := range workers {

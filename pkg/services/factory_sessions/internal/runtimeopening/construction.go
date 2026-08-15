@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -171,7 +172,7 @@ func NewDurableExecution(
 	resolvedDefaults operatorconfig.ResolvedDefaults,
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	executionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -189,7 +190,7 @@ type RuntimeOpening interface {
 	Projection() ProjectionService
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (
-		workerexecution.Provider,
+		providers.Service,
 		workerexecution.CommandRunner,
 		[]ReplayHook,
 		CompletionDeliveryPlanner,
@@ -1286,7 +1287,7 @@ type BindReplayExecutionRequest struct {
 // Deprecated: provider and runner bindings are intentionally excluded from the
 // peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
-	Provider           workerexecution.Provider
+	Provider           providers.Service
 	CommandRunner      workerexecution.CommandRunner
 	Hooks              []ReplayHook
 	CompletionDelivery CompletionDeliveryPlanner
@@ -1721,7 +1722,7 @@ type RuntimeRecorderFactory func(
 type ReplayExecutionFactory func(
 	*ReplayArtifact,
 ) (
-	workerexecution.Provider,
+	providers.Service,
 	workerexecution.CommandRunner,
 	[]ReplayHook,
 	CompletionDeliveryPlanner,

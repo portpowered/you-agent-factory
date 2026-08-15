@@ -4,14 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// TestReplaySideEffectsSatisfyWorkersRootPorts proves replay side effects satisfy
-// Workers root Provider and CommandRunner ports using only Workers root request
-// and result types at the Recordings/Workers boundary.
-func TestReplaySideEffectsSatisfyWorkersRootPorts(t *testing.T) {
+// TestReplaySideEffectsSatisfyProvidersRootPorts proves replay side effects
+// satisfy the Providers root and the Workers command effect at the
+// Recordings/Workers boundary.
+func TestReplaySideEffectsSatisfyProvidersRootPorts(t *testing.T) {
 	t.Parallel()
 
 	sideEffects, err := NewSideEffects(
@@ -23,30 +24,29 @@ func TestReplaySideEffectsSatisfyWorkersRootPorts(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	var provider workers.Provider = sideEffects
+	var provider providers.Service = sideEffects
 	var runner workers.CommandRunner = sideEffects
 	if provider == nil || runner == nil {
 		t.Fatal("replay side effects must satisfy workers root ports")
 	}
 
-	providerRequest := workers.ProviderInferenceRequest{
-		Dispatch: work.WorkDispatch{
-			WorkerType: "worker-a",
-			Execution: work.ExecutionMetadata{
-				ReplayKey: "process/trace-1/work-1",
-				TraceID:   "trace-1",
-				WorkIDs:   []string{"work-1"},
-			},
-		},
-		WorkstationType: "process",
+	providerRequest := providers.ExecuteRequest{
+		AttemptID:       "provider-dispatch",
+		Provider:        providers.ID("claude"),
+		WorkerType:      "worker-a",
+		WorkstationName: "process",
 		Model:           "claude-3-5-haiku-20241022",
-		ModelProvider:   "claude",
 		SystemPrompt:    "system prompt",
 		UserMessage:     "user prompt",
+		Correlation: providers.ExecuteCorrelation{
+			ReplayKey: "process/trace-1/work-1",
+			TraceID:   "trace-1",
+			WorkIDs:   []string{"work-1"},
+		},
 	}
-	resp, err := provider.Infer(context.Background(), providerRequest)
+	resp, err := provider.Execute(context.Background(), providerRequest)
 	if err != nil {
-		t.Fatalf("Infer through workers.Provider: %v", err)
+		t.Fatalf("Execute through providers.Service: %v", err)
 	}
 	if resp.Content != "recorded provider output" {
 		t.Fatalf("provider content = %q, want recorded provider output", resp.Content)

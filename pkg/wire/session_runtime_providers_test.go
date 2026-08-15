@@ -36,7 +36,9 @@ func codexWireTestOutput(content string) []byte {
 	return []byte("{\"type\":\"turn.started\"}\n" + string(item) + "\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
 }
 
-type wireTestProvider struct{}
+type wireTestProvider struct {
+	testutil.ProviderServiceAdapter
+}
 
 func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{}, nil

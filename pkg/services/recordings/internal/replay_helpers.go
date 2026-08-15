@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -21,7 +22,7 @@ func NewReplayExecution(
 	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 ) (
-	workers.Provider,
+	providers.Service,
 	workers.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,

@@ -81,6 +81,8 @@ func (runner providerCommandRunner) Run(
 		DispatchID:      request.AttemptID,
 		WorkerType:      request.WorkerType,
 		WorkstationName: request.WorkstationName,
+		Execution:       request.Execution,
+		ExecutionLogger: request.ExecutionLogger,
 	})
 	return providerswire.CommandResult{
 		Stdout:   append([]byte(nil), result.Stdout...),
@@ -103,6 +105,8 @@ func (runner providerCommandRunner) RunStreaming(
 		DispatchID:      request.AttemptID,
 		WorkerType:      request.WorkerType,
 		WorkstationName: request.WorkstationName,
+		Execution:       request.Execution,
+		ExecutionLogger: request.ExecutionLogger,
 	}
 	streaming, ok := runner.runner.(interface {
 		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)

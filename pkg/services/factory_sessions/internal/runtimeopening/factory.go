@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -81,7 +82,7 @@ type FactoryRuntimePorts struct {
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 	Clock                           factoryruntime.Clock
-	ProviderOverride                workers.Provider
+	ProviderOverride                providers.Service
 	SubmissionRecorder              recordings.SubmissionRecorder
 	DispatchRecorder                recordings.DispatchRecorder
 }
@@ -214,7 +215,7 @@ type Factory struct {
 	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
 	runtimeRoot                      FactoryRuntimeRoot
 	clock                            factoryruntime.Clock
-	providerOverride                 workers.Provider
+	providerOverride                 providers.Service
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder
 	providerCommandRunner            workers.CommandRunner
 	scriptCommandRunner              workers.CommandRunner

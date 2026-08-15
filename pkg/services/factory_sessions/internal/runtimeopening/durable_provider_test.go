@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -58,7 +59,7 @@ func TestResolveDurableExecutionProvider_PrefersOverride(t *testing.T) {
 			t.Fatal("mock command runner factory should not run when override is present")
 			return nil
 		},
-		func(workers.CommandRunner) (workers.Provider, error) {
+		func(workers.CommandRunner) (providers.Service, error) {
 			t.Fatal("build provider should not run when override is present")
 			return nil, nil
 		},
@@ -89,7 +90,7 @@ func TestResolveDurableExecutionProvider_BuildsFromMockWrappedRunner(t *testing.
 		nil,
 		baseRunner,
 		recordingMockCommandRunnerFactory(&builtRunner),
-		func(runner workers.CommandRunner) (workers.Provider, error) {
+		func(runner workers.CommandRunner) (providers.Service, error) {
 			if runner != builtRunner {
 				t.Fatalf("build provider runner = %#v, want wrapped %#v", runner, builtRunner)
 			}
@@ -116,7 +117,7 @@ func TestResolveDurableExecutionProvider_ReturnsNilWithoutPassthroughPolicy(t *t
 			t.Fatal("mock command runner factory should not run without passthrough unmatched policy")
 			return nil
 		},
-		func(workers.CommandRunner) (workers.Provider, error) {
+		func(workers.CommandRunner) (providers.Service, error) {
 			t.Fatal("build provider should not run without passthrough unmatched policy")
 			return nil, nil
 		},
@@ -141,7 +142,7 @@ func TestResolveDurableExecutionProvider_ReturnsNilWithoutMockWorkers(t *testing
 			t.Fatal("mock command runner factory should not run without mock workers")
 			return nil
 		},
-		func(workers.CommandRunner) (workers.Provider, error) {
+		func(workers.CommandRunner) (providers.Service, error) {
 			t.Fatal("build provider should not run without mock workers")
 			return nil, nil
 		},

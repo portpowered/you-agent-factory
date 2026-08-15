@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -228,7 +229,7 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 		_ workers.ProviderInferenceRequest
 		_ workers.InvocationInput
 		_ workers.CommandRequest
-		_ workers.Provider
+		_ providers.Service
 		_ workers.InvocationExecutor
 		_ workers.CommandRunner
 		_ workers.PTYAllocator

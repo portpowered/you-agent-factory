@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -80,7 +81,7 @@ type WorkersRuntimeExecutorsFactory func(
 	logging.Logger,
 	bool,
 	*bool,
-	workers.Provider,
+	providers.Service,
 	workers.ProgressPublisher,
 	workers.ScriptEventRecorder,
 	workers.InferenceEventRecorder,

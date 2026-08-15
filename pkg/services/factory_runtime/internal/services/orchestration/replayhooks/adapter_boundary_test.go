@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -27,7 +28,7 @@ func TestAdaptPreservesRecordingsReplayContracts(t *testing.T) {
 	replayFactory := factoryruntime.ReplayExecutionFactory(func(
 		artifact *recordings.ReplayArtifact,
 	) (
-		workers.Provider,
+		providers.Service,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,

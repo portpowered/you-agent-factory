@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
@@ -732,7 +733,7 @@ func TestExecutionServiceRolesNameWorkersRootContracts(t *testing.T) {
 
 	var (
 		_ workers.InvocationExecutor
-		_ workers.Provider
+		_ providers.Service
 		_ workers.ProgressPublisher
 	)
 }

@@ -21,6 +21,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -652,7 +653,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	executionFactory := func(
 		_ string,
 		_ factorysessions.PersistencePolicy,
-		_ workers.Provider,
+		_ providers.Service,
 		_ factoryruntime.Clock,
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,

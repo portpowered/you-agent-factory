@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -28,7 +29,7 @@ type Service struct {
 	workflowID                 string
 	workstationLoader          factorydefinitions.WorkstationLoader
 	loadFactory                factory.LoadedFactoryLoader
-	providerOverride           workers.Provider
+	providerOverride           providers.Service
 	providerCommandRunner      workers.CommandRunner
 	scriptCommandRunner        workers.CommandRunner
 	mockWorkersConfig          *workers.MockWorkersConfig
@@ -51,7 +52,7 @@ func New(
 	workflowID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factory.LoadedFactoryLoader,
-	providerOverride workers.Provider,
+	providerOverride providers.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
@@ -114,7 +115,7 @@ func (s *Service) BuildSpec(
 	executionBaseDir string,
 	loadedFactoryCfg factorydefinitions.MutableLoadedFactorySource,
 	runtimeInstanceID string,
-	replayProvider workers.Provider,
+	replayProvider providers.Service,
 	replayCommandRunner workers.CommandRunner,
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,

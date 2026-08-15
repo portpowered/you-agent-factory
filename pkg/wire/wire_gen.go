@@ -144,12 +144,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	provider := provideFactoryRuntimeProviderOverride(edges2)
+	wireProviderOverrideService := provideFactoryRuntimeProviderOverride(edges2)
 	v10, err := provideFactoryRuntimeProviderCommandRunner(edges2)
 	if err != nil {
 		return nil, err
 	}
-	providerInvocationExecutorFactory := provideProviderInvocationExecutorFactory(v8, v9, ptyAllocator, provider, v10)
+	providerInvocationExecutorFactory := provideProviderInvocationExecutorFactory(v8, v9, ptyAllocator, wireProviderOverrideService, v10)
 	workersMockCommandRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
 	if err != nil {
@@ -243,7 +243,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v21 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, provider, agentToolFileSystem, decisionEnvelopeService)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v20, readFileTree, clock, logger, factoryWorktreePreparer, v21, temporaryFileSystem, wireProviderOverrideService, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ResolveClock:                    clockResolver,
 		NewSessionLogger:                sessionLoggerFactory,
 		Clock:                           clock,
-		ProviderOverride:                provider,
+		ProviderOverride:                service,
 		SubmissionRecorder:              v23,
 		DispatchRecorder:                v24,
 	}
@@ -348,7 +348,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v44 := provideFactorySessionRuntimePersistenceStoreFactory(v43)
 	v45 := provideFactorySessionSyncWaitScheduler()
 	v46 := provideWorkerCommandRunnerAdapter()
-	v47 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v42, v44, v45, v11, responseEventIDGenerator, responseEventRetentionLimits, ptyAllocator, v46, provider, eventsService, v15)
+	v47 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v42, v44, v45, v11, responseEventIDGenerator, responseEventRetentionLimits, ptyAllocator, v46, wireProviderOverrideService, eventsService, v15)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
 	v48, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
@@ -752,14 +752,14 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	}
 	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	provider := provideFactoryRuntimeProviderOverride(edges2)
+	wireProviderOverrideService := provideFactoryRuntimeProviderOverride(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
 	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
 	if err != nil {
 		return nil, err
 	}
 	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, provider, agentToolFileSystem, decisionEnvelopeService)
+	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, wireProviderOverrideService, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
 	}

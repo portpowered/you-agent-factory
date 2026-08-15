@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -26,7 +27,7 @@ type FactoryRuntimeAssembler interface {
 		string,
 		factorydefinitions.WorkstationLoader,
 		factoryruntime.LoadedFactoryLoader,
-		workers.Provider,
+		providers.Service,
 		workers.CommandRunner,
 		workers.CommandRunner,
 		*workers.MockWorkersConfig,

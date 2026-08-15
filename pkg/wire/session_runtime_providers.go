@@ -43,6 +43,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// providerOverrideService keeps an optional edge replacement distinct from
+// the process Providers root in Wire's type graph. Both expose the same
+// Providers-owned operations; the distinction is composition metadata, not a
+// second provider contract.
+type providerOverrideService interface {
+	providers.Service
+}
+
 // compositeProcessLifecycle aggregates every inert service that retains
 // resources lazily while commands execute into the single ProcessLifecycle
 // Process.Close reaches. Each closer runs even if an earlier one fails, and
@@ -586,7 +594,7 @@ func provideFactorySessionExecutionFactory(
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	allocator workers.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	eventsService events.Service,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.FactorySessionExecutionFactory {
@@ -599,7 +607,7 @@ func provideFactorySessionExecutionFactory(
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
-		provider workers.Provider,
+		provider providers.Service,
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
@@ -778,7 +786,7 @@ func provideStatelessWorkersService(
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	agentToolFileSystem workers.AgentToolFileSystem,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 ) (workers.Service, error) {
@@ -1011,7 +1019,7 @@ func provideProviderInvocationExecutorFactory(
 	conductorInvocation factorysessionwire.ConductorInvocationWithProgressFactory,
 	registryRebinder workerswire.ProviderRegistryRebinder,
 	allocator workers.PTYAllocator,
-	providerOverride workers.Provider,
+	providerOverride providerOverrideService,
 	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 ) factoryruntime.ProviderInvocationExecutorFactory {
 	return func(
@@ -1216,7 +1224,7 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (workers.Provider, error) {
+	return func(runner workers.CommandRunner) (providers.Service, error) {
 		return workerswire.NewProviderFromCommandRunner(
 			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,

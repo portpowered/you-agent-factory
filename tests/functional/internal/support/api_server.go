@@ -21,6 +21,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -46,7 +47,7 @@ type FunctionalAPIServerConfig struct {
 	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	Args                         []string
 	Env                          []string
-	ProviderOverride             workers.Provider
+	ProviderOverride             providers.Service
 	Edges                        serviceedges.Edges
 	// BeforeStart prepares scenario-owned durable state through the same
 	// root-built process that will host the server. The callback runs after

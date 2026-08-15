@@ -405,7 +405,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		defaults operatorsettings.ResolvedDefaults,
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
-		provider workers.Provider,
+		provider providers.Service,
 		mockWorkersConfig *workers.MockWorkersConfig,
 		factory factorysessionwire.FactorySessionExecutionFactory,
 		providerIdentities factorysessions.ProviderIdentityResolver,

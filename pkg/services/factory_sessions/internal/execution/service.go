@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -404,11 +405,79 @@ func NewJavaScriptExecutionService(
 // fixture-backed live-provider child smoke without MCP host startup. Scope for
 // this provider is the completed CLI live-dispatch smoke lane; MCP live serve and
 // website inspection remain deferred follow-up cells.
-func SmokeLiveChildProvider() workers.Provider {
-	return smokeLiveChildProvider{}
+func SmokeLiveChildProvider() *smokeLiveChildProvider {
+	return &smokeLiveChildProvider{}
 }
 
 type smokeLiveChildProvider struct{}
+
+func (smokeLiveChildProvider) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{}, nil
+}
+
+func (smokeLiveChildProvider) GetProvider(_ context.Context, request providers.GetProviderRequest) (providers.GetProviderResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.GetProviderResult{}, err
+	}
+	return providers.GetProviderResult{Provider: providers.Descriptor{ID: request.ID}}, nil
+}
+
+func (smokeLiveChildProvider) ResolveIdentity(_ context.Context, request providers.ResolveIdentityRequest) (providers.ResolveIdentityResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ResolveIdentityResult{}, err
+	}
+	return providers.ResolveIdentityResult{ID: providers.ID(request.Identity)}, nil
+}
+
+func (smokeLiveChildProvider) ResolveSelection(_ context.Context, request providers.ResolveSelectionRequest) (providers.ResolveSelectionResult, error) {
+	identity := request.Workstation
+	if identity == "" {
+		identity = request.Factory
+	}
+	if identity == "" {
+		identity = request.ModelProvider
+	}
+	if identity == "" {
+		return providers.ResolveSelectionResult{}, providers.ErrInvalidID
+	}
+	return providers.ResolveSelectionResult{Provider: providers.ID(identity)}, nil
+}
+
+func (smokeLiveChildProvider) ValidatePrerequisites(_ context.Context, request providers.ValidatePrerequisitesRequest) error {
+	return request.Validate()
+}
+
+func (smokeLiveChildProvider) Execute(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	provider := request.Provider
+	if provider == "" {
+		provider = "mock"
+	}
+	return providers.ExecuteResult{
+		Content:    `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
+		SessionRef: &providers.SessionRef{Provider: provider, Kind: providers.SessionIDKind, ID: "live-provider-session-1"},
+		Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
+	}, nil
+}
+
+func (smokeLiveChildProvider) ControlAttempt(_ context.Context, request providers.ControlAttemptRequest) (providers.ControlAttemptResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ControlAttemptResult{}, err
+	}
+	return providers.ControlAttemptResult{Provider: request.Provider, AttemptID: request.AttemptID, Action: request.Action, Outcome: providers.ControlOutcomeUnsupported}, nil
+}
+
+func (provider smokeLiveChildProvider) Continue(ctx context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	result, err := provider.Execute(ctx, request.Attempt)
+	if err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{Reference: request.Reference, Outcome: providers.ContinuationOutcomeResumed, Result: result}, nil
+}
 
 func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{
