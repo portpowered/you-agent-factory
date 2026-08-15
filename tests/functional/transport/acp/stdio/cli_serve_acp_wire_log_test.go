@@ -24,6 +24,14 @@ import (
 // The transcript is checked against the process' own stdout rather than
 // against a hand-written expectation, so this cannot pass by agreeing with a
 // stale fixture.
+//
+// The public process path deliberately proves the live publication boundary
+// after each response. Forced rotation and a short/erroring stdout sink are
+// not injectable through Process.Execute or edges.Edges: production supplies
+// the fixed default transcript policy and the caller owns the stdio writer.
+// Those failure modes are therefore asserted in the owning wiretranscript and
+// transport package tests rather than by constructing platform writers in a
+// functional test.
 func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you serve acp through root.BuildProcess")
