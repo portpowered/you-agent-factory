@@ -47,6 +47,7 @@ export function FactoryGraphVisualGroupLayer({
   const {
     handleGroupAffordanceKeyDown,
     handleGroupPointerDown,
+    handlePointerCancel,
     handlePointerMove,
     handlePointerUp,
     handleResizeKeyDown,
@@ -118,6 +119,7 @@ export function FactoryGraphVisualGroupLayer({
               }
               handleGroupAffordanceKeyDown={handleGroupAffordanceKeyDown(group)}
               handleGroupPointerDown={handleGroupPointerDown(group)}
+              handlePointerCancel={handlePointerCancel}
               handlePointerMove={handlePointerMove}
               handlePointerUp={handlePointerUp}
               handleResizeKeyDown={(corner) =>
