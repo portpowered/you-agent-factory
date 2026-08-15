@@ -155,7 +155,6 @@ The manifest still lists the entire legacy `execution/internal/provider` tree fo
 - `kiro`
 - `opencode`
 - `pi`
-- `providersroot`
 - `registry`
 - `agypty`
 

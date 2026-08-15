@@ -2147,10 +2147,6 @@
       "minimum": 89.13
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/providersroot",
-      "minimum": 2.50
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry",
       "minimum": 82.66
     },
