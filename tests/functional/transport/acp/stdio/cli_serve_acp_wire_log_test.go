@@ -48,19 +48,8 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	seedFixtureFactory(t, cwd)
-	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-	providerResult := platformprocess.CommandResult{Stdout: []byte(fixtureFinalAnswerText)}
-	runner := support.NewShapedProviderCommandRunner(providerResult, providerResult, providerResult, providerResult)
-
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ACPWireRecorder:       newRotatingWireRecorder(t, home),
-		ProviderCommandRunner: runner,
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
+	runner := newTranscriptProviderRunner()
+	process := newTranscriptProcess(t, home, cwd, runner)
 
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
@@ -88,7 +77,43 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 	})
 
 	stdout := &transcriptRPCReader{reader: bufio.NewReader(stdoutRead)}
+	sent := exerciseTranscriptConversation(t, home, cwd, stdinWrite, stdout)
+	finishTranscriptConversation(t, home, command, stdinWrite, stdoutWrite, runner, stdout, sent)
+}
 
+func newTranscriptProviderRunner() *support.ShapedProviderCommandRunner {
+	providerResult := platformprocess.CommandResult{Stdout: []byte(fixtureFinalAnswerText)}
+	return support.NewShapedProviderCommandRunner(providerResult, providerResult, providerResult, providerResult)
+}
+
+func newTranscriptProcess(
+	t *testing.T,
+	home string,
+	cwd string,
+	runner *support.ShapedProviderCommandRunner,
+) support.Process {
+	t.Helper()
+	seedFixtureFactory(t, cwd)
+	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ACPWireRecorder:       newRotatingWireRecorder(t, home),
+		ProviderCommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	support.CleanupProcess(t, process)
+	return process
+}
+
+func exerciseTranscriptConversation(
+	t *testing.T,
+	home string,
+	cwd string,
+	stdinWrite *os.File,
+	stdout *transcriptRPCReader,
+) []string {
+	t.Helper()
 	var sent []string
 	send := func(line string) {
 		sent = append(sent, line)
@@ -152,6 +177,20 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 		}
 		assertOutboundTranscriptVisible(t, home, stdout.frames)
 	}
+	return sent
+}
+
+func finishTranscriptConversation(
+	t *testing.T,
+	home string,
+	command *support.ProcessCommand,
+	stdinWrite *os.File,
+	stdoutWrite *os.File,
+	runner *support.ShapedProviderCommandRunner,
+	stdout *transcriptRPCReader,
+	sent []string,
+) {
+	t.Helper()
 	if err := stdinWrite.Close(); err != nil {
 		t.Fatalf("close stdin: %v", err)
 	}
