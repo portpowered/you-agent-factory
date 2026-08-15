@@ -42,6 +42,10 @@ func fakeGoCoverageCommandTestFailsWithoutDetail(invocation commandInvocation) (
 	return fakeGoCommandByScenario("coverage-test-fails-without-detail", invocation.name, invocation.args...)
 }
 
+func fakeGoCoverageCommandTestFailsWithObservedFailures(invocation commandInvocation) (string, string, error) {
+	return fakeGoCommandByScenario("coverage-test-fails-with-observed-failures", invocation.name, invocation.args...)
+}
+
 func fakeGoListCommandFailsWithStderr(invocation commandInvocation) (string, string, error) {
 	return fakeGoCommandByScenario("go-list-fails-with-stderr", invocation.name, invocation.args...)
 }
@@ -101,7 +105,7 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 			return "", "", fmt.Errorf("missing -coverprofile")
 		}
 		switch scenario {
-		case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-measured-zero-config", "coverage-temp-profile", "coverage-test-fails-without-detail":
+		case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-measured-zero-config", "coverage-temp-profile", "coverage-test-fails-without-detail", "coverage-test-fails-with-observed-failures":
 			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
 				"mode: count",
 				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
@@ -157,6 +161,8 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 				modulePath + "/pkg/transports/http/client\t\tcoverage: 0.0% of statements\n", "", nil
 		case "coverage-test-fails-without-detail":
 			return "", "raw failure output from go test", fmt.Errorf("exit status 7")
+		case "coverage-test-fails-with-observed-failures":
+			return "--- FAIL: TestObservedFirstFailure (0.01s)\n--- FAIL: TestObservedSecondFailure (0.01s)\nFAIL\n", "raw failure output from go test", fmt.Errorf("exit status 7")
 		default:
 			return "", "", fmt.Errorf("unexpected cover scenario: %s", scenario)
 		}
@@ -171,6 +177,8 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 			modulePath + "/pkg/service\t\tcoverage: 100.0% of statements\n", "", nil
 	case "coverage-test-fails-without-detail":
 		return "", "raw failure output from go test", fmt.Errorf("exit status 7")
+	case "coverage-test-fails-with-observed-failures":
+		return "--- FAIL: TestObservedFirstFailure (0.01s)\n--- FAIL: TestObservedSecondFailure (0.01s)\nFAIL\n", "raw failure output from go test", fmt.Errorf("exit status 7")
 	}
 
 	switch scenario {

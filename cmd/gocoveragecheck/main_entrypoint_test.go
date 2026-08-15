@@ -203,6 +203,33 @@ func TestMainRejectsNegativePackageFloorEpsilonBeforeCoverageWork(t *testing.T) 
 	if !strings.Contains(stderr, "finite non-negative percentage-point value") || !strings.Contains(stderr, "set it to 0 or greater") {
 		t.Fatalf("main() stderr = %q, want actionable epsilon diagnostic", stderr)
 	}
+	if strings.Contains(stderr, "coverage not evaluated") {
+		t.Fatalf("main() stderr = %q, did not expect test-failure-only warning", stderr)
+	}
+}
+
+func TestMainReportsSkippedPackageFloorsWhenCoverageTestsFail(t *testing.T) {
+	stdout, stderr, exitCode := runMainForTest(t, []string{
+		"-coverpkg=" + modulePath + "/pkg/config",
+		"-packages=./pkg/config",
+	}, fakeGoCoverageCommandTestFailsWithObservedFailures)
+
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if stdout != "" {
+		t.Fatalf("main() stdout = %q, want no coverage summaries without a valid measurement", stdout)
+	}
+	for _, want := range []string{
+		"coverage not evaluated",
+		"2 failed tests observed",
+		"package floors were NOT checked",
+		"raw failure output from go test",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("main() stderr = %q, want diagnostic containing %q", stderr, want)
+		}
+	}
 }
 
 func TestMainRejectsSingleProfileManifestUpdateBeforeCoverage(t *testing.T) {

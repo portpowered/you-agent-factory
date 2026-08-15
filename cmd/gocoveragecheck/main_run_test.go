@@ -268,8 +268,11 @@ func TestExecuteDoesNotReportPackageSummariesWhenMeasurementFails(t *testing.T) 
 	if stdout.Len() != 0 {
 		t.Fatalf("execute() stdout = %q, want no package summaries without a valid measurement", stdout.String())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	if got := stderr.String(); !strings.Contains(got, "coverage not evaluated") || !strings.Contains(got, "package floors were NOT checked") {
+		t.Fatalf("execute() stderr = %q, want skipped-floor diagnostic", got)
+	}
+	if strings.Contains(stderr.String(), "failed tests observed") {
+		t.Fatalf("execute() stderr = %q, did not expect an invented failure count", stderr.String())
 	}
 }
 
