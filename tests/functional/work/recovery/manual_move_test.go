@@ -73,20 +73,26 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	})
 
 	waitForWorkIDsAtState(t, server.URL(), []string{parentWorkID, childWorkID}, "failed", 15*time.Second)
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
 
-	parentMoved := postMoveWork(t, server.URL(), parentWorkID, "processing")
-	if workStateName(parentMoved.State) != "processing" {
-		t.Fatalf("parent move response = %#v, want processing", parentMoved)
+	parentMoveStatus, parentMoveBody := postMoveWorkStatus(t, server.URL(), parentWorkID, "processing")
+	if parentMoveStatus != http.StatusOK {
+		t.Fatalf("parent move status = %d, want 200: %s", parentMoveStatus, parentMoveBody)
 	}
 
-	childMoved := postMoveWork(t, server.URL(), childWorkID, "init")
-	if workStateName(childMoved.State) != "init" {
-		t.Fatalf("child move response = %#v, want init", childMoved)
+	childMoveStatus, childMoveBody := postMoveWorkStatus(t, server.URL(), childWorkID, "init")
+	if childMoveStatus != http.StatusOK {
+		t.Fatalf("child move status = %d, want 200: %s", childMoveStatus, childMoveBody)
 	}
 
-	completed := waitForWorkIDsComplete(t, server.URL(), []string{childWorkID}, 15*time.Second)
-	if len(completed) != 1 || workStateName(completed[0].State) != "complete" {
-		t.Fatalf("child completion = %#v, want complete", completed)
+	completed := waitForWorkIDsComplete(t, server.URL(), []string{parentWorkID, childWorkID}, 15*time.Second)
+	if len(completed) != 2 {
+		t.Fatalf("completed Works = %#v, want parent and child", completed)
+	}
+	for _, item := range completed {
+		if workStateName(item.State) != "complete" {
+			t.Fatalf("completed Work = %#v, want complete", item)
+		}
 	}
 
 	listed := support.ListDefaultSessionWork(t, server.URL())
