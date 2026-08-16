@@ -2123,10 +2123,6 @@
       "minimum": 6.34
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/conductor",
-      "minimum": 87.76
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract",
       "minimum": 89.13
     },
