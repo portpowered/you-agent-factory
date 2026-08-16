@@ -247,7 +247,7 @@ func (e *childWorkerExecutor) openChild(
 	dispatchID string,
 	childIndex int,
 ) (factory.JavaScriptChildDispatchRecord, error) {
-	runnerID, err := workers.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
+	runnerID, err := childRunnerID(req.ExecutorProvider, req.ModelProvider)
 	if err != nil {
 		return factory.JavaScriptChildDispatchRecord{}, err
 	}

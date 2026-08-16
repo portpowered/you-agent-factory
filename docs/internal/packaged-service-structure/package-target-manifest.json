@@ -483,7 +483,6 @@
     "pkg/services/workers/internal/interface",
     "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
-    "pkg/services/workers/internal/services/runners/inference",
     "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/mock",
     "pkg/services/workers/internal/services/runners/internal/script",
@@ -2790,11 +2789,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
-      "disposition": "retain",
-      "destination": "workers/internal/services/runners"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runners/inference",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
     },

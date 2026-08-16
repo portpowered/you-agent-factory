@@ -44,7 +44,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	base := func(provider, script workers.CommandRunner, publisher workers.ProgressPublisher, allocator workers.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
 		_, err := New(
 			testModelsService{}, testProvidersService{}, provider, script, publisher, allocator,
-			logger, false, "", "", "", nil, nil, now, os.Environ, os.Getwd, nil, nil, nil, nil,
+			logger, false, "", "", "", nil, nil, now, os.Environ, os.Getwd, nil, nil, nil,
 			testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 			testRetryRandom,
 			platformfilesystem.Local{},
@@ -75,7 +75,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 	_, err := New(
 		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
-		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -86,7 +86,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 	_, err = New(
 		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
-		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, nil,
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -97,7 +97,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 	_, err = New(
 		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
-		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		nil,
 		platformfilesystem.Local{},
@@ -108,7 +108,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 	_, err = New(
 		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
-		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		nil,
@@ -119,7 +119,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	}
 	_, err = New(
 		testModelsService{}, testProvidersService{}, validRunner, validRunner, validPublisher, validAllocator,
-		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		zap.NewNop(), false, "", "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -368,7 +368,6 @@ func newTestServiceWithDependencies(
 		time.Now,
 		os.Environ,
 		os.Getwd,
-		nil,
 		nil,
 		nil,
 		nil,

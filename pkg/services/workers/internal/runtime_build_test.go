@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -812,7 +811,7 @@ func TestOwnedProviderLifecyclesClosesInReverseAndRejectsLateServices(t *testing
 	}
 }
 
-func TestRuntimeCompatibilityRejectsUnsupportedAndUsesInjectedExecutor(t *testing.T) {
+func TestRuntimeCompatibilityRejectsUnsupported(t *testing.T) {
 	t.Parallel()
 
 	if _, err := BuildRuntimeExecutors(nil, nil, nil, "", nil, nil, false, nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
@@ -825,20 +824,6 @@ func TestRuntimeCompatibilityRejectsUnsupportedAndUsesInjectedExecutor(t *testin
 	service := &Service{}
 	if service.CurrentModelRuntimeConfig() != nil {
 		t.Fatal("CurrentModelRuntimeConfig() != nil, want no implicit runtime")
-	}
-	var called bool
-	want := &compatibilityWorkstationExecutor{}
-	service.modelInvocationExecutorOverride = func(
-		interfaces.RuntimeConfigLookup,
-		*interfaces.FactoryConfig,
-		string,
-	) (workers.WorkstationRequestExecutor, error) {
-		called = true
-		return want, nil
-	}
-	got, err := service.modelInvocationExecutor(nil, nil, "worker")
-	if err != nil || got != want || !called {
-		t.Fatalf("modelInvocationExecutor() = %#v, %v, called=%t; want injected executor", got, err, called)
 	}
 }
 

@@ -48,6 +48,34 @@ func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
 	}
 }
 
+func TestRunnerDelegateFallbackUsesModelProviderWhenInferenceIdentityIsSelected(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: false},
+	}
+	delegate := &captureDelegateRunner{
+		result: workers.RunnerExecutionResult{Content: "provider output"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{
+		Models: modelsEdge, Delegate: delegate,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := validRequest()
+	request.ModelProvider = workers.RunnerIDCodex
+	result, err := inferenceRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "provider output" {
+		t.Fatalf("result content = %q, want delegate output", result.Content)
+	}
+	if delegate.Request().RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("delegate runner id = %q, want model provider %q", delegate.Request().RunnerID, workers.RunnerIDCodex)
+	}
+}
+
 func TestRunnerCompositionPreservesProviderRunnerIdentityAndDeclinesWithoutModelOperation(t *testing.T) {
 	modelsEdge := &captureModelsService{
 		result: models.LocalInvocationResult{Handled: false},
@@ -376,6 +404,33 @@ func TestRunnerAppliesRequestScopedWorkerOverrides(t *testing.T) {
 	if captured.Name != request.WorkerName || captured.Model != request.Model ||
 		captured.ModelLocality != request.ModelLocality {
 		t.Fatalf("Models worker = %#v, want request overrides", captured)
+	}
+}
+
+func TestRunnerUsesRequestScopedModelRuntimeScope(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: true, Content: "scoped"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{Models: modelsEdge})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:request-scope")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	request := validRequest()
+	config := validConfig()
+	request.ModelRuntime = &workers.ModelRuntimeInput{
+		Scope:     scope,
+		Worker:    config.Worker,
+		Resources: config.Resources,
+	}
+	if _, err := inferenceRunner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := modelsEdge.Request().Scope; got != scope {
+		t.Fatalf("Models scope = %q, want request scope %q", got, scope)
 	}
 }
 

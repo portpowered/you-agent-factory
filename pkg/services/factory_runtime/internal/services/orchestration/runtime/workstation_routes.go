@@ -487,12 +487,15 @@ func finalizeRuntimeExecutionSelection(
 	if isACPProviderMarker(selection.executorProvider) ||
 		isACPProviderMarker(selection.providerID) {
 		selection.executorProvider = workers.ExecutorProviderACP
-		if identity, err := workers.RunnerIdentityForWorker(
-			selection.providerID,
-			selection.modelProvider,
-		); err == nil && identity != "" {
-			selection.providerID = identity
-			selection.runnerID = identity
+		if modelProvider := strings.TrimSpace(selection.modelProvider); modelProvider != "" {
+			selection.providerID = modelProvider
+			selection.runnerID = modelProvider
+		} else {
+			// Keep the authored ACP marker as an invalid provider target so the
+			// Workers/Providers boundary returns its typed unknown-provider
+			// rejection instead of silently falling back to Codex.
+			selection.providerID = workers.ExecutorProviderACP
+			selection.runnerID = workers.ExecutorProviderACP
 		}
 	}
 	if selection.providerID == "" {

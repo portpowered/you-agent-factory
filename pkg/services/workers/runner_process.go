@@ -158,25 +158,6 @@ func platformCommandRunnerWithLogger(runner platformprocess.CommandRunner, logge
 	}
 }
 
-type StreamingExecCommandRunner struct {
-	Observer OutputChunkObserver
-	Logger   logging.Logger
-	Runner   CommandRunner
-}
-
-func (r StreamingExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	if r.Runner == nil {
-		return CommandResult{}, errors.New("workers streaming command runner is required")
-	}
-	streaming, ok := r.Runner.(interface {
-		RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
-	})
-	if !ok {
-		return CommandResult{}, errors.New("injected workers command runner does not support streaming")
-	}
-	return streaming.RunStreaming(ctx, req, r.Observer)
-}
-
 // StreamingAdaptedCommandRunner preserves the optional streaming capability
 // only when the injected platform effect actually implements it.
 type StreamingAdaptedCommandRunner struct {
@@ -340,5 +321,4 @@ func commandResult(result platformprocess.CommandResult) CommandResult {
 
 var _ CommandRunner = ExecCommandRunner{}
 var _ CommandRunner = StreamingAdaptedCommandRunner{}
-var _ CommandRunner = StreamingExecCommandRunner{}
 var _ CommandRunner = (*LoggingCommandRunner)(nil)

@@ -469,8 +469,14 @@ func providerIdentityForExecution(request workers.WorkstationExecutionRequest) s
 	if runner != "" && !strings.EqualFold(runner, workers.ExecutorProviderACP) && !strings.EqualFold(runner, "SCRIPT_WRAP") {
 		return runner
 	}
-	if identity, err := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider); err == nil && strings.TrimSpace(identity) != "" {
-		return strings.TrimSpace(identity)
+	executorProvider := strings.TrimSpace(request.ExecutorProvider)
+	if executorProvider != "" &&
+		!strings.EqualFold(executorProvider, workers.ExecutorProviderACP) &&
+		!strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		return executorProvider
+	}
+	if modelProvider := strings.TrimSpace(request.ModelProvider); modelProvider != "" {
+		return modelProvider
 	}
 	if request.Continuation != nil {
 		return strings.TrimSpace(request.Continuation.Provider)

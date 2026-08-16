@@ -7,7 +7,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 func buildExecutionFactories(
@@ -22,27 +21,23 @@ func buildExecutionFactories(
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-) (*workerexecutor.ScriptFactory, workers.CommandRunner, workers.CommandRunner, error) {
+) (workers.CommandRunner, workers.CommandRunner, error) {
 	if providerRunner == nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker execution service: provider command runner is required")
+		return nil, nil, fmt.Errorf("construct Worker execution service: provider command runner is required")
 	}
 	if scriptRunner == nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker execution service: script command runner is required")
+		return nil, nil, fmt.Errorf("construct Worker execution service: script command runner is required")
 	}
 	if commandClock == nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker execution service: command clock is required")
+		return nil, nil, fmt.Errorf("construct Worker execution service: command clock is required")
 	}
 	if allocator == nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker execution service: Agy PTY allocator is required")
+		return nil, nil, fmt.Errorf("construct Worker execution service: Agy PTY allocator is required")
 	}
 	if factoryDocs == nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker execution service: Factory docs loader is required")
+		return nil, nil, fmt.Errorf("construct Worker execution service: Factory docs loader is required")
 	}
-	scriptFactory, err := workerexecutor.NewScriptFactory(scriptRunner, commandClock, factoryDocs)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("construct Worker execution service: %w", err)
-	}
-	return scriptFactory, providerRunner, scriptRunner, nil
+	return providerRunner, scriptRunner, nil
 }
 
 func serviceCommandClock(s *Service) workers.Clock {

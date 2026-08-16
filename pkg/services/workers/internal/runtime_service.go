@@ -8,7 +8,6 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -16,9 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,7 +27,6 @@ type Service struct {
 	models                            models.Service
 	modelsScope                       models.RuntimeScopeRef
 	providers                         providers.Service
-	scriptFactory                     *workerexecutor.ScriptFactory
 	executorBuilder                   workerconstruction.Builder
 	providerCommandRunner             workers.CommandRunner
 	scriptCommandRunner               workers.CommandRunner
@@ -47,7 +43,6 @@ type Service struct {
 	clock                             func() time.Time
 	processEnvironment                func() []string
 	currentWorkingDirectory           func() (string, error)
-	modelInvocationExecutorOverride   ModelInvocationExecutor
 	interpolation                     interfaces.InvocationInterpolationService
 	executionPolicy                   interfaces.WorkstationExecutionPolicyService
 	decisionEnvelopes                 interfaces.DecisionEnvelopeService
@@ -128,13 +123,6 @@ func (owned *ownedProviderLifecycles) Close(ctx context.Context) error {
 	return result
 }
 
-// ModelInvocationExecutor builds a direct executor for one model-bound Worker.
-type ModelInvocationExecutor func(
-	interfaces.RuntimeConfigLookup,
-	*interfaces.FactoryConfig,
-	string,
-) (workers.WorkstationRequestExecutor, error)
-
 // New constructs a Worker execution service from injected dependencies.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -156,7 +144,6 @@ func New(
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
-	modelInvocationExecutor ModelInvocationExecutor,
 	contentMaterializer work.ContentMaterializer,
 	interpolation interfaces.InvocationInterpolationService,
 	executionPolicy interfaces.WorkstationExecutionPolicyService,
@@ -209,7 +196,7 @@ func New(
 	if temporaryFiles == nil {
 		return nil, fmt.Errorf("construct Worker execution service: provider temporary filesystem is required")
 	}
-	scriptFactory, providerRunner, scriptRunner, err := buildExecutionFactories(
+	providerRunner, scriptRunner, err := buildExecutionFactories(
 		providerCommandRunner, scriptCommandRunner, workers.ClockFunc(clock), agyPTYAllocator,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		temporaryFiles,
@@ -220,7 +207,6 @@ func New(
 	decisionEnvelopeService := firstDecisionEnvelopeService(decisionEnvelopes)
 	executorBuilder := workerconstruction.New(
 		providersService,
-		scriptFactory,
 		interpolation,
 		executionPolicy,
 		factoryDocs,
@@ -233,7 +219,6 @@ func New(
 	return &Service{
 		models:                            modelService,
 		providers:                         providersService,
-		scriptFactory:                     scriptFactory,
 		executorBuilder:                   executorBuilder,
 		providerCommandRunner:             providerRunner,
 		scriptCommandRunner:               scriptRunner,
@@ -249,7 +234,6 @@ func New(
 		clock:                             clock,
 		processEnvironment:                processEnvironment,
 		currentWorkingDirectory:           currentWorkingDirectory,
-		modelInvocationExecutorOverride:   modelInvocationExecutor,
 		interpolation:                     interpolation,
 		executionPolicy:                   executionPolicy,
 		decisionEnvelopes:                 decisionEnvelopeService,
@@ -362,17 +346,6 @@ func (s *Service) CancelWorkstationDispatch(
 	return s.Root.CancelWorkstationDispatch(ctx, request)
 }
 
-func (s *Service) modelInvocationExecutor(
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	factoryCfg *interfaces.FactoryConfig,
-	workerName string,
-) (workers.WorkstationRequestExecutor, error) {
-	if s != nil && s.modelInvocationExecutorOverride != nil {
-		return s.modelInvocationExecutorOverride(runtimeCfg, factoryCfg, workerName)
-	}
-	return s.BuildModelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
-}
-
 // CurrentModelRuntimeConfig returns the selected session's runtime configuration.
 func (s *Service) CurrentModelRuntimeConfig() interfaces.RuntimeConfigLookup {
 	// Direct model invocation is no longer resolved from a selected Factory
@@ -380,36 +353,4 @@ func (s *Service) CurrentModelRuntimeConfig() interfaces.RuntimeConfigLookup {
 	// workflow context in ExecuteRequest; this legacy role has no implicit
 	// runtime to consult.
 	return nil
-}
-
-// BuildModelInvocationExecutor constructs a direct executor through the same
-// canonical Worker constructor used by Factory runtimes.
-func (s *Service) BuildModelInvocationExecutor(runtimeCfg interfaces.RuntimeConfigLookup, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
-	if s == nil || runtimeCfg == nil || factoryCfg == nil {
-		return nil, fmt.Errorf("runtime config is required")
-	}
-	if s.executorBuilder == nil {
-		return nil, fmt.Errorf("Worker application is required")
-	}
-	workerDef, ok := runtimeCfg.Worker(workerName)
-	if !ok || workerDef == nil {
-		return nil, fmt.Errorf("worker %q is not configured", workerName)
-	}
-	if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(workerDef, s.invocationSkipPermissionsOverride); err != nil {
-		return nil, fmt.Errorf("worker %q: %w", workerName, err)
-	}
-	result, err := s.executorBuilder.Build(
-		runtimeCfg, workerName, s.factoryRunnerID, nil,
-		logging.NewZapLogger(s.logger, s.verbose),
-		s.invocationSkipPermissionsOverride, s.providerOverride,
-		s.progressPublisher, nil, nil, nil, s.clock, s.processEnvironment, s.currentWorkingDirectory,
-		s.runtimeRunnerDecorators(runtimeCfg, factoryCfg, nil, s.clock, s.providerOverride == nil, nil),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct model worker %q: %w", workerName, err)
-	}
-	if result.Direct == nil {
-		return nil, fmt.Errorf("model worker %q does not support direct invocation", workerName)
-	}
-	return result.Direct, nil
 }

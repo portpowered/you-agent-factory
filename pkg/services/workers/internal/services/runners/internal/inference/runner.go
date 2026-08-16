@@ -80,7 +80,13 @@ func (r *runner) Execute(
 			return workers.RunnerExecutionResult{}, err
 		}
 	}
-	invocation := r.localInvocationRequest(request)
+	scope, worker, resources := modelRuntimeProjection(
+		request,
+		r.scope,
+		r.workerForRequest(request),
+		r.resources,
+	)
+	invocation := r.localInvocationRequest(request, scope, worker, resources)
 	if !composition {
 		if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
 			return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
@@ -89,7 +95,7 @@ func (r *runner) Execute(
 	result, err := r.models.InvokeLocal(ctx, invocation)
 	if !result.Handled {
 		if r.delegate != nil {
-			return r.delegate.Execute(ctx, request)
+			return r.delegate.Execute(ctx, delegateRequest(request))
 		}
 		return workers.RunnerExecutionResult{}, err
 	}
@@ -104,15 +110,50 @@ func (r *runner) Execute(
 	}, nil
 }
 
+func modelRuntimeProjection(
+	request workers.RunnerExecutionRequest,
+	fallbackScope models.RuntimeScopeRef,
+	fallbackWorker models.LocalWorker,
+	fallbackResources []models.LocalResource,
+) (models.RuntimeScopeRef, models.LocalWorker, []models.LocalResource) {
+	projection := request.ModelRuntime
+	if projection == nil || projection.Scope.IsZero() {
+		return fallbackScope, fallbackWorker, snapshotResources(fallbackResources)
+	}
+	worker := snapshotWorker(projection.Worker)
+	if worker.Name == "" && worker.Model == "" {
+		worker = fallbackWorker
+	}
+	resources := snapshotResources(projection.Resources)
+	if len(resources) == 0 {
+		resources = snapshotResources(fallbackResources)
+	}
+	return projection.Scope, worker, resources
+}
+
+func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecutionRequest {
+	// A request selected only the private inference strategy when it carried
+	// no provider runner. Delegate fallback still needs the provider identity
+	// that was resolved on the model target.
+	if workers.NormalizeRunnerID(request.RunnerID) == Identity {
+		if provider := workers.NormalizeRunnerID(request.ModelProvider); provider != "" {
+			request.RunnerID = provider
+		}
+	}
+	return request
+}
+
 func (r *runner) localInvocationRequest(
 	request workers.RunnerExecutionRequest,
+	scope models.RuntimeScopeRef,
+	worker models.LocalWorker,
+	resources []models.LocalResource,
 ) models.LocalInvocationRequest {
-	worker := r.workerForRequest(request)
 	return models.LocalInvocationRequest{
-		Scope:            r.scope,
+		Scope:            scope,
 		Holder:           invocationHolder(request),
 		Worker:           worker,
-		Resources:        r.resources,
+		Resources:        resources,
 		Dispatch:         request.Dispatch,
 		ModelOperation:   request.ModelOperation,
 		ModelBindings:    modelBindingsForLocalRuntime(request.ModelBindings),

@@ -20,8 +20,6 @@ import (
 // The harness owns provider retry for the turns it drives, matching the
 // behavior the workstation router produced before dispatch became detached.
 //
-// WSE-09 relocates the request-scoped Workstation implementation; this branch
-// moves with it.
 func (s *Service) runAgentLoop(
 	ctx context.Context,
 	request workers.ExecuteRequest,

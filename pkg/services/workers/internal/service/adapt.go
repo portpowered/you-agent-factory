@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -13,6 +14,15 @@ func resolveRunnerIdentity(target workers.ExecutionTarget) string {
 	switch runnerID {
 	case runners.ScriptIdentity, runners.InferenceIdentity, runners.AgentIdentity, runners.MockIdentity:
 		return runnerID
+	}
+	// Managed-model attempts enter the private Inference Runner even when the
+	// request carries a provider runner for delegate fallback. The runner
+	// preserves that provider identity in its normalized attempt.
+	if strings.EqualFold(
+		strings.TrimSpace(target.Model.Locality),
+		models.RuntimeModelLocalityLocal,
+	) && strings.TrimSpace(target.Model.Name) != "" {
+		return runners.InferenceIdentity
 	}
 	if runnerID != "" {
 		return runners.AgentIdentity
@@ -42,6 +52,7 @@ func adaptRunnerRequest(
 		ExecutorProvider:             firstNonEmpty(request.Target.ExecutorProvider, providerIdentity(request.Target.Provider)),
 		ModelOperation:               request.Input.ModelOperation,
 		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+		ModelRuntime:                 modelRuntimeInputFromRequest(request),
 		InputTokens:                  workers.InputTokens(inputTokens...),
 		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
 		UserMessage:                  request.Target.Prompt.UserMessage,

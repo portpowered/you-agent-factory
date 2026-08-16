@@ -782,6 +782,14 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	}
 
 	mode := os.Args[len(os.Args)-1]
+	if mode == "spawn-child-orphan-pipe" || mode == "escaped-child" {
+		runCommandHelperEscapedMode(mode)
+		return
+	}
+	runCommandHelperMode(mode)
+}
+
+func runCommandHelperMode(mode string) {
 	switch mode {
 	case "success":
 		assertCommandHelperInputs()
@@ -821,6 +829,15 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
 		os.Exit(2)
 	}
+}
+
+func runCommandHelperEscapedMode(mode string) {
+	if mode == "spawn-child-orphan-pipe" {
+		spawnCommandHelperEscapedChildMode()
+		time.Sleep(10 * time.Second)
+		return
+	}
+	select {}
 }
 
 func runCommandHelperSpawnMode(mode string) {

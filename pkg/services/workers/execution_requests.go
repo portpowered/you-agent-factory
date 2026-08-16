@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -74,6 +75,10 @@ const (
 type RunnerSelectionSource string
 
 const (
+	// ExecutorProviderACP is the authored execution-mechanism marker for an
+	// ACP worker. The concrete Providers identity is carried separately in
+	// ModelProvider and is resolved by Providers.
+	ExecutorProviderACP                                       = "ACP"
 	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
 	RunnerSelectionSourceFactory        RunnerSelectionSource = "factory"
 	RunnerSelectionSourceLegacyProvider RunnerSelectionSource = "legacy_provider"
@@ -257,8 +262,12 @@ type ProviderInferenceRequest struct {
 	GoalRoutingDecisionEnvelope  bool                            `json:"goal_routing_decision_envelope,omitempty"`
 	PrintTimeout                 time.Duration                   `json:"-"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
-	SessionID                    string                          `json:"session_id,omitempty"`
-	WorkflowContext              *Context                        `json:"-"`
+	// ModelRuntime is the explicit request-owned Models projection for a
+	// managed inference attempt. It is intentionally excluded from provider
+	// payloads and is copied through the private runner boundary.
+	ModelRuntime    *ModelRuntimeInput `json:"-"`
+	SessionID       string             `json:"session_id,omitempty"`
+	WorkflowContext *Context           `json:"-"`
 	// Continuation is the opaque Providers-owned continuation. Providers owns
 	// decoding it and deciding whether the referenced attempt can continue.
 	Continuation *ProviderContinuationRef `json:"-"`
@@ -312,6 +321,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
+	clone.ModelRuntime = request.ModelRuntime.Clone()
 	clone.TemporaryFiles = request.TemporaryFiles
 	clone.ExecutionLogger = request.ExecutionLogger
 	return clone
@@ -548,10 +558,15 @@ type ExecutionInput struct {
 	Dispatch work.WorkDispatch
 	// RecordingID remains the optional Worker Sessions recording identity. It
 	// is distinct from Correlation.RuntimeID, which identifies the live Runtime.
-	RecordingID      string
-	Invocation       work.InvocationArguments
-	ModelBindings    []ResolvedModelOperationBinding
-	ModelOperation   string
+	RecordingID    string
+	Invocation     work.InvocationArguments
+	ModelBindings  []ResolvedModelOperationBinding
+	ModelOperation string
+	// ModelRuntime carries the opened Models scope and the detached local
+	// worker/resource projection for a managed inference attempt. It is an
+	// explicit request input, not a context side channel or a second Execute
+	// operation.
+	ModelRuntime     *ModelRuntimeInput
 	PreviousAttempts []AttemptSummary
 	Resume           *ProviderContinuationRef
 	// WorkflowContext is the complete detached context selected for this
@@ -582,6 +597,24 @@ type ExecutionInput struct {
 	// facts for this detached attempt. It is a request-scoped capability and is
 	// never retained by the process-scoped Workers service.
 	InferenceEventRecorder InferenceEventRecorder `json:"-"`
+}
+
+// ModelRuntimeInput is the request-owned Models projection consumed by the
+// private inference runner for one managed-model attempt.
+type ModelRuntimeInput struct {
+	Scope     modelinference.RuntimeScopeRef
+	Worker    modelinference.LocalWorker
+	Resources []modelinference.LocalResource
+}
+
+func (input *ModelRuntimeInput) Clone() *ModelRuntimeInput {
+	if input == nil {
+		return nil
+	}
+	clone := *input
+	clone.Worker.Resources = append([]modelinference.LocalResource(nil), input.Worker.Resources...)
+	clone.Resources = append([]modelinference.LocalResource(nil), input.Resources...)
+	return &clone
 }
 
 type WorkInput struct {
@@ -770,6 +803,7 @@ func (input ExecutionInput) Clone() ExecutionInput {
 		clone.Invocation = *args
 	}
 	clone.ModelBindings = CloneResolvedModelOperationBindings(input.ModelBindings)
+	clone.ModelRuntime = input.ModelRuntime.Clone()
 	if len(input.Work) > 0 {
 		clone.Work = make([]WorkInput, len(input.Work))
 		for i, item := range input.Work {

@@ -189,7 +189,13 @@ func providerSessionForRequest(
 	request workerexecution.RunnerExecutionRequest,
 	workerDef *interfaces.FactoryWorkerConfig,
 ) *workerexecution.ProviderSessionMetadata {
-	provider, _ := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider)
+	provider := strings.TrimSpace(request.RunnerID)
+	executorProvider := strings.TrimSpace(request.ExecutorProvider)
+	if strings.EqualFold(executorProvider, workers.ExecutorProviderACP) {
+		provider = strings.TrimSpace(request.ModelProvider)
+	} else if executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		provider = executorProvider
+	}
 	if strings.TrimSpace(provider) == "" {
 		provider = strings.TrimSpace(request.ModelProvider)
 	}

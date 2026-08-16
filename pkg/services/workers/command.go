@@ -5,7 +5,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workstationenv "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 // CommandRunner is the Workers-owned subprocess execution port.
@@ -37,26 +36,3 @@ type CommandRequest struct {
 	// runtime log. It is intentionally excluded from serialized payloads.
 	ExecutionLogger logging.Logger `json:"-"`
 }
-
-// CommandResult is the observable worker subprocess result.
-type CommandResult struct {
-	Stdout   []byte
-	Stderr   []byte
-	ExitCode int
-}
-
-const (
-	RedactedCommandEnvValue              = workstationenv.RedactedCommandEnvValue
-	MetadataOnlyCommandEnvValue          = workstationenv.MetadataOnlyCommandEnvValue
-	CommandEnvClassificationSafe         = workstationenv.CommandEnvClassificationSafe
-	CommandEnvClassificationRedacted     = workstationenv.CommandEnvClassificationRedacted
-	CommandEnvClassificationMetadataOnly = workstationenv.CommandEnvClassificationMetadataOnly
-)
-
-type (
-	CommandEnvDiagnosticProjection = workstationenv.CommandEnvDiagnosticProjection
-)
-
-var (
-	ProjectCommandEnvForDiagnostics = workstationenv.ProjectCommandEnvForDiagnostics
-)

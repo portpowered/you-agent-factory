@@ -1,10 +1,8 @@
 package process
 
 import (
-	"context"
 	"io"
-
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"sync"
 )
 
 const (
@@ -23,23 +21,8 @@ const (
 // subprocess is still running.
 type OutputChunkObserver func(stream string, chunk []byte)
 
-// StreamingExecCommandRunner executes subprocesses and emits stdout/stderr
-// chunks through an observer before the command exits.
-type StreamingExecCommandRunner struct {
-	Observer   OutputChunkObserver
-	Logger     logging.Logger
-	Clock      Clock
-	NewCommand CommandFactory
-}
-
-// Run executes the command with process-tree cancellation, capturing stdout and
-// stderr while forwarding incremental chunks to Observer when configured.
-func (r StreamingExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	runner := ExecCommandRunner{Logger: r.Logger, Clock: r.Clock, NewCommand: r.NewCommand}
-	return runner.run(ctx, req, r.Observer, true)
-}
-
 type observedBuffer struct {
+	mu        sync.Mutex
 	stream    string
 	observer  OutputChunkObserver
 	buf       []byte
@@ -52,12 +35,16 @@ func (b *observedBuffer) Write(p []byte) (int, error) {
 		chunk := append([]byte(nil), p...)
 		b.observer(b.stream, chunk)
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.retain(p)
 	return len(p), nil
 }
 
 func (b *observedBuffer) Bytes() []byte {
-	return b.buf
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.buf...)
 }
 
 func (b *observedBuffer) retain(p []byte) {
@@ -100,4 +87,3 @@ func (b *observedBuffer) retain(p []byte) {
 }
 
 var _ io.Writer = (*observedBuffer)(nil)
-var _ CommandRunner = StreamingExecCommandRunner{}

@@ -32,8 +32,8 @@ const agentRunProbeBody = "AGENT_RUN_PROBE_BODY read probe.txt and report the co
 
 // TestAgentRunWorkstationDispatchExecutesAgentRunHarness proves that a Petri
 // dispatch to an AGENT_RUN workstation with an AGENT_WORKER is routed through
-// WorkstationBehaviorRouter into the agent-run harness, instead of collapsing
-// into one raw provider call on the stateless-workers execute path.
+// request-scoped Workers Execute adapter into the agent-run harness, instead
+// of collapsing into one raw provider call on the stateless-workers path.
 //
 // The provider prompt assertion proves the dispatch reached the harness; the
 // response-event assertion below proves the completion publication was neither

@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -68,7 +69,7 @@ func (e *directChildExecutor) Execute(
 	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
-	runnerID, err := workers.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
+	runnerID, err := childRunnerID(req.ExecutorProvider, req.ModelProvider)
 	if err != nil {
 		return factory.JavaScriptChildExecutionResult{}, err
 	}
@@ -134,6 +135,21 @@ func (e *directChildExecutor) Execute(
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
 	}, nil
+}
+
+func childRunnerID(executorProvider, modelProvider string) (string, error) {
+	executorProvider = strings.TrimSpace(executorProvider)
+	modelProvider = strings.TrimSpace(modelProvider)
+	if strings.EqualFold(executorProvider, workers.ExecutorProviderACP) {
+		if modelProvider == "" {
+			return "", fmt.Errorf("executorProvider ACP requires modelProvider to name an ACP integration")
+		}
+		return modelProvider, nil
+	}
+	if executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		return executorProvider, nil
+	}
+	return modelProvider, nil
 }
 
 func (e *directChildExecutor) inferenceRequest(

@@ -68,9 +68,9 @@ import (
 // final-only message (pkg/services/providers/.../agy/progress.go's
 // finalOnlyMessageEvent, which publishes the provider process' raw stdout --
 // here the undecoded decision-envelope JSON -- as role "assistant" whenever
-// no native streaming format applies), followed by (2) AgentRunExecutor's
+// no native streaming format applies), followed by (2) the agent-run path's
 // own decision-envelope-aware final message
-// (pkg/services/workers/.../agentrun/executor.go's publishFinalMessage, the
+// (pkg/services/workers/.../agentrun/final_message.go's publishAgentFinalMessage, the
 // genuinely customer-facing extracted "output" field). Both existed and
 // published independently before this PRD ever consumed the response-event
 // stream; nothing about this PRD's own scope (message/reasoning/usage/gap

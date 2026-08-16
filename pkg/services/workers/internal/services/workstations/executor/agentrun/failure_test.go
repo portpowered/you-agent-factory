@@ -7,14 +7,11 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
-	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestMergeAgentRunDiagnosticsPreservesCompletionValidationFacts(t *testing.T) {
@@ -261,29 +258,6 @@ func TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout(t *testing.T) {
 	}
 }
 
-func TestAgentRunFailureWorkResult_PreservesProviderContinuationClassification(t *testing.T) {
-	t.Parallel()
-
-	providerErr := workerexecution.NewProviderError(
-		workerexecution.WorkFailureTypePermanentBadRequest,
-		"provider session continuation is unsupported",
-		nil,
-	)
-	providerErr.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
-	result := agentRunFailureWorkResult(
-		work.WorkDispatch{DispatchID: "dispatch-agent-run-continuation", TransitionID: "transition-1"},
-		providerErr,
-		time.Second,
-		"",
-		nil,
-	)
-	if result.Outcome != workerexecution.OutcomeFailed ||
-		result.ProviderContinuationOutcome != providers.ContinuationOutcomeUnsupported ||
-		result.ProviderFailureKind != "" || result.ProviderContinuationFailureKind != "" {
-		t.Fatalf("agentRunFailureWorkResult() = %#v, want unsupported continuation classification", result)
-	}
-}
-
 func TestModelhostOperationalFailureClass_MissingAssets(t *testing.T) {
 	t.Parallel()
 
@@ -358,5 +332,17 @@ func TestFormatAgentRunError_ModelhostErrorsUseAgentRunWording(t *testing.T) {
 	got := formatAgentRunError(errors.Join(errors.New("wrapped"), modelhost.ErrHostCapacityExhausted))
 	if got == "" || got == "provider error" {
 		t.Fatalf("formatAgentRunError = %q, want agent-run lease denial wording", got)
+	}
+}
+
+func TestSafeToolPolicyFailureSummaryBoundsPolicyErrors(t *testing.T) {
+	if got := safeToolPolicyFailureSummary(nil); got != "tool policy violation" {
+		t.Fatalf("safeToolPolicyFailureSummary(nil) = %q", got)
+	}
+	if got := safeToolPolicyFailureSummary(errors.New(" ")); got != "tool policy violation" {
+		t.Fatalf("safeToolPolicyFailureSummary(empty) = %q", got)
+	}
+	if got := safeToolPolicyFailureSummary(errors.New("write denied")); got != "write denied" {
+		t.Fatalf("safeToolPolicyFailureSummary(error) = %q", got)
 	}
 }

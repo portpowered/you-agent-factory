@@ -131,6 +131,23 @@ func (s *Service) buildConfiguredRuntimeWorkers(
 		if interfaces.IsPollerWorkerType(definition.Type) {
 			continue
 		}
+		// Script attempts are assembled by the request-scoped Execute service.
+		// Do not materialize a per-worker Workstation executor for them; the
+		// runtime boundary carries the detached command, environment, and
+		// recording inputs on each request.
+		if definition.Type == interfaces.WorkerTypeScript {
+			continue
+		}
+		// Provider-backed attempts are assembled by the request-scoped Execute
+		// service and its private runner registry. Do not retain a per-worker
+		// Workstation executor for them. MODEL_WORKER is the legacy authored
+		// spelling for inference and AGENT_WORKER is the agent-loop route; both
+		// enter the same detached boundary in production.
+		if definition.Type == interfaces.WorkerTypeModel ||
+			definition.Type == interfaces.WorkerTypeInference ||
+			definition.Type == interfaces.WorkerTypeAgent {
+			continue
+		}
 		result, err := s.executorBuilder.Build(
 			runtimeConfig, configured.Name, factoryRunnerID, workflowContext, logger,
 			invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher,
@@ -422,21 +439,4 @@ func validateRuntimeRunnerPrerequisites(
 		return providerService.ValidatePrerequisites(ctx, providers.ValidatePrerequisitesRequest{ID: resolved.ID})
 	}
 	return workerrunner.ValidateBuiltInRunnerPrerequisites(executableLocator, runnerID)
-}
-
-func providerRunnerID(id providers.ID) string {
-	return strings.ToLower(strings.TrimSpace(id.String()))
-}
-
-func workerSelectionSource(source providers.SelectionSource) workers.RunnerSelectionSource {
-	switch source {
-	case providers.SelectionSourceWorkstation:
-		return workers.RunnerSelectionSourceWorkstation
-	case providers.SelectionSourceFactory:
-		return workers.RunnerSelectionSourceFactory
-	case providers.SelectionSourceLegacyProvider:
-		return workers.RunnerSelectionSourceLegacyProvider
-	default:
-		return workers.RunnerSelectionSourceDefault
-	}
 }

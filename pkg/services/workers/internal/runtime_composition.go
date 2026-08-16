@@ -78,7 +78,6 @@ func NewRuntime(
 		now,
 		processEnvironment,
 		currentWorkingDirectory,
-		nil,
 		contentMaterializer,
 		interpolation,
 		executionPolicy,

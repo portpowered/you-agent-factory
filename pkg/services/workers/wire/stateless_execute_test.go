@@ -3,7 +3,6 @@ package wire
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +29,74 @@ func TestNewServiceExecuteRunsScriptInferenceAndAgentAttempts(t *testing.T) {
 		fixture.provider.executeCalls.Load() != 1 {
 		t.Fatalf("attempt effects = command %d model %d provider %d, want one each",
 			fixture.command.calls.Load(), fixture.local.calls.Load(), fixture.provider.executeCalls.Load())
+	}
+}
+
+func TestNewServiceExecuteManagedInferenceFallsBackThroughProviderRunner(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	local := &statelessDecliningLocalInvoker{}
+	delegate := &statelessInferenceDelegate{}
+	input.inferenceDependencies = runners.InferenceDependencies{
+		Models:   local,
+		Delegate: delegate,
+	}
+	service, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-inference",
+			RuntimeID:        "runtime-inference",
+			GenerationID:     "generation-inference",
+			DispatchID:       "dispatch-inference",
+			AttemptID:        "attempt-inference",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "selected-inference-worker",
+			WorkerType: factorydefinitions.WorkerTypeInference,
+			RunnerID:   workers.RunnerIDCodex,
+			Provider:   workers.ProviderReference{ID: workers.RunnerIDCodex},
+			Model: workers.ModelReference{
+				Name:     "selected-model",
+				Provider: workers.RunnerIDCodex,
+				Locality: models.RuntimeModelLocalityLocal,
+			},
+		},
+		Input: workers.ExecutionInput{ModelOperation: "invoke"},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || result.Output.Primary[0].Text != "delegate-output" {
+		t.Fatalf("Execute() result = %#v, want accepted delegate output", result)
+	}
+	if local.calls.Load() != 1 {
+		t.Fatalf("Models calls = %d, want one managed-model attempt", local.calls.Load())
+	}
+	if local.request.Worker.Name != "selected-inference-worker" || local.request.Worker.Model != "selected-model" {
+		t.Fatalf("Models worker = %#v, want request-selected identity", local.request.Worker)
+	}
+	if delegate.request.RunnerID != workers.RunnerIDCodex ||
+		delegate.request.Model != "selected-model" ||
+		delegate.request.ModelProvider != workers.RunnerIDCodex {
+		t.Fatalf("delegate request = %#v, want provider/model identity preserved", delegate.request)
 	}
 }
 
@@ -176,86 +243,6 @@ func TestNewServiceExecuteNormalizesOutcomeAndOutputContractPolicy(t *testing.T)
 	}
 }
 
-func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing.T) {
-	t.Parallel()
-
-	input := newStatelessConstructionInputs()
-	override := &statelessProviderOverride{}
-	service, err := NewService(
-		input.agentDependencies,
-		input.scriptConfig,
-		input.scriptDependencies,
-		input.inferenceConfig,
-		input.inferenceDependencies,
-		nil,
-		nil,
-		func() time.Time { return time.Unix(1, 0) },
-		nil,
-		nil,
-		nil,
-		nil,
-		override,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	var events []workers.InferenceEvent
-	request := workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{
-			FactorySessionID: "session-override",
-			RuntimeID:        "runtime-override",
-			GenerationID:     "generation-override",
-			DispatchID:       "dispatch-override",
-			AttemptID:        "attempt-override",
-		},
-		Target: workers.ExecutionTarget{
-			WorkerName: runners.AgentIdentity,
-			RunnerID:   runners.AgentIdentity,
-			Provider:   workers.ProviderReference{ID: string(providers.IDCodex)},
-			Output:     workers.OutputPolicy{StopToken: "<COMPLETE>"},
-			Prompt:     workers.PromptPolicy{UserMessage: "override prompt"},
-		},
-		Input: workers.ExecutionInput{
-			InferenceEventRecorder: func(event workers.InferenceEvent) {
-				events = append(events, event)
-			},
-		},
-	}
-	result, err := service.Execute(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	gotCorrelation := override.request.Correlation
-	wantCorrelation := request.Correlation
-	if override.calls.Load() != 1 {
-		t.Fatalf("provider override calls/request = %d/%#v, want one detached request", override.calls.Load(), override.request)
-	}
-	if !reflect.DeepEqual(gotCorrelation, providers.ExecuteCorrelation{
-		FactorySessionID: wantCorrelation.FactorySessionID,
-		RuntimeID:        wantCorrelation.RuntimeID,
-		GenerationID:     wantCorrelation.GenerationID,
-		DispatchID:       wantCorrelation.DispatchID,
-		AttemptID:        wantCorrelation.AttemptID,
-		RequestID:        wantCorrelation.RequestID,
-		TraceID:          wantCorrelation.TraceID,
-	}) {
-		t.Fatalf("provider override correlation = %#v, want %#v", gotCorrelation, wantCorrelation)
-	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
-		result.Output.Primary[0].Text != "override output\n<COMPLETE>" {
-		t.Fatalf("override result = %#v, want accepted normalized output", result)
-	}
-	if len(events) != 2 || events[0].Request == nil || events[1].Response == nil {
-		t.Fatalf("inference events = %#v, want request and response", events)
-	}
-	if events[0].Request.InferenceRequestID == "" || events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
-		t.Fatalf("inference request correlation = %#v, want matching IDs", events)
-	}
-	if events[1].Response.Continuation == nil || events[1].Response.Continuation.ProviderSessionID != "session-attempt-override" {
-		t.Fatalf("provider continuation event = %#v, want override session identity", events[1].Response.Continuation)
-	}
-}
-
 func TestNewMockServiceExecutesMockThroughCanonicalWorkersBehavior(t *testing.T) {
 	t.Parallel()
 
@@ -378,73 +365,6 @@ func TestNewServiceRejectsMockSelectionWithoutExplicitMockComposition(t *testing
 	if result.Correlation != (workers.ExecutionCorrelation{}) ||
 		result.Outcome != "" || len(result.Output.Primary) != 0 || result.Failure != nil {
 		t.Fatalf("production mock result = %#v, want no started result", result)
-	}
-}
-
-func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testing.T) {
-	t.Parallel()
-
-	input := newStatelessConstructionInputs()
-	override := &statelessProviderOverride{
-		content: `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
-	}
-	service, err := NewService(
-		input.agentDependencies,
-		input.scriptConfig,
-		input.scriptDependencies,
-		input.inferenceConfig,
-		input.inferenceDependencies,
-		nil,
-		nil,
-		func() time.Time { return time.Unix(1, 0) },
-		nil,
-		nil,
-		nil,
-		nil,
-		override,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{
-			FactorySessionID: "session-goal",
-			RuntimeID:        "runtime-goal",
-			GenerationID:     "generation-goal",
-			DispatchID:       "dispatch-goal",
-			AttemptID:        "attempt-goal",
-		},
-		Target: workers.ExecutionTarget{
-			WorkerName:      runners.AgentIdentity,
-			WorkstationName: "execute-goal",
-			RunnerID:        runners.AgentIdentity,
-			Provider:        workers.ProviderReference{ID: string(providers.IDCodex)},
-			Prompt:          workers.PromptPolicy{UserMessage: "complete this goal"},
-			Tools: workers.ToolPolicy{
-				AgentLoop: true,
-			},
-			Output: workers.OutputPolicy{
-				Format:                      factorydefinitions.DecisionEnvelopeOutcomeFormat,
-				DecisionEnvelope:            true,
-				GoalRoutingDecisionEnvelope: true,
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted {
-		t.Fatalf("outcome = %q, failure = %#v, want ACCEPTED", result.Outcome, result.Failure)
-	}
-	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != "ship" {
-		t.Fatalf("output = %#v, want the decision-envelope primary output", result.Output)
-	}
-	if result.Output.Feedback != "ready" || result.Output.Classification != "accepted" {
-		t.Fatalf("output metadata = %#v, want feedback and goal classification", result.Output)
-	}
-	if override.calls.Load() != 1 {
-		t.Fatalf("provider override calls = %d, want one detached AGENT_RUN attempt", override.calls.Load())
 	}
 }
 
@@ -758,6 +678,32 @@ type statelessTestLocalInvoker struct {
 	seen  []models.LocalInvocationRequest
 }
 
+type statelessDecliningLocalInvoker struct {
+	calls   atomic.Int32
+	request models.LocalInvocationRequest
+}
+
+func (invoker *statelessDecliningLocalInvoker) InvokeLocal(
+	_ context.Context,
+	request models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	invoker.calls.Add(1)
+	invoker.request = request
+	return models.LocalInvocationResult{Handled: false}, nil
+}
+
+type statelessInferenceDelegate struct {
+	request workers.RunnerExecutionRequest
+}
+
+func (delegate *statelessInferenceDelegate) Execute(
+	_ context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	delegate.request = workers.CloneProviderInferenceRequest(request)
+	return workers.RunnerExecutionResult{Content: "delegate-output"}, nil
+}
+
 func (invoker *statelessTestLocalInvoker) InvokeLocal(
 	ctx context.Context,
 	request models.LocalInvocationRequest,
@@ -784,6 +730,7 @@ type statelessTestProviders struct {
 	executeCalls atomic.Int32
 	mu           sync.Mutex
 	content      string
+	requests     []providers.ExecuteRequest
 }
 
 type statelessProviderOverride struct {
@@ -906,6 +853,7 @@ func (provider *statelessTestProviders) Execute(
 ) (providers.ExecuteResult, error) {
 	provider.executeCalls.Add(1)
 	provider.mu.Lock()
+	provider.requests = append(provider.requests, request.Clone())
 	content := provider.content
 	provider.mu.Unlock()
 	if content == "" {
@@ -919,6 +867,16 @@ func (provider *statelessTestProviders) Execute(
 			ID:       "session-" + request.AttemptID,
 		},
 	}, nil
+}
+
+func (provider *statelessTestProviders) Requests() []providers.ExecuteRequest {
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	requests := make([]providers.ExecuteRequest, len(provider.requests))
+	for index, request := range provider.requests {
+		requests[index] = request.Clone()
+	}
+	return requests
 }
 
 var _ providers.Service = (*statelessTestProviders)(nil)
