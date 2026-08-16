@@ -393,7 +393,7 @@ func openRuntime(
 	// service it must be handed to was already constructed. The eventual root
 	// activation operation must preserve this dependency ordering without
 	// publishing a second post-construction binding path.
-	bindWorkerInvoker(durableExecution.Service, rootRuntime)
+	setWorkerInvoker(durableExecution.Service, rootRuntime)
 	opened := assembleRuntimeProducts(
 		factoryDefinitions,
 		service4,
@@ -547,17 +547,17 @@ func fanOutWorkerProgress(
 
 // workerInvokerBinder is the narrow capability a durable execution service
 // exposes when its orchestrator runs Workers of its own.
-type workerInvokerBinder interface {
-	BindWorkerInvoker(func(sessionID string) factoryruntime.Service)
+type workerInvokerSetter interface {
+	SetWorkerInvoker(factoryruntime.Service)
 }
 
-// bindWorkerInvoker hands one session's Factory Runtime to its execution
-// service. An execution backend with no Workers of its own does not implement
-// the binder, and skipping it is correct rather than a missing wire.
-func bindWorkerInvoker(execution any, runtime factoryruntime.Service) {
-	binder, ok := execution.(workerInvokerBinder)
+// setWorkerInvoker hands one session's opaque Factory Runtime capability to its
+// execution service. An execution backend with no Workers of its own does not
+// implement the setter, and skipping it is correct rather than a missing wire.
+func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
+	setter, ok := execution.(workerInvokerSetter)
 	if !ok || runtime == nil {
 		return
 	}
-	binder.BindWorkerInvoker(func(string) factoryruntime.Service { return runtime })
+	setter.SetWorkerInvoker(runtime)
 }
