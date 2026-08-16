@@ -31,24 +31,26 @@ blocking PR conversation feedback is explicitly addressed, merge conflicts are
 resolved, and the PR is merged. A PR that is merely opened, green, approved, or
 ready to merge is not complete.
 
-That contract belongs to the lane as a whole, and the `Delivery Loop` section
-must attribute its two halves to the two stages that actually own them:
+That contract belongs to the lane as a whole, and the project-level delivery
+criterion must be written from the perspective of the stage that evaluates it.
+Every emitted delivery criterion must lead with this implementation-stage
+finish line and preserve this order:
 
-- The **implementation stage** finishes when it has pushed its final head, the
-  PR is open, CI has started, and all blocking review feedback is addressed.
-- The **review stage** owns driving CI to terminal-and-passing and owns the
-  merge itself.
+> Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.
 
-Never phrase an acceptance criterion so that the implementation stage owns
-"CI is green" or "the PR is merged". The implementer cannot merge, so a
-criterion worded that way makes it wait on an outcome it does not control: it
-re-runs CI for hours and commits progress notes about the run it is watching.
-Each such commit creates a new head, which invalidates the very run it just
-recorded, and the loop restarts. This has cost tens of agent-hours on a single
-lane.
+The implementation stage owns only the finish line at the start of that
+criterion. The review stage owns driving CI to terminal-and-passing, resolving
+merge conflicts, and merging the PR afterward; merge remains the lane-wide
+delivery boundary.
 
-For the same reason, every plan must state that evidence about a CI run goes in
-a PR comment and never in a commit.
+Never phrase a delivery criterion so that implementation owns "CI is green"
+or "the PR is merged", and never open it with "delivery continues until ...
+merged" or equivalent merge-first wording. The evaluating implementation stage
+cannot merge, so a merge-first criterion makes it wait on a review-owned
+outcome and can trigger repeated redispatch until the executor-loop breaker
+ends the lane. Implementation must stop at its finish line and must not poll
+or re-check CI afterward. Every plan must state that evidence about a CI run
+goes in a PR comment and never in a commit.
 
 When the ask touches backend, plan for clear package ownership, explicit state,
 isolated side effects, aligned contracts, and direct verification at the right
@@ -95,16 +97,19 @@ The JSON file must be implementation-ready and contain:
 - `acceptanceCriteria` with 3-7 project-level criteria, a final quality-gate
   criterion for typecheck, lint, and tests, and a delivery criterion that keeps
   the lane's implementation/review loop going until the PR is actually merged.
-  The delivery criterion must assign stage ownership explicitly: the
-  implementation stage finishes after its final head is pushed, the PR is open,
-  CI has started, and all blocking review feedback is addressed; the review
-  stage owns driving CI to terminal-and-passing, resolving merge conflicts, and
-  merging the PR. Terminal-and-passing CI, conflict resolution, and merge are
-  review-stage outcomes, not implementation-stage responsibilities, even though
-  merge remains the lane-wide completion boundary. After the implementation
-  finish line, implementation must not poll or re-check CI because every
-  redispatch consumes one of the 12 process visits. Put CI-run evidence in a PR
-  comment and never in a commit. Phrase the lint criterion as "no NEW lint
+  The delivery criterion must begin with the exact implementation-stage finish
+  line in the canonical example above: implementation marks it satisfied and
+  stops after its final head is pushed, the PR is open, CI has started, and all
+  blocking review feedback is addressed. It must then assign terminal-and-
+  passing CI, merge-conflict resolution, and merging to the review stage while
+  retaining merge as the lane-wide completion boundary. Do not open it with
+  "delivery continues until ... merged" or equivalent merge-first wording: the
+  implementation stage evaluates the criterion but cannot merge, and waiting
+  on that review-owned outcome can trigger repeated redispatch until the
+  executor-loop breaker ends the lane. After the implementation finish line,
+  implementation must not poll or re-check CI because every redispatch consumes
+  one of the 12 process visits. Put CI-run evidence in a PR comment and never in
+  a commit. Phrase the lint criterion as "no NEW lint
   violations relative to current main, and the gates green on main
   (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green" —
   NOT as a blanket "make lint passes": `make lint` cannot pass end-to-end on
