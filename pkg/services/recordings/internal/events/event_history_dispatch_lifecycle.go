@@ -67,6 +67,28 @@ func (subscription *eventHistorySubscription) releasePending() {
 	subscription.pendingMu.Unlock()
 }
 
+func (subscription *eventHistorySubscription) drainTerminalEvents() bool {
+	for {
+		select {
+		case <-subscription.done:
+			return false
+		case event := <-subscription.inbox:
+			select {
+			case <-subscription.done:
+				subscription.releasePending()
+				return false
+			case <-subscription.overflow:
+				subscription.releasePending()
+				return false
+			case subscription.events <- event.Clone():
+				subscription.releasePending()
+			}
+		default:
+			return true
+		}
+	}
+}
+
 func (h *FactoryEventHistory) relayLiveSubscription(id int, subscription *eventHistorySubscription) {
 	defer close(subscription.drained)
 	defer func() {
@@ -82,25 +104,10 @@ func (h *FactoryEventHistory) relayLiveSubscription(id int, subscription *eventH
 		case <-subscription.overflow:
 			return
 		case <-subscription.terminal:
-			for {
-				select {
-				case <-subscription.done:
-					return
-				case event := <-subscription.inbox:
-					select {
-					case <-subscription.done:
-						subscription.releasePending()
-						return
-					case <-subscription.overflow:
-						subscription.releasePending()
-						return
-					case subscription.events <- event.Clone():
-						subscription.releasePending()
-					}
-				default:
-					return
-				}
+			if !subscription.drainTerminalEvents() {
+				return
 			}
+			return
 		case event := <-subscription.inbox:
 			select {
 			case <-subscription.done:
