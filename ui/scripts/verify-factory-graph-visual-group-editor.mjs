@@ -91,7 +91,18 @@ async function createAndEditVisualGroup(page, viewport) {
   const secondaryMembershipCheckbox = page.getByRole("checkbox", {
     name: "Include Implement in this group",
   });
+  const secondaryMembershipInputId =
+    await secondaryMembershipCheckbox.getAttribute("id");
+  if (!secondaryMembershipInputId) {
+    throw new Error(
+      "Expected the secondary membership Checkbox to have an id.",
+    );
+  }
+  await page.locator(`label[for="${secondaryMembershipInputId}"]`).click();
+  await expectChecked(secondaryMembershipCheckbox, true);
   await secondaryMembershipCheckbox.focus();
+  await page.keyboard.press("Space");
+  await expectChecked(secondaryMembershipCheckbox, false);
   await page.keyboard.press("Space");
   await expectChecked(secondaryMembershipCheckbox, true);
 
