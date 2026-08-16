@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -27,6 +28,39 @@ const (
 	resumeAttemptSourceEventID        events.SourceEventID  = "resume"
 	retryAttemptSourceEventID         events.SourceEventID  = "retry"
 )
+
+func (r *registry) reconcileOverdueAttempt(
+	id string, supervision *supervision, attemptID string,
+	attemptDone chan struct{}, deadlineAt time.Time,
+) {
+	if !supervision.deadlineAttemptActive(attemptID, attemptDone) {
+		return
+	}
+	lifecycleContext := r.lifecycleCtx
+	if lifecycleContext == nil {
+		lifecycleContext = context.Background()
+	}
+	_, err := r.boundary.Cancel(
+		context.WithoutCancel(lifecycleContext),
+		workers.WorkstationDispatchCancelRequest{
+			DispatchID: attemptID,
+			Reason:     workers.WorkstationDispatchCancelReasonTimeout,
+		},
+	)
+	if err == nil || errors.Is(err, workers.ErrWorkstationDispatchAlreadyTerminal) || errors.Is(err, workers.ErrWorkstationDispatchCanceled) {
+		return
+	}
+	r.logger.Info(
+		"worker session reconciliation failed",
+		"sessionID", id,
+		"attemptID", attemptID,
+		"dispatchID", attemptID,
+		"reason", string(workers.WorkstationDispatchReconciliationReasonTimeout),
+		"prior_state", string(workersessions.StateRunning),
+		"deadline", deadlineAt.UTC().Format(time.RFC3339Nano),
+		"outcome", "rejected",
+	)
+}
 
 // continueTuple is the immutable caller-owned identity of one continuation
 // request. The exact Provider Session and resolved execution are captured in

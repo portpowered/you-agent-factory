@@ -22,5 +22,6 @@ func Request(
 		WorkIDs:   append([]string(nil), request.Correlation.WorkIDs...),
 	}
 	command.ExecutionLogger = request.ExecutionLogger
+	command.ProcessLifecycleObserver = request.ProcessLifecycleObserver
 	return command
 }

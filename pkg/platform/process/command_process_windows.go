@@ -173,7 +173,7 @@ func commandJobActiveProcesses(job windows.Handle) uint32 {
 
 const processStillActive = 259
 
-func commandProcessLeaderRunning(cmd *exec.Cmd) bool {
+func commandProcessLeaderRunning(cmd *exec.Cmd, _ ProcessStateReader) bool {
 	if cmd == nil || cmd.Process == nil {
 		return false
 	}

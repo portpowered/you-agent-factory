@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -35,4 +36,7 @@ type CommandRequest struct {
 	// concurrent Factory Sessions cannot share or overwrite each other's
 	// runtime log. It is intentionally excluded from serialized payloads.
 	ExecutionLogger logging.Logger `json:"-"`
+	// ProcessLifecycleObserver carries the dispatch-owned process lifecycle
+	// effect explicitly through the Workers command boundary.
+	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver `json:"-"`
 }

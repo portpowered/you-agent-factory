@@ -306,10 +306,7 @@ func (p *Pool) dispatch(
 		execution.RunnerID = selection.RunnerID
 		execution.RunnerSelectionSource = selection.Source
 	}
-	executionCtx = platformprocess.WithProcessLifecycleObserver(
-		executionCtx,
-		dispatchProcessObserver{record: record},
-	)
+	execution.ProcessLifecycleObserver = dispatchProcessObserver{record: record}
 	executionDone := make(chan executionCompletion, 1)
 	go func() {
 		result, executeErr := execute(executionCtx, route.binding.Executor, execution)

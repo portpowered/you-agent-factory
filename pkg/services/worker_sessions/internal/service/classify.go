@@ -15,6 +15,33 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// startTuple is the detached value compared for one asynchronous start replay.
+type startTuple struct {
+	SessionID   string
+	Execution   workers.WorkstationDispatchRequest
+	MaxAttempts int
+}
+
+// startReplay stores one accepted or deterministically rejected start result.
+type startReplay struct {
+	tuple     startTuple
+	sessionID string
+	done      chan struct{}
+	result    workersessions.StartResult
+	err       error
+}
+
+func normalizeStartRequest(req workersessions.StartRequest) workersessions.StartRequest {
+	req.RequestID = strings.TrimSpace(req.RequestID)
+	req.Execution = cloneWorkstationDispatchRequest(req.Execution)
+	req.Retry.MaxAttempts = req.Retry.Attempts()
+	return req
+}
+
+func startTupleFor(req workersessions.StartRequest) startTuple {
+	return startTuple{SessionID: req.ID, Execution: cloneWorkstationDispatchRequest(req.Execution), MaxAttempts: req.Retry.Attempts()}
+}
+
 type runtimeAttempt struct {
 	registry   *registry
 	workerID   string

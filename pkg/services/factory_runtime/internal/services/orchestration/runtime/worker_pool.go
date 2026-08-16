@@ -52,17 +52,18 @@ type executeCapability interface {
 }
 
 type activeAttempt struct {
-	dispatchID string
-	attemptID  string
-	cancel     context.CancelFunc
-	done       chan struct{}
-	canceled   bool
+	dispatchID  string
+	attemptID   string
+	cancel      context.CancelFunc
+	done        chan struct{}
+	canceled    bool
+	processGone bool
 }
 
 // attemptLifecycle is the Runtime-owned lifecycle boundary for stateless
-// Worker execution. It deliberately retains only cancellation and correlation
-// state; Workers receives a detached ExecuteRequest and returns a detached
-// ExecuteResult.
+// Worker execution. It deliberately retains only cancellation, correlation,
+// and process-reconciliation state; Workers receives a detached ExecuteRequest
+// and returns a detached ExecuteResult.
 type attemptLifecycle struct {
 	mu       sync.Mutex
 	service  executeCapability
@@ -152,6 +153,7 @@ func (l *attemptLifecycle) startWithPreparation(
 		cancel()
 		return err
 	}
+	request = attachAttemptProcessObserver(request, l, attempt)
 	var preparedTerminal attemptTerminalFunc
 	if prepare != nil {
 		preparedTerminal, err = prepare(context.WithoutCancel(execCtx), &request)
@@ -165,13 +167,16 @@ func (l *attemptLifecycle) startWithPreparation(
 
 	run := func() {
 		result, err := l.executeSafely(execCtx, request)
-		applied, canceled := l.finish(attempt)
+		applied, canceled, processGone := l.finish(attempt)
 		if !applied {
 			close(attempt.done)
 			return
 		}
 		defer close(attempt.done)
-		if canceled {
+		if processGone {
+			result = processGoneAttemptResult(request, result)
+			err = workers.ErrWorkstationDispatchProcessGone
+		} else if canceled {
 			result = canceledAttemptResult(request, result)
 			err = nil
 		}
@@ -186,6 +191,20 @@ func (l *attemptLifecycle) startWithPreparation(
 	}
 	run()
 	return nil
+}
+
+func attachAttemptProcessObserver(
+	request workers.ExecuteRequest,
+	lifecycle *attemptLifecycle,
+	attempt *activeAttempt,
+) workers.ExecuteRequest {
+	if request.Input.ProcessLifecycleObserver == nil {
+		request.Input.ProcessLifecycleObserver = attemptProcessObserver{
+			lifecycle: lifecycle,
+			attempt:   attempt,
+		}
+	}
+	return request
 }
 
 func (l *attemptLifecycle) prepareAttemptRequest(
@@ -389,16 +408,33 @@ func correlationValueConflicts(actual, expected string) bool {
 		strings.TrimSpace(actual) != strings.TrimSpace(expected)
 }
 
-func (l *attemptLifecycle) finish(attempt *activeAttempt) (bool, bool) {
+func (l *attemptLifecycle) finish(attempt *activeAttempt) (bool, bool, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	current, exists := l.active[attempt.dispatchID]
 	if !exists || current != attempt {
-		return false, false
+		return false, false, false
 	}
 	delete(l.active, attempt.dispatchID)
 	l.terminal[attempt.dispatchID] = attempt.attemptID
-	return true, attempt.canceled
+	return true, attempt.canceled, attempt.processGone
+}
+
+func (l *attemptLifecycle) reconcileProcessGone(attempt *activeAttempt) {
+	if l == nil || attempt == nil {
+		return
+	}
+	l.mu.Lock()
+	current, active := l.active[attempt.dispatchID]
+	if !active || current != attempt || attempt.canceled {
+		l.mu.Unlock()
+		return
+	}
+	attempt.canceled = true
+	attempt.processGone = true
+	cancel := attempt.cancel
+	l.mu.Unlock()
+	cancel()
 }
 
 func (l *attemptLifecycle) cancel(

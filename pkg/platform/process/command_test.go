@@ -101,7 +101,7 @@ func (r fixedCommandRunnerWithError) Run(context.Context, CommandRequest) (Comma
 
 func testExecCommandRunner(t testing.TB, logger logging.Logger) ExecCommandRunner {
 	t.Helper()
-	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger)
+	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger, nil)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}
@@ -917,6 +917,8 @@ func spawnCommandHelperChildMode(mode string) {
 		"COMMAND_HELPER_PID_FILE="+pidFile,
 		"COMMAND_HELPER_PID_WRITTEN_BY_PARENT=1",
 	)
+	child.Stdout = os.Stdout
+	child.Stderr = os.Stderr
 	if err := child.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)

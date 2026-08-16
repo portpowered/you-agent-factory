@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -229,39 +230,40 @@ type WorkstationExecutionRequest struct {
 }
 
 type ProviderInferenceRequest struct {
-	Dispatch                     work.WorkDispatch               `json:"dispatch"`
-	Correlation                  ExecutionCorrelation            `json:"-"`
-	WorkerName                   string                          `json:"worker_name,omitempty"`
-	WorkerType                   string                          `json:"worker_type,omitempty"`
-	WorkstationType              string                          `json:"workstation_type,omitempty"`
-	RunnerID                     string                          `json:"runner_id,omitempty"`
-	ExecutorProvider             string                          `json:"executor_provider,omitempty"`
-	ProjectID                    string                          `json:"project_id,omitempty"`
-	InputTokens                  []any                           `json:"input_tokens,omitempty"`
-	ModelOperation               string                          `json:"model_operation,omitempty"`
-	ModelBindings                []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
-	SystemPrompt                 string                          `json:"system_prompt,omitempty"`
-	UserMessage                  string                          `json:"user_message,omitempty"`
-	OutputSchema                 string                          `json:"output_schema,omitempty"`
-	ToolExecutionMode            RunnerToolExecutionMode         `json:"tool_execution_mode,omitempty"`
-	RequiredOptionalCapabilities []RunnerOptionalCapability      `json:"required_optional_capabilities,omitempty"`
-	EnvVars                      map[string]string               `json:"env_vars,omitempty"`
-	ProcessEnvironment           []string                        `json:"-"`
-	Worktree                     string                          `json:"worktree,omitempty"`
-	WorkingDirectory             string                          `json:"working_directory,omitempty"`
-	Model                        string                          `json:"model,omitempty"`
-	ModelProvider                string                          `json:"model_provider,omitempty"`
-	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
-	Command                      string                          `json:"command,omitempty"`
-	Args                         []string                        `json:"args,omitempty"`
-	FactoryDirectory             string                          `json:"factory_directory,omitempty"`
-	OutputContract               string                          `json:"output_contract,omitempty"`
-	OutputFormat                 string                          `json:"output_format,omitempty"`
-	StopToken                    string                          `json:"stop_token,omitempty"`
-	DecisionEnvelope             bool                            `json:"decision_envelope,omitempty"`
-	GoalRoutingDecisionEnvelope  bool                            `json:"goal_routing_decision_envelope,omitempty"`
-	PrintTimeout                 time.Duration                   `json:"-"`
-	ModelLocality                string                          `json:"model_locality,omitempty"`
+	Dispatch                     work.WorkDispatch                        `json:"dispatch"`
+	Correlation                  ExecutionCorrelation                     `json:"-"`
+	WorkerName                   string                                   `json:"worker_name,omitempty"`
+	WorkerType                   string                                   `json:"worker_type,omitempty"`
+	WorkstationType              string                                   `json:"workstation_type,omitempty"`
+	RunnerID                     string                                   `json:"runner_id,omitempty"`
+	ExecutorProvider             string                                   `json:"executor_provider,omitempty"`
+	ProjectID                    string                                   `json:"project_id,omitempty"`
+	InputTokens                  []any                                    `json:"input_tokens,omitempty"`
+	ModelOperation               string                                   `json:"model_operation,omitempty"`
+	ModelBindings                []ResolvedModelOperationBinding          `json:"model_bindings,omitempty"`
+	SystemPrompt                 string                                   `json:"system_prompt,omitempty"`
+	UserMessage                  string                                   `json:"user_message,omitempty"`
+	OutputSchema                 string                                   `json:"output_schema,omitempty"`
+	ToolExecutionMode            RunnerToolExecutionMode                  `json:"tool_execution_mode,omitempty"`
+	RequiredOptionalCapabilities []RunnerOptionalCapability               `json:"required_optional_capabilities,omitempty"`
+	EnvVars                      map[string]string                        `json:"env_vars,omitempty"`
+	ProcessEnvironment           []string                                 `json:"-"`
+	ProcessLifecycleObserver     platformprocess.ProcessLifecycleObserver `json:"-"`
+	Worktree                     string                                   `json:"worktree,omitempty"`
+	WorkingDirectory             string                                   `json:"working_directory,omitempty"`
+	Model                        string                                   `json:"model,omitempty"`
+	ModelProvider                string                                   `json:"model_provider,omitempty"`
+	ReasoningEffort              string                                   `json:"reasoning_effort,omitempty"`
+	Command                      string                                   `json:"command,omitempty"`
+	Args                         []string                                 `json:"args,omitempty"`
+	FactoryDirectory             string                                   `json:"factory_directory,omitempty"`
+	OutputContract               string                                   `json:"output_contract,omitempty"`
+	OutputFormat                 string                                   `json:"output_format,omitempty"`
+	StopToken                    string                                   `json:"stop_token,omitempty"`
+	DecisionEnvelope             bool                                     `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope  bool                                     `json:"goal_routing_decision_envelope,omitempty"`
+	PrintTimeout                 time.Duration                            `json:"-"`
+	ModelLocality                string                                   `json:"model_locality,omitempty"`
 	// ModelRuntime is the explicit request-owned Models projection for a
 	// managed inference attempt. It is intentionally excluded from provider
 	// payloads and is copied through the private runner boundary.

@@ -4026,3 +4026,160 @@ func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t
 		t.Fatalf("Subscribe() calls = %d, want 0 for unavailable durable cursor", reader.subscribeCalls)
 	}
 }
+
+type deadlineBoundary struct {
+	err       error
+	cancelled chan struct{}
+}
+
+type sourceOnlyClock struct{}
+
+func (sourceOnlyClock) Now() time.Time { return time.Now() }
+
+func (deadlineBoundary) Start(context.Context) error { return nil }
+
+func (deadlineBoundary) Publish(
+	context.Context,
+	workers.WorkstationDispatchRequest,
+	workers.WorkstationDispatchAcceptFunc,
+) error {
+	return nil
+}
+
+func (deadlineBoundary) PublishWithAdmission(
+	context.Context,
+	workers.WorkstationDispatchRequest,
+	workers.WorkstationDispatchAdmissionFunc,
+	workers.WorkstationDispatchAcceptFunc,
+) error {
+	return nil
+}
+
+func (boundary deadlineBoundary) Cancel(
+	context.Context,
+	workers.WorkstationDispatchCancelRequest,
+) (workers.WorkstationDispatchCancelResult, error) {
+	if boundary.cancelled != nil {
+		close(boundary.cancelled)
+	}
+	return workers.WorkstationDispatchCancelResult{}, boundary.err
+}
+
+func (deadlineBoundary) Stop(context.Context) error { return nil }
+
+func TestDeadlineSupervisionCoversInactiveAndHostTimerPaths(t *testing.T) {
+	clock := sourceOnlyClock{}
+	deadlineTimer := newSupervisionDeadlineTimer(clock, time.Hour)
+	if deadlineTimer.C() == nil {
+		t.Fatal("host deadline timer channel is nil")
+	}
+	if !deadlineTimer.Stop() {
+		t.Fatal("host deadline timer Stop() = false, want true")
+	}
+
+	serviceRegistry := &registry{clock: clock}
+	noTimeout := newSupervision("session", "turn")
+	serviceRegistry.startDeadlineWatcher("session", noTimeout, time.Now())
+	inactive := newSupervision("session", "turn", workers.WorkstationDispatchRequest{
+		Execution: workers.WorkstationExecutionRequest{
+			WorkerType: "worker",
+			Timeout:    time.Second,
+		},
+	})
+	serviceRegistry.startDeadlineWatcher("session", inactive, time.Now())
+	acceptedWithoutAttempt := newSupervision("session", "turn", workers.WorkstationDispatchRequest{
+		Execution: workers.WorkstationExecutionRequest{
+			WorkerType: "worker",
+			Timeout:    time.Second,
+		},
+	})
+	acceptedWithoutAttempt.accepted = true
+	serviceRegistry.startDeadlineWatcher("session", acceptedWithoutAttempt, time.Now())
+	expiredCancellation := make(chan struct{})
+	expired := newSupervision("expired", "turn", workers.WorkstationDispatchRequest{
+		Execution: workers.WorkstationExecutionRequest{
+			WorkerType: "worker",
+			Timeout:    time.Second,
+		},
+	})
+	expired.accepted = true
+	expired.attemptDone = make(chan struct{})
+	serviceRegistry.boundary = deadlineBoundary{cancelled: expiredCancellation}
+	serviceRegistry.startDeadlineWatcher("session", expired, time.Now().Add(-time.Hour))
+	expiredWait := time.NewTimer(time.Second)
+	defer expiredWait.Stop()
+	select {
+	case <-expiredCancellation:
+	case <-expiredWait.C:
+		t.Fatal("expired deadline watcher did not reconcile")
+	}
+
+	supervision := newSupervision("dispatch", "turn")
+	supervision.accepted = true
+	supervision.dispatchID = "dispatch"
+	attemptDone := make(chan struct{})
+	supervision.attemptDone = attemptDone
+	if !supervision.deadlineAttemptActive("dispatch", attemptDone) {
+		t.Fatal("deadlineAttemptActive() = false for active attempt")
+	}
+	if supervision.deadlineAttemptActive("other", attemptDone) {
+		t.Fatal("deadlineAttemptActive() = true for another dispatch")
+	}
+	close(attemptDone)
+	if supervision.deadlineAttemptActive("dispatch", attemptDone) {
+		t.Fatal("deadlineAttemptActive() = true after attempt completion")
+	}
+
+	reconciliationSupervision := newSupervision("dispatch", "turn")
+	reconciliationSupervision.accepted = true
+	reconciliationSupervision.dispatchID = "dispatch"
+	reconciliationAttemptDone := make(chan struct{})
+	reconciliationSupervision.attemptDone = reconciliationAttemptDone
+	for _, cancelErr := range []error{
+		nil,
+		workers.ErrWorkstationDispatchAlreadyTerminal,
+		workers.ErrWorkstationDispatchCanceled,
+		errors.New("cancel failed"),
+	} {
+		serviceRegistry.boundary = deadlineBoundary{err: cancelErr}
+		serviceRegistry.logger = logging.NoopLogger{}
+		serviceRegistry.reconcileOverdueAttempt("session", reconciliationSupervision, "dispatch", reconciliationAttemptDone, time.Now())
+	}
+	inactiveAttempt := newSupervision("inactive", "turn")
+	serviceRegistry.reconcileOverdueAttempt("session", inactiveAttempt, "inactive", make(chan struct{}), time.Now())
+}
+
+func TestOpeningSessionContinuationPreservesExactResumeIdentity(t *testing.T) {
+	if got := openingSessionContinuation(workers.WorkstationExecutionRequest{}); got != nil {
+		t.Fatalf("openingSessionContinuation(empty) = %#v, want nil", got)
+	}
+	request := workers.WorkstationExecutionRequest{
+		Continuation: &providers.ContinuationRef{
+			Provider:          "codex",
+			ProviderSessionID: "provider-session-1",
+		},
+	}
+	got := openingSessionContinuation(request)
+	if got == nil || got.Provider != "codex" || got.Kind == "" || got.ID != "provider-session-1" {
+		t.Fatalf("openingSessionContinuation(resume) = %#v, want normalized exact identity", got)
+	}
+	request.Continuation = &providers.ContinuationRef{}
+	if got := openingSessionContinuation(request); got == nil || got.Kind == "" {
+		t.Fatalf("openingSessionContinuation(empty continuation) = %#v, want compatibility kind", got)
+	}
+}
+
+func TestWorkerSessionSmallBoundaryBranchesRemainObservable(t *testing.T) {
+	if _, err := decodeObservationListCursor("not-base64"); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("decodeObservationListCursor(invalid) error = %v, want invalid pagination", err)
+	}
+	if got := (&registry{}).sessionState("missing"); got != "" {
+		t.Fatalf("sessionState(missing) = %q, want empty", got)
+	}
+	replay := &replayObservationSubscription{terminalRecordSeen: true}
+	replay.noteTerminalRecord(nil)
+	stoppable := &registry{stopDone: make(chan struct{})}
+	if err := stoppable.Stop(nil); err != nil {
+		t.Fatalf("Stop(nil) error = %v, want nil", err)
+	}
+}

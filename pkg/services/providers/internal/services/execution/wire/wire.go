@@ -153,11 +153,12 @@ func (runner platformCommandRunner) Run(
 	request providerservice.CommandRequest,
 ) (providerservice.CommandResult, error) {
 	result, err := runner.runner.Run(ctx, platformprocess.CommandRequest{
-		Command: request.Command,
-		Args:    request.Args,
-		Stdin:   request.Stdin,
-		Env:     request.Env,
-		WorkDir: request.WorkDir,
+		Command:                  request.Command,
+		Args:                     request.Args,
+		Stdin:                    request.Stdin,
+		Env:                      request.Env,
+		WorkDir:                  request.WorkDir,
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	})
 	return providerservice.CommandResult{
 		Stdout:   result.Stdout,
@@ -172,11 +173,12 @@ func (runner platformCommandRunner) RunStreaming(
 	observer providerservice.OutputChunkObserver,
 ) (providerservice.CommandResult, error) {
 	platformRequest := platformprocess.CommandRequest{
-		Command: request.Command,
-		Args:    request.Args,
-		Stdin:   request.Stdin,
-		Env:     request.Env,
-		WorkDir: request.WorkDir,
+		Command:                  request.Command,
+		Args:                     request.Args,
+		Stdin:                    request.Stdin,
+		Env:                      request.Env,
+		WorkDir:                  request.WorkDir,
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
 	streaming, ok := runner.runner.(interface {
 		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)

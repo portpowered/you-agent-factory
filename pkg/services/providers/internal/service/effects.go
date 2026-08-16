@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -39,16 +40,17 @@ const (
 // CommandRequest contains policy-free process inputs plus the Providers
 // attempt correlation needed by composition-owned effect adapters.
 type CommandRequest struct {
-	Command         string
-	Args            []string
-	Stdin           []byte
-	Env             []string
-	WorkDir         string
-	AttemptID       string
-	WorkerType      string
-	WorkstationName string
-	Execution       work.ExecutionMetadata
-	ExecutionLogger logging.Logger
+	Command                  string
+	Args                     []string
+	Stdin                    []byte
+	Env                      []string
+	WorkDir                  string
+	AttemptID                string
+	WorkerType               string
+	WorkstationName          string
+	Execution                work.ExecutionMetadata
+	ExecutionLogger          logging.Logger
+	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
 }
 
 // CommandResult is the observable result of one provider subprocess effect.

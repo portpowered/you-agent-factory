@@ -7,9 +7,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
 
 func TestDefaultPostRunCleanupGracePeriod(t *testing.T) {
@@ -77,6 +81,203 @@ func TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("waitForCommandExit did not observe the injected grace timer")
 	}
+}
+
+func TestNewProcfsProcessStateReaderUsesInjectedFileEffect(t *testing.T) {
+	tests := []struct {
+		name      string
+		pid       int
+		data      []byte
+		readErr   error
+		wantState byte
+		wantOK    bool
+		wantPath  string
+	}{
+		{name: "invalid pid", pid: 0},
+		{name: "read error", pid: 42, readErr: fmt.Errorf("not mounted"), wantPath: "/proc/42/stat"},
+		{name: "malformed stat", pid: 42, data: []byte("42 missing close paren"), wantPath: "/proc/42/stat"},
+		{name: "valid stat", pid: 42, data: []byte("42 (worker child) S 1 2 3"), wantState: 'S', wantOK: true, wantPath: "/proc/42/stat"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var gotPath string
+			reader := NewProcfsProcessStateReader(func(path string) ([]byte, error) {
+				gotPath = path
+				return test.data, test.readErr
+			})
+			state, ok := reader(test.pid)
+			if state != test.wantState || ok != test.wantOK {
+				t.Fatalf("state = %q, ok = %t, want %q, %t", state, ok, test.wantState, test.wantOK)
+			}
+			if gotPath != test.wantPath {
+				t.Fatalf("read path = %q, want %q", gotPath, test.wantPath)
+			}
+		})
+	}
+
+	if reader := NewProcfsProcessStateReader(nil); reader != nil {
+		t.Fatal("nil file effect returned a process state reader")
+	}
+}
+
+func TestCommandProcessLeaderRunningUsesInjectedStateWithoutProcessStateRace(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("procfs state probe is Unix-specific")
+	}
+	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
+	if commandProcessLeaderRunning(cmd, func(int) (byte, bool) { return 'Z', true }) {
+		t.Fatal("zombie process state reported as running")
+	}
+	if !commandProcessLeaderRunning(cmd, func(int) (byte, bool) { return 'S', true }) {
+		t.Fatal("live process state reported as stopped")
+	}
+	if commandProcessLeaderRunning(nil, nil) {
+		t.Fatal("nil command reported as running")
+	}
+}
+
+func TestProcessLifecycleMonitorStopsWhenWaitCompletes(t *testing.T) {
+	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
+	waitDone := make(chan struct{})
+	close(waitDone)
+	observer := &lifecycleObserverRecorder{
+		started: make(chan ProcessInfo, 1),
+		exited:  make(chan ProcessInfo, 1),
+	}
+	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer, NewProcfsProcessStateReader(os.ReadFile))
+	if monitor == nil {
+		t.Fatal("startProcessLifecycleMonitor() returned nil")
+	}
+	monitor.stopAndWait()
+	select {
+	case <-observer.started:
+	default:
+		t.Fatal("monitor did not report process start")
+	}
+	select {
+	case <-observer.exited:
+		t.Fatal("monitor reported exit after wait completed")
+	default:
+	}
+}
+
+func TestNewExecCommandRunnerRejectsMissingEffects(t *testing.T) {
+	if _, err := NewExecCommandRunner(nil, platformclock.Real{}, nil, nil); err == nil {
+		t.Fatal("nil command factory was accepted")
+	}
+	if _, err := NewExecCommandRunner(exec.Command, nil, nil, nil); err == nil {
+		t.Fatal("nil process clock was accepted")
+	}
+}
+
+func TestExecCommandRunnerRunRejectsMissingRuntimeEffects(t *testing.T) {
+	tests := []struct {
+		name   string
+		runner ExecCommandRunner
+		want   string
+	}{
+		{
+			name: "command factory",
+			runner: ExecCommandRunner{
+				Clock: platformclock.Real{},
+			},
+			want: "command factory",
+		},
+		{
+			name: "clock",
+			runner: ExecCommandRunner{
+				NewCommand: exec.Command,
+			},
+			want: "clock",
+		},
+		{
+			name: "nil command",
+			runner: ExecCommandRunner{
+				Clock:      platformclock.Real{},
+				NewCommand: func(string, ...string) *exec.Cmd { return nil },
+			},
+			want: "returned nil",
+		},
+		{
+			name: "start error",
+			runner: ExecCommandRunner{
+				Clock:      platformclock.Real{},
+				NewCommand: func(string, ...string) *exec.Cmd { return &exec.Cmd{} },
+			},
+			want: "exec",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.runner.Run(context.Background(), CommandRequest{Command: "helper"})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Run() error = %v, want text %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestStreamingExecCommandRunnerRunForwardsInjectedOutput(t *testing.T) {
+	requireProcessIntegration(t)
+	var observed []string
+	runner := StreamingExecCommandRunner{
+		Clock:      platformclock.Real{},
+		NewCommand: exec.Command,
+		Observer: func(stream string, chunk []byte) {
+			observed = append(observed, stream+":"+string(chunk))
+		},
+	}
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command: os.Args[0],
+		Args: []string{
+			"-test.run=TestExecCommandRunner_HelperProcess",
+			"--",
+			"fail",
+		},
+		Env: append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
+	})
+	if err != nil {
+		t.Fatalf("StreamingExecCommandRunner.Run() error = %v, want nil for non-zero exit", err)
+	}
+	if result.ExitCode != 17 || len(observed) == 0 {
+		t.Fatalf("streaming result = %#v, observations = %#v, want exit 17 and output", result, observed)
+	}
+}
+
+func TestProcessLifecycleMonitorStopsDuringExitObservationGrace(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("injected process state probe is Unix-specific")
+	}
+	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
+	waitDone := make(chan struct{})
+	stateRead := make(chan struct{}, 1)
+	observer := &lifecycleObserverRecorder{
+		started: make(chan ProcessInfo, 1),
+		exited:  make(chan ProcessInfo, 1),
+	}
+	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer, func(int) (byte, bool) {
+		select {
+		case stateRead <- struct{}{}:
+		default:
+		}
+		return 'Z', true
+	})
+	if monitor == nil {
+		t.Fatal("startProcessLifecycleMonitor() returned nil")
+	}
+	<-stateRead
+	monitor.stopAndWait()
+	select {
+	case <-observer.exited:
+		t.Fatal("monitor reported exit after stop")
+	default:
+	}
+}
+
+func TestProcessLifecycleMonitorNotifyExitIgnoresMissingObserver(t *testing.T) {
+	var nilMonitor *processLifecycleMonitor
+	nilMonitor.notifyExit()
+	(&processLifecycleMonitor{}).notifyExit()
 }
 
 func TestExecCommandRunner_RunStreamingBoundsRetainedOutputAndForwardsAllChunks(t *testing.T) {
@@ -302,7 +503,7 @@ func TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes(t *testing
 		started: make(chan ProcessInfo, 1),
 		exited:  make(chan ProcessInfo, 1),
 	}
-	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer)
+	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer, NewProcfsProcessStateReader(os.ReadFile))
 	t.Cleanup(func() {
 		close(waitDone)
 		monitor.stopAndWait()
@@ -333,5 +534,53 @@ func TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes(t *testing
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("process lifecycle monitor did not report gone parent; child %d was retained", childPID)
+	}
+}
+
+type cancelOnProcessExitObserver struct {
+	cancel context.CancelFunc
+}
+
+func (observer cancelOnProcessExitObserver) ProcessStarted(ProcessInfo) {}
+
+func (observer cancelOnProcessExitObserver) ProcessExited(ProcessInfo) {
+	observer.cancel()
+}
+
+func TestExecCommandRunnerCancelsInheritedPipeAfterParentExitObservation(t *testing.T) {
+	requireProcessIntegration(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	runner, err := NewExecCommandRunner(
+		exec.Command,
+		platformclock.Real{},
+		nil,
+		NewProcfsProcessStateReader(os.ReadFile),
+	)
+	if err != nil {
+		t.Fatalf("NewExecCommandRunner() error = %v", err)
+	}
+	result, runErr := runner.Run(ctx, CommandRequest{
+		Command: os.Args[0],
+		Args: []string{
+			"-test.run=TestExecCommandRunner_HelperProcess",
+			"--",
+			"spawn-child-success",
+		},
+		Env: append(
+			os.Environ(),
+			"GO_WANT_COMMAND_HELPER=1",
+			"COMMAND_HELPER_PID_FILE="+pidFile,
+		),
+		ProcessLifecycleObserver: cancelOnProcessExitObserver{cancel: cancel},
+	})
+	if runErr == nil || !errors.Is(runErr, context.Canceled) {
+		t.Fatalf("Run() result=%#v error=%v, want context canceled after parent exit", result, runErr)
+	}
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
+	t.Cleanup(func() { commandTestTerminateProcess(childPID) })
+	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
+		t.Fatalf("inherited-pipe child process %d is still running after observer cancellation", childPID)
 	}
 }

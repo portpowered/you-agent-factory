@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +22,77 @@ import (
 )
 
 const processCleanupWorkerTimeout = 5 * time.Second
+
+// TestProcessGoneReleasesSameRouteAdmissionThroughRootProcess proves the
+// parent-process observation closes the gap between a dead command leader and
+// an inherited output pipe. The first Work leaves a descendant holding the
+// pipe; the second same-route Work can complete only after the first
+// workstation admission is released by PROCESS_GONE reconciliation.
+func TestProcessGoneReleasesSameRouteAdmissionThroughRootProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-gone inherited-pipe observation is covered on the Unix process boundary")
+	}
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	childPIDFile := filepath.Join(t.TempDir(), "process-gone-child.pid")
+
+	workerAgentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
+	workerAgents := fmt.Sprintf(`---
+type: SCRIPT_WORKER
+command: %s
+args:
+  - '-test.run=TestProcessTreeHelper'
+  - '--'
+  - 'process-gone'
+  - '{{ (index .Inputs 0).WorkID }}'
+  - %s
+---
+Exit the first process while a descendant holds the inherited output pipe,
+then complete the second same-route Work after PROCESS_GONE reconciliation.
+`, yamlSingleQuoted(os.Args[0]), yamlSingleQuoted(childPIDFile))
+	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
+		t.Fatalf("write worker AGENTS.md: %v", err)
+	}
+
+	const (
+		firstWorkID  = "work-process-gone-first"
+		secondWorkID = "work-process-gone-second"
+	)
+	for _, workID := range []string{firstWorkID, secondWorkID} {
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkID:     workID,
+			WorkTypeID: "task",
+			TraceID:    "trace-" + workID,
+			Payload:    []byte("process gone route release"),
+		})
+	}
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		processCleanupScriptEdges(t),
+		20*time.Second,
+	)
+
+	childPID := readProcessCleanupPID(t, childPIDFile)
+	t.Cleanup(func() {
+		processCleanupTerminateProcess(childPID)
+	})
+	if processCleanupProcessRunning(childPID) {
+		t.Fatalf("inherited-pipe descendant process %d is still running after PROCESS_GONE reconciliation", childPID)
+	}
+	assertProcessCleanupListedWorkIdentity(t, listed, "failed", firstWorkID, "task", "trace-"+firstWorkID, nil)
+	assertProcessCleanupListedWorkIdentity(t, listed, "done", secondWorkID, "task", "trace-"+secondWorkID, nil)
+	if session.Runtime.Progress.Categories.Failed != 1 || session.Runtime.Progress.Categories.Terminal != 1 {
+		t.Fatalf(
+			"session progress categories = %+v, want one PROCESS_GONE failure and one completed same-route Work",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if session.Runtime.Progress.Categories.Processing != 0 {
+		t.Fatalf("session processing count = %d, want zero after route release", session.Runtime.Progress.Categories.Processing)
+	}
+	assertProcessGoneDispatchOutcomes(t, events, firstWorkID, secondWorkID)
+}
 
 // TestProviderTimeoutTerminatesChildProcessTree proves a timed-out script-worker
 // invocation tears down its spawned descendant process tree and clears active
@@ -111,14 +183,17 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 // cleanup proofs. It spawns a descendant process, records its PID, and blocks
 // until the factory timeout cancels the process tree.
 func TestProcessTreeHelper(t *testing.T) {
-	if len(os.Args) < 2 {
+	mode, args := processCleanupHelperArgs()
+	if mode == "" {
 		return
 	}
 
-	mode := os.Args[len(os.Args)-2]
-	pidFile := os.Args[len(os.Args)-1]
 	switch mode {
 	case "spawn-child":
+		if len(args) < 1 {
+			return
+		}
+		pidFile := args[0]
 		spawnProcessCleanupChild(pidFile)
 		time.Sleep(30 * time.Second)
 		finishProcessCleanupHelper()
@@ -128,16 +203,45 @@ func TestProcessTreeHelper(t *testing.T) {
 		finishProcessCleanupHelper()
 		return
 	case "companion-timeout-once":
+		if len(args) < 1 {
+			return
+		}
+		pidFile := args[0]
 		runCompanionTimeoutOnceHelper(pidFile)
 		finishProcessCleanupHelper()
 		return
+	case "process-gone":
+		if len(args) < 2 {
+			return
+		}
+		runProcessGoneHelper(args[0], args[1])
+		finishProcessCleanupHelper()
+		return
 	case "timeout-once":
+		if len(args) < 1 {
+			return
+		}
+		pidFile := args[0]
 		runTimeoutOnceHelper(pidFile)
 		finishProcessCleanupHelper()
 		return
 	default:
 		return
 	}
+}
+
+func processCleanupHelperArgs() (string, []string) {
+	separator := -1
+	for index := len(os.Args) - 1; index >= 0; index-- {
+		if os.Args[index] == "--" {
+			separator = index
+			break
+		}
+	}
+	if separator < 0 || separator+1 >= len(os.Args) {
+		return "", nil
+	}
+	return os.Args[separator+1], os.Args[separator+2:]
 }
 
 // TestProviderSuccessWaitsForProcessAndStreamClosure proves a successful script-worker
@@ -247,6 +351,14 @@ func runCompanionTimeoutOnceHelper(attemptFile string) {
 	fmt.Println("recovered after companion timeout")
 }
 
+func runProcessGoneHelper(workID, childPIDFile string) {
+	if strings.HasSuffix(workID, "-first") {
+		spawnProcessCleanupChild(childPIDFile)
+		return
+	}
+	fmt.Println("recovered after process gone COMPLETE")
+}
+
 func finishProcessCleanupHelper() {
 	if os.Getenv("GOCOVERDIR") == "" {
 		os.Exit(0)
@@ -288,6 +400,8 @@ func spawnProcessCleanupChild(pidFile string) {
 	args = append(args, "--", "pid-sleep", pidFile)
 	child := exec.Command(os.Args[0], args...)
 	child.Env = os.Environ()
+	child.Stdout = os.Stdout
+	child.Stderr = os.Stderr
 	if err := child.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
@@ -377,6 +491,40 @@ func assertProcessCleanupDispatchOutcomeSequence(
 	}
 	if firstError != "" && (responses[0].Error == nil || !strings.Contains(*responses[0].Error, firstError)) {
 		t.Errorf("first dispatch error = %#v, want text %q", responses[0].Error, firstError)
+	}
+}
+
+func assertProcessGoneDispatchOutcomes(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	firstWorkID, secondWorkID string,
+) {
+	t.Helper()
+	var first, second *support.DispatchEventObservation
+	observations := support.ObserveDispatchEvents(t, events)
+	for index := range observations {
+		dispatch := &observations[index]
+		if support.DispatchObservationIncludesWork(*dispatch, firstWorkID) {
+			first = dispatch
+		}
+		if support.DispatchObservationIncludesWork(*dispatch, secondWorkID) {
+			second = dispatch
+		}
+	}
+	if first == nil || first.Response == nil {
+		t.Fatalf("PROCESS_GONE dispatch for work %q = %#v, want terminal response", firstWorkID, first)
+	}
+	if first.Response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("PROCESS_GONE dispatch outcome = %s, want FAILED", first.Response.Outcome)
+	}
+	if !strings.Contains(strings.ToLower(support.StringPointerValue(first.Response.Error)), "process") {
+		t.Fatalf("PROCESS_GONE dispatch error = %q, want process classification", support.StringPointerValue(first.Response.Error))
+	}
+	if second == nil || second.Response == nil {
+		t.Fatalf("same-route follow-up dispatch for work %q = %#v, want terminal response", secondWorkID, second)
+	}
+	if second.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("same-route follow-up dispatch outcome = %s, want ACCEPTED", second.Response.Outcome)
 	}
 }
 
@@ -509,7 +657,8 @@ func processCleanupDispatchResponses(t *testing.T, events []factoryapi.FactoryEv
 
 func processCleanupScriptEdges(t *testing.T) serviceedges.Edges {
 	t.Helper()
-	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
+	stateReader := platformprocess.NewProcfsProcessStateReader(os.ReadFile)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, stateReader)
 	if err != nil {
 		t.Fatalf("construct process cleanup script command runner: %v", err)
 	}

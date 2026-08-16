@@ -1,5 +1,3 @@
-// backendsizecheck:ignore-file deadline supervision shares the invocation lifecycle file so it can observe the accepted attempt without adding a package file beyond the exact file-count ratchet; split it when that boundary is relaxed.
-// pkgmaintcheck:ignore-file-lines deadline supervision shares the invocation lifecycle file so it can observe the accepted attempt without adding a package file beyond the exact file-count ratchet; split it when that boundary is relaxed.
 package service
 
 import (
@@ -997,114 +995,20 @@ func (s *observationSubscription) closeSource() {
 	}
 }
 
-type supervisionDeadlineTimer interface {
-	C() <-chan time.Time
-	Stop() bool
+func (r *registry) finishStartReplay(replay *startReplay, result workersessions.StartResult, err error) {
+	replay.result = cloneStartResult(result)
+	replay.err = err
+	close(replay.done)
 }
 
-type hostSupervisionDeadlineTimer struct {
-	timer *time.Timer
+func cloneStartResult(result workersessions.StartResult) workersessions.StartResult {
+	result.Session = cloneSession(result.Session)
+	return result
 }
 
-func (timer hostSupervisionDeadlineTimer) C() <-chan time.Time { return timer.timer.C }
-
-func (timer hostSupervisionDeadlineTimer) Stop() bool { return timer.timer.Stop() }
-
-func newSupervisionDeadlineTimer(clock platformclock.Source, timeout time.Duration) supervisionDeadlineTimer {
-	if timerSource, ok := clock.(platformclock.TimerSource); ok {
-		return timerSource.NewTimer(timeout)
+func startReplayOutcome(err error) string {
+	if err == nil {
+		return "accepted"
 	}
-	return hostSupervisionDeadlineTimer{timer: time.NewTimer(timeout)}
-}
-
-func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acceptedAt time.Time) {
-	timeout := resolvedHardExecutionTimeout(supervision.execution.Execution)
-	if timeout <= 0 {
-		return
-	}
-	supervision.mu.Lock()
-	attemptDone := supervision.attemptDone
-	attemptID := supervision.dispatchID
-	if attemptDone == nil || !supervision.accepted {
-		supervision.mu.Unlock()
-		return
-	}
-	deadlineAt := acceptedAt.Add(timeout)
-	supervision.deadlineAt = deadlineAt
-	supervision.mu.Unlock()
-
-	remaining := deadlineAt.Sub(r.clock.Now())
-	if remaining < 0 {
-		remaining = 0
-	}
-	timer := newSupervisionDeadlineTimer(r.clock, remaining)
-	go func() {
-		defer timer.Stop()
-		select {
-		case <-timer.C():
-			r.reconcileOverdueAttempt(id, supervision, attemptID, attemptDone, deadlineAt)
-		case <-attemptDone:
-		}
-	}()
-}
-
-func (r *registry) reconcileOverdueAttempt(
-	id string,
-	supervision *supervision,
-	attemptID string,
-	attemptDone chan struct{},
-	deadlineAt time.Time,
-) {
-	if !supervision.deadlineAttemptActive(attemptID, attemptDone) {
-		return
-	}
-	lifecycleContext := r.lifecycleCtx
-	if lifecycleContext == nil {
-		lifecycleContext = context.Background()
-	}
-	_, err := r.boundary.Cancel(
-		context.WithoutCancel(lifecycleContext),
-		workers.WorkstationDispatchCancelRequest{
-			DispatchID: attemptID,
-			Reason:     workers.WorkstationDispatchCancelReasonTimeout,
-		},
-	)
-	if err == nil || errors.Is(err, workers.ErrWorkstationDispatchAlreadyTerminal) || errors.Is(err, workers.ErrWorkstationDispatchCanceled) {
-		return
-	}
-	r.logger.Info(
-		"worker session reconciliation failed",
-		"sessionID", id,
-		"attemptID", attemptID,
-		"dispatchID", attemptID,
-		"reason", string(workers.WorkstationDispatchReconciliationReasonTimeout),
-		"prior_state", string(workersessions.StateRunning),
-		"deadline", deadlineAt.UTC().Format(time.RFC3339Nano),
-		"outcome", "rejected",
-	)
-}
-
-func (s *supervision) deadlineAttemptActive(attemptID string, attemptDone chan struct{}) bool {
-	s.mu.Lock()
-	active := s.accepted && s.dispatchID == attemptID && s.attemptDone == attemptDone
-	s.mu.Unlock()
-	if !active {
-		return false
-	}
-	select {
-	case <-attemptDone:
-		return false
-	default:
-		return true
-	}
-}
-
-func resolvedHardExecutionTimeout(execution workers.WorkstationExecutionRequest) time.Duration {
-	if execution.Timeout > 0 {
-		return execution.Timeout
-	}
-	if strings.TrimSpace(execution.WorkerType) != "" {
-		return workers.DefaultWorkstationExecutionTimeout
-	}
-	return 0
+	return "rejected"
 }

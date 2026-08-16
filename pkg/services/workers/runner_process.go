@@ -115,11 +115,12 @@ func (r projectedPlatformCommandRunner) RunStreaming(
 
 func workersCommandRequest(req platformprocess.CommandRequest) CommandRequest {
 	return CommandRequest{
-		Command: req.Command,
-		Args:    req.Args,
-		Stdin:   req.Stdin,
-		Env:     req.Env,
-		WorkDir: req.WorkDir,
+		Command:                  req.Command,
+		Args:                     req.Args,
+		Stdin:                    req.Stdin,
+		Env:                      req.Env,
+		WorkDir:                  req.WorkDir,
+		ProcessLifecycleObserver: req.ProcessLifecycleObserver,
 	}
 }
 
@@ -312,7 +313,14 @@ func execCommandRunnerWithLogger(runner CommandRunner, logger logging.Logger) Co
 }
 
 func effectRequest(req CommandRequest) platformprocess.CommandRequest {
-	return platformprocess.CommandRequest{Command: req.Command, Args: req.Args, Stdin: req.Stdin, Env: req.Env, WorkDir: req.WorkDir}
+	return platformprocess.CommandRequest{
+		Command:                  req.Command,
+		Args:                     req.Args,
+		Stdin:                    req.Stdin,
+		Env:                      req.Env,
+		WorkDir:                  req.WorkDir,
+		ProcessLifecycleObserver: req.ProcessLifecycleObserver,
+	}
 }
 
 func commandResult(result platformprocess.CommandResult) CommandResult {

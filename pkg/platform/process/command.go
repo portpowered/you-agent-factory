@@ -42,27 +42,34 @@ type ProcessInfo struct {
 	PID int
 }
 
-type processLifecycleObserverContextKey struct{}
+// ProcessStateReader observes the non-reaping host state for one process.
+// Production supplies the procfs-backed implementation from the composition
+// root; tests can provide a deterministic reader or nil when signal-0 alone
+// is sufficient.
+type ProcessStateReader func(pid int) (state byte, ok bool)
 
-// WithProcessLifecycleObserver attaches one process observer to a command
-// context. The value is an optional effect supplied by the caller; process
-// execution remains policy-free and does not decide what an exit means.
-func WithProcessLifecycleObserver(ctx context.Context, observer ProcessLifecycleObserver) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if observer == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, processLifecycleObserverContextKey{}, observer)
-}
-
-func processLifecycleObserverFromContext(ctx context.Context) ProcessLifecycleObserver {
-	if ctx == nil {
+// NewProcfsProcessStateReader adapts an injected file reader to the Linux
+// /proc/<pid>/stat state probe. Keeping file access at the composition
+// boundary makes process observation explicit and leaves this package free of
+// ambient filesystem effects.
+func NewProcfsProcessStateReader(readFile func(string) ([]byte, error)) ProcessStateReader {
+	if readFile == nil {
 		return nil
 	}
-	observer, _ := ctx.Value(processLifecycleObserverContextKey{}).(ProcessLifecycleObserver)
-	return observer
+	return func(pid int) (byte, bool) {
+		if pid <= 0 {
+			return 0, false
+		}
+		data, err := readFile(fmt.Sprintf("/proc/%d/stat", pid))
+		if err != nil {
+			return 0, false
+		}
+		closeParen := bytes.LastIndexByte(data, ')')
+		if closeParen < 0 || closeParen+2 >= len(data) {
+			return 0, false
+		}
+		return data[closeParen+2], true
+	}
 }
 
 // CommandFactory creates one inert host command. Production command creation
@@ -72,11 +79,12 @@ type CommandFactory func(name string, args ...string) *exec.Cmd
 
 // CommandRequest describes one policy-free subprocess effect.
 type CommandRequest struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args,omitempty"`
-	Stdin   []byte   `json:"stdin,omitempty"`
-	Env     []string `json:"env,omitempty"`
-	WorkDir string   `json:"work_dir,omitempty"`
+	Command                  string                   `json:"command"`
+	Args                     []string                 `json:"args,omitempty"`
+	Stdin                    []byte                   `json:"stdin,omitempty"`
+	Env                      []string                 `json:"env,omitempty"`
+	WorkDir                  string                   `json:"work_dir,omitempty"`
+	ProcessLifecycleObserver ProcessLifecycleObserver `json:"-"`
 }
 
 // CommandResult captures the observable output and exit status from a command.
@@ -89,21 +97,22 @@ type CommandResult struct {
 // ExecCommandRunner implements CommandRunner by delegating to os/exec.
 type ExecCommandRunner struct {
 	// Logger emits structured process-group cleanup diagnostics. Nil disables cleanup logging.
-	Logger     logging.Logger
-	Clock      Clock
-	NewCommand CommandFactory
+	Logger             logging.Logger
+	Clock              Clock
+	NewCommand         CommandFactory
+	ProcessStateReader ProcessStateReader
 }
 
 // NewExecCommandRunner constructs a host command runner from exact external
 // effects. Missing effects fail closed rather than selecting ambient defaults.
-func NewExecCommandRunner(newCommand CommandFactory, clock Clock, logger logging.Logger) (ExecCommandRunner, error) {
+func NewExecCommandRunner(newCommand CommandFactory, clock Clock, logger logging.Logger, processStateReader ProcessStateReader) (ExecCommandRunner, error) {
 	if newCommand == nil {
 		return ExecCommandRunner{}, errors.New("platform process command factory is required")
 	}
 	if clock == nil {
 		return ExecCommandRunner{}, errors.New("platform process clock is required")
 	}
-	return ExecCommandRunner{Logger: logger, Clock: clock, NewCommand: newCommand}, nil
+	return ExecCommandRunner{Logger: logger, Clock: clock, NewCommand: newCommand, ProcessStateReader: processStateReader}, nil
 }
 
 // Run executes the command with process-tree cancellation, capturing stdout and stderr.
@@ -158,7 +167,8 @@ func (r ExecCommandRunner) run(
 	processMonitor := startProcessLifecycleMonitor(
 		cmd,
 		waitDone,
-		processLifecycleObserverFromContext(ctx),
+		req.ProcessLifecycleObserver,
+		r.ProcessStateReader,
 	)
 	defer processMonitor.stopAndWait()
 
@@ -294,26 +304,29 @@ const (
 // exec.Cmd.Wait. That distinction is the important failure boundary: Wait
 // can remain blocked by inherited pipes after the parent process has exited.
 type processLifecycleMonitor struct {
-	observer ProcessLifecycleObserver
-	info     ProcessInfo
-	stop     chan struct{}
-	done     chan struct{}
-	exited   sync.Once
+	observer    ProcessLifecycleObserver
+	info        ProcessInfo
+	stateReader ProcessStateReader
+	stop        chan struct{}
+	done        chan struct{}
+	exited      sync.Once
 }
 
 func startProcessLifecycleMonitor(
 	cmd *exec.Cmd,
 	waitDone <-chan struct{},
 	observer ProcessLifecycleObserver,
+	stateReader ProcessStateReader,
 ) *processLifecycleMonitor {
 	if cmd == nil || cmd.Process == nil || observer == nil {
 		return nil
 	}
 	monitor := &processLifecycleMonitor{
-		observer: observer,
-		info:     ProcessInfo{PID: cmd.Process.Pid},
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
+		observer:    observer,
+		info:        ProcessInfo{PID: cmd.Process.Pid},
+		stateReader: stateReader,
+		stop:        make(chan struct{}),
+		done:        make(chan struct{}),
 	}
 	observer.ProcessStarted(monitor.info)
 	go monitor.watch(cmd, waitDone)
@@ -329,7 +342,7 @@ func (m *processLifecycleMonitor) watch(cmd *exec.Cmd, waitDone <-chan struct{})
 		case <-m.stop:
 			return
 		case <-ticker.C:
-			if commandProcessLeaderRunning(cmd) {
+			if commandProcessLeaderRunning(cmd, m.stateReader) {
 				continue
 			}
 			grace := time.NewTimer(processExitObservationGrace)

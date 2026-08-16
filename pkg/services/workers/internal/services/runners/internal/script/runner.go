@@ -401,6 +401,7 @@ func (r *runner) resolveCommandRequest(
 		Execution:                dispatch.Execution,
 		InputTokens:              workers.InputTokens(tokens...),
 		InputBindings:            cloneStringSliceMap(dispatch.InputBindings),
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}, nil
 }
 
