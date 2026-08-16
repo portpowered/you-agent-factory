@@ -16,7 +16,7 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions"
 )
 
 // BuildRuntimeExecutors constructs every configured runtime worker through the

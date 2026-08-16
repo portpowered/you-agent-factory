@@ -1,4 +1,4 @@
-package envdiagnostics
+package diagnostics
 
 import (
 	"fmt"

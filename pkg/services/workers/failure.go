@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure"
+	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure"
 )
 
 // InferenceFailureClass is the stable customer-facing inference failure category.

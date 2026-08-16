@@ -44,7 +44,17 @@ var workersMappingCases = []packageMappingCase{
 		retainOwner: "workers",
 	},
 	{
+		path:        "pkg/services/workers/internal/inferencefailure",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
 		path:        "pkg/services/workers/internal/prompting",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/skippermissions",
 		wantRetain:  true,
 		retainOwner: "workers",
 	},
@@ -232,7 +242,11 @@ func workersCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/draftvalidation"):
 		return true
+	case strings.HasPrefix(rest, "internal/inferencefailure"):
+		return true
 	case strings.HasPrefix(rest, "internal/prompting"):
+		return true
+	case strings.HasPrefix(rest, "internal/skippermissions"):
 		return true
 	default:
 		return false

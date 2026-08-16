@@ -1,10 +1,10 @@
-package envdiagnostics_test
+package diagnostics_test
 
 import (
 	"reflect"
 	"testing"
 
-	workstationenv "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 )
 
 func TestClassifyCommandEnvKey_SensitiveNamesAreRedacted(t *testing.T) {
@@ -20,35 +20,35 @@ func TestClassifyCommandEnvKey_SensitiveNamesAreRedacted(t *testing.T) {
 
 	for _, name := range testCases {
 		t.Run(name, func(t *testing.T) {
-			if got := workstationenv.ClassifyCommandEnvKey(name); got != workstationenv.CommandEnvClassificationRedacted {
-				t.Fatalf("workstationenv.ClassifyCommandEnvKey(%q) = %q, want %q", name, got, workstationenv.CommandEnvClassificationRedacted)
+			if got := workerdiagnostics.ClassifyCommandEnvKey(name); got != workerdiagnostics.CommandEnvClassificationRedacted {
+				t.Fatalf("workerdiagnostics.ClassifyCommandEnvKey(%q) = %q, want %q", name, got, workerdiagnostics.CommandEnvClassificationRedacted)
 			}
 		})
 	}
 }
 
 func TestClassifyCommandEnvKey_SafeAllowlistOnlyPermitsLowRiskValues(t *testing.T) {
-	testCases := map[string]workstationenv.CommandEnvClassification{
-		"CI":                    workstationenv.CommandEnvClassificationSafe,
-		"GIT_TERMINAL_PROMPT":   workstationenv.CommandEnvClassificationSafe,
-		"TERM":                  workstationenv.CommandEnvClassificationSafe,
-		"PATH":                  workstationenv.CommandEnvClassificationMetadataOnly,
-		"HOME":                  workstationenv.CommandEnvClassificationMetadataOnly,
-		"AGENT_FACTORY_API_KEY": workstationenv.CommandEnvClassificationRedacted,
-		"PORTOS_API_KEY":        workstationenv.CommandEnvClassificationRedacted,
+	testCases := map[string]workerdiagnostics.CommandEnvClassification{
+		"CI":                    workerdiagnostics.CommandEnvClassificationSafe,
+		"GIT_TERMINAL_PROMPT":   workerdiagnostics.CommandEnvClassificationSafe,
+		"TERM":                  workerdiagnostics.CommandEnvClassificationSafe,
+		"PATH":                  workerdiagnostics.CommandEnvClassificationMetadataOnly,
+		"HOME":                  workerdiagnostics.CommandEnvClassificationMetadataOnly,
+		"AGENT_FACTORY_API_KEY": workerdiagnostics.CommandEnvClassificationRedacted,
+		"PORTOS_API_KEY":        workerdiagnostics.CommandEnvClassificationRedacted,
 	}
 
 	for name, want := range testCases {
 		t.Run(name, func(t *testing.T) {
-			if got := workstationenv.ClassifyCommandEnvKey(name); got != want {
-				t.Fatalf("workstationenv.ClassifyCommandEnvKey(%q) = %q, want %q", name, got, want)
+			if got := workerdiagnostics.ClassifyCommandEnvKey(name); got != want {
+				t.Fatalf("workerdiagnostics.ClassifyCommandEnvKey(%q) = %q, want %q", name, got, want)
 			}
 		})
 	}
 }
 
 func TestProjectCommandEnvForDiagnostics_PreservesSafeMetadataAndRedactsSecrets(t *testing.T) {
-	projection := workstationenv.ProjectCommandEnvForDiagnostics([]string{
+	projection := workerdiagnostics.ProjectCommandEnvForDiagnostics([]string{
 		"CI=true",
 		"PATH=C:\\Tools",
 		"OPENAI_API_KEY=sk-raw-secret",
@@ -66,13 +66,13 @@ func TestProjectCommandEnvForDiagnostics_PreservesSafeMetadataAndRedactsSecrets(
 	if projection.Values["CI"] != "true" {
 		t.Fatalf("CI value = %q, want raw allowlisted value", projection.Values["CI"])
 	}
-	if projection.Values["PATH"] != workstationenv.MetadataOnlyCommandEnvValue {
+	if projection.Values["PATH"] != workerdiagnostics.MetadataOnlyCommandEnvValue {
 		t.Fatalf("PATH value = %q, want metadata marker", projection.Values["PATH"])
 	}
-	if projection.Values["OPENAI_API_KEY"] != workstationenv.RedactedCommandEnvValue {
+	if projection.Values["OPENAI_API_KEY"] != workerdiagnostics.RedactedCommandEnvValue {
 		t.Fatalf("OPENAI_API_KEY value = %q, want redaction marker", projection.Values["OPENAI_API_KEY"])
 	}
-	if projection.Values["ANTHROPIC_AUTH_TOKEN"] != workstationenv.RedactedCommandEnvValue {
+	if projection.Values["ANTHROPIC_AUTH_TOKEN"] != workerdiagnostics.RedactedCommandEnvValue {
 		t.Fatalf("ANTHROPIC_AUTH_TOKEN value = %q, want redaction marker", projection.Values["ANTHROPIC_AUTH_TOKEN"])
 	}
 	for name, value := range projection.Values {
@@ -83,7 +83,7 @@ func TestProjectCommandEnvForDiagnostics_PreservesSafeMetadataAndRedactsSecrets(
 }
 
 func TestCommandEnvDiagnosticMetadata_RecordsCountAndKeySet(t *testing.T) {
-	metadata := workstationenv.CommandEnvDiagnosticMetadata(workstationenv.CommandEnvDiagnosticProjection{
+	metadata := workerdiagnostics.CommandEnvDiagnosticMetadata(workerdiagnostics.CommandEnvDiagnosticProjection{
 		Count: 2,
 		Keys:  []string{"CI", "OPENAI_API_KEY"},
 	})

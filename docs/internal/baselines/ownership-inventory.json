@@ -5395,6 +5395,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/inferencefailure",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/interface",
       "disposition": "move",
       "destination": "workers",
@@ -5525,12 +5531,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/execution",
       "disposition": "retain",
       "destination": "workers",
@@ -5555,12 +5555,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/internal/service",
       "disposition": "retain",
       "destination": "workers",
@@ -5579,12 +5573,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/skippermissions",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/wire",
       "disposition": "retain",
       "destination": "workers",
@@ -5592,6 +5580,12 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations/worktree",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/skippermissions",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"

@@ -250,9 +250,25 @@ func TestMapCommittedOwnerPackageWorkersCanonicalRetains(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/workers/internal/inferencefailure",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/inferencefailure",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
 			path: "pkg/services/workers/internal/prompting",
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/internal/prompting",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
+			path: "pkg/services/workers/internal/skippermissions",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/skippermissions",
 				Disposition: DispositionRetain,
 				Destination: "workers/internal",
 			},
@@ -334,6 +350,9 @@ func TestWorkersInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 		if _, extracted := mapProvidersExtraction(packagePath); extracted {
 			continue
 		}
+		if workersCanonicalRetainRest(strings.TrimPrefix(packagePath, "pkg/services/workers/")) {
+			continue
+		}
 
 		got, ok := mapCommittedOwnerPackage(packagePath)
 		if !ok {
@@ -380,7 +399,11 @@ func workersCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/draftvalidation"):
 		return true
+	case strings.HasPrefix(rest, "internal/inferencefailure"):
+		return true
 	case strings.HasPrefix(rest, "internal/prompting"):
+		return true
+	case strings.HasPrefix(rest, "internal/skippermissions"):
 		return true
 	default:
 		return false

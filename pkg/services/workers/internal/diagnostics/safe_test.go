@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
@@ -19,7 +17,7 @@ func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
 			},
 		},
 	})
-	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != MetadataOnlyCommandEnvValue {
 		t.Fatalf("working_directory = %q, want metadata-only marker", got)
 	}
 	if got := safe.Provider.RequestMetadata["worktree"]; got != "feature-runtime" {
@@ -66,10 +64,10 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	if _, ok := safe.Provider.RequestMetadata["authorization"]; ok {
 		t.Fatal("secret provider metadata leaked")
 	}
-	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != MetadataOnlyCommandEnvValue {
 		t.Fatalf("host working directory = %q, want metadata-only marker", got)
 	}
-	if got := safe.Provider.RequestMetadata["worktree"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["worktree"]; got != MetadataOnlyCommandEnvValue {
 		t.Fatalf("host worktree = %q, want metadata-only marker", got)
 	}
 	if _, ok := safe.RenderedPrompt.Variables["api_key"]; ok {

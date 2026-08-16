@@ -50,8 +50,8 @@ fold or delete them.
 | File | Classification | Later target / rationale |
 | --- | --- | --- |
 | `command.go` | keep | Subprocess execution port (`CommandRunner`, `CommandRequest`, `CommandResult`). |
-| `env_diagnostics.go` | *(folded)* | Moved to `internal/services/workstations/envdiagnostics` during story 003. |
-| `env_diagnostics_test.go` | *(folded)* | Moved with `env_diagnostics.go` during story 003. |
+| `env_diagnostics.go` | *(folded)* | Moved to `internal/diagnostics` during the Workers compatibility-retirement slice. |
+| `env_diagnostics_test.go` | *(folded)* | Moved with `env_diagnostics.go` during the Workers compatibility-retirement slice. |
 | `execution_context.go` | keep | Worker execution environment (`Context`, project/session defaults). |
 | `execution_contracts.go` | keep | Canonical inference/script/model/agent event and request vocabulary at the Workers root boundary. |
 | `execution_requests.go` | keep | Runner capability and workstation execution request vocabulary published for selection and dispatch planning. |
@@ -59,8 +59,8 @@ fold or delete them.
 | `execution_tokens.go` | keep | Worker-facing dispatch token/color view shared across execution paths. |
 | `executor_test_helpers_test.go` | *(folded)* | Moved to `internal/testhelpers/workstation_executor.go` during story 004. |
 | `failure.go` | keep | Normalized provider failure type (`ProviderError`) at the public boundary. |
-| `inference_failure.go` | *(folded)* | Root forwards to `internal/services/workstations/inferencefailure` during story 003. |
-| `inference_failure_test.go` | *(folded)* | Moved to internal inferencefailure during story 003. |
+| `inference_failure.go` | *(folded)* | Root forwards to `internal/inferencefailure` after the Workers compatibility-retirement slice. |
+| `inference_failure_test.go` | *(folded)* | Moved to `internal/inferencefailure` during the Workers compatibility-retirement slice. |
 | `interfaces.go` | keep | Primary Workers root contracts (`Service`, hosted poller ports, provider identity, docs loader, and related peer-facing interfaces). |
 | `invocation_executor_test.go` | *(folded)* | Moved to `internal/services/workstations/invocation` during story 003. |
 | `legacy_fold_boundary_test.go` | keep | Post-inventory characterization test locking transitional public sibling retention and published-surface import boundaries after legacy package fold. |

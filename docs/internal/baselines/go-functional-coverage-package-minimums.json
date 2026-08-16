@@ -2839,10 +2839,6 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution",
       "exception": {
         "kind": "measurement",
@@ -2865,7 +2861,7 @@
       "minimum": 18.23
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure",
       "minimum": 0.00
     },
     {
@@ -2891,13 +2887,13 @@
       "minimum": 23.80
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions",
       "exception": {
         "kind": "migration",
-        "justification": "Skip-permissions validation was a Workers runtime preflight. Its only non-test importers are runtime_assembly/construction/service.go, internal/runtime_service.go, and internal/runtime_options.go, all on the retired per-session runtime, so all five functions measure 0.0% in the functional profile.",
+        "justification": "Skip-permissions validation remains a Workers request-scoped preflight. The functional profile does not exercise invocation override admission, so all five functions measure 0.0% in the functional profile.",
         "owner": "backend-quality",
         "deadline": "2027-06-30",
-        "removalGate": "WSE-09 deletes RuntimeService and the legacy runtime construction helpers that own invocation skip-permissions preflight."
+        "removalGate": "Remove this exception when a functional flow measures the Workers permission preflight or the request-scoped permission path is deleted."
       }
     },
     {

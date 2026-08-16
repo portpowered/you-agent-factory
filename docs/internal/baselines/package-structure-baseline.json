@@ -2794,11 +2794,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/execution",
       "target": "pkg/services/workers/internal/services/workstations"
     },
@@ -2809,22 +2804,12 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/invocation",
       "target": "pkg/services/workers/internal/services/workstations"
     },
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/skippermissions",
       "target": "pkg/services/workers/internal/services/workstations"
     },
     {

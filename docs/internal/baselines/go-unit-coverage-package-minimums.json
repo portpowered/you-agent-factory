@@ -2233,10 +2233,6 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "minimum": 91.39
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution",
       "exception": {
         "kind": "measurement",
@@ -2259,7 +2255,7 @@
       "minimum": 80.83
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure",
       "minimum": 61.09
     },
     {
@@ -2285,7 +2281,7 @@
       "minimum": 83.42
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions",
       "minimum": 90.24
     },
     {

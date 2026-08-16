@@ -186,7 +186,7 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	if owner == "workers" && rest == "internal/service" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
 	}
-	if owner == "workers" && (rest == "internal/draftvalidation" || strings.HasPrefix(rest, "internal/draftvalidation/") || rest == "internal/prompting" || strings.HasPrefix(rest, "internal/prompting/")) {
+	if owner == "workers" && (rest == "internal/draftvalidation" || strings.HasPrefix(rest, "internal/draftvalidation/") || rest == "internal/inferencefailure" || strings.HasPrefix(rest, "internal/inferencefailure/") || rest == "internal/prompting" || strings.HasPrefix(rest, "internal/prompting/") || rest == "internal/skippermissions" || strings.HasPrefix(rest, "internal/skippermissions/")) {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
 	}
 	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
