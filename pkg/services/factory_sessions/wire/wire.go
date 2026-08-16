@@ -159,6 +159,8 @@ func NewDetachedOperations(owner factorysessions.DetachedOperationsOwner) (facto
 	return (&factorysessions.DetachedOperations{}).Bind(owner)
 }
 
+// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
+// use the root-owned detached capability.
 // NewDurableExecution constructs the configured durable execution capability
 // without exposing its implementation package to application Wire.
 func NewDurableExecution(
@@ -193,6 +195,8 @@ func NewDurableExecution(
 	)
 }
 
+// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
+// use the root-owned detached capability.
 // NewStandaloneExecution constructs the configured standalone execution
 // capability without exposing its implementation package to application Wire.
 func NewStandaloneExecution(

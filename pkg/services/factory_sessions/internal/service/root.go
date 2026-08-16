@@ -177,6 +177,8 @@ func validateCompatibilityBinding(root *Root, clock factoryruntime.Clock) error 
 	return err
 }
 
+// TODO(btrc-p4-sessions-lifecycle-003): remove ForRuntime after application
+// callers use the direct process-root capability.
 // ForRuntime is retained as a compatibility binding for callers that have not
 // yet moved to the direct runtime-root port. It never constructs or returns a
 // child service; the process root already owns the shared assembly.

@@ -120,6 +120,8 @@ type Service interface {
 	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
 	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
 	ActivateNamedFactory(context.Context, string) error
+	// TODO(btrc-p4-sessions-lifecycle-003): remove this compatibility binding
+	// after application callers use the direct process-root capability.
 	ForRuntime(OpeningBindingRequest) (Service, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
