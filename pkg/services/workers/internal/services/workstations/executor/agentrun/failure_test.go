@@ -7,14 +7,11 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
-	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestMergeAgentRunDiagnosticsPreservesCompletionValidationFacts(t *testing.T) {
@@ -258,29 +255,6 @@ func TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout(t *testing.T) {
 
 	if got := failureClassForError(context.DeadlineExceeded); got != FailureClassTimeout {
 		t.Fatalf("failureClassForError() = %q, want %q", got, FailureClassTimeout)
-	}
-}
-
-func TestAgentRunFailureWorkResult_PreservesProviderContinuationClassification(t *testing.T) {
-	t.Parallel()
-
-	providerErr := workerexecution.NewProviderError(
-		workerexecution.WorkFailureTypePermanentBadRequest,
-		"provider session continuation is unsupported",
-		nil,
-	)
-	providerErr.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
-	result := agentRunFailureWorkResult(
-		work.WorkDispatch{DispatchID: "dispatch-agent-run-continuation", TransitionID: "transition-1"},
-		providerErr,
-		time.Second,
-		"",
-		nil,
-	)
-	if result.Outcome != workerexecution.OutcomeFailed ||
-		result.ProviderContinuationOutcome != providers.ContinuationOutcomeUnsupported ||
-		result.ProviderFailureKind != "" || result.ProviderContinuationFailureKind != "" {
-		t.Fatalf("agentRunFailureWorkResult() = %#v, want unsupported continuation classification", result)
 	}
 }
 

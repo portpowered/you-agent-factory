@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -516,6 +517,124 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 	}
 }
 
+func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuationAndTerminal(t *testing.T) {
+	t.Parallel()
+
+	const attemptCount = 8
+	provider := &statelessTestProviders{}
+	input := newStatelessConstructionInputs()
+	input.agentDependencies.Providers = provider
+	var observationsMu sync.Mutex
+	observations := make(map[string][]workers.ExecutionObservation, attemptCount)
+	service, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		func(_ context.Context, observation workers.ExecutionObservation) error {
+			observationsMu.Lock()
+			defer observationsMu.Unlock()
+			observations[observation.Correlation.DispatchID] = append(
+				observations[observation.Correlation.DispatchID], observation.Clone(),
+			)
+			return nil
+		},
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	type executionResult struct {
+		index  int
+		result workers.ExecuteResult
+		err    error
+	}
+	results := make(chan executionResult, attemptCount)
+	var wg sync.WaitGroup
+	for index := 0; index < attemptCount; index++ {
+		index := index
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			dispatchID := fmt.Sprintf("concurrent-agent-dispatch-%d", index)
+			attemptID := fmt.Sprintf("concurrent-agent-attempt-%d", index)
+			result, executeErr := service.Execute(context.Background(), workers.ExecuteRequest{
+				Correlation: workers.ExecutionCorrelation{
+					FactorySessionID: "session-concurrent-agent",
+					RuntimeID:        "runtime-concurrent-agent",
+					GenerationID:     "generation-concurrent-agent",
+					DispatchID:       dispatchID,
+					AttemptID:        attemptID,
+				},
+				Target: workers.ExecutionTarget{
+					WorkerName: runners.AgentIdentity,
+					RunnerID:   runners.AgentIdentity,
+					Provider:   workers.ProviderReference{ID: string(providers.IDCodex)},
+					Prompt:     workers.PromptPolicy{UserMessage: "concurrent agent prompt"},
+				},
+			})
+			results <- executionResult{index: index, result: result, err: executeErr}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	for item := range results {
+		if item.err != nil {
+			t.Fatalf("attempt %d Execute() error = %v", item.index, item.err)
+		}
+		dispatchID := fmt.Sprintf("concurrent-agent-dispatch-%d", item.index)
+		attemptID := fmt.Sprintf("concurrent-agent-attempt-%d", item.index)
+		wantCorrelation := workers.ExecutionCorrelation{
+			FactorySessionID: "session-concurrent-agent",
+			RuntimeID:        "runtime-concurrent-agent",
+			GenerationID:     "generation-concurrent-agent",
+			DispatchID:       dispatchID,
+			AttemptID:        attemptID,
+		}
+		if item.result.Outcome != workers.ExecutionOutcomeAccepted ||
+			item.result.Correlation != wantCorrelation {
+			t.Fatalf("attempt %d result = %#v, want accepted result with independent correlation %#v", item.index, item.result, wantCorrelation)
+		}
+		if item.result.Continuation == nil ||
+			item.result.Continuation.ProviderSessionID != "session-"+dispatchID {
+			t.Fatalf("attempt %d continuation = %#v, want provider session for %s", item.index, item.result.Continuation, dispatchID)
+		}
+
+		observationsMu.Lock()
+		attemptObservations := append([]workers.ExecutionObservation(nil), observations[dispatchID]...)
+		observationsMu.Unlock()
+		if len(attemptObservations) != 2 ||
+			attemptObservations[0].Kind != workers.ExecutionObservationKindStarted ||
+			attemptObservations[1].Kind != workers.ExecutionObservationKindCompleted ||
+			attemptObservations[1].Correlation != wantCorrelation {
+			t.Fatalf("attempt %d observations = %#v, want exactly one started and one correlated terminal completion", item.index, attemptObservations)
+		}
+	}
+
+	providerRequests := provider.Requests()
+	if len(providerRequests) != attemptCount {
+		t.Fatalf("provider requests = %d, want one per concurrent attempt", len(providerRequests))
+	}
+	seenAttempts := make(map[string]struct{}, attemptCount)
+	for _, request := range providerRequests {
+		if _, exists := seenAttempts[request.AttemptID]; exists {
+			t.Fatalf("provider request duplicated attempt ID %q", request.AttemptID)
+		}
+		seenAttempts[request.AttemptID] = struct{}{}
+		if request.AttemptID == "" || !strings.HasPrefix(request.AttemptID, "concurrent-agent-dispatch-") {
+			t.Fatalf("provider request = %#v, want its own detached attempt identity", request)
+		}
+	}
+}
+
 type statelessTestFixture struct {
 	service  workers.Service
 	provider *statelessTestProviders
@@ -878,6 +997,7 @@ type statelessTestProviders struct {
 	executeCalls atomic.Int32
 	mu           sync.Mutex
 	content      string
+	requests     []providers.ExecuteRequest
 }
 
 type statelessProviderOverride struct {
@@ -1000,6 +1120,7 @@ func (provider *statelessTestProviders) Execute(
 ) (providers.ExecuteResult, error) {
 	provider.executeCalls.Add(1)
 	provider.mu.Lock()
+	provider.requests = append(provider.requests, request.Clone())
 	content := provider.content
 	provider.mu.Unlock()
 	if content == "" {
@@ -1013,6 +1134,16 @@ func (provider *statelessTestProviders) Execute(
 			ID:       "session-" + request.AttemptID,
 		},
 	}, nil
+}
+
+func (provider *statelessTestProviders) Requests() []providers.ExecuteRequest {
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	requests := make([]providers.ExecuteRequest, len(provider.requests))
+	for index, request := range provider.requests {
+		requests[index] = request.Clone()
+	}
+	return requests
 }
 
 var _ providers.Service = (*statelessTestProviders)(nil)

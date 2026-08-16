@@ -425,15 +425,13 @@ func executionCorrelationFromDispatch(
 	return correlation, nil
 }
 
-// applyRuntimeAgentRunSelection restates the Workers WorkstationBehaviorRouter
+// applyRuntimeAgentRunSelection resolves the detached Workers Execute
 // decision at the boundary that owns Factory definitions: an agent-run
 // workstation staffed by an agent worker executes its agent/tool loop, and
 // everything else executes one provider attempt. Runtime resolves it here and
 // hands Workers a detached tool policy, so the routing survives without
 // Workers reading a Factory definition or a workstation pool.
 //
-// WSE-09 relocates the request-scoped Workstation implementation; this
-// selection belongs with it and moves when that step lands.
 func applyRuntimeAgentRunSelection(
 	selection *runtimeExecutionSelection,
 	workstation *interfaces.FactoryWorkstationConfig,

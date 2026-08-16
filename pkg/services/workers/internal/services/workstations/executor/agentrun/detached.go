@@ -13,8 +13,6 @@ import (
 // workstation and worker taxonomy, prompt, provider target, and tool policy, so
 // this entry point reads no Factory definition and keeps no workstation state.
 //
-// WSE-09 relocates the request-scoped Workstation implementation; this entry
-// point moves with it.
 type DetachedRequest struct {
 	// Attempt is the resolved provider request that every harness turn runs.
 	Attempt workerexecution.RunnerExecutionRequest

@@ -14,49 +14,23 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
-func TestServiceBuildProviderBackedExposesDispatchAndDirectBoundaries(t *testing.T) {
+func TestServiceBuildProviderBackedDoesNotMaterializeWorkstationExecution(t *testing.T) {
 	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
 		"model": {Name: "model", Type: interfaces.WorkerTypeModel},
 	}}
-	decorated := false
 	result, err := New(nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "model", "", nil, logging.NoopLogger{}, nil,
 		providerStub{}, nil, nil, nil, nil, testClock, os.Environ, os.Getwd,
-		[]RunnerDecorator{func(runner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
-			decorated = true
-			return runner
-		}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	if result.Dispatch == nil || result.Direct == nil {
-		t.Fatalf("Build() = %#v, want dispatch and direct executors", result)
-	}
-	if !decorated {
-		t.Fatal("Build() did not apply the injected runner decorator")
-	}
-}
-
-func TestEffectiveSkipPermissionsRunnerAppliesPolicyOutsideDecorators(t *testing.T) {
-	t.Parallel()
-
-	captured := workerexecution.ProviderInferenceRequest{}
-	inner := runnerFunc(func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
-		captured = request
-		return workers.RunnerExecutionResult{}, nil
-	})
-	runner := effectiveSkipPermissionsRunner{next: inner, enabled: true}
-
-	if _, err := runner.Execute(t.Context(), workers.RunnerExecutionRequest{UserMessage: "fixture"}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !captured.SkipPermissions {
-		t.Fatal("Execute() omitted invocation-effective skip-permissions policy")
+	if result.Dispatch == nil || result.Direct != nil {
+		t.Fatalf("Build() = %#v, want dispatch without a direct provider executor", result)
 	}
 }
 
@@ -183,15 +157,6 @@ func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testin
 
 type providerStub struct {
 	testutil.NativeProvider
-}
-
-type runnerFunc func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
-
-func (fn runnerFunc) Execute(
-	ctx context.Context,
-	request workers.RunnerExecutionRequest,
-) (workers.RunnerExecutionResult, error) {
-	return fn(ctx, request)
 }
 
 func testClock() time.Time { return time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC) }

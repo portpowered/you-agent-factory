@@ -257,80 +257,6 @@ func TestWorkstationExecutorPreservesResolvedContinuationReference(t *testing.T)
 	}
 }
 
-func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *testing.T) {
-	t.Parallel()
-
-	providers := providerRegistryWithExternalFixture(t)
-
-	for _, tc := range []struct {
-		alias     string
-		canonical string
-	}{
-		{alias: "openai", canonical: "codex"},
-		{alias: "anthropic", canonical: "claude"},
-	} {
-		t.Run(tc.alias, func(t *testing.T) {
-			t.Parallel()
-
-			runtimeConfig := staticRuntimeConfig{
-				Workers: map[string]*interfaces.FactoryWorkerConfig{
-					"worker-a": {
-						Type:          interfaces.WorkerTypeModel,
-						ModelProvider: tc.alias,
-					},
-				},
-				Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-					"standard": {
-						Type:           interfaces.WorkstationTypeModel,
-						PromptTemplate: "run",
-					},
-				},
-			}
-			provider := &agentMockProvider{
-				response: workerexecution.InferenceResponse{Content: "done"},
-			}
-			agent := NewAgentExecutor(
-				runtimeConfig,
-				provider,
-				nil,
-				time.Now,
-			)
-			workstation := newTestWorkstationExecutor(runtimeConfig, agent)
-			workstation.ResolveRunnerSelection = providers.ResolveRunnerSelection
-
-			result, executeErr := workstation.Execute(context.Background(), work.WorkDispatch{
-				DispatchID:      "dispatch-" + tc.alias,
-				TransitionID:    "transition-" + tc.alias,
-				WorkerType:      "worker-a",
-				WorkstationName: "standard",
-			})
-			if executeErr != nil {
-				t.Fatalf("Execute() error = %v", executeErr)
-			}
-			if result.Outcome == workerexecution.OutcomeFailed {
-				t.Fatalf("Execute() result = %#v", result)
-			}
-			if provider.callCount != 1 {
-				t.Fatalf("provider calls = %d, want 1", provider.callCount)
-			}
-			if provider.lastReq.ModelProvider != tc.canonical {
-				t.Fatalf(
-					"final provider request ModelProvider = %q, want canonical %q",
-					provider.lastReq.ModelProvider,
-					tc.canonical,
-				)
-			}
-			if provider.lastReq.RunnerID != tc.canonical {
-				t.Fatalf(
-					"final provider request RunnerID = %q, want canonical %q",
-					provider.lastReq.RunnerID,
-					tc.canonical,
-				)
-			}
-		})
-	}
-}
-
 func TestModelProviderForExecutionProjectsCanonicalCursorIdentityToNativeCommand(t *testing.T) {
 	t.Parallel()
 
@@ -1286,26 +1212,6 @@ func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingR
 	if err == nil {
 		t.Fatal("expected missing required input slot to fail")
 	}
-}
-
-func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRunnerCapability(t *testing.T) {
-	req := testAgentRequest(
-		work.WorkDispatch{DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review"},
-		withAgentPrompts("System prompt", "Review"),
-		withAgentWorkingDirectory("/tmp/authored"),
-		func(req *workerexecution.WorkstationExecutionRequest) {
-			req.WorkingDirectoryAuthored = true
-		},
-	)
-	got := inferenceRequestForExecutionRequest(req, &interfaces.FactoryWorkerConfig{
-		Model: "gemini-1.5-pro", ModelProvider: workerexecution.RunnerIDGemini,
-	}, nil)
-	for _, capability := range got.RequiredOptionalCapabilities {
-		if capability == workerexecution.RunnerOptionalCapabilityWorkingDirectory {
-			return
-		}
-	}
-	t.Fatalf("capabilities = %#v, want authored working directory capability", got.RequiredOptionalCapabilities)
 }
 
 func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonicalContent(t *testing.T) {

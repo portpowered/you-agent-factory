@@ -3,9 +3,7 @@
 package construction
 
 import (
-	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -15,13 +13,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
-	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 )
 
 // Builder constructs one configured worker without owning runtime lifecycle.
@@ -69,7 +63,6 @@ type Result struct {
 // Service is a stateless worker executor constructor.
 type Service struct {
 	providers          providers.Service
-	runnerRegistry     runners.Service
 	interpolation      interfaces.InvocationInterpolationService
 	executionPolicy    interfaces.WorkstationExecutionPolicyService
 	decisionEnvelopes  interfaces.DecisionEnvelopeService
@@ -154,17 +147,6 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 	}
 	clone := *s
 	clone.resolveProvider = resolve
-	return &clone
-}
-
-// WithRunnerRegistry returns a service copy that routes Agent and Inference
-// construction through the shared immutable Workers registry.
-func (s *Service) WithRunnerRegistry(registry runners.Service) *Service {
-	if s == nil {
-		return nil
-	}
-	clone := *s
-	clone.runnerRegistry = registry
 	return &clone
 }
 
@@ -268,35 +250,27 @@ func (s *Service) buildConfiguredWorker(
 
 func (s *Service) buildProviderWorker(
 	runtimeConfig interfaces.RuntimeConfigLookup,
-	def *interfaces.FactoryWorkerConfig,
+	_ *interfaces.FactoryWorkerConfig,
 	factoryRunnerID string,
 	workflowContext *workerexecution.Context,
 	logger logging.Logger,
-	invocationSkipPermissionsOverride *bool,
-	providerOverride providers.Service,
+	_ *bool,
+	_ providers.Service,
 	providersService providers.Service,
-	inferenceProgressPublisher workers.ProgressPublisher,
-	inferenceRecorder workers.InferenceEventRecorder,
-	agentRunRecorder workeragentrun.AgentRunEventRecorder,
+	_ workers.ProgressPublisher,
+	_ workers.InferenceEventRecorder,
+	_ workeragentrun.AgentRunEventRecorder,
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
-	runnerDecorators []RunnerDecorator,
+	_ []RunnerDecorator,
 ) (Result, error) {
-	effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
-	runner, err := s.agentRunner(runtimeConfig, def, logger, effectiveSkipPermissions, providerOverride, inferenceProgressPublisher)
-	if err != nil {
-		return Result{}, err
-	}
-	runner = decorateProviderRunner(runner, def, runnerDecorators, effectiveSkipPermissions)
-	runner = recordProviderRunner(runner, inferenceRecorder, clock)
-	inference := workerexecutor.NewAgentExecutorWithRunner(runtimeConfig, runner, logger, clock, s.decisionEnvelopes)
-	agentRun := workeragentrun.NewAgentRunExecutorWithDependencies(
-		runtimeConfig, runner, logger, s.agentRunHarness, agentRunRecorder, clock, s.decisionEnvelopes,
-	).WithProgressPublisher(inferenceProgressPublisher)
-	direct := &workerexecutor.WorkstationBehaviorRouter{RuntimeConfig: runtimeConfig, InferenceExecutor: inference, AgentRunExecutor: agentRun}
+	// Provider-backed attempts are now complete detached Execute requests. The
+	// runtime's request adapter resolves the authored target and calls the
+	// process-scoped Workers service, so this compatibility constructor must not
+	// materialize an agent or agent-run Workstation executor.
 	return workstationResult(
-		runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
+		runtimeConfig, factoryRunnerID, workflowContext, logger, nil, s.interpolation,
 		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
 		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
 		providersService, s.resolveRunner, s.resolveProvider,
@@ -355,146 +329,6 @@ func (s *Service) BuildLogical(
 		s.resolveRunner,
 		s.resolveProvider,
 	)
-}
-
-func (s *Service) agentRunner(
-	runtimeConfig interfaces.RuntimeConfigLookup,
-	def *interfaces.FactoryWorkerConfig,
-	logger logging.Logger,
-	effectiveSkipPermissions bool,
-	providerOverride providers.Service,
-	inferenceProgressPublisher workers.ProgressPublisher,
-) (workers.Runner, error) {
-	usesNamedExecutorProvider := def != nil && namedExecutorProvider(def.ExecutorProvider, def.ModelProvider)
-	if providerOverride != nil && !usesNamedExecutorProvider {
-		return workerexecutor.RunnerFromProvider(providerOverride), nil
-	}
-	if s != nil && s.runnerRegistry != nil {
-		identity := runners.AgentIdentity
-		if def != nil && def.Type == interfaces.WorkerTypeInference {
-			identity = runners.InferenceIdentity
-		}
-		return registryRunner{registry: s.runnerRegistry, identity: identity}, nil
-	}
-	return s.resolveRegisteredAgentRunner(
-		runtimeConfig,
-		logger,
-		effectiveSkipPermissions,
-		inferenceProgressPublisher,
-	)
-}
-
-func namedExecutorProvider(executorProvider, modelProvider string) bool {
-	trimmed := strings.TrimSpace(executorProvider)
-	if strings.EqualFold(trimmed, workerexecution.ExecutorProviderACP) {
-		return strings.TrimSpace(modelProvider) != ""
-	}
-	return trimmed != "" && !strings.EqualFold(trimmed, "SCRIPT_WRAP")
-}
-
-type registryRunner struct {
-	registry runners.Service
-	identity string
-}
-
-func (runner registryRunner) Execute(
-	ctx context.Context,
-	request workers.RunnerExecutionRequest,
-) (workers.RunnerExecutionResult, error) {
-	if runner.registry == nil {
-		return workers.RunnerExecutionResult{}, fmt.Errorf("shared runner registry is required")
-	}
-	return runner.registry.Execute(ctx, runners.ExecuteRequest{
-		Identity:             runner.identity,
-		RequiredCapabilities: request.RequiredOptionalCapabilities,
-		Attempt:              request,
-	})
-}
-
-func (s *Service) resolveRegisteredAgentRunner(
-	runtimeConfig interfaces.RuntimeConfigLookup,
-	logger logging.Logger,
-	effectiveSkipPermissions bool,
-	inferenceProgressPublisher workers.ProgressPublisher,
-) (workers.Runner, error) {
-	if s == nil || s.providers == nil {
-		return nil, fmt.Errorf("Providers service is required")
-	}
-	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
-	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
-		Providers:         s.providers,
-		Publish:           publish,
-		DecisionEnvelopes: s.decisionEnvelopes,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("construct agent runner registry: %w", err)
-	}
-	return registryRunner{
-		registry: registry,
-		identity: runners.AgentIdentity,
-	}, nil
-}
-
-func agentProgressPublisherOrNoop(
-	publisher workers.ProgressPublisher,
-) workers.ProgressPublisher {
-	if publisher != nil {
-		return publisher
-	}
-	return func(_ workers.ProgressFragment) {}
-}
-
-func recordProviderRunner(
-	runner workers.Runner,
-	recorder workers.InferenceEventRecorder,
-	clock func() time.Time,
-) workers.Runner {
-	return workerrecording.NewProviderRunner(runner, recorder, clock)
-}
-
-// effectiveSkipPermissionsRunner installs invocation-local policy outside all
-// execution decorators. This is intentionally the outermost runner so a
-// conductor route that does not call the retained native runner still receives
-// the same effective worker policy.
-type effectiveSkipPermissionsRunner struct {
-	next    workers.Runner
-	enabled bool
-}
-
-func effectiveWorkerSkipPermissions(
-	def *interfaces.FactoryWorkerConfig,
-	invocationOverride *bool,
-) bool {
-	return skippermissions.EffectiveSkipPermissions(
-		def.SkipPermissions,
-		def.Type,
-		invocationOverride,
-	)
-}
-
-func decorateProviderRunner(
-	runner workers.Runner,
-	def *interfaces.FactoryWorkerConfig,
-	decorators []RunnerDecorator,
-	effectiveSkipPermissions bool,
-) workers.Runner {
-	for _, decorate := range decorators {
-		if decorate != nil {
-			runner = decorate(runner, def)
-		}
-	}
-	return effectiveSkipPermissionsRunner{
-		next:    runner,
-		enabled: effectiveSkipPermissions,
-	}
-}
-
-func (r effectiveSkipPermissionsRunner) Execute(
-	ctx context.Context,
-	request workers.RunnerExecutionRequest,
-) (workers.RunnerExecutionResult, error) {
-	request.SkipPermissions = r.enabled
-	return r.next.Execute(ctx, request)
 }
 
 func workstationResult(
