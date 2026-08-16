@@ -60,9 +60,9 @@ func (f *Factory) activateRuntime(
 	if err != nil {
 		return nil, err
 	}
-	service := products.application.HTTP.FactoryRuntime
+	service := runtimeEngineService(products)
 	if service == nil {
-		return nil, fmt.Errorf("activate Factory Runtime: opened runtime service is required")
+		return nil, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
 	}
 	legacySubmission, ok := service.(runtimeWorkSubmitter)
 	if !ok {
@@ -86,6 +86,18 @@ func (f *Factory) activateRuntime(
 			return products.application.Resources.Close()
 		},
 	}, nil
+}
+
+// runtimeEngineService selects the live engine from the detached opening
+// record. The application HTTP view is intentionally not used here: during
+// the migration it is allowed to be a Factory Sessions resolver proxy, and
+// publishing that proxy as the binding would re-enter the same session lookup
+// for every Work or Worker operation.
+func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
+	if products.startup == nil {
+		return nil
+	}
+	return products.startup.RuntimeService()
 }
 
 func runtimeOpeningRequestFromActivation(
@@ -262,8 +274,7 @@ func (f *Factory) openActivatedRuntimeWithReplayInput(
 	closeRuntime := f.activationCloser(binding, result.RuntimeID)
 	if !binding.IsZero() && products.bindRuntime != nil {
 		if err := products.bindRuntime(binding); err != nil {
-			_ = closeRuntime()
-			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: publish Runtime binding to Factory Session: %w", err)
+			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
 	if binding.Service() != nil {
@@ -282,11 +293,10 @@ func (f *Factory) activationCloser(binding factoryruntime.RuntimeBinding, runtim
 	closed := false
 	return func() error {
 		mu.Lock()
+		defer mu.Unlock()
 		if closed {
-			mu.Unlock()
 			return nil
 		}
-		mu.Unlock()
 		var err error
 		if !binding.IsZero() {
 			_, err = binding.Deactivate(context.Background())
@@ -299,13 +309,21 @@ func (f *Factory) activationCloser(binding factoryruntime.RuntimeBinding, runtim
 		if errors.Is(err, factoryruntime.ErrRuntimeNotActive) {
 			err = nil
 		}
-		mu.Lock()
 		if err == nil {
 			closed = true
 		}
-		mu.Unlock()
 		return err
 	}
+}
+
+func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
+	if cleanupErr == nil {
+		return fmt.Errorf("open Factory Runtime: publish Runtime binding to Factory Session: %w", bindErr)
+	}
+	return fmt.Errorf(
+		"open Factory Runtime: publish Runtime binding to Factory Session: %w",
+		errors.Join(bindErr, fmt.Errorf("cleanup activated Runtime: %w", cleanupErr)),
+	)
 }
 
 func (f *Factory) activationRequest(
