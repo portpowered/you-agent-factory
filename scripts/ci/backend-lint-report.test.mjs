@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
+import { BACKEND_LINT_ALLOWANCES } from "./backend-lint-policy.mjs";
 import {
 	BACKEND_LINT_COMMENT_MARKER,
 	countViolations,
 	renderBackendLintComment,
 	renderBackendLintSummary,
+	renderBackendLintVerdict,
 	summarizeBackendLintReport,
 } from "./backend-lint-report.mjs";
-import { BACKEND_LINT_ALLOWANCES } from "./backend-lint-policy.mjs";
 
 function report(overrides = {}) {
 	return {
@@ -49,6 +54,32 @@ function baselineTargets(overrides = {}) {
 	}));
 }
 
+function runReporterCli(t, reportValue) {
+	const directory = mkdtempSync(join(tmpdir(), "backend-lint-report-test-"));
+	t.after(() => rmSync(directory, { recursive: true, force: true }));
+	const reportPath = join(directory, "report.json");
+	const summaryPath = join(directory, "summary.md");
+	const commentPath = join(directory, "comment.md");
+	writeFileSync(reportPath, JSON.stringify(reportValue));
+	const result = spawnSync(
+		process.execPath,
+		[
+			"scripts/ci/backend-lint-report.mjs",
+			"--report",
+			reportPath,
+			"--summary",
+			summaryPath,
+			"--comment",
+			commentPath,
+		],
+		{ cwd: process.cwd(), encoding: "utf8" },
+	);
+	return {
+		...result,
+		summary: readFileSync(summaryPath, "utf8"),
+	};
+}
+
 test("mixed hosted results retain the complete inventory and derive counts", () => {
 	const summary = summarizeBackendLintReport(report());
 
@@ -60,8 +91,8 @@ test("mixed hosted results retain the complete inventory and derive counts", () 
 	]);
 	assert.deepEqual(summary.targets.map((target) => target.violationCount), [0, 2, 2]);
 	assert.match(renderBackendLintSummary(summary), /Total Backend Lint wall time: `12\.35s`/);
-	assert.match(renderBackendLintSummary(summary), /\| clean-check \| `pass` \| 0 \|/);
-	assert.match(renderBackendLintSummary(summary), /\| broken-check \| `fail` \| 2 \|/);
+	assert.match(renderBackendLintSummary(summary), /\| clean-check \| `pass` \| 0 \| 0 \| \+0 \|/);
+	assert.match(renderBackendLintSummary(summary), /\| broken-check \| `fail` \| 0 \| 2 \| \+2 \|/);
 	assert.match(renderBackendLintSummary(summary), /Failed checker diagnostics/);
 });
 
@@ -87,7 +118,96 @@ test("a measured baseline failure is reported but allowed at its recorded count"
 	assert.equal(summary.ok, true);
 	assert.equal(summary.targets.find((target) => target.name === "ui-deadcode").policyStatus, "allowed");
 	assert.match(markdown, /Allowed baseline debt: `1` checker\(s\) within measured limits/);
-	assert.match(markdown, /\| ui-deadcode \| 4 \| 4 \| allowed \|/);
+	assert.match(markdown, /\| ui-deadcode \| 4 \| 4 \| \+0 \| allowed \|/);
+});
+
+test("a measured failure below its baseline remains tolerated with a negative delta", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "LINT_VIOLATION_COUNT: 3",
+			},
+		}),
+	}));
+
+	assert.equal(summary.ok, true);
+	assert.match(
+		renderBackendLintVerdict(summary),
+		/ui-deadcode: baseline 4 -> current 3 \(delta -1; allowed\)/,
+	);
+});
+
+test("a single baseline rise is the authoritative failed verdict with signed counts", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 7",
+			},
+		}),
+	}));
+	const markdown = renderBackendLintSummary(summary);
+
+	assert.equal(summary.ok, false);
+	assert.match(markdown, /BACKEND LINT RATCHET FAILED/);
+	assert.match(markdown, /ui-deadcode: baseline 4 -> current 7 \(delta \+3; exceeded\)/);
+	assert.match(markdown, /raw `make lint` inventory.*not the gate result/);
+});
+
+test("multiple baseline rises are reported independently", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "LINT_VIOLATION_COUNT: 5",
+			},
+			"backend-size": {
+				status: "fail",
+				output: "LINT_VIOLATION_COUNT: 3",
+			},
+		}),
+	}));
+	const verdict = renderBackendLintVerdict(summary);
+
+	assert.equal(summary.ok, false);
+	assert.match(verdict, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
+	assert.match(verdict, /backend-size: baseline 2 -> current 3 \(delta \+1; exceeded\)/);
+});
+
+test("a no-rise ratchet pass states the baseline rule and tolerated debt", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "LINT_VIOLATION_COUNT: 4",
+			},
+		}),
+	}));
+	const verdict = renderBackendLintVerdict(summary);
+
+	assert.equal(summary.ok, true);
+	assert.match(verdict, /BACKEND LINT RATCHET PASSED/);
+	assert.match(verdict, /every observed target is at or below baseline/);
+	assert.match(verdict, /ui-deadcode: baseline 4 -> current 4 \(delta \+0; allowed\)/);
+});
+
+test("the reporter CLI logs the authoritative verdict and exits with that decision", (t) => {
+	const passing = runReporterCli(t, report({ targets: baselineTargets() }));
+	assert.equal(passing.status, 0);
+	assert.match(passing.stdout, /BACKEND LINT RATCHET PASSED/);
+	assert.match(passing.summary, /BACKEND LINT RATCHET PASSED/);
+
+	const failing = runReporterCli(t, report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "LINT_VIOLATION_COUNT: 5",
+			},
+		}),
+	}));
+	assert.equal(failing.status, 1);
+	assert.match(failing.stdout, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
 });
 
 test("baseline growth fails the gate instead of being hidden by an allowance", () => {
@@ -119,6 +239,7 @@ test("a newly failing clean checker is gated immediately", () => {
 
 	assert.equal(summary.ok, false);
 	assert.match(summary.failures.join("\n"), /new-clean-check failed with 1 reported violation\(s\); no baseline allowance exists/);
+	assert.match(renderBackendLintVerdict(summary), /new-clean-check: baseline 0 -> current 1 \(delta \+1; new failure\)/);
 });
 
 test("a successful checker always reports zero violations", () => {
@@ -141,6 +262,24 @@ test("a failed checker without a machine-readable count fails closed", () => {
 	assert.equal(summary.ok, false);
 	assert.equal(summary.targets.find((target) => target.name === "ownership-inventory-check").violationCount, null);
 	assert.match(summary.failures.join("\n"), /without a reliable machine-readable violation count/);
+	assert.match(renderBackendLintVerdict(summary), /ownership-inventory-check: baseline 16 -> current unknown \(delta unknown; unmeasured\)/);
+});
+
+test("a missing allowed target is an explicit failed ratchet condition", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets(),
+	}));
+	const incomplete = summarizeBackendLintReport(report({
+		targets: summary.targets
+			.filter((target) => target.name !== "ui-deadcode")
+			.map(({ policyStatus, baselineViolationCount, allowance, ...target }) => target),
+	}));
+
+	assert.equal(incomplete.ok, false);
+	assert.match(
+		renderBackendLintVerdict(incomplete),
+		/ui-deadcode: baseline 4 -> current unknown \(delta unknown; not observed\)/,
+	);
 });
 
 test("structured finding growth exceeds the ownership allowance even on one diagnostic line", () => {

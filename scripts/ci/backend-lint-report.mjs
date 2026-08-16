@@ -9,6 +9,7 @@ import {
 
 const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
+const CLEAN_TARGET_BASELINE = 0;
 export const BACKEND_LINT_COMMENT_MARKER = "<!-- backend-lint-report -->";
 
 function textValue(value) {
@@ -110,6 +111,71 @@ export function formatDuration(milliseconds) {
 	return `${(duration / 1000).toFixed(2)}s`;
 }
 
+function formatCount(value) {
+	return Number.isSafeInteger(value) && value >= 0 ? String(value) : "unknown";
+}
+
+function effectiveBaseline(target) {
+	return Number.isSafeInteger(target?.baselineViolationCount) && target.baselineViolationCount >= 0
+		? target.baselineViolationCount
+		: CLEAN_TARGET_BASELINE;
+}
+
+function formatSignedDelta(current, baseline) {
+	if (!Number.isSafeInteger(current) || current < 0 || !Number.isSafeInteger(baseline) || baseline < 0) {
+		return "unknown";
+	}
+	const delta = current - baseline;
+	return `${delta >= 0 ? "+" : ""}${delta}`;
+}
+
+function formatTargetComparison(target) {
+	const baseline = effectiveBaseline(target);
+	const current = formatCount(target.violationCount);
+	const delta = formatSignedDelta(target.violationCount, baseline);
+	const policy = target.policyStatus || "unknown";
+	return `- ${target.name}: baseline ${baseline} -> current ${current} (delta ${delta}; ${policy})`;
+}
+
+function formatAllowanceComparison(allowance) {
+	const current = formatCount(allowance.observedViolationCount);
+	const delta = formatSignedDelta(allowance.observedViolationCount, allowance.baselineViolationCount);
+	return `- ${allowance.name}: baseline ${allowance.baselineViolationCount} -> current ${current} (delta ${delta}; ${allowance.status})`;
+}
+
+export function renderBackendLintVerdict(summary) {
+	const toleratedTargets = summary.targets.filter((target) => target.policyStatus === "allowed");
+	const failedTargets = summary.targets.filter(
+		(target) => !["clean", "allowed"].includes(target.policyStatus),
+	);
+	const missingTargets = (summary.allowances || []).filter((allowance) => allowance.status === "not observed");
+	const verdict = summary.ok ? "PASSED" : "FAILED";
+	const lines = [
+		`### Backend Lint ratchet verdict: ${verdict}`,
+		summary.ok
+			? "**BACKEND LINT RATCHET PASSED:** every observed target is at or below baseline."
+			: "**BACKEND LINT RATCHET FAILED:** one or more observed targets rose above baseline or could not be evaluated.",
+	];
+
+	if (summary.ok) {
+		lines.push("", "Tolerated failing targets:");
+		lines.push(
+			...(toleratedTargets.length > 0 ? toleratedTargets.map(formatTargetComparison) : ["- None."]),
+		);
+		return lines.join("\n");
+	}
+
+	lines.push("", "Policy failures:");
+	lines.push(
+		...(failedTargets.length > 0 ? failedTargets.map(formatTargetComparison) : []),
+		...(missingTargets.length > 0 ? missingTargets.map(formatAllowanceComparison) : []),
+	);
+	if (failedTargets.length === 0 && missingTargets.length === 0) {
+		lines.push(...summary.failures.map((failure) => `- ${failure}`));
+	}
+	return lines.join("\n");
+}
+
 function preview(text) {
 	const safe = textValue(text).replaceAll("```", "``\\`");
 	if (safe.length <= DIAGNOSTIC_PREVIEW_LIMIT) {
@@ -129,6 +195,11 @@ export function renderBackendLintSummary(summary) {
 	const lines = [
 		"## Backend Lint",
 		"",
+		"**Measurement only:** the raw `make lint` inventory, including any `LINT FAILED: N target(s)` line, is not the gate result. The ratchet verdict below is authoritative and controls this step's exit code.",
+		"Targets without a recorded allowance use an effective baseline of `0`; any positive count remains a `new failure`.",
+		"",
+		renderBackendLintVerdict(summary),
+		"",
 		`- Result: \`${summary.ok ? "passed" : "failed"}\``,
 		`- Canonical checkers observed: \`${summary.targets.length}\``,
 		`- Clean checkers gated: \`${summary.targets.filter((target) => target.policyStatus === "clean").length}\``,
@@ -137,12 +208,12 @@ export function renderBackendLintSummary(summary) {
 		`- LINT_JOBS: \`${summary.jobs ?? "unknown"}\``,
 		`- Total Backend Lint wall time: \`${formatDuration(summary.totalDurationMillis)}\``,
 		"",
-		"| Checker | Result | Violations | Wall time | Policy |",
-		"| --- | --- | ---: | ---: | --- |",
+		"| Checker | Result | Baseline | Current | Delta | Wall time | Policy |",
+		"| --- | --- | ---: | ---: | ---: | ---: | --- |",
 	];
 	for (const target of summary.targets) {
 		lines.push(
-			`| ${target.name} | \`${target.status}\` | ${target.violationCount ?? "unknown"} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,
+			`| ${target.name} | \`${target.status}\` | ${effectiveBaseline(target)} | ${formatCount(target.violationCount)} | ${formatSignedDelta(target.violationCount, effectiveBaseline(target))} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,
 		);
 	}
 
@@ -152,21 +223,21 @@ export function renderBackendLintSummary(summary) {
 		"",
 		"Allowances are capped measured debt; they do not permit new checker failures or growth.",
 		"",
-		"| Checker | Baseline | Observed | Status | Reason | Owner/remediation lane | Deadline | Removal condition |",
-		"| --- | ---: | ---: | --- | --- | --- | --- | --- |",
+		"| Checker | Baseline | Observed | Delta | Status | Reason | Owner/remediation lane | Deadline | Removal condition |",
+		"| --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
 	);
 	for (const allowance of summary.allowances || []) {
 		lines.push(
-			`| ${allowance.name} | ${allowance.baselineViolationCount} | ${allowance.observedViolationCount ?? "not observed"} | ${allowance.status} | ${formatMarkdownCell(allowance.reason)} | ${formatMarkdownCell(allowance.ownerOrLane)} | ${allowance.deadline} | ${formatMarkdownCell(allowance.removalCondition)} |`,
+			`| ${allowance.name} | ${allowance.baselineViolationCount} | ${allowance.observedViolationCount ?? "not observed"} | ${formatSignedDelta(allowance.observedViolationCount, allowance.baselineViolationCount)} | ${allowance.status} | ${formatMarkdownCell(allowance.reason)} | ${formatMarkdownCell(allowance.ownerOrLane)} | ${allowance.deadline} | ${formatMarkdownCell(allowance.removalCondition)} |`,
 		);
 	}
 	if (!(summary.allowances || []).length) {
-		lines.push("| (none) | — | — | — | No baseline allowances loaded. | — | — | — |");
+		lines.push("| (none) | — | — | — | — | No baseline allowances loaded. | — | — | — |");
 	}
 
 	const failedTargets = summary.targets.filter((target) => target.status !== "pass");
 	if (failedTargets.length > 0) {
-		lines.push("", "### Failed checker diagnostics", "");
+		lines.push("", "### Failed checker diagnostics (measurement only; not the ratchet verdict)", "");
 		for (const target of failedTargets) {
 			lines.push(
 				`<details><summary>${target.name}: ${target.violationCount ?? "unknown"} reported violation(s) (${target.policyStatus || "ungated"})</summary>`,
@@ -237,6 +308,7 @@ function runCli() {
 			? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
 			: "",
 	}));
+	process.stdout.write(markdown);
 	if (!summary.ok) {
 		process.exitCode = 1;
 	}
