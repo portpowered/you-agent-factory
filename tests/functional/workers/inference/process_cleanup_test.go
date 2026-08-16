@@ -120,9 +120,9 @@ func TestProcessGoneReconciliationThroughRootProcess(t *testing.T) {
 	)
 
 	assertProcessCleanupListedWorkIdentity(t, listed, "failed", workID, "task", traceID, nil)
-	if session.Runtime.Progress.Categories.Failed != 1 || session.Runtime.Progress.Categories.Terminal != 1 {
+	if session.Runtime.Progress.Categories.Failed != 1 || session.Runtime.Progress.Categories.Terminal != 0 {
 		t.Fatalf(
-			"session progress categories = %+v, want one PROCESS_GONE failure",
+			"session progress categories = %+v, want one PROCESS_GONE failure and no successful terminal Work",
 			session.Runtime.Progress.Categories,
 		)
 	}
