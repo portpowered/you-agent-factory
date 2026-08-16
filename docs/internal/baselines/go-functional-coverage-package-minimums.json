@@ -2713,16 +2713,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference",
-      "exception": {
-        "kind": "migration",
-        "justification": "Stateless Workers execution retired the per-session Workers runtime, so runtime_build.go executeServiceFromWorkstation no longer type-asserts a workers.RuntimeService and BuildRuntimeExecutors never runs; this package's only non-test importers are executor/helpers.go, executor/agent.go, and internal/model_invocation.go, all of which WSE-09 deletes, and every function measures 0.0% in the functional profile.",
-        "owner": "backend-quality",
-        "deadline": "2027-06-30",
-        "removalGate": "WSE-09 deletes the Workers runtime, executable binding map, and Workstation pool, and this package is deleted with its legacy-executor importers."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
       "exception": {
         "kind": "measurement",

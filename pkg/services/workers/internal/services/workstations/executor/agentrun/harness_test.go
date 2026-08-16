@@ -51,20 +51,6 @@ func (s staticInferencer) InferStream(ctx context.Context, req messages.Inferenc
 	return ch, nil
 }
 
-type recordingHarnessAdapter struct {
-	lastInput HarnessInput
-	result    HarnessResult
-	err       error
-}
-
-func (adapter *recordingHarnessAdapter) Execute(_ context.Context, input HarnessInput) (HarnessResult, error) {
-	adapter.lastInput = input
-	if adapter.err != nil {
-		return HarnessResult{}, adapter.err
-	}
-	return adapter.result, nil
-}
-
 type stubRunner struct {
 	response    string
 	err         error
@@ -92,12 +78,6 @@ func (runner *stubRunner) Execute(ctx context.Context, request workerexecution.R
 		return workerexecution.RunnerExecutionResult{}, runner.err
 	}
 	return workerexecution.RunnerExecutionResult{Content: runner.response}, nil
-}
-
-func (runner *stubRunner) executionRequest() workerexecution.RunnerExecutionRequest {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return runner.lastRequest
 }
 
 func TestLibraryHarnessAdapterSuccess(t *testing.T) {

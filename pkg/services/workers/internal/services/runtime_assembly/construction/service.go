@@ -15,7 +15,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 // Builder constructs one configured worker without owning runtime lifecycle.
@@ -232,12 +231,10 @@ func (s *Service) buildConfiguredWorker(
 ) (Result, error) {
 	switch def.Type {
 	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
-		return s.buildProviderWorker(
-			runtimeConfig, def, factoryRunnerID, workflowContext, logger,
-			invocationSkipPermissionsOverride, providerOverride, providersService,
-			inferenceProgressPublisher, inferenceRecorder, agentRunRecorder, clock,
-			processEnvironment, currentWorkingDirectory, runnerDecorators,
-		)
+		// Provider-backed attempts are admitted by the request-scoped Workers
+		// service. Keeping a WorkstationExecutor binding here would recreate the
+		// compatibility route that the runtime executor map intentionally omits.
+		return Result{}, nil
 	case interfaces.WorkstationTypeLogical:
 		return s.buildLogicalWorker(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, providersService,
@@ -246,35 +243,6 @@ func (s *Service) buildConfiguredWorker(
 	default:
 		return Result{}, nil
 	}
-}
-
-func (s *Service) buildProviderWorker(
-	runtimeConfig interfaces.RuntimeConfigLookup,
-	_ *interfaces.FactoryWorkerConfig,
-	factoryRunnerID string,
-	workflowContext *workerexecution.Context,
-	logger logging.Logger,
-	_ *bool,
-	_ providers.Service,
-	providersService providers.Service,
-	_ workers.ProgressPublisher,
-	_ workers.InferenceEventRecorder,
-	_ workeragentrun.AgentRunEventRecorder,
-	clock func() time.Time,
-	processEnvironment func() []string,
-	currentWorkingDirectory func() (string, error),
-	_ []RunnerDecorator,
-) (Result, error) {
-	// Provider-backed attempts are now complete detached Execute requests. The
-	// runtime's request adapter resolves the authored target and calls the
-	// process-scoped Workers service, so this compatibility constructor must not
-	// materialize an agent or agent-run Workstation executor.
-	return workstationResult(
-		runtimeConfig, factoryRunnerID, workflowContext, logger, nil, s.interpolation,
-		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
-		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
-		providersService, s.resolveRunner, s.resolveProvider,
-	), nil
 }
 
 func (s *Service) buildLogicalWorker(
@@ -287,12 +255,7 @@ func (s *Service) buildLogicalWorker(
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 ) (Result, error) {
-	return workstationResult(
-		runtimeConfig, factoryRunnerID, workflowContext, logger, nil, s.interpolation,
-		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
-		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
-		providersService, s.resolveRunner, s.resolveProvider,
-	), nil
+	return workstationResult(runtimeConfig, clock), nil
 }
 
 // BuildLogical constructs the dispatch boundary for a workerless logical workstation.
@@ -306,78 +269,20 @@ func (s *Service) BuildLogical(
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 ) Result {
-	if s == nil || s.factoryDocs == nil {
+	if s == nil {
 		return Result{}
 	}
-	return workstationResult(
-		runtimeConfig,
-		factoryRunnerID,
-		workflowContext,
-		logger,
-		nil,
-		s.interpolation,
-		s.executionPolicy,
-		clock,
-		processEnvironment,
-		currentWorkingDirectory,
-		s.factoryDocs,
-		s.worktreePreparer,
-		s.runWorktree,
-		s.runReasoningEffort,
-		s.workstationFiles,
-		s.providers,
-		s.resolveRunner,
-		s.resolveProvider,
-	)
+	return workstationResult(runtimeConfig, clock)
 }
 
 func workstationResult(
 	runtimeConfig interfaces.RuntimeConfigLookup,
-	factoryRunnerID string,
-	workflowContext *workerexecution.Context,
-	logger logging.Logger,
-	direct workers.WorkstationRequestExecutor,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
 	clock func() time.Time,
-	processEnvironment func() []string,
-	currentWorkingDirectory func() (string, error),
-	factoryDocs workers.FactoryDocsLoader,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	runWorktree string,
-	runReasoningEffort string,
-	workstationFiles platformfilesystem.ReadFileInspector,
-	providersService providers.Service,
-	resolveRunner workers.RunnerSelectionResolver,
-	resolveProvider workers.ProviderIdentityResolver,
 ) Result {
-	renderer := &workerprompting.DefaultPromptRenderer{FactoryDocs: factoryDocs}
 	return Result{
-		Direct: direct,
 		Dispatch: &workerexecutor.WorkstationExecutor{
-			Now:                     clock,
-			ProcessEnvironment:      processEnvironment,
-			CurrentWorkingDirectory: currentWorkingDirectory,
-			RuntimeConfig:           runtimeConfig, DefaultRunnerID: factoryRunnerID,
-			Providers:               providersService,
-			ResolveRunnerSelection:  resolveRunner,
-			ResolveProviderIdentity: resolveProvider,
-			WorkflowContext:         workflowContext, Executor: direct,
-			Interpolation:   interpolation,
-			ExecutionPolicy: executionPolicy,
-			Renderer:        renderer, Logger: logger,
-			WorktreePreparer:   worktreePreparer,
-			RunWorktree:        runWorktree,
-			RunReasoningEffort: runReasoningEffort,
-			FileSystem:         workstationFiles,
-			ArtifactFileSystem: artifactFileSystem(workstationFiles),
+			Now:           clock,
+			RuntimeConfig: runtimeConfig,
 		},
 	}
-}
-
-func artifactFileSystem(fileSystem platformfilesystem.ReadFileInspector) platformfilesystem.GlobInspector {
-	if inspector, ok := fileSystem.(platformfilesystem.GlobInspector); ok {
-		return inspector
-	}
-	return nil
 }

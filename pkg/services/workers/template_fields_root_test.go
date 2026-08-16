@@ -1,20 +1,14 @@
 package workers_test
 
 import (
-	"context"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
-	workertesthelpers "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers"
 )
 
 func canonicalWorkerTestPath(value string) string {
@@ -448,165 +442,5 @@ func TestApplyResolvedFields_NilResolved(t *testing.T) {
 	result := workerprompting.ApplyResolvedFields(base, nil)
 	if result != base {
 		t.Error("expected original base returned when resolved is nil")
-	}
-}
-
-func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
-	projectRoot := t.TempDir()
-	workertesthelpers.SetTestWorkingDirectory(t, projectRoot)
-
-	mock := &workertesthelpers.WSMockExecutor{
-		Result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
-	}
-
-	we := &workerexecutor.WorkstationExecutor{
-		Now:                     time.Now,
-		CurrentWorkingDirectory: os.Getwd,
-		RuntimeConfig: workertesthelpers.StaticRuntimeConfig{
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"worker-a": {Body: "system"},
-			},
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {
-					Name:             "standard",
-					Type:             interfaces.WorkstationTypeModel,
-					PromptTemplate:   "do work",
-					WorkingDirectory: `/worktrees/{{ index (index .Inputs 0).Tags "branch" }}`,
-				},
-			},
-		},
-		Executor: mock,
-		Renderer: &workerprompting.DefaultPromptRenderer{},
-	}
-
-	dispatch := work.WorkDispatch{
-		TransitionID: "t-1",
-		WorkerType:   "worker-a",
-		InputTokens: workers.InputTokens(factoryruntime.RuntimeToken{
-			ID: "tok-1",
-			Color: factoryruntime.RuntimeTokenColor{
-				WorkID: "work-1",
-				Tags:   map[string]string{"branch": "feature-abc"},
-			},
-		}),
-		WorkstationName: "standard",
-	}
-
-	result, err := we.Execute(context.Background(), dispatch)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Outcome != workers.OutcomeAccepted {
-		t.Errorf("expected ACCEPTED, got %s", result.Outcome)
-	}
-
-	// Verify the working directory was resolved and applied.
-	wantWorkingDirectory := filepath.Join(
-		canonicalWorkerTestPath(projectRoot),
-		"worktrees",
-		"feature-abc",
-	)
-	if canonicalWorkerTestPath(mock.Dispatch.WorkingDirectory) != wantWorkingDirectory {
-		t.Fatalf("expected working directory %q, got %q", wantWorkingDirectory, mock.Dispatch.WorkingDirectory)
-	}
-}
-
-func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
-	mock := &workertesthelpers.WSMockExecutor{
-		Result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
-	}
-
-	we := &workerexecutor.WorkstationExecutor{
-		Now: time.Now,
-		RuntimeConfig: workertesthelpers.StaticRuntimeConfig{
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"worker-a": {Body: "system"},
-			},
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {
-					Type:           interfaces.WorkstationTypeModel,
-					PromptTemplate: "do work",
-					Env: map[string]string{
-						"PROJECT": `{{ index (index .Inputs 0).Tags "project" }}`,
-					},
-				},
-			},
-		},
-		Executor: mock,
-		Renderer: &workerprompting.DefaultPromptRenderer{},
-	}
-
-	dispatch := work.WorkDispatch{
-		TransitionID: "t-1",
-		WorkerType:   "worker-a",
-		InputTokens: workers.InputTokens(factoryruntime.RuntimeToken{
-			ID: "tok-1",
-			Color: factoryruntime.RuntimeTokenColor{
-				WorkID: "work-1",
-				Tags:   map[string]string{"project": "myapp"},
-			},
-		}),
-		WorkstationName: "standard",
-	}
-
-	result, err := we.Execute(context.Background(), dispatch)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Outcome != workers.OutcomeAccepted {
-		t.Errorf("expected ACCEPTED, got %s", result.Outcome)
-	}
-
-	if mock.Dispatch.EnvVars["PROJECT"] != "myapp" {
-		t.Errorf("expected myapp, got %s", mock.Dispatch.EnvVars["PROJECT"])
-	}
-}
-
-func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
-	mock := &workertesthelpers.WSMockExecutor{}
-
-	we := &workerexecutor.WorkstationExecutor{
-		Now: time.Now,
-		RuntimeConfig: workertesthelpers.StaticRuntimeConfig{
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"worker-a": {Body: "system"},
-			},
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {
-					Name:             "standard",
-					Type:             interfaces.WorkstationTypeModel,
-					PromptTemplate:   "do work",
-					WorkingDirectory: `{{ .InvalidSyntax`,
-				},
-			},
-		},
-		Executor: mock,
-		Renderer: &workerprompting.DefaultPromptRenderer{},
-	}
-
-	dispatch := work.WorkDispatch{
-		TransitionID:    "t-1",
-		WorkerType:      "worker-a",
-		WorkstationName: "standard",
-		InputTokens: workers.InputTokens(factoryruntime.RuntimeToken{
-			ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"},
-		}),
-	}
-
-	result, err := we.Execute(context.Background(), dispatch)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if mock.Called {
-		t.Fatal("executor should not be called when parameterized field resolution fails")
-	}
-
-	if result.Outcome != workers.OutcomeFailed {
-		t.Errorf("expected FAILED, got %s", result.Outcome)
-	}
-
-	if !strings.Contains(result.Error, "parameterized field resolution failed") {
-		t.Errorf("error should mention parameterized field resolution: %s", result.Error)
 	}
 }

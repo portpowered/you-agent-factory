@@ -18,6 +18,16 @@ type ExecuteCapability interface {
 	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
 }
 
+type modelRuntimeScopeExecuteCapability interface {
+	ExecuteWithModelRuntimeScope(
+		context.Context,
+		modelinference.RuntimeScopeRef,
+		modelinference.LocalWorker,
+		[]modelinference.LocalResource,
+		workers.ExecuteRequest,
+	) (workers.ExecuteResult, error)
+}
+
 type promptRenderer interface {
 	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
 }
@@ -98,6 +108,27 @@ func (r *Root) Execute(
 		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
 	}
 	return r.execute.Execute(ctx, request)
+}
+
+// ExecuteWithModelRuntimeScope preserves the singular detached Execute seam
+// while allowing an opened Models scope to reach the private inference runner
+// for one direct model attempt. The capability is intentionally optional and
+// remains outside the public Workers service contract.
+func (r *Root) ExecuteWithModelRuntimeScope(
+	ctx context.Context,
+	scope modelinference.RuntimeScopeRef,
+	worker modelinference.LocalWorker,
+	resources []modelinference.LocalResource,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if r == nil || r.execute == nil {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	execute, ok := r.execute.(modelRuntimeScopeExecuteCapability)
+	if !ok {
+		return r.execute.Execute(ctx, request)
+	}
+	return execute.ExecuteWithModelRuntimeScope(ctx, scope, worker, resources, request)
 }
 
 // BuildRuntime delegates the singular Workers root operation to its

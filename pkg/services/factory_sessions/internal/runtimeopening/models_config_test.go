@@ -422,6 +422,9 @@ func assertManagedModelInvocation(
 	if len(workersService.requests) != 1 {
 		t.Fatalf("Workers Execute requests = %d, want one", len(workersService.requests))
 	}
+	if len(workersService.scopedRequests) != 1 || workersService.scopedRequests[0] != scope {
+		t.Fatalf("scoped Workers requests = %#v, want opened runtime scope", workersService.scopedRequests)
+	}
 	execute := workersService.requests[0]
 	assertManagedModelTarget(t, execute)
 	assertManagedModelInput(t, execute)
@@ -691,14 +694,26 @@ func (stub *runtimeInvokerSessionsStub) GetFactorySession(context.Context, strin
 
 type runtimeInvokerWorkersStub struct {
 	workers.Service
-	requests []workers.ExecuteRequest
-	result   workers.ExecuteResult
-	err      error
+	requests       []workers.ExecuteRequest
+	scopedRequests []models.RuntimeScopeRef
+	result         workers.ExecuteResult
+	err            error
 }
 
 func (stub *runtimeInvokerWorkersStub) Execute(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 	stub.requests = append(stub.requests, request)
 	return stub.result, stub.err
+}
+
+func (stub *runtimeInvokerWorkersStub) ExecuteWithModelRuntimeScope(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	_ models.LocalWorker,
+	_ []models.LocalResource,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	stub.scopedRequests = append(stub.scopedRequests, scope)
+	return stub.Execute(ctx, request)
 }
 
 func mustRuntimeModelScope(t *testing.T, value string) models.RuntimeScopeRef {

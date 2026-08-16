@@ -104,6 +104,16 @@ type runtimeModelInvoker struct {
 	config RuntimeModelInvokerConfig
 }
 
+type modelRuntimeScopeExecutor interface {
+	ExecuteWithModelRuntimeScope(
+		context.Context,
+		models.RuntimeScopeRef,
+		models.LocalWorker,
+		[]models.LocalResource,
+		workers.ExecuteRequest,
+	) (workers.ExecuteResult, error)
+}
+
 // NewRuntimeModelInvoker binds direct model invocation to one opened runtime.
 // The opened Models scope is used for readiness, while the attempt itself
 // enters the same request-scoped Workers path as Factory Runtime execution.
@@ -161,7 +171,9 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
 	}
 
-	raw, err := invoker.invokeRuntimeModel(ctx, worker, request, bindings)
+	raw, err := invoker.invokeRuntimeModel(
+		ctx, worker, projection.Context.FactoryCfg, request, bindings,
+	)
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
 	}
@@ -189,6 +201,7 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 	ctx context.Context,
 	worker *factorydefinitions.FactoryWorkerConfig,
+	factoryConfig *factorydefinitions.FactoryConfig,
 	request models.Request,
 	bindings []models.ResolvedModelOperationBinding,
 ) (string, error) {
@@ -208,7 +221,7 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 	workingDirectory := strings.TrimSpace(invoker.config.WorkingDirectory)
 	factoryDirectory := strings.TrimSpace(invoker.config.FactoryDirectory)
 	userMessage := runtimeModelUserMessage(request.Operation, request.Content, bindings)
-	executeResult, err := invoker.config.Workers.Execute(ctx, workers.ExecuteRequest{
+	executeRequest := workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
 			FactorySessionID: factorysessions.DefaultSessionID,
 			RuntimeID:        runtimeID,
@@ -268,7 +281,15 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 			},
 		},
 		Attempt: workers.AttemptContext{Number: 1},
-	})
+	}
+	executeResult, err := executeRuntimeModelRequest(
+		ctx,
+		invoker.config.Workers,
+		invoker.config.Scope,
+		factoryConfig,
+		worker,
+		executeRequest,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -280,6 +301,72 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 		return "", fmt.Errorf("%s", message)
 	}
 	return runtimeModelOutput(executeResult), nil
+}
+
+func executeRuntimeModelRequest(
+	ctx context.Context,
+	service workers.Service,
+	scope models.RuntimeScopeRef,
+	factoryConfig *factorydefinitions.FactoryConfig,
+	worker *factorydefinitions.FactoryWorkerConfig,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if isManagedRuntimeWorker(worker) {
+		if scoped, ok := service.(modelRuntimeScopeExecutor); ok {
+			return scoped.ExecuteWithModelRuntimeScope(
+				ctx,
+				scope,
+				localRuntimeWorker(worker),
+				localRuntimeResources(factoryConfig),
+				request,
+			)
+		}
+	}
+	return service.Execute(ctx, request)
+}
+
+func isManagedRuntimeWorker(worker *factorydefinitions.FactoryWorkerConfig) bool {
+	return worker != nil && strings.EqualFold(
+		strings.TrimSpace(worker.ModelLocality),
+		models.RuntimeModelLocalityLocal,
+	)
+}
+
+func localRuntimeWorker(worker *factorydefinitions.FactoryWorkerConfig) models.LocalWorker {
+	if worker == nil {
+		return models.LocalWorker{}
+	}
+	return models.LocalWorker{
+		Name:          worker.Name,
+		Type:          worker.Type,
+		Model:         worker.Model,
+		ModelLocality: worker.ModelLocality,
+		Resources:     localRuntimeResourcesFromConfigs(worker.Resources),
+	}
+}
+
+func localRuntimeResources(config *factorydefinitions.FactoryConfig) []models.LocalResource {
+	if config == nil {
+		return nil
+	}
+	return localRuntimeResourcesFromConfigs(config.Resources)
+}
+
+func localRuntimeResourcesFromConfigs(
+	resources []factorydefinitions.ResourceConfig,
+) []models.LocalResource {
+	if len(resources) == 0 {
+		return nil
+	}
+	result := make([]models.LocalResource, len(resources))
+	for index, resource := range resources {
+		result[index] = models.LocalResource{
+			ID: resource.ID, Name: resource.Name, Type: resource.Type,
+			Capacity: resource.Capacity, Model: resource.Model, Backend: resource.Backend,
+			LoadPolicy: resource.LoadPolicy, Provider: resource.Provider,
+		}
+	}
+	return result
 }
 
 func runtimeModelOutput(result workers.ExecuteResult) string {

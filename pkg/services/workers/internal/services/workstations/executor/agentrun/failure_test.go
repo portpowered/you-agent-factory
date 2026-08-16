@@ -334,3 +334,15 @@ func TestFormatAgentRunError_ModelhostErrorsUseAgentRunWording(t *testing.T) {
 		t.Fatalf("formatAgentRunError = %q, want agent-run lease denial wording", got)
 	}
 }
+
+func TestSafeToolPolicyFailureSummaryBoundsPolicyErrors(t *testing.T) {
+	if got := safeToolPolicyFailureSummary(nil); got != "tool policy violation" {
+		t.Fatalf("safeToolPolicyFailureSummary(nil) = %q", got)
+	}
+	if got := safeToolPolicyFailureSummary(errors.New(" ")); got != "tool policy violation" {
+		t.Fatalf("safeToolPolicyFailureSummary(empty) = %q", got)
+	}
+	if got := safeToolPolicyFailureSummary(errors.New("write denied")); got != "write denied" {
+		t.Fatalf("safeToolPolicyFailureSummary(error) = %q", got)
+	}
+}

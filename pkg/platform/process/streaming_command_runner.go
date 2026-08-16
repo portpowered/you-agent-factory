@@ -1,11 +1,8 @@
 package process
 
 import (
-	"context"
 	"io"
 	"sync"
-
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 const (
@@ -23,22 +20,6 @@ const (
 // OutputChunkObserver receives incremental stdout or stderr bytes while a
 // subprocess is still running.
 type OutputChunkObserver func(stream string, chunk []byte)
-
-// StreamingExecCommandRunner executes subprocesses and emits stdout/stderr
-// chunks through an observer before the command exits.
-type StreamingExecCommandRunner struct {
-	Observer   OutputChunkObserver
-	Logger     logging.Logger
-	Clock      Clock
-	NewCommand CommandFactory
-}
-
-// Run executes the command with process-tree cancellation, capturing stdout and
-// stderr while forwarding incremental chunks to Observer when configured.
-func (r StreamingExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	runner := ExecCommandRunner{Logger: r.Logger, Clock: r.Clock, NewCommand: r.NewCommand}
-	return runner.run(ctx, req, r.Observer, true)
-}
 
 type observedBuffer struct {
 	mu        sync.Mutex
@@ -106,4 +87,3 @@ func (b *observedBuffer) retain(p []byte) {
 }
 
 var _ io.Writer = (*observedBuffer)(nil)
-var _ CommandRunner = StreamingExecCommandRunner{}

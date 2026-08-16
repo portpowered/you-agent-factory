@@ -3,6 +3,7 @@ package workerexecution
 import (
 	"context"
 
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -21,6 +22,76 @@ type mockWorkerOutputPolicyKey struct{}
 type progressPublisherKey struct{}
 type scriptEventRecorderKey struct{}
 type commandRunnerOverrideKey struct{}
+type modelRuntimeProjectionKey struct{}
+
+type modelRuntimeProjection struct {
+	scope     models.RuntimeScopeRef
+	worker    models.LocalWorker
+	resources []models.LocalResource
+}
+
+// WithModelRuntimeScope attaches the opened Models scope to one detached
+// inference attempt. The scope is request-scoped and is never retained by
+// the process Workers root.
+func WithModelRuntimeScope(ctx context.Context, scope models.RuntimeScopeRef) context.Context {
+	if ctx == nil || scope.IsZero() {
+		return ctx
+	}
+	return context.WithValue(ctx, modelRuntimeProjectionKey{}, modelRuntimeProjection{scope: scope})
+}
+
+// WithModelRuntimeProjection attaches the opened Models scope and its
+// runtime-selected worker/resource projection to one detached inference
+// attempt. The values are copied before entering the request context.
+func WithModelRuntimeProjection(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	worker models.LocalWorker,
+	resources []models.LocalResource,
+) context.Context {
+	if ctx == nil || scope.IsZero() {
+		return ctx
+	}
+	worker.Resources = cloneLocalResources(worker.Resources)
+	return context.WithValue(ctx, modelRuntimeProjectionKey{}, modelRuntimeProjection{
+		scope:     scope,
+		worker:    worker,
+		resources: cloneLocalResources(resources),
+	})
+}
+
+// ModelRuntimeProjectionFromContext resolves request-scoped Models values, or
+// returns the construction-time fallbacks used by direct runner callers.
+func ModelRuntimeProjectionFromContext(
+	ctx context.Context,
+	fallbackScope models.RuntimeScopeRef,
+	fallbackWorker models.LocalWorker,
+	fallbackResources []models.LocalResource,
+) (models.RuntimeScopeRef, models.LocalWorker, []models.LocalResource) {
+	if ctx != nil {
+		if projection, ok := ctx.Value(modelRuntimeProjectionKey{}).(modelRuntimeProjection); ok && !projection.scope.IsZero() {
+			worker := projection.worker
+			if worker.Name == "" && worker.Model == "" {
+				worker = fallbackWorker
+			}
+			resources := projection.resources
+			if len(resources) == 0 {
+				resources = fallbackResources
+			}
+			return projection.scope, worker, cloneLocalResources(resources)
+		}
+	}
+	return fallbackScope, fallbackWorker, cloneLocalResources(fallbackResources)
+}
+
+func cloneLocalResources(resources []models.LocalResource) []models.LocalResource {
+	if len(resources) == 0 {
+		return nil
+	}
+	cloned := make([]models.LocalResource, len(resources))
+	copy(cloned, resources)
+	return cloned
+}
 
 // WithMockWorkersConfig attaches a cloned, request-scoped mock override to a
 // detached Workers execution. The process-scoped Workers service retains no

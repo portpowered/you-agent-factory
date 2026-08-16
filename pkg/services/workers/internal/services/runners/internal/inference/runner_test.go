@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
@@ -404,6 +405,29 @@ func TestRunnerAppliesRequestScopedWorkerOverrides(t *testing.T) {
 	if captured.Name != request.WorkerName || captured.Model != request.Model ||
 		captured.ModelLocality != request.ModelLocality {
 		t.Fatalf("Models worker = %#v, want request overrides", captured)
+	}
+}
+
+func TestRunnerUsesRequestScopedModelRuntimeScope(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: true, Content: "scoped"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{Models: modelsEdge})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:request-scope")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if _, err := inferenceRunner.Execute(
+		workerexecution.WithModelRuntimeScope(t.Context(), scope),
+		validRequest(),
+	); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := modelsEdge.Request().Scope; got != scope {
+		t.Fatalf("Models scope = %q, want request scope %q", got, scope)
 	}
 }
 

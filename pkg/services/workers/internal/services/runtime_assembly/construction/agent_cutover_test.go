@@ -68,8 +68,8 @@ func TestServiceBuildDoesNotExposeProviderDirectExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
-	if result.Dispatch == nil || result.Direct != nil {
-		t.Fatalf("Build() = %#v, want dispatch without a direct provider executor", result)
+	if result.Dispatch != nil || result.Direct != nil {
+		t.Fatalf("Build() = %#v, want no workstation executor for provider-backed workers", result)
 	}
 }
 

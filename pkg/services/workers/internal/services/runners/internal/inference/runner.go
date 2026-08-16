@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 const Identity = "inference"
@@ -80,7 +81,13 @@ func (r *runner) Execute(
 			return workers.RunnerExecutionResult{}, err
 		}
 	}
-	invocation := r.localInvocationRequest(request)
+	scope, worker, resources := workerexecution.ModelRuntimeProjectionFromContext(
+		ctx,
+		r.scope,
+		r.workerForRequest(request),
+		r.resources,
+	)
+	invocation := r.localInvocationRequest(request, scope, worker, resources)
 	if !composition {
 		if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
 			return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
@@ -118,13 +125,15 @@ func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecu
 
 func (r *runner) localInvocationRequest(
 	request workers.RunnerExecutionRequest,
+	scope models.RuntimeScopeRef,
+	worker models.LocalWorker,
+	resources []models.LocalResource,
 ) models.LocalInvocationRequest {
-	worker := r.workerForRequest(request)
 	return models.LocalInvocationRequest{
-		Scope:            r.scope,
+		Scope:            scope,
 		Holder:           invocationHolder(request),
 		Worker:           worker,
-		Resources:        r.resources,
+		Resources:        resources,
 		Dispatch:         request.Dispatch,
 		ModelOperation:   request.ModelOperation,
 		ModelBindings:    modelBindingsForLocalRuntime(request.ModelBindings),

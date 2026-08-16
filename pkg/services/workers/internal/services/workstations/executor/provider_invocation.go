@@ -2,9 +2,7 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -31,33 +29,6 @@ type ProviderInvocationExecutor struct {
 }
 
 var _ WorkstationRequestExecutor = (*ProviderInvocationExecutor)(nil)
-
-func promptSourceFailureResult(
-	dispatch work.WorkDispatch,
-	role string,
-	name string,
-	path string,
-	err error,
-	diagnostics *workerexecution.WorkDiagnostics,
-	duration time.Duration,
-) workerexecution.WorkResult {
-	return workerexecution.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      workerexecution.OutcomeFailed,
-		Error: fmt.Sprintf(
-			"%s %q prompt source %s: %v",
-			role,
-			name,
-			path,
-			err,
-		),
-		Diagnostics: diagnostics,
-		Metrics: workerexecution.WorkMetrics{
-			Duration: duration,
-		},
-	}
-}
 
 // NewProviderInvocationExecutor constructs the direct-inference executor from
 // the Workers-owned invocation boundary. A nil invocation boundary yields a nil

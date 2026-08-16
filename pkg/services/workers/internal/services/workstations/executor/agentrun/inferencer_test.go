@@ -145,3 +145,41 @@ func TestRunnerInferencer_DoesNotRetryTerminalProviderFailure(t *testing.T) {
 		t.Fatalf("runner calls = %d, want no retry", runner.calls)
 	}
 }
+
+func TestSleepForProviderRetryHonorsTimerAndCancellation(t *testing.T) {
+	if err := sleepForProviderRetry(context.Background(), 0); err != nil {
+		t.Fatalf("sleepForProviderRetry(ready) = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sleepForProviderRetry(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("sleepForProviderRetry(canceled) = %v, want context.Canceled", err)
+	}
+}
+
+func TestConversationPromptPreservesRolesAndFallbacks(t *testing.T) {
+	system, conversation := conversationPrompt("base", []messages.Message{
+		messages.NewTextMessage(messages.RoleSystem, "ignored system"),
+		messages.NewTextMessage(messages.RoleUser, "question"),
+		messages.NewTextMessage(messages.RoleAssistant, "answer"),
+		messages.NewTextMessage(messages.RoleTool, "tool result"),
+	})
+	if system != "base" || conversation != "User: question\n\nAssistant: answer\n\nTool: tool result" {
+		t.Fatalf("conversationPrompt() = (%q, %q), want all non-system roles", system, conversation)
+	}
+
+	system, conversation = conversationPrompt("", []messages.Message{
+		messages.NewTextMessage(messages.RoleSystem, "runtime system"),
+		messages.NewTextMessage(messages.RoleUser, "fallback question"),
+	})
+	if system != "runtime system" || conversation != "User: fallback question" {
+		t.Fatalf("conversationPrompt(system/user) = (%q, %q)", system, conversation)
+	}
+
+	system, conversation = conversationPrompt("base", []messages.Message{
+		messages.NewTextMessage(messages.RoleSystem, "ignored"),
+	})
+	if system != "base" || conversation != "" {
+		t.Fatalf("conversationPrompt(empty history) = (%q, %q), want base and empty", system, conversation)
+	}
+}

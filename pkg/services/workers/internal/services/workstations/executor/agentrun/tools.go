@@ -288,17 +288,6 @@ func toolDiagnosticsMetadata(policy string, recorder *ToolDiagnosticRecorder) ma
 	return metadata
 }
 
-func mergeToolDiagnostics(base map[string]string, policy string, recorder *ToolDiagnosticRecorder) map[string]string {
-	merged := make(map[string]string, len(base)+3)
-	for key, value := range base {
-		merged[key] = value
-	}
-	for key, value := range toolDiagnosticsMetadata(policy, recorder) {
-		merged[key] = value
-	}
-	return merged
-}
-
 func toolDefinitionsForPolicy(policy string) []messages.ToolDefinition {
 	switch workerconfig.NormalizeAgentToolPolicy(policy) {
 	case workerconfig.AgentToolPolicyReadOnly:

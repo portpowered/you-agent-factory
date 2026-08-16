@@ -13,7 +13,6 @@ type Clock = workers.Clock
 type ClockFunc = workers.ClockFunc
 type ExecCommandRunner = workers.ExecCommandRunner
 type StreamingAdaptedCommandRunner = workers.StreamingAdaptedCommandRunner
-type StreamingExecCommandRunner = workers.StreamingExecCommandRunner
 type LoggingCommandRunner = workers.LoggingCommandRunner
 
 const (
