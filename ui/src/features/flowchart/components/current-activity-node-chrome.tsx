@@ -1,7 +1,6 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import {
   factoryGraphNodeSurfaceClassName,
-  factoryGraphNodeTitleClassName,
   type FactoryGraphNodeSurfaceTone,
 } from "@you-agent-factory/factory-graph";
 
@@ -23,10 +22,6 @@ const BADGE_WEIGHT_CLASS_NAME: Record<ActivityGraphNodeBadgeWeight, string> = {
   // hardcoded-ui-copy-exception: non-product-diagnostic
   label: "text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
 };
-export function activityGraphNodeTitleClassName(className?: string) {
-  return factoryGraphNodeTitleClassName(className);
-}
-
 export function activityGraphNodeSurfaceClassName(
   tone: ActivityGraphNodeSurfaceTone,
 ) {
