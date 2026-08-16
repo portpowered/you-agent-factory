@@ -23,6 +23,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -218,6 +219,43 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	}
 }
 
+func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
+	t.Parallel()
+
+	want := &factorysessions.DetachedOperations{}
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		rootDetachedOperationsCapabilityProbe{operations: want},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(detached capability) error = %v", err)
+	}
+	if got := DetachedOperationsFromProcess(process); got != want {
+		t.Fatalf("DetachedOperationsFromProcess() = %#v, want %#v", got, want)
+	}
+
+	wrongType, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		rootDetachedOperationsCapabilityProbe{operations: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(wrong-type capability) error = %v", err)
+	}
+	if got := DetachedOperationsFromProcess(wrongType); got != nil {
+		t.Fatalf("DetachedOperationsFromProcess(wrong type) = %#v, want nil", got)
+	}
+}
+
 func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 	t.Parallel()
 
@@ -271,6 +309,14 @@ func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) 
 }
 
 type rootWorkerRecordingReaderProbe struct{}
+
+type rootDetachedOperationsCapabilityProbe struct {
+	operations any
+}
+
+func (probe rootDetachedOperationsCapabilityProbe) DetachedOperations() any {
+	return probe.operations
+}
 
 type rootWorkerProcessRegistry struct{}
 
