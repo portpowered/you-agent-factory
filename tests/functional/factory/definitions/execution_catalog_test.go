@@ -1,4 +1,4 @@
-package wire_test
+package definitions
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// TestDefinitionsExecutionCatalogResolvesDetachedPolicyAtPublicRoot keeps the
-// owner-local integration proof for the public Definitions composition
-// boundary. ResolveExecutionCatalog has no Process.Execute representation, so
+// TestDefinitionsExecutionCatalogResolvesDetachedPolicyAtPublicRoot exercises
+// the public Definitions composition boundary. ResolveExecutionCatalog is a
+// Definitions operation without a Process.Execute transport representation, so
 // this test uses the public service root directly and asserts its observable
 // policy and diagnostic contract.
 func TestDefinitionsExecutionCatalogResolvesDetachedPolicyAtPublicRoot(t *testing.T) {
