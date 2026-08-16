@@ -28,6 +28,7 @@ type runtimeControlHTTPResponse = control.RuntimeControlHTTPResponse
 type runtimeDispatchPlanHTTPResponse = dispatch.RuntimeDispatchPlanHTTPResponse
 
 type observationHandler = observation.Handler
+type SessionObserver = observation.SessionObserver
 type controlHandler = control.Handler
 type dispatchHandler = dispatch.Handler
 
@@ -53,6 +54,14 @@ func NewAdapter(root RuntimeRoot) *Adapter {
 		observationHandler: observation.NewHandler(root),
 		controlHandler:     control.NewHandler(root),
 		dispatchHandler:    dispatch.NewHandler(root),
+	}
+}
+
+// BindSessionObserver attaches the Factory Sessions router used by the
+// session-scoped observation route.
+func (a *Adapter) BindSessionObserver(sessions SessionObserver) {
+	if a != nil && a.observationHandler != nil {
+		a.observationHandler.BindSessionObserver(sessions)
 	}
 }
 

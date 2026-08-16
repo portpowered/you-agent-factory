@@ -43,6 +43,10 @@ type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }
 type sessionRootRole struct{ sessionRole }
 
+func (*sessionRole) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{}, nil
+}
+
 func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
 	return factorysessions.SessionProjection{
 		Context: factorysessions.ProjectionContext{

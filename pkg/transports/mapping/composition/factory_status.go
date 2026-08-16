@@ -2,29 +2,44 @@ package composition
 
 import (
 	"context"
+	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+type factoryStatusSessionReader interface {
+	ObserveForSession(
+		context.Context,
+		string,
+		factoryruntime.ObserveRequest,
+	) (factoryruntime.ObserveResult, error)
+}
+
 type factoryStatusAPI struct {
-	runtime   factoryruntime.Service
+	sessions  factoryStatusSessionReader
 	projector factoryruntime.FactoryStatusProjector
 }
 
-// newFactoryStatusAPI binds status projection to the already-opened Runtime
-// capability. Factory Sessions owns session identity and controls; Runtime
-// owns the live observation itself.
-func newFactoryStatusAPI(runtime factoryruntime.Service, projector factoryruntime.FactoryStatusProjector) apisurface.FactoryStatusAPI {
-	return &factoryStatusAPI{runtime: runtime, projector: projector}
+// newFactoryStatusAPI binds status projection to the Factory Sessions session
+// router. Factory Sessions owns session identity; the selected session gateway
+// owns the live observation.
+func newFactoryStatusAPI(
+	sessions factoryStatusSessionReader,
+	projector factoryruntime.FactoryStatusProjector,
+) apisurface.FactoryStatusAPI {
+	return &factoryStatusAPI{sessions: sessions, projector: projector}
 }
 
 func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
-	_ = sessionID
-	if api == nil || api.runtime == nil || api.projector == nil {
+	if api == nil || api.sessions == nil || api.projector == nil {
 		return factoryruntime.FactoryStatus{}, factoryruntime.ErrNotRunning
 	}
-	result, err := api.runtime.Observe(ctx, factoryruntime.ObserveRequest{
+	if sessionID = strings.TrimSpace(sessionID); sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	result, err := api.sessions.ObserveForSession(ctx, sessionID, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
 	})
 	if err != nil {

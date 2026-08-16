@@ -136,12 +136,16 @@ func (operations *DetachedOperations) Bind(owner Service) (DetachedService, erro
 	if !ok {
 		return nil, fmt.Errorf("%w: live control capability is required", ErrDetachedServiceUnavailable)
 	}
+	liveResults, ok := owner.(LiveResultService)
+	if !ok {
+		return nil, fmt.Errorf("%w: live result capability is required", ErrDetachedServiceUnavailable)
+	}
 	if operations == nil {
 		operations = &DetachedOperations{}
 	}
 	operations.owner = owner
 	operations.liveControl = liveControl
-	operations.liveResults, _ = owner.(LiveResultService)
+	operations.liveResults = liveResults
 	return operations, nil
 }
 

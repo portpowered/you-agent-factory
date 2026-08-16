@@ -25,6 +25,8 @@ const (
 	OperationDispatchPlan
 )
 
+var ErrSessionObserverRequired = stderrors.New("factory session observation is required for session-scoped status reads")
+
 // RootErrorResponse maps published Runtime root sentinel failures to HTTP
 // status and the generated ErrorResponse shape.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
@@ -35,6 +37,9 @@ func RootErrorResponse(err error, operation Operation) (int, factoryapi.ErrorRes
 
 	switch operation {
 	case OperationObserve:
+		if stderrors.Is(err, ErrSessionObserverRequired) {
+			return serviceUnavailableErrorResponse("factory status is unavailable")
+		}
 		if stderrors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			return notFoundErrorResponse("factory session not found")
 		}
