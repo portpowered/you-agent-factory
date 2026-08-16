@@ -57,11 +57,11 @@ import {
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
   type FactoryLayoutGroup,
-  type FactoryLayoutGroupColorToken,
   type FactoryLayoutGroupNodeGeometry,
   fitFactoryLayoutGroup,
   fitFactoryLayoutGroupBounds,
   moveFactoryLayoutGroupByDelta,
+  normalizeFactoryLayoutGroupColor,
   removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
   resizeFactoryLayoutGroup,
@@ -124,10 +124,7 @@ export interface FactoryGraphLayoutDraftDerivedState {
     nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
   ) => void;
   renameVisualGroup: (groupId: string, label: string) => void;
-  setVisualGroupColor: (
-    groupId: string,
-    color: FactoryLayoutGroupColorToken,
-  ) => void;
+  setVisualGroupColor: (groupId: string, color: string) => void;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
   moveVisualGroupByDelta: (
@@ -657,14 +654,19 @@ export function useFactoryGraphLayoutDraftState(
     [commitLayoutUpdate],
   );
   const setVisualGroupColor = useCallback(
-    (groupId: string, color: FactoryLayoutGroupColorToken) => {
+    (groupId: string, color: string) => {
+      const normalizedColor = normalizeFactoryLayoutGroupColor(color);
+      if (normalizedColor === null) {
+        return;
+      }
+
       commitLayoutUpdate(({ currentLayout }) => {
         const nextLayout = updateFactoryLayoutGroup(
           currentLayout,
           groupId,
           (group) => ({
             ...group,
-            color,
+            color: normalizedColor,
           }),
         );
         const updatedGroup = nextLayout.groups?.find(

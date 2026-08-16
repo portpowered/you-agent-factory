@@ -25,6 +25,8 @@ import {
   fitFactoryLayoutGroupBounds,
   isApprovedFactoryLayoutGroupColor,
   moveFactoryLayoutGroupByDelta,
+  normalizeFactoryLayoutGroupColor,
+  normalizeFactoryLayoutGroupCustomColor,
   removeFactoryLayoutGroup,
   removeNodeFromAllFactoryLayoutGroups,
   removeNodeFromFactoryLayoutGroup,
@@ -345,6 +347,21 @@ describe("factory graph layout groups", () => {
     expect(factoryLayoutGroupColorSurfaceCssVariable(undefined)).toBe(
       "var(--color-surface-container-low)",
     );
+    expect(factoryLayoutGroupColorCssVariable("#ABC123")).toBe("#abc123");
+    expect(factoryLayoutGroupColorSurfaceCssVariable("#ABC123")).toBe(
+      "color-mix(in srgb, #abc123 18%, transparent)",
+    );
+  });
+
+  it("normalizes safe custom colors and rejects values that could become CSS", () => {
+    expect(normalizeFactoryLayoutGroupCustomColor(" #ABC123 ")).toBe("#abc123");
+    expect(normalizeFactoryLayoutGroupCustomColor("#abc")).toBe("#aabbcc");
+    expect(normalizeFactoryLayoutGroupColor("warning")).toBe("warning");
+    expect(normalizeFactoryLayoutGroupColor("#ABC123")).toBe("#abc123");
+    expect(normalizeFactoryLayoutGroupColor("rgb(1, 2, 3)")).toBeNull();
+    expect(
+      normalizeFactoryLayoutGroupCustomColor("url(javascript:alert(1))"),
+    ).toBeNull();
   });
 
   it("clamps undersized group bounds during resize", () => {
@@ -452,8 +469,8 @@ describe("factory graph layout groups", () => {
         },
       ]),
     ).toEqual([
-      { id: "workstation:review", label: "Review" },
-      { id: "worker:writer", label: "Writer" },
+      { id: "workstation:review", kind: "workstation", label: "Review" },
+      { id: "worker:writer", kind: "worker", label: "Writer" },
     ]);
   });
 

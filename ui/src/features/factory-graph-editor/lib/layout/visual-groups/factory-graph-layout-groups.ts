@@ -8,6 +8,7 @@ import { moveFactoryLayoutNodesByDelta } from "../factory-graph-layout-operation
 
 export type FactoryLayoutGroupCanvasNodeOption = {
   id: string;
+  kind: FactoryGraphNode["kind"];
   label: string;
 };
 
@@ -51,6 +52,46 @@ const FACTORY_LAYOUT_GROUP_COLOR_TOKEN_SET = new Set<string>(
   FACTORY_LAYOUT_GROUP_COLOR_TOKENS,
 );
 
+const FACTORY_LAYOUT_GROUP_CUSTOM_COLOR_PATTERN =
+  /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i;
+
+/**
+ * Normalize a user-selected hex color before it enters the durable layout.
+ * Native color inputs emit six-digit hex values, while accepting the short
+ * form here keeps the operation safe for non-browser callers as well.
+ */
+export function normalizeFactoryLayoutGroupCustomColor(
+  color: string | undefined,
+): string | null {
+  const normalized = color?.trim().toLowerCase();
+  if (
+    normalized === undefined ||
+    !FACTORY_LAYOUT_GROUP_CUSTOM_COLOR_PATTERN.test(normalized)
+  ) {
+    return null;
+  }
+
+  if (normalized.length === 4) {
+    return `#${normalized
+      .slice(1)
+      .split("")
+      .map((digit) => `${digit}${digit}`)
+      .join("")}`;
+  }
+
+  return normalized;
+}
+
+export function normalizeFactoryLayoutGroupColor(
+  color: string | undefined,
+): string | null {
+  if (isApprovedFactoryLayoutGroupColor(color)) {
+    return color;
+  }
+
+  return normalizeFactoryLayoutGroupCustomColor(color);
+}
+
 export function isApprovedFactoryLayoutGroupColor(
   color: string | undefined,
 ): color is FactoryLayoutGroupColorToken {
@@ -60,6 +101,11 @@ export function isApprovedFactoryLayoutGroupColor(
 export function factoryLayoutGroupColorCssVariable(
   color: string | undefined,
 ): string {
+  const customColor = normalizeFactoryLayoutGroupCustomColor(color);
+  if (customColor !== null) {
+    return customColor;
+  }
+
   switch (color) {
     case "danger":
       return "var(--color-error)";
@@ -82,6 +128,12 @@ export function factoryLayoutGroupColorCssVariable(
 export function factoryLayoutGroupColorSurfaceCssVariable(
   color: string | undefined,
 ): string {
+  const customColor = normalizeFactoryLayoutGroupCustomColor(color);
+  if (customColor !== null) {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
+    return `color-mix(in srgb, ${customColor} 18%, transparent)`;
+  }
+
   switch (color) {
     case "danger":
       return "var(--color-error-container)";
@@ -143,7 +195,7 @@ export function defaultFactoryLayoutGroupBounds(
 
 export function createFactoryLayoutGroup(input: {
   bounds: FactoryLayoutGroup["bounds"];
-  color?: FactoryLayoutGroupColorToken;
+  color?: string;
   id: string;
   label?: string;
   layout: FactoryLayout;
@@ -223,6 +275,7 @@ export function factoryLayoutGroupCanvasNodeOptions(
   return [...nodes]
     .map((node) => ({
       id: node.id,
+      kind: node.kind,
       label: node.label,
     }))
     .sort((left, right) => left.label.localeCompare(right.label));

@@ -20,7 +20,6 @@ import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-
 import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
 import {
-  type FactoryLayoutGroupColorToken,
   type FactoryLayoutGroupNodeGeometry,
   factoryLayoutGroupCanvasNodeOptions,
 } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
@@ -126,10 +125,7 @@ type BuildCurrentActivityGraphStateValueArgs = {
     nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
   ) => void;
   renameVisualGroup: (groupId: string, label: string) => void;
-  setVisualGroupColor: (
-    groupId: string,
-    color: FactoryLayoutGroupColorToken,
-  ) => void;
+  setVisualGroupColor: (groupId: string, color: string) => void;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
   moveVisualGroupByDelta: (

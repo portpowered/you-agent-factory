@@ -137,7 +137,7 @@ const visualGroupControls = {
   onRenameGroup: vi.fn(),
   onSetGroupColor: vi.fn(),
   onToggleNodeMembership: vi.fn(),
-  selectedGroupLabel: "Selected visual group",
+  groupAriaLabel: "Visual group Review",
   staleMemberNodeIds: [],
 };
 

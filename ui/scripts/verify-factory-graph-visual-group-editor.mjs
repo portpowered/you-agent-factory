@@ -13,6 +13,7 @@ import {
 const TARGET_WORKSTATION_LABEL = "Plan";
 const TARGET_WORKSTATION_ID = "workstation:plan";
 const GROUP_LABEL = "Planning lane";
+const CUSTOM_GROUP_COLOR = "#a1b2c3";
 
 export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   page,
@@ -78,6 +79,7 @@ async function createAndEditVisualGroup(page, viewport) {
   await page
     .locator("[data-factory-visual-group-controls]")
     .waitFor({ state: "visible" });
+  await expectVisualGroupControlsWithinViewport(page, viewport);
 
   const labelField = page.getByRole("textbox", { name: "Group label" });
   await labelField.fill(GROUP_LABEL);
@@ -90,7 +92,19 @@ async function createAndEditVisualGroup(page, viewport) {
   const secondaryMembershipCheckbox = page.getByRole("checkbox", {
     name: "Include Implement in this group",
   });
-  await secondaryMembershipCheckbox.check();
+  const secondaryMembershipInputId =
+    await secondaryMembershipCheckbox.getAttribute("id");
+  if (!secondaryMembershipInputId) {
+    throw new Error(
+      "Expected the secondary membership Checkbox to have an id.",
+    );
+  }
+  await page.locator(`label[for="${secondaryMembershipInputId}"]`).click();
+  await expectChecked(secondaryMembershipCheckbox, true);
+  await secondaryMembershipCheckbox.focus();
+  await page.keyboard.press("Space");
+  await expectChecked(secondaryMembershipCheckbox, false);
+  await page.keyboard.press("Space");
   await expectChecked(secondaryMembershipCheckbox, true);
 
   const warningColorButton = page.getByRole("button", {
@@ -100,14 +114,17 @@ async function createAndEditVisualGroup(page, viewport) {
   await warningColorButton.click();
   await expectAttribute(warningColorButton, "aria-pressed", "true");
 
+  const customColorPicker = page.getByLabel("Custom group color");
+  await customColorPicker.fill(CUSTOM_GROUP_COLOR);
+  await expectInputValue(customColorPicker, CUSTOM_GROUP_COLOR);
+  await expectAttribute(warningColorButton, "aria-pressed", "false");
+
   const boundsBeforeResize = await readVisualGroupBounds(page);
   await resizeVisualGroup(page, "sw", { deltaX: -40, deltaY: 30 });
   const boundsAfterResize = await readVisualGroupBounds(page);
   expectBoundsChanged(boundsBeforeResize, boundsAfterResize, "resize");
 
-  await page
-    .getByRole("button", { name: "Fit to members" })
-    .click({ force: true });
+  await page.getByRole("button", { name: "Fit to members" }).click();
   const boundsAfterFit = await readVisualGroupBounds(page);
   expectFiniteBounds(boundsAfterFit, "fit group");
 
@@ -141,9 +158,9 @@ async function saveVisualGroup(page) {
   if (!persistedGroup) {
     throw new Error(`Saved factory did not contain the ${GROUP_LABEL} group.`);
   }
-  if (persistedGroup.color !== "warning") {
+  if (persistedGroup.color !== CUSTOM_GROUP_COLOR) {
     throw new Error(
-      `Expected the saved group color to be warning, found ${persistedGroup.color}.`,
+      `Expected the saved group color to be ${CUSTOM_GROUP_COLOR}, found ${persistedGroup.color}.`,
     );
   }
   if (!persistedGroup.nodeIds?.includes(TARGET_WORKSTATION_ID)) {
@@ -215,11 +232,13 @@ async function verifyVisualGroupAfterReload({
     page.getByRole("checkbox", { name: "Include Implement in this group" }),
     true,
   );
+  const customColorAfterReload = page.getByLabel("Custom group color");
+  await expectInputValue(customColorAfterReload, CUSTOM_GROUP_COLOR);
   const warningColorAfterReload = page.getByRole("button", {
     exact: true,
     name: "Use warning group color",
   });
-  await expectAttribute(warningColorAfterReload, "aria-pressed", "true");
+  await expectAttribute(warningColorAfterReload, "aria-pressed", "false");
   await expectEditorGraphInteractions(page);
   await captureEvidence(page, "visual-group-after-reload-editor");
 }
@@ -311,6 +330,46 @@ async function readVisualGroupBounds(page) {
   }
 
   return bounds;
+}
+
+async function expectVisualGroupControlsWithinViewport(page, viewport) {
+  const controls = page.locator("[data-factory-visual-group-controls]");
+  const controlsBox = await controls.boundingBox();
+  const viewportBox = await viewport.boundingBox();
+  const scrollMetrics = await controls.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+
+  if (!controlsBox || !viewportBox) {
+    throw new Error(
+      "Could not measure the visual group controls and graph viewport.",
+    );
+  }
+
+  const controlsBottom = controlsBox.y + controlsBox.height;
+  const viewportBottom = viewportBox.y + viewportBox.height;
+  if (
+    controlsBox.y < viewportBox.y ||
+    controlsBottom > viewportBottom ||
+    controlsBox.x < viewportBox.x ||
+    controlsBox.x + controlsBox.width > viewportBox.x + viewportBox.width
+  ) {
+    throw new Error(
+      `Visual group controls exceed the graph viewport: ${JSON.stringify({
+        controlsBox,
+        viewportBox,
+      })}`,
+    );
+  }
+
+  if (scrollMetrics.scrollHeight <= scrollMetrics.clientHeight) {
+    throw new Error(
+      `Expected the visual group controls to expose vertical scrolling for the overflowing membership panel: ${JSON.stringify(
+        scrollMetrics,
+      )}`,
+    );
+  }
 }
 
 function expectBoundsChanged(before, after, operation) {
@@ -410,6 +469,15 @@ async function expectLabelField(page, value) {
   const actual = await labelField.inputValue();
   if (actual !== value) {
     throw new Error(`Expected group label "${value}" but found "${actual}".`);
+  }
+}
+
+async function expectInputValue(locator, expected) {
+  const actual = await locator.inputValue();
+  if (actual !== expected) {
+    throw new Error(
+      `Expected input value "${expected}" but found "${actual}".`,
+    );
   }
 }
 

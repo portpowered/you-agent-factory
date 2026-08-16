@@ -16,6 +16,7 @@ export {
   type FactoryGraphGroupRegionView,
   factoryGraphGroupRegionColorStyle,
   isValidFactoryGraphGroupRegionBounds,
+  normalizeFactoryGraphGroupRegionCustomColor,
   projectFactoryGraphGroupRegionBounds,
   projectFactoryGraphGroupRegions,
   resolveFactoryGraphGroupRegionColor,

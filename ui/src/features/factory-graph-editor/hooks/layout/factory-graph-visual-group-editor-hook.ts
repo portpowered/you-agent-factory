@@ -8,7 +8,6 @@ import type {
 import { isValidFactoryLayoutGroupBounds } from "../../lib/layout/factory-graph-layout-validation";
 import {
   type FactoryLayoutGroupCanvasNodeOption,
-  type FactoryLayoutGroupColorToken,
   type FactoryLayoutGroupNodeGeometry,
   factoryLayoutGroupById,
   factoryLayoutGroupContainsNode,
@@ -61,10 +60,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
     groupId: string,
     bounds: NonNullable<FactoryLayout["groups"]>[number]["bounds"],
   ) => void;
-  setVisualGroupColor: (
-    groupId: string,
-    color: FactoryLayoutGroupColorToken,
-  ) => void;
+  setVisualGroupColor: (groupId: string, color: string) => void;
   nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
   selectedNodeIds?: readonly string[];
   resolveViewportCenter: () => FactoryLayoutPoint | null;
@@ -140,7 +136,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
   );
 
   const handleSetSelectedGroupColor = useCallback(
-    (color: FactoryLayoutGroupColorToken) => {
+    (color: string) => {
       if (!selectedGroupId || !canEditVisualGroups) {
         return;
       }
@@ -249,6 +245,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             canvasNodeOptions: input.canvasNodeOptions,
             colorLabel: messages.visualGroupColorLabel,
             colorOptionLabel: messages.visualGroupColorOptionLabel,
+            customColorLabel: messages.visualGroupCustomColorLabel,
             deleteGroupLabel: messages.visualGroupDeleteLabel,
             fitGroupLabel: messages.visualGroupFitLabel,
             boundsError: selectedGroupBoundsError,
@@ -259,6 +256,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             labelFieldLabel: messages.visualGroupLabelFieldLabel,
             membershipEmptyLabel: messages.visualGroupMembershipEmptyLabel,
             membershipLabel: messages.visualGroupMembershipLabel,
+            membershipNodeKindLabel: messages.kindLabel,
             membershipNodeLabel: messages.visualGroupMembershipNodeLabel,
             membershipStaleNodeLabel:
               messages.visualGroupMembershipStaleNodeLabel,
@@ -267,7 +265,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             onRenameGroup: handleRenameSelectedGroup,
             onSetGroupColor: handleSetSelectedGroupColor,
             onToggleNodeMembership: handleToggleSelectedGroupNodeMembership,
-            selectedGroupLabel: messages.visualGroupSelectedLabel,
+            groupAriaLabel: messages.visualGroupAriaLabel(selectedGroup),
             staleMemberNodeIds,
           }
         : null,

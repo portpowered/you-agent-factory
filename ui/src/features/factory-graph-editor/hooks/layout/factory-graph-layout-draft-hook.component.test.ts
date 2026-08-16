@@ -626,6 +626,42 @@ describe("useFactoryGraphLayoutDraftState visual group create rename style", () 
 });
 
 describe("useFactoryGraphLayoutDraftState visual group save reload", () => {
+  it("normalizes a custom color through the layout operation and restores it after reload", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-group-custom-color",
+      }),
+    );
+
+    act(() => {
+      result.current.createVisualGroup({ x: 0, y: 0 });
+      result.current.setVisualGroupColor("group-1", "#ABC123");
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.color,
+    ).toBe("#abc123");
+
+    const savedLayout = structuredClone(result.current.layout);
+    act(() => {
+      result.current.setVisualGroupColor("group-1", "rgb(1, 2, 3)");
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.color,
+    ).toBe("#abc123");
+
+    act(() => {
+      result.current.adoptSavedLayout(savedLayout);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.color,
+    ).toBe("#abc123");
+    expect(result.current.canUndoLayout).toBe(false);
+  });
+
   it("adopts saved visual group layout after reload without topology dirty state", () => {
     const savedLayoutDocument = {
       ...baseFactoryDefinition,
