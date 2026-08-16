@@ -6,9 +6,9 @@ import (
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 // ExecuteCapability is the request-scoped Execute owner composed into the

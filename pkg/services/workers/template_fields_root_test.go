@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 )
 
 func canonicalWorkerTestPath(value string) string {

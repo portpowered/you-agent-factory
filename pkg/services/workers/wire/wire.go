@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
@@ -246,7 +247,7 @@ func defaultBindingAssembler(
 	}, nil
 }
 
-var NewFactoryDocsLoader = workstationswire.NewFactoryDocsLoader
+var NewFactoryDocsLoader = workerprompting.NewFactoryDocsLoader
 
 var NewExecutor = invocation.NewExecutor
 var NewLibraryHarnessAdapter = agentrun.NewLibraryHarnessAdapter

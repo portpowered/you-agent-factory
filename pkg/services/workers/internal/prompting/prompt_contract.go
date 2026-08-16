@@ -36,23 +36,6 @@ const (
 type PromptTemplateDiagnostic = workers.PromptTemplateDiagnostic
 type PromptTemplateValidationResult = workers.PromptTemplateValidationResult
 
-// Service exposes prompting operations through the Workers root contract.
-type Service struct{}
-
-func NewService() workers.PromptTemplates { return Service{} }
-
-func (Service) BuildPromptTemplateContract(inputCount int, docPaths []string) PromptTemplateContract {
-	return BuildPromptTemplateContract(inputCount, docPaths)
-}
-
-func (Service) ValidatePromptTemplate(
-	template string,
-	inputCount int,
-	docPaths []string,
-) PromptTemplateValidationResult {
-	return ValidatePromptTemplate(template, inputCount, docPaths)
-}
-
 func BuildPromptTemplateContract(inputCount int, docPaths []string) PromptTemplateContract {
 	normalizedDocPaths := NormalizeFactoryBundledDocTargetPaths(docPaths)
 	references := []PromptTemplateVariableReference{

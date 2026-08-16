@@ -77,15 +77,6 @@ type DefaultPromptRenderer struct {
 	FactoryDocs workerexecution.FactoryDocsLoader
 }
 
-// NewDefaultPromptRenderer constructs a renderer with its required Factory
-// documentation edge.
-func NewDefaultPromptRenderer(loader workerexecution.FactoryDocsLoader) (*DefaultPromptRenderer, error) {
-	if loader == nil {
-		return nil, fmt.Errorf("construct Worker prompt renderer: Factory docs loader is required")
-	}
-	return &DefaultPromptRenderer{FactoryDocs: loader}, nil
-}
-
 // Render parses the template string, builds PromptData from input tokens and
 // workflow context, and returns the rendered prompt.
 func (r *DefaultPromptRenderer) Render(tmpl string, tokens []workerexecution.Token, wfCtx *workerexecution.Context) (string, error) {

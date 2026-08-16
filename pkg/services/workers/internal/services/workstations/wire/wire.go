@@ -5,7 +5,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 // NewService constructs an inert workstation capability. Logger is optional
@@ -13,5 +12,3 @@ import (
 func NewService(logger ...logging.Logger) workstations.Service {
 	return internalservice.New(logger...)
 }
-
-var NewFactoryDocsLoader = prompting.NewFactoryDocsLoader

@@ -242,6 +242,22 @@ func TestMapCommittedOwnerPackageWorkersCanonicalRetains(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/workers/internal/draftvalidation",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/draftvalidation",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
+			path: "pkg/services/workers/internal/prompting",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/prompting",
+				Disposition: DispositionRetain,
+				Destination: "workers/internal",
+			},
+		},
+		{
 			path: "pkg/services/workers/internal/services/runners",
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/internal/services/runners",
@@ -361,6 +377,10 @@ func workersCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/runners"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/workstations"):
+		return true
+	case strings.HasPrefix(rest, "internal/draftvalidation"):
+		return true
+	case strings.HasPrefix(rest, "internal/prompting"):
 		return true
 	default:
 		return false
