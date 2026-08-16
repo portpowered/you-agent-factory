@@ -43,6 +43,19 @@ func (m *recordingSubmitter) submitCallCount() int {
 	return len(m.workRequests)
 }
 
+func (m *recordingSubmitter) drainSubmitted() {
+	if m.submitted == nil {
+		return
+	}
+	for {
+		select {
+		case <-m.submitted:
+		default:
+			return
+		}
+	}
+}
+
 func cloneWorkRequest(request work.WorkRequest) work.WorkRequest {
 	out := request
 	out.Works = make([]work.Work, len(request.Works))
