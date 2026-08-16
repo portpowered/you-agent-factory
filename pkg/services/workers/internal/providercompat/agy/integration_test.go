@@ -22,17 +22,7 @@ func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {
 	mock := &workers.MockPTYAllocator{
 		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy conductor answer"},
 	}
-	providersService, err := providerswire.NewService(
-		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
-		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
-			Allocator: mock,
-			Locator:   platformprocess.HostExecutableLocator{},
-			Inspector: platformfilesystem.Local{},
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
+	providersService := newAgyProvidersServiceWithPTY(t, mock)
 	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
 		ProvidersService: providersService,
 	})
@@ -141,6 +131,22 @@ type continuationProvidersFake struct {
 type metadataProvidersFake struct {
 	providers.Service
 	result providers.ExecuteResult
+}
+
+func newAgyProvidersServiceWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) providers.Service {
+	t.Helper()
+	providersService, err := providerswire.NewService(
+		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
+		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
+			Allocator: allocator,
+			Locator:   platformprocess.HostExecutableLocator{},
+			Inspector: platformfilesystem.Local{},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return providersService
 }
 
 func (fake *metadataProvidersFake) Execute(
