@@ -29,6 +29,25 @@ func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
 
+// NewInvocationFromService adapts the canonical Workers service to the
+// transitional one-attempt invocation contract used by standalone opening.
+// Runtime and Sessions callers retain the older provider-backed constructors
+// below until their own cutover stories complete.
+func NewInvocationFromService(service workers.Service) workers.InvocationExecutor {
+	return workersinternal.NewInvocationFromService(service)
+}
+
+// NewInvocationWithProgressFromService is the progress-capable form of
+// NewInvocationFromService.
+func NewInvocationWithProgressFromService(
+	service workers.Service,
+	publisher workers.ProgressPublisher,
+) workers.InvocationExecutor {
+	return workersinternal.NewInvocationWithProgressFromService(service, publisher)
+}
+
+// TODO(P6-C): retire the provider-backed compatibility constructors after the
+// Runtime and Sessions caller families use the canonical Execute boundary.
 // NewInvocation constructs the narrow direct-invocation role.
 func NewInvocation(
 	providersService providers.Service,

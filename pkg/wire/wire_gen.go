@@ -419,7 +419,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v62 := provideFactorySessionContractFixtureReader(edges2)
 	v63 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v40, v42, v43, v8, v62, v12)
-	v64 := provideWorkerInvocationFactory(service, edges2)
+	v64 := provideWorkerInvocationFactory(workersService)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
 	v65 := provideFactorySessionExecutionOpeningFileSystem(edges2)
 	v66, err := provideSessionExecutionOpeningFactory(v61, providerCommandRunner, v63, v64, clockResolver, runtimeArtifactRootResolver, v65, ptyAllocator, logger)

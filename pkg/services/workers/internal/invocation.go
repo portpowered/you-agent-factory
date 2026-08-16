@@ -13,6 +13,24 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
+// NewInvocationFromService adapts the canonical Workers Execute capability
+// for the remaining standalone invocation factory. The caller still receives
+// the old one-attempt shape until the Sessions child caller family moves.
+func NewInvocationFromService(service workers.Service) workers.InvocationExecutor {
+	return workerinvocation.NewExecuteService(service)
+}
+
+// NewInvocationWithProgressFromService preserves the old progress-capable
+// factory shape while routing its attempt through Workers Service.Execute.
+func NewInvocationWithProgressFromService(
+	service workers.Service,
+	publisher workers.ProgressPublisher,
+) workers.InvocationExecutor {
+	return workerinvocation.NewExecuteServiceWithProgress(service, publisher)
+}
+
+// TODO(P6-C): retire the provider-backed compatibility invocation bridge after
+// Runtime and Sessions caller families pass detached values to Service.Execute.
 // NewInvocation constructs the narrow direct-invocation role used by
 // standalone Factory Session execution.
 func NewInvocation(

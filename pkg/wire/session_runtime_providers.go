@@ -1034,70 +1034,18 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 }
 
 func provideWorkerInvocationWithProgressFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
+	executionService workers.Service,
 ) factorysessionwire.WorkerInvocationWithProgressFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner, allocator workers.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-		return workerswire.NewInvocationWithProgress(
-			providersService, runner, commandClock, allocator, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
-		)
+	return func(_ workers.CommandRunner, _ workers.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+		return workerswire.NewInvocationWithProgressFromService(executionService, publisher), nil
 	}
 }
 
 func provideWorkerInvocationFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
+	executionService workers.Service,
 ) factorysessionwire.WorkerInvocationFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner, allocator workers.PTYAllocator) (workers.InvocationExecutor, error) {
-		return workerswire.NewInvocation(
-			providersService, runner, commandClock, allocator, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
-		)
+	return func(_ workers.CommandRunner, _ workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		return workerswire.NewInvocationFromService(executionService), nil
 	}
 }
 
