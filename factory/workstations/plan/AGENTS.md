@@ -92,15 +92,25 @@ The JSON file must be implementation-ready and contain:
 - `context.customerAsk`
 - `context.problem`
 - `context.solution`
-- `acceptanceCriteria` with 3-7 project-level criteria plus a final quality-gate
-  criterion for typecheck, lint, and tests and a delivery criterion requiring
-  the implementation/review loop to continue until the PR is actually merged.
-  Phrase the lint criterion as "no NEW lint violations relative to current
-  main, and the gates green on main (backend-size, pkg-maint, pkg-file-count,
-  pkg-structure, vet) stay green" — NOT as a blanket "make lint passes":
-  `make lint` cannot pass end-to-end on main while the pkg-boundary target
-  carries pre-existing packaged-service-structure migration debt (recorded
-  2026-08-08), and an unsatisfiable criterion stalls the review loop.
+- `acceptanceCriteria` with 3-7 project-level criteria, a final quality-gate
+  criterion for typecheck, lint, and tests, and a delivery criterion that keeps
+  the lane's implementation/review loop going until the PR is actually merged.
+  The delivery criterion must assign stage ownership explicitly: the
+  implementation stage finishes after its final head is pushed, the PR is open,
+  CI has started, and all blocking review feedback is addressed; the review
+  stage owns driving CI to terminal-and-passing, resolving merge conflicts, and
+  merging the PR. Terminal-and-passing CI, conflict resolution, and merge are
+  review-stage outcomes, not implementation-stage responsibilities, even though
+  merge remains the lane-wide completion boundary. After the implementation
+  finish line, implementation must not poll or re-check CI because every
+  redispatch consumes one of the 12 process visits. Put CI-run evidence in a PR
+  comment and never in a commit. Phrase the lint criterion as "no NEW lint
+  violations relative to current main, and the gates green on main
+  (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green" —
+  NOT as a blanket "make lint passes": `make lint` cannot pass end-to-end on
+  main while the pkg-boundary target carries pre-existing
+  packaged-service-structure migration debt (recorded 2026-08-08), and an
+  unsatisfiable criterion stalls the review loop.
 - `userStories` with sequential  ids, title, description,
   acceptanceCriteria, priority, `passes: false`, and empty `notes`
 - Ids for storeis should be shaped like {{ (index .Inputs 0).Name }}-001, 002, etc. 
