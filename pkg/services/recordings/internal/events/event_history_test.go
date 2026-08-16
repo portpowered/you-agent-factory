@@ -517,6 +517,41 @@ func TestFactoryEventHistory_CloseLiveSubscriptionsDeliversQueuedTerminalEvent(t
 	}
 }
 
+func TestFactoryEventHistory_CloseLiveSubscriptionsBoundsUnreadSubscriber(t *testing.T) {
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	_, err := history.Subscribe(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	history.mu.RLock()
+	subscription := history.streams[0]
+	history.mu.RUnlock()
+	if subscription == nil {
+		t.Fatal("live subscription was not registered")
+	}
+
+	history.RecordRunResponse(1, interfaces.FactoryStateCompleted, "", time.Unix(1, 0).UTC())
+	closeDone := make(chan struct{})
+	go func() {
+		history.CloseLiveSubscriptions()
+		close(closeDone)
+	}()
+
+	deadline := time.NewTimer(eventHistoryCloseDrainTimeout + 250*time.Millisecond)
+	defer deadline.Stop()
+	select {
+	case <-closeDone:
+	case <-subscription.overflow:
+		select {
+		case <-closeDone:
+		case <-deadline.C:
+			t.Fatal("CloseLiveSubscriptions did not return after releasing the unread subscriber")
+		}
+	case <-deadline.C:
+		t.Fatal("CloseLiveSubscriptions blocked on a subscriber that stopped reading")
+	}
+}
+
 func TestFactoryEventHistory_ScopedSubscriptionBoundsHistoryAndLiveBuffer(t *testing.T) {
 	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
 	event := func(id, dispatchID string) interfaces.FactoryEvent {

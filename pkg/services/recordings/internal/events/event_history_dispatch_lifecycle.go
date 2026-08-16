@@ -91,6 +91,9 @@ func (h *FactoryEventHistory) relayLiveSubscription(id int, subscription *eventH
 					case <-subscription.done:
 						subscription.releasePending()
 						return
+					case <-subscription.overflow:
+						subscription.releasePending()
+						return
 					case subscription.events <- event.Clone():
 						subscription.releasePending()
 					}

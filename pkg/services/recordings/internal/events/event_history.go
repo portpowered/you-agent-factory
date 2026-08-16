@@ -37,6 +37,7 @@ const (
 	failureReasonUnknown                    = "workstation_failed"
 	failureMessageUnavailable               = "Workstation failed without a reported error message."
 	eventHistoryStreamBufferSize            = 64
+	eventHistoryCloseDrainTimeout           = time.Second
 )
 
 type eventHistorySubscription struct {
@@ -75,6 +76,8 @@ func (subscription *eventHistorySubscription) signalTerminal() {
 // recorded so SSE clients observe the final timeline and then a closed stream.
 // It waits until each subscription has handed off all events accepted before
 // the terminal signal, while canceled subscribers are allowed to exit early.
+// A non-cooperative subscriber is released through overflow after one shared
+// bounded drain deadline so teardown cannot block forever.
 func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 	if h == nil {
 		return
@@ -87,8 +90,20 @@ func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 		subscription.signalTerminal()
 	}
 	h.mu.Unlock()
-	for _, subscription := range streams {
-		<-subscription.drained
+	if len(streams) == 0 {
+		return
+	}
+	drainDeadline := time.NewTimer(eventHistoryCloseDrainTimeout)
+	defer drainDeadline.Stop()
+	for index, subscription := range streams {
+		select {
+		case <-subscription.drained:
+		case <-drainDeadline.C:
+			for _, pending := range streams[index:] {
+				pending.signalOverflow()
+			}
+			return
+		}
 	}
 }
 
