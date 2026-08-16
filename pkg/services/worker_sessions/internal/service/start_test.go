@@ -204,16 +204,27 @@ func assertTerminalDeliveryAt(t *testing.T, subscription events.Subscription, po
 
 func assertSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
 	t.Helper()
-	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
-		Topic: workersessions.Topic(id),
-		From:  events.Cursor{Topic: workersessions.Topic(id)},
-		Limit: 10,
-	})
-	if err != nil {
-		t.Fatalf("session records for %q read error = %v", id, err)
-	}
-	if len(read.Records) != 2 {
-		t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		read, err := eventsSvc.Read(ctx, events.ReadRequest{
+			Topic: workersessions.Topic(id),
+			From:  events.Cursor{Topic: workersessions.Topic(id)},
+			Limit: 10,
+		})
+		if err != nil {
+			t.Fatalf("session records for %q read error = %v", id, err)
+		}
+		if len(read.Records) == 2 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -3205,7 +3216,7 @@ var _ recordings.WorkerSessionRecordingService = (*controlledRecordingService)(n
 
 var _ recordings.WorkerSessionRecordingService = (*failingRecordingService)(nil)
 
-var _ workers.WorkstationPoolBoundary = executionBoundary{}
+var _ workers.WorkstationExecutionService = executionBoundary{}
 
 var _ platformclock.Source = platformclock.Real{}
 

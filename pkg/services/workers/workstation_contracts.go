@@ -185,7 +185,7 @@ const (
 
 // ProviderInvocationRoute is the reserved route name for Workers that have no
 // authored workstation behind them. A JavaScript workflow child names it
-// instead of a workstation, so it reaches the same pool boundary, the same
+// instead of a workstation, so it reaches the same Workers execution route,
 // admission and cancellation, and the same Worker Session supervision as a
 // Petri Worker while skipping workstation prompt rendering it has no
 // definition for.

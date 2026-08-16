@@ -509,7 +509,6 @@
     "pkg/services/workers/internal/services/workstations/executor/agentrun",
     "pkg/services/workers/internal/services/workstations/internal/service",
     "pkg/services/workers/internal/services/workstations/invocation",
-    "pkg/services/workers/internal/services/workstations/poolboundary",
     "pkg/services/workers/internal/services/workstations/wire",
     "pkg/services/workers/internal/skippermissions",
     "pkg/services/workers/internal/testhelpers",
@@ -2918,11 +2917,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations/invocation",
-      "disposition": "retain",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
     },

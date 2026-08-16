@@ -15,26 +15,31 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// controlledBoundary records the exact pool-boundary controls Worker Sessions
-// performs and exposes callback completion as deterministic test input. It
+// controlledBoundary records the exact Workers execution controls Worker
+// Sessions performs and exposes completion as deterministic test input. It
 // models an accepted asynchronous dispatch without sleeps or polling.
 type controlledBoundary struct {
 	mu sync.Mutex
 
-	started      chan struct{}
-	startedOnce  sync.Once
-	admitted     chan struct{}
-	admittedOnce sync.Once
-	accept       workers.WorkstationDispatchAcceptFunc
-	request      workers.WorkstationDispatchRequest
-	publishCalls int
-	cancelCalls  []workers.WorkstationDispatchCancelRequest
-	cancelCalled chan struct{}
-	cancel       func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
-	publishError func(int, workers.WorkstationDispatchRequest) error
+	started       chan struct{}
+	startedOnce   sync.Once
+	admitted      chan struct{}
+	admittedOnce  sync.Once
+	request       workers.WorkstationDispatchRequest
+	publishCalls  int
+	cancelCalls   []workers.WorkstationDispatchCancelRequest
+	cancelCalled  chan struct{}
+	cancel        func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
+	publishError  func(int, workers.WorkstationDispatchRequest) error
+	completed     chan struct{}
+	completedOnce sync.Once
+	returned      chan struct{}
+	returnedOnce  sync.Once
+	result        workers.WorkstationDispatchResult
+	resultErr     error
 }
 
-var _ workers.WorkstationPoolBoundary = (*controlledBoundary)(nil)
+var _ workers.WorkstationExecutionService = (*controlledBoundary)(nil)
 
 func newControlledBoundary() *controlledBoundary {
 	return &controlledBoundary{
@@ -44,34 +49,60 @@ func newControlledBoundary() *controlledBoundary {
 	}
 }
 
-func (*controlledBoundary) Start(context.Context) error { return nil }
-
-func (b *controlledBoundary) Publish(_ context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return b.PublishWithAdmission(context.Background(), request, nil, accept)
+func (*controlledBoundary) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
 }
 
-func (b *controlledBoundary) PublishWithAdmission(_ context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
-	b.mu.Lock()
-	b.request = request
-	b.accept = accept
-	b.publishCalls++
-	publishCall := b.publishCalls
-	publishError := b.publishError
-	b.mu.Unlock()
-	b.startedOnce.Do(func() { close(b.started) })
-	if publishError != nil {
-		if err := publishError(publishCall, request); err != nil {
-			return err
-		}
+func (*controlledBoundary) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
+}
+
+func (b *controlledBoundary) DispatchWorkstation(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+	return b.DispatchWorkstationWithAdmission(ctx, request, nil)
+}
+
+func (b *controlledBoundary) DispatchWorkstationWithAdmission(_ context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
+	completed, err := b.prepare(request)
+	if err != nil {
+		return workers.WorkstationDispatchResult{}, err
 	}
 	if admitted != nil {
 		admitted()
 		b.admittedOnce.Do(func() { close(b.admitted) })
 	}
-	return nil
+	return b.await(completed)
 }
 
-func (b *controlledBoundary) Cancel(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+func (b *controlledBoundary) await(completed chan struct{}) (workers.WorkstationDispatchResult, error) {
+	defer b.returnedOnce.Do(func() { close(b.returned) })
+	<-completed
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.result, b.resultErr
+}
+
+func (b *controlledBoundary) prepare(request workers.WorkstationDispatchRequest) (chan struct{}, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.request = request
+	b.publishCalls++
+	publishCall := b.publishCalls
+	publishError := b.publishError
+	b.completed = make(chan struct{})
+	b.completedOnce = sync.Once{}
+	completed := b.completed
+	b.returned = make(chan struct{})
+	b.returnedOnce = sync.Once{}
+	b.startedOnce.Do(func() { close(b.started) })
+	if publishError != nil {
+		if err := publishError(publishCall, request); err != nil {
+			return nil, err
+		}
+	}
+	return completed, nil
+}
+
+func (b *controlledBoundary) CancelWorkstationDispatch(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	b.mu.Lock()
 	b.cancelCalls = append(b.cancelCalls, request)
 	cancel := b.cancel
@@ -83,16 +114,18 @@ func (b *controlledBoundary) Cancel(ctx context.Context, request workers.Worksta
 	return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
 }
 
-func (*controlledBoundary) Stop(context.Context) error { return nil }
-
 func (b *controlledBoundary) complete(result workers.WorkstationDispatchResult, err error) {
 	b.mu.Lock()
-	accept, request := b.accept, b.request
+	completed := b.completed
+	b.result, b.resultErr = result, err
 	b.mu.Unlock()
-	if accept == nil {
+	if completed == nil {
 		panic("complete before Publish")
 	}
-	accept(context.Background(), request, result, err)
+	b.completedOnce.Do(func() { close(completed) })
+	if returned := b.returned; returned != nil {
+		<-returned
+	}
 }
 
 func (b *controlledBoundary) cancellations() []workers.WorkstationDispatchCancelRequest {
@@ -128,9 +161,9 @@ func (b *controlledBoundary) setPublishError(fn func(int, workers.WorkstationDis
 	b.mu.Unlock()
 }
 
-func newControlledRegistry(t *testing.T, boundary workers.WorkstationPoolBoundary) workersessions.Service {
+func newControlledRegistry(t *testing.T, execution workers.WorkstationExecutionService) workersessions.Service {
 	t.Helper()
-	registry, err := newService(boundary, newEventsAppender(), logging.NoopLogger{})
+	registry, err := newService(execution, newEventsAppender(), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("service.New() error = %v", err)
 	}

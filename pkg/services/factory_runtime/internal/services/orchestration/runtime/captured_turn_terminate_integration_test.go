@@ -31,16 +31,11 @@ import (
 // cannot hide a missed child control.
 func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *testing.T) {
 	execution := newSynchronousFanOutExecution("dispatch-a", "dispatch-b", "dispatch-replacement")
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    execution,
-		RouteNames: []string{"review"},
-		Async:      false,
-	})
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	workerSessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
@@ -100,14 +95,11 @@ func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *t
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations(t *testing.T) {
 	execution := newContinuationFanOutExecution("dispatch-a", "dispatch-b", "dispatch-direct")
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service: execution, RouteNames: []string{"review"}, Async: true,
-	})
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New Events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(boundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	workerSessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}

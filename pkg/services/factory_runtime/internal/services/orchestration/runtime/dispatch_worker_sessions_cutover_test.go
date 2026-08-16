@@ -56,16 +56,11 @@ func (l *blockingAssociationLedger) RecordDispatchWorkerSessionAssociation(
 
 func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t *testing.T) {
 	workerService := newControlledWorkstationBoundary()
-	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    workerService,
-		RouteNames: []string{"review"},
-		Async:      true,
-	})
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New events service: %v", err)
 	}
-	workerSessions, err := workersessionswire.NewService(workersBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	workerSessions, err := workersessionswire.NewService(workerService, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
@@ -81,7 +76,7 @@ func TestStartThroughWorkerSessions_AssociationIsControlAddressableBeforeStart(t
 	acceptedErr := make(chan error, 1)
 	startErr := make(chan error, 1)
 	go func() {
-		startErr <- startThroughWorkerSessions(context.Background(), cfg, ledger, workersBoundary, request, func(
+		startErr <- startThroughWorkerSessions(context.Background(), cfg, ledger, request, func(
 			_ context.Context,
 			_ workers.WorkstationDispatchRequest,
 			result workers.WorkstationDispatchResult,
@@ -185,7 +180,7 @@ func TestFactoryImpl_PlanDispatchRecordsWorkerSessionAssociationBeforeWorkersHan
 
 // TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart proves every
 // resolved dispatch now executes through worker_sessions.Service.Start (which
-// drives the existing Workers workstation-pool boundary underneath) instead
+// drives the injected Workers execution service underneath) instead
 // of Runtime invoking that boundary directly, while preserving the existing
 // accepted dispatch result shape.
 func TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart(t *testing.T) {
@@ -249,23 +244,18 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkerSessionsStart(t *testing.T
 // Worker Sessions service, and one such assembly is enough.
 func newInvokeWorkerTestFactory(
 	t *testing.T,
-	boundary *controlledWorkstationBoundary,
+	execution *controlledWorkstationBoundary,
 ) *factoryImpl {
 	t.Helper()
-	poolBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    boundary,
-		RouteNames: []string{workers.ProviderInvocationRoute},
-		Async:      true,
-	})
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	requireNoRootErr(t, err, "New events service")
-	sessions, err := workersessionswire.NewService(poolBoundary, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	sessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	requireNoRootErr(t, err, "New Worker Sessions service")
 
 	runtime, _, err := newTestFactoryWithScriptedLedger(
 		withNet(buildSimpleNet()),
 		withInlineDispatch(),
-		withWorkerService(boundary),
+		withWorkerService(execution),
 		withWorkerSessions(sessions),
 		withLogger(logging.NoopLogger{}),
 	)

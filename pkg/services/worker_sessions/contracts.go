@@ -50,7 +50,7 @@ func (a RuntimeAttempt) Complete(
 // and transport behavior are later ACP Worker Events slices. Provider Session
 // association and controls are exposed here because this service owns
 // one session's supervision state and is the only route to an admitted
-// workstation dispatch's explicit cancellation boundary.
+// Workers dispatch's explicit cancellation boundary.
 type Service interface {
 	// Reserve validates req and, when req.ID is not already registered,
 	// stores a new session in StateReserved and returns its snapshot.
@@ -116,7 +116,7 @@ type Service interface {
 	// InvokeSession validates req, then establishes or reuses one stable Worker
 	// Session identity in StateReserved, transitions StateStarting, and hands
 	// a detached clone of req.Execution to the one directly injected
-	// workers.WorkstationExecutionService. InvokeSession is synchronous: it
+	// Workers execution service. InvokeSession is synchronous: it
 	// returns only after the attempt commits its exactly-once absorbing
 	// terminal outcome, classified from the Workers WorkResult first and the
 	// adapter error second. A cancel or terminate that wins after Reserve but
@@ -231,7 +231,7 @@ type Service interface {
 	Resume(ctx context.Context, req ControlRequest) (ControlResult, error)
 
 	// Cancel explicitly stops an admitted dispatch through the injected
-	// WorkstationPoolBoundary. It never uses caller-context cancellation as a
+	// Workers execution service. It never uses caller-context cancellation as a
 	// substitute for that boundary effect.
 	Cancel(ctx context.Context, req ControlRequest) (ControlResult, error)
 

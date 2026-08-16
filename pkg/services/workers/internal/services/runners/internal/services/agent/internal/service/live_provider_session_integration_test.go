@@ -180,18 +180,26 @@ func newLiveSessionBoundary(runner interface {
 	return &liveSessionBoundary{runner: runner, cancels: make(map[string]context.CancelFunc)}
 }
 
-func (*liveSessionBoundary) Start(context.Context) error { return nil }
-
-func (b *liveSessionBoundary) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return b.PublishWithAdmission(ctx, request, nil, accept)
+func (b *liveSessionBoundary) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
 }
 
-func (b *liveSessionBoundary) PublishWithAdmission(
+func (b *liveSessionBoundary) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
+}
+
+func (b *liveSessionBoundary) DispatchWorkstation(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	return b.DispatchWorkstationWithAdmission(ctx, request, nil)
+}
+
+func (b *liveSessionBoundary) DispatchWorkstationWithAdmission(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
+) (workers.WorkstationDispatchResult, error) {
 	dispatchID := request.Execution.Dispatch.DispatchID
 	attemptCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	b.mu.Lock()
@@ -200,17 +208,14 @@ func (b *liveSessionBoundary) PublishWithAdmission(
 	if admitted != nil {
 		admitted()
 	}
-	go func() {
-		response, attemptErr := b.runner.Execute(attemptCtx, liveSessionRunnerRequest(request))
-		accept(context.Background(), request, liveSessionDispatchResult(request, response, attemptErr), attemptErr)
-		b.mu.Lock()
-		delete(b.cancels, dispatchID)
-		b.mu.Unlock()
-	}()
-	return nil
+	response, attemptErr := b.runner.Execute(attemptCtx, liveSessionRunnerRequest(request))
+	b.mu.Lock()
+	delete(b.cancels, dispatchID)
+	b.mu.Unlock()
+	return liveSessionDispatchResult(request, response, attemptErr), attemptErr
 }
 
-func (b *liveSessionBoundary) Cancel(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+func (b *liveSessionBoundary) CancelWorkstationDispatch(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	b.mu.Lock()
 	cancel := b.cancels[request.DispatchID]
 	b.mu.Unlock()
@@ -220,8 +225,6 @@ func (b *liveSessionBoundary) Cancel(_ context.Context, request workers.Workstat
 	cancel()
 	return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
 }
-
-func (*liveSessionBoundary) Stop(context.Context) error { return nil }
 
 func liveSessionRunnerRequest(request workers.WorkstationDispatchRequest) workers.RunnerExecutionRequest {
 	execution := request.Execution

@@ -79,10 +79,9 @@ func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 }
 
 // InvokeSession supervises one resolved execution through the same preparation
-// and attempt driver used by asynchronous Start. The boundary is the sole
-// mechanism that starts, cancels, and reports an attempt; the result callback
-// remains authoritative for terminal Workers output, so control cannot
-// fabricate a Factory Runtime result.
+// and attempt driver used by asynchronous Start. Workers owns the execution
+// call and its admission callback; Worker Sessions owns the surrounding
+// identity, control, and terminal publication state.
 //
 // req.Execution.WorkstationName routes into the runtime binding already
 // assembled by Workers, allowing Petri and JavaScript children to share it.
@@ -110,7 +109,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 	return r.driveRegisteredInvocation(ctx, req, prepared.supervision)
 }
 
-// driveInvocation begins boundary supervision only after the opening Worker
+// driveInvocation begins execution supervision only after the opening Worker
 // Session record committed, then runs attempts until one is terminal or the
 // attempt budget is spent. Controls that win before boundary admission
 // terminalize the session without sending a cancellation for unknown work.
@@ -143,7 +142,7 @@ func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersess
 	}
 	for {
 		result, retry := r.publishRegisteredAttempt(
-			ctx, req.ID, handoff, supervision, r.beginBoundaryPublish(req.ID, supervision),
+			ctx, req.ID, handoff, supervision, r.beginExecutionPublish(req.ID, supervision),
 		)
 		if !retry {
 			result.Attempts = supervision.attemptCount()
@@ -220,13 +219,11 @@ func (r *registry) publishRegisteredAttempt(
 
 	r.logger.Info("worker session start", "sessionID", sessionID, "attemptID", attemptID, "outcome", "handoff", "state", string(workersessions.StateStarting))
 	attemptDone := supervision.beginAttempt()
-	publishErr := r.boundary.PublishWithAdmission(
+	publishErr := r.publishExecution(
 		context.WithoutCancel(ctx),
+		sessionID,
 		handoff,
-		func() { r.acceptSupervision(sessionID, supervision) },
-		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
-			r.completeSupervision(sessionID, supervision, result, dispatchErr)
-		},
+		supervision,
 	)
 	if publishErr != nil {
 		final, committed := r.commitTerminal(sessionID, workersessions.StateFailed, classifyTerminal(publishErr, workers.WorkstationDispatchResult{}))

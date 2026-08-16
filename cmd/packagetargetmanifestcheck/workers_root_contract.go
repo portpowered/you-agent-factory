@@ -49,10 +49,9 @@ var workersThinRootContractFiles = []string{
 	"template_fields_root_test.go",
 	"validate_draft.go",
 	"worker_vocabulary_contract.go",
+	"worker_executor_failure.go",
 	"workstation_contracts.go",
-	"workstation_pool_boundary_contracts.go",
-	"workstation_pool_boundary_impl.go",
-	"workstation_pool_boundary_impl_test.go",
+	"workstation_execution_contracts.go",
 	"workstation_result_contract_test.go",
 }
 

@@ -29,20 +29,20 @@ func continuationFromProviderReference(reference providers.SessionRef) *provider
 }
 
 func newService(
-	boundary workers.WorkstationPoolBoundary,
+	execution workers.WorkstationExecutionService,
 	eventsAppender workersessionservice.EventsAppender,
 	logger logging.Logger,
 ) (workersessions.Service, error) {
-	return newServiceWithClock(boundary, eventsAppender, logger, platformclock.Real{})
+	return newServiceWithClock(execution, eventsAppender, logger, platformclock.Real{})
 }
 
 func newServiceWithClock(
-	boundary workers.WorkstationPoolBoundary,
+	execution workers.WorkstationExecutionService,
 	eventsAppender workersessionservice.EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(boundary, eventsAppender, logger, clock, unavailableProviderSessions{}, nil)
+	return workersessionservice.New(execution, eventsAppender, logger, clock, unavailableProviderSessions{}, nil)
 }
 
 type unavailableProviderSessions struct {
@@ -144,41 +144,34 @@ func (f *fakeExecution) cancellationRequests() []workers.WorkstationDispatchCanc
 	return append([]workers.WorkstationDispatchCancelRequest(nil), f.cancelCalls...)
 }
 
-// executionBoundary adapts the existing controlled Workers execution fake to
-// the exact pool boundary Worker Sessions receives in production. It keeps
-// tests focused on observable Worker Sessions behavior while preserving the
-// production rule that control enters through Boundary.Cancel.
+// executionBoundary is the direct Workers execution double used by the
+// Worker Sessions tests. It deliberately exposes only the supported Workers
+// execution contract; admission and terminal behavior are supplied by the
+// Workers-shaped methods below.
 type executionBoundary struct {
 	execution workers.WorkstationExecutionService
 }
 
-var _ workers.WorkstationPoolBoundary = executionBoundary{}
+var _ workers.WorkstationExecutionService = executionBoundary{}
 
-func (b executionBoundary) Start(ctx context.Context) error {
-	_, err := b.execution.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{})
-	return err
+func (b executionBoundary) StartWorkstationPool(ctx context.Context, request workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
+	return b.execution.StartWorkstationPool(ctx, request)
 }
 
-func (b executionBoundary) Publish(ctx context.Context, req workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return b.PublishWithAdmission(ctx, req, nil, accept)
+func (b executionBoundary) StopWorkstationPool(ctx context.Context) (workers.WorkstationPoolStopResult, error) {
+	return b.execution.StopWorkstationPool(ctx)
 }
 
-func (b executionBoundary) PublishWithAdmission(ctx context.Context, req workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
-	if err := b.Start(ctx); err != nil {
-		return err
-	}
-	result, err := b.execution.DispatchWorkstationWithAdmission(ctx, req, admitted)
-	accept(context.Background(), req, result, err)
-	return nil
+func (b executionBoundary) DispatchWorkstation(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+	return b.execution.DispatchWorkstation(ctx, request)
 }
 
-func (b executionBoundary) Cancel(ctx context.Context, req workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return b.execution.CancelWorkstationDispatch(ctx, req)
+func (b executionBoundary) DispatchWorkstationWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
+	return b.execution.DispatchWorkstationWithAdmission(ctx, request, admitted)
 }
 
-func (b executionBoundary) Stop(ctx context.Context) error {
-	_, err := b.execution.StopWorkstationPool(ctx)
-	return err
+func (b executionBoundary) CancelWorkstationDispatch(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	return b.execution.CancelWorkstationDispatch(ctx, request)
 }
 
 // appendOnlyEvents deliberately exposes no Read or Subscribe method. It
@@ -228,24 +221,28 @@ type noAdmissionBoundary struct {
 	err error
 }
 
-var _ workers.WorkstationPoolBoundary = noAdmissionBoundary{}
+var _ workers.WorkstationExecutionService = noAdmissionBoundary{}
 
-func (b noAdmissionBoundary) Start(context.Context) error { return nil }
-
-func (b noAdmissionBoundary) Publish(
-	ctx context.Context,
-	req workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	return b.PublishWithAdmission(ctx, req, nil, accept)
+func (b noAdmissionBoundary) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{}, nil
 }
 
-func (b noAdmissionBoundary) PublishWithAdmission(
+func (b noAdmissionBoundary) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{}, nil
+}
+
+func (b noAdmissionBoundary) DispatchWorkstation(
+	ctx context.Context,
+	req workers.WorkstationDispatchRequest,
+) (workers.WorkstationDispatchResult, error) {
+	return b.DispatchWorkstationWithAdmission(ctx, req, nil)
+}
+
+func (b noAdmissionBoundary) DispatchWorkstationWithAdmission(
 	_ context.Context,
 	req workers.WorkstationDispatchRequest,
 	_ workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
+) (workers.WorkstationDispatchResult, error) {
 	result := workers.WorkstationDispatchResult{
 		DispatchID:      req.Execution.Dispatch.DispatchID,
 		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
@@ -254,15 +251,12 @@ func (b noAdmissionBoundary) PublishWithAdmission(
 			Outcome:    workers.OutcomeFailed,
 		},
 	}
-	accept(context.Background(), req, result, b.err)
-	return nil
+	return result, b.err
 }
 
-func (b noAdmissionBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+func (b noAdmissionBoundary) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	return workers.WorkstationDispatchCancelResult{}, nil
 }
-
-func (b noAdmissionBoundary) Stop(context.Context) error { return nil }
 
 // validStartRequest returns a minimally well-formed StartRequest for id,
 // naming attemptID as its resolved attempt (dispatch) identity.
@@ -669,32 +663,26 @@ type continuationFailureBoundary struct {
 	err error
 }
 
-func (b *continuationFailureBoundary) Publish(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	return b.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (b *continuationFailureBoundary) PublishWithAdmission(
+func (b *continuationFailureBoundary) DispatchWorkstationWithAdmission(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
+) (workers.WorkstationDispatchResult, error) {
 	if request.Execution.Continuation == nil {
-		return b.controlledBoundary.PublishWithAdmission(ctx, request, admitted, accept)
+		return b.controlledBoundary.DispatchWorkstationWithAdmission(ctx, request, admitted)
 	}
-	accept(context.Background(), request, workers.WorkstationDispatchResult{
+	_, err := b.controlledBoundary.prepare(request)
+	if err != nil {
+		return workers.WorkstationDispatchResult{}, err
+	}
+	return workers.WorkstationDispatchResult{
 		DispatchID:      request.Execution.Dispatch.DispatchID,
 		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
 		Result: workers.WorkResult{
 			DispatchID: request.Execution.Dispatch.DispatchID,
 			Outcome:    workers.OutcomeFailed,
 		},
-	}, b.err)
-	return nil
+	}, b.err
 }
 
 func TestContinue_PreAdmissionFailureReturnsTerminalSuccessorAndTypedError(t *testing.T) {
@@ -793,33 +781,28 @@ func TestContinue_CanceledCallerDoesNotCancelReservedContinuation(t *testing.T) 
 	}
 }
 
-func (b *continuationAdmissionBoundary) PublishWithAdmission(
+func (b *continuationAdmissionBoundary) DispatchWorkstationWithAdmission(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	embeddedAdmission := admitted
-	if request.Execution.Continuation != nil {
-		embeddedAdmission = nil
+) (workers.WorkstationDispatchResult, error) {
+	completed, err := b.controlledBoundary.prepare(request)
+	if err != nil {
+		return workers.WorkstationDispatchResult{}, err
 	}
-	if err := b.controlledBoundary.PublishWithAdmission(ctx, request, embeddedAdmission, accept); err != nil {
-		return err
-	}
-	if request.Execution.Continuation == nil || admitted == nil {
-		if admitted != nil {
-			admitted()
+	if request.Execution.Continuation != nil && admitted != nil {
+		b.readyOnce.Do(func() { close(b.continuationReady) })
+		select {
+		case <-b.continuationGate:
+		case <-ctx.Done():
+			return workers.WorkstationDispatchResult{}, ctx.Err()
 		}
-		return nil
 	}
-	b.readyOnce.Do(func() { close(b.continuationReady) })
-	select {
-	case <-b.continuationGate:
+	if admitted != nil {
 		admitted()
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+		b.controlledBoundary.admittedOnce.Do(func() { close(b.controlledBoundary.admitted) })
 	}
+	return b.controlledBoundary.await(completed)
 }
 
 func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *testing.T) {
@@ -843,9 +826,24 @@ func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *te
 	handoff := boundary.currentRequest()
 	boundary.complete(failedContinuationDispatch(handoff.Execution.Dispatch.DispatchID, reference), nil)
 
-	successor, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
-	if err != nil {
-		t.Fatalf("Get(successor) error = %v", err)
+	var successor workersessions.Session
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		successor, err = registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
+		if err != nil {
+			t.Fatalf("Get(successor) error = %v", err)
+		}
+		if successor.State == workersessions.StateFailed && successor.Result != nil && successor.Result.Cause != nil {
+			break
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf("successor after provider failure = %#v, want FAILED with cause", successor)
+		case <-ticker.C:
+		}
 	}
 	if successor.State != workersessions.StateFailed || successor.Result == nil || successor.Result.Cause == nil {
 		t.Fatalf("successor after provider failure = %#v, want FAILED with cause", successor)

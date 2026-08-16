@@ -83,7 +83,7 @@ type registry struct {
 	// deliberately do not install Worker Sessions-owned supervision: Runtime
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts  map[string]struct{}
-	boundary         workers.WorkstationPoolBoundary
+	execution        workers.WorkstationExecutionService
 	events           EventsAppender
 	eventReader      EventsReader
 	retainedReader   EventsRetainedReader
@@ -118,14 +118,14 @@ var _ workersessions.Service = (*registry)(nil)
 // Provider Sessions service is rejected: the registry cannot truthfully
 // supervise, time, or enrich an observation without each of them.
 func New(
-	boundary workers.WorkstationPoolBoundary,
+	execution workers.WorkstationExecutionService,
 	eventsAppender EventsAppender,
 	logger logging.Logger,
 	clock platformclock.Source,
 	providerSessions providersessions.Service,
 	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
-	if boundary == nil {
+	if execution == nil {
 		return nil, ErrMissingExecution
 	}
 	if eventsAppender == nil {
@@ -151,7 +151,7 @@ func New(
 		interruptReplays:    make(map[string]*interruptReplay),
 		dispatchOwners:      make(map[string]string),
 		runtimeAttempts:     make(map[string]struct{}),
-		boundary:            boundary,
+		execution:           execution,
 		events:              eventsAppender,
 		clock:               clock,
 		providerSessions:    providerSessions,

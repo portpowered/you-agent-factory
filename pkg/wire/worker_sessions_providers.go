@@ -21,7 +21,6 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 func provideWorkerRecordingReader(
@@ -99,19 +98,7 @@ func provideWorkerSessionsFactoryWithRecorder(
 	logger logging.Logger,
 	recorder recordings.WorkerSessionRecordingService,
 ) factoryruntime.WorkerSessionsFactory {
-	return func(boundary workers.WorkstationPoolBoundary, clock platformclock.Source) (workersessions.Service, error) {
-		return workersessionswire.NewService(boundary, eventsService, logger, clock, providerSessions, recorder)
-	}
-}
-
-// provideWorkstationPoolBoundaryFactory keeps the Workers-owned constructor
-// in the canonical composition root. Factory Runtime consumes only the
-// factoryruntime composition contract.
-func provideWorkstationPoolBoundaryFactory() factoryruntime.WorkstationPoolBoundaryFactory {
-	return func(config workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary {
-		config.ServiceFactory = func() workers.WorkstationExecutionService {
-			return workerswire.NewWorkstationPool(logging.NoopLogger{})
-		}
-		return workers.NewWorkstationPoolBoundary(config)
+	return func(execution workers.WorkstationExecutionService, clock platformclock.Source) (workersessions.Service, error) {
+		return workersessionswire.NewService(execution, eventsService, logger, clock, providerSessions, recorder)
 	}
 }

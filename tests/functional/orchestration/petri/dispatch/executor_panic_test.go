@@ -87,8 +87,8 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 // path already covered by the "provider_command_exit_routes_to_failed_terminal"
 // subtest in simple_run_test.go, never a Go-level panic. An in-process
 // An in-process Provider.Execute fake is therefore the only way to exercise the recover() in
-// workerExecutorRequestAdapter.Execute
-// (pkg/services/workers/workstation_pool_boundary_impl.go).
+// the Workers execution service's WorkerExecutor panic recovery
+// (pkg/services/workers/worker_executor_failure.go).
 type panicExecuteProvider struct {
 	testutil.NativeProvider
 	message string

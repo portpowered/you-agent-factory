@@ -47,20 +47,16 @@ type failingPublishBoundary struct {
 	err error
 }
 
-func (b failingPublishBoundary) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
-	return b.err
-}
-
-func (b failingPublishBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
-	return b.err
+func (b failingPublishBoundary) DispatchWorkstationWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
+	return workers.WorkstationDispatchResult{}, b.err
 }
 
 type noAdmissionBoundary struct {
 	unusedExecution
 }
 
-func (noAdmissionBoundary) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
-	return nil
+func (noAdmissionBoundary) DispatchWorkstationWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc) (workers.WorkstationDispatchResult, error) {
+	return workers.WorkstationDispatchResult{}, nil
 }
 
 // cancellationResultBoundary supplies one deterministic boundary cancellation
@@ -72,7 +68,7 @@ type cancellationResultBoundary struct {
 	err    error
 }
 
-func (b cancellationResultBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+func (b cancellationResultBoundary) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	return b.result, b.err
 }
 
@@ -99,31 +95,6 @@ func (u unusedExecution) DispatchWorkstationWithAdmission(context.Context, worke
 func (u unusedExecution) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	u.t.Fatal("unexpected CancelWorkstationDispatch call")
 	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (u unusedExecution) Start(context.Context) error {
-	u.t.Fatal("unexpected boundary Start call")
-	return nil
-}
-
-func (u unusedExecution) Publish(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAcceptFunc) error {
-	u.t.Fatal("unexpected boundary Publish call")
-	return nil
-}
-
-func (u unusedExecution) PublishWithAdmission(context.Context, workers.WorkstationDispatchRequest, workers.WorkstationDispatchAdmissionFunc, workers.WorkstationDispatchAcceptFunc) error {
-	u.t.Fatal("unexpected boundary PublishWithAdmission call")
-	return nil
-}
-
-func (u unusedExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	u.t.Fatal("unexpected boundary Cancel call")
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (u unusedExecution) Stop(context.Context) error {
-	u.t.Fatal("unexpected boundary Stop call")
-	return nil
 }
 
 // newTestRegistry returns the concrete *registry (not just the Service
@@ -621,14 +592,14 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 		t.Fatal("registerSupervision(missing) unexpectedly succeeded")
 	}
 	supervision.requestedAction = workersessions.ControlActionCancel
-	if r.beginBoundaryPublish("worker-2", supervision) {
+	if r.beginExecutionPublish("worker-2", supervision) {
 		t.Fatal("beginBoundaryPublish() succeeded after a control request")
 	}
 	r.reserveIfAbsent("worker-3")
 	if workerSession, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-3"}); err != nil || workerSession.State != workersessions.StateReserved {
 		t.Fatalf("Get(worker-3) = %#v, %v, want RESERVED", workerSession, err)
 	}
-	if r.beginBoundaryPublish("worker-3", newSupervision("dispatch-3", "")) {
+	if r.beginExecutionPublish("worker-3", newSupervision("dispatch-3", "")) {
 		t.Fatal("beginBoundaryPublish() succeeded for a session that never started")
 	}
 	if session, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-2"}); err != nil || session.State != workersessions.StateStarting {
@@ -676,7 +647,7 @@ func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(
 
 	t.Run("boundary publication failure", func(t *testing.T) {
 		r := newTestRegistry(t)
-		r.boundary = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: errors.New("boundary publish failed")}
+		r.execution = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: errors.New("execution publish failed")}
 		r.reserveIfAbsent("worker-1")
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
@@ -1001,7 +972,7 @@ func TestCancelBoundaryReturnsNoopForNonCanceledWorkersOutcome(t *testing.T) {
 	wait := make(chan struct{})
 	supervision.controlDone = wait
 	r.supervisions[sessionID] = supervision
-	r.boundary = cancellationResultBoundary{
+	r.execution = cancellationResultBoundary{
 		unusedExecution: unusedExecution{t: t},
 		result: workers.WorkstationDispatchCancelResult{
 			DispatchID: dispatchID,
@@ -2023,7 +1994,7 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 	t.Run("publication failure restores the exact paused continuation", func(t *testing.T) {
 		r, supervision, _ := newPausedContinuationRegistry(t)
 		publishErr := errors.New("continuation publish failed")
-		r.boundary = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: publishErr}
+		r.execution = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: publishErr}
 		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 		if !errors.Is(err, publishErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.DispatchID != "dispatch-1/resume/1" {
 			t.Fatalf("Resume() = %#v, %v, want failed fresh continuation dispatch", result, err)
@@ -2035,7 +2006,7 @@ func TestContinuationControl_GuardsPreserveThePausedSession(t *testing.T) {
 
 	t.Run("missing admission restores the exact paused continuation", func(t *testing.T) {
 		r, supervision, _ := newPausedContinuationRegistry(t)
-		r.boundary = noAdmissionBoundary{unusedExecution: unusedExecution{t: t}}
+		r.execution = noAdmissionBoundary{unusedExecution: unusedExecution{t: t}}
 
 		result, err := r.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 		if !errors.Is(err, workersessions.ErrStartAdmissionFailed) || result.Outcome != workersessions.ControlOutcomeFailed ||
@@ -2095,7 +2066,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	t.Run("boundary error returns a failed control without changing the session", func(t *testing.T) {
 		r, _ := newRunningPauseRegistry(t)
 		boundaryErr := errors.New("cancel boundary failed")
-		r.boundary = cancellationResultBoundary{unusedExecution: unusedExecution{t: t}, err: boundaryErr}
+		r.execution = cancellationResultBoundary{unusedExecution: unusedExecution{t: t}, err: boundaryErr}
 		result, err := r.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
 		if !errors.Is(err, boundaryErr) || result.Outcome != workersessions.ControlOutcomeFailed || result.Session.State != workersessions.StateRunning {
 			t.Fatalf("Pause() = %#v, %v, want failed RUNNING result", result, err)
@@ -2105,7 +2076,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	t.Run("already-terminal cancellation is a no-op", func(t *testing.T) {
 		r, supervision := newRunningPauseRegistry(t)
 		supervision.signalDone()
-		r.boundary = cancellationResultBoundary{
+		r.execution = cancellationResultBoundary{
 			unusedExecution: unusedExecution{t: t},
 			result:          workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyCanceled},
 		}
@@ -2118,7 +2089,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 	t.Run("cancellation without a paused callback remains a no-op", func(t *testing.T) {
 		r, supervision := newRunningPauseRegistry(t)
 		supervision.signalDone()
-		r.boundary = cancellationResultBoundary{
+		r.execution = cancellationResultBoundary{
 			unusedExecution: unusedExecution{t: t},
 			result:          workers.WorkstationDispatchCancelResult{DispatchID: "dispatch-1", Outcome: workers.WorkstationDispatchCancelOutcomeCanceled},
 		}
@@ -3571,7 +3542,7 @@ func TestRunInterruptRejectsSuccessorWithConflictingCapturedReference(t *testing
 	r.dispatchOwners["dispatch-source"] = sourceID
 	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
 	close(boundary.release)
-	r.boundary = boundary
+	r.execution = boundary
 
 	result, err := r.runInterrupt(interruptPlan{
 		request: workersessions.InterruptRequest{
@@ -3638,7 +3609,7 @@ func TestContinue_ReturnsAtTheAdmissionBarrierBeforeCompletion(t *testing.T) {
 	r := newContinuationSource(t, request)
 	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	boundary := &admitBeforeCompletionBoundary{ready: make(chan struct{}), release: make(chan struct{})}
-	r.boundary = boundary
+	r.execution = boundary
 
 	outcomes := make(chan struct {
 		result workersessions.ContinueResult
@@ -3735,42 +3706,44 @@ type admitBeforeCompletionBoundary struct {
 	once    sync.Once
 }
 
-func (boundary *admitBeforeCompletionBoundary) Start(context.Context) error { return nil }
-
-func (boundary *admitBeforeCompletionBoundary) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return boundary.PublishWithAdmission(ctx, request, nil, accept)
+func (boundary *admitBeforeCompletionBoundary) StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error) {
+	return workers.WorkstationPoolStartResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStarted}, nil
 }
 
-func (boundary *admitBeforeCompletionBoundary) PublishWithAdmission(
+func (boundary *admitBeforeCompletionBoundary) StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error) {
+	return workers.WorkstationPoolStopResult{Outcome: workers.WorkstationPoolLifecycleOutcomeStopped}, nil
+}
+
+func (boundary *admitBeforeCompletionBoundary) DispatchWorkstation(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+	return boundary.DispatchWorkstationWithAdmission(ctx, request, nil)
+}
+
+func (boundary *admitBeforeCompletionBoundary) DispatchWorkstationWithAdmission(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
+) (workers.WorkstationDispatchResult, error) {
 	if admitted != nil {
 		admitted()
 		boundary.once.Do(func() { close(boundary.ready) })
 		select {
 		case <-boundary.release:
 		case <-ctx.Done():
-			return ctx.Err()
+			return workers.WorkstationDispatchResult{}, ctx.Err()
 		}
 	}
-	accept(context.Background(), request, workers.WorkstationDispatchResult{
+	return workers.WorkstationDispatchResult{
 		DispatchID: request.Execution.Dispatch.DispatchID,
 		Result: workers.WorkResult{
 			DispatchID: request.Execution.Dispatch.DispatchID,
 			Outcome:    workers.OutcomeAccepted,
 		},
-	}, nil)
-	return nil
+	}, nil
 }
 
-func (*admitBeforeCompletionBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+func (*admitBeforeCompletionBoundary) CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 	return workers.WorkstationDispatchCancelResult{Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
 }
-
-func (*admitBeforeCompletionBoundary) Stop(context.Context) error { return nil }
 
 type continuationLineageRecordingStub struct {
 	recordErr error

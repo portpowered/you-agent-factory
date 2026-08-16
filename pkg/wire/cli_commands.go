@@ -263,8 +263,8 @@ func bindWorkerSessionControlOperation(
 // boundary rewrites only the pool route while preserving the execution payload
 // that the provider-invocation executor consumes.
 type localWorkerSessionsBoundary struct {
-	service workersessions.Service
-	pool    workers.WorkstationPoolBoundary
+	service   workersessions.Service
+	execution workers.WorkstationExecutionService
 }
 
 var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
@@ -353,10 +353,11 @@ func (b *localWorkerSessionsBoundary) StreamObservationsByWorkerSessionID(
 }
 
 func (b *localWorkerSessionsBoundary) Close(ctx context.Context) error {
-	if b == nil || b.pool == nil {
+	if b == nil || b.execution == nil {
 		return nil
 	}
-	return b.pool.Stop(ctx)
+	_, err := b.execution.StopWorkstationPool(ctx)
+	return err
 }
 
 func provideLocalWorkerSessionsBoundary(
@@ -382,13 +383,20 @@ func provideLocalWorkerSessionsBoundary(
 		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation is unavailable")
 	}
 
-	pool := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:            workerswire.NewWorkstationPool(logger),
-		ProviderInvocation: providerInvocation,
-		Async:              true,
-	})
+	execution := workerswire.NewWorkstationPool(logger)
+	if _, err := execution.StartWorkstationPool(context.Background(), workers.WorkstationPoolStartRequest{
+		Bindings: []workers.AssembledRuntimeBinding{{
+			RoleName:      workers.ProviderInvocationRoute,
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      providerInvocation,
+			Capacity:      workers.DefaultRuntimePoolBindingCapacity,
+			QueueCapacity: workers.DefaultRuntimePoolBindingCapacity,
+		}},
+	}); err != nil {
+		return nil, fmt.Errorf("start local Workers execution service: %w", err)
+	}
 	service, err := workersessionswire.NewService(
-		pool,
+		execution,
 		eventsService,
 		logger,
 		platformclock.Real{},
@@ -399,7 +407,7 @@ func provideLocalWorkerSessionsBoundary(
 		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
 	}
 	observationPublisher.Bind(service)
-	return &localWorkerSessionsBoundary{service: service, pool: pool}, nil
+	return &localWorkerSessionsBoundary{service: service, execution: execution}, nil
 }
 
 func provideInvokeWorkerSessionOperation(

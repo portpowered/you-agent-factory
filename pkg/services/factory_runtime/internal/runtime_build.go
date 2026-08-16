@@ -530,14 +530,15 @@ func buildProviderInvocation(
 }
 
 // bindProviderSessionProgress keeps the Workers progress bridge session-local:
-// Factory Runtime creates the same Worker Sessions service that owns the pool
-// and binds it before any dispatch can be admitted or produce output.
+// Factory Runtime creates the same Worker Sessions service that owns the
+// execution service and binds it before any dispatch can be admitted or
+// produce output.
 func bindProviderSessionProgress(
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	publisher *workersessions.ProviderSessionObservationPublisher,
 ) factory.WorkerSessionsFactory {
-	return func(boundary workers.WorkstationPoolBoundary, clock platformclock.Source) (workersessions.Service, error) {
-		service, err := workerSessionsFactory(boundary, clock)
+	return func(execution workers.WorkstationExecutionService, clock platformclock.Source) (workersessions.Service, error) {
+		service, err := workerSessionsFactory(execution, clock)
 		if err != nil {
 			return nil, err
 		}
@@ -590,7 +591,6 @@ func loadWorkerOptions(
 }
 func executeServiceFromWorkstation(
 	service runtimeWorkstationService,
-	boundary workers.WorkstationPoolBoundary,
 ) runtimeExecuteService {
 	if service == nil {
 		return nil
@@ -598,34 +598,44 @@ func executeServiceFromWorkstation(
 	if execute, ok := service.(runtimeExecuteService); ok {
 		return execute
 	}
-	if boundary != nil {
-		return workstationExecuteAdapter{boundary: boundary}
-	}
 	return workstationExecuteAdapter{service: service}
 }
 
-func buildRuntimeWorkstationBoundary(
-	factory factory.WorkstationPoolBoundaryFactory,
+func startRuntimeWorkstationService(
+	ctx context.Context,
 	service runtimeWorkstationService,
 	executors map[string]workers.WorkerExecutor,
 	net *state.Net,
 	requestExecutor workers.WorkstationRequestExecutor,
 	providerInvocation workers.WorkstationRequestExecutor,
-) workers.WorkstationPoolBoundary {
-	if factory == nil || service == nil {
-		return nil
+) error {
+	if service == nil {
+		return fmt.Errorf("Workers execution service is unavailable")
 	}
-	return factory(workers.WorkstationPoolBoundaryConfig{
-		Service:            service,
-		Executors:          executors,
-		RequestExecutor:    requestExecutor,
-		RouteNames:         runtimeBoundaryRouteNames(net, executors),
-		ProviderInvocation: providerInvocation,
-		Async:              true,
-	})
+	bindings := make([]workers.AssembledRuntimeBinding, 0, len(executors)+1)
+	for _, name := range runtimeWorkstationRouteNames(net, executors) {
+		bindings = append(bindings, workers.AssembledRuntimeBinding{
+			RoleName:      name,
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      requestExecutor,
+			Capacity:      workers.DefaultRuntimePoolBindingCapacity,
+			QueueCapacity: workers.DefaultRuntimePoolBindingCapacity,
+		})
+	}
+	if providerInvocation != nil {
+		bindings = append(bindings, workers.AssembledRuntimeBinding{
+			RoleName:      workers.ProviderInvocationRoute,
+			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
+			Executor:      providerInvocation,
+			Capacity:      workers.DefaultRuntimePoolBindingCapacity,
+			QueueCapacity: workers.DefaultRuntimePoolBindingCapacity,
+		})
+	}
+	_, err := service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{Bindings: bindings})
+	return err
 }
 
-func runtimeBoundaryRouteNames(
+func runtimeWorkstationRouteNames(
 	net *state.Net,
 	executors map[string]workers.WorkerExecutor,
 ) []string {
@@ -664,17 +674,13 @@ func runtimeBoundaryRouteNames(
 // constructor receives only ExecuteService; production Workers services take
 // the direct branch above.
 type workstationExecuteAdapter struct {
-	service  runtimeWorkstationService
-	boundary workers.WorkstationPoolBoundary
+	service runtimeWorkstationService
 }
 
 func (adapter workstationExecuteAdapter) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
-	if adapter.boundary != nil {
-		return adapter.executeThroughBoundary(ctx, request)
-	}
 	if adapter.service == nil {
 		return workers.ExecuteResult{}, fmt.Errorf("Workers Execute service is unavailable")
 	}
@@ -738,49 +744,6 @@ func (adapter workstationExecuteAdapter) Execute(
 		StructuredResult:        jsonvalue.Clone(result.Result.StructuredResult),
 		StructuredResultPresent: jsonvalue.Present(result.Result.StructuredResult, result.Result.StructuredResultPresent),
 	}, nil
-}
-
-type workstationDispatchCompletion struct {
-	result workers.WorkstationDispatchResult
-	err    error
-}
-
-func (adapter workstationExecuteAdapter) executeThroughBoundary(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	legacyRequest := workstationDispatchRequestFromExecute(request)
-	completion := make(chan workstationDispatchCompletion, 1)
-	err := adapter.boundary.Publish(
-		ctx,
-		legacyRequest,
-		func(_ context.Context, _ workers.WorkstationDispatchRequest, result workers.WorkstationDispatchResult, dispatchErr error) {
-			completion <- workstationDispatchCompletion{result: result, err: dispatchErr}
-		},
-	)
-	if err != nil {
-		return workers.ExecuteResult{}, err
-	}
-	select {
-	case completed := <-completion:
-		return executeResultFromWorkstationDispatch(request, completed.result, completed.err)
-	case <-ctx.Done():
-		_, cancelErr := adapter.boundary.Cancel(
-			context.WithoutCancel(ctx),
-			workers.WorkstationDispatchCancelRequest{DispatchID: legacyRequest.Execution.Dispatch.DispatchID},
-		)
-		if cancelErr != nil {
-			return workers.ExecuteResult{}, cancelErr
-		}
-		return canceledExecuteResult(request), nil
-	}
-}
-
-func (adapter workstationExecuteAdapter) Stop(ctx context.Context) error {
-	if adapter.boundary == nil {
-		return nil
-	}
-	return adapter.boundary.Stop(ctx)
 }
 
 func workstationDispatchRequestFromExecute(

@@ -8,22 +8,21 @@
 > These are observations, not normative policy. Normative rules live under
 > `docs/internal/standards/`.
 
-## Worker Sessions and the workstation pool boundary
+## Worker Sessions and the Workers execution service
 
-- Construct each Factory Session's Worker Sessions service only after its
-  session-owned `WorkstationPoolBoundary` exists, so dispatch and cancellation
-  share the exact same boundary.
-- Worker Session controls must use `context.WithoutCancel` when calling the pool
-  boundary; dispatch termination remains observable through the boundary
-  callback rather than caller-context cancellation.
-- An asynchronous `WorkstationPoolBoundary.Publish` must not return until Workers
-  has admitted the dispatch into an exact cancellable queue or running set (or
-  has already returned a terminal result); Worker Sessions may then safely issue
-  exact cancellation.
-- A pool boundary that offers synchronous completion must forward Workers'
-  cancellable-admission acknowledgement before it waits for the terminal result;
-  otherwise a valid running dispatch becomes unreachable to its supervising
-  control plane.
+- Construct each Factory Session's Worker Sessions service with the directly
+  injected Workers execution service, so dispatch and cancellation share the
+  exact admission and cancellation capability.
+- Worker Session controls must use `context.WithoutCancel` when calling the
+  Workers execution service; dispatch termination remains observable through
+  the terminal result rather than caller-context cancellation.
+- An asynchronous execution handoff must not return until Workers has admitted
+  the dispatch into an exact cancellable queue or running set (or has already
+  returned a terminal result); Worker Sessions may then safely issue exact
+  cancellation.
+- A synchronous execution call must expose Workers' cancellable-admission
+  acknowledgement before it waits for the terminal result; otherwise a valid
+  running dispatch becomes unreachable by its supervising control plane.
 - A late admission callback must never move a terminal Worker Session back to
   `RUNNING`; terminal lifecycle snapshots are absorbing under every
   control/completion interleaving.

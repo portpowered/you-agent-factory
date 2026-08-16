@@ -74,7 +74,7 @@ func (r *registry) pauseBoundary(
 	supervision *supervision,
 	attempt cancellationAttempt,
 ) (workersessions.ControlResult, bool, error) {
-	cancelResult, cancelErr := r.boundary.Cancel(
+	cancelResult, cancelErr := r.execution.CancelWorkstationDispatch(
 		context.WithoutCancel(ctx),
 		workers.WorkstationDispatchCancelRequest{DispatchID: attempt.dispatchID},
 	)
@@ -372,7 +372,7 @@ func (r *registry) cancelBoundary(
 	if detachContext {
 		boundaryContext = context.WithoutCancel(ctx)
 	}
-	cancelResult, cancelErr := r.boundary.Cancel(boundaryContext, workers.WorkstationDispatchCancelRequest{DispatchID: attempt.dispatchID})
+	cancelResult, cancelErr := r.execution.CancelWorkstationDispatch(boundaryContext, workers.WorkstationDispatchCancelRequest{DispatchID: attempt.dispatchID})
 	alreadyTerminal := supervision.finishCancellation(action, attempt.wait, cancelResult, cancelErr, sessionIsTerminal(r, req.ID))
 
 	// Every terminal control promises to return only after the authoritative
@@ -728,7 +728,8 @@ func (s *supervision) lastResult() workers.WorkstationDispatchResult {
 }
 
 // acceptSupervision records Workers' exact cancellable-admission point. It
-// deliberately runs from the pool boundary callback rather than after Publish
+// deliberately runs from the Workers admission callback rather than after the
+// execution call
 // returns: synchronous Publish waits for terminal completion, but its admitted
 // dispatch must remain controllable throughout that wait.
 func (r *registry) acceptSupervision(id string, supervision *supervision) {
@@ -814,7 +815,7 @@ func (r *registry) registerSupervisionOwned(
 	return supervision, true
 }
 
-func (r *registry) beginBoundaryPublish(id string, supervision *supervision) bool {
+func (r *registry) beginExecutionPublish(id string, supervision *supervision) bool {
 	r.mu.RLock()
 	session := r.sessions[id]
 	r.mu.RUnlock()

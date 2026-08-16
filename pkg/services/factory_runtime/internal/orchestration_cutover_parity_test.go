@@ -170,7 +170,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		nil, nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
-		nil, testRuntimePoolBoundaryFactory,
+		nil,
 	).Build(
 		context.Background(), dir, dir, "~default",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,

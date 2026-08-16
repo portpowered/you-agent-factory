@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 func codexWireTestOutput(content string) []byte {
@@ -780,10 +781,6 @@ func TestCanonicalWorkerCompositionBindingsRemainConstructible(t *testing.T) {
 		t.Fatalf("provider invocation no-conductor factory() = executor %T, error %v", executor, err)
 	}
 
-	boundary := provideWorkstationPoolBoundaryFactory()(workers.WorkstationPoolBoundaryConfig{})
-	if boundary == nil {
-		t.Fatal("provideWorkstationPoolBoundaryFactory() returned nil boundary")
-	}
 }
 
 func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
@@ -809,9 +806,9 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider sessions service = %v", err)
 	}
-	boundary := provideWorkstationPoolBoundaryFactory()(workers.WorkstationPoolBoundaryConfig{})
+	execution := workerswire.NewWorkstationPool(logging.NoopLogger{})
 	factory := provideWorkerSessionsFactory(eventsService, providerSessions, logging.NoopLogger{}, nil)
-	service, err := factory(boundary, platformclock.Real{})
+	service, err := factory(execution, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("worker sessions factory() error = %v", err)
 	}

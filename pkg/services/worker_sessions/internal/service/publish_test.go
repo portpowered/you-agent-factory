@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -666,7 +667,7 @@ func TestContinue_PersistsExactAttemptAndPortableContinuationLineage(t *testing.
 	assertSuccessorContinuationOpening(t, successorRecords, request, reference)
 	successorHandoff := boundary.currentRequest()
 	boundary.complete(completedDispatchWithProviderSession(successorHandoff.Execution.Dispatch.DispatchID, reference), nil)
-	successorRecords = readWorkerSessionRecords(t, eventsSvc, request.SuccessorWorkerSessionID)
+	successorRecords = readWorkerSessionRecordsUntil(t, eventsSvc, request.SuccessorWorkerSessionID, 2)
 	if len(successorRecords) != 2 {
 		t.Fatalf("successor records = %#v, want opening and terminal", successorRecords)
 	}
@@ -681,6 +682,25 @@ func readWorkerSessionRecords(t *testing.T, eventsSvc events.Service, id string)
 		t.Fatalf("Read(%q) error = %v", id, err)
 	}
 	return read.Records
+}
+
+func readWorkerSessionRecordsUntil(t *testing.T, eventsSvc events.Service, id string, minimum int) []events.Record {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		records := readWorkerSessionRecords(t, eventsSvc, id)
+		if len(records) >= minimum {
+			return records
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("records for %q = %#v, want at least %d", id, records, minimum)
+		case <-ticker.C:
+		}
+	}
 }
 
 func assertSourceContinuationLineage(t *testing.T, records []events.Record, request workersessions.ContinueRequest, reference providers.SessionRef) {

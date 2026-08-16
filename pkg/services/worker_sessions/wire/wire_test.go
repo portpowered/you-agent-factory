@@ -68,24 +68,6 @@ func (stubExecution) CancelWorkstationDispatch(
 	return workers.WorkstationDispatchCancelResult{}, nil
 }
 
-func (stubExecution) Start(context.Context) error { return nil }
-
-func (stubExecution) Publish(ctx context.Context, request workers.WorkstationDispatchRequest, accept workers.WorkstationDispatchAcceptFunc) error {
-	return stubExecution{}.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (stubExecution) PublishWithAdmission(ctx context.Context, request workers.WorkstationDispatchRequest, admitted workers.WorkstationDispatchAdmissionFunc, accept workers.WorkstationDispatchAcceptFunc) error {
-	result, err := stubExecution{}.DispatchWorkstationWithAdmission(ctx, request, admitted)
-	accept(context.Background(), request, result, err)
-	return nil
-}
-
-func (stubExecution) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
-	return workers.WorkstationDispatchCancelResult{}, nil
-}
-
-func (stubExecution) Stop(context.Context) error { return nil }
-
 func TestNewService_ConstructsAWorkingServiceFromInjectedExecution(t *testing.T) {
 	service, err := wire.NewService(stubExecution{}, newTestEventsAppender(t), logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {

@@ -17,10 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// admissionControlledExecution is a controlled Workers execution service used
-// only behind the real asynchronous WorkstationPoolBoundary. Its channels make
-// the production boundary's admission barrier and terminal/control race
-// observable without sleeps or polling.
+// admissionControlledExecution is a controlled Workers execution service. Its
+// channels make the direct execution service's admission barrier and
+// terminal/control race observable without sleeps or polling.
 type admissionControlledExecution struct {
 	mu sync.Mutex
 
@@ -139,22 +138,12 @@ func (e *admissionControlledExecution) CancelWorkstationDispatch(
 
 func newProductionBoundaryRegistry(t *testing.T, execution workers.WorkstationExecutionService) workersessions.Service {
 	t.Helper()
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    execution,
-		RouteNames: []string{"review"},
-		Async:      true,
-	})
-	return newControlledRegistry(t, boundary)
+	return newControlledRegistry(t, execution)
 }
 
 func newSynchronousProductionBoundaryRegistry(t *testing.T, execution workers.WorkstationExecutionService) workersessions.Service {
 	t.Helper()
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    execution,
-		RouteNames: []string{"review"},
-		Async:      false,
-	})
-	return newControlledRegistry(t, boundary)
+	return newControlledRegistry(t, execution)
 }
 
 func TestCancel_WaitsForProductionAsyncBoundaryAdmissionBeforeExactCancellation(t *testing.T) {
@@ -278,12 +267,7 @@ func TestTerminate_ProductionSynchronousBoundaryCancelsAdmittedDispatchBeforePub
 func TestTerminate_ProductionBoundaryAlreadyCanceledJoinsHeldCallback(t *testing.T) {
 	execution := newAdmissionControlledExecution(false)
 	execution.alreadyCanceled = true
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    execution,
-		RouteNames: []string{"review"},
-		Async:      true,
-	})
-	registry := newControlledRegistry(t, boundary)
+	registry := newControlledRegistry(t, execution)
 	started := make(chan workersessions.InvokeSessionResult, 1)
 	startErr := make(chan error, 1)
 	go func() {
@@ -295,12 +279,12 @@ func TestTerminate_ProductionBoundaryAlreadyCanceledJoinsHeldCallback(t *testing
 	close(execution.allowAdmission)
 	<-execution.admitted
 
-	first, err := boundary.Cancel(context.Background(), workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-1"})
+	first, err := execution.CancelWorkstationDispatch(context.Background(), workers.WorkstationDispatchCancelRequest{DispatchID: "dispatch-1"})
 	if err != nil || first.Outcome != workers.WorkstationDispatchCancelOutcomeCanceled {
-		t.Fatalf("first boundary Cancel() = %#v, %v, want committed cancellation", first, err)
+		t.Fatalf("first execution cancellation = %#v, %v, want committed cancellation", first, err)
 	}
 	if call := <-execution.cancelCalls; call.DispatchID != "dispatch-1" {
-		t.Fatalf("first boundary cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
+		t.Fatalf("first execution cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
 	}
 
 	terminated := make(chan workersessions.ControlResult, 1)
@@ -311,7 +295,7 @@ func TestTerminate_ProductionBoundaryAlreadyCanceledJoinsHeldCallback(t *testing
 		terminateErr <- err
 	}()
 	if call := <-execution.cancelCalls; call.DispatchID != "dispatch-1" {
-		t.Fatalf("Terminate boundary cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
+		t.Fatalf("Terminate execution cancel dispatch ID = %q, want dispatch-1", call.DispatchID)
 	}
 	select {
 	case result := <-terminated:
@@ -402,7 +386,7 @@ func projectedDetail(ref providers.SessionRef) providersessions.ProjectResult {
 
 func newObservationService(
 	t *testing.T,
-	boundary workers.WorkstationPoolBoundary,
+	execution workers.WorkstationExecutionService,
 	eventsAppender workersessionservice.EventsAppender,
 	clock platformclock.Source,
 	projection providersessions.Service,
@@ -411,7 +395,7 @@ func newObservationService(
 	if projection == nil {
 		projection = unavailableProviderSessions{}
 	}
-	service, err := workersessionservice.New(boundary, eventsAppender, logging.NoopLogger{}, clock, projection, nil)
+	service, err := workersessionservice.New(execution, eventsAppender, logging.NoopLogger{}, clock, projection, nil)
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}
@@ -487,9 +471,9 @@ func TestObservationProjection_ListsCorrelatedAttemptsAndNormalizedFacts(t *test
 				WorkstationName: request.WorkstationName,
 				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
 				Result: workers.WorkResult{
-					DispatchID:      dispatchID,
-					Outcome:         workers.OutcomeAccepted,
-					Continuation:    continuationFromProviderMetadata(providerMetadata(firstRef)),
+					DispatchID:   dispatchID,
+					Outcome:      workers.OutcomeAccepted,
+					Continuation: continuationFromProviderMetadata(providerMetadata(firstRef)),
 				},
 			}, nil
 		}

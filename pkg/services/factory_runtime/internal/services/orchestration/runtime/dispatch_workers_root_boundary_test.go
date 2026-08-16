@@ -157,18 +157,23 @@ func TestFactoryImpl_PlannedDispatchAcceptsWorkersResultThroughRuntimeRoot(t *te
 	}
 }
 
-// TestWorkersRootPoolBoundaryAdmitsRuntimePlannedDispatchRequest proves the
-// Workers root pool boundary executes a dispatch request shaped like Runtime
-// planning publishes without importing nested Workers implementation packages.
-func TestWorkersRootPoolBoundaryAdmitsRuntimePlannedDispatchRequest(t *testing.T) {
+// TestWorkersExecutionServiceAdmitsRuntimePlannedDispatchRequest proves the
+// injected Workers execution service executes a dispatch request shaped like
+// Runtime planning publishes without importing nested implementation packages.
+func TestWorkersExecutionServiceAdmitsRuntimePlannedDispatchRequest(t *testing.T) {
 	executor := &recordingRootBoundaryExecutor{}
 	service := &testWorkstationBoundary{}
-	boundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    service,
-		Executors:  map[string]workers.WorkerExecutor{"mock": executor},
-		RouteNames: []string{"Process", "mock", "t-process"},
-		Async:      false,
-	})
+	requestExecutor := testWorkstationRequestExecutor{executors: map[string]workers.WorkerExecutor{"mock": executor}}
+	bindings := make([]workers.AssembledRuntimeBinding, 0, 3)
+	for _, routeName := range []string{"Process", "mock", "t-process"} {
+		bindings = append(bindings, workers.AssembledRuntimeBinding{
+			RoleName: routeName, RoleKind: workers.RuntimeBuildRoleKindWorkstation,
+			Executor: requestExecutor,
+		})
+	}
+	if _, err := service.StartWorkstationPool(t.Context(), workers.WorkstationPoolStartRequest{Bindings: bindings}); err != nil {
+		t.Fatalf("StartWorkstationPool: %v", err)
+	}
 
 	dispatch := work.WorkDispatch{
 		DispatchID:      "workers-root-dispatch",
@@ -189,26 +194,13 @@ func TestWorkersRootPoolBoundaryAdmitsRuntimePlannedDispatchRequest(t *testing.T
 		},
 	}
 
-	done := make(chan workers.WorkstationDispatchResult, 1)
-	err := boundary.Publish(t.Context(), request, func(
-		_ context.Context,
-		_ workers.WorkstationDispatchRequest,
-		result workers.WorkstationDispatchResult,
-		publishErr error,
-	) {
-		if publishErr != nil {
-			t.Errorf("Workers root publish callback error = %v", publishErr)
-			return
-		}
-		done <- result
-	})
-	requireNoRootErr(t, err, "Publish")
-	result := <-done
+	result, err := service.DispatchWorkstation(t.Context(), request)
+	requireNoRootErr(t, err, "DispatchWorkstation")
 	if result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCompleted {
 		t.Fatalf("terminal outcome = %q, want COMPLETED", result.TerminalOutcome)
 	}
 	if executor.calls.Load() != 1 {
-		t.Fatalf("executor calls = %d, want 1 through Workers root boundary", executor.calls.Load())
+		t.Fatalf("executor calls = %d, want 1 through Workers execution service", executor.calls.Load())
 	}
 	lastDispatchID, _ := executor.lastDispatchID.Load().(string)
 	if lastDispatchID != dispatch.DispatchID {

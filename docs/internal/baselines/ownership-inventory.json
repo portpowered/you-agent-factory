@@ -5567,12 +5567,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/wire",
       "disposition": "retain",
       "destination": "workers",

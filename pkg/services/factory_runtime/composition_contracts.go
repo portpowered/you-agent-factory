@@ -97,18 +97,12 @@ type WorkersMockCommandRunnerFactory func(
 ) workers.CommandRunner
 
 // WorkerSessionsFactory constructs the per-session Worker Sessions service
-// (W4 Runtime dispatch cutover) from that session's already-resolved Workers
-// workstation-pool boundary and the canonical runtime clock. Wire composes
+// (W4 Runtime dispatch cutover) from the directly injected Workers execution
+// service and the canonical runtime clock. Wire composes
 // the one construction path (worker_sessions/wire.NewService plus its Events,
 // logging, and Provider Sessions dependencies) behind this factory so Factory
 // Runtime never imports a peer service's wire or internal packages directly.
-type WorkerSessionsFactory func(workers.WorkstationPoolBoundary, platformclock.Source) (workersessions.Service, error)
-
-// WorkstationPoolBoundaryFactory constructs the Workers-owned workstation
-// pool boundary for one Factory Runtime session. Wire owns the concrete
-// Workers constructor; Factory Runtime receives only this composition
-// contract so its orchestration code does not construct a peer service.
-type WorkstationPoolBoundaryFactory func(workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary
+type WorkerSessionsFactory func(workers.WorkstationExecutionService, platformclock.Source) (workersessions.Service, error)
 
 // ProviderInvocationExecutorFactory constructs the executor serving
 // workers.ProviderInvocationRoute for one session, from that session's own

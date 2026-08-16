@@ -581,37 +581,6 @@ type testWorkstationBoundary struct {
 	routes map[string]workers.WorkstationRequestExecutor
 }
 
-func testWorkstationPoolBoundaryFactory(cfg workers.WorkstationPoolBoundaryConfig) workers.WorkstationPoolBoundary {
-	bindings := make([]workers.AssembledRuntimeBinding, 0, len(cfg.RouteNames)+1)
-	requestExecutor := testWorkstationRequestExecutor{executors: cfg.Executors}
-	for _, routeName := range cfg.RouteNames {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName:      routeName,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      requestExecutor,
-			Capacity:      cfg.Capacity,
-			QueueCapacity: cfg.QueueCapacity,
-		})
-	}
-	if cfg.ProviderInvocation != nil {
-		bindings = append(bindings, workers.AssembledRuntimeBinding{
-			RoleName:      workers.ProviderInvocationRoute,
-			RoleKind:      workers.RuntimeBuildRoleKindWorkstation,
-			Executor:      cfg.ProviderInvocation,
-			Capacity:      cfg.Capacity,
-			QueueCapacity: cfg.QueueCapacity,
-		})
-	}
-	return &testWorkstationPoolBoundary{service: cfg.Service, bindings: bindings}
-}
-
-type testWorkstationPoolBoundary struct {
-	service  workers.WorkstationExecutionService
-	bindings []workers.AssembledRuntimeBinding
-	started  bool
-	mu       sync.Mutex
-}
-
 type testWorkstationRequestExecutor struct {
 	executors map[string]workers.WorkerExecutor
 }
@@ -641,65 +610,6 @@ func (executor testWorkstationRequestExecutor) Execute(
 		return workers.WorkResult{}, fmt.Errorf("no executor registered for worker type %q", workerType)
 	}
 	return worker.Execute(ctx, request.Dispatch)
-}
-
-func (boundary *testWorkstationPoolBoundary) Start(ctx context.Context) error {
-	boundary.mu.Lock()
-	defer boundary.mu.Unlock()
-	if boundary.started {
-		return nil
-	}
-	if boundary.service == nil {
-		return nil
-	}
-	if _, err := boundary.service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{
-		Bindings: append([]workers.AssembledRuntimeBinding(nil), boundary.bindings...),
-	}); err != nil {
-		return err
-	}
-	boundary.started = true
-	return nil
-}
-
-func (boundary *testWorkstationPoolBoundary) Publish(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	return boundary.PublishWithAdmission(ctx, request, nil, accept)
-}
-
-func (boundary *testWorkstationPoolBoundary) PublishWithAdmission(
-	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-	admission workers.WorkstationDispatchAdmissionFunc,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if err := boundary.Start(ctx); err != nil {
-		return err
-	}
-	result, err := boundary.service.DispatchWorkstationWithAdmission(ctx, request, admission)
-	if accept != nil {
-		accept(context.Background(), request, result, err)
-	}
-	return nil
-}
-
-func (boundary *testWorkstationPoolBoundary) Cancel(
-	ctx context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	return boundary.service.CancelWorkstationDispatch(ctx, request)
-}
-
-func (boundary *testWorkstationPoolBoundary) Stop(ctx context.Context) error {
-	boundary.mu.Lock()
-	defer boundary.mu.Unlock()
-	if !boundary.started || boundary.service == nil {
-		return nil
-	}
-	_, err := boundary.service.StopWorkstationPool(ctx)
-	return err
 }
 
 func (b *testWorkstationBoundary) StartWorkstationPool(
