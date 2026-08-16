@@ -7,8 +7,6 @@ import (
 )
 
 // GetEventsBySessionId routes canonical Factory Event history to Recordings.
-// The Sessions fallback remains available for standalone durable-execution
-// bindings that use the compatibility NewServer constructor.
 func (s *Server) GetEventsBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -19,15 +17,11 @@ func (s *Server) GetEventsBySessionId(
 		s.recordingsHTTP.GetEventsBySessionId(w, r, sessionID, params)
 		return
 	}
-	if s != nil && s.factorySessionsAdapter != nil && s.factorySessionsAdapter.Adapter != nil {
-		s.factorySessionsAdapter.GetEventsBySessionId(w, r, sessionID, params)
-		return
-	}
 	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
 }
 
 // GetFactorySessionResults routes durable historical result projection to
-// Recordings while preserving the existing Sessions compatibility path.
+// Recordings.
 func (s *Server) GetFactorySessionResults(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -36,10 +30,6 @@ func (s *Server) GetFactorySessionResults(
 ) {
 	if s != nil && s.recordingsHTTP != nil {
 		s.recordingsHTTP.GetFactorySessionResults(w, r, sessionID, params)
-		return
-	}
-	if s != nil && s.factorySessionsAdapter != nil && s.factorySessionsAdapter.Adapter != nil {
-		s.factorySessionsAdapter.GetFactorySessionResults(w, r, sessionID, params)
 		return
 	}
 	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
@@ -54,10 +44,6 @@ func (s *Server) ListFactorySessionDispatches(
 ) {
 	if s != nil && s.recordingsHTTP != nil {
 		s.recordingsHTTP.ListFactorySessionDispatches(w, r, sessionID, params)
-		return
-	}
-	if s != nil && s.factorySessionsAdapter != nil && s.factorySessionsAdapter.Adapter != nil {
-		s.factorySessionsAdapter.ListFactorySessionDispatches(w, r, sessionID, params)
 		return
 	}
 	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
@@ -75,10 +61,6 @@ func (s *Server) GetFactorySessionDispatch(
 		s.recordingsHTTP.GetFactorySessionDispatch(w, r, sessionID, dispatchID)
 		return
 	}
-	if s != nil && s.factorySessionsAdapter != nil && s.factorySessionsAdapter.Adapter != nil {
-		s.factorySessionsAdapter.GetFactorySessionDispatch(w, r, sessionID, dispatchID)
-		return
-	}
 	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
 }
 
@@ -90,10 +72,6 @@ func (s *Server) ListFactorySessionArtifacts(
 ) {
 	if s != nil && s.recordingsHTTP != nil {
 		s.recordingsHTTP.ListFactorySessionArtifacts(w, r, sessionID)
-		return
-	}
-	if s != nil && s.factorySessionsAdapter != nil && s.factorySessionsAdapter.Adapter != nil {
-		s.factorySessionsAdapter.ListFactorySessionArtifacts(w, r, sessionID)
 		return
 	}
 	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
@@ -109,10 +87,6 @@ func (s *Server) GetFactorySessionArtifact(
 ) {
 	if s != nil && s.recordingsHTTP != nil {
 		s.recordingsHTTP.GetFactorySessionArtifact(w, r, sessionID, artifactID)
-		return
-	}
-	if s != nil && s.factorySessionsAdapter != nil && s.factorySessionsAdapter.Adapter != nil {
-		s.factorySessionsAdapter.GetFactorySessionArtifact(w, r, sessionID, artifactID)
 		return
 	}
 	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")

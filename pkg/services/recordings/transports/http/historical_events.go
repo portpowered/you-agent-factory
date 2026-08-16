@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -68,11 +69,16 @@ func (a *Adapter) probeHistoricalEventStreamRecovery(
 		_, err = historicalEventStart(result.Events, input.Params, input.StreamGenerationID)
 	}
 	if err != nil {
-		a.writeJSON(w, http.StatusOK, EventStreamRecoveryToAPI(
-			input.SessionID,
-			factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE,
-			true,
-		))
+		outcome := factoryapi.FactorySessionEventStreamRecoveryOutcomeINTERNALERROR
+		omitCursor := false
+		switch {
+		case isHistoricalSessionMissing(err):
+			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION
+		case isEventReconnectValidationError(err):
+			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE
+			omitCursor = true
+		}
+		a.writeJSON(w, http.StatusOK, EventStreamRecoveryToAPI(input.SessionID, outcome, omitCursor))
 		return
 	}
 	a.writeJSON(w, http.StatusOK, EventStreamRecoveryToAPI(
@@ -80,4 +86,14 @@ func (a *Adapter) probeHistoricalEventStreamRecovery(
 		factoryapi.FactorySessionEventStreamRecoveryOutcomeSTREAMREADY,
 		false,
 	))
+}
+
+func isHistoricalSessionMissing(err error) bool {
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) ||
+		errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		return true
+	}
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	return errors.As(err, &historicalErr) &&
+		historicalErr.Kind == recordings.HistoricalRecordingQueryErrorMissingHistory
 }

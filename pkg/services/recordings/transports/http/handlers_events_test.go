@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -66,6 +67,7 @@ func TestGetEventsBySessionId_EncodesFakeRootHistoryAsSSE(t *testing.T) {
 			}
 			delivered := false
 			return recordings.SubscribeResult{
+				RetainedEventCount: 1,
 				Subscription: recordings.EventSubscription(func(context.Context) recordings.SubscriptionOutcome {
 					if delivered {
 						return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
@@ -89,7 +91,8 @@ func TestGetEventsBySessionId_EncodesFakeRootHistoryAsSSE(t *testing.T) {
 	if recorder.Code != http.StatusOK ||
 		!strings.Contains(recorder.Header().Get("Content-Type"), "text/event-stream") ||
 		!strings.Contains(body, `"id":"event-1"`) ||
-		recorder.Header().Get(SessionEventStreamFactorySessionHeader) != "session-1" {
+		recorder.Header().Get(SessionEventStreamFactorySessionHeader) != "session-1" ||
+		recorder.Header().Get(factorysessions.SessionEventStreamRetainedCountHeader) != "1" {
 		t.Fatalf("response = %d headers=%#v body=%s, want encoded SSE history", recorder.Code, recorder.Header(), body)
 	}
 }

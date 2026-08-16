@@ -60,9 +60,8 @@ func NewServer(
 }
 
 // NewServerWithRecordings composes the generated route shell with the
-// Recordings-owned history and artifact adapter. The legacy constructor keeps
-// its compatibility fallback for standalone durable-execution bindings and
-// focused transport tests.
+// Recordings-owned history and artifact adapter. Standalone durable-execution
+// compatibility is contained inside that owner adapter until its callers move.
 func NewServerWithRecordings(
 	recordingsHTTP *recordingshttp.Adapter,
 	factorySessionsHTTP *factorysessionshttp.Handler,

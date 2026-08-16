@@ -2425,10 +2425,6 @@
       "minimum": 85.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection",
-      "minimum": 30.69
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
       "minimum": 71.38
     },
@@ -2459,10 +2455,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary",
       "minimum": 90.90
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection",
-      "minimum": 85.71
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession",

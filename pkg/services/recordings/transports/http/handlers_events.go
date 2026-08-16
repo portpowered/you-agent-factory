@@ -3,8 +3,10 @@ package http
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -36,6 +38,39 @@ func (a *Adapter) GetEventsBySessionId(
 		Params:             params,
 		StreamGenerationID: r.Header.Get(SessionEventStreamGenerationHeader),
 	}
+	if isDurableHistorySession(input.SessionID) && a.hasLegacyHistory() {
+		if requestsJSONEventRecoveryProbe(r) {
+			a.probeLegacyEventRecovery(w, r, input.SessionID, input.Params)
+			return
+		}
+		stream, err := a.legacyEvents(r.Context(), input.SessionID, input.Params)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			if a.writeLegacyError(w, err, "failed to subscribe to factory events") {
+				return
+			}
+		}
+		a.streamLegacyFactoryEvents(w, r, stream, input.SessionID)
+		return
+	}
+	if !isDurableHistorySession(input.SessionID) && a.hasLegacyLiveEvents() {
+		if requestsJSONEventRecoveryProbe(r) {
+			a.probeLegacyLiveEventRecovery(w, r, input.SessionID, input.Params)
+			return
+		}
+		stream, err := a.legacyLive(r.Context(), input.SessionID, input.Params)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeLegacyError(w, err, "failed to subscribe to factory events")
+			return
+		}
+		a.streamLegacyFactoryEvents(w, r, stream, input.SessionID)
+		return
+	}
 	if requestsJSONEventRecoveryProbe(r) {
 		if isDurableHistorySession(input.SessionID) {
 			a.probeHistoricalEventStreamRecovery(w, r, input)
@@ -62,7 +97,10 @@ func (a *Adapter) GetEventsBySessionId(
 		if strings.TrimSpace(streamGenerationID) == "" && len(result.Events) > 0 {
 			streamGenerationID = result.Events[0].Cursor.StreamGenerationID
 		}
-		a.streamFactoryEvents(w, r, historicalEventSubscription(result.Events[start:]), input.SessionID, streamGenerationID)
+		a.streamFactoryEvents(
+			w, r, historicalEventSubscription(result.Events[start:]),
+			input.SessionID, streamGenerationID, len(result.Events[start:]),
+		)
 		return
 	}
 	request, err := SubscribeRequestFromAPI(input)
@@ -81,7 +119,10 @@ func (a *Adapter) GetEventsBySessionId(
 		a.writeRootOrInternalError(w, recordingsHTTPOperationEventSubscribe, err)
 		return
 	}
-	a.streamFactoryEvents(w, r, result.Subscription, input.SessionID, input.StreamGenerationID)
+	a.streamFactoryEvents(
+		w, r, result.Subscription, input.SessionID,
+		input.StreamGenerationID, result.RetainedEventCount,
+	)
 }
 
 func (a *Adapter) probeEventStreamRecovery(w http.ResponseWriter, input EventSubscribeInput) {
@@ -144,6 +185,7 @@ func (a *Adapter) streamFactoryEvents(
 	subscription recordings.EventSubscription,
 	sessionID string,
 	streamGenerationID string,
+	retainedEventCount int,
 ) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -161,6 +203,10 @@ func (a *Adapter) streamFactoryEvents(
 	if streamGenerationID = strings.TrimSpace(streamGenerationID); streamGenerationID != "" {
 		w.Header().Set(SessionEventStreamGenerationHeader, streamGenerationID)
 	}
+	w.Header().Set(
+		factorysessions.SessionEventStreamRetainedCountHeader,
+		strconv.Itoa(retainedEventCount),
+	)
 
 	for {
 		if requestContextEnded(r.Context()) {

@@ -764,11 +764,11 @@ func provideHTTPRuntimeBinding(
 		sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 			SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
 			Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
-			Sessions: mapped.Sessions, SessionEvents: opened.FactorySessions,
+			Sessions:   mapped.Sessions,
 			Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
 			FactoryValidation: validation, WorkflowPreview: opened.WorkflowPreview,
 			DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
-			DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
+			DurableListing: mapped.Durable, DurableResponseEvents: mapped.Durable,
 			DurableLister:     opened.FactorySessions,
 			LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.LiveControl},
 			WorkerPrompts:     opened.WorkerPrompts, InvocationWorkType: invocationWorkType,

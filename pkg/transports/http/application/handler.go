@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -94,10 +95,13 @@ func (handler *Handler) BindDurableExecution(
 	durable := factorysessionmapping.NewDurableAPI(execution)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		DurableExecution: durable, DurableLifecycle: durable,
-		DurableListing: durable, DurableProjection: durable,
+		DurableListing: durable, DurableResponseEvents: durable,
 		DurableLister: execution, FactoryValidation: handler.validation,
 		InvocationWorkType: handler.invocationWorkType,
 		SessionRequests:    handler.sessionRequests,
 	}, logger)
-	return transporthttp.NewServer(sessionsHandler, nil, nil, nil, nil, logger).Handler(), nil
+	return transporthttp.NewServerWithRecordings(
+		recordingshttp.NewLegacyAdapter(durable, handler.sessionRequests),
+		sessionsHandler, nil, nil, nil, nil, logger,
+	).Handler(), nil
 }

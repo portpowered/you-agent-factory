@@ -116,6 +116,106 @@ func TestGetFactorySessionResults_DurableHistoryMapsMissingHistoryToNotFound(t *
 	}
 }
 
+func TestListFactorySessionDispatches_DurableHistoryUsesHistoricalProjection(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-dispatch-001"
+	artifact := recordings.RecordingArtifactReference("artifact-history-http-dispatch-001")
+	adapter := NewAdapter(&rootFake{
+		queryRecordingStatus: func(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+				RecordingID: request.RecordingID, Artifact: artifact, State: recordings.RecordingFinalized,
+			}}, nil
+		},
+		queryHistoricalRecording: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{
+				Recording: request.Recording,
+				Dispatches: []recordings.HistoricalDispatch{{
+					ID: "dispatch-history-1", Status: recordings.FactoryDispatchStatusCompleted,
+					DispatchKind: recordings.FactoryDispatchKindJavaScriptScript,
+				}},
+			}, nil
+		},
+	})
+	recorder := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
+	)
+
+	if recorder.Code != http.StatusOK ||
+		!strings.Contains(recorder.Body.String(), `"id":"dispatch-history-1"`) ||
+		!strings.Contains(recorder.Body.String(), `"dispatchKind":"JAVASCRIPT_SCRIPT"`) {
+		t.Fatalf("response = %d %s, want historical dispatch projection", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGetFactorySessionDispatch_DurableHistoryMapsMissingDispatchToNotFound(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-dispatch-missing-001"
+	adapter := NewAdapter(&rootFake{
+		queryRecordingStatus: func(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+				RecordingID: request.RecordingID, Artifact: "artifact-history-http-dispatch-missing-001", State: recordings.RecordingFinalized,
+			}}, nil
+		},
+		queryHistoricalRecording: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{Recording: request.Recording}, nil
+		},
+	})
+	recorder := httptest.NewRecorder()
+	adapter.GetFactorySessionDispatch(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches/missing", nil),
+		factoryapi.SessionID(sessionID), factoryapi.DispatchID("missing"),
+	)
+
+	if recorder.Code != http.StatusNotFound || !strings.Contains(recorder.Body.String(), `"code":"NOT_FOUND"`) {
+		t.Fatalf("response = %d %s, want typed missing dispatch", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestGetEventsBySessionId_DurableProbeDistinguishesStaleCursorAndMissingHistory(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-history-http-probe-001"
+	artifact := recordings.RecordingArtifactReference("artifact-history-http-probe-001")
+	adapter := NewAdapter(&rootFake{
+		queryRecordingStatus: func(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			if request.RecordingID == recordings.RecordingID("dur-sess-history-http-missing-001") {
+				return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
+			}
+			return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+				RecordingID: request.RecordingID, Artifact: artifact, State: recordings.RecordingFinalized,
+			}}, nil
+		},
+		queryHistoricalRecording: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{Recording: request.Recording, Events: []recordings.CanonicalEvent{
+				historicalHTTPTestEvent(sessionID, "event-history-probe-1", 0),
+			}}, nil
+		},
+	})
+
+	staleRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/events", nil)
+	staleRequest.Header.Set("Accept", "application/json")
+	staleEventID := factoryapi.AfterEventId("missing-event")
+	stale := httptest.NewRecorder()
+	adapter.GetEventsBySessionId(stale, staleRequest, factoryapi.SessionID(sessionID), factoryapi.GetEventsBySessionIdParams{AfterEventId: &staleEventID})
+	if stale.Code != http.StatusOK || !strings.Contains(stale.Body.String(), `"outcome":"CURSOR_STALE"`) {
+		t.Fatalf("stale probe = %d %s, want cursor stale", stale.Code, stale.Body.String())
+	}
+
+	missingRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/dur-sess-history-http-missing-001/events", nil)
+	missingRequest.Header.Set("Accept", "application/json")
+	missing := httptest.NewRecorder()
+	adapter.GetEventsBySessionId(missing, missingRequest, "dur-sess-history-http-missing-001", factoryapi.GetEventsBySessionIdParams{})
+	if missing.Code != http.StatusOK || !strings.Contains(missing.Body.String(), `"outcome":"UNKNOWN_SESSION"`) {
+		t.Fatalf("missing-history probe = %d %s, want unknown session", missing.Code, missing.Body.String())
+	}
+}
+
 func historicalHTTPTestEvent(sessionID, id string, sequence int64) recordings.CanonicalEvent {
 	return recordings.CanonicalEvent{
 		ID: recordings.CanonicalEventID(id), Sequence: recordings.CanonicalEventSequence(sequence), FactoryTick: int(sequence + 1),

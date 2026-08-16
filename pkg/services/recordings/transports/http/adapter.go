@@ -9,13 +9,49 @@ package http
 import (
 	"context"
 	"errors"
+	"reflect"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Adapter maps Recordings service values at the outward HTTP boundary.
 type Adapter struct {
-	root recordings.Service
+	root              recordings.Service
+	legacyHistory     LegacyHistory
+	legacyPreparation LegacyRequestPreparation
+	legacyLiveEvents  LegacyLiveEvents
+}
+
+// LegacyHistory is the narrow compatibility seam used only by standalone
+// durable-execution hosts while they do not open a process Recordings root.
+// Production runtime composition uses NewAdapter and never supplies this
+// bridge; the generated route shell still has one Recordings HTTP owner.
+type LegacyHistory interface {
+	GetDurableFactorySessionResult(context.Context, string, factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error)
+	ReadDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+	ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error
+	ListDurableFactorySessionDispatches(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	GetDurableFactorySessionDispatch(context.Context, string, string) (factoryapi.FactoryDispatch, error)
+	ListDurableFactorySessionArtifacts(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error)
+	GetDurableFactorySessionArtifact(context.Context, string, string) (factoryapi.FactorySessionArtifactDetail, error)
+}
+
+// LegacyRequestPreparation preserves the request normalization performed by
+// the old standalone durable binding. It is intentionally not part of the
+// Recordings Service contract and is only accepted by NewLegacyAdapter.
+type LegacyRequestPreparation interface {
+	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
+	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
+}
+
+// LegacyLiveEvents is the narrow compatibility seam for older focused HTTP
+// fakes that have not yet supplied a process Recordings ledger.
+type LegacyLiveEvents interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
+	ProbeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) error
 }
 
 // NewAdapter constructs the Recordings HTTP representation adapter.
@@ -24,6 +60,52 @@ func NewAdapter(root recordings.Service) *Adapter {
 		return nil
 	}
 	return &Adapter{root: root}
+}
+
+// NewLegacyAdapter places the standalone durable compatibility path behind the
+// Recordings-owned HTTP adapter. It is used by direct JavaScript hosting and
+// narrow transport fakes; opened process runtimes use NewAdapter instead.
+func NewLegacyAdapter(history LegacyHistory, preparation LegacyRequestPreparation) *Adapter {
+	return NewLegacyAdapterWithLive(history, preparation)
+}
+
+// NewLegacyAdapterWithLive extends the standalone compatibility bridge with
+// the old live-session event capability used by narrow transport fakes.
+func NewLegacyAdapterWithLive(
+	history LegacyHistory,
+	preparation LegacyRequestPreparation,
+	live ...LegacyLiveEvents,
+) *Adapter {
+	var liveEvents LegacyLiveEvents
+	if len(live) > 0 {
+		liveEvents = live[0]
+	}
+	if isNilCompatibilityValue(history) {
+		history = nil
+	}
+	if isNilCompatibilityValue(preparation) {
+		preparation = nil
+	}
+	if isNilCompatibilityValue(liveEvents) {
+		liveEvents = nil
+	}
+	return &Adapter{
+		legacyHistory: history, legacyPreparation: preparation,
+		legacyLiveEvents: liveEvents,
+	}
+}
+
+func isNilCompatibilityValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }
 
 // Root returns the accepted Recordings root consumed by adapter-owned operations.

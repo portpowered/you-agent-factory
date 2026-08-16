@@ -10,10 +10,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	events "github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -73,58 +71,6 @@ func (s *Server) getStatus(
 	}
 
 	s.writeJSON(w, http.StatusOK, apisurface.FactoryStatusToAPI(status))
-}
-
-func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetEventsBySessionIdParams) {
-	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
-	if requestsJSONEventRecoveryProbe(r) {
-		s.probeFactorySessionEventStreamRecovery(w, r, string(sessionID), reconnect)
-		return
-	}
-
-	if isDurableExecutionSessionID(string(sessionID)) {
-		reader, ok := s.requireDurableSessionEventsReader(w)
-		if !ok {
-			return
-		}
-		raw, err := factorysessionmapping.EventReconnectRequestFromAPI(params)
-		if err == nil {
-			raw, err = s.sessionRequests.PrepareEventReconnect(raw)
-		}
-		if err != nil {
-			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
-			return
-		}
-		stream, err := reader.ReadDurableFactorySessionEvents(r.Context(), string(sessionID), raw)
-		if err != nil {
-			if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-				return
-			}
-			if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
-				s.writeError(w, http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST")
-				return
-			}
-			if s.writeDurableSessionReadError(w, err) {
-				return
-			}
-			s.logger.Error("read durable factory session events failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR")
-			return
-		}
-		s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-			return stream, nil
-		})
-		return
-	}
-
-	if s.sessionEvents == nil {
-		s.writeError(w, http.StatusInternalServerError, "session event API is unavailable", "INTERNAL_ERROR")
-		return
-	}
-	s.getEvents(w, r, true, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-		return s.sessionEvents.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
-	})
 }
 
 // GetFactoryResponseEventsBySessionId streams the retained-then-live ephemeral
@@ -293,74 +239,6 @@ func writeFactoryResponseEventSSE(w http.ResponseWriter, event apisurface.Factor
 	return err
 }
 
-func requestsJSONEventRecoveryProbe(r *http.Request) bool {
-	return strings.Contains(strings.ToLower(strings.TrimSpace(r.Header.Get("Accept"))), "application/json")
-}
-
-func (s *Server) probeFactorySessionEventStreamRecovery(
-	w http.ResponseWriter,
-	r *http.Request,
-	sessionID string,
-	reconnect *interfaces.FactoryEventReconnectCursor,
-) {
-	var err error
-	if isDurableExecutionSessionID(sessionID) {
-		reader, ok := s.requireDurableSessionEventsReader(w)
-		if !ok {
-			return
-		}
-		raw, prepareErr := factorysessionmapping.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{
-			AfterEventId:  afterEventIDParam(reconnect),
-			AfterSequence: afterSequenceParam(reconnect),
-		})
-		if prepareErr == nil {
-			raw, prepareErr = s.sessionRequests.PrepareEventReconnect(raw)
-		}
-		if prepareErr != nil {
-			err = prepareErr
-		} else {
-			err = reader.ProbeDurableFactorySessionEvents(r.Context(), sessionID, raw)
-		}
-	} else {
-		if s.sessionEvents == nil {
-			s.writeError(w, http.StatusInternalServerError, "session event API is unavailable", "INTERNAL_ERROR")
-			return
-		}
-		err = s.sessionEvents.ProbeFactoryEventsForSession(r.Context(), sessionID, reconnect)
-	}
-	if err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION, false))
-			return
-		}
-		if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) ||
-			errors.Is(err, events.ErrReconnectCursorNotFound) ||
-			errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
-			s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE, true))
-			return
-		}
-		s.logger.Error("probe factory session event recovery failed", zap.String("session_id", sessionID), zap.Error(err))
-		s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeINTERNALERROR, false))
-		return
-	}
-	s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeSTREAMREADY, false))
-}
-
-func staleCursorRecoveryResponse(
-	sessionID string,
-	outcome factoryapi.FactorySessionEventStreamRecoveryOutcome,
-	omitReconnectCursor bool,
-) factoryapi.FactorySessionEventStreamRecovery {
-	return factoryapi.FactorySessionEventStreamRecovery{
-		FactorySessionId: sessionID,
-		Outcome:          outcome,
-		Retry: factoryapi.FactorySessionEventStreamRecoveryRetry{
-			OmitAfterEventId:  omitReconnectCursor,
-			OmitAfterSequence: omitReconnectCursor,
-		},
-	}
-}
-
 func (s *Server) GetFactorySessionSyncPreflightBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -407,121 +285,4 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 // canonical Factory Event cursor.
 func ReconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
 	return reconnectCursorFromParams(afterEventID, afterSequence)
-}
-
-func afterEventIDParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterEventId {
-	if cursor == nil || strings.TrimSpace(cursor.AfterEventID) == "" {
-		return nil
-	}
-	value := factoryapi.AfterEventId(cursor.AfterEventID)
-	return &value
-}
-
-func afterSequenceParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterSequence {
-	if cursor == nil || cursor.AfterSequence == nil {
-		return nil
-	}
-	value := factoryapi.AfterSequence(*cursor.AfterSequence)
-	return &value
-}
-
-func writeSessionEventStreamHandshakeHeaders(
-	w http.ResponseWriter,
-	stream *interfaces.FactoryEventStream,
-) {
-	if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
-		w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
-	}
-	if logicalSessionKeyID := strings.TrimSpace(stream.LogicalSessionKeyID); logicalSessionKeyID != "" {
-		w.Header().Set(sessionEventStreamLogicalSessionKeyHeader, logicalSessionKeyID)
-	}
-	if factorySessionID := strings.TrimSpace(stream.FactorySessionID); factorySessionID != "" {
-		w.Header().Set(sessionEventStreamFactorySessionHeader, factorySessionID)
-	}
-	if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
-		w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
-	}
-}
-
-func (s *Server) getEvents(
-	w http.ResponseWriter,
-	r *http.Request,
-	includeSessionHandshake bool,
-	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
-) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		s.writeError(w, http.StatusInternalServerError, "streaming unsupported", "INTERNAL_ERROR")
-		return
-	}
-
-	stream, err := subscribe(r.Context())
-	if err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-			return
-		}
-		if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, events.ErrReconnectCursorNotFound) {
-			s.writeError(w, http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST")
-			return
-		}
-		s.logger.Error("subscribe factory events failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR")
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	// Published before the body so a bounded reader can determine, from a
-	// deterministic header value rather than stream timing, exactly how many
-	// leading `data:` records make up the already-committed retained-history
-	// prefix (stream.History) captured at subscribe time.
-	w.Header().Set(sessionEventStreamRetainedCountHeader, strconv.Itoa(len(stream.History)))
-	if includeSessionHandshake {
-		writeSessionEventStreamHandshakeHeaders(w, stream)
-	}
-
-	for _, event := range stream.History {
-		if err := s.writeFactoryEventSSE(w, event); err != nil {
-			s.logger.Debug("write historical factory event failed", zap.Error(err))
-			return
-		}
-		flusher.Flush()
-	}
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case event, ok := <-stream.Events:
-			if !ok {
-				return
-			}
-			if err := s.writeFactoryEventSSE(w, event); err != nil {
-				s.logger.Debug("write live factory event failed", zap.Error(err))
-				return
-			}
-			flusher.Flush()
-		}
-	}
-}
-
-func (s *Server) writeFactoryEventSSE(w http.ResponseWriter, event interfaces.FactoryEvent) error {
-	apiEvent, err := apisurface.FactoryEventToAPI(event)
-	if err != nil {
-		return err
-	}
-	return s.writeSSEDataJSON(w, apiEvent)
-}
-
-// StreamFactoryEvents writes one canonical Factory Event subscription as SSE.
-func (s *Handler) StreamFactoryEvents(
-	w http.ResponseWriter,
-	r *http.Request,
-	includeSessionHandshake bool,
-	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
-) {
-	s.getEvents(w, r, includeSessionHandshake, subscribe)
 }

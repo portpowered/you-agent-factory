@@ -5872,12 +5872,6 @@
       "destinationKind": "family"
     },
     {
-      "packagePath": "pkg/transports/http/workstationprojection",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
       "packagePath": "pkg/transports/mapping",
       "disposition": "retain",
       "destination": "transports",
@@ -5927,12 +5921,6 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorydefinition/retiredboundary",
-      "disposition": "retain",
-      "destination": "transports",
-      "destinationKind": "family"
-    },
-    {
-      "packagePath": "pkg/transports/mapping/factoryeventprojection",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

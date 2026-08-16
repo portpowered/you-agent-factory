@@ -66,6 +66,18 @@ func (a *Adapter) GetFactorySessionResults(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
+	if a.hasLegacyHistory() {
+		response, err := a.legacyResult(r.Context(), string(sessionID), params)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeLegacyError(w, err, "failed to get factory session result")
+			return
+		}
+		a.writeJSON(w, http.StatusOK, response)
+		return
+	}
 	result, err := a.historicalRecording(r.Context(), string(sessionID))
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
@@ -92,6 +104,18 @@ func (a *Adapter) ListFactorySessionDispatches(
 ) {
 	if !isDurableHistorySession(string(sessionID)) {
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+	if a.hasLegacyHistory() {
+		response, err := a.legacyDispatches(r.Context(), string(sessionID), params)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeLegacyError(w, err, "failed to list factory session dispatches")
+			return
+		}
+		a.writeJSON(w, http.StatusOK, response)
 		return
 	}
 	result, err := a.historicalRecording(r.Context(), string(sessionID))
@@ -126,6 +150,18 @@ func (a *Adapter) GetFactorySessionDispatch(
 ) {
 	if !isDurableHistorySession(string(sessionID)) {
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+	if a.hasLegacyHistory() {
+		response, err := a.legacyDispatch(r.Context(), string(sessionID), string(dispatchID))
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeLegacyError(w, err, "failed to get factory session dispatch")
+			return
+		}
+		a.writeJSON(w, http.StatusOK, response)
 		return
 	}
 	result, err := a.historicalRecording(r.Context(), string(sessionID))

@@ -19,6 +19,22 @@ func (a *Adapter) ListFactorySessionArtifacts(
 	sessionID factoryapi.SessionID,
 ) {
 	input := ArtifactListInput{SessionID: string(sessionID)}
+	if isDurableHistorySession(input.SessionID) && a.hasLegacyHistory() {
+		response, err := a.legacyArtifacts(r.Context(), input.SessionID)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeLegacyError(w, err, "failed to list factory session artifacts")
+			return
+		}
+		a.writeJSON(w, http.StatusOK, response)
+		return
+	}
+	if a.root == nil && a.legacyHistory == nil {
+		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
+		return
+	}
 	statusRequest, err := ArtifactListRequestFromAPI(input)
 	if err != nil {
 		a.writeError(w, http.StatusBadRequest, "invalid artifact read scope", "BAD_REQUEST")
@@ -50,6 +66,22 @@ func (a *Adapter) GetFactorySessionArtifact(
 	input := ArtifactGetInput{
 		SessionID:  string(sessionID),
 		ArtifactID: string(artifactID),
+	}
+	if isDurableHistorySession(input.SessionID) && a.hasLegacyHistory() {
+		response, err := a.legacyArtifact(r.Context(), input.SessionID, input.ArtifactID)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeLegacyError(w, err, "failed to get factory session artifact")
+			return
+		}
+		a.writeJSON(w, http.StatusOK, response)
+		return
+	}
+	if a.root == nil && a.legacyHistory == nil {
+		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
+		return
 	}
 	readRequest, err := ArtifactGetRequestFromAPI(input)
 	if err != nil {
@@ -114,4 +146,3 @@ func (a *Adapter) loadArtifactProjections(
 	}
 	return ArtifactStatesFromWorldStatePayload(reconstructed.WorldState.Payload)
 }
-
