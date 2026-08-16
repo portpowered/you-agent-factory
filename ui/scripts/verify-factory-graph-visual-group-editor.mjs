@@ -497,7 +497,20 @@ async function expectInlineGroupLabel(region) {
         backgroundColor: style.backgroundColor,
         boxShadow: style.boxShadow,
         className: element.className,
-        borderStyle: style.borderStyle,
+        borderWidths: [
+          style.borderTopWidth,
+          style.borderRightWidth,
+          style.borderBottomWidth,
+          style.borderLeftWidth,
+        ],
+        wrapperBorderWidths: wrapperStyle
+          ? [
+              wrapperStyle.borderTopWidth,
+              wrapperStyle.borderRightWidth,
+              wrapperStyle.borderBottomWidth,
+              wrapperStyle.borderLeftWidth,
+            ]
+          : [],
         maxWidth: wrapperStyle?.maxWidth ?? "none",
         transform: style.transform,
       };
@@ -520,7 +533,8 @@ async function expectInlineGroupLabel(region) {
   }
 
   if (
-    presentation.borderStyle !== "none" ||
+    presentation.borderWidths.some((width) => width !== "0px") ||
+    presentation.wrapperBorderWidths.some((width) => width !== "0px") ||
     presentation.backgroundColor !== "rgba(0, 0, 0, 0)" ||
     presentation.boxShadow !== "none" ||
     presentation.transform !== "none" ||
