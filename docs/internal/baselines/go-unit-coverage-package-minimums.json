@@ -2115,20 +2115,8 @@
       "minimum": 50.75
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/claude",
-      "minimum": 4.44
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/codex",
-      "minimum": 6.34
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract",
       "minimum": 89.13
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry",
-      "minimum": 82.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/service",

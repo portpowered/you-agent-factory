@@ -161,14 +161,10 @@ func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 		strings.HasPrefix(packagePath, "pkg/services/workers/internal/providercompat/"),
 		packagePath == "pkg/services/workers/internal/providercompat_test",
 		strings.HasPrefix(packagePath, "pkg/services/workers/internal/providercompat_test/"):
-		destination := "providers/internal/services/execution"
-		if packagePath == "pkg/services/workers/internal/providercompat/registry" {
-			destination = "providers/internal/services/catalog"
-		}
 		return PackageMapping{
 			PackagePath: packagePath,
 			Disposition: DispositionMove,
-			Destination: destination,
+			Destination: "providers/internal/services/execution",
 		}, true
 	default:
 		return PackageMapping{}, false

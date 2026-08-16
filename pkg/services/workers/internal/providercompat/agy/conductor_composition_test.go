@@ -3,42 +3,49 @@ package agy_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	agypkg "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry"
 )
 
-func TestBuiltInRegistrySelectsAntigravityThroughAuthoritativeManifestIdentity(t *testing.T) {
+func TestProvidersServiceSelectsAntigravityThroughAuthoritativeCatalogIdentity(t *testing.T) {
 	t.Parallel()
 
-	providers := newProductionAgyRegistry(t)
-	entry, err := providers.Lookup(" ANTIGRAVITY ")
+	providersService := newProductionAgyProvidersService(t)
+	resolved, err := providersService.ResolveIdentity(
+		context.Background(),
+		providers.ResolveIdentityRequest{Identity: " ANTIGRAVITY "},
+	)
 	if err != nil {
-		t.Fatalf("Lookup(antigravity) error = %v", err)
+		t.Fatalf("ResolveIdentity(antigravity) error = %v", err)
 	}
-	if entry.Identity() != inference.Identity(modelprovider.ProviderAntigravity) {
-		t.Fatalf("Lookup identity = %q, want antigravity", entry.Identity())
+	if resolved.ID != providers.IDAntigravity {
+		t.Fatalf("ResolveIdentity identity = %q, want antigravity", resolved.ID)
 	}
-	integration, err := providers.Integration(string(modelprovider.ProviderAntigravity))
+	descriptor, err := providersService.GetProvider(
+		context.Background(),
+		providers.GetProviderRequest{ID: resolved.ID},
+	)
 	if err != nil {
-		t.Fatalf("Integration(agy) error = %v", err)
+		t.Fatalf("GetProvider(antigravity) error = %v", err)
 	}
-	if integration.Identity() != inference.Identity(modelprovider.ProviderAntigravity) {
-		t.Fatalf("Integration identity = %q, want agy", integration.Identity())
+	if descriptor.Provider.ID != providers.IDAntigravity ||
+		descriptor.Provider.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("GetProvider(antigravity) = %#v, want selectable canonical descriptor", descriptor.Provider)
 	}
-	maximum := integration.MaximumCapabilities()
-	if !maximum.Has(inference.CapabilityPromptSubmission) || !maximum.Has(inference.CapabilityMessageSnapshots) {
-		t.Fatalf("MaximumCapabilities() = %v, want prompt_submission and message_snapshots", maximum.Values())
+	if !slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityPromptSubmission) ||
+		!slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityMessageSnapshots) {
+		t.Fatalf("GetProvider(antigravity) capabilities = %v, want prompt_submission and message_snapshots", descriptor.Provider.Capabilities)
 	}
-	if providers.UsesNativeRunner(string(modelprovider.ProviderAntigravity)) {
-		t.Fatal("UsesNativeRunner(agy) = true, want migrated Agy route")
+	if slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityNativeStreaming) {
+		t.Fatal("GetProvider(antigravity) overclaims native streaming")
 	}
 }
 
@@ -49,13 +56,12 @@ func TestAgyIntegrationInvokesProviderThroughProvidersRoot(t *testing.T) {
 		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy provider answer"},
 	}
 	providersService := newAgyProvidersServiceWithPTY(t, mock)
-	registryProviders := newAgyRegistryWithService(t, providersService)
 	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
 		ProvidersService: providersService,
 	})
 	destination := &orderedWriter{}
 	providerSession := inference.NewProviderSession(
-		string(modelprovider.ProviderAntigravity),
+		string(providers.IDAntigravity),
 		"transcript",
 		"prior-session",
 		map[string]string{"source": "test"},
@@ -73,12 +79,11 @@ func TestAgyIntegrationInvokesProviderThroughProvidersRoot(t *testing.T) {
 			WorkingDirectory: t.TempDir(),
 		},
 	})
-	if _, err := registryProviders.Capabilities(
+	if _, err := providersService.GetProvider(
 		context.Background(),
-		string(modelprovider.ProviderAntigravity),
-		request,
+		providers.GetProviderRequest{ID: providers.IDAntigravity},
 	); err != nil {
-		t.Fatalf("registry.Capabilities(antigravity) error = %v", err)
+		t.Fatalf("providers.GetProvider(antigravity) error = %v", err)
 	}
 	err := inference.ExecuteInvocation(
 		context.Background(),
@@ -100,13 +105,26 @@ func TestAgyIntegrationInvokesProviderThroughProvidersRoot(t *testing.T) {
 	}
 }
 
-func TestAgyRegistryRejectsCapabilityEscalationBeforeProviderIO(t *testing.T) {
+func TestAgyIntegrationDoesNotOverclaimCapabilityBeforeProviderIO(t *testing.T) {
 	t.Parallel()
 
 	mock := &workers.MockPTYAllocator{
 		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "should-not-run"},
 	}
-	providers := newAgyRegistryWithPTY(t, mock)
+	providersService := newAgyProvidersServiceWithPTY(t, mock)
+	descriptor, err := providersService.GetProvider(
+		context.Background(),
+		providers.GetProviderRequest{ID: providers.IDAntigravity},
+	)
+	if err != nil {
+		t.Fatalf("providers.GetProvider(antigravity) error = %v", err)
+	}
+	if slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityNativeStreaming) {
+		t.Fatal("GetProvider(antigravity) overclaims native streaming")
+	}
+	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
+		ProvidersService: providersService,
+	})
 	request := inference.NewInvocationRequest(inference.InvocationInput{
 		InvocationID: "inv-agy-escalate",
 		UserMessage:  "hello",
@@ -116,18 +134,12 @@ func TestAgyRegistryRejectsCapabilityEscalationBeforeProviderIO(t *testing.T) {
 			inference.CapabilityNativeStreaming,
 		),
 	})
-	_, err := providers.Capabilities(
-		context.Background(),
-		string(modelprovider.ProviderAntigravity),
-		request,
-	)
-	if err == nil {
-		t.Fatal("registry.Capabilities(escalation) error = nil, want rejection")
+	capabilities, err := integration.Capabilities(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Agy Capabilities() error = %v", err)
 	}
-	var validation *inference.ValidationError
-	if !errors.As(err, &validation) ||
-		!strings.Contains(validation.Message, string(inference.CapabilityNativeStreaming)) {
-		t.Fatalf("registry.Capabilities(escalation) error = %v, want native_streaming validation", err)
+	if capabilities.Has(inference.CapabilityNativeStreaming) {
+		t.Fatal("Agy integration overclaimed native streaming")
 	}
 	if len(mock.Sessions) != 0 {
 		t.Fatalf("provider I/O occurred: pty sessions = %d", len(mock.Sessions))
@@ -144,7 +156,6 @@ func TestAgyIntegrationClassifiesNativeFailureSafely(t *testing.T) {
 		},
 	}
 	providersService := newAgyProvidersServiceWithPTY(t, mock)
-	registryProviders := newAgyRegistryWithService(t, providersService)
 	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
 		ProvidersService: providersService,
 	})
@@ -154,12 +165,11 @@ func TestAgyIntegrationClassifiesNativeFailureSafely(t *testing.T) {
 		UserMessage:  "private prompt",
 		Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
 	})
-	if _, err := registryProviders.Capabilities(
+	if _, err := providersService.GetProvider(
 		context.Background(),
-		string(modelprovider.ProviderAntigravity),
-		request,
+		providers.GetProviderRequest{ID: providers.IDAntigravity},
 	); err != nil {
-		t.Fatalf("registry.Capabilities(antigravity) error = %v", err)
+		t.Fatalf("providers.GetProvider(antigravity) error = %v", err)
 	}
 	err := inference.ExecuteInvocation(
 		context.Background(),
@@ -214,36 +224,11 @@ func (canceledProvidersFake) Execute(context.Context, providers.ExecuteRequest) 
 	return providers.ExecuteResult{}, context.Canceled
 }
 
-func newProductionAgyRegistry(t *testing.T) *registry.Registry {
+func newProductionAgyProvidersService(t *testing.T) providers.Service {
 	t.Helper()
-	registrations, err := registry.BuiltInRegistrations()
+	providersService, err := providerswire.NewService()
 	if err != nil {
-		t.Fatalf("BuiltInRegistrations() error = %v", err)
+		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
-	providers, err := registry.New(registrations...)
-	if err != nil {
-		t.Fatalf("registry.New() error = %v", err)
-	}
-	return providers
-}
-
-func newAgyRegistryWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) *registry.Registry {
-	t.Helper()
-	providersService := newAgyProvidersServiceWithPTY(t, allocator)
-	return newAgyRegistryWithService(t, providersService)
-}
-
-func newAgyRegistryWithService(t *testing.T, providersService providers.Service) *registry.Registry {
-	t.Helper()
-	registrations, err := registry.BuiltInRegistrations(registry.BuiltInDependencies{
-		ProvidersService: providersService,
-	})
-	if err != nil {
-		t.Fatalf("BuiltInRegistrations() error = %v", err)
-	}
-	providers, err := registry.New(registrations...)
-	if err != nil {
-		t.Fatalf("registry.New() error = %v", err)
-	}
-	return providers
+	return providersService
 }

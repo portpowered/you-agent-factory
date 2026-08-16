@@ -482,10 +482,7 @@
     "pkg/services/workers/internal/interface",
     "pkg/services/workers/internal/providercompat",
     "pkg/services/workers/internal/providercompat/agy",
-    "pkg/services/workers/internal/providercompat/claude",
-    "pkg/services/workers/internal/providercompat/codex",
     "pkg/services/workers/internal/providercompat/inferencecontract",
-    "pkg/services/workers/internal/providercompat/registry",
     "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/inference",
@@ -2794,24 +2791,9 @@
       "destination": "providers/internal/services/execution"
     },
     {
-      "packagePath": "pkg/services/workers/internal/providercompat/claude",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/codex",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/registry",
-      "disposition": "move",
-      "destination": "providers/internal/services/catalog"
     },
     {
       "packagePath": "pkg/services/workers/internal/service",

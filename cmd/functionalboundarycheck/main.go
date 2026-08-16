@@ -51,8 +51,6 @@ var forbiddenCompositionImports = []string{
 
 var forbiddenProviderImplementationImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy",
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/claude",
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/codex",
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/cursor",
 }
 

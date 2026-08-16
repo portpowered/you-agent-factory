@@ -860,16 +860,10 @@ type Conductor interface {
 	}
 }
 
-func TestRunAllowsAbsorbedWorkersProviderRegistryAndProvidersCatalog(t *testing.T) {
+func TestRunAllowsProvidersCatalog(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/services/workers/internal/providercompat/registry/registry.go", `package registry
-
-type Registry struct {
-	IDs []string
-}
-`)
 	writeGoSourceFile(t, repoRoot, "pkg/services/providers/catalog/catalog.go", `package catalog
 
 import "context"
@@ -881,7 +875,7 @@ type Catalog interface {
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want absorbed Workers registry and Providers catalog allowed; stderr=%q", err, stderr.String())
+		t.Fatalf("run() error = %v, want Providers catalog allowed; stderr=%q", err, stderr.String())
 	}
 }
 

@@ -168,14 +168,6 @@ func TestMapCommittedOwnerPackageWorkersProvidersExtractionMoves(t *testing.T) {
 				Destination: "providers/internal/services/execution",
 			},
 		},
-		{
-			path: "pkg/services/workers/internal/providercompat/registry",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/internal/providercompat/registry",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/catalog",
-			},
-		},
 	}
 
 	for _, tc := range cases {

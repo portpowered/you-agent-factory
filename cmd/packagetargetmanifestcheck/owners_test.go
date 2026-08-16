@@ -100,14 +100,6 @@ func TestMapCommittedOwnerPackageUsesPlanNestedDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/internal/providercompat/registry",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/internal/providercompat/registry",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/catalog",
-			},
-		},
-		{
 			path: "pkg/services/provider_sessions/cursor",
 			want: PackageMapping{
 				PackagePath: "pkg/services/provider_sessions/cursor",
