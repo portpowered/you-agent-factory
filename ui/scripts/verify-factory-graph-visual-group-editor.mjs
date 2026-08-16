@@ -8,6 +8,7 @@ import {
   readNodeSize,
   resizeSelectedNode,
 } from "./verify-factory-graph-node-size-browser-helpers.mjs";
+import { expectVisualGroupDragWithMembers } from "./verify-factory-graph-visual-group-editor-group-drag.mjs";
 import {
   expectEditorGraphInteractions,
   expectGraphSurfaceBasics,
@@ -147,17 +148,11 @@ async function createAndEditVisualGroup(page, viewport) {
   const boundsAfterFit = await readVisualGroupBounds(page);
   expectFiniteBounds(boundsAfterFit, "fit group");
 
-  await dragVisualGroup(page, { deltaX: 12, deltaY: 8 });
+  await expectVisualGroupDragWithMembers(page, {
+    memberNodeIds: [TARGET_WORKSTATION_ID, "workstation:implement"],
+    unrelatedNodeId: "workstation:review",
+  });
   await resizeVisualGroup(page, "sw", { deltaX: -560, deltaY: 420 });
-  await dragVisualGroup(page, { deltaX: 8, deltaY: 6 });
-
-  const undoButton = page.getByRole("button", { name: "Undo" });
-  await undoButton.waitFor({ state: "visible" });
-  await expectEnabled(undoButton, true);
-  await undoButton.click();
-  const redoButton = page.getByRole("button", { name: "Redo" });
-  await expectEnabled(redoButton, true);
-  await redoButton.click();
 
   return resizedNode;
 }
@@ -404,23 +399,6 @@ function expectFiniteBounds(bounds, description) {
   }
 }
 
-async function dragVisualGroup(page, { deltaX, deltaY }) {
-  const groupLabel = page.locator("[data-factory-visual-group-label]").first();
-  await groupLabel.waitFor({ state: "visible" });
-  const box = await groupLabel.boundingBox();
-  if (!box) {
-    throw new Error("Could not measure visual group label for drag.");
-  }
-
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move(startX + deltaX, startY + deltaY);
-  await page.mouse.up();
-  await page.waitForTimeout(100);
-}
-
 async function resizeVisualGroup(page, corner, { deltaX, deltaY }) {
   const handle = page
     .locator(`[data-factory-visual-group-resize="${corner}"]`)
@@ -540,12 +518,5 @@ async function expectChecked(locator, checked) {
     throw new Error(
       `Expected checkbox checked=${checked} but found ${actual}.`,
     );
-  }
-}
-
-async function expectEnabled(locator, enabled) {
-  const actual = await locator.isEnabled();
-  if (actual !== enabled) {
-    throw new Error(`Expected control enabled=${enabled} but found ${actual}.`);
   }
 }

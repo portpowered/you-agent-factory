@@ -111,7 +111,7 @@ async function expectZoomInsideRegion(page, region) {
   await expectViewportTransformChange(page, before, "zoom");
 }
 
-async function findPointInsideRegion(page, region, { requireCanvas }) {
+export async function findPointInsideRegion(page, region, { requireCanvas }) {
   await waitForStableFactoryGraphViewport(page);
   await waitForStableBoundingBox(region);
   const bounds = await region.boundingBox();
@@ -295,7 +295,7 @@ async function readHitTarget(page, point) {
   }, point);
 }
 
-async function readViewportTransform(page) {
+export async function readViewportTransform(page) {
   return page.locator(".react-flow__viewport").evaluate((element) => {
     const transform = getComputedStyle(element).transform;
     const values = transform.match(/matrix\(([^)]+)\)/)?.[1];
@@ -303,7 +303,7 @@ async function readViewportTransform(page) {
   });
 }
 
-async function expectViewportTransformChange(page, before, operation) {
+export async function expectViewportTransformChange(page, before, operation) {
   await page
     .waitForFunction(
       (previous) => {

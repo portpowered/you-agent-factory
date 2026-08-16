@@ -862,6 +862,11 @@ describe("useFactoryGraphLayoutDraftState visual group membership", () => {
 });
 
 describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
+  it(
+    "moves all group members, leaves unrelated nodes stable, and restores the full move",
+    moveAllGroupMembersThroughHistory,
+  );
+
   it("records group move, resize, and delete with undo and redo", () => {
     const layoutDocument = {
       ...baseFactoryDefinition,
@@ -960,4 +965,101 @@ describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
     );
   });
 });
+
+function moveAllGroupMembersThroughHistory() {
+  const originalBounds = { height: 240, width: 360, x: 40, y: 60 };
+  let layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+    bounds: originalBounds,
+    id: "group-1",
+    label: "Review",
+    nodeIds: ["workstation:draft", "worker:writer"],
+  });
+  layout = moveFactoryLayoutNode(layout, "workstation:draft", {
+    x: 80,
+    y: 100,
+  });
+  layout = moveFactoryLayoutNode(layout, "worker:writer", {
+    x: 180,
+    y: 140,
+  });
+  layout = moveFactoryLayoutNode(layout, "workstation:unrelated", {
+    x: 500,
+    y: 520,
+  });
+  const layoutDocument = {
+    ...baseFactoryDefinition,
+    layout,
+  };
+
+  const { result } = renderHook(() =>
+    useFactoryGraphLayoutDraftState({
+      currentFactoryDocument: layoutDocument,
+      factoryDocumentScopeKey: "session-group-move-members",
+    }),
+  );
+
+  const delta = { x: 32, y: -18 };
+  act(() => {
+    result.current.moveVisualGroupByDelta(
+      "group-1",
+      delta,
+      new Map([
+        ["workstation:draft", { x: 80, y: 100 }],
+        ["worker:writer", { x: 180, y: 140 }],
+      ]),
+    );
+  });
+
+  expect(
+    factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+  ).toEqual({
+    height: 240,
+    width: 360,
+    x: 72,
+    y: 42,
+  });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+  ).toEqual({ x: 112, y: 82 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "worker:writer"),
+  ).toEqual({ x: 212, y: 122 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:unrelated"),
+  ).toEqual({ x: 500, y: 520 });
+
+  act(() => {
+    result.current.undoLayout();
+  });
+  expect(
+    factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+  ).toEqual(originalBounds);
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+  ).toEqual({ x: 80, y: 100 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "worker:writer"),
+  ).toEqual({ x: 180, y: 140 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:unrelated"),
+  ).toEqual({ x: 500, y: 520 });
+
+  act(() => {
+    result.current.redoLayout();
+  });
+  expect(
+    factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+  ).toEqual({
+    height: 240,
+    width: 360,
+    x: 72,
+    y: 42,
+  });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+  ).toEqual({ x: 112, y: 82 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "worker:writer"),
+  ).toEqual({ x: 212, y: 122 });
+}
 // Component lane: requires DOM APIs.
