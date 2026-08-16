@@ -77,13 +77,6 @@ func TestRootErrorResponse_MapsObservationFailures(t *testing.T) {
 		wantMsg    string
 	}{
 		{
-			name:       "session observer required",
-			err:        errSessionObserverRequired,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   factoryapi.ErrorResponseCode("SERVICE_UNAVAILABLE"),
-			wantMsg:    "factory status is unavailable",
-		},
-		{
 			name:       "session not found",
 			err:        factorysessions.ErrSessionNotFound,
 			wantStatus: http.StatusNotFound,

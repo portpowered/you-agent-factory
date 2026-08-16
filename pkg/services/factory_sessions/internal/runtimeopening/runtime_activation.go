@@ -289,9 +289,9 @@ func (f *Factory) openActivatedRuntimeWithReplayInput(
 		}
 	}
 	if binding.Service() != nil {
-		products.application.HTTP.FactoryRuntime = binding.Service()
+		products.application.FactoryRuntime = binding.Service()
 	} else {
-		products.application.HTTP.FactoryRuntime = f.runtimeRoot
+		products.application.FactoryRuntime = f.runtimeRoot
 	}
 	products.application.Resources.Close = closeRuntime
 	products.invocation.CloseArtifacts = closeRuntime

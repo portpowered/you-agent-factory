@@ -71,10 +71,8 @@ type (
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
 	LiveChangeCoordinator                = factorysessionwirecontracts.LiveChangeCoordinator
-	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
 	OpeningPresentationOwner             = factorysessions.OpeningPresentationOwner
 	RuntimeResources                     = roles.RuntimeResources
-	RuntimeHTTPServices                  = roles.RuntimeHTTPServices
 	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
 	OpenedApplicationRuntime             = roles.OpenedApplicationRuntime
 	OpenedProcessApplication             = roles.OpenedProcessApplication

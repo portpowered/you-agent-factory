@@ -11,12 +11,16 @@ type compositionService struct {
 	legacy *httpService
 }
 
-func bindCompositionService(httpProtocol clihttp.Protocol, invocation InvocationOperation) Service {
+func bindCompositionService(
+	httpProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	providers ...CompositionScopeProvider,
+) Service {
 	if httpProtocol == nil || invocation == nil {
 		return nil
 	}
 	legacy := &httpService{http: httpProtocol, invocation: invocation}
-	owned := NewService(ConfigFromComposition(httpProtocol, invocation))
+	owned := NewService(ConfigFromComposition(httpProtocol, invocation, providers...))
 	if owned == nil {
 		return legacy
 	}

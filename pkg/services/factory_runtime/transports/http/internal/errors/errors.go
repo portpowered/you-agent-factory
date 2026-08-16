@@ -13,10 +13,6 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-// ErrSessionObserverRequired identifies an unavailable session-scoped Runtime
-// observation peer without leaking a Sessions implementation into the handler.
-var ErrSessionObserverRequired = stderrors.New("factory session observation is required for session-scoped status reads")
-
 // Operation identifies the Runtime operation whose typed failures are being
 // mapped. Keeping this value in the transport error package prevents operation
 // handlers from sharing a parent-package error policy implementation.
@@ -28,6 +24,8 @@ const (
 	OperationMoveWork
 	OperationDispatchPlan
 )
+
+var ErrSessionObserverRequired = stderrors.New("factory session observation is required for session-scoped status reads")
 
 // RootErrorResponse maps published Runtime root sentinel failures to HTTP
 // status and the generated ErrorResponse shape.

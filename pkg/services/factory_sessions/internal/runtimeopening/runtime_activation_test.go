@@ -24,7 +24,7 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	engine := &activationServiceFake{}
 	products := runtimeProducts{
 		application: roles.OpenedApplicationRuntime{
-			HTTP: roles.RuntimeHTTPServices{FactoryRuntime: proxy},
+			FactoryRuntime: proxy,
 		},
 		startup: activationRuntimeRecord{service: engine},
 	}

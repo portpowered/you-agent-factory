@@ -43,7 +43,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 	return func(
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,
-	) factorysessionwire.ApplicationOpeningRequest {
+	) *factorysessions.RuntimeOpeningRequest {
 		logDirectory := cfg.RuntimeLogDir
 		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
 			logDirectory = logging.RuntimeLogsRoot(cfg.HomeDir)
@@ -104,7 +104,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			ModelCacheDirectory: cfg.ModelCacheDir,
 			OperatorDefaults:    cfg.OperatorDefaults,
 		}
-		return factorysessionwire.ApplicationOpeningRequest{Runtime: request}
+		return request
 	}
 }
 

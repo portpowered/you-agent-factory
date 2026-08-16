@@ -81,7 +81,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	observationResult, err := fs.ObserveForSession(ctx, session.ID, factoryruntime.ObserveRequest{
+	observationResult, err := fs.observeRuntimeForSession(ctx, session.ID, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
 	})
 	if err != nil {
@@ -106,7 +106,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	}
 	return sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg,
-		Observation: observationResult.Observation,
+		Observation:    observationResult.Observation,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
 		CheckpointStore: checkpointStore, Events: runtimebinding.CanonicalEventsFromSession(session),

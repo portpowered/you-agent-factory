@@ -1,5 +1,10 @@
 package controlplane
 
+// This forwarding helper is retained only as named P6 cleanup residue. P4
+// production callers route durable lifecycle operations through the canonical
+// Factory Sessions root; the P5A transport mapper still owns its compatibility
+// method names until that packet completes its cutover.
+
 import (
 	"context"
 	"errors"

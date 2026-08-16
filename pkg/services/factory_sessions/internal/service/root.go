@@ -18,9 +18,9 @@ import (
 // assembly is constructed once by Wire and retains process-scoped registries;
 // opening a session only adds private session/runtime state to that assembly.
 type Root struct {
-	factorysessions.Service
 	*legacyservice.Assembly
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
+	detachedOperations    factorysessions.DetachedService
 }
 
 var _ factorysessions.Service = (*Root)(nil)
@@ -86,14 +86,25 @@ func NewRoot(
 		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
 	}
 	root := &Root{
-		Service:               &legacyservice.Service{},
 		Assembly:              assembly,
 		liveChangeCoordinator: liveChangeCoordinator,
 	}
-	if err := validateCompatibilityBinding(root, clock); err != nil {
-		return nil, fmt.Errorf("construct Factory Sessions: compatibility binding rejected root: %w", err)
+	detachedOperations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions: bind detached operations: %w", err)
 	}
+	root.detachedOperations = detachedOperations
 	return root, nil
+}
+
+// DetachedOperations returns the one process-scoped operation view bound to
+// the root assembly. It is intentionally a value-operation capability; the
+// runtime gateway routing remains private to the assembly.
+func (r *Root) DetachedOperations() factorysessions.DetachedService {
+	if r == nil {
+		return nil
+	}
+	return r.detachedOperations
 }
 
 func validateRootDependencies(
@@ -152,28 +163,4 @@ func validateRootRuntimeDependencies(
 		return fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
 	}
 	return nil
-}
-
-// validateCompatibilityBinding keeps the published compatibility contract
-// checked against the exact process root. The binding is inert: it neither
-// constructs a child service nor starts runtime work.
-func validateCompatibilityBinding(root *Root, clock factoryruntime.Clock) error {
-	_, err := root.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	return err
-}
-
-// ForRuntime is retained as a compatibility binding for callers that have not
-// yet moved to the direct runtime-root port. It never constructs or returns a
-// child service; the process root already owns the shared assembly.
-func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessions.Service, error) {
-	if r == nil {
-		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
-	}
-	if binding.Clock == nil {
-		return nil, &factorysessions.OpeningBindingError{
-			Field:   "clock",
-			Message: "clock is required",
-		}
-	}
-	return r, nil
 }

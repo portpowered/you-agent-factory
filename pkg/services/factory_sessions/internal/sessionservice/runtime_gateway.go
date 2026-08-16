@@ -20,8 +20,22 @@ import (
 
 type sessionGateway interface {
 	factorysessions.Service
+	factorysessions.LiveControlService
 	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
+}
+
+// ObserveForSession routes a status read through the live-runtime capability
+// bound to the requested Factory Session.
+func (s *Service) ObserveForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryruntime.ObserveRequest,
+) (factoryruntime.ObserveResult, error) {
+	if s == nil || s.liveRuntime == nil {
+		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions live runtime gateway is required")
+	}
+	return s.liveRuntime.Observe(ctx, sessionID, request)
 }
 
 // SubscribeFactoryEventsForSession routes session-scoped observation through
@@ -96,18 +110,6 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	}
 	_, err := s.durable.ReadEvents(ctx, sessionID, reconnect)
 	return err
-}
-
-// ObserveForSession returns one live session's orchestration-neutral observation.
-func (s *Service) ObserveForSession(
-	ctx context.Context,
-	sessionID string,
-	req factoryruntime.ObserveRequest,
-) (factoryruntime.ObserveResult, error) {
-	if s == nil || s.host == nil {
-		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions gateway is required")
-	}
-	return s.liveRuntime.Observe(ctx, sessionID, req)
 }
 
 func (fs *SessionRuntime) inferenceProgressPublisher(

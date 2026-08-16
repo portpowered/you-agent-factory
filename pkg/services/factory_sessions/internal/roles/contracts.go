@@ -17,15 +17,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 type InvocationMetricsRecorder = factorysessions.InvocationMetricsRecorder
-
-type ApplicationOpeningRequest = factorysessions.ApplicationOpeningRequest
 
 // FactoryEventReader is the private presentation-bridge reader capability.
 // It is an alias to an unnamed interface so the Factory Sessions root does not
@@ -53,19 +53,30 @@ type RuntimeResources struct {
 	Close             func() error
 }
 
-type RuntimeHTTPServices = factorysessions.RuntimeHTTPServices
-
 type RuntimeVisualizationServices struct {
 	Reader      RuntimeReader
 	Projections recordings.ProjectionService
 }
 
 type OpenedApplicationRuntime struct {
-	Process          ProcessRuntime
-	HTTP             RuntimeHTTPServices
-	Visualization    RuntimeVisualizationServices
-	Resources        RuntimeResources
-	HistoricalReplay *factorysessions.HistoricalReplayInspection
+	Process            ProcessRuntime
+	FactoryRuntime     factoryruntime.Service
+	FactoryDefinitions factorydefinitions.Service
+	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
+	FactorySessions    factorysessions.Service
+	LiveControl        factorysessions.LiveControlService
+	Work               work.Service
+	Models             models.Service
+	ModelsScope        models.RuntimeScopeRef
+	ModelInvoker       workers.ModelInvoker
+	Workers            workers.Service
+	ProviderSessions   providersessions.Service
+	WorkerSessions     workersessions.ObservationService
+	WorkerPrompts      workers.PromptTemplates
+	Logger             *zap.Logger
+	Visualization      RuntimeVisualizationServices
+	Resources          RuntimeResources
+	HistoricalReplay   *factorysessions.HistoricalReplayInspection
 }
 
 type OpenedProcessApplication struct {
@@ -83,6 +94,7 @@ type OpenedInvocationRuntime struct {
 	Workers        workers.Service
 	ModelInvoker   workers.ModelInvoker
 	Sessions       factorysessions.Service
+	LiveControl    factorysessions.LiveControlService
 	Invoker        SessionInvoker
 	InputResolver  InvocationInputResolver
 	Execution      durableexecution.Service

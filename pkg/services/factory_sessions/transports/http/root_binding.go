@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -28,10 +29,16 @@ func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	durable := factorysessionmapping.NewDurableAPI(binding.Sessions)
+	liveControl, _ := binding.Sessions.(factorysessions.LiveControlService)
 	return NewHandler(Dependencies{
-		SessionsRoot:    binding.Sessions,
-		LiveControl:     binding.Sessions,
-		SessionRequests: binding.Prepare,
+		SessionsRoot:      binding.Sessions,
+		LiveControl:       liveControl,
+		DurableExecution:  durable,
+		DurableLifecycle:  durable,
+		DurableListing:    durable,
+		DurableProjection: durable,
+		SessionRequests:   binding.Prepare,
 	}, logger)
 }
 

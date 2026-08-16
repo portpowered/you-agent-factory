@@ -672,10 +672,6 @@ func newPeerRootServiceFake() *peerRootServiceFake {
 
 var _ Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) ForRuntime(OpeningBindingRequest) (Service, error) {
-	return fake, nil
-}
-
 func (fake *peerRootServiceFake) OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error) {
 	return &OpenResult{SessionID: DefaultSessionID}, nil
 }
@@ -733,10 +729,6 @@ func (fake *peerRootServiceFake) ReadDurableFactorySessionEventStream(context.Co
 
 func (fake *peerRootServiceFake) ProbeDurableFactorySessionEvents(context.Context, string, EventReconnectRequest) error {
 	return ErrDurableSessionNotFound
-}
-
-func (fake *peerRootServiceFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, ErrSessionNotFound
 }
 
 func (fake *peerRootServiceFake) PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error) {

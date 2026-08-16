@@ -434,7 +434,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		WorkerReasoningEffort:             "xhigh",
 		InvocationSkipPermissionsOverride: &skip,
 	}, mocks)
-	request := opening.Runtime
+	request := opening
 
 	if request.FactoryDefinition.Directory != "factory" ||
 		request.FactoryDefinition.SourcePath != "/tmp/factory.json" ||

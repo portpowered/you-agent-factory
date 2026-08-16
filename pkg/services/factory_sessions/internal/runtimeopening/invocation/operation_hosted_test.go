@@ -30,10 +30,6 @@ func newHostedLiveSessionsFake(projection factorysessions.SessionProjection) *ho
 
 var _ factorysessions.Service = (*hostedLiveSessionsFake)(nil)
 
-func (fake *hostedLiveSessionsFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
-	return fake, nil
-}
-
 func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string) error {
 	return factorysessions.ErrSessionNotFound
 }
@@ -99,10 +95,6 @@ func (fake *hostedLiveSessionsFake) ReadDurableFactorySessionEventStream(context
 
 func (fake *hostedLiveSessionsFake) ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error {
 	return factorysessions.ErrDurableSessionNotFound
-}
-
-func (fake *hostedLiveSessionsFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 }
 
 func (fake *hostedLiveSessionsFake) PauseLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

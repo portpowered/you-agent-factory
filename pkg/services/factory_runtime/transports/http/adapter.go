@@ -22,16 +22,13 @@ import (
 // internal packages.
 type RuntimeRoot = factoryruntime.Service
 
-// SessionObserver routes session-scoped Runtime observation requests through
-// the Factory Sessions peer surface without importing Sessions internals.
-type SessionObserver = observation.SessionObserver
-
 // These aliases keep the existing package-local HTTP test vocabulary stable
 // while the response shapes are owned by their operation packages.
 type runtimeControlHTTPResponse = control.RuntimeControlHTTPResponse
 type runtimeDispatchPlanHTTPResponse = dispatch.RuntimeDispatchPlanHTTPResponse
 
 type observationHandler = observation.Handler
+type SessionObserver = observation.SessionObserver
 type controlHandler = control.Handler
 type dispatchHandler = dispatch.Handler
 
@@ -60,7 +57,8 @@ func NewAdapter(root RuntimeRoot) *Adapter {
 	}
 }
 
-// BindSessionObserver attaches the peer used for session-scoped status reads.
+// BindSessionObserver attaches the Factory Sessions router used by the
+// session-scoped observation route.
 func (a *Adapter) BindSessionObserver(sessions SessionObserver) {
 	if a != nil && a.observationHandler != nil {
 		a.observationHandler.BindSessionObserver(sessions)

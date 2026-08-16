@@ -672,9 +672,21 @@ func (l *lifecycle) close(ctx context.Context, opened roles.OpenedInvocationRunt
 	}
 	cleanupContext := context.WithoutCancel(ctx)
 	var result error
-	if err := opened.Sessions.CloseFactorySession(cleanupContext, factorysessions.DefaultSessionID); err != nil {
-		if !errors.Is(err, factorysessions.ErrSessionNotFound) {
-			result = errors.Join(result, err)
+	var closeSession func(context.Context, string) error
+	if opened.LiveControl != nil {
+		closeSession = opened.LiveControl.CloseFactorySession
+	} else if opened.Sessions != nil {
+		if closer, ok := opened.Sessions.(interface {
+			CloseFactorySession(context.Context, string) error
+		}); ok {
+			closeSession = closer.CloseFactorySession
+		}
+	}
+	if closeSession != nil {
+		if err := closeSession(cleanupContext, factorysessions.DefaultSessionID); err != nil {
+			if !errors.Is(err, factorysessions.ErrSessionNotFound) {
+				result = errors.Join(result, err)
+			}
 		}
 	}
 	if l.stopWorker != nil {

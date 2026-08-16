@@ -602,3 +602,69 @@ func newValidationError(field, message string) *ValidationError {
 		Message: message,
 	}
 }
+
+func cloneDetachedStartRequest(request SessionStartRequest) SessionStartRequest {
+	request.Definition = cloneDefinitionSelection(request.Definition)
+	request.Source = cloneSource(request.Source)
+	request.Input = clonePreparedInput(request.Input)
+	request.Args = cloneAnyMap(request.Args)
+	request.Policy = cloneAnyMap(request.Policy)
+	request.Orchestrator = cloneOrchestratorOverride(request.Orchestrator)
+	request.RuntimeOptions = cloneRuntimeOptions(request.RuntimeOptions)
+	request.Target = cloneTargetRef(request.Target)
+	return request
+}
+
+func cloneDefinitionSelection(selection SessionDefinitionSelection) SessionDefinitionSelection {
+	selection.SourceRef = strings.TrimSpace(selection.SourceRef)
+	selection.SourceHash = strings.TrimSpace(selection.SourceHash)
+	if selection.DefinitionVersion != nil {
+		version := *selection.DefinitionVersion
+		selection.DefinitionVersion = &version
+	}
+	return selection
+}
+
+func cloneSource(source Source) Source {
+	cloned := source
+	cloned.FactoryInline = append([]byte(nil), source.FactoryInline...)
+	if source.InlineWorkflow != nil {
+		inline := *source.InlineWorkflow
+		inline.ArgsSchema = append([]byte(nil), source.InlineWorkflow.ArgsSchema...)
+		inline.DefaultPolicy = append([]byte(nil), source.InlineWorkflow.DefaultPolicy...)
+		inline.Metadata = cloneStringMap(source.InlineWorkflow.Metadata)
+		if len(source.InlineWorkflow.Agents) > 0 {
+			inline.Agents = make(map[string]interfaces.FactoryOrchestratorJavaScriptAgent, len(source.InlineWorkflow.Agents))
+			for name, agent := range source.InlineWorkflow.Agents {
+				inline.Agents[name] = agent
+			}
+		}
+		cloned.InlineWorkflow = &inline
+	}
+	return cloned
+}
+
+func cloneTargetRef(target *TargetRef) *TargetRef {
+	if target == nil {
+		return nil
+	}
+	cloned := *target
+	return &cloned
+}
+
+func cloneOrchestratorOverride(override *OrchestratorOverride) *OrchestratorOverride {
+	if override == nil {
+		return nil
+	}
+	cloned := *override
+	cloned.Raw = append([]byte(nil), override.Raw...)
+	return &cloned
+}
+
+func cloneRuntimeOptions(options *RuntimeOptions) *RuntimeOptions {
+	if options == nil {
+		return nil
+	}
+	cloned := *options
+	return &cloned
+}

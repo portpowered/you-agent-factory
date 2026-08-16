@@ -260,18 +260,22 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		func() error { return nil },
 	)
 
-	if opened.application.HTTP.Models != root {
+	if opened.application.Models != root {
 		t.Fatal("opened application runtime did not retain the process-scoped Models root")
 	}
-	if opened.application.HTTP.ModelsScope != scope {
-		t.Fatalf("opened HTTP Models scope = %q, want %q", opened.application.HTTP.ModelsScope, scope)
+	if opened.application.ModelsScope != scope {
+		t.Fatalf("opened Models scope = %q, want %q", opened.application.ModelsScope, scope)
 	}
 }
 
-func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(t *testing.T) {
+func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicationRoles(t *testing.T) {
 	t.Parallel()
 
-	gateway := &runtimeProductsSessionsRole{}
+	gateway := &runtimeProductsSessionsRole{readSession: func(string) factorysessions.SessionReadResult {
+		return factorysessions.SessionReadResult{SessionID: "host-bound-gateway"}
+	}, readLiveSession: func(string) factorysessions.LiveControlSnapshot {
+		return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactorySessionID: "host-bound-gateway"}}
+	}}
 	opened := assembleRuntimeProducts(
 		nil,
 		gateway,
@@ -294,11 +298,19 @@ func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(
 		func() error { return nil },
 	)
 
-	if got := opened.application.HTTP.FactorySessions; got != gateway {
-		t.Fatalf("FactorySessions = %T, want original runtime gateway %T", got, gateway)
+	got, err := opened.application.FactorySessions.GetSession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("FactorySessions.GetSession() error = %v, want host-bound gateway read", err)
 	}
-	if got := opened.application.HTTP.LiveControl; got == nil || any(got) != any(gateway) {
-		t.Fatalf("LiveControl = %T, want the same runtime gateway %T", got, gateway)
+	if got.SessionID != "host-bound-gateway" {
+		t.Fatalf("FactorySessions.GetSession() = %q, want host-bound gateway result", got.SessionID)
+	}
+	liveRead, err := opened.application.LiveControl.GetFactorySession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("LiveControl.GetSession() error = %v, want host-bound gateway read", err)
+	}
+	if liveRead.Context.FactorySessionID != "host-bound-gateway" {
+		t.Fatalf("LiveControl.GetFactorySession() = %q, want host-bound gateway result", liveRead.Context.FactorySessionID)
 	}
 }
 
@@ -505,12 +517,36 @@ type openingCoordinatorSessionsRoot struct {
 
 type runtimeProductsSessionsRole struct {
 	factorysessions.Service
+	readSession     func(string) factorysessions.SessionReadResult
+	readLiveSession func(string) factorysessions.LiveControlSnapshot
 }
 
-func (openingCoordinatorSessionsRoot) ForRuntime(
-	factorysessions.OpeningBindingRequest,
-) (factorysessions.Service, error) {
-	panic("runtime opening must use the injected Factory Sessions runtime assembly directly")
+func (role *runtimeProductsSessionsRole) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	return role.readSession(sessionID), nil
+}
+
+func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
+	return role.readLiveSession(sessionID), nil
+}
+
+func (role *runtimeProductsSessionsRole) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) CloseFactorySession(context.Context, string) error {
+	return errors.New("not implemented")
 }
 
 type openingCoordinatorBoundSessions struct {

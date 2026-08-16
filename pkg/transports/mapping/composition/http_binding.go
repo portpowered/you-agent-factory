@@ -72,12 +72,20 @@ func (binder *HTTPBinder) Bind(
 		// compatibility capability check from the HTTP mapping boundary.
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: Factory Runtime event subscription is required")
 	}
+	statusSessions, ok := sessions.(factoryStatusSessionReader)
+	if !ok {
+		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: Factory Sessions session-scoped status observation is required")
+	}
 	var durableExecution factorysessionmapping.DurableExecution = sessions
+	liveGateway, ok := sessions.(factorysessionmapping.LiveGateway)
+	if !ok {
+		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: Factory Sessions live result gateway is required")
+	}
 	durable := NewDurableAPI(durableExecution)
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(runtime, definitions),
-		FactoryStatus:      newFactoryStatusAPI(sessions),
-		Sessions:           NewLiveSessionAPI(liveControl, sessions),
+		FactoryStatus:      newFactoryStatusAPI(statusSessions, binder.statusProjector),
+		Sessions:           NewLiveSessionAPI(liveControl, liveGateway),
 		Invocation:         NewInvocationAPI(sessions),
 		FactoryDefinitions: NewFactoryDefinitionAPI(definitions),
 		Durable:            durable,

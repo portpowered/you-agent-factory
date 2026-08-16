@@ -41,7 +41,11 @@ func (*runtimeRole) SubscribeFactoryEvents(
 
 type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }
-type sessionRootRole struct{ factorysessions.Service }
+type sessionRootRole struct{ sessionRole }
+
+func (*sessionRole) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{}, nil
+}
 
 func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
 	return factorysessions.SessionProjection{
@@ -52,6 +56,42 @@ func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.
 			},
 		},
 	}, nil
+}
+
+func (*sessionRole) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return &factorysessions.LiveControlOpenResult{}, nil
+}
+
+func (*sessionRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, nil
+}
+
+func (*sessionRole) PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, nil
+}
+
+func (*sessionRole) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, nil
+}
+
+func (*sessionRole) CloseFactorySession(context.Context, string) error {
+	return nil
+}
+
+func (*sessionRole) GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error) {
+	return factoryruntime.LiveSessionResult{}, nil
+}
+
+func (*sessionRole) GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error) {
+	return factoryruntime.PartialSessionResult{}, nil
+}
+
+func (*sessionRole) SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	return nil, nil
+}
+
+func (*sessionRole) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error) {
+	return factorysessions.SyncPreflightResult{}, nil
 }
 
 type workRole struct{ work.Service }
@@ -102,7 +142,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 	sessions := &sessionRole{}
-	opened := factorysessions.RuntimeHTTPServices{
+	opened := Binding{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
 		FactorySessions: sessions, LiveControl: sessions,
 		Work: &workRole{}, Models: &modelRole{},
@@ -142,7 +182,7 @@ func TestHandlerBindsLiveControlAtApplicationEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
-	opened := factorysessions.RuntimeHTTPServices{
+	opened := Binding{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
 		FactorySessions: &sessionRootRole{}, LiveControl: &sessionRole{},
 		Work: &workRole{}, Models: &modelRole{},
@@ -184,7 +224,7 @@ func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{
+	bound, err := handler.Bind(Binding{
 		FactoryRuntime:     &runtimeWithoutAPIRole{},
 		FactoryDefinitions: &definitionRole{}, FactorySessions: &sessionRole{}, LiveControl: &sessionRole{},
 		Work: &workRole{}, Models: &modelRole{}, Workers: &workerRole{},
@@ -198,7 +238,7 @@ func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
 func TestBindRejectsMissingProcessScopedHandler(t *testing.T) {
 	t.Parallel()
 
-	if bound, err := (*Handler)(nil).Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+	if bound, err := (*Handler)(nil).Bind(Binding{}); err == nil || bound != nil {
 		t.Fatalf("Bind = (%T, %v), want missing process-scoped handler error", bound, err)
 	}
 }
@@ -211,7 +251,7 @@ func TestBindRejectsMissingModelsBinding(t *testing.T) {
 		t.Fatalf("NewHTTPBinder: %v", err)
 	}
 	handler := &Handler{mappings: mappings, modelsContent: &contentPreparationRole{}}
-	if bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+	if bound, err := handler.Bind(Binding{}); err == nil || bound != nil {
 		t.Fatalf("Bind = (%T, %v), want missing Models binding error", bound, err)
 	}
 }

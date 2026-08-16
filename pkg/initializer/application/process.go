@@ -32,6 +32,7 @@ type Process struct {
 	lifecycle      ProcessLifecycle
 	acpServer      processcontract.ACPServer
 	workerReader   processcontract.WorkerRecordingReader
+	detachedOps    processcontract.DetachedOperationsCapability
 }
 
 func NewProcess(
@@ -41,6 +42,7 @@ func NewProcess(
 	lifecycle ProcessLifecycle,
 	acpServer processcontract.ACPServer,
 	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -55,6 +57,7 @@ func NewProcess(
 		lifecycle:      lifecycle,
 		acpServer:      acpServer,
 		workerReader:   workerReader,
+		detachedOps:    detachedOps,
 	}, nil
 }
 
@@ -95,6 +98,15 @@ func (p *Process) WorkerRecordingReader() processcontract.WorkerRecordingReader 
 		return nil
 	}
 	return p.workerReader
+}
+
+// DetachedOperations returns the opaque Factory Sessions capability composed
+// for this process. The root package owns its typed public projection.
+func (p *Process) DetachedOperations() processcontract.DetachedOperationsCapability {
+	if p == nil {
+		return nil
+	}
+	return p.detachedOps
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

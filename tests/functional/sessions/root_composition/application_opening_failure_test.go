@@ -70,10 +70,7 @@ func TestApplicationOpeningClosesRuntimeWhenVisualizationSinkIsUnavailable(t *te
 		t.Fatalf("NewApplicationService() error = %v", err)
 	}
 
-	_, err = service.OpenApplication(context.Background(), factorysessionwire.ApplicationOpeningRequest{
-		Runtime:             &factorysessions.RuntimeOpeningRequest{},
-		VisualizationSinkID: "stale-sink",
-	})
+	_, err = service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "stale-sink")
 	if err == nil || !strings.Contains(err.Error(), `Visualization sink "stale-sink" is unavailable`) {
 		t.Fatalf("OpenApplication() error = %v, want unavailable visualization sink", err)
 	}

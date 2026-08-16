@@ -254,7 +254,8 @@ type cleanInvocationWorkTarget struct {
 // opening owner before this value-only request is built.
 type RuntimeRunnerBuilder func(
 	context.Context,
-	factorysessions.ApplicationOpeningRequest,
+	*factorysessions.RuntimeOpeningRequest,
+	factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error)
 
 // RuntimeOpeningRequestFactory is the Wire-selected mapping from CLI values
@@ -262,7 +263,7 @@ type RuntimeRunnerBuilder func(
 type RuntimeOpeningRequestFactory func(
 	RunConfig,
 	*workers.MockWorkersConfig,
-) factorysessions.ApplicationOpeningRequest
+) *factorysessions.RuntimeOpeningRequest
 
 type Opener func(
 	context.Context,

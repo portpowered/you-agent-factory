@@ -23,6 +23,7 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -163,11 +164,15 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	if reader := WorkerRecordingReaderFromProcess(nil); reader != nil {
 		t.Fatalf("WorkerRecordingReaderFromProcess(nil) = %#v, want nil", reader)
 	}
+	if operations := DetachedOperationsFromProcess(nil); operations != nil {
+		t.Fatalf("DetachedOperationsFromProcess(nil) = %#v, want nil", operations)
+	}
 	processWithoutReader, err := initializerapplication.NewProcess(
 		nil,
 		nil,
 		rootWorkerProcessRegistry{},
 		rootWorkerProcessLifecycle{},
+		nil,
 		nil,
 		nil,
 	)
@@ -176,6 +181,9 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	}
 	if reader := WorkerRecordingReaderFromProcess(processWithoutReader); reader != nil {
 		t.Fatalf("WorkerRecordingReaderFromProcess(without reader) = %#v, want nil", reader)
+	}
+	if operations := DetachedOperationsFromProcess(processWithoutReader); operations != nil {
+		t.Fatalf("DetachedOperationsFromProcess(without capability) = %#v, want nil", operations)
 	}
 
 	readerWriter := &rootWorkerRecordingReaderProbe{}
@@ -194,6 +202,9 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	} else if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
 		t.Fatalf("WorkerRecordingReaderFromProcess snapshot = %#v, want empty snapshot", snapshot)
 	}
+	if operations := DetachedOperationsFromProcess(process); operations == nil {
+		t.Fatal("DetachedOperationsFromProcess(composed process) returned nil, want the composed view")
+	}
 
 	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{
 		WorkerRecordingWriter: recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
@@ -208,6 +219,43 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	}
 }
 
+func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
+	t.Parallel()
+
+	want := &factorysessions.DetachedOperations{}
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		rootDetachedOperationsCapabilityProbe{operations: want},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(detached capability) error = %v", err)
+	}
+	if got := DetachedOperationsFromProcess(process); got != want {
+		t.Fatalf("DetachedOperationsFromProcess() = %#v, want %#v", got, want)
+	}
+
+	wrongType, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		rootDetachedOperationsCapabilityProbe{operations: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(wrong-type capability) error = %v", err)
+	}
+	if got := DetachedOperationsFromProcess(wrongType); got != nil {
+		t.Fatalf("DetachedOperationsFromProcess(wrong type) = %#v, want nil", got)
+	}
+}
+
 func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 	t.Parallel()
 
@@ -219,6 +267,7 @@ func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{err: wantErr},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
@@ -243,6 +292,7 @@ func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) 
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
@@ -259,6 +309,14 @@ func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) 
 }
 
 type rootWorkerRecordingReaderProbe struct{}
+
+type rootDetachedOperationsCapabilityProbe struct {
+	operations any
+}
+
+func (probe rootDetachedOperationsCapabilityProbe) DetachedOperations() any {
+	return probe.operations
+}
 
 type rootWorkerProcessRegistry struct{}
 

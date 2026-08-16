@@ -227,11 +227,6 @@ func (s *Server) handleDurableLifecycleControl(
 		return
 	}
 
-	if s.sessionsRoot != nil {
-		s.invokeRootDurableLifecycleControl(w, r.Context(), sessionID, operation, control)
-		return
-	}
-
 	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
 	if !ok {
 		return
@@ -364,12 +359,6 @@ func (s *Server) handleDurableApproveControl(
 		return
 	}
 
-	if s.sessionsRoot != nil {
-		result, invokeErr := s.sessionsRoot.ApproveDurableFactorySession(r.Context(), string(sessionID), approve)
-		s.finishRootLifecycleControl(w, string(sessionID), "approve", result, invokeErr)
-		return
-	}
-
 	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
 	if !ok {
 		return
@@ -409,12 +398,6 @@ func (s *Server) handleDurableRetryDispatchControl(
 			return
 		}
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	if s.sessionsRoot != nil {
-		result, invokeErr := s.sessionsRoot.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), retry)
-		s.finishRootLifecycleControl(w, string(sessionID), "retry-dispatch", result, invokeErr)
 		return
 	}
 
@@ -529,12 +512,6 @@ func (s *Server) handleDurableInterruptDispatchControl(
 			return
 		}
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	if s.sessionsRoot != nil {
-		result, invokeErr := s.sessionsRoot.InterruptDurableFactorySessionDispatch(r.Context(), string(sessionID), interrupt)
-		s.finishRootLifecycleControl(w, string(sessionID), "interrupt-dispatch", result, invokeErr)
 		return
 	}
 

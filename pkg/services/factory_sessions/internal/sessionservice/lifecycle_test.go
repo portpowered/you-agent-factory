@@ -205,32 +205,6 @@ func TestService_PauseLiveFactorySession_DelegatesToDataplane(t *testing.T) {
 	}
 }
 
-func TestService_ObserveForSession_ForwardsRootObserveRequest(t *testing.T) {
-	t.Parallel()
-
-	runtimeFactory := &gatewayLifecycleFactory{factoryState: string(interfaces.FactoryStateRunning)}
-	host := &lifecycleGatewayHost{factory: runtimeFactory}
-	gateway := newServiceTestGateway(host)
-
-	result, err := gateway.ObserveForSession(
-		context.Background(),
-		"sess-observe",
-		factory.ObserveRequest{Scope: factory.ObservationScopeStatus},
-	)
-	if err != nil {
-		t.Fatalf("ObserveForSession: %v", err)
-	}
-	if runtimeFactory.observeCalls != 1 {
-		t.Fatalf("Observe calls = %d, want 1 through Runtime root Service", runtimeFactory.observeCalls)
-	}
-	if runtimeFactory.lastObserveRequest.Scope != factory.ObservationScopeStatus {
-		t.Fatalf("observe scope = %q, want STATUS", runtimeFactory.lastObserveRequest.Scope)
-	}
-	if result.Observation.Status != factory.ObservationStatusActive {
-		t.Fatalf("observation status = %q, want ACTIVE", result.Observation.Status)
-	}
-}
-
 func TestService_ResumeLiveFactorySession_DelegatesToDataplane(t *testing.T) {
 	t.Parallel()
 
@@ -275,13 +249,13 @@ func TestService_LifecycleGatewayRoutesLiveAndDurableSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PauseLiveFactorySession: %v", err)
 	}
-	durable, err := gateway.PauseDurableFactorySession(
+	durable, err := gateway.Pause(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
-		t.Fatalf("PauseDurableFactorySession: %v", err)
+		t.Fatalf("Pause: %v", err)
 	}
 
 	if live.Status != factorysessionexecution.LifecycleStatusPaused {

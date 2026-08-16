@@ -147,28 +147,6 @@ func TestNewFactoryUsesStableFirstMissingRequirementAndRemainsInert(t *testing.T
 	}
 }
 
-func TestNewFactoryConstructsInertFactoryWithExactModelsRoot(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-	dependencies := validRuntimeOpeningOwnerPorts(&calls)
-	wantModels := dependencies.Models.Service
-
-	factory, err := dependencies.newFactory()
-	if err != nil {
-		t.Fatalf("NewFactory() error = %v", err)
-	}
-	if factory == nil {
-		t.Fatal("NewFactory() = nil, want factory")
-	}
-	if got := factory.ModelsRoot(); got != wantModels {
-		t.Fatalf("ModelsRoot() = %T, want exact injected Models root %T", got, wantModels)
-	}
-	if calls != 0 {
-		t.Fatalf("NewFactory() invoked %d collaborator functions, want inert construction", calls)
-	}
-}
-
 func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
 	t.Parallel()
 

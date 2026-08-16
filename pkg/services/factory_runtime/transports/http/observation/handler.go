@@ -11,17 +11,21 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// SessionObserver routes session-scoped Runtime observation through the
-// Factory Sessions peer surface without importing Sessions internals.
-type SessionObserver interface {
-	ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
-}
-
 // Handler adapts Runtime observation operations while keeping their protocol
 // mechanics separate from lifecycle, dispatch, and checkpoint handlers.
 type Handler struct {
 	root     factoryruntime.Service
 	sessions SessionObserver
+}
+
+// SessionObserver is the Factory Sessions capability used for session-scoped
+// status reads. It selects the runtime bound to the requested session.
+type SessionObserver interface {
+	ObserveForSession(
+		context.Context,
+		string,
+		factoryruntime.ObserveRequest,
+	) (factoryruntime.ObserveResult, error)
 }
 
 // NewHandler binds observation to the already-constructed Runtime root.
@@ -32,7 +36,8 @@ func NewHandler(root factoryruntime.Service) *Handler {
 	return &Handler{root: root}
 }
 
-// BindSessionObserver attaches the peer used for session-scoped status reads.
+// BindSessionObserver attaches the Factory Sessions session router after the
+// stable Runtime HTTP adapter has been constructed.
 func (h *Handler) BindSessionObserver(sessions SessionObserver) {
 	if h != nil {
 		h.sessions = sessions
@@ -82,11 +87,11 @@ func (h *Handler) observeStatus(ctx context.Context, sessionID string) (factoryr
 		return factoryruntime.ObserveResult{}, err
 	}
 	request := factoryruntime.ObserveRequest{Scope: statusObserveScope}
-	if sessionID == "" {
-		return root.Observe(ctx, request)
+	if sessionID != "" {
+		if h == nil || h.sessions == nil {
+			return factoryruntime.ObserveResult{}, transporterrors.ErrSessionObserverRequired
+		}
+		return h.sessions.ObserveForSession(ctx, sessionID, request)
 	}
-	if h == nil || h.sessions == nil {
-		return factoryruntime.ObserveResult{}, transporterrors.ErrSessionObserverRequired
-	}
-	return h.sessions.ObserveForSession(ctx, sessionID, request)
+	return root.Observe(ctx, request)
 }

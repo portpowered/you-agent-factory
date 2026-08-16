@@ -9,13 +9,18 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -34,6 +39,27 @@ type Handler struct {
 	contentStaging       work.ContentStagingService
 	requestPreparation   work.RequestPreparationService
 	sessionRequests      factorysessionshttp.RequestPreparation
+}
+
+// Binding is the transport-owned application role set. Factory Sessions
+// opens runtime state, while Wire supplies these already-constructed roles to
+// the HTTP adapter without publishing an application service table from the
+// Sessions contract.
+type Binding struct {
+	FactoryRuntime     factoryruntime.Service
+	FactoryDefinitions factorydefinitions.Service
+	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
+	FactorySessions    factorysessions.Service
+	LiveControl        factorysessions.LiveControlService
+	Work               work.Service
+	Models             models.Service
+	ModelsScope        models.RuntimeScopeRef
+	ModelInvoker       workers.ModelInvoker
+	Workers            workers.Service
+	ProviderSessions   providersessions.Service
+	WorkerSessions     workersessions.ObservationService
+	WorkerPrompts      workers.PromptTemplates
+	Logger             *zap.Logger
 }
 
 func NewHandler(
@@ -59,7 +85,7 @@ func NewHandler(
 	}, nil
 }
 
-func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.Handler, error) {
+func (handler *Handler) Bind(opened Binding) (http.Handler, error) {
 	if handler == nil || handler.mappings == nil || handler.providerSessionsHTTP == nil || handler.modelsContent == nil {
 		return nil, fmt.Errorf("bind HTTP handler: process-scoped handler is required")
 	}

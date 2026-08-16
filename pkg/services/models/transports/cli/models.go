@@ -93,8 +93,12 @@ type httpService struct {
 // composition. It is a thin facade over the owned adapter Service built from
 // composition collaborators when a Models root is available, with HTTP and
 // bootstrap invoke behavior retained for remote and legacy composition paths.
-func New(httpProtocol clihttp.Protocol, invocation InvocationOperation) Service {
-	return bindCompositionService(httpProtocol, adaptCompositionInvocation(invocation))
+func New(
+	httpProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	providers ...CompositionScopeProvider,
+) Service {
+	return bindCompositionService(httpProtocol, invocation, providers...)
 }
 
 func (service *httpService) List(cfg ListConfig) error {

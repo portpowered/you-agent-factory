@@ -311,8 +311,18 @@ func (a *activatedRuntime) close(ctx context.Context) (*activeInvocation, error)
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (a *activatedRuntime) cleanup(ctx context.Context) error {
 	var result error
-	if a.opened.Sessions != nil && !a.sessionClosed {
-		if err := a.opened.Sessions.CloseFactorySession(ctx, factorysessions.DefaultSessionID); err != nil &&
+	var closeSession func(context.Context, string) error
+	if a.opened.LiveControl != nil {
+		closeSession = a.opened.LiveControl.CloseFactorySession
+	} else if a.opened.Sessions != nil {
+		if closer, ok := a.opened.Sessions.(interface {
+			CloseFactorySession(context.Context, string) error
+		}); ok {
+			closeSession = closer.CloseFactorySession
+		}
+	}
+	if closeSession != nil && !a.sessionClosed {
+		if err := closeSession(ctx, factorysessions.DefaultSessionID); err != nil &&
 			!errors.Is(err, factorysessions.ErrSessionNotFound) {
 			result = errors.Join(result, err)
 		} else {
@@ -888,7 +898,7 @@ func (s *Service) removeActivation(sessionID string, current *activatedRuntime) 
 // CloseFactorySession tears down and evicts the exact runtime a prior
 // StartAsync call opened for sessionID. Closing an unknown or already-closed
 // identity is a no-op success, matching the idempotent close semantics
-// factorysessions.Service.CloseFactorySession already documents.
+// factorysessions.LiveControlService.CloseFactorySession already documents.
 func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) error {
 	control, ok := s.lockControl(sessionID)
 	if !ok {

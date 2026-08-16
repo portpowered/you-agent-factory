@@ -75,7 +75,8 @@ func New(
 
 func (service *Service) OpenApplication(
 	ctx context.Context,
-	request roles.ApplicationOpeningRequest,
+	request *factorysessions.RuntimeOpeningRequest,
+	sinkID factorysessions.VisualizationSinkID,
 ) (roles.OpenedProcessApplication, error) {
 	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil || service.visualization == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
@@ -87,14 +88,14 @@ func (service *Service) OpenApplication(
 	if opened.HistoricalReplay != nil {
 		return service.openHistoricalReplayApplication(opened)
 	}
-	return service.bindLiveApplication(opened, request.VisualizationSinkID)
+	return service.bindLiveApplication(opened, sinkID)
 }
 
 func (service *Service) openRuntimeForRequest(
 	ctx context.Context,
-	request roles.ApplicationOpeningRequest,
+	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedApplicationRuntime, error) {
-	inputs, err := service.resolveInputs(ctx, request.Runtime)
+	inputs, err := service.resolveInputs(ctx, request)
 	if err != nil {
 		return roles.OpenedApplicationRuntime{}, fmt.Errorf("resolve runtime inputs: %w", err)
 	}
@@ -136,8 +137,8 @@ func (service *Service) bindLiveApplication(
 		Plan:             plan,
 		Diagnostics:      opened.Resources.Diagnostics,
 		Ready:            runtimeReady(opened.Process),
-		CleanInvocation:  opened.HTTP.FactoryRuntime,
-		HostedInvocation: hostedInvocation(opened.HTTP.FactorySessions),
+		CleanInvocation:  opened.FactoryRuntime,
+		HostedInvocation: hostedInvocation(opened.FactorySessions),
 	}, nil
 }
 

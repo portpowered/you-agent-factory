@@ -147,12 +147,12 @@ func TestDurableCallSitesRouteThroughOwnerCapabilityNotHostAccessor(t *testing.T
 	if _, err := gateway.Pause(ctx, "dur-sess-outer", factorysessionexecution.ControlRequest{}); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
-	if _, err := gateway.PauseDurableFactorySession(
+	if _, err := gateway.Pause(
 		ctx,
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	); err != nil {
-		t.Fatalf("PauseDurableFactorySession: %v", err)
+		t.Fatalf("Pause: %v", err)
 	}
 
 	if host.durableAccessors != 1 {
