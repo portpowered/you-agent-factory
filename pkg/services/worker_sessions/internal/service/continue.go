@@ -36,7 +36,7 @@ func (r *registry) reconcileOverdueAttempt(
 	if lifecycleContext == nil {
 		lifecycleContext = context.Background()
 	}
-	_, err := r.boundary.Cancel(
+	_, err := r.execution.CancelWorkstationDispatch(
 		context.WithoutCancel(lifecycleContext),
 		workers.WorkstationDispatchCancelRequest{
 			DispatchID: attemptID,
