@@ -39,6 +39,18 @@ function renderWorkerNode() {
   return render(<WorkerNodeView {...workerNodeProps} />);
 }
 
+function renderWorkerIcon(overrides: {
+  runnerId?: string | null;
+  workerType?: string | null;
+}) {
+  return render(
+    <WorkerNodeView
+      {...workerNodeProps}
+      data={{ ...workerNodeProps.data, ...overrides }}
+    />,
+  );
+}
+
 function bounds(top: number, bottom: number): DOMRect {
   return {
     bottom,
@@ -112,4 +124,37 @@ describe("CurrentActivity worker node layout", () => {
       container.querySelector("[data-worker-label-zone]")?.className,
     ).toContain("h-full");
   });
+});
+
+describe("CurrentActivity worker node icons", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it.each([
+    ["SCRIPT_WORKER", "codex", "script"],
+    [undefined, "codex", "codex"],
+    [undefined, "CLAUDE", "claude"],
+    [undefined, "antigravity", "antigravity"],
+  ])("selects the %s/%s worker glyph", (workerType, runnerId, expectedKind) => {
+    const { container } = renderWorkerIcon({ workerType, runnerId });
+
+    expect(
+      container
+        .querySelector("[data-graph-semantic-icon]")
+        ?.getAttribute("data-graph-semantic-icon"),
+    ).toBe(expectedKind);
+  });
+
+  it.each([undefined, null, "", "future-runner"])(
+    "keeps %s runner identity on the generic worker glyph",
+    (runnerId) => {
+      const { container } = renderWorkerIcon({ runnerId });
+      const icon = container.querySelector("[data-graph-semantic-icon]");
+
+      expect(icon?.getAttribute("data-graph-semantic-icon")).toBe("worker");
+      expect(icon?.querySelectorAll("path, circle").length).toBeGreaterThan(0);
+      expect(icon?.getAttribute("aria-label")).toBe("Worker");
+    },
+  );
 });

@@ -11,6 +11,7 @@ import type {
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import { resolveRunnerSelection } from "../../current-factory-definition/lib/runner-selection";
 import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
@@ -507,6 +508,40 @@ function placeNodeSizingContent(
   ];
 }
 
+function workerPresentationMetadata(
+  factory: DashboardSnapshot["factory"],
+  workerName: string,
+): {
+  runnerId?: string;
+  workerType?: string;
+} {
+  const worker = factory?.workers?.find(
+    (candidate) => candidate.name === workerName || candidate.id === workerName,
+  );
+  if (!worker) {
+    return {};
+  }
+
+  const workstationRunner = factory.workstations?.find(
+    (workstation) =>
+      workstation.worker === worker.name &&
+      typeof workstation.runner === "string" &&
+      workstation.runner.trim().length > 0,
+  )?.runner;
+  const runnerSelection = resolveRunnerSelection(
+    workstationRunner,
+    factory.runner,
+    worker.modelProvider,
+  );
+
+  return {
+    ...(worker.type ? { workerType: worker.type } : {}),
+    ...(runnerSelection.source !== "default"
+      ? { runnerId: runnerSelection.runnerId }
+      : {}),
+  };
+}
+
 function buildPlaceNodeShell(positionedNode: PositionedPlaceNode) {
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
@@ -637,6 +672,10 @@ function buildPlaceNode(
   if (factoryGraphNode?.kind === "worker") {
     const workerName =
       place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
+    const workerMetadata = workerPresentationMetadata(
+      input.factoryDefinition ?? input.snapshot.factory,
+      workerName,
+    );
     return {
       ...basePlaceNode,
       data: {
@@ -646,6 +685,7 @@ function buildPlaceNode(
           ? { onSelectWorker: input.onSelectWorker }
           : {}),
         place,
+        ...workerMetadata,
         selectedWorker:
           input.selection?.kind === "worker" &&
           input.selection.workerName === workerName,

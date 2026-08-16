@@ -11,6 +11,10 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
   "failed",
   "resource",
   "worker",
+  "script",
+  "codex",
+  "claude",
+  "antigravity",
   "work-type",
   "constraint",
   "doc",
@@ -139,12 +143,50 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
       </>
     ),
   },
+  script: {
+    paths: (
+      <>
+        <rect height="14" rx="2" width="16" x="4" y="5" />
+        <path d="m8 9 3 3-3 3" />
+        <path d="M13.5 15H17" />
+      </>
+    ),
+  },
   worker: {
     paths: (
       <>
         <circle cx="12" cy="7" r="3.2" />
         <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
         <path d="M8.5 14.5 12 18l3.5-3.5" />
+      </>
+    ),
+  },
+  codex: {
+    paths: (
+      <>
+        <path d="m12 3.5 2.3 4.4 4.8 1-3.3 3.4.6 4.8-4.4-1.9-4.4 1.9.6-4.8-3.3-3.4 4.8-1L12 3.5Z" />
+        <path d="M12 8.5v5" />
+        <path d="M9.5 11h5" />
+      </>
+    ),
+  },
+  claude: {
+    paths: (
+      <>
+        <path d="M12 3.5c1.5 2.2 2.4 3.9 2.4 5.5 0 1.4-.9 2.4-2.4 2.4s-2.4-1-2.4-2.4c0-1.6.9-3.3 2.4-5.5Z" />
+        <path d="M20.5 12c-2.2 1.5-3.9 2.4-5.5 2.4-1.4 0-2.4-.9-2.4-2.4s1-2.4 2.4-2.4c1.6 0 3.3.9 5.5 2.4Z" />
+        <path d="M12 20.5c-1.5-2.2-2.4-3.9-2.4-5.5 0-1.4.9-2.4 2.4-2.4s2.4 1 2.4 2.4c0 1.6-.9 3.3-2.4 5.5Z" />
+        <path d="M3.5 12c2.2-1.5 3.9-2.4 5.5-2.4 1.4 0 2.4.9 2.4 2.4s-1 2.4-2.4 2.4c-1.6 0-3.3-.9-5.5-2.4Z" />
+      </>
+    ),
+  },
+  antigravity: {
+    paths: (
+      <>
+        <path d="M12 4v14" />
+        <path d="m7 9 5-5 5 5" />
+        <path d="M5 19h14" />
+        <path d="m8 14 4 4 4-4" />
       </>
     ),
   },

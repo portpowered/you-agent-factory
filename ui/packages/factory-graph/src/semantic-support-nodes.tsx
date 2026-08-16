@@ -16,6 +16,7 @@ import {
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkerIconKind } from "./worker-icon.js";
 
 /** The portion of a Factory place needed by the original semantic node views. */
 export interface FactoryGraphPlaceRef {
@@ -36,9 +37,11 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectWorker?: (workerName: string) => void;
   place: FactoryGraphPlaceRef;
+  runnerId?: string | null;
   resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorker: boolean;
   validationError?: boolean;
+  workerType?: string | null;
 }
 
 export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
@@ -96,6 +99,10 @@ export function FactoryGraphWorkerNodeView({
   const workerName = resolveWorkerName(data);
   const label = `worker:${workerName}`;
   const workerLabel = semanticLabel("worker", data.locale);
+  const workerIconKind = factoryGraphWorkerIconKind(
+    data.workerType,
+    data.runnerId,
+  );
   const selectable = data.onSelectWorker !== undefined;
   const selected = data.selectedWorker || reactFlowSelected;
   const visualState = resolveFactoryGraphVisualState({
@@ -121,7 +128,7 @@ export function FactoryGraphWorkerNodeView({
           "h-3.5 w-3.5 shrink-0",
           factoryGraphNodeVisualIconClassName(visualState, "text-info"),
         )}
-        kind="worker"
+        kind={workerIconKind}
         label={workerLabel}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">

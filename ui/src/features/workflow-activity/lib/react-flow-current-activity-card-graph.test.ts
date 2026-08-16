@@ -139,6 +139,61 @@ describe("dashboardWorkstationFromFactory", () => {
 });
 
 describe("current activity graph editor handles", () => {
+  it("projects canonical worker type and resolved runner metadata onto worker nodes", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      runner: "claude",
+      workers: [
+        {
+          ...baseFactoryDefinition.workers?.[0],
+          modelProvider: "CODEX",
+          name: "writer",
+          type: "AGENT_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          runner: "antigravity",
+          worker: "writer",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+    });
+
+    expect(nodes.find((node) => node.id === "worker:writer")).toMatchObject({
+      data: {
+        kind: "worker",
+        runnerId: "antigravity",
+        workerType: "AGENT_WORKER",
+      },
+      type: "worker",
+    });
+  });
+
   it("marks factory-derived workstation nodes active from runtime execution ids", async () => {
     const factory = baseFactoryDefinition;
     const graphLayout =
