@@ -10,6 +10,7 @@ import {
 const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
 const CLEAN_TARGET_BASELINE = 0;
+const ADDED_FINDINGS_HEADER = "New unused frontend code:";
 export const BACKEND_LINT_COMMENT_MARKER = "<!-- backend-lint-report -->";
 
 function textValue(value) {
@@ -25,6 +26,53 @@ function normalizedStatus(value) {
 	return ["pass", "passed", "success"].includes(textValue(value).toLowerCase())
 		? "pass"
 		: "fail";
+}
+
+function isAddedFindingsTerminator(line) {
+	return line === "Baseline entries no longer reported:"
+		|| line.startsWith("Current report written to ")
+		|| line.startsWith("Remove the unused code ")
+		|| /^LINT_VIOLATION_COUNT:\s*\d+$/.test(line);
+}
+
+function parseNamedFinding(line) {
+	const match = line.match(/^\s*-\s+(.+?)\s+(export|file|type)\s+(.+?)\s*$/);
+	if (!match) {
+		return null;
+	}
+	return {
+		file: match[1],
+		kind: match[2],
+		name: match[3],
+	};
+}
+
+export function extractAddedFindings(output) {
+	const lines = textValue(output).replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
+	const headerIndex = lines.findIndex((line) => line.trim() === ADDED_FINDINGS_HEADER);
+	if (headerIndex === -1) {
+		return [];
+	}
+
+	const findings = [];
+	for (const rawLine of lines.slice(headerIndex + 1)) {
+		const line = rawLine.trim();
+		if (isAddedFindingsTerminator(line)) {
+			return findings;
+		}
+		if (!line) {
+			continue;
+		}
+		const finding = parseNamedFinding(line);
+		if (!finding) {
+			return [];
+		}
+		findings.push(finding);
+	}
+
+	// A complete section must have an explicit following status/count line. This
+	// prevents a truncated diagnostic from being presented as a complete set.
+	return [];
 }
 
 function machineReadableViolationCount(target) {
@@ -88,6 +136,7 @@ export function summarizeBackendLintReport(report, options = {}) {
 			durationMillis: numericValue(target.durationMillis),
 			output: textValue(target.output),
 			error: textValue(target.error),
+			addedFindings: extractAddedFindings(target.output),
 		};
 	});
 	const policy = evaluateBackendLintPolicy(targets);
@@ -143,6 +192,29 @@ function formatAllowanceComparison(allowance) {
 	return `- ${allowance.name}: baseline ${allowance.baselineViolationCount} -> current ${current} (delta ${delta}; ${allowance.status})`;
 }
 
+function formatCode(value) {
+	return `\`${textValue(value).replaceAll("`", "\\`")}\``;
+}
+
+function hasPositiveDelta(target) {
+	const baseline = effectiveBaseline(target);
+	return Number.isSafeInteger(target.violationCount)
+		&& target.violationCount > baseline;
+}
+
+function formatPolicyFailure(target) {
+	const lines = [formatTargetComparison(target)];
+	if (hasPositiveDelta(target) && target.addedFindings?.length > 0) {
+		lines.push("  Added named findings:");
+		lines.push(
+			...target.addedFindings.map(
+				(finding) => `  - file: ${formatCode(finding.file)}; kind: ${formatCode(finding.kind)}; symbol: ${formatCode(finding.name)}`,
+			),
+		);
+	}
+	return lines;
+}
+
 export function renderBackendLintVerdict(summary) {
 	const toleratedTargets = summary.targets.filter((target) => target.policyStatus === "allowed");
 	const failedTargets = summary.targets.filter(
@@ -167,7 +239,7 @@ export function renderBackendLintVerdict(summary) {
 
 	lines.push("", "Policy failures:");
 	lines.push(
-		...(failedTargets.length > 0 ? failedTargets.map(formatTargetComparison) : []),
+		...(failedTargets.length > 0 ? failedTargets.flatMap(formatPolicyFailure) : []),
 		...(missingTargets.length > 0 ? missingTargets.map(formatAllowanceComparison) : []),
 	);
 	if (failedTargets.length === 0 && missingTargets.length === 0) {

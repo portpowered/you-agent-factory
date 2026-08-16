@@ -9,6 +9,7 @@ import { BACKEND_LINT_ALLOWANCES } from "./backend-lint-policy.mjs";
 import {
 	BACKEND_LINT_COMMENT_MARKER,
 	countViolations,
+	extractAddedFindings,
 	renderBackendLintComment,
 	renderBackendLintSummary,
 	renderBackendLintVerdict,
@@ -173,6 +174,71 @@ test("multiple baseline rises are reported independently", () => {
 	assert.equal(summary.ok, false);
 	assert.match(verdict, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
 	assert.match(verdict, /backend-size: baseline 2 -> current 3 \(delta \+1; exceeded\)/);
+});
+
+test("a positive ui-deadcode rise reports every bounded named addition", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: [
+					"Frontend dead-code baseline drift detected.",
+					"New unused frontend code:",
+					"- ui/src/components/unused.ts export unusedExport",
+					"- ui/src/types/unused.ts type UnusedType",
+					"Current report written to bin/frontend-deadcode-current.json.",
+					"LINT_VIOLATION_COUNT: 6",
+				].join("\n"),
+			},
+		}),
+	}));
+	const verdict = renderBackendLintVerdict(summary);
+
+	assert.deepEqual(summary.targets.find((target) => target.name === "ui-deadcode").addedFindings, [
+		{ file: "ui/src/components/unused.ts", kind: "export", name: "unusedExport" },
+		{ file: "ui/src/types/unused.ts", kind: "type", name: "UnusedType" },
+	]);
+	assert.match(verdict, /ui-deadcode: baseline 4 -> current 6 \(delta \+2; exceeded\)/);
+	assert.match(verdict, /Added named findings:/);
+	assert.match(verdict, /file: `ui\/src\/components\/unused\.ts`; kind: `export`; symbol: `unusedExport`/);
+	assert.match(verdict, /file: `ui\/src\/types\/unused\.ts`; kind: `type`; symbol: `UnusedType`/);
+});
+
+test("a count-only rise remains actionable without invented findings", () => {
+	const summary = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"ui-deadcode": {
+				status: "fail",
+				output: "Frontend dead-code baseline drift detected.\nLINT_VIOLATION_COUNT: 5",
+			},
+		}),
+	}));
+	const verdict = renderBackendLintVerdict(summary);
+
+	assert.deepEqual(summary.targets.find((target) => target.name === "ui-deadcode").addedFindings, []);
+	assert.match(verdict, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
+	assert.doesNotMatch(verdict, /Added named findings/);
+});
+
+test("added-finding extraction excludes removed entries and incomplete diagnostics", () => {
+	const output = [
+		"New unused frontend code:",
+		"- ui/src/new.ts export newExport",
+		"Baseline entries no longer reported:",
+		"- ui/src/old.ts export oldExport",
+		"LINT_VIOLATION_COUNT: 2",
+	].join("\n");
+	assert.deepEqual(extractAddedFindings(output), [
+		{ file: "ui/src/new.ts", kind: "export", name: "newExport" },
+	]);
+	assert.deepEqual(
+		extractAddedFindings("New unused frontend code:\n- ui/src/new.ts export newExport"),
+		[],
+	);
+	assert.deepEqual(
+		extractAddedFindings("New unused frontend code:\n- arbitrary diagnostic\nLINT_VIOLATION_COUNT: 1"),
+		[],
+	);
 });
 
 test("a no-rise ratchet pass states the baseline rule and tolerated debt", () => {
