@@ -104,16 +104,6 @@ type runtimeModelInvoker struct {
 	config RuntimeModelInvokerConfig
 }
 
-type modelRuntimeScopeExecutor interface {
-	ExecuteWithModelRuntimeScope(
-		context.Context,
-		models.RuntimeScopeRef,
-		models.LocalWorker,
-		[]models.LocalResource,
-		workers.ExecuteRequest,
-	) (workers.ExecuteResult, error)
-}
-
 // NewRuntimeModelInvoker binds direct model invocation to one opened runtime.
 // The opened Models scope is used for readiness, while the attempt itself
 // enters the same request-scoped Workers path as Factory Runtime execution.
@@ -274,6 +264,7 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 			},
 			ModelBindings:  runtimeWorkerBindings(bindings),
 			ModelOperation: strings.TrimSpace(request.Operation),
+			ModelRuntime:   modelRuntimeInput(invoker.config.Scope, factoryConfig, worker),
 			WorkflowContext: &workers.Context{
 				FactoryDirectory: factoryDirectory,
 				WorkDirectory:    workingDirectory,
@@ -282,14 +273,7 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 		},
 		Attempt: workers.AttemptContext{Number: 1},
 	}
-	executeResult, err := executeRuntimeModelRequest(
-		ctx,
-		invoker.config.Workers,
-		invoker.config.Scope,
-		factoryConfig,
-		worker,
-		executeRequest,
-	)
+	executeResult, err := invoker.config.Workers.Execute(ctx, executeRequest)
 	if err != nil {
 		return "", err
 	}
@@ -303,26 +287,19 @@ func (invoker *runtimeModelInvoker) invokeRuntimeModel(
 	return runtimeModelOutput(executeResult), nil
 }
 
-func executeRuntimeModelRequest(
-	ctx context.Context,
-	service workers.Service,
+func modelRuntimeInput(
 	scope models.RuntimeScopeRef,
 	factoryConfig *factorydefinitions.FactoryConfig,
 	worker *factorydefinitions.FactoryWorkerConfig,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	if isManagedRuntimeWorker(worker) {
-		if scoped, ok := service.(modelRuntimeScopeExecutor); ok {
-			return scoped.ExecuteWithModelRuntimeScope(
-				ctx,
-				scope,
-				localRuntimeWorker(worker),
-				localRuntimeResources(factoryConfig),
-				request,
-			)
-		}
+) *workers.ModelRuntimeInput {
+	if !isManagedRuntimeWorker(worker) {
+		return nil
 	}
-	return service.Execute(ctx, request)
+	return &workers.ModelRuntimeInput{
+		Scope:     scope,
+		Worker:    localRuntimeWorker(worker),
+		Resources: localRuntimeResources(factoryConfig),
+	}
 }
 
 func isManagedRuntimeWorker(worker *factorydefinitions.FactoryWorkerConfig) bool {

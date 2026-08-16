@@ -171,12 +171,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/acp/internal/stdio/server_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -574,12 +568,6 @@
     {
       "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/workers/internal/services/runners/wire/agent_progress_test.go#TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor.go#WorkstationExecutor.executeModelWorkstation",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
     },
@@ -2013,24 +2001,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor.go#WorkstationExecutor.executeModelWorkstation",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/services/workstations/internal/service/service_logging_test.go#TestPoolLogsCancellationOutcomesIncludingNoOps",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2553,12 +2523,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/transports/acp/internal/stdio/server_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2910,18 +2874,6 @@
       "target": "pkg/services/workers/internal/services/runners/wire/agent_progress_test.go#TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor.go#WorkstationExecutor.executeModelWorkstation",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go#TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",

@@ -422,12 +422,14 @@ func assertManagedModelInvocation(
 	if len(workersService.requests) != 1 {
 		t.Fatalf("Workers Execute requests = %d, want one", len(workersService.requests))
 	}
-	if len(workersService.scopedRequests) != 1 || workersService.scopedRequests[0] != scope {
-		t.Fatalf("scoped Workers requests = %#v, want opened runtime scope", workersService.scopedRequests)
-	}
 	execute := workersService.requests[0]
 	assertManagedModelTarget(t, execute)
 	assertManagedModelInput(t, execute)
+	runtime := execute.Input.ModelRuntime
+	if runtime.Scope != scope || runtime.Worker.Name != "local-worker" ||
+		len(runtime.Resources) != 1 || runtime.Resources[0].ID != "shared" {
+		t.Fatalf("managed Models request projection = %#v, want opened scope and shared resource", runtime)
+	}
 }
 
 func assertManagedModelTarget(t *testing.T, execute workers.ExecuteRequest) {
@@ -445,6 +447,7 @@ func assertManagedModelInput(t *testing.T, execute workers.ExecuteRequest) {
 	t.Helper()
 	if execute.Input.ModelOperation != "invoke" || len(execute.Input.ModelBindings) != 1 ||
 		execute.Input.ModelBindings[0].Source != workers.ModelOperationBindingSourceInput ||
+		execute.Input.ModelRuntime == nil || execute.Input.ModelRuntime.Scope.IsZero() ||
 		execute.Input.WorkflowContext == nil {
 		t.Fatalf("managed execution input = %#v, want detached model metadata", execute.Input)
 	}
@@ -694,26 +697,14 @@ func (stub *runtimeInvokerSessionsStub) GetFactorySession(context.Context, strin
 
 type runtimeInvokerWorkersStub struct {
 	workers.Service
-	requests       []workers.ExecuteRequest
-	scopedRequests []models.RuntimeScopeRef
-	result         workers.ExecuteResult
-	err            error
+	requests []workers.ExecuteRequest
+	result   workers.ExecuteResult
+	err      error
 }
 
 func (stub *runtimeInvokerWorkersStub) Execute(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 	stub.requests = append(stub.requests, request)
 	return stub.result, stub.err
-}
-
-func (stub *runtimeInvokerWorkersStub) ExecuteWithModelRuntimeScope(
-	ctx context.Context,
-	scope models.RuntimeScopeRef,
-	_ models.LocalWorker,
-	_ []models.LocalResource,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	stub.scopedRequests = append(stub.scopedRequests, scope)
-	return stub.Execute(ctx, request)
 }
 
 func mustRuntimeModelScope(t *testing.T, value string) models.RuntimeScopeRef {

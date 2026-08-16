@@ -2774,11 +2774,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runners/inference",
-      "target": "pkg/services/workers/internal/services/runners"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/runners/process",
       "target": "pkg/services/workers/internal/services/runners"
     },

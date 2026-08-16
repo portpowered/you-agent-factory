@@ -1,24 +1,13 @@
 package service
 
-import (
-	"context"
+import "github.com/portpowered/infinite-you/pkg/services/workers"
 
-	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
-)
-
-// ExecuteWithModelRuntimeScope keeps direct managed-model invocation on the
-// normal Execute path while supplying the opened Models scope to the private
-// inference runner for this attempt only.
-func (s *Service) ExecuteWithModelRuntimeScope(
-	ctx context.Context,
-	scope models.RuntimeScopeRef,
-	worker models.LocalWorker,
-	resources []models.LocalResource,
+// modelRuntimeInputFromRequest snapshots the explicit Models projection as it
+// crosses from the public Execute request into the private runner request.
+// The scope remains request-owned; this helper does not add another execution
+// operation or context-based transport.
+func modelRuntimeInputFromRequest(
 	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	return s.Execute(workerexecution.WithModelRuntimeProjection(
-		ctx, scope, worker, resources,
-	), request)
+) *workers.ModelRuntimeInput {
+	return request.Input.ModelRuntime.Clone()
 }

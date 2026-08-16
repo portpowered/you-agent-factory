@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
@@ -420,10 +419,14 @@ func TestRunnerUsesRequestScopedModelRuntimeScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if _, err := inferenceRunner.Execute(
-		workerexecution.WithModelRuntimeScope(t.Context(), scope),
-		validRequest(),
-	); err != nil {
+	request := validRequest()
+	config := validConfig()
+	request.ModelRuntime = &workers.ModelRuntimeInput{
+		Scope:     scope,
+		Worker:    config.Worker,
+		Resources: config.Resources,
+	}
+	if _, err := inferenceRunner.Execute(t.Context(), request); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if got := modelsEdge.Request().Scope; got != scope {

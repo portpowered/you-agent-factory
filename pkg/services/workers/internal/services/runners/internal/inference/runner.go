@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
 )
 
 const Identity = "inference"
@@ -81,8 +80,8 @@ func (r *runner) Execute(
 			return workers.RunnerExecutionResult{}, err
 		}
 	}
-	scope, worker, resources := workerexecution.ModelRuntimeProjectionFromContext(
-		ctx,
+	scope, worker, resources := modelRuntimeProjection(
+		request,
 		r.scope,
 		r.workerForRequest(request),
 		r.resources,
@@ -109,6 +108,27 @@ func (r *runner) Execute(
 			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 		}},
 	}, nil
+}
+
+func modelRuntimeProjection(
+	request workers.RunnerExecutionRequest,
+	fallbackScope models.RuntimeScopeRef,
+	fallbackWorker models.LocalWorker,
+	fallbackResources []models.LocalResource,
+) (models.RuntimeScopeRef, models.LocalWorker, []models.LocalResource) {
+	projection := request.ModelRuntime
+	if projection == nil || projection.Scope.IsZero() {
+		return fallbackScope, fallbackWorker, snapshotResources(fallbackResources)
+	}
+	worker := snapshotWorker(projection.Worker)
+	if worker.Name == "" && worker.Model == "" {
+		worker = fallbackWorker
+	}
+	resources := snapshotResources(projection.Resources)
+	if len(resources) == 0 {
+		resources = snapshotResources(fallbackResources)
+	}
+	return projection.Scope, worker, resources
 }
 
 func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecutionRequest {

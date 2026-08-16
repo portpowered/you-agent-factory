@@ -297,7 +297,7 @@
     },
     {
       "packagePath": "pkg/services/workers/internal",
-      "fileCount": 26,
+      "fileCount": 25,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
