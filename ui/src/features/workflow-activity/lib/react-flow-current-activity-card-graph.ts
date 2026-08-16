@@ -515,7 +515,11 @@ function workerPresentationMetadata(
   runnerId?: string;
   workerType?: string;
 } {
-  const worker = factory?.workers?.find(
+  if (!factory) {
+    return {};
+  }
+
+  const worker = factory.workers?.find(
     (candidate) => candidate.name === workerName || candidate.id === workerName,
   );
   if (!worker) {
