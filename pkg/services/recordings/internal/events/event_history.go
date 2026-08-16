@@ -271,11 +271,12 @@ func (h *FactoryEventHistory) AddEventRecorder(recorder func(interfaces.FactoryE
 	h.mu.Lock()
 	events := cloneFactoryEvents(h.events)
 	h.recorders = append(h.recorders, recorder)
-	h.mu.Unlock()
-
+	// Replay under the history lock so a newly registered recorder observes
+	// the existing prefix before any later append can be delivered to it.
 	for _, event := range events {
 		recorder(event)
 	}
+	h.mu.Unlock()
 }
 
 // AddEventTypeRecorder registers a transport-independent callback for the type
@@ -292,11 +293,11 @@ func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.Fact
 		eventTypes[index] = event.Type
 	}
 	h.eventTypeRecorders = append(h.eventTypeRecorders, recorder)
-	h.mu.Unlock()
-
+	// Keep the replayed prefix and future type notifications in append order.
 	for _, eventType := range eventTypes {
 		recorder(eventType)
 	}
+	h.mu.Unlock()
 }
 
 // RecordInitialStructure records the static topology before work events.

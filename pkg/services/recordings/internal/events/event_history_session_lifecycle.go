@@ -506,13 +506,16 @@ func (h *FactoryEventHistory) appendEventWithValidation(
 			stream.signalOverflow()
 		}
 	}
-	h.mu.Unlock()
-
+	// Recorder callbacks must share the append critical section. They feed
+	// durable recording state, and invoking them after unlock lets concurrent
+	// appenders acquire the recorder in a different order than the canonical
+	// event sequence.
 	for _, recorder := range recorders {
 		recorder(event.Clone())
 	}
 	for _, recorder := range eventTypeRecorders {
 		recorder(event.Type)
 	}
+	h.mu.Unlock()
 	return event.Clone(), nil
 }
