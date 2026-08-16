@@ -94,6 +94,70 @@ then complete the second same-route Work after PROCESS_GONE reconciliation.
 	assertProcessGoneDispatchOutcomes(t, events, firstWorkID, secondWorkID)
 }
 
+// TestProcessGoneReconciliationThroughRootProcess exercises the public root
+// composition with a deterministic command edge. The edge reports a started
+// then exited process before returning, so this remains a cross-platform
+// observable witness for workstation reconciliation and route release while
+// the Unix test above covers the real inherited-pipe process boundary.
+func TestProcessGoneReconciliationThroughRootProcess(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	const (
+		workID  = "work-process-gone-functional"
+		traceID = "trace-process-gone-functional"
+	)
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     workID,
+		WorkTypeID: "task",
+		TraceID:    traceID,
+		Payload:    []byte("deterministic process gone reconciliation"),
+	})
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ScriptCommandRunner: processGoneFunctionalCommandRunner{}},
+		20*time.Second,
+	)
+
+	assertProcessCleanupListedWorkIdentity(t, listed, "failed", workID, "task", traceID, nil)
+	if session.Runtime.Progress.Categories.Failed != 1 || session.Runtime.Progress.Categories.Terminal != 1 {
+		t.Fatalf(
+			"session progress categories = %+v, want one PROCESS_GONE failure",
+			session.Runtime.Progress.Categories,
+		)
+	}
+	if session.Runtime.Progress.Categories.Processing != 0 {
+		t.Fatalf("session processing count = %d, want zero after route release", session.Runtime.Progress.Categories.Processing)
+	}
+	assertProcessCleanupDispatchOutcomeSequence(t, events, []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+	}, "process")
+}
+
+// processGoneFunctionalCommandRunner is a root.BuildProcess edge, not a
+// service-level fake. It preserves the platform command contract and reports
+// lifecycle facts through the request-scoped observer installed by Workers.
+type processGoneFunctionalCommandRunner struct{}
+
+func (processGoneFunctionalCommandRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return processGoneFunctionalCommandRunner{}.RunStreaming(ctx, request, nil)
+}
+
+func (processGoneFunctionalCommandRunner) RunStreaming(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+	_ platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	if observer := request.ProcessLifecycleObserver; observer != nil {
+		observer.ProcessStarted(platformprocess.ProcessInfo{PID: 1})
+		observer.ProcessExited(platformprocess.ProcessInfo{PID: 1})
+	}
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
 // TestProviderTimeoutTerminatesChildProcessTree proves a timed-out script-worker
 // invocation tears down its spawned descendant process tree and clears active
 // execution so the public Work listing and Factory Event stream show a terminal

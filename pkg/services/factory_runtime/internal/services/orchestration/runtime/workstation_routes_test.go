@@ -678,6 +678,43 @@ func TestDetachedResultMaterializationMapsTerminalOutcomes(t *testing.T) {
 	}
 }
 
+func TestDetachedResultMaterializationMapsProcessGoneReconciliation(t *testing.T) {
+	t.Parallel()
+
+	request := workers.WorkstationDispatchRequest{
+		WorkstationName: "review",
+		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID:   "dispatch-process-gone",
+			TransitionID: "transition-process-gone",
+		}},
+	}
+	result, err := workstationDispatchResultFromExecute(
+		request,
+		workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled},
+		workers.ErrWorkstationDispatchProcessGone,
+	)
+	if !errors.Is(err, workers.ErrWorkstationDispatchProcessGone) {
+		t.Fatalf("workstationDispatchResultFromExecute() error = %v, want process-gone error", err)
+	}
+	if result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed ||
+		result.ReconciliationReason != workers.WorkstationDispatchReconciliationReasonProcessGone ||
+		result.Result.Outcome != workers.OutcomeFailed ||
+		result.Result.Error != workers.ErrWorkstationDispatchProcessGone.Error() {
+		t.Fatalf("process-gone dispatch result = %#v, want failed reconciled result", result)
+	}
+	if result.Result.FailureMetadata == nil ||
+		result.Result.FailureMetadata.Family != workers.WorkFailureFamilyRetryable ||
+		result.Result.FailureMetadata.Type != workers.WorkFailureTypeUnknown {
+		t.Fatalf("process-gone failure metadata = %#v, want retryable unknown failure", result.Result.FailureMetadata)
+	}
+	if result.Result.Diagnostics == nil || result.Result.Diagnostics.Metadata == nil ||
+		result.Result.Diagnostics.Metadata[workers.ProviderResponseMetadataFailureOperation] != "worker_session_reconciliation" ||
+		result.Result.Diagnostics.Metadata[workers.ProviderResponseMetadataFailureClassification] != "process_gone" ||
+		result.Result.Diagnostics.Metadata[workers.ProviderResponseMetadataFailureStage] != "process" {
+		t.Fatalf("process-gone diagnostics = %#v, want bounded reconciliation metadata", result.Result.Diagnostics)
+	}
+}
+
 func TestProviderSessionFromContinuationUsesAvailableIdentity(t *testing.T) {
 	t.Parallel()
 

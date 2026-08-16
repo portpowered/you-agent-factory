@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -22,6 +23,12 @@ type attemptExecuteFunc func(context.Context, workers.ExecuteRequest) (workers.E
 func (fn attemptExecuteFunc) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 	return fn(ctx, request)
 }
+
+type attemptProcessObserverProbe struct{}
+
+func (attemptProcessObserverProbe) ProcessStarted(platformprocess.ProcessInfo) {}
+
+func (attemptProcessObserverProbe) ProcessExited(platformprocess.ProcessInfo) {}
 
 func TestAttemptLifecycleBoundsCapacityAndCleansActiveState(t *testing.T) {
 	started := make(chan struct{})
@@ -179,6 +186,84 @@ func TestAttemptLifecycleCancellationWinsACompletionRaceAfterCancel(t *testing.T
 	close(release)
 	if result := <-results; result.Outcome != workers.ExecutionOutcomeCanceled {
 		t.Fatalf("racing completion outcome = %q, want CANCELED", result.Outcome)
+	}
+}
+
+func TestAttemptLifecycleProcessExitReconcilesActiveAttemptExactlyOnce(t *testing.T) {
+	started := make(chan workers.ExecuteRequest, 1)
+	terminalResults := make(chan struct {
+		result workers.ExecuteResult
+		err    error
+	}, 1)
+	service := attemptExecuteFunc(func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		started <- request
+		<-ctx.Done()
+		return workers.ExecuteResult{
+			Correlation: request.Correlation,
+			Outcome:     workers.ExecutionOutcomeCanceled,
+		}, ctx.Err()
+	})
+	lifecycle := newAttemptLifecycle(service, func() string { return "attempt-gone" }, 1)
+	if err := lifecycle.start(
+		context.Background(), attemptTestRequest("dispatch-gone", ""), true,
+		func(_ context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, err error) {
+			terminalResults <- struct {
+				result workers.ExecuteResult
+				err    error
+			}{result: result, err: err}
+		},
+	); err != nil {
+		t.Fatalf("start() error = %v", err)
+	}
+	request := <-started
+	observer, ok := request.Input.ProcessLifecycleObserver.(platformprocess.ProcessLifecycleObserver)
+	if !ok {
+		t.Fatalf("process lifecycle observer = %T, want ProcessLifecycleObserver", request.Input.ProcessLifecycleObserver)
+	}
+	observer.ProcessExited(platformprocess.ProcessInfo{PID: 42})
+
+	terminal := <-terminalResults
+	if !errors.Is(terminal.err, workers.ErrWorkstationDispatchProcessGone) {
+		t.Fatalf("terminal error = %v, want process-gone error", terminal.err)
+	}
+	if terminal.result.Outcome != workers.ExecutionOutcomeFailed || terminal.result.Failure == nil ||
+		terminal.result.Failure.Family != workers.WorkFailureFamilyRetryable ||
+		terminal.result.Failure.Message != workers.ErrWorkstationDispatchProcessGone.Error() {
+		t.Fatalf("process-gone terminal result = %#v, want one retryable failed result", terminal.result)
+	}
+	if len(terminal.result.Output.Primary) != 0 || terminal.result.Continuation != nil {
+		t.Fatalf("process-gone result retained worker output: %#v", terminal.result)
+	}
+	if got := lifecycle.activeCount(); got != 0 {
+		t.Fatalf("active count after process exit = %d, want 0", got)
+	}
+	if attemptID, ok := lifecycle.terminalAttemptID("dispatch-gone"); !ok || attemptID != "attempt-gone" {
+		t.Fatalf("terminal attempt = %q, %v; want attempt-gone, true", attemptID, ok)
+	}
+
+	observer.ProcessExited(platformprocess.ProcessInfo{PID: 42})
+	select {
+	case duplicate := <-terminalResults:
+		t.Fatalf("duplicate process-gone terminal result = %#v", duplicate)
+	default:
+	}
+}
+
+func TestAttemptLifecyclePreservesProvidedProcessObserver(t *testing.T) {
+	provided := attemptProcessObserverProbe{}
+	var observed workers.ExecuteRequest
+	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		observed = request
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	})
+	lifecycle := newAttemptLifecycle(service, func() string { return "attempt-provided-observer" }, 1)
+	request := attemptTestRequest("dispatch-provided-observer", "")
+	request.Input.ProcessLifecycleObserver = provided
+	if err := lifecycle.start(context.Background(), request, false, func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}); err != nil {
+		t.Fatalf("start() error = %v", err)
+	}
+	if observed.Input.ProcessLifecycleObserver != provided {
+		t.Fatalf("provided observer = %T, want caller-owned observer", observed.Input.ProcessLifecycleObserver)
 	}
 }
 
