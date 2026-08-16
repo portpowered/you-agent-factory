@@ -40,9 +40,3 @@ export interface WorkflowActivityBentoCardState {
   topologyDraft: FactoryGraphDraft;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
 }
-
-export function cloneWorkflowActivityBentoCardState(
-  state: WorkflowActivityBentoCardState,
-): WorkflowActivityBentoCardState {
-  return structuredClone(state);
-}
