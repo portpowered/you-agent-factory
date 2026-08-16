@@ -155,6 +155,7 @@ interface LayoutDraftStoreState {
 interface UseFactoryGraphLayoutDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   factoryDocumentScopeKey?: string | null;
+  initialLayout?: FactoryLayout;
   /**
    * Compatibility bridge for the parent editor's unified document history.
    * The layout command history below remains available to direct layout-hook
@@ -174,6 +175,9 @@ export function useFactoryGraphLayoutDraftState(
   const factoryDocumentScopeKey = options.factoryDocumentScopeKey ?? null;
   const onCommit = options.onCommit;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
+  const initialLayoutRef = useRef<FactoryLayout | undefined>(
+    options.initialLayout,
+  );
   const isApplyingHistoryRef = useRef(false);
   const [store, setStore] = useState<LayoutDraftStoreState>(() => ({
     history: clearFactoryLayoutHistoryState(),
@@ -241,11 +245,16 @@ export function useFactoryGraphLayoutDraftState(
       return;
     }
 
+    const restoredLayout = initialLayoutRef.current;
+    initialLayoutRef.current = undefined;
     setStore((currentStore) => {
       if (!currentStore.sessionState) {
         return {
           history: clearFactoryLayoutHistoryState(),
-          sessionState: createLayoutSessionState(documentBaseLayout),
+          sessionState: createLayoutSessionState(
+            documentBaseLayout,
+            restoredLayout,
+          ),
         };
       }
 
@@ -833,12 +842,12 @@ export function useFactoryGraphLayoutDraftState(
 }
 
 function createLayoutSessionState(
-  layout: FactoryLayout,
+  baseLayout: FactoryLayout,
+  layout: FactoryLayout = baseLayout,
 ): FactoryGraphLayoutSessionState {
-  const clonedLayout = structuredClone(layout);
   return {
-    baseLayout: clonedLayout,
-    layout: structuredClone(clonedLayout),
+    baseLayout: structuredClone(baseLayout),
+    layout: structuredClone(layout),
   };
 }
 

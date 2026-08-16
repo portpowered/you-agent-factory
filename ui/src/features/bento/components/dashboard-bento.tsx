@@ -68,10 +68,14 @@ export function DashboardBento({
   const {
     currentSelection,
     dashboardCardStateContext,
+    getDashboardCardState,
     materializedWorkOutcomeState,
+    reportDashboardCardState,
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
     reportDashboardCardDirtyState,
     workOutcomeHydrationStatus,
   } = useDashboardBentoSnapshot(sessionID, workOutcomeStream);
@@ -89,10 +93,12 @@ export function DashboardBento({
   const dashboardWidgetRemoval = useDashboardWidgetRemoval({
     dashboardLayout,
     dirtyCardInstanceIDs: dashboardCardStateContext.dirtyCardInstanceIDs,
+    getDashboardCardState,
     getWidgetTitle: (widgetType) =>
       getDashboardWidgetTitle(widgetType, resolvedLocale),
     persistDashboardLayout,
     removeDashboardWidget,
+    restoreDashboardCardState,
   });
   const importController = useCurrentActivityImportController({
     currentFactoryDefinition: snapshot.factory,
@@ -132,6 +138,8 @@ export function DashboardBento({
     currentSelection,
     dashboardCardStateContext,
     dashboardLayout,
+    onDashboardCardStateChange: reportDashboardCardState,
+    restoredDashboardCardStates,
     importController,
     isCurrent: selectedTimelineTick === snapshot.tick_count,
     locale: resolvedLocale,
@@ -205,9 +213,11 @@ function buildDashboardCardLayouts({
   isCurrent,
   locale,
   now,
+  onDashboardCardStateChange,
   onRemoveDashboardWidget,
   onDashboardCardDirtyStateChange,
   providerSessionState,
+  restoredDashboardCardStates,
   selectedSessionID,
   selectedTrace,
   selectedTraceID,
@@ -231,12 +241,14 @@ function buildDashboardCardLayouts({
     isCurrent,
     locale,
     now,
+    onDashboardCardStateChange,
     onDashboardCardDirtyStateChange,
     onRemoveDashboardWidget,
     onSelectInlineWidget: (widgetType) => {
       addDashboardWidget(widgetType);
     },
     providerSessionState,
+    restoredDashboardCardStates,
     selectedSessionID,
     selectedTrace,
     selectedTraceID,

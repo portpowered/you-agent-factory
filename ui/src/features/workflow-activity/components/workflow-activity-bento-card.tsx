@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { DashboardSelection } from "../../current-selection/base/state/selection-types";
@@ -6,6 +6,7 @@ import { useDashboardSession } from "../../dashboard/session/dashboard-session-p
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import { useCurrentActivityGraphState } from "../hooks/use-current-activity-graph-state";
+import type { WorkflowActivityBentoCardState } from "../hooks/workflow-activity-card-state";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
@@ -18,11 +19,13 @@ interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onCardStateChange?: (state: WorkflowActivityBentoCardState) => void;
   onDocAdded?: (targetPath: string) => void;
   onDirtyStateChange?: (isDirty: boolean) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
+  restoredCardState?: WorkflowActivityBentoCardState;
   onSelectWorkID: (
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
@@ -36,16 +39,52 @@ interface WorkflowActivityBentoCardProps {
   widgetInstanceID?: string;
 }
 
+function useWorkflowActivityCardStateReporting({
+  cardStateSnapshot,
+  hasSharedGraphChanges,
+  onCardStateChange,
+  onDirtyStateChange,
+  preferencesDirty,
+}: {
+  cardStateSnapshot: WorkflowActivityBentoCardState;
+  hasSharedGraphChanges: boolean;
+  onCardStateChange?: (state: WorkflowActivityBentoCardState) => void;
+  onDirtyStateChange?: (isDirty: boolean) => void;
+  preferencesDirty: boolean;
+}): void {
+  const dirtyStateChangeRef = useRef(onDirtyStateChange);
+  const cardStateChangeRef = useRef(onCardStateChange);
+
+  useEffect(() => {
+    dirtyStateChangeRef.current = onDirtyStateChange;
+    cardStateChangeRef.current = onCardStateChange;
+  }, [onCardStateChange, onDirtyStateChange]);
+
+  useEffect(() => {
+    dirtyStateChangeRef.current?.(hasSharedGraphChanges || preferencesDirty);
+
+    return () => {
+      dirtyStateChangeRef.current?.(false);
+    };
+  }, [hasSharedGraphChanges, preferencesDirty]);
+
+  useEffect(() => {
+    cardStateChangeRef.current?.(cardStateSnapshot);
+  }, [cardStateSnapshot]);
+}
+
 export function WorkflowActivityBentoCard({
   headerAction,
   importController,
   locale,
   now,
+  onCardStateChange,
   onDocAdded,
   onDirtyStateChange,
   onNodeRemovedFromDraft,
   selection,
   snapshot,
+  restoredCardState,
   widgetInstanceID,
   onSelectWorkID,
   onSelectDoc,
@@ -66,6 +105,7 @@ export function WorkflowActivityBentoCard({
     sessionID,
     onDocAdded,
     onNodeRemovedFromDraft,
+    restoredCardState,
   );
   const currentActivitySelection = toCurrentActivitySelection(selection);
   const viewModel = useCurrentActivityGraphCardViewModel({
@@ -83,21 +123,13 @@ export function WorkflowActivityBentoCard({
     snapshot,
   });
   const editorControls = viewModel.editorControls;
-
-  useEffect(() => {
-    onDirtyStateChange?.(
-      viewModel.status.hasSharedGraphChanges ||
-        viewModel.status.preferencesDirty,
-    );
-
-    return () => {
-      onDirtyStateChange?.(false);
-    };
-  }, [
+  useWorkflowActivityCardStateReporting({
+    cardStateSnapshot: activityGraphState.cardStateSnapshot,
+    hasSharedGraphChanges: viewModel.status.hasSharedGraphChanges,
+    onCardStateChange,
     onDirtyStateChange,
-    viewModel.status.hasSharedGraphChanges,
-    viewModel.status.preferencesDirty,
-  ]);
+    preferencesDirty: viewModel.status.preferencesDirty,
+  });
 
   useEffect(() => {
     if (!editorControls.isEditing) {

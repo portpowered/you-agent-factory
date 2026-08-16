@@ -260,22 +260,56 @@ vi.mock(
 vi.mock("../../workflow-activity/components/workflow-activity-widget", () => ({
   WorkflowActivityWidget: ({
     headerAction,
+    onCardStateChange,
     onDirtyStateChange,
+    restoredCardState,
     widgetInstanceID,
   }: {
     headerAction?: React.ReactNode;
+    onCardStateChange?: (state: unknown) => void;
     onDirtyStateChange?: (isDirty: boolean) => void;
+    restoredCardState?: unknown;
     widgetInstanceID?: string;
   }) => {
+    const [graphCardState, setGraphCardState] = React.useState(
+      restoredCardState ?? { draft: "saved-topology" },
+    );
+    const dirtyStateChangeRef = React.useRef(onDirtyStateChange);
+    const cardStateChangeRef = React.useRef(onCardStateChange);
+
     React.useEffect(() => {
-      onDirtyStateChange?.(mockGraphDirty);
-    }, [onDirtyStateChange]);
+      dirtyStateChangeRef.current = onDirtyStateChange;
+      cardStateChangeRef.current = onCardStateChange;
+    }, [onCardStateChange, onDirtyStateChange]);
+
+    React.useEffect(() => {
+      dirtyStateChangeRef.current?.(
+        mockGraphDirty || graphCardState.draft === "unsaved-topology-node",
+      );
+      cardStateChangeRef.current?.(graphCardState);
+    }, [graphCardState]);
 
     return (
       <section>
         {headerAction}
         Workflow activity card
         {widgetInstanceID ? `:${widgetInstanceID}` : ""}
+        <div data-testid="graph-card-state">
+          {JSON.stringify(graphCardState)}
+        </div>
+        <button
+          onClick={() => {
+            const nextState = { draft: "unsaved-topology-node" };
+            setGraphCardState(nextState);
+            cardStateChangeRef.current?.(nextState);
+            dirtyStateChangeRef.current?.(true);
+          }}
+          type="button"
+        >
+          Edit graph draft
+        </button>
+        <button type="button">Save draft</button>
+        <button type="button">Discard changes</button>
       </section>
     );
   },
@@ -351,7 +385,14 @@ vi.mock("../hooks/useDashboardLayout", () => ({
       },
       dashboardLayout,
       dashboardLayoutDiagnostics: mockDashboardLayoutDiagnostics,
-      persistDashboardLayout: vi.fn(),
+      persistDashboardLayout: (nextLayout) => {
+        setDashboardLayout(nextLayout);
+        return {
+          diagnostics: [],
+          instanceHighWaterMarks: {},
+          persisted: true,
+        };
+      },
       removeDashboardWidget: (widgetInstanceID: string) => {
         removeDashboardWidget(widgetInstanceID);
         setDashboardLayout((currentLayout) =>
@@ -599,5 +640,36 @@ describe("DashboardBento", () => {
     fireEvent.click(graphRemoveButton);
     fireEvent.click(screen.getByRole("button", { name: "Remove widget" }));
     expect(removeDashboardWidget).toHaveBeenCalledWith("work-graph::primary");
+  });
+
+  it("restores an unsaved graph draft and editor actions through removal undo", () => {
+    render(<DashboardBento />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit graph draft" }));
+    expect(screen.getByTestId("graph-card-state").textContent).toContain(
+      "unsaved-topology-node",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove Factory graph widget from dashboard",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove widget" }));
+    expect(screen.queryByTestId("graph-card-state")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Undo removing Factory graph",
+      }),
+    );
+
+    expect(screen.getByTestId("graph-card-state").textContent).toContain(
+      "unsaved-topology-node",
+    );
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Discard changes" }),
+    ).toBeTruthy();
   });
 });

@@ -2,6 +2,7 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CurrentActivityFactoryDocumentState } from "./current-activity-factory-document-state";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 export interface CurrentActivityEditableGraphDocumentDraft {
   baseDocument: EditableFactoryGraphViewModel["draftState"]["baseDocument"];
@@ -26,6 +27,7 @@ export function useCurrentActivityEditableGraph({
   factoryDocumentScopeKey,
   hasPreferenceChanges = false,
   locale,
+  restoredCardState,
   snapshot,
 }: {
   editorMode: boolean;
@@ -33,6 +35,7 @@ export function useCurrentActivityEditableGraph({
   factoryDocumentScopeKey?: string | null;
   hasPreferenceChanges?: boolean;
   locale?: string | null;
+  restoredCardState?: WorkflowActivityBentoCardState;
   snapshot: DashboardSnapshot;
 }) {
   const editableGraph = useEditableFactoryGraph({
@@ -40,6 +43,8 @@ export function useCurrentActivityEditableGraph({
     currentFactoryDocument: factoryDocumentState.currentFactoryDocument,
     factoryDocumentScopeKey,
     hasPreferenceChanges,
+    initialDraft: restoredCardState?.topologyDraft,
+    initialLayout: restoredCardState?.layout,
     locale,
   });
   const documentDraft: CurrentActivityEditableGraphDocumentDraft = {

@@ -135,6 +135,29 @@ describe("useDashboardLayout core migrations", () => {
 describe("useDashboardLayout scoped persistence", () => {
   beforeEach(resetDashboardLayoutStorage);
 
+  it("does not re-read a loaded scope on every dashboard remount", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-mount-guard",
+      "session-mount-guard",
+    );
+    const first = renderHook(() => useDashboardLayout(scope));
+    const loadedLayout = first.result.current.dashboardLayout;
+    first.unmount();
+
+    writeStoredDashboardLayout(
+      loadedLayout.map((item) =>
+        item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+          ? { ...item, h: item.h + 4 }
+          : item,
+      ),
+      scope,
+    );
+
+    const second = renderHook(() => useDashboardLayout(scope));
+
+    expect(second.result.current.dashboardLayout).toEqual(loadedLayout);
+  });
+
   it("keeps layouts isolated for sessions of the same Factory", () => {
     const firstScope = createDashboardLayoutScope(
       "factory-shared",

@@ -5,6 +5,7 @@ import { buildFactoryGraphTopologyFromDefinition } from "../lib/draft/factory-gr
 import {
   type CurrentFactoryDocument,
   createEmptyFactoryGraphDraft,
+  type FactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
   type FactoryGraphDraftSessionState,
   type FactoryGraphDraftValidationError,
@@ -23,6 +24,7 @@ interface UseFactoryGraphDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   /** Normalized dashboard session id; draft state resets when this changes. */
   factoryDocumentScopeKey?: string | null;
+  initialDraft?: FactoryGraphDraft;
   locale?: string | null;
 }
 
@@ -39,6 +41,9 @@ export function useFactoryGraphDraftState(
   const staleDocumentBlockedForScopeChangeRef = useRef<
     CurrentFactoryDocument | undefined
   >(undefined);
+  const initialDraftRef = useRef<FactoryGraphDraft | undefined>(
+    options.initialDraft,
+  );
   const emptyDraft = useMemo(() => createEmptyFactoryGraphDraft(), []);
   const emptyGraph = useMemo(
     () => ({ edges: [], nodes: [] }) as FactoryGraphDraftDerivedState["graph"],
@@ -158,9 +163,22 @@ export function useFactoryGraphDraftState(
     }
     staleDocumentBlockedForScopeChangeRef.current = undefined;
 
-    setSessionState((currentState) =>
-      syncFactoryGraphDraftSession(currentState, currentFactoryDocument),
-    );
+    const restoredDraft = initialDraftRef.current;
+    initialDraftRef.current = undefined;
+    setSessionState((currentState) => {
+      if (currentState) {
+        return syncFactoryGraphDraftSession(
+          currentState,
+          currentFactoryDocument,
+        );
+      }
+
+      return {
+        draft: structuredClone(restoredDraft ?? createEmptyFactoryGraphDraft()),
+        latestDocument: currentFactoryDocument,
+        sessionStartDocument: currentFactoryDocument,
+      };
+    });
     lastSyncedFactoryDocumentRef.current = currentFactoryDocument;
   }, [currentFactoryDocument, factoryDocumentScopeKey]);
 

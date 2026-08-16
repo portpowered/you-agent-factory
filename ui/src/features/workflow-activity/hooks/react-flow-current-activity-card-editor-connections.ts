@@ -18,6 +18,7 @@ import {
   resolveFactoryGraphConnectionAnchorContext,
 } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 type FactoryGraphConnectionCommit = (connection: {
   sourceAnchorId: string;
@@ -25,6 +26,21 @@ type FactoryGraphConnectionCommit = (connection: {
   targetAnchorId: string;
   targetNodeId: string;
 }) => void;
+
+interface FactoryGraphConnectionAnchorHandlerOptions {
+  activeTool: FactoryGraphEditorTool;
+  canInteractWithEditor: boolean;
+  commitConnection: FactoryGraphConnectionCommit;
+  draftNodes: EditableFactoryGraphViewModel["draftState"]["graph"]["nodes"];
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
+  locale?: string | null;
+  pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
+  setConnectionNotice: (notice: string | null) => void;
+  setPendingConnectionSource: Dispatch<
+    SetStateAction<FactoryGraphConnectionEndpoint | null>
+  >;
+  workstationResolver: FactoryGraphConnectionResolver;
+}
 
 function handleFactoryGraphConnectionAnchorClick(
   endpoint: FactoryGraphConnectionEndpoint,
@@ -39,20 +55,7 @@ function handleFactoryGraphConnectionAnchorClick(
     setConnectionNotice,
     setPendingConnectionSource,
     workstationResolver,
-  }: {
-    activeTool: FactoryGraphEditorTool;
-    canInteractWithEditor: boolean;
-    commitConnection: FactoryGraphConnectionCommit;
-    draftNodes: EditableFactoryGraphViewModel["draftState"]["graph"]["nodes"];
-    hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
-    locale?: string | null;
-    pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
-    setConnectionNotice: (notice: string | null) => void;
-    setPendingConnectionSource: Dispatch<
-      SetStateAction<FactoryGraphConnectionEndpoint | null>
-    >;
-    workstationResolver: FactoryGraphConnectionResolver;
-  },
+  }: FactoryGraphConnectionAnchorHandlerOptions,
 ): void {
   if (!canInteractWithEditor || activeTool === "delete") {
     return;
@@ -102,6 +105,70 @@ function handleFactoryGraphConnectionAnchorClick(
   });
 }
 
+function useFactoryGraphConnectionAnchorHandler({
+  activeTool,
+  canInteractWithEditor,
+  commitConnection,
+  draftNodes,
+  hiddenNodeClasses,
+  locale,
+  pendingConnectionSource,
+  setConnectionNotice,
+  setPendingConnectionSource,
+  workstationResolver,
+}: FactoryGraphConnectionAnchorHandlerOptions) {
+  return useCallback(
+    (endpoint: FactoryGraphConnectionEndpoint) => {
+      handleFactoryGraphConnectionAnchorClick(endpoint, {
+        activeTool,
+        canInteractWithEditor,
+        commitConnection,
+        draftNodes,
+        hiddenNodeClasses,
+        locale,
+        pendingConnectionSource,
+        setConnectionNotice,
+        setPendingConnectionSource,
+        workstationResolver,
+      });
+    },
+    [
+      activeTool,
+      canInteractWithEditor,
+      commitConnection,
+      draftNodes,
+      hiddenNodeClasses,
+      locale,
+      pendingConnectionSource,
+      setConnectionNotice,
+      setPendingConnectionSource,
+      workstationResolver,
+    ],
+  );
+}
+
+function useFactoryGraphConnectionIntentState(
+  restoredCardState?: Pick<
+    WorkflowActivityBentoCardState,
+    "connectionNotice" | "pendingConnectionSource"
+  >,
+) {
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(
+    () => restoredCardState?.connectionNotice ?? null,
+  );
+  const [pendingConnectionSource, setPendingConnectionSource] =
+    useState<FactoryGraphConnectionEndpoint | null>(
+      () => restoredCardState?.pendingConnectionSource ?? null,
+    );
+
+  return {
+    connectionNotice,
+    pendingConnectionSource,
+    setConnectionNotice,
+    setPendingConnectionSource,
+  };
+}
+
 export function useFactoryGraphConnectionController({
   activeTool,
   canInteractWithEditor,
@@ -109,6 +176,7 @@ export function useFactoryGraphConnectionController({
   editableGraph,
   hiddenNodeClasses,
   locale,
+  restoredCardState,
 }: {
   activeTool: FactoryGraphEditorTool;
   canInteractWithEditor: boolean;
@@ -116,10 +184,17 @@ export function useFactoryGraphConnectionController({
   editableGraph: EditableFactoryGraphViewModel;
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string | null;
+  restoredCardState?: Pick<
+    WorkflowActivityBentoCardState,
+    "connectionNotice" | "pendingConnectionSource"
+  >;
 }) {
-  const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
-  const [pendingConnectionSource, setPendingConnectionSource] =
-    useState<FactoryGraphConnectionEndpoint | null>(null);
+  const {
+    connectionNotice,
+    pendingConnectionSource,
+    setConnectionNotice,
+    setPendingConnectionSource,
+  } = useFactoryGraphConnectionIntentState(restoredCardState);
   const workstationResolver = useMemo(
     () =>
       createFactoryGraphWorkstationResolver(
@@ -139,7 +214,7 @@ export function useFactoryGraphConnectionController({
     if (!canInteractWithEditor || activeTool === "delete") {
       setPendingConnectionSource(null);
     }
-  }, [activeTool, canInteractWithEditor]);
+  }, [activeTool, canInteractWithEditor, setPendingConnectionSource]);
   const commitConnection = useCallback(
     (connection: {
       sourceAnchorId: string;
@@ -155,7 +230,7 @@ export function useFactoryGraphConnectionController({
       setConnectionNotice(null);
       setPendingConnectionSource(null);
     },
-    [editableGraph.actions],
+    [editableGraph.actions, setConnectionNotice, setPendingConnectionSource],
   );
   const handleEditorConnect = useCallback(
     (connection: Connection) => {
@@ -198,32 +273,18 @@ export function useFactoryGraphConnectionController({
       hiddenNodeClasses,
     ],
   );
-  const handleConnectionAnchorClick = useCallback(
-    (endpoint: FactoryGraphConnectionEndpoint) => {
-      handleFactoryGraphConnectionAnchorClick(endpoint, {
-        activeTool,
-        canInteractWithEditor,
-        commitConnection,
-        draftNodes: draftState.graph.nodes,
-        hiddenNodeClasses,
-        locale,
-        pendingConnectionSource,
-        setConnectionNotice,
-        setPendingConnectionSource,
-        workstationResolver,
-      });
-    },
-    [
-      activeTool,
-      canInteractWithEditor,
-      commitConnection,
-      draftState.graph.nodes,
-      hiddenNodeClasses,
-      locale,
-      pendingConnectionSource,
-      workstationResolver,
-    ],
-  );
+  const handleConnectionAnchorClick = useFactoryGraphConnectionAnchorHandler({
+    activeTool,
+    canInteractWithEditor,
+    commitConnection,
+    draftNodes: draftState.graph.nodes,
+    hiddenNodeClasses,
+    locale,
+    pendingConnectionSource,
+    setConnectionNotice,
+    setPendingConnectionSource,
+    workstationResolver,
+  });
   return {
     connectionNotice,
     handleConnectionAnchorClick,

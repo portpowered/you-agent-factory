@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
+import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
   EditableFactoryGraphDocumentSaveControls,
@@ -11,6 +11,7 @@ import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/edi
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 export type GraphEditorTransientControllerReset = {
   setBlockedRemovalReason: (reason: string | null) => void;
@@ -34,6 +35,7 @@ export function useGraphEditorSaveFlow({
   saveEditableDefinition,
   setActiveTool,
   setEditorMode,
+  restoredCardState,
   transientControllerReset,
 }: {
   activeWorkCount: number;
@@ -47,21 +49,34 @@ export function useGraphEditorSaveFlow({
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setEditorMode: (mode: boolean) => void;
+  restoredCardState?: Pick<
+    WorkflowActivityBentoCardState,
+    "isConfirmingLeaveEditor" | "isConfirmingSave" | "saveAttemptRevision"
+  >;
   transientControllerReset: GraphEditorTransientControllerReset;
 }) {
-  const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(false);
-  const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState(false);
-  const [saveAttemptRevision, setSaveAttemptRevision] = useState(0);
+  const [isConfirmingLeaveEditor, setIsConfirmingLeaveEditor] = useState(
+    () => restoredCardState?.isConfirmingLeaveEditor ?? false,
+  );
+  const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState(
+    () => restoredCardState?.isConfirmingSave ?? false,
+  );
+  const [saveAttemptRevision, setSaveAttemptRevision] = useState(
+    () => restoredCardState?.saveAttemptRevision ?? 0,
+  );
   const hasActiveWork = activeWorkCount > 0;
   const isStaleDraft = editableGraph.saveState.isStale;
   const isConfirmingSave =
     isFactoryDocumentSaveConfirming(documentSave) || pendingSaveConfirmation;
 
   useEffect(() => {
-    if (!isFactoryDocumentSaveConfirming(documentSave)) {
+    if (
+      !isFactoryDocumentSaveConfirming(documentSave) &&
+      !restoredCardState?.isConfirmingSave
+    ) {
       setPendingSaveConfirmation(false);
     }
-  }, [documentSave]);
+  }, [documentSave, restoredCardState?.isConfirmingSave]);
   const canSaveDraft =
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&

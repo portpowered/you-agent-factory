@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
-import type { DashboardCardStateContext } from "../../dashboard/lib/dashboard-card-state";
+import type {
+  DashboardCardStateContext,
+  DashboardCardStateSnapshot,
+} from "../../dashboard/lib/dashboard-card-state";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   factoryTimelineEntryKey,
@@ -27,11 +30,27 @@ export type DashboardBentoDirtyStateReporter = (
   isDirty: boolean,
 ) => void;
 
+export type DashboardBentoCardStateReporter = (
+  widgetInstanceID: string,
+  state: DashboardCardStateSnapshot,
+) => void;
+
 export interface DashboardBentoSnapshot {
   currentSelection: ReturnType<typeof useCurrentSelection>;
   dashboardCardStateContext: DashboardBentoCardStateContext;
+  getDashboardCardState: (
+    widgetInstanceID: string,
+  ) => DashboardCardStateSnapshot | undefined;
   materializedWorkOutcomeState: unknown;
+  reportDashboardCardState: DashboardBentoCardStateReporter;
   reportDashboardCardDirtyState: DashboardBentoDirtyStateReporter;
+  restoreDashboardCardState: (
+    widgetInstanceID: string,
+    state: DashboardCardStateSnapshot,
+  ) => void;
+  restoredDashboardCardStates: Readonly<
+    Record<string, DashboardCardStateSnapshot>
+  >;
   selectedSnapshot: DashboardSnapshot | undefined;
   selectedTimelineTick: number;
   snapshot: DashboardSnapshot;
@@ -99,13 +118,29 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   uptime_seconds: 0,
 };
 
-export function useDashboardBentoSnapshot(
+interface DashboardBentoCardStateRegistry {
+  dirtyCardInstanceIDs: ReadonlySet<string>;
+  getDashboardCardState: (
+    widgetInstanceID: string,
+  ) => DashboardCardStateSnapshot | undefined;
+  reportDashboardCardState: DashboardBentoCardStateReporter;
+  reportDashboardCardDirtyState: DashboardBentoDirtyStateReporter;
+  restoreDashboardCardState: (
+    widgetInstanceID: string,
+    state: DashboardCardStateSnapshot,
+  ) => void;
+  restoredDashboardCardStates: Readonly<
+    Record<string, DashboardCardStateSnapshot>
+  >;
+}
+
+function useDashboardBentoCardStateRegistry(
   sessionID: string | null | undefined,
-  workOutcomeStream?: DashboardWorkOutcomeStream,
-): DashboardBentoSnapshot {
+): DashboardBentoCardStateRegistry {
   const [dirtyCardInstanceIDs, setDirtyCardInstanceIDs] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const previousSessionIDRef = useRef(sessionID);
   const reportDashboardCardDirtyState = useCallback(
     (widgetInstanceID: string, isDirty: boolean) => {
       setDirtyCardInstanceIDs((currentIDs) => {
@@ -128,11 +163,65 @@ export function useDashboardBentoSnapshot(
     },
     [],
   );
+  const dashboardCardStateByInstanceIDRef = useRef<
+    Map<string, DashboardCardStateSnapshot>
+  >(new Map());
+  const [restoredDashboardCardStates, setRestoredDashboardCardStates] =
+    useState<Record<string, DashboardCardStateSnapshot>>({});
+  const reportDashboardCardState = useCallback<DashboardBentoCardStateReporter>(
+    (widgetInstanceID, state) => {
+      dashboardCardStateByInstanceIDRef.current.set(widgetInstanceID, state);
+    },
+    [],
+  );
+  const getDashboardCardState = useCallback(
+    (widgetInstanceID: string) =>
+      dashboardCardStateByInstanceIDRef.current.get(widgetInstanceID),
+    [],
+  );
+  const restoreDashboardCardState = useCallback(
+    (widgetInstanceID: string, state: DashboardCardStateSnapshot) => {
+      setRestoredDashboardCardStates((currentStates) => ({
+        ...currentStates,
+        [widgetInstanceID]: state,
+      }));
+    },
+    [],
+  );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: session changes intentionally reset the cross-card dirty registry.
   useEffect(() => {
+    if (previousSessionIDRef.current === sessionID) {
+      return;
+    }
+
+    previousSessionIDRef.current = sessionID;
     setDirtyCardInstanceIDs(new Set());
+    dashboardCardStateByInstanceIDRef.current.clear();
+    setRestoredDashboardCardStates({});
   }, [sessionID]);
+
+  return {
+    dirtyCardInstanceIDs,
+    getDashboardCardState,
+    reportDashboardCardState,
+    reportDashboardCardDirtyState,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
+  };
+}
+
+export function useDashboardBentoSnapshot(
+  sessionID: string | null | undefined,
+  workOutcomeStream?: DashboardWorkOutcomeStream,
+): DashboardBentoSnapshot {
+  const {
+    dirtyCardInstanceIDs,
+    getDashboardCardState,
+    reportDashboardCardState,
+    reportDashboardCardDirtyState,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
+  } = useDashboardBentoCardStateRegistry(sessionID);
 
   const materializedWorkOutcomeState = useFactoryTimelineStore(
     (state) =>
@@ -176,6 +265,8 @@ export function useDashboardBentoSnapshot(
   return {
     currentSelection,
     materializedWorkOutcomeState,
+    getDashboardCardState,
+    reportDashboardCardState,
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
@@ -190,5 +281,7 @@ export function useDashboardBentoSnapshot(
     } satisfies DashboardBentoCardStateContext,
     workOutcomeHydrationStatus,
     reportDashboardCardDirtyState,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
   };
 }

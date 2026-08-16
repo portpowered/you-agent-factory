@@ -49,6 +49,7 @@ export function useEditableFactoryGraph(
   });
   const layoutDraftState = useFactoryGraphLayoutDraftState({
     ...options,
+    initialLayout: options.initialLayout,
     onCommit: ({ nextLayout }) => {
       documentHistory.recordLayout(nextLayout);
     },

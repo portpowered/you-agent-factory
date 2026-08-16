@@ -67,7 +67,10 @@ interface DashboardLayoutStoreState {
     DashboardLayoutInstanceHighWaterMarks
   >;
   layoutsByStorageKey: Record<string, AgentBentoLayoutItem[]>;
-  loadDashboardLayout: (scope: DashboardLayoutScope | null | undefined) => void;
+  loadDashboardLayout: (
+    scope: DashboardLayoutScope | null | undefined,
+    force?: boolean,
+  ) => void;
   persistDashboardLayout: (
     scope: DashboardLayoutScope | null | undefined,
     layout: AgentBentoLayoutItem[],
@@ -97,6 +100,14 @@ type DashboardLayoutStoreMutationState = Pick<
 interface DashboardLayoutPersistenceMutation {
   mutationState: DashboardLayoutStoreMutationState;
   writeResult: DashboardLayoutStorageWriteResult;
+}
+
+function shouldLoadDashboardLayout(
+  state: DashboardLayoutStoreState,
+  storageKey: string,
+  force: boolean,
+): boolean {
+  return force || !Object.hasOwn(state.layoutsByStorageKey, storageKey);
 }
 
 function getDashboardLayoutStateAtScope(
@@ -202,9 +213,13 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
   diagnosticsByStorageKey: {
     [getStorageKey(undefined)]: initialDashboardLayoutStorageResult.diagnostics,
   },
-  loadDashboardLayout: (scope) => {
+  loadDashboardLayout: (scope, force = false) => {
     set((state) => {
       const storageKey = getStorageKey(scope);
+      if (!shouldLoadDashboardLayout(state, storageKey, force)) {
+        return state;
+      }
+
       const storedResult = readStoredDashboardLayoutResult(scope);
       return {
         diagnosticsByStorageKey: {
@@ -341,7 +356,7 @@ export function useDashboardLayout(
 export function reloadDashboardLayoutFromStorage(
   scope?: DashboardLayoutScope | null,
 ): void {
-  useDashboardLayoutStore.getState().loadDashboardLayout(scope);
+  useDashboardLayoutStore.getState().loadDashboardLayout(scope, true);
 }
 
 function getStorageKey(scope?: DashboardLayoutScope | null): string {

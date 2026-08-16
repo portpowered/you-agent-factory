@@ -20,6 +20,7 @@ import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 import { useHiddenFactoryGraphNodeClasses } from "./use-hidden-factory-graph-node-classes";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph state wires session, controllers, and save flow into one card value model.
 export function useCurrentActivityGraphState(
@@ -28,9 +29,14 @@ export function useCurrentActivityGraphState(
   factoryDocumentScopeKey?: string | null,
   onDocAdded?: (targetPath: string) => void,
   onNodeRemovedFromDraft?: (nodeId: string) => void,
+  restoredCardState?: WorkflowActivityBentoCardState,
 ): CurrentActivityGraphStateValue {
-  const [editorMode, setEditorMode] = useState(false);
-  const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
+  const [editorMode, setEditorMode] = useState(
+    () => restoredCardState?.editorMode ?? false,
+  );
+  const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(
+    () => restoredCardState?.activeTool ?? null,
+  );
   const {
     hiddenNodeClasses,
     hideShowMenuOpen,
@@ -40,7 +46,16 @@ export function useCurrentActivityGraphState(
     setVisibilityPreset,
     toggleHiddenNodeClass,
     visibilityPreset,
-  } = useHiddenFactoryGraphNodeClasses(factoryDocumentScopeKey);
+  } = useHiddenFactoryGraphNodeClasses(
+    factoryDocumentScopeKey,
+    restoredCardState
+      ? {
+          hideShowMenuOpen: restoredCardState.hideShowMenuOpen,
+          hiddenNodeClasses: restoredCardState.hiddenNodeClasses,
+          visibilityPreset: restoredCardState.visibilityPreset,
+        }
+      : undefined,
+  );
   const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const factoryDocumentState = useCurrentActivityFactoryDocumentState({
     eventFactory: snapshot.factory,
@@ -56,6 +71,7 @@ export function useCurrentActivityGraphState(
     factoryDocumentScopeKey,
     hasPreferenceChanges: preferencesDirty,
     locale,
+    restoredCardState,
     snapshot,
   });
   const draftState = editableGraph.draftState;
@@ -96,6 +112,7 @@ export function useCurrentActivityGraphState(
     locale,
     onDocAdded,
     onNodeRemovedFromDraft,
+    restoredCardState,
     saveEditableDefinition,
     setActiveTool,
   });
@@ -113,6 +130,7 @@ export function useCurrentActivityGraphState(
     saveEditableDefinition,
     setActiveTool,
     setEditorMode,
+    restoredCardState,
     transientControllerReset: {
       setBlockedRemovalReason: controllers.setBlockedRemovalReason,
       setConnectionNotice: controllers.setConnectionNotice,
@@ -158,6 +176,51 @@ export function useCurrentActivityGraphState(
     saveBlockedReason: saveFlow.saveBlockedReason,
     saveError: saveEditableDefinition.error ?? null,
   });
+  const cardStateSnapshot = useMemo<WorkflowActivityBentoCardState>(
+    () =>
+      structuredClone({
+        activeTool,
+        addEntityDraft: controllers.addEntityController.addEntityDraft,
+        addEntityErrors: controllers.addEntityController.addEntityErrors,
+        addMenuOpen: controllers.addEntityController.addMenuOpen,
+        blockedRemovalReason: controllers.blockedRemovalReason,
+        connectionNotice: controllers.connectionNotice,
+        editorMode,
+        hideShowMenuOpen,
+        hiddenNodeClasses: [...hiddenNodeClasses],
+        isConfirmingLeaveEditor: saveFlow.isConfirmingLeaveEditor,
+        isConfirmingSave: saveFlow.isConfirmingSave,
+        layout: editableGraph.layoutDraftState.layout,
+        pendingBatchRemovalPlan: controllers.pendingBatchRemovalPlan,
+        pendingConnectionSource: controllers.pendingConnectionSource,
+        pendingRemovalEdgeId: controllers.pendingRemovalEdgeId,
+        pendingRemovalNodeId: controllers.pendingRemovalNodeId,
+        saveAttemptRevision: saveFlow.saveAttemptRevision,
+        topologyDraft: editableGraph.draftState.draft,
+        visibilityPreset,
+      }),
+    [
+      activeTool,
+      controllers.addEntityController.addEntityDraft,
+      controllers.addEntityController.addEntityErrors,
+      controllers.addEntityController.addMenuOpen,
+      controllers.blockedRemovalReason,
+      controllers.connectionNotice,
+      controllers.pendingBatchRemovalPlan,
+      controllers.pendingConnectionSource,
+      controllers.pendingRemovalEdgeId,
+      controllers.pendingRemovalNodeId,
+      editableGraph.draftState.draft,
+      editableGraph.layoutDraftState.layout,
+      editorMode,
+      hideShowMenuOpen,
+      hiddenNodeClasses,
+      saveFlow.isConfirmingLeaveEditor,
+      saveFlow.isConfirmingSave,
+      saveFlow.saveAttemptRevision,
+      visibilityPreset,
+    ],
+  );
 
   useEffect(() => {
     useFactoryGraphTopologyEditorBridge
@@ -205,6 +268,7 @@ export function useCurrentActivityGraphState(
     addEntityController,
     addMenuActions: session.addMenuActions,
     blockedRemovalReason: controllers.blockedRemovalReason,
+    cardStateSnapshot,
     canDeleteSelection: controllers.canDeleteSelection,
     canInteractWithEditor: session.canInteractWithEditor,
     cancelSaveConfirmation: saveFlow.cancelSaveConfirmation,

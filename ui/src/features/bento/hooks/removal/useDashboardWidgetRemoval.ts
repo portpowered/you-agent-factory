@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
-
+import type { DashboardCardStateSnapshot } from "../../../dashboard/lib/dashboard-card-state";
 import type { AgentBentoLayoutItem } from "../../components/agent-bento";
 import { getDashboardWidgetRemovalMessages } from "../../messages/dashboard-widget-removal";
 import { restoreDashboardWidgetToLayout } from "../dashboardLayoutMutations";
@@ -16,6 +16,7 @@ export type DashboardWidgetUndoStatus =
   | "restored";
 
 export interface DashboardWidgetRemovalCandidate {
+  cardStateSnapshot?: DashboardCardStateSnapshot;
   originalIndex: number;
   removedItem: AgentBentoLayoutItem;
   triggerElement: HTMLElement | null;
@@ -31,6 +32,9 @@ export interface DashboardWidgetUndoState
 export interface UseDashboardWidgetRemovalOptions {
   dashboardLayout: AgentBentoLayoutItem[];
   dirtyCardInstanceIDs: ReadonlySet<string>;
+  getDashboardCardState?: (
+    widgetInstanceID: string,
+  ) => DashboardCardStateSnapshot | undefined;
   getWidgetTitle: (widgetType: string) => string;
   persistDashboardLayout: (
     layout: AgentBentoLayoutItem[],
@@ -38,6 +42,10 @@ export interface UseDashboardWidgetRemovalOptions {
   removeDashboardWidget: (
     widgetInstanceID: string,
   ) => DashboardLayoutStorageWriteResult | undefined;
+  restoreDashboardCardState?: (
+    widgetInstanceID: string,
+    state: DashboardCardStateSnapshot,
+  ) => void;
 }
 
 export interface UseDashboardWidgetRemovalResult {
@@ -106,9 +114,11 @@ function useDashboardWidgetFocus(
 export function useDashboardWidgetRemoval({
   dashboardLayout,
   dirtyCardInstanceIDs,
+  getDashboardCardState,
   getWidgetTitle,
   persistDashboardLayout,
   removeDashboardWidget,
+  restoreDashboardCardState,
 }: UseDashboardWidgetRemovalOptions): UseDashboardWidgetRemovalResult {
   const [pendingRemoval, setPendingRemoval] =
     useState<DashboardWidgetRemovalCandidate | null>(null);
@@ -148,6 +158,7 @@ export function useDashboardWidgetRemoval({
       }
 
       const candidate: DashboardWidgetRemovalCandidate = {
+        cardStateSnapshot: getDashboardCardState?.(widgetInstanceID),
         originalIndex,
         removedItem: { ...item },
         triggerElement: getActiveHTMLElement(),
@@ -161,7 +172,13 @@ export function useDashboardWidgetRemoval({
 
       commitRemoval(candidate);
     },
-    [commitRemoval, dashboardLayout, dirtyCardInstanceIDs, getWidgetTitle],
+    [
+      commitRemoval,
+      dashboardLayout,
+      dirtyCardInstanceIDs,
+      getDashboardCardState,
+      getWidgetTitle,
+    ],
   );
 
   const cancelRemoval = useCallback(() => {
@@ -195,6 +212,12 @@ export function useDashboardWidgetRemoval({
       undoState.removedItem,
       undoState.originalIndex,
     );
+    if (undoState.cardStateSnapshot) {
+      restoreDashboardCardState?.(
+        undoState.removedItem.id,
+        undoState.cardStateSnapshot,
+      );
+    }
     const writeResult = persistDashboardLayout(restoredLayout);
     setUndoState((currentState) =>
       currentState && currentState.status === "available"
@@ -211,7 +234,12 @@ export function useDashboardWidgetRemoval({
       kind: "restored",
       widgetInstanceID: undoState.removedItem.id,
     });
-  }, [dashboardLayout, persistDashboardLayout, undoState]);
+  }, [
+    dashboardLayout,
+    persistDashboardLayout,
+    restoreDashboardCardState,
+    undoState,
+  ]);
 
   const dismissUndo = useCallback(() => {
     setUndoState((currentState) =>
