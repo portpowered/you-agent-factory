@@ -2,6 +2,7 @@
 import "../../../testing/vitest-dom-capabilities.setup";
 
 import { act, renderHook } from "@testing-library/react";
+import { vi } from "vitest";
 
 import {
   readStoredDashboardLayout,
@@ -572,6 +573,45 @@ describe("useDashboardLayout widget instance persistence", () => {
         (item) => item.widgetType === DASHBOARD_WIDGET_IDS.currentSelection,
       ),
     ).toHaveLength(1);
+  });
+
+  it("rejects a second graph card without mutating or persisting the layout", () => {
+    const setItem = vi.spyOn(window.localStorage, "setItem");
+    const { result } = renderHook(() => useDashboardLayout());
+    const initialLayout = result.current.dashboardLayout;
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workGraph);
+    });
+
+    expect(result.current.dashboardLayout).toEqual(initialLayout);
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
+  it("allocates a fresh graph identity after removing the existing graph card", () => {
+    const { result } = renderHook(() => useDashboardLayout());
+    const graphCard = result.current.dashboardLayout.find(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+    );
+
+    expect(graphCard).toBeDefined();
+
+    act(() => {
+      result.current.removeDashboardWidget(graphCard?.id ?? "");
+      reloadDashboardLayoutFromStorage();
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workGraph);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({
+        id: "work-graph::instance-1",
+        widgetType: DASHBOARD_WIDGET_IDS.workGraph,
+      }),
+    );
+    expect(result.current.dashboardLayout).not.toContainEqual(
+      expect.objectContaining({ id: graphCard?.id }),
+    );
   });
 
   it("removes only the targeted widget instance and keeps the inline add-widget card", () => {

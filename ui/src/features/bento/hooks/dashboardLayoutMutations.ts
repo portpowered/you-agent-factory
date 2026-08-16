@@ -10,6 +10,7 @@ import {
 import {
   createDashboardWidgetInstanceID,
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+  DASHBOARD_WIDGET_IDS,
   type DashboardLayoutInstanceHighWaterMarks,
   getDefaultInlineAddWidgetLayout,
   getDefaultWidgetLayoutByType,
@@ -38,7 +39,13 @@ export function allocateDashboardWidgetInstance(
   }
 
   const primaryInstanceID = getPrimaryInstanceIDForWidgetType(widgetType);
-  if (!layout.some((item) => item.id === primaryInstanceID && !item.hidden)) {
+  if (
+    shouldUsePrimaryDashboardWidgetInstance(
+      layout,
+      widgetType,
+      instanceHighWaterMarks,
+    )
+  ) {
     return { instanceHighWaterMarks, instanceID: primaryInstanceID };
   }
 
@@ -141,17 +148,49 @@ function getNextDashboardWidgetInstanceID(
   widgetType: string,
 ): string {
   const primaryInstanceID = getPrimaryInstanceIDForWidgetType(widgetType);
-  if (!layout.some((item) => item.id === primaryInstanceID && !item.hidden)) {
+  const instanceHighWaterMarks =
+    getDashboardLayoutInstanceHighWaterMarks(layout);
+  if (
+    shouldUsePrimaryDashboardWidgetInstance(
+      layout,
+      widgetType,
+      instanceHighWaterMarks,
+    )
+  ) {
     return primaryInstanceID;
   }
 
-  const instanceHighWaterMarks =
-    getDashboardLayoutInstanceHighWaterMarks(layout);
   const nextInstanceNumber = (instanceHighWaterMarks[widgetType] ?? 0) + 1;
 
   return createDashboardWidgetInstanceID(
     widgetType,
     `${DASHBOARD_WIDGET_INSTANCE_SLOT_PREFIX}-${nextInstanceNumber}`,
+  );
+}
+
+function shouldUsePrimaryDashboardWidgetInstance(
+  layout: readonly AgentBentoLayoutItem[],
+  widgetType: string,
+  instanceHighWaterMarks: DashboardLayoutInstanceHighWaterMarks,
+): boolean {
+  if (
+    layout.some(
+      (item) =>
+        item.id === getPrimaryInstanceIDForWidgetType(widgetType) &&
+        !item.hidden,
+    )
+  ) {
+    return false;
+  }
+
+  if (widgetType !== DASHBOARD_WIDGET_IDS.workGraph) {
+    return true;
+  }
+
+  return (
+    !layout.some(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+    ) && (instanceHighWaterMarks[widgetType] ?? 0) === 0
   );
 }
 

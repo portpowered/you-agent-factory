@@ -385,8 +385,11 @@ vi.mock("../../dashboard-add-card/components/inline-add-widget-card", () => ({
   }) => (
     <section>
       Add widget card
-      <button onClick={() => onSelectWidget?.("work-graph")} type="button">
-        Add workflow activity widget
+      <button
+        onClick={() => onSelectWidget?.("work-outcome-chart")}
+        type="button"
+      >
+        Add work outcome chart widget
       </button>
     </section>
   ),
@@ -472,36 +475,27 @@ describe("DashboardBento", () => {
     );
   });
 
-  it("adds a widget instance through the inline picker selection seam", () => {
+  it("adds a duplicate-capable widget through the inline picker selection seam", () => {
     render(<DashboardBento />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Add workflow activity widget" }),
+      screen.getByRole("button", {
+        name: "Add work outcome chart widget",
+      }),
     );
 
-    expect(addDashboardWidget).toHaveBeenCalledWith("work-graph");
+    expect(addDashboardWidget).toHaveBeenCalledWith("work-outcome-chart");
   });
 
-  it("passes stable workflow activity instance ids into duplicate-capable dashboard cards", () => {
-    mockDashboardLayout = [
-      ...DEFAULT_DASHBOARD_LAYOUT,
-      {
-        h: 8,
-        id: "work-graph::instance-1",
-        minH: 6,
-        minW: 5,
-        w: 8,
-        widgetType: "work-graph",
-        x: 0,
-        y: 12,
-      },
-    ];
+  it("passes the persisted workflow activity instance id into its card", () => {
+    mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === "work-graph"
+        ? { ...item, id: "work-graph::instance-1" }
+        : item,
+    );
 
     render(<DashboardBento />);
 
-    expect(
-      screen.getByText("Workflow activity card:work-graph::primary"),
-    ).toBeTruthy();
     expect(
       screen.getByText("Workflow activity card:work-graph::instance-1"),
     ).toBeTruthy();

@@ -19,7 +19,6 @@ export type DashboardWidgetPickerWidgetType =
 
 export const DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES = [
   DASHBOARD_WIDGET_IDS.terminalWork,
-  DASHBOARD_WIDGET_IDS.workGraph,
   DASHBOARD_WIDGET_IDS.workOutcomeChart,
   DASHBOARD_WIDGET_IDS.workTotals,
 ] as const satisfies readonly DashboardWidgetPickerWidgetType[];

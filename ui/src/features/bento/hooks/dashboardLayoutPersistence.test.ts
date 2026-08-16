@@ -1,5 +1,6 @@
 import { sanitizeDashboardLayout } from "./dashboardLayoutPersistence";
 import {
+  DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
   getDefaultWidgetLayoutByType,
@@ -104,6 +105,7 @@ describe("sanitizeDashboardLayout", () => {
         DASHBOARD_WIDGET_IDS.providerSession,
         "provider-session::instance-2",
       ),
+      layoutItem(DASHBOARD_WIDGET_IDS.workGraph, "work-graph::instance-1"),
     ]);
 
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
@@ -117,6 +119,11 @@ describe("sanitizeDashboardLayout", () => {
         (item) =>
           item.widgetType === DASHBOARD_WIDGET_IDS.providerSession &&
           !item.hidden,
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.layout.filter(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
       ),
     ).toHaveLength(1);
   });
@@ -146,5 +153,29 @@ describe("sanitizeDashboardLayout", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(result.layout).toEqual(DEFAULT_DASHBOARD_LAYOUT);
+  });
+});
+
+describe("sanitizeDashboardLayout graph replacement", () => {
+  it("keeps a visible graph replacement instead of restoring the default graph identity", () => {
+    const replacementGraph = layoutItem(
+      DASHBOARD_WIDGET_IDS.workGraph,
+      "work-graph::instance-1",
+    );
+    const result = sanitizeDashboardLayout(
+      DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+        item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+          ? replacementGraph
+          : item,
+      ),
+    );
+
+    expect(result.layout).toContainEqual(replacementGraph);
+    expect(result.layout).not.toContainEqual(
+      expect.objectContaining({
+        id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph,
+      }),
+    );
+    expect(result.diagnostics).toEqual([]);
   });
 });

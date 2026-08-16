@@ -53,7 +53,11 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
 
 vi.mock("../session/dashboard-session-provider", () => ({
   DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
-  useDashboardSession: () => ({ rawSessionID: "session-test" }),
+  useDashboardSession: () => ({
+    factoryPath: "/factory-sessions/session-test/factory",
+    rawSessionID: "session-test",
+    sessionID: "session-test",
+  }),
 }));
 
 vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({

@@ -168,7 +168,30 @@ export function repairDashboardLayout(
 
   const retainedSingletonLayout: AgentBentoLayoutItem[] = [];
   const visibleWidgetTypes = new Set<string>();
+  const hasVisibleGraph = uniqueIDLayout.some(
+    (item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph && !item.hidden,
+  );
+  let retainedGraph = false;
   for (const item of uniqueIDLayout) {
+    if (item.widgetType === DASHBOARD_WIDGET_IDS.workGraph) {
+      if (
+        (hasVisibleGraph && item.hidden) ||
+        (!item.hidden && visibleWidgetTypes.has(item.widgetType)) ||
+        (item.hidden && retainedGraph)
+      ) {
+        diagnostics.add("singleton-violation");
+        continue;
+      }
+
+      retainedGraph = true;
+      if (!item.hidden) {
+        visibleWidgetTypes.add(item.widgetType);
+      }
+      retainedSingletonLayout.push(item);
+      continue;
+    }
+
     if (
       !item.hidden &&
       !isDuplicateCapableDashboardWidgetType(item.widgetType)

@@ -153,12 +153,21 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
         widgetType,
         layoutState.currentHighWaterMarks,
       );
+      if (!allocation.instanceID) {
+        return state;
+      }
+
+      const addedLayout = addDashboardWidgetToLayout(
+        layoutState.currentLayout,
+        widgetType,
+        allocation.instanceID,
+      );
+      if (addedLayout === layoutState.currentLayout) {
+        return state;
+      }
+
       const nextLayout = mergeDashboardLayout(
-        addDashboardWidgetToLayout(
-          layoutState.currentLayout,
-          widgetType,
-          allocation.instanceID,
-        ),
+        addedLayout,
         layoutState.currentLayout,
       );
       return persistDashboardLayoutState(

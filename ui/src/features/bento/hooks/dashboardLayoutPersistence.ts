@@ -56,6 +56,10 @@ function mergeNormalizedDashboardLayouts(
   normalizedLayout: AgentBentoLayoutItem[],
   normalizedBaseLayout: AgentBentoLayoutItem[],
 ): AgentBentoLayoutItem[] {
+  const hasVisibleGraph = normalizedLayout.some(
+    (item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph && !item.hidden,
+  );
   const itemsByID = new Map<string, AgentBentoLayoutItem[]>();
   for (const item of normalizedLayout) {
     const items = itemsByID.get(item.id) ?? [];
@@ -64,7 +68,21 @@ function mergeNormalizedDashboardLayouts(
   }
 
   const mergedBaseLayout: AgentBentoLayoutItem[] = [];
+  const visibleGraph = normalizedLayout.find(
+    (item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph && !item.hidden,
+  );
   for (const baseItem of normalizedBaseLayout) {
+    if (
+      hasVisibleGraph &&
+      baseItem.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+    ) {
+      if (visibleGraph) {
+        mergedBaseLayout.push(visibleGraph);
+      }
+      continue;
+    }
+
     const matchingItems = itemsByID.get(baseItem.id) ?? [];
     const [matchingItem, ...duplicateItems] = matchingItems;
     mergedBaseLayout.push(
@@ -73,7 +91,10 @@ function mergeNormalizedDashboardLayouts(
     );
   }
 
-  const baseIDs = new Set(normalizedBaseLayout.map((item) => item.id));
+  const baseIDs = new Set([
+    ...normalizedBaseLayout.map((item) => item.id),
+    ...mergedBaseLayout.map((item) => item.id),
+  ]);
   const additionalItems = normalizedLayout.filter(
     (item) => !baseIDs.has(item.id),
   );
