@@ -972,56 +972,6 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArgum
 	}
 }
 
-func TestWorkstationExecutor_ScriptWorkerUsesInvocationInterpolatedArguments(t *testing.T) {
-	mock := &interpolatedScriptExecutorMock{}
-	we := newTestWorkstationExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.FactoryWorkerConfig{
-			"script-a": {Type: interfaces.WorkerTypeScript, Command: "tool", Args: []string{"${branch}"}},
-		},
-		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"script-run": {Type: interfaces.WorkstationTypeModel, WorkerTypeName: "script-a"},
-		},
-	}, mock)
-	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
-		InterpolateWorker: func(worker interfaces.FactoryWorkerConfig, _ *work.InvocationArguments, _ interfaces.FileReader) (interfaces.FactoryWorkerConfig, error) {
-			worker.Args = []string{"feature/customer-branch"}
-			return worker, nil
-		},
-	}
-
-	result, err := we.Execute(context.Background(), work.WorkDispatch{
-		DispatchID: "d-script", TransitionID: "t-script", WorkerType: "script-a", WorkstationName: "script-run",
-		InputTokens: InputTokens(workstationRuntimeToken{ID: "tok-script", Color: workstationRuntimeTokenColor{
-			WorkID: "work-script", InvocationArguments: &work.InvocationArguments{},
-		}}),
-	})
-	if err != nil || result.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("Execute() = %#v, %v", result, err)
-	}
-	if !mock.interpolatedCalled || mock.plainCalled || strings.Join(mock.worker.Args, ",") != "feature/customer-branch" {
-		t.Fatalf("script executor = %#v", mock)
-	}
-}
-
-type interpolatedScriptExecutorMock struct {
-	plainCalled        bool
-	interpolatedCalled bool
-	worker             *interfaces.FactoryWorkerConfig
-}
-
-func (mock *interpolatedScriptExecutorMock) Execute(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
-	mock.plainCalled = true
-	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
-}
-
-func (mock *interpolatedScriptExecutorMock) ExecuteWithWorker(_ context.Context, _ workerexecution.WorkstationExecutionRequest, worker *interfaces.FactoryWorkerConfig) (workerexecution.WorkResult, error) {
-	mock.interpolatedCalled = true
-	clone := *worker
-	clone.Args = append([]string(nil), worker.Args...)
-	mock.worker = &clone
-	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
-}
-
 func TestWorkstationExecutor_ResolvesInterpolatedProviderThroughRegistryBeforeExecution(t *testing.T) {
 	t.Parallel()
 	providers := providerRegistryWithExternalFixture(t)
@@ -1950,103 +1900,6 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 	}
 }
 
-func TestWorkstationExecutor_ScriptClassifierUsesFinalStdoutLineAndPreservesDiagnostics(t *testing.T) {
-	stdout := "checking payload\r\n\t needs_review \t\r\n\r\n"
-	stderr := "script diagnostic\n"
-	mock := &wsMockExecutor{result: workerexecution.WorkResult{
-		Outcome: workerexecution.OutcomeAccepted,
-		// Script runners trim the result content, while command diagnostics
-		// retain the exact streams for inspection.
-		Output: strings.TrimSpace(stdout),
-		Diagnostics: &workerexecution.WorkDiagnostics{Command: &workerexecution.CommandDiagnostic{
-			Stdout: stdout,
-			Stderr: stderr,
-		}},
-	}}
-	we := newTestWorkstationExecutor(
-		staticRuntimeConfig{
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript, Body: "script"},
-			},
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
-			},
-		},
-		mock,
-	)
-
-	result, err := we.Execute(context.Background(), work.WorkDispatch{
-		DispatchID:      "d-script-classifier-line",
-		TransitionID:    "t-script-classifier-line",
-		WorkerType:      "script-worker",
-		WorkstationName: "classifier",
-		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1"}),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "needs_review" {
-		t.Fatalf("result = %#v, want accepted needs_review label", result)
-	}
-	if result.SelectedClassificationLabel != "" {
-		t.Fatalf("selected classification label = %q, want empty before route matching", result.SelectedClassificationLabel)
-	}
-	if result.Diagnostics == nil || result.Diagnostics.Command == nil {
-		t.Fatalf("diagnostics = %#v, want command diagnostics", result.Diagnostics)
-	}
-	if result.Diagnostics.Command.Stdout != stdout || result.Diagnostics.Command.Stderr != stderr {
-		t.Fatalf("command diagnostics = %#v, want unmodified stdout/stderr", result.Diagnostics.Command)
-	}
-}
-
-func TestWorkstationExecutor_ScriptClassifierRejectsWhitespaceOnlyStdoutAndPreservesDiagnostics(t *testing.T) {
-	stdout := " \r\n\t  \n"
-	stderr := "script warning"
-	mock := &wsMockExecutor{result: workerexecution.WorkResult{
-		Outcome: workerexecution.OutcomeAccepted,
-		Output:  "",
-		Diagnostics: &workerexecution.WorkDiagnostics{Command: &workerexecution.CommandDiagnostic{
-			Stdout: stdout,
-			Stderr: stderr,
-		}},
-	}}
-	we := newTestWorkstationExecutor(
-		staticRuntimeConfig{
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript, Body: "script"},
-			},
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
-			},
-		},
-		mock,
-	)
-
-	result, err := we.Execute(context.Background(), work.WorkDispatch{
-		DispatchID:      "d-script-classifier-empty",
-		TransitionID:    "t-script-classifier-empty",
-		WorkerType:      "script-worker",
-		WorkstationName: "classifier",
-		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1"}),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
-	}
-	if result.Error != "classifier output invalid: empty label" {
-		t.Fatalf("Error = %q, want actionable missing-label diagnostic", result.Error)
-	}
-	if result.SelectedClassificationLabel != "" {
-		t.Fatalf("selected classification label = %q, want empty on failure", result.SelectedClassificationLabel)
-	}
-	if result.Diagnostics == nil || result.Diagnostics.Command == nil ||
-		result.Diagnostics.Command.Stdout != stdout || result.Diagnostics.Command.Stderr != stderr {
-		t.Fatalf("command diagnostics = %#v, want unmodified stdout/stderr", result.Diagnostics)
-	}
-}
-
 func TestWorkstationExecutor_InferenceClassifierRetainsWholeOutputInterpretation(t *testing.T) {
 	output := "provider diagnostic\nneeds_review"
 	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: output}}
@@ -2074,36 +1927,6 @@ func TestWorkstationExecutor_InferenceClassifierRetainsWholeOutputInterpretation
 	}
 	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != output {
 		t.Fatalf("result = %#v, want accepted whole inference output", result)
-	}
-}
-
-func TestWorkstationExecutor_NonClassifierScriptRetainsWholeOutputInterpretation(t *testing.T) {
-	output := "script diagnostic\nscript result"
-	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: output}}
-	we := newTestWorkstationExecutor(
-		staticRuntimeConfig{
-			Workers: map[string]*interfaces.FactoryWorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript, Body: "script"},
-			},
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "run"},
-			},
-		},
-		mock,
-	)
-
-	result, err := we.Execute(context.Background(), work.WorkDispatch{
-		DispatchID:      "d-script-whole-output",
-		TransitionID:    "t-script-whole-output",
-		WorkerType:      "script-worker",
-		WorkstationName: "standard",
-		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1"}),
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != output {
-		t.Fatalf("result = %#v, want accepted whole script output", result)
 	}
 }
 

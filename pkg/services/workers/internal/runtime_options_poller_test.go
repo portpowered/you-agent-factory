@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
@@ -168,6 +167,57 @@ func TestBuildRuntimeExecutorsOmitsAutomationsOwnedPollerWorkers(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeExecutorsLeavesScriptWorkersToDetachedService(t *testing.T) {
+	t.Parallel()
+
+	worker := &interfaces.FactoryWorkerConfig{
+		Name:    "script-worker",
+		Type:    interfaces.WorkerTypeScript,
+		Command: "script-tool",
+	}
+	factoryConfig := &interfaces.FactoryConfig{
+		Workers: []interfaces.FactoryWorkerConfig{*worker},
+	}
+	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{
+		Factory: factoryConfig,
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			worker.Name: worker,
+		},
+	}
+	builder := &pollerOmissionBuilder{t: t}
+	service := &Service{
+		executorBuilder:   builder,
+		clock:             time.Now,
+		executableLocator: stubExecutableLocator{},
+	}
+
+	executors, err := service.BuildRuntimeExecutors(
+		runtimeConfig,
+		factoryConfig,
+		"",
+		nil,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeExecutors() error = %v", err)
+	}
+	if builder.calls != 0 {
+		t.Fatalf("executor builder calls = %d, want zero for detached script execution", builder.calls)
+	}
+	if _, ok := executors[worker.Name]; ok {
+		t.Fatalf("executors[%q] present, want script execution owned by detached service", worker.Name)
+	}
+}
+
 type pollerOmissionBuilder struct {
 	t     *testing.T
 	calls int
@@ -182,7 +232,7 @@ func (b *pollerOmissionBuilder) Build(
 	*bool,
 	providers.Service,
 	workers.ProgressPublisher,
-	workerexecutor.ScriptEventRecorder,
+	workers.ScriptEventRecorder,
 	workers.InferenceEventRecorder,
 	workeragentrun.AgentRunEventRecorder,
 	func() time.Time,

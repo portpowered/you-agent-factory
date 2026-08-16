@@ -267,10 +267,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, requ
 		return result, err
 	}
 	if workstationDef.Type == factorydefinitions.WorkstationTypeClassify {
-		result = normalizeClassifierWorkResult(
-			result,
-			workerDef.Type == factorydefinitions.WorkerTypeScript,
-		)
+		result = normalizeClassifierWorkResult(result)
 	}
 	return we.verifyExpectedArtifacts(executionRequest, workstationDef, result), nil
 }
@@ -832,17 +829,7 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 		defer cancel()
 	}
 
-	// Script Workers carry interpolatable command arguments, so execute from
-	// the per-dispatch definition rather than the invocation-neutral runner
-	// captured when the Factory Runtime opened.
-	var result workerexecution.WorkResult
-	if interpolated, ok := we.Executor.(interface {
-		ExecuteWithWorker(context.Context, workerexecution.WorkstationExecutionRequest, *factorydefinitions.FactoryWorkerConfig) (workerexecution.WorkResult, error)
-	}); ok {
-		result, err = interpolated.ExecuteWithWorker(executorCtx, request, workerDef)
-	} else {
-		result, err = we.Executor.Execute(executorCtx, request)
-	}
+	result, err := we.Executor.Execute(executorCtx, request)
 	if err != nil {
 		if errors.Is(executorCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return timeoutWorkResult(request.Dispatch, we.Now().Sub(start)), nil
@@ -872,16 +859,13 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 	return result, nil
 }
 
-func normalizeClassifierWorkResult(result workerexecution.WorkResult, scriptBacked bool) workerexecution.WorkResult {
+func normalizeClassifierWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	if result.Outcome == workerexecution.OutcomeFailed {
 		result.SelectedClassificationLabel = ""
 		return result
 	}
 
 	output := result.Output
-	if scriptBacked {
-		output = finalScriptClassifierLine(result)
-	}
 	label, err := normalizeClassifierLabel(output)
 	if err != nil {
 		result.Outcome = workerexecution.OutcomeFailed
@@ -894,19 +878,6 @@ func normalizeClassifierWorkResult(result workerexecution.WorkResult, scriptBack
 	result.Output = label
 	result.Feedback = ""
 	return result
-}
-
-func finalScriptClassifierLine(result workerexecution.WorkResult) string {
-	output := result.Output
-	if result.Diagnostics != nil && result.Diagnostics.Command != nil {
-		output = result.Diagnostics.Command.Stdout
-	}
-	trimmed := strings.TrimSpace(output)
-	if trimmed == "" {
-		return ""
-	}
-	lines := strings.Split(trimmed, "\n")
-	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 func normalizeClassifierLabel(output string) (string, error) {
@@ -983,12 +954,5 @@ func (we *WorkstationExecutor) runtimeWorkstation(dispatch work.WorkDispatch) (*
 	if workstationDef.Type != "" {
 		return workstationDef, true
 	}
-	workerName := workstationWorkerName(workstationDef, dispatch)
-	workerDef, ok := we.RuntimeConfig.Worker(workerName)
-	if !ok || workerDef.Type != factorydefinitions.WorkerTypeScript {
-		return nil, false
-	}
-	fallback := *workstationDef
-	fallback.Type = factorydefinitions.WorkstationTypeModel
-	return &fallback, true
+	return nil, false
 }
