@@ -7,6 +7,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type factoryStatusRuntimeRole struct {
@@ -71,17 +72,35 @@ func TestFactoryStatusAPIUsesBoundSessionRuntimeForCurrentAndSessionRoutes(t *te
 	}}
 	api := newFactoryStatusAPI(sessions, projector)
 
-	got, err := api.ProjectFactoryStatus(context.Background(), "")
-	if err != nil || got.FactoryState != "CURRENT" || got.RuntimeStatus != "ACTIVE" ||
-		got.TotalTokens != 2 || got.Categories.Processing != 1 || runtime.observations != 0 || sessions.observations != 1 || projector.projections != 1 {
-		t.Fatalf("default status = (%#v, %v), observations = %d, projections = %d", got, err, runtime.observations, projector.projections)
-	}
-	got, err = api.ProjectFactoryStatus(context.Background(), "session-beta")
-	if err != nil || got.FactoryState != "CURRENT" || got.TotalTokens != 2 || runtime.observations != 0 || sessions.observations != 2 || projector.projections != 2 {
-		t.Fatalf("scoped status = (%#v, %v), runtime observations = %d, session observations = %d, projections = %d", got, err, runtime.observations, sessions.observations, projector.projections)
-	}
+	assertFactoryStatusRequest(t, api, "", runtime, sessions, projector, 1)
+	assertFactoryStatusRequest(t, api, "session-beta", runtime, sessions, projector, 2)
 	if len(sessions.sessionIDs) != 2 || sessions.sessionIDs[0] != factorysessions.DefaultSessionID || sessions.sessionIDs[1] != "session-beta" {
 		t.Fatalf("session IDs = %#v, want [~default session-beta]", sessions.sessionIDs)
+	}
+}
+
+func assertFactoryStatusRequest(
+	t *testing.T,
+	api apisurface.FactoryStatusAPI,
+	sessionID string,
+	runtime *factoryStatusRuntimeRole,
+	sessions *factoryStatusSessionRole,
+	projector *factoryStatusProjectorRole,
+	expectedCalls int,
+) {
+	t.Helper()
+	got, err := api.ProjectFactoryStatus(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("status error = %v", err)
+	}
+	if got.FactoryState != "CURRENT" || got.RuntimeStatus != "ACTIVE" || got.TotalTokens != 2 || got.Categories.Processing != 1 {
+		t.Fatalf("status = %#v, want injected projector result", got)
+	}
+	if runtime.observations != 0 {
+		t.Fatalf("bound runtime observations = %d, want 0", runtime.observations)
+	}
+	if sessions.observations != expectedCalls || projector.projections != expectedCalls {
+		t.Fatalf("observations = %d, projections = %d, want %d", sessions.observations, projector.projections, expectedCalls)
 	}
 }
 
