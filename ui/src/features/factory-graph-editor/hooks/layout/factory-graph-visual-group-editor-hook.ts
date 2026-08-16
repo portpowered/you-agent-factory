@@ -259,6 +259,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             labelFieldLabel: messages.visualGroupLabelFieldLabel,
             membershipEmptyLabel: messages.visualGroupMembershipEmptyLabel,
             membershipLabel: messages.visualGroupMembershipLabel,
+            membershipNodeKindLabel: messages.kindLabel,
             membershipNodeLabel: messages.visualGroupMembershipNodeLabel,
             membershipStaleNodeLabel:
               messages.visualGroupMembershipStaleNodeLabel,

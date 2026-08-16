@@ -48,8 +48,8 @@ describe("useFactoryGraphVisualGroupEditor", () => {
           addNodeToVisualGroup,
           canInteractWithEditor: true,
           canvasNodeOptions: [
-            { id: "workstation:draft", label: "Draft" },
-            { id: "worker:writer", label: "Writer" },
+            { id: "workstation:draft", kind: "workstation", label: "Draft" },
+            { id: "worker:writer", kind: "worker", label: "Writer" },
           ],
           createVisualGroup,
           deleteVisualGroup,

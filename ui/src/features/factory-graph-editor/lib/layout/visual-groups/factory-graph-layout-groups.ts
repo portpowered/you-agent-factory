@@ -8,6 +8,7 @@ import { moveFactoryLayoutNodesByDelta } from "../factory-graph-layout-operation
 
 export type FactoryLayoutGroupCanvasNodeOption = {
   id: string;
+  kind: FactoryGraphNode["kind"];
   label: string;
 };
 
@@ -223,6 +224,7 @@ export function factoryLayoutGroupCanvasNodeOptions(
   return [...nodes]
     .map((node) => ({
       id: node.id,
+      kind: node.kind,
       label: node.label,
     }))
     .sort((left, right) => left.label.localeCompare(right.label));

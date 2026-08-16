@@ -1,7 +1,9 @@
 import { useId } from "react";
 
+import { Checkbox } from "../../../../../components/ui/checkbox";
 import { DashboardActionButton } from "../../../../../components/ui/dashboard-action-button";
 import { cn } from "../../../../../lib/cn";
+import type { FactoryGraphNodeKind } from "../../../lib/draft/factory-graph-draft-types";
 import {
   FACTORY_LAYOUT_GROUP_COLOR_TOKENS,
   type FactoryLayoutGroup,
@@ -22,6 +24,7 @@ export function FactoryGraphVisualGroupControls({
   group,
   isNodeMember,
   labelFieldLabel,
+  membershipNodeKindLabel,
   membershipEmptyLabel,
   membershipLabel,
   membershipNodeLabel,
@@ -44,6 +47,7 @@ export function FactoryGraphVisualGroupControls({
   group: FactoryLayoutGroup;
   isNodeMember: (nodeId: string) => boolean;
   labelFieldLabel: string;
+  membershipNodeKindLabel: (kind: FactoryGraphNodeKind) => string;
   membershipEmptyLabel: string;
   membershipLabel: string;
   membershipNodeLabel: (label: string) => string;
@@ -172,17 +176,27 @@ export function FactoryGraphVisualGroupControls({
                     className="flex items-center gap-2 text-sm text-on-surface"
                     htmlFor={checkboxId}
                   >
-                    <input
+                    <Checkbox
+                      aria-label={membershipNodeLabel(option.label)}
                       checked={checked}
-                      className="h-4 w-4 rounded border-outline text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                       data-factory-visual-group-member={option.id}
                       id={checkboxId}
                       onChange={(event) =>
                         onToggleNodeMembership(option.id, event.target.checked)
                       }
-                      type="checkbox"
                     />
-                    <span>{membershipNodeLabel(option.label)}</span>
+                    <span className="flex min-w-0 items-baseline gap-1">
+                      <span className="shrink-0 text-on-surface-subtle">
+                        {membershipNodeKindLabel(option.kind)}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="text-on-surface-subtle"
+                      >
+                        ·
+                      </span>
+                      <span className="truncate">{option.label}</span>
+                    </span>
                   </label>
                 </li>
               );

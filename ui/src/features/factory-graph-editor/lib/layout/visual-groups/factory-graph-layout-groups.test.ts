@@ -452,8 +452,8 @@ describe("factory graph layout groups", () => {
         },
       ]),
     ).toEqual([
-      { id: "workstation:review", label: "Review" },
-      { id: "worker:writer", label: "Writer" },
+      { id: "workstation:review", kind: "workstation", label: "Review" },
+      { id: "worker:writer", kind: "worker", label: "Writer" },
     ]);
   });
 

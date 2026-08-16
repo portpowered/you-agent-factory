@@ -14,8 +14,8 @@ describe("FactoryGraphVisualGroupControls", () => {
     render(
       <FactoryGraphVisualGroupControls
         canvasNodeOptions={[
-          { id: "workstation:draft", label: "Draft" },
-          { id: "worker:writer", label: "Writer" },
+          { id: "workstation:draft", kind: "workstation", label: "Draft" },
+          { id: "worker:writer", kind: "worker", label: "Writer" },
         ]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
@@ -32,6 +32,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -58,6 +59,11 @@ describe("FactoryGraphVisualGroupControls", () => {
     expect(
       screen.getByRole("region", { name: "Visual group Review" }),
     ).not.toHaveTextContent("Selected visual group");
+    expect(screen.getByText("workstation")).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Visual group Review" }),
+    ).not.toHaveTextContent("Include Draft in this group");
     expect(
       screen.getByText(
         "Saved member workstation:missing is no longer on the canvas.",
@@ -71,6 +77,16 @@ describe("FactoryGraphVisualGroupControls", () => {
     );
 
     expect(onToggleNodeMembership).toHaveBeenCalledWith("worker:writer", true);
+
+    const includedCheckbox = screen.getByRole("checkbox", {
+      name: "Include Draft in this group",
+    });
+    includedCheckbox.focus();
+    await user.keyboard(" ");
+    expect(onToggleNodeMembership).toHaveBeenLastCalledWith(
+      "workstation:draft",
+      false,
+    );
   });
 
   it("invokes color selection when a group color option is activated", async () => {
@@ -96,6 +112,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -146,6 +163,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -185,6 +203,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -225,6 +244,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -258,6 +278,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -283,7 +304,13 @@ describe("FactoryGraphVisualGroupControls", () => {
 
     render(
       <FactoryGraphVisualGroupControls
-        canvasNodeOptions={[{ id: "workstation:draft", label: "Draft" }]}
+        canvasNodeOptions={[
+          {
+            id: "workstation:draft",
+            kind: "workstation",
+            label: "Draft",
+          },
+        ]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
         boundsError={null}
@@ -300,6 +327,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         labelFieldLabel="Group label"
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
         membershipNodeLabel={(label) => `Include ${label} in this group`}
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
@@ -350,6 +378,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         }}
         isNodeMember={() => false}
         labelFieldLabel="Group label"
+        membershipNodeKindLabel={(kind) => kind}
         membershipEmptyLabel="No canvas nodes are available to assign."
         membershipLabel="Group members"
         membershipNodeLabel={(label) => `Include ${label} in this group`}
