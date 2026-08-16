@@ -16,7 +16,6 @@ import (
 )
 
 type durableResponseEventsProjectionFake struct {
-	apisurface.DurableSessionProjectionAPI
 	subscribe func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
 }
 
