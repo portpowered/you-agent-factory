@@ -29,6 +29,12 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
+	// In-scope construction exception: this cascade needs independent response
+	// sequences for starter and finisher. ProviderCommandRunner receives only the
+	// policy-free command, args, and identical fixture prompt, so it cannot target
+	// those per-worker attempts; a queued edge run leaves the recovered child
+	// failed. The provider service below is the narrowest way to preserve this
+	// public cascade/recovery behavior without changing the production path.
 	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
 		"starter": {
 			{Content: "COMPLETE"},
