@@ -4,14 +4,121 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
+	t.Parallel()
+
+	proxy := &activationServiceFake{}
+	engine := &activationServiceFake{}
+	products := runtimeProducts{
+		application: roles.OpenedApplicationRuntime{
+			HTTP: roles.RuntimeHTTPServices{FactoryRuntime: proxy},
+		},
+		startup: activationRuntimeRecord{service: engine},
+	}
+
+	if got := runtimeEngineService(products); got != engine {
+		t.Fatalf("runtimeEngineService() = %T, want concrete engine %T", got, engine)
+	}
+	handoff := &activatedRuntimeService{
+		Service:              engine,
+		runtimeWorkSubmitter: engine,
+	}
+	if _, err := handoff.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
+		t.Fatalf("SubmitWorkRequest() error = %v", err)
+	}
+	if got := engine.submitCalls.Load(); got != 1 {
+		t.Fatalf("engine SubmitWorkRequest calls = %d, want 1", got)
+	}
+	if got := proxy.submitCalls.Load(); got != 0 {
+		t.Fatalf("session proxy SubmitWorkRequest calls = %d, want 0", got)
+	}
+}
+
+func TestRuntimeBindingPublicationErrorPreservesPrimaryAndCleanupFailures(t *testing.T) {
+	t.Parallel()
+
+	bindErr := errors.New("bind failed")
+	cleanupErr := errors.New("cleanup failed")
+	err := runtimeBindingPublicationError(bindErr, cleanupErr)
+	if !errors.Is(err, bindErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("runtimeBindingPublicationError() = %v, want both causes", err)
+	}
+}
+
+func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
+	t.Parallel()
+
+	service := &activationServiceFake{}
+	var calls atomic.Int32
+	binding := factoryruntime.NewRuntimeBinding(
+		"runtime-1",
+		service,
+		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
+			calls.Add(1)
+			return factoryruntime.RuntimeDeactivationResult{}, nil
+		},
+	)
+	closer := (&Factory{}).activationCloser(binding, "runtime-1")
+
+	const callers = 16
+	var wait sync.WaitGroup
+	wait.Add(callers)
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			defer wait.Done()
+			errs <- closer()
+		}()
+	}
+	wait.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("activation closer error = %v, want nil", err)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("deactivation calls = %d, want exactly once", got)
+	}
+	if err := closer(); err != nil {
+		t.Fatalf("second activation closer call = %v, want nil", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("deactivation calls after second close = %d, want exactly once", got)
+	}
+}
+
+type activationRuntimeRecord struct {
+	factoryruntime.RuntimeRecord
+	service factoryruntime.Service
+}
+
+func (record activationRuntimeRecord) RuntimeService() factoryruntime.Service {
+	return record.service
+}
+
+type activationServiceFake struct {
+	factoryruntime.Service
+	submitCalls atomic.Int32
+}
+
+func (service *activationServiceFake) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	service.submitCalls.Add(1)
+	return work.WorkRequestSubmitResult{}, nil
+}
 
 func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	t.Parallel()
