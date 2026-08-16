@@ -37,12 +37,16 @@ export function factoryGraphReactFlowEdgeIdentity(
 export function decorateProjectedEdgesWithWaypoints(input: {
   edges: readonly FactoryGraphReactFlowEdge[];
   layout: FactoryLayout;
+  waypointPreviews?: ReadonlyMap<string, readonly { x: number; y: number }[]>;
   selectedWaypointEdgeId?: string | null;
 }): FactoryGraphReactFlowEdge[] {
   return input.edges.map((edge): FactoryGraphReactFlowEdge => {
     const data = (edge.data ?? {}) as Partial<WaypointDecoratedEdgeData>;
     const layoutEdgeId = data.factoryGraphEdgeId ?? edge.id;
-    const waypoints = factoryLayoutEdgeWaypoints(input.layout, layoutEdgeId);
+    const previewWaypoints = input.waypointPreviews?.get(layoutEdgeId);
+    const waypoints =
+      previewWaypoints?.map((point) => ({ x: point.x, y: point.y })) ??
+      factoryLayoutEdgeWaypoints(input.layout, layoutEdgeId);
     const selected =
       edge.id === input.selectedWaypointEdgeId ||
       layoutEdgeId === input.selectedWaypointEdgeId;

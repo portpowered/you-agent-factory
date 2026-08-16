@@ -34,7 +34,7 @@ export async function expectRegionPointerThrough(page, region) {
   await page.mouse.click(point.x, point.y);
 }
 
-export async function expectEditorGraphInteractions(page) {
+export async function expectEditorGraphInteractions(page, options = {}) {
   await waitForStableGraphSurface(page);
   const group = page.locator("[data-factory-visual-group]").first();
   await group.waitFor({ state: "visible" });
@@ -58,11 +58,91 @@ export async function expectEditorGraphInteractions(page) {
   await expectPanInsideRegion(page, group);
   await expectZoomInsideRegion(page, group);
 
-  const edgePoint = await findEdgePointInsideRegion(page, group);
-  await page.mouse.click(edgePoint.x, edgePoint.y);
+  await expectDirectEdgeDrag(page, group, options);
+}
+
+export async function expectDirectEdgeDrag(page, region, options = {}) {
+  const { edgeId: expectedEdgeId } = options;
+  const { edge, point } = await findEdgeInsideRegion(
+    page,
+    region,
+    expectedEdgeId,
+  );
+  const edgeId = await readEdgeId(edge);
+  if (!edgeId) {
+    throw new Error("Could not identify the graph edge selected for dragging.");
+  }
+
+  const beforeWaypointCount = await page
+    .locator("[data-factory-edge-waypoint]")
+    .count();
+  const finalPoint = { x: point.x + 36, y: point.y + 28 };
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(finalPoint.x, finalPoint.y, { steps: 5 });
+  await page.mouse.up();
+
+  const waypoints = page.locator("[data-factory-edge-waypoint]");
+  await waitForDurableCheckpoint("direct edge drag waypoint", async () => {
+    return (await waypoints.count()) > beforeWaypointCount;
+  });
+  await page.locator("[data-factory-edge-waypoint-controls]").waitFor({
+    state: "visible",
+  });
+
+  const waypoint = waypoints.last();
+  await waitForStableBoundingBox(waypoint);
+  const waypointBounds = await waypoint.boundingBox();
+  if (!waypointBounds) {
+    throw new Error(
+      "Could not measure the waypoint created by direct edge drag.",
+    );
+  }
+  const waypointCenter = {
+    x: waypointBounds.x + waypointBounds.width / 2,
+    y: waypointBounds.y + waypointBounds.height / 2,
+  };
+  if (
+    Math.hypot(
+      waypointCenter.x - finalPoint.x,
+      waypointCenter.y - finalPoint.y,
+    ) > 18
+  ) {
+    throw new Error(
+      `The rendered edge waypoint did not follow the pointer: ${JSON.stringify({ finalPoint, waypointCenter })}.`,
+    );
+  }
+
+  const undoButton = page.getByRole("button", { name: "Undo" });
+  await waitForDurableCheckpoint("direct edge drag undo enabled", () =>
+    undoButton.isEnabled(),
+  );
+  await undoButton.click();
+  await waitForDurableCheckpoint("direct edge drag undone", async () => {
+    return (await waypoints.count()) === beforeWaypointCount;
+  });
+
+  const redoButton = page.getByRole("button", { name: "Redo" });
+  await waitForDurableCheckpoint("direct edge drag redo enabled", () =>
+    redoButton.isEnabled(),
+  );
+  await redoButton.click();
+  await waitForDurableCheckpoint("direct edge drag redone", async () => {
+    return (await waypoints.count()) > beforeWaypointCount;
+  });
+
+  return edgeId;
+}
+
+export async function expectPersistedEdgeWaypoint(page, region, edgeId) {
+  const { point } = await findEdgeInsideRegion(page, region, edgeId);
+  await page.mouse.click(point.x, point.y);
   await page
     .locator("[data-factory-edge-waypoint-controls]")
     .waitFor({ state: "visible" });
+  await page.locator("[data-factory-edge-waypoint]").first().waitFor({
+    state: "visible",
+  });
 }
 
 async function waitForStableGraphSurface(page) {
@@ -225,7 +305,7 @@ async function findElementPointInsideRegion(page, region, candidates) {
   );
 }
 
-async function findEdgePointInsideRegion(page, region) {
+async function findEdgeInsideRegion(page, region, expectedEdgeId) {
   await waitForStableFactoryGraphViewport(page);
   await waitForStableBoundingBox(region);
   const bounds = await region.boundingBox();
@@ -237,8 +317,12 @@ async function findEdgePointInsideRegion(page, region) {
 
   const edges = page.locator(".react-flow__edge");
   const edgeCount = await edges.count();
+  let matchingEdgePointOutsideRegion = null;
   for (let index = 0; index < edgeCount; index += 1) {
     const edge = edges.nth(index);
+    if (expectedEdgeId && (await readEdgeId(edge)) !== expectedEdgeId) {
+      continue;
+    }
     const points = await edge
       .evaluate((element) => {
         const path = element.querySelector(".react-flow__edge-path");
@@ -260,22 +344,39 @@ async function findEdgePointInsideRegion(page, region) {
       })
       .catch(() => []);
     for (const point of points) {
-      if (
+      const insideRegion =
         point.x >= bounds.x &&
         point.x <= bounds.x + bounds.width &&
         point.y >= bounds.y &&
-        point.y <= bounds.y + bounds.height
-      ) {
-        const hit = await readHitTarget(page, point);
-        if (hit.isEdge && !hit.isGroupRegion) {
-          return point;
+        point.y <= bounds.y + bounds.height;
+      if (!insideRegion && !expectedEdgeId) {
+        continue;
+      }
+      const hit = await readHitTarget(page, point);
+      if (hit.isEdge && !hit.isGroupRegion) {
+        if (insideRegion) {
+          return { edge, point };
+        }
+        if (expectedEdgeId && !matchingEdgePointOutsideRegion) {
+          matchingEdgePointOutsideRegion = { edge, point };
         }
       }
     }
   }
 
+  if (matchingEdgePointOutsideRegion) {
+    return matchingEdgePointOutsideRegion;
+  }
+
   throw new Error(
     `Could not find a hit-testable graph edge inside ${GROUP_LABEL}.`,
+  );
+}
+
+async function readEdgeId(edge) {
+  return (
+    (await edge.getAttribute("data-id")) ??
+    (await edge.getAttribute("data-edge-id"))
   );
 }
 

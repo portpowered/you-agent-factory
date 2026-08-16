@@ -61,12 +61,7 @@ export async function expectVisualGroupDragWithMembers(
 }
 
 export async function dragVisualGroup(page, { deltaX, deltaY }) {
-  const groupLabel = page.locator("[data-factory-visual-group-label]").first();
-  await groupLabel.waitFor({ state: "visible" });
-  const box = await groupLabel.boundingBox();
-  if (!box) {
-    throw new Error("Could not measure visual group label for drag.");
-  }
+  const { box } = await findVisibleGroupDragSurface(page);
 
   const startX = box.x + box.width / 2;
   const startY = box.y + box.height / 2;
@@ -74,6 +69,55 @@ export async function dragVisualGroup(page, { deltaX, deltaY }) {
   await page.mouse.down();
   await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 4 });
   await page.mouse.up();
+}
+
+async function findVisibleGroupDragSurface(page) {
+  const candidates = [
+    page.locator("[data-factory-visual-group-label]").first(),
+    page.locator('[data-factory-visual-group-outline="bottom"]').first(),
+    page.locator('[data-factory-visual-group-outline="left"]').first(),
+    page.locator('[data-factory-visual-group-outline="right"]').first(),
+    page.locator('[data-factory-visual-group-outline="top"]').first(),
+  ];
+  const viewport = await page.evaluate(() => ({
+    height: window.innerHeight,
+    width: window.innerWidth,
+  }));
+
+  for (const locator of candidates) {
+    if (!(await locator.isVisible())) {
+      continue;
+    }
+    const box = await locator.boundingBox();
+    if (!box) {
+      continue;
+    }
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    if (
+      centerX >= 0 &&
+      centerX <= viewport.width &&
+      centerY >= 0 &&
+      centerY <= viewport.height
+    ) {
+      const hitIsGroupSurface = await page.evaluate(
+        ({ x, y }) => {
+          const target = document.elementFromPoint(x, y);
+          return Boolean(
+            target?.closest(
+              "[data-factory-visual-group-label], [data-factory-visual-group-outline]",
+            ),
+          );
+        },
+        { x: centerX, y: centerY },
+      );
+      if (hitIsGroupSurface) {
+        return { box, locator };
+      }
+    }
+  }
+
+  throw new Error("Could not find a visible visual group drag surface.");
 }
 
 function graphNodeLocator(page, nodeId) {

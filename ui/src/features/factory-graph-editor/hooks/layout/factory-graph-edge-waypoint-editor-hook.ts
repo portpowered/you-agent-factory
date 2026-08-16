@@ -1,12 +1,34 @@
 import type { XYPosition } from "@xyflow/react";
-import { useCallback, useMemo, useState } from "react";
+import type { GraphEdgeInteraction } from "@you-agent-factory/components/graphs";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { FactoryGraphEditorTool } from "../../components/controls/factory-graph-editor-controls";
 import { flowMidpointBetweenNodes } from "../../components/flow/factory-graph-edge-waypoint-layer";
 import { describeFactoryGraphLayoutEdgeId } from "../../lib/layout/factory-graph-layout-edge-labels";
 import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
-import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
+import type {
+  FactoryLayout,
+  FactoryLayoutPoint,
+} from "../../lib/layout/factory-graph-layout-operations";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
+
+const EDGE_DRAG_CLICK_THRESHOLD_PX = 4;
+
+type EdgeDragSession = {
+  baseWaypoints: FactoryLayoutPoint[];
+  edgeId: string;
+  insertIndex: number;
+  moved: boolean;
+  pointerId: number;
+  pointerTarget: SVGPathElement;
+  startScreenPosition: { x: number; y: number };
+};
+
+type EdgeWaypointPreview = {
+  edgeId: string;
+  waypoints: FactoryLayoutPoint[];
+};
 
 function canEditFactoryGraphEdgeWaypoints(input: {
   activeTool: FactoryGraphEditorTool;
@@ -43,6 +65,76 @@ function resolveEdgeNodePositions(
   };
 }
 
+function squaredDistanceToSegment(
+  point: FactoryLayoutPoint,
+  start: FactoryLayoutPoint,
+  end: FactoryLayoutPoint,
+): number {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+  if (lengthSquared === 0) {
+    const offsetX = point.x - start.x;
+    const offsetY = point.y - start.y;
+    return offsetX * offsetX + offsetY * offsetY;
+  }
+
+  const projection = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) /
+        lengthSquared,
+    ),
+  );
+  const closestX = start.x + projection * deltaX;
+  const closestY = start.y + projection * deltaY;
+  const offsetX = point.x - closestX;
+  const offsetY = point.y - closestY;
+  return offsetX * offsetX + offsetY * offsetY;
+}
+
+function resolveEdgeWaypointInsertIndex(
+  nodes: readonly FactoryGraphEdgeWaypointNode[],
+  edgeId: string,
+  waypoints: readonly FactoryLayoutPoint[],
+  position: FactoryLayoutPoint,
+): number {
+  const endpoints = resolveEdgeNodePositions(nodes, edgeId);
+  const routePoints = endpoints
+    ? [endpoints.source, ...waypoints, endpoints.target]
+    : [...waypoints];
+  if (routePoints.length < 2) {
+    return waypoints.length;
+  }
+
+  let closestSegmentIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < routePoints.length - 1; index += 1) {
+    const distance = squaredDistanceToSegment(
+      position,
+      routePoints[index],
+      routePoints[index + 1],
+    );
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestSegmentIndex = index;
+    }
+  }
+
+  return Math.min(closestSegmentIndex, waypoints.length);
+}
+
+function insertEdgeWaypoint(
+  waypoints: readonly FactoryLayoutPoint[],
+  position: FactoryLayoutPoint,
+  insertIndex: number,
+): FactoryLayoutPoint[] {
+  const nextWaypoints = waypoints.map((point) => ({ ...point }));
+  nextWaypoints.splice(insertIndex, 0, { x: position.x, y: position.y });
+  return nextWaypoints;
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates edge selection, layout mutation, and editor controls.
 export function useFactoryGraphEdgeWaypointEditor(input: {
   activeTool: FactoryGraphEditorTool;
@@ -65,19 +157,28 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
   nodes: readonly FactoryGraphEdgeWaypointNode[];
 }) {
   const messages = getFactoryGraphEditorMessages(input.locale);
+  const edgeDragSessionRef = useRef<EdgeDragSession | null>(null);
+  const suppressNextEdgeClickRef = useRef<string | null>(null);
+  const [edgeWaypointPreview, setEdgeWaypointPreview] =
+    useState<EdgeWaypointPreview | null>(null);
   const [selectedWaypointEdgeId, setSelectedWaypointEdgeId] = useState<
     string | null
   >(null);
   const canEditWaypoints = canEditFactoryGraphEdgeWaypoints(input);
 
-  const selectedEdgeWaypoints = useMemo(
-    () =>
-      selectedWaypointEdgeId
-        ? (factoryLayoutEdgeWaypoints(input.layout, selectedWaypointEdgeId) ??
-          [])
-        : [],
-    [input.layout, selectedWaypointEdgeId],
-  );
+  const selectedEdgeWaypoints = useMemo(() => {
+    if (!selectedWaypointEdgeId) {
+      return [];
+    }
+
+    if (edgeWaypointPreview?.edgeId === selectedWaypointEdgeId) {
+      return edgeWaypointPreview.waypoints;
+    }
+
+    return (
+      factoryLayoutEdgeWaypoints(input.layout, selectedWaypointEdgeId) ?? []
+    );
+  }, [edgeWaypointPreview, input.layout, selectedWaypointEdgeId]);
 
   const selectedEdgeDescription = useMemo(() => {
     if (!selectedWaypointEdgeId) {
@@ -96,9 +197,142 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     };
   }, [messages, selectedWaypointEdgeId]);
 
+  const releaseEdgePointerCapture = useCallback((session: EdgeDragSession) => {
+    if (session.pointerTarget.hasPointerCapture(session.pointerId)) {
+      session.pointerTarget.releasePointerCapture(session.pointerId);
+    }
+  }, []);
+
+  const clearEdgeDragSession = useCallback(() => {
+    const session = edgeDragSessionRef.current;
+    if (!session) {
+      return;
+    }
+
+    edgeDragSessionRef.current = null;
+    releaseEdgePointerCapture(session);
+    setEdgeWaypointPreview(null);
+  }, [releaseEdgePointerCapture]);
+
+  const handleEditorEdgePointerDown = useCallback(
+    (
+      edgeId: string,
+      event: ReactPointerEvent<SVGPathElement>,
+      flowPosition: FactoryLayoutPoint,
+    ) => {
+      if (!canEditWaypoints) {
+        return;
+      }
+
+      event.stopPropagation();
+      event.preventDefault();
+      suppressNextEdgeClickRef.current = null;
+      const baseWaypoints =
+        factoryLayoutEdgeWaypoints(input.layout, edgeId) ?? [];
+      edgeDragSessionRef.current = {
+        baseWaypoints,
+        edgeId,
+        insertIndex: resolveEdgeWaypointInsertIndex(
+          input.nodes,
+          edgeId,
+          baseWaypoints,
+          flowPosition,
+        ),
+        moved: false,
+        pointerId: event.pointerId,
+        pointerTarget: event.currentTarget,
+        startScreenPosition: {
+          x: event.clientX,
+          y: event.clientY,
+        },
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [canEditWaypoints, input.layout, input.nodes],
+  );
+
+  const handleEditorEdgePointerMove = useCallback(
+    (
+      event: ReactPointerEvent<SVGPathElement>,
+      flowPosition: FactoryLayoutPoint,
+    ) => {
+      const session = edgeDragSessionRef.current;
+      if (!session || session.pointerId !== event.pointerId) {
+        return;
+      }
+
+      if (
+        !session.moved &&
+        Math.hypot(
+          event.clientX - session.startScreenPosition.x,
+          event.clientY - session.startScreenPosition.y,
+        ) < EDGE_DRAG_CLICK_THRESHOLD_PX
+      ) {
+        return;
+      }
+
+      session.moved = true;
+      setSelectedWaypointEdgeId(session.edgeId);
+      setEdgeWaypointPreview({
+        edgeId: session.edgeId,
+        waypoints: insertEdgeWaypoint(
+          session.baseWaypoints,
+          flowPosition,
+          session.insertIndex,
+        ),
+      });
+    },
+    [],
+  );
+
+  const handleEditorEdgePointerUp = useCallback(
+    (
+      event: ReactPointerEvent<SVGPathElement>,
+      flowPosition: FactoryLayoutPoint,
+    ) => {
+      const session = edgeDragSessionRef.current;
+      if (!session || session.pointerId !== event.pointerId) {
+        return;
+      }
+
+      edgeDragSessionRef.current = null;
+      releaseEdgePointerCapture(session);
+      setEdgeWaypointPreview(null);
+      if (!session.moved) {
+        setSelectedWaypointEdgeId(session.edgeId);
+        suppressNextEdgeClickRef.current = session.edgeId;
+        return;
+      }
+
+      input.addEdgeWaypoint(session.edgeId, flowPosition, session.insertIndex);
+      setSelectedWaypointEdgeId(session.edgeId);
+      suppressNextEdgeClickRef.current = session.edgeId;
+    },
+    [input.addEdgeWaypoint, releaseEdgePointerCapture],
+  );
+
+  const handleEditorEdgePointerCancel = useCallback(
+    (event: ReactPointerEvent<SVGPathElement>) => {
+      const session = edgeDragSessionRef.current;
+      if (!session || session.pointerId !== event.pointerId) {
+        return;
+      }
+
+      clearEdgeDragSession();
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [clearEdgeDragSession],
+  );
+
   const handleEditorEdgeClick = useCallback(
     (edgeId: string) => {
       if (!input.canInteractWithEditor || !input.editorMode) {
+        return;
+      }
+
+      if (suppressNextEdgeClickRef.current === edgeId) {
+        suppressNextEdgeClickRef.current = null;
         return;
       }
 
@@ -184,12 +418,47 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     [canEditWaypoints, input],
   );
 
+  const edgeWaypointPreviews = useMemo(() => {
+    if (!edgeWaypointPreview) {
+      return undefined;
+    }
+
+    return new Map<string, readonly FactoryLayoutPoint[]>([
+      [edgeWaypointPreview.edgeId, edgeWaypointPreview.waypoints],
+    ]);
+  }, [edgeWaypointPreview]);
+
+  const edgePointerInteraction = useCallback(
+    (edgeId: string): GraphEdgeInteraction | undefined => {
+      if (!canEditWaypoints) {
+        return undefined;
+      }
+
+      return {
+        onPointerCancel: handleEditorEdgePointerCancel,
+        onPointerDown: (event, flowPosition) =>
+          handleEditorEdgePointerDown(edgeId, event, flowPosition),
+        onPointerMove: handleEditorEdgePointerMove,
+        onPointerUp: handleEditorEdgePointerUp,
+      };
+    },
+    [
+      canEditWaypoints,
+      handleEditorEdgePointerCancel,
+      handleEditorEdgePointerDown,
+      handleEditorEdgePointerMove,
+      handleEditorEdgePointerUp,
+    ],
+  );
+
   return {
     canEditWaypoints,
     clearSelectedWaypointEdge: () => setSelectedWaypointEdgeId(null),
     handleAddSelectedEdgeWaypoint,
     handleEditorEdgeClick,
     handleEditorEdgeDoubleClick,
+    edgePointerInteraction,
+    edgeWaypointPreviews,
     handleMoveSelectedEdgeWaypoint,
     handleRemoveSelectedEdgeWaypoint,
     selectedEdgeDescription,

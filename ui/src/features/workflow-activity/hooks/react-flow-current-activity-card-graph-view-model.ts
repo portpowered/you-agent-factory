@@ -5,12 +5,12 @@ import type {
   NodeChange,
   OnSelectionChangeFunc,
 } from "@xyflow/react";
+import type { GraphEdgeInteraction } from "@you-agent-factory/components/graphs";
 import {
   type FactoryGraphNodeDimensions,
   resolveFactoryGraphNodeResizeDimensions,
 } from "@you-agent-factory/factory-graph";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -70,6 +70,11 @@ export type CurrentActivityGraphViewModelEditorInput = Omit<
   CurrentActivityEditorState,
   "onConnectionAnchorClick" | "validationTargets"
 > & {
+  edgePointerInteraction?: (edgeId: string) => GraphEdgeInteraction | undefined;
+  edgeWaypointPreviews?: ReadonlyMap<
+    string,
+    readonly { x: number; y: number }[]
+  >;
   graphProjection: CurrentActivityGraphRenderProjection;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
   selectedWaypointEdgeId?: string | null;
@@ -400,6 +405,8 @@ function useCurrentActivityGraphEdges({
   graphSelection,
   handleAssignments,
   layout,
+  edgePointerInteraction,
+  edgeWaypointPreviews,
   pendingAdditionEdgeIds,
   selectedWaypointEdgeId,
   visibleGraphEdges,
@@ -409,6 +416,11 @@ function useCurrentActivityGraphEdges({
   graphSelection: FactoryGraphEditorSelectionController;
   handleAssignments: ReturnType<typeof buildHandleAssignments>;
   layout: FactoryLayout;
+  edgePointerInteraction?: (edgeId: string) => GraphEdgeInteraction | undefined;
+  edgeWaypointPreviews?: ReadonlyMap<
+    string,
+    readonly { x: number; y: number }[]
+  >;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   selectedWaypointEdgeId?: string | null;
   visibleGraphEdges: GraphLayout["edges"];
@@ -425,6 +437,7 @@ function useCurrentActivityGraphEdges({
     return decorateProjectedEdgesWithWaypoints({
       edges: edges as FactoryGraphReactFlowEdge[],
       layout,
+      waypointPreviews: edgeWaypointPreviews,
       selectedWaypointEdgeId: selectedWaypointEdgeId ?? null,
     }).map((edge) => {
       const layoutEdgeId =
@@ -435,19 +448,23 @@ function useCurrentActivityGraphEdges({
         graphSelection.isEdgeSelected(edge.id) ||
         graphSelection.isEdgeSelected(layoutEdgeId);
 
-      if (!selected) {
+      const interaction = edgePointerInteraction?.(layoutEdgeId);
+      if (!selected && !interaction) {
         return edge;
       }
 
       return {
         ...edge,
-        selected: true,
-        type: edge.type ?? "factoryEditorEdge",
+        data: interaction ? { ...edge.data, interaction } : edge.data,
+        selected: selected || edge.selected,
+        type: "factoryEditorEdge",
       };
     });
   }, [
     activeGraphHighlights,
     displayNodes,
+    edgePointerInteraction,
+    edgeWaypointPreviews,
     graphSelection,
     handleAssignments,
     layout,
@@ -601,6 +618,8 @@ export function useCurrentActivityGraphViewModel({
   const edges = useCurrentActivityGraphEdges({
     activeGraphHighlights,
     displayNodes,
+    edgePointerInteraction: editor.edgePointerInteraction,
+    edgeWaypointPreviews: editor.edgeWaypointPreviews,
     graphSelection,
     handleAssignments,
     layout: renderedLayout,

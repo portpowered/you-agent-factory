@@ -74,6 +74,10 @@ export function useCurrentActivityGraphCardViewModel(
       graphProjection,
       handleConnectionAnchorClick: connectionControls.handleAnchorClick,
       nodeResizeControls,
+      edgePointerInteraction:
+        publicEditor.edgeWaypointControls.edgePointerInteraction,
+      edgeWaypointPreviews:
+        publicEditor.edgeWaypointControls.edgeWaypointPreviews,
       pendingConnectionSource: connectionControls.pendingSource,
       selectedWaypointEdgeId:
         publicEditor.edgeWaypointControls.selectedWaypointEdgeId,

@@ -3,7 +3,12 @@ export const COMPONENTS_CATEGORY = "graphs" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
-export type { GraphEdgeData, GraphEdgeProps } from "./graph-edge";
+export type {
+  GraphEdgeData,
+  GraphEdgeInteraction,
+  GraphEdgePointerInteraction,
+  GraphEdgeProps,
+} from "./graph-edge";
 export { GRAPH_EDGE_TYPES, GraphEdge } from "./graph-edge";
 export {
   buildGraphEdgePathThroughWaypoints,

@@ -1,5 +1,6 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: React Flow projection keeps node, edge, and handle mapping together for one adapter seam.
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
+import type { GraphEdgeInteraction } from "@you-agent-factory/components/graphs";
 import {
   type FACTORY_GRAPH_NODE_TYPES,
   type FactoryGraphActiveExecution,
@@ -118,6 +119,7 @@ export type FactoryGraphReactFlowEdge = Edge<{
   active?: boolean;
   alwaysShowLabel?: boolean;
   factoryGraphEdgeId?: string;
+  interaction?: GraphEdgeInteraction;
   kind?: FactoryGraphEdge["kind"];
   label?: string;
   pendingStatus?: "addition" | "none" | "removal";

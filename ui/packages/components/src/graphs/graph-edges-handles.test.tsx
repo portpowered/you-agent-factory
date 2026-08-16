@@ -35,6 +35,7 @@ function renderWithReactFlow(ui: ReactElement) {
   return renderPackageComponent(<ReactFlowProvider>{ui}</ReactFlowProvider>);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph edge and handle coverage stays grouped around the package contract.
 describe("graph edges and handles", () => {
   it("renders graph edge geometry from React Flow props with package-owned visual data", () => {
     renderWithReactFlow(
@@ -93,6 +94,64 @@ describe("graph edges and handles", () => {
     expect(path?.getAttribute("d")).toContain("M 0 0");
     expect(path?.getAttribute("d")).toContain("200, 100");
     expect(edge).toHaveAttribute("data-label-visible", "true");
+  });
+
+  it("forwards opt-in edge pointer gestures with flow-space coordinates", () => {
+    const onPointerDown = vi.fn();
+    const onPointerMove = vi.fn();
+    const onPointerUp = vi.fn();
+    renderWithReactFlow(
+      <svg aria-hidden="true">
+        <GraphEdge
+          data={{
+            interaction: { onPointerDown, onPointerMove, onPointerUp },
+          }}
+          id="edge-direct-drag"
+          interactionWidth={20}
+          selected={false}
+          sourcePosition={Position.Right}
+          sourceX={0}
+          sourceY={0}
+          style={{ stroke: "var(--color-primary)" }}
+          targetPosition={Position.Left}
+          targetX={200}
+          targetY={100}
+        />
+      </svg>,
+    );
+
+    const interactionPath = document.querySelector(
+      '[data-edge-id="edge-direct-drag"] .react-flow__edge-interaction',
+    );
+    expect(interactionPath).toBeInTheDocument();
+    fireEvent.pointerDown(interactionPath, {
+      clientX: 80,
+      clientY: 40,
+      pointerId: 2,
+    });
+    fireEvent.pointerMove(interactionPath, {
+      clientX: 120,
+      clientY: 70,
+      pointerId: 2,
+    });
+    fireEvent.pointerUp(interactionPath, {
+      clientX: 140,
+      clientY: 80,
+      pointerId: 2,
+    });
+
+    expect(onPointerDown).toHaveBeenCalledWith(
+      expect.objectContaining({ pointerId: 2 }),
+      expect.objectContaining({ x: 80, y: 40 }),
+    );
+    expect(onPointerMove).toHaveBeenCalledWith(
+      expect.objectContaining({ pointerId: 2 }),
+      expect.objectContaining({ x: 120, y: 70 }),
+    );
+    expect(onPointerUp).toHaveBeenCalledWith(
+      expect.objectContaining({ pointerId: 2 }),
+      expect.objectContaining({ x: 140, y: 80 }),
+    );
   });
 
   it("renders source and target handle badges with accessible labels", () => {

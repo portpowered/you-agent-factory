@@ -2,6 +2,7 @@
  * Drives the real factory graph editor surface for visual group save/reload coverage.
  */
 
+// biome-ignore lint/style/noExcessiveLinesPerFile: this browser workflow composes the full editor save, reload, and interaction scenario.
 import {
   assertNodeSizeMatches,
   expectNoObsoleteNodeResizeActions,
@@ -10,8 +11,10 @@ import {
 } from "./verify-factory-graph-node-size-browser-helpers.mjs";
 import { expectVisualGroupDragWithMembers } from "./verify-factory-graph-visual-group-editor-group-drag.mjs";
 import {
+  expectDirectEdgeDrag,
   expectEditorGraphInteractions,
   expectGraphSurfaceBasics,
+  expectPersistedEdgeWaypoint,
   expectRegionPointerThrough,
 } from "./verify-factory-graph-visual-group-editor-interactions.mjs";
 import {
@@ -41,11 +44,15 @@ export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   await waitForStoryRender(page);
 
   const { toolbar, viewport } = await enterVisualGroupEditor(page);
-  const resizedNode = await createAndEditVisualGroup(page, viewport);
-  const savedNodeSize = await saveVisualGroup(page, resizedNode);
+  const { edgeId, resizedNode } = await createAndEditVisualGroup(
+    page,
+    viewport,
+  );
+  const savedNodeSize = await saveVisualGroup(page, resizedNode, edgeId);
 
   await verifyVisualGroupAfterReload({
     currentUrl: page.url(),
+    expectedEdgeId: edgeId,
     expectedNodeSize: savedNodeSize,
     page,
     toolbar,
@@ -126,6 +133,13 @@ async function createAndEditVisualGroup(page, viewport) {
   await expectChecked(secondaryMembershipCheckbox, false);
   await page.keyboard.press("Space");
   await expectChecked(secondaryMembershipCheckbox, true);
+  const unrelatedMembershipCheckbox = page.getByRole("checkbox", {
+    name: "Include Review in this group",
+  });
+  if (await unrelatedMembershipCheckbox.isChecked()) {
+    await unrelatedMembershipCheckbox.uncheck();
+  }
+  await expectChecked(unrelatedMembershipCheckbox, false);
 
   const warningColorButton = page.getByRole("button", {
     exact: true,
@@ -154,10 +168,14 @@ async function createAndEditVisualGroup(page, viewport) {
   });
   await resizeVisualGroup(page, "sw", { deltaX: -560, deltaY: 420 });
 
-  return resizedNode;
+  const edgeId = await expectDirectEdgeDrag(
+    page,
+    page.locator("[data-factory-visual-group]").first(),
+  );
+  return { edgeId, resizedNode };
 }
 
-async function saveVisualGroup(page, resizedNode) {
+async function saveVisualGroup(page, resizedNode, edgeId) {
   await page.getByRole("button", { name: "Save changes" }).click();
   await page
     .getByRole("heading", { name: "Save factory graph changes?" })
@@ -189,12 +207,21 @@ async function saveVisualGroup(page, resizedNode) {
     (node) => node.id === TARGET_WORKSTATION_ID,
   )?.size;
   assertNodeSizeMatches(persistedNode, resizedNode, "saved");
+  const persistedEdge = persistedFactory?.layout?.edges?.find(
+    (edge) => edge.id === edgeId,
+  );
+  if (!persistedEdge?.waypoints?.length) {
+    throw new Error(
+      `Saved Factory layout did not retain the directly dragged waypoint for ${edgeId}.`,
+    );
+  }
   await captureEvidence(page, "visual-group-before-reload");
   return persistedNode;
 }
 
 async function verifyVisualGroupAfterReload({
   currentUrl,
+  expectedEdgeId,
   expectedNodeSize,
   page,
   toolbar,
@@ -304,7 +331,8 @@ async function verifyVisualGroupAfterReload({
     name: "Use warning group color",
   });
   await expectAttribute(warningColorAfterReload, "aria-pressed", "false");
-  await expectEditorGraphInteractions(page);
+  await expectPersistedEdgeWaypoint(page, reloadedGroup, expectedEdgeId);
+  await expectEditorGraphInteractions(page, { edgeId: expectedEdgeId });
   await captureEvidence(page, "visual-group-after-reload-editor");
 }
 
