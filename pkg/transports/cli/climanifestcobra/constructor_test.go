@@ -1,7 +1,6 @@
 package climanifestcobra
 
 import (
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -817,33 +816,6 @@ func directedRelationship(
 	participants ...climanifest.ParticipantRef,
 ) climanifest.Relationship {
 	return climanifest.Relationship{ID: id, Kind: kind, When: &when, Participants: participants}
-}
-
-func TestResolvedWorkerSessionsHandlerRunsOptionalPreRun(t *testing.T) {
-	wantErr := errors.New("pre-run failed")
-	cases := []struct {
-		name string
-		pre  func(*cobra.Command, []string) error
-		want error
-	}{
-		{name: "pre-run and run", pre: func(*cobra.Command, []string) error { return nil }},
-		{name: "pre-run failure", pre: func(*cobra.Command, []string) error { return wantErr }, want: wantErr},
-		{name: "without pre-run"},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			preRuns, runs := 0, 0
-			handlers := commandregistry.CommandHandlers{PreRunE: test.pre, RunE: func(*cobra.Command, []string) error { runs++; return nil }}
-			if handlers.PreRunE != nil {
-				pre := handlers.PreRunE
-				handlers.PreRunE = func(cmd *cobra.Command, args []string) error { preRuns++; return pre(cmd, args) }
-			}
-			err := resolvedWorkerSessionsHandler(handlers)(&cobra.Command{Use: "worker-sessions"}, []string{"list"}, nil, resolvedinput.Inputs{})
-			if !errors.Is(err, test.want) || preRuns != boolToInt(test.pre != nil) || runs != boolToInt(test.want == nil) {
-				t.Fatalf("handler result = error %v, pre-runs %d, runs %d", err, preRuns, runs)
-			}
-		})
-	}
 }
 
 func TestWorkerConstructorManifestBranches(t *testing.T) {

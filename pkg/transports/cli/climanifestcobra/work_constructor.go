@@ -774,17 +774,6 @@ func workerSessionsHandlerBindings(
 	}, nil, nil
 }
 
-func resolvedWorkerSessionsHandler(handlers commandregistry.CommandHandlers) func(*cobra.Command, []string, map[string]any, resolvedinput.Inputs) error {
-	return func(cmd *cobra.Command, args []string, _ map[string]any, _ resolvedinput.Inputs) error {
-		if handlers.PreRunE != nil {
-			if err := handlers.PreRunE(cmd, args); err != nil {
-				return err
-			}
-		}
-		return handlers.RunE(cmd, args)
-	}
-}
-
 func validateWorkerSessionsManifest(manifest climanifest.Manifest) error {
 	if manifest.RootPath != "you" {
 		return fmt.Errorf("manifest root path = %q, want %q", manifest.RootPath, "you")
