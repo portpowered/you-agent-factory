@@ -182,6 +182,60 @@ func TestBuildModelInvocationExecutorReachesConstructionInjectedProviderCommandR
 	}
 }
 
+// TestCanonicalProviderAttemptThroughModelWorkstationEmitsResponseAndCompletion
+// proves the surviving canonical Providers contract remains observable through
+// the Workers model/workstation executor after the providercompat root removal:
+// one dispatch reaches the selected provider, returns its response, and emits
+// correlated progress followed by stream completion.
+func TestCanonicalProviderAttemptThroughModelWorkstationEmitsResponseAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	const dispatchID = "canonical-provider-dispatch-1"
+	runner := &recordingProviderCommandRunner{stdout: []byte("canonical provider response")}
+	providersService := commandRunnerBackedProvidersService{
+		runner: runner,
+		progress: []providers.ExecuteProgress{
+			{Phase: "provider.progress", Detail: "canonical provider progress"},
+		},
+	}
+
+	var published []workers.ProgressFragment
+	publisher := workers.ProgressPublisher(func(fragment workers.ProgressFragment) {
+		published = append(published, cloneServiceProgressFragment(fragment))
+	})
+
+	service := providerInvocationRuntimeService(runner, providersService, publisher)
+	runtimeCfg := agentInvocationRuntimeConfig()
+	executor, err := service.BuildModelInvocationExecutor(runtimeCfg, runtimeCfg.FactoryConfig(), "agent-worker")
+	if err != nil {
+		t.Fatalf("BuildModelInvocationExecutor() error = %v", err)
+	}
+
+	result, err := executor.Execute(context.Background(), agentInvocationExecutionRequest(dispatchID))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.OutcomeAccepted || result.Output != "canonical provider response" {
+		t.Fatalf("Execute() result = %#v, want accepted canonical provider response", result)
+	}
+
+	requests := runner.requests()
+	if len(requests) != 1 || requests[0].Command != string(providers.IDCodex) || requests[0].DispatchID != dispatchID {
+		t.Fatalf("provider command requests = %#v, want one codex request for %q", requests, dispatchID)
+	}
+	if len(published) != 3 ||
+		published[0].Kind != workers.ProgressFragmentKind ||
+		published[0].DispatchID != dispatchID ||
+		published[0].Payload != "canonical provider progress" ||
+		published[1].Kind != workers.ProgressFragmentKind ||
+		published[1].DispatchID != dispatchID ||
+		published[1].Payload != "canonical provider response" ||
+		published[2].Kind != workers.CompletedFragmentKind ||
+		published[2].DispatchID != dispatchID {
+		t.Fatalf("published fragments = %#v, want provider progress, response, then completion for %q", published, dispatchID)
+	}
+}
+
 // TestBuildModelInvocationExecutorDeliversProviderCommandRunnerFailure proves
 // a provider command runner's non-zero exit surfaces as a failed WorkResult
 // while still reaching the exact construction-injected provider command
