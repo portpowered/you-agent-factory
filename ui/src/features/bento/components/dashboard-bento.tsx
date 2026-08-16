@@ -26,7 +26,7 @@ import {
   buildDashboardCards,
   type DashboardCardBuilderArgs,
 } from "./dashboard-bento-cards";
-import { DashboardLayoutDiagnostics } from "./dashboard-layout-diagnostics";
+import { DashboardLayoutDiagnostics } from "./diagnostics/dashboard-layout-diagnostics";
 
 function useDashboardBentoSelectionState() {
   return {

@@ -15,10 +15,16 @@ export interface DashboardLayoutScope {
   sessionID: string;
 }
 
+export type DashboardLayoutInstanceHighWaterMarks = Readonly<
+  Record<string, number>
+>;
+
 export interface DashboardLayoutStorageEnvelope {
   layout: AgentBentoLayoutItem[];
   schemaVersion: typeof DASHBOARD_LAYOUT_STORAGE_VERSION;
   scope: DashboardLayoutScope;
+  /** Optional so v3 envelopes written before monotonic allocation remain readable. */
+  instanceHighWaterMarks?: DashboardLayoutInstanceHighWaterMarks;
 }
 
 export type DashboardLayoutDiagnosticCode =

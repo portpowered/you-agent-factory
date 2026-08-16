@@ -1,9 +1,14 @@
 import type { AgentBentoLayoutItem } from "../../components/agent-bento";
+import {
+  getDashboardLayoutInstanceHighWaterMarks,
+  mergeDashboardLayoutInstanceHighWaterMarks,
+} from "../allocation/dashboardLayoutAllocation";
 import { sanitizeDashboardLayout } from "../dashboardLayoutPersistence";
 import {
   DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_LAYOUT_STORAGE_VERSION,
   type DashboardLayoutDiagnostic,
+  type DashboardLayoutInstanceHighWaterMarks,
   type DashboardLayoutScope,
   type DashboardLayoutStorageEnvelope,
   DEFAULT_DASHBOARD_LAYOUT,
@@ -12,11 +17,13 @@ import {
 
 export interface DashboardLayoutStorageReadResult {
   diagnostics: DashboardLayoutDiagnostic[];
+  instanceHighWaterMarks: Record<string, number>;
   layout: AgentBentoLayoutItem[];
 }
 
 export interface DashboardLayoutStorageWriteResult {
   diagnostics: DashboardLayoutDiagnostic[];
+  instanceHighWaterMarks: Record<string, number>;
   persisted: boolean;
 }
 
@@ -39,6 +46,7 @@ export function readStoredDashboardLayoutResult(
   if (!storageResult.storage) {
     return {
       diagnostics: storageResult.diagnostic ? [storageResult.diagnostic] : [],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
@@ -50,6 +58,7 @@ export function readStoredDashboardLayoutResult(
   if (scopedRead.diagnostic) {
     return {
       diagnostics: [scopedRead.diagnostic],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
@@ -65,6 +74,7 @@ export function readStoredDashboardLayoutResult(
   if (!normalizedScope) {
     return {
       diagnostics: [],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
@@ -76,12 +86,14 @@ export function readStoredDashboardLayoutResult(
   if (legacyRead.diagnostic) {
     return {
       diagnostics: [legacyRead.diagnostic],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
   if (legacyRead.value === null) {
     return {
       diagnostics: [],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
@@ -99,12 +111,14 @@ export function readStoredDashboardLayoutResult(
     legacyResult.layout,
     normalizedScope,
     storageResult.storage,
+    legacyResult.instanceHighWaterMarks,
   );
   return {
     diagnostics: combineDiagnostics(
       legacyResult.diagnostics,
       writeResult.diagnostics,
     ),
+    instanceHighWaterMarks: writeResult.instanceHighWaterMarks,
     layout: legacyResult.layout,
   };
 }
@@ -112,15 +126,28 @@ export function readStoredDashboardLayoutResult(
 export function writeStoredDashboardLayout(
   layout: AgentBentoLayoutItem[],
   scope?: DashboardLayoutScope | null,
+  instanceHighWaterMarks?: DashboardLayoutInstanceHighWaterMarks,
 ): DashboardLayoutStorageWriteResult {
-  const sanitized = sanitizeDashboardLayout(layout);
   const storageResult = getLocalStorage();
+  const persistedHighWaterMarks =
+    scope && instanceHighWaterMarks === undefined && storageResult.storage
+      ? readStoredInstanceHighWaterMarks(storageResult.storage, scope)
+      : {};
+  const sanitized = sanitizeDashboardLayout(
+    layout,
+    DEFAULT_DASHBOARD_LAYOUT,
+    mergeDashboardLayoutInstanceHighWaterMarks(
+      persistedHighWaterMarks,
+      instanceHighWaterMarks,
+    ),
+  );
   if (!storageResult.storage) {
     return {
       diagnostics: combineDiagnostics(
         sanitized.diagnostics,
         storageResult.diagnostic ? [storageResult.diagnostic] : [],
       ),
+      instanceHighWaterMarks: sanitized.instanceHighWaterMarks,
       persisted: false,
     };
   }
@@ -129,12 +156,14 @@ export function writeStoredDashboardLayout(
     sanitized.layout,
     scope ?? undefined,
     storageResult.storage,
+    sanitized.instanceHighWaterMarks,
   );
   return {
     diagnostics: combineDiagnostics(
       sanitized.diagnostics,
       writeResult.diagnostics,
     ),
+    instanceHighWaterMarks: writeResult.instanceHighWaterMarks,
     persisted: writeResult.persisted,
   };
 }
@@ -150,6 +179,7 @@ function resolveStoredLayout(
   } catch {
     return {
       diagnostics: [createDiagnostic("malformed-json")],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
@@ -160,19 +190,34 @@ function resolveStoredLayout(
   if (!storedLayout) {
     return {
       diagnostics: [createDiagnostic("unsupported-envelope")],
+      instanceHighWaterMarks: {},
       layout: DEFAULT_DASHBOARD_LAYOUT,
     };
   }
 
-  const sanitized = sanitizeDashboardLayout(storedLayout);
+  const sanitized = sanitizeDashboardLayout(
+    storedLayout.layout,
+    DEFAULT_DASHBOARD_LAYOUT,
+    storedLayout.instanceHighWaterMarks,
+  );
   const writeResult = scope
-    ? writeStoredDashboardLayoutValue(sanitized.layout, scope, storage)
-    : { diagnostics: [], persisted: false };
+    ? writeStoredDashboardLayoutValue(
+        sanitized.layout,
+        scope,
+        storage,
+        sanitized.instanceHighWaterMarks,
+      )
+    : {
+        diagnostics: [],
+        instanceHighWaterMarks: sanitized.instanceHighWaterMarks,
+        persisted: false,
+      };
   return {
     diagnostics: combineDiagnostics(
       sanitized.diagnostics,
       writeResult.diagnostics,
     ),
+    instanceHighWaterMarks: writeResult.instanceHighWaterMarks,
     layout: sanitized.layout,
   };
 }
@@ -181,6 +226,7 @@ function writeStoredDashboardLayoutValue(
   layout: AgentBentoLayoutItem[],
   scope: DashboardLayoutScope | undefined,
   storage: Storage,
+  instanceHighWaterMarks: DashboardLayoutInstanceHighWaterMarks,
 ): DashboardLayoutStorageWriteResult {
   const storageKey = scope
     ? getDashboardLayoutStorageKey(scope)
@@ -190,15 +236,17 @@ function writeStoredDashboardLayoutValue(
         layout,
         schemaVersion: DASHBOARD_LAYOUT_STORAGE_VERSION,
         scope,
+        instanceHighWaterMarks,
       }
     : layout;
 
   try {
     storage.setItem(storageKey, JSON.stringify(value));
-    return { diagnostics: [], persisted: true };
+    return { diagnostics: [], instanceHighWaterMarks, persisted: true };
   } catch (error) {
     return {
       diagnostics: [createDiagnostic(classifyStorageWriteError(error))],
+      instanceHighWaterMarks,
       persisted: false,
     };
   }
@@ -300,21 +348,63 @@ function combineDiagnostics(
   return [...diagnosticsByCode.values()];
 }
 
+interface StoredDashboardLayout {
+  instanceHighWaterMarks: Record<string, number>;
+  layout: AgentBentoLayoutItem[];
+}
+
 function readLegacyDashboardLayout(
   value: unknown,
-): AgentBentoLayoutItem[] | null {
-  return Array.isArray(value) ? (value as AgentBentoLayoutItem[]) : null;
+): StoredDashboardLayout | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const layout = value as AgentBentoLayoutItem[];
+  return {
+    instanceHighWaterMarks: getDashboardLayoutInstanceHighWaterMarks(layout),
+    layout,
+  };
 }
 
 function readScopedDashboardLayout(
   value: unknown,
   scope: DashboardLayoutScope,
-): AgentBentoLayoutItem[] | null {
+): StoredDashboardLayout | null {
   if (!isDashboardLayoutStorageEnvelope(value, scope)) {
     return null;
   }
 
-  return value.layout;
+  return {
+    instanceHighWaterMarks: mergeDashboardLayoutInstanceHighWaterMarks(
+      value.instanceHighWaterMarks,
+      getDashboardLayoutInstanceHighWaterMarks(value.layout),
+    ),
+    layout: value.layout,
+  };
+}
+
+function readStoredInstanceHighWaterMarks(
+  storage: Storage,
+  scope: DashboardLayoutScope,
+): DashboardLayoutInstanceHighWaterMarks {
+  const storedValue = readStorageValue(
+    storage,
+    getDashboardLayoutStorageKey(scope),
+  ).value;
+  if (storedValue === null) {
+    return {};
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(storedValue);
+    return (
+      readScopedDashboardLayout(parsedValue, scope)?.instanceHighWaterMarks ??
+      {}
+    );
+  } catch {
+    return {};
+  }
 }
 
 function isDashboardLayoutStorageEnvelope(

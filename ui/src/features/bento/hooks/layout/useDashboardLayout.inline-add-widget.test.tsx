@@ -1,4 +1,4 @@
-import "../../../testing/vitest-dom-capabilities.setup";
+import "../../../../testing/vitest-dom-capabilities.setup";
 
 import { act, renderHook } from "@testing-library/react";
 
@@ -9,7 +9,7 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   reloadDashboardLayoutFromStorage,
   useDashboardLayout,
-} from "./useDashboardLayout";
+} from "../useDashboardLayout";
 
 function resetDashboardLayoutStorage() {
   window.localStorage.clear();

@@ -5,6 +5,7 @@ import {
   createDashboardLayoutScope,
   DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_LAYOUT_STORAGE_VERSION,
+  DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
   getDashboardLayoutStorageKey,
 } from "../dashboardLayoutSchema";
@@ -99,6 +100,32 @@ describe("dashboard layout storage diagnostics", () => {
         (item) => item.w > 0 && item.x >= 0 && item.x + item.w <= 12,
       ),
     ).toBe(true);
+  });
+
+  it("retains scoped allocation state when a write omits the optional state", () => {
+    const workOutcomeLayout = DEFAULT_DASHBOARD_LAYOUT.find(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+    );
+    if (!workOutcomeLayout) {
+      throw new Error("default work-outcome layout is missing");
+    }
+
+    writeStoredDashboardLayout(
+      [
+        ...DEFAULT_DASHBOARD_LAYOUT,
+        { ...workOutcomeLayout, id: "work-outcome-chart::instance-9" },
+      ],
+      scope,
+    );
+    writeStoredDashboardLayout(DEFAULT_DASHBOARD_LAYOUT, scope);
+
+    expect(
+      readStoredDashboardLayoutResult(scope).instanceHighWaterMarks,
+    ).toEqual(
+      expect.objectContaining({
+        [DASHBOARD_WIDGET_IDS.workOutcomeChart]: 9,
+      }),
+    );
   });
 
   it("distinguishes quota and generic write failures", () => {

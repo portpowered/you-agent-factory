@@ -609,6 +609,194 @@ describe("useDashboardLayout widget instance persistence", () => {
   });
 });
 
+describe("useDashboardLayout highest instance allocation", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("does not reuse the highest deleted instance after a scoped reload", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-highest",
+    );
+    const { result } = renderHook(() => useDashboardLayout(scope));
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({
+        id: "work-outcome-chart::instance-1",
+        widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      }),
+    );
+
+    act(() => {
+      result.current.removeDashboardWidget("work-outcome-chart::instance-1");
+      reloadDashboardLayoutFromStorage(scope);
+    });
+
+    const storedEnvelope = JSON.parse(
+      window.localStorage.getItem(getDashboardLayoutStorageKey(scope)) ?? "{}",
+    ) as { instanceHighWaterMarks?: Record<string, number> };
+    expect(storedEnvelope.instanceHighWaterMarks).toMatchObject({
+      [DASHBOARD_WIDGET_IDS.workOutcomeChart]: 1,
+    });
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({
+        id: "work-outcome-chart::instance-2",
+        widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      }),
+    );
+    expect(result.current.dashboardLayout).not.toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+    );
+  });
+});
+
+describe("useDashboardLayout middle instance allocation", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("advances beyond a deleted middle instance and keeps scopes independent", () => {
+    const firstScope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-middle",
+    );
+    const secondScope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-independent",
+    );
+    const first = renderHook(() => useDashboardLayout(firstScope));
+    const second = renderHook(() => useDashboardLayout(secondScope));
+
+    act(() => {
+      first.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+      first.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+    });
+    expect(first.result.current.dashboardLayout).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+        expect.objectContaining({ id: "work-outcome-chart::instance-2" }),
+      ]),
+    );
+
+    act(() => {
+      first.result.current.removeDashboardWidget(
+        "work-outcome-chart::instance-1",
+      );
+      first.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+      second.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+    });
+
+    expect(first.result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-3" }),
+    );
+    expect(first.result.current.dashboardLayout).not.toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+    );
+    expect(second.result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+    );
+  });
+});
+
+describe("useDashboardLayout persisted allocation state", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("seeds the high-water mark from repaired persisted instance ids", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-repaired",
+    );
+    window.localStorage.setItem(
+      getDashboardLayoutStorageKey(scope),
+      JSON.stringify({
+        layout: [
+          ...DEFAULT_DASHBOARD_LAYOUT,
+          {
+            ...DEFAULT_DASHBOARD_LAYOUT.find(
+              (item) =>
+                item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+            ),
+            id: "work-outcome-chart::instance-7",
+          },
+        ],
+        schemaVersion: 3,
+        scope,
+      }),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage(scope);
+    });
+    const { result } = renderHook(() => useDashboardLayout(scope));
+
+    act(() => {
+      result.current.removeDashboardWidget("work-outcome-chart::instance-7");
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-8" }),
+    );
+  });
+
+  it("seeds the high-water mark when migrating a legacy layout", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-legacy",
+    );
+    const legacyItem = DEFAULT_DASHBOARD_LAYOUT.find(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+    );
+    if (!legacyItem) {
+      throw new Error("default work-outcome layout is missing");
+    }
+
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify([
+        ...DEFAULT_DASHBOARD_LAYOUT,
+        { ...legacyItem, id: "work-outcome-chart::instance-4" },
+      ]),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage(scope);
+    });
+    const { result } = renderHook(() => useDashboardLayout(scope));
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-5" }),
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(getDashboardLayoutStorageKey(scope)) ??
+          "{}",
+      ),
+    ).toMatchObject({
+      instanceHighWaterMarks: {
+        [DASHBOARD_WIDGET_IDS.workOutcomeChart]: 5,
+      },
+    });
+  });
+});
+
 describe("useDashboardLayout reload persistence", () => {
   beforeEach(resetDashboardLayoutStorage);
 

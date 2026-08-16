@@ -1,9 +1,9 @@
 import {
   DashboardStatusPill,
   type DashboardStatusPillTone,
-} from "../../../components/ui/dashboard-status-pill";
-import type { DashboardLayoutDiagnostic } from "../hooks/dashboardLayoutSchema";
-import { getDashboardLayoutDiagnosticsMessages } from "../messages/dashboard-layout-diagnostics";
+} from "../../../../components/ui/dashboard-status-pill";
+import type { DashboardLayoutDiagnostic } from "../../hooks/dashboardLayoutSchema";
+import { getDashboardLayoutDiagnosticsMessages } from "../../messages/dashboard-layout-diagnostics";
 
 export interface DashboardLayoutDiagnosticsProps {
   diagnostics?: readonly DashboardLayoutDiagnostic[];

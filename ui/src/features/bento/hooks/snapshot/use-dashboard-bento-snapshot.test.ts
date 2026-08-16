@@ -1,8 +1,8 @@
-import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import {
   type DashboardWorkOutcomeStream,
   selectDashboardWorkOutcomeInput,
-} from "./use-dashboard-bento-snapshot";
+} from "../use-dashboard-bento-snapshot";
 
 const resolvedStream: DashboardWorkOutcomeStream = {
   identity: {

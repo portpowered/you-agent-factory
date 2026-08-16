@@ -1,5 +1,6 @@
 import type { AgentBentoLayoutItem } from "../components/agent-bento";
 import { isDuplicateCapableDashboardWidgetType } from "../lib/dashboard-widget-picker";
+import { getDashboardLayoutInstanceHighWaterMarks } from "./allocation/dashboardLayoutAllocation";
 import {
   createDashboardWidgetInstanceID,
   DASHBOARD_WIDGET_IDS,
@@ -17,6 +18,7 @@ const DASHBOARD_WIDGET_INSTANCE_ID_PATTERN = /^[a-z0-9-]+::[a-z0-9-]+$/;
 
 export interface DashboardLayoutSanitizationResult {
   diagnostics: DashboardLayoutDiagnostic[];
+  instanceHighWaterMarks: Record<string, number>;
   layout: AgentBentoLayoutItem[];
 }
 
@@ -189,6 +191,8 @@ export function repairDashboardLayout(
   );
   return {
     diagnostics: diagnostics.toArray(),
+    instanceHighWaterMarks:
+      getDashboardLayoutInstanceHighWaterMarks(repairedLayout),
     layout: repairedLayout,
   };
 }

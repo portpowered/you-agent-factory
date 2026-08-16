@@ -1,4 +1,5 @@
 import type { AgentBentoLayoutItem } from "../components/agent-bento";
+import { mergeDashboardLayoutInstanceHighWaterMarks } from "./allocation/dashboardLayoutAllocation";
 import {
   collectStoredLayoutDiagnostics,
   type DashboardLayoutSanitizationResult,
@@ -9,6 +10,7 @@ import {
 import {
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
   DASHBOARD_WIDGET_IDS,
+  type DashboardLayoutInstanceHighWaterMarks,
   DEFAULT_DASHBOARD_LAYOUT,
   getDefaultInlineAddWidgetLayout,
   getDefaultWidgetLayoutByType,
@@ -29,6 +31,7 @@ export function mergeDashboardLayout(
 export function sanitizeDashboardLayout(
   layout: AgentBentoLayoutItem[],
   baseLayout = DEFAULT_DASHBOARD_LAYOUT,
+  initialHighWaterMarks: DashboardLayoutInstanceHighWaterMarks = {},
 ): DashboardLayoutSanitizationResult {
   const normalizedBaseLayout = migrateDashboardLayout(baseLayout);
   const normalizedLayout = migrateDashboardLayout(layout);
@@ -36,10 +39,17 @@ export function sanitizeDashboardLayout(
     normalizedLayout,
     normalizedBaseLayout,
   );
-  return repairDashboardLayout(
+  const repaired = repairDashboardLayout(
     mergedLayout,
     collectStoredLayoutDiagnostics(layout),
   );
+  return {
+    ...repaired,
+    instanceHighWaterMarks: mergeDashboardLayoutInstanceHighWaterMarks(
+      initialHighWaterMarks,
+      repaired.instanceHighWaterMarks,
+    ),
+  };
 }
 
 function mergeNormalizedDashboardLayouts(
