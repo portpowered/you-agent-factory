@@ -49,6 +49,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
@@ -780,6 +781,7 @@ func provideHTTPRuntimeBinding(
 		factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
 			factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions}, opened.Logger,
 		)
+		recordingsAdapter := recordingshttp.NewAdapter(opened.Recordings)
 		var workerSessionsHandler *workersessionshttp.Handler
 		if opened.WorkerSessions != nil {
 			workerSessionsHandler = workersessionshttp.NewHandler(
@@ -789,7 +791,8 @@ func provideHTTPRuntimeBinding(
 				), opened.Logger,
 			)
 		}
-		return transporthttp.NewServer(
+		return transporthttp.NewServerWithRecordings(
+			recordingsAdapter,
 			sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
 			factoryDefinitionsHandler, opened.Logger, workerSessionsHandler,
 		).Handler(), nil

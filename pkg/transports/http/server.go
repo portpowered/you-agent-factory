@@ -16,6 +16,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -31,6 +32,7 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 type Server struct {
 	*factorySessionsAdapter
 	*workAdapter
+	recordingsHTTP         *recordingshttp.Adapter
 	factoryDefinitionsHTTP *factorydefinitionshttp.Handler
 	modelsHTTP             *modelshttp.Handler
 	providerSessionsHTTP   *providersessionshttp.Handler
@@ -54,12 +56,43 @@ func NewServer(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
+	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, workerSessions...)
+}
+
+// NewServerWithRecordings composes the generated route shell with the
+// Recordings-owned history and artifact adapter. The legacy constructor keeps
+// its compatibility fallback for standalone durable-execution bindings and
+// focused transport tests.
+func NewServerWithRecordings(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, workerSessions...)
+}
+
+func newServer(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	srv := &Server{
 		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
 		workAdapter:            &workAdapter{Adapter: workHTTP},
+		recordingsHTTP:         recordingsHTTP,
 		factoryDefinitionsHTTP: factoryDefinitionsHTTP,
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 	}

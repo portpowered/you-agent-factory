@@ -12,6 +12,7 @@ import (
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"sort"
 	"strings"
@@ -348,6 +349,37 @@ func NewRuntimeRoot(
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) recordings.Root {
+	return NewRuntimeRootWithHistoricalQuery(
+		targets,
+		writeFile,
+		publication,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		nil,
+		clocks...,
+	)
+}
+
+// NewRuntimeRootWithHistoricalQuery constructs the process-scoped Recordings
+// root with the Wire-selected durable historical reader.
+func NewRuntimeRootWithHistoricalQuery(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication interface {
+		Publish(context.Context, string, []byte) error
+		Read(context.Context, string) ([]byte, error)
+	},
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	historicalQuery historicalquery.Service,
+	clocks ...recordings.RecordingClock,
+) recordings.Root {
 	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
 	projection := NewProjectionService()
 	var writer recordings.RecordingSnapshotWriter
@@ -356,13 +388,14 @@ func NewRuntimeRoot(
 		writer = NewReplayRecordingSnapshotWriter(writeFile)
 		tickers = NewRecordingFlushTickerFactory()
 	}
-	service := NewServiceWithLifecycleEffectsAndLogger(
+	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger(
 		router,
 		projection,
 		targets,
 		writer,
 		tickers,
 		publication,
+		historicalQuery,
 		logger,
 		clocks...,
 	)

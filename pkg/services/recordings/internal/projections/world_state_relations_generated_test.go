@@ -9,10 +9,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 )
 
 func TestFactoryRelationsFromRequest_PreservesRequestNameAndContextResolution(t *testing.T) {
@@ -390,7 +390,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 
 func mustCanonicalProjectionEvent(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {
 	t.Helper()
-	canonicalEvent, err := factoryeventprojection.CanonicalFactoryEvent(event)
+	canonicalEvent, err := recordingshttp.CanonicalFactoryEvent(event)
 	if err != nil {
 		t.Fatalf("convert projection event %q: %v", event.Type, err)
 	}

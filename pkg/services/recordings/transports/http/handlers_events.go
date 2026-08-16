@@ -37,7 +37,32 @@ func (a *Adapter) GetEventsBySessionId(
 		StreamGenerationID: r.Header.Get(SessionEventStreamGenerationHeader),
 	}
 	if requestsJSONEventRecoveryProbe(r) {
+		if isDurableHistorySession(input.SessionID) {
+			a.probeHistoricalEventStreamRecovery(w, r, input)
+			return
+		}
 		a.probeEventStreamRecovery(w, input)
+		return
+	}
+	if isDurableHistorySession(input.SessionID) {
+		result, err := a.historicalRecording(r.Context(), input.SessionID)
+		if shouldEndOnRequestContext(r.Context(), err) {
+			return
+		}
+		if err != nil {
+			a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
+			return
+		}
+		start, err := historicalEventStart(result.Events, input.Params, input.StreamGenerationID)
+		if err != nil {
+			a.writeRootOrInternalError(w, recordingsHTTPOperationEventSubscribe, err)
+			return
+		}
+		streamGenerationID := input.StreamGenerationID
+		if strings.TrimSpace(streamGenerationID) == "" && len(result.Events) > 0 {
+			streamGenerationID = result.Events[0].Cursor.StreamGenerationID
+		}
+		a.streamFactoryEvents(w, r, historicalEventSubscription(result.Events[start:]), input.SessionID, streamGenerationID)
 		return
 	}
 	request, err := SubscribeRequestFromAPI(input)

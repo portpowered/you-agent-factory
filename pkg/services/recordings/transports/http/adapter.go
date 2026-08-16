@@ -71,3 +71,12 @@ func (a *Adapter) invokeReconstructWorldState(
 	}
 	return a.root.ReconstructWorldState(request)
 }
+
+func (a *Adapter) invokeQueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	if a == nil || a.root == nil {
+		return recordings.HistoricalRecordingQueryResult{}, errors.New("recordings service is required")
+	}
+	return a.root.QueryHistoricalRecording(request)
+}

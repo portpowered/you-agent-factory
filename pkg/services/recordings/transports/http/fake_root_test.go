@@ -11,11 +11,12 @@ import (
 type rootFake struct {
 	recordings.Service
 
-	streamGenerationID      string
-	subscribeFrom           func(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
-	queryRecordingStatus    func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
-	buildPortableArtifact   func(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error)
-	reconstructWorldState   func(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
+	streamGenerationID       string
+	subscribeFrom            func(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
+	queryRecordingStatus     func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	queryHistoricalRecording func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	buildPortableArtifact    func(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error)
+	reconstructWorldState    func(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
 }
 
 func (fake *rootFake) SubscribeFrom(
@@ -35,6 +36,18 @@ func (fake *rootFake) QueryRecordingStatus(
 		return fake.queryRecordingStatus(request)
 	}
 	return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (fake *rootFake) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	if fake.queryHistoricalRecording != nil {
+		return fake.queryHistoricalRecording(request)
+	}
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+		RecordingID: request.Recording.RecordingID,
+	}
 }
 
 func (fake *rootFake) BuildPortableArtifact(

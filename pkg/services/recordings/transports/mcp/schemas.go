@@ -80,6 +80,14 @@ func queryStatusInputSchema() map[string]any {
 	}, "recordingId")
 }
 
+func queryHistoryInputSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"recordingId":      stringProperty("Stable recording identifier."),
+		"artifact":         stringProperty("Opaque published artifact reference."),
+		"factorySessionId": stringProperty("Factory Session scope to validate against the recording."),
+	}, "recordingId", "artifact", "factorySessionId")
+}
+
 func appendEventInputSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"event": canonicalEventSchema(),
@@ -127,7 +135,7 @@ func appendRecordedEventResultSchema() map[string]any {
 func replayRecordingFactsSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"RecordingID": stringProperty("Stable recording identifier."),
-		"Scope":     canonicalEventScopeSchema(),
+		"Scope":       canonicalEventScopeSchema(),
 		"Events": map[string]any{
 			"type":        "array",
 			"description": "Detached canonical facts selected for replay.",
@@ -172,5 +180,45 @@ func portableArtifactSchema() map[string]any {
 func readPortableArtifactResultSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"Artifact": portableArtifactSchema(),
+	})
+}
+
+func historicalRecordingQueryResultSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"Recording": objectSchema(map[string]any{
+			"RecordingID": stringProperty("Stable recording identifier."),
+			"Artifact":    stringProperty("Opaque published artifact reference."),
+			"Scope":       canonicalEventScopeSchema(),
+		}),
+		"Status": recordingStatusFactsSchema(),
+		"Events": map[string]any{
+			"type":  "array",
+			"items": canonicalEventSchema(),
+		},
+		"WorldState": objectSchema(map[string]any{
+			"SchemaVersion": stringProperty("World-state read-model schema version."),
+			"Scope":         canonicalEventScopeSchema(),
+			"Through":       canonicalEventCursorSchema(),
+			"SelectedTick":  integerProperty("Selected Factory tick."),
+			"Payload":       stringProperty("Immutable JSON world-state payload."),
+		}),
+		"WorkstationRequests": objectSchema(map[string]any{
+			"workstationRequestsByDispatchId": map[string]any{
+				"type":                 "object",
+				"additionalProperties": true,
+				"description":          "Selected-tick workstation request views keyed by dispatch identifier.",
+			},
+		}),
+		"Dispatches": map[string]any{
+			"type": "array",
+			"items": objectSchema(map[string]any{
+				"ID":           stringProperty("Stable dispatch identifier."),
+				"Status":       stringProperty("Latest dispatch lifecycle status."),
+				"DispatchKind": stringProperty("Stable public dispatch kind."),
+				"TransitionID": stringProperty("Petri transition identifier when present."),
+				"FirstCursor":  canonicalEventCursorSchema(),
+				"LastCursor":   canonicalEventCursorSchema(),
+			}),
+		},
 	})
 }

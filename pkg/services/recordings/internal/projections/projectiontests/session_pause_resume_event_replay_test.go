@@ -6,8 +6,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 )
 
 // ReconstructFactoryWorldState keeps generated-event compatibility assertions
@@ -16,7 +16,7 @@ func ReconstructFactoryWorldState(
 	events []factoryapi.FactoryEvent,
 	selectedTick int,
 ) (interfaces.FactoryWorldState, error) {
-	return factoryeventprojection.ReconstructFactoryWorldState(projections.ReconstructCanonicalFactoryWorldState, events, selectedTick)
+	return recordingshttp.ReconstructFactoryWorldState(projections.ReconstructCanonicalFactoryWorldState, events, selectedTick)
 }
 
 func TestReconstructFactoryWorldState_PauseResumeHistoryReconstructsLifecycleControlStatus(t *testing.T) {

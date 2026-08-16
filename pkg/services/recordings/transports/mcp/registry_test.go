@@ -13,12 +13,13 @@ func TestDiscoverTools_ExposesExpectedRecordingsTools(t *testing.T) {
 	t.Parallel()
 
 	tools := mcprecording.DiscoverTools()
-	if len(tools) != 4 {
-		t.Fatalf("tool count = %d, want 4", len(tools))
+	if len(tools) != 5 {
+		t.Fatalf("tool count = %d, want 5", len(tools))
 	}
 
 	wantNames := []string{
 		mcprecording.ToolQueryStatus,
+		mcprecording.ToolQueryHistory,
 		mcprecording.ToolAppendEvent,
 		mcprecording.ToolLoadReplay,
 		mcprecording.ToolReadPortableArtifact,

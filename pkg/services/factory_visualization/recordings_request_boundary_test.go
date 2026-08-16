@@ -205,6 +205,15 @@ type recordingsRequestBoundaryStub struct {
 
 var _ recordings.Service = (*recordingsRequestBoundaryStub)(nil)
 
+func (stub *recordingsRequestBoundaryStub) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+		RecordingID: request.Recording.RecordingID,
+	}
+}
+
 func (stub *recordingsRequestBoundaryStub) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {

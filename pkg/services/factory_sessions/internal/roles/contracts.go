@@ -64,6 +64,7 @@ type OpenedApplicationRuntime struct {
 	FactoryDefinitions factorydefinitions.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    factorysessions.Service
+	Recordings         recordings.Service
 	LiveControl        factorysessions.LiveControlService
 	Work               work.Service
 	Models             models.Service

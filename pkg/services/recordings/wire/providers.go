@@ -13,6 +13,8 @@ import (
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
+	historicalquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -88,7 +90,11 @@ func NewRuntimeRoot(
 	if err != nil {
 		return nil, fmt.Errorf("construct Recordings publication: %w", err)
 	}
-	root := recordingsinternal.NewRuntimeRoot(
+	historicalQuery := historicalquerywire.NewService(
+		readFile,
+		recordingsinternal.NewProjectionService(),
+	)
+	root := recordingsinternal.NewRuntimeRootWithHistoricalQuery(
 		targets,
 		writeFile,
 		publication,
@@ -97,6 +103,7 @@ func NewRuntimeRoot(
 		decodeRuntimeConfig,
 		replayInputs,
 		logger,
+		historicalQuery,
 		clocks...,
 	)
 	if root == nil {
@@ -237,12 +244,14 @@ func NewServiceWithProjectionAndEffects(
 	if err != nil {
 		return nil, fmt.Errorf("construct Recordings publication: %w", err)
 	}
+	historicalQuery := historicalquerywire.NewService(readFile, projection)
 	return newServiceWithProjection(
 		ledger,
 		projection,
 		targets,
 		writeFile,
 		publication,
+		historicalQuery,
 		false,
 		clocks...,
 	)
@@ -259,6 +268,7 @@ func newServiceWithProjection(
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
 	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
 	requireWriter bool,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
@@ -277,13 +287,14 @@ func newServiceWithProjection(
 		writer = recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
 		tickers = recordingsinternal.NewRecordingFlushTickerFactory()
 	}
-	service := recordingsinternal.NewServiceWithLifecycleEffects(
+	service := recordingsinternal.NewServiceWithLifecycleEffectsAndHistoricalQuery(
 		ledger,
 		projection,
 		targets,
 		writer,
 		tickers,
 		publication,
+		historicalQuery,
 		clocks...,
 	)
 	if service == nil {

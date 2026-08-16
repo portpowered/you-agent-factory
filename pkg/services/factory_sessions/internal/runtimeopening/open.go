@@ -416,6 +416,7 @@ func openRuntime(
 	opened.lifecycle = runtimeLifecycle
 	opened.sidecars = runtimeSidecars
 	opened.application.Resources.Clock = clock
+	opened.application.Recordings = recordingsRoot
 	return opened, nil
 }
 

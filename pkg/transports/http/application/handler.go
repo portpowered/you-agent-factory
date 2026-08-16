@@ -12,6 +12,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -44,6 +45,7 @@ type Binding struct {
 	FactoryDefinitions factorydefinitions.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    factorysessions.Service
+	Recordings         recordings.Service
 	LiveControl        factorysessions.LiveControlService
 	Work               work.Service
 	Models             models.Service

@@ -1,6 +1,4 @@
-// Package workstationprojection maps the Recordings-owned workstation request
-// read model into generated OpenAPI response types.
-package workstationprojection
+package http
 
 import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -9,7 +7,9 @@ import (
 	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 )
 
-// Generated maps one canonical Recordings projection into its OpenAPI shape.
+// Generated maps the Recordings-owned workstation request projection into the
+// generated HTTP response shape. The mapping stays beside the owner adapter so
+// no aggregate transport package owns historical projection policy.
 func Generated(
 	projection recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice,
 ) factoryapi.FactoryWorldWorkstationRequestProjectionSlice {
@@ -108,17 +108,11 @@ func generatedRunner(
 		result.SelectionSource = &value
 	}
 	if view.Capabilities != nil {
-		baseline := make(
-			[]factoryapi.FactoryWorldRunnerBaselineCapability,
-			len(view.Capabilities.BaselineCapabilities),
-		)
+		baseline := make([]factoryapi.FactoryWorldRunnerBaselineCapability, len(view.Capabilities.BaselineCapabilities))
 		for i, capability := range view.Capabilities.BaselineCapabilities {
 			baseline[i] = factoryapi.FactoryWorldRunnerBaselineCapability(capability)
 		}
-		optional := make(
-			[]factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView,
-			len(view.Capabilities.OptionalCapabilities),
-		)
+		optional := make([]factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView, len(view.Capabilities.OptionalCapabilities))
 		for i, support := range view.Capabilities.OptionalCapabilities {
 			optional[i] = factoryapi.FactoryWorldRunnerOptionalCapabilitySupportView{
 				Capability: factoryapi.FactoryWorldRunnerOptionalCapability(support.Capability),

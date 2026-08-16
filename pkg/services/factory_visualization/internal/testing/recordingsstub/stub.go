@@ -23,6 +23,15 @@ var (
 	_ recordings.ProjectionService = (*Service)(nil)
 )
 
+func (stub *Service) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+		RecordingID: request.Recording.RecordingID,
+	}
+}
+
 func (stub *Service) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {

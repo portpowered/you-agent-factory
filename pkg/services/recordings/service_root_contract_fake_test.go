@@ -48,6 +48,15 @@ type peerRootServiceFake struct {
 
 var _ recordings.Service = (*peerRootServiceFake)(nil)
 
+func (fake *peerRootServiceFake) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+		RecordingID: request.Recording.RecordingID,
+	}
+}
+
 func (fake *peerRootServiceFake) Append(
 	request recordings.AppendRecordedEventRequest,
 ) (recordings.AppendRecordedEventResult, error) {

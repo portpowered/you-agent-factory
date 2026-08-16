@@ -325,8 +325,13 @@ type (
 // graph for historical replay.
 type RuntimeOpening = recordingcontracts.RuntimeOpening
 
-// Root is the complete process-scoped Recordings authority.
-type Root = recordingcontracts.Root
+// Root is the complete process-scoped Recordings authority. The historical
+// query capability is part of the same process root so Wire can bind the
+// public Service contract without introducing a second Recordings graph.
+type Root interface {
+	recordingcontracts.Root
+	HistoricalRecordingQuery
+}
 
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable
@@ -501,4 +506,5 @@ var (
 // Service is the singular cross-service Recordings authority.
 type Service interface {
 	recordingcontracts.Service
+	HistoricalRecordingQuery
 }
