@@ -204,7 +204,21 @@ async function verifyVisualGroupAfterReload({
     .waitFor({ state: "hidden" });
   await captureEvidence(page, "visual-group-after-reload-observer");
 
+  await page.setViewportSize({ height: 720, width: 768 });
+  await page.reload({ waitUntil: "networkidle" });
+  await waitForStoryRender(page);
+  const constrainedRegion = page.getByRole("region", {
+    exact: true,
+    name: GROUP_LABEL,
+  });
+  await constrainedRegion.waitFor({ state: "visible" });
+  await expectInlineGroupLabel(constrainedRegion);
+  await expectRegionPointerThrough(page, constrainedRegion);
+
   const editModeAfterReload = page.getByRole("button", { name: "Edit mode" });
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await page.reload({ waitUntil: "networkidle" });
+  await waitForStoryRender(page);
   await editModeAfterReload.waitFor({ state: "visible" });
   await editModeAfterReload.click();
   await toolbar.waitFor({ state: "visible" });
@@ -497,20 +511,8 @@ async function expectInlineGroupLabel(region) {
         backgroundColor: style.backgroundColor,
         boxShadow: style.boxShadow,
         className: element.className,
-        borderWidths: [
-          style.borderTopWidth,
-          style.borderRightWidth,
-          style.borderBottomWidth,
-          style.borderLeftWidth,
-        ],
-        wrapperBorderWidths: wrapperStyle
-          ? [
-              wrapperStyle.borderTopWidth,
-              wrapperStyle.borderRightWidth,
-              wrapperStyle.borderBottomWidth,
-              wrapperStyle.borderLeftWidth,
-            ]
-          : [],
+        hasBorder:
+          style.borderWidth !== "0px" || wrapperStyle?.borderWidth !== "0px",
         maxWidth: wrapperStyle?.maxWidth ?? "none",
         transform: style.transform,
       };
@@ -533,8 +535,7 @@ async function expectInlineGroupLabel(region) {
   }
 
   if (
-    presentation.borderWidths.some((width) => width !== "0px") ||
-    presentation.wrapperBorderWidths.some((width) => width !== "0px") ||
+    presentation.hasBorder ||
     presentation.backgroundColor !== "rgba(0, 0, 0, 0)" ||
     presentation.boxShadow !== "none" ||
     presentation.transform !== "none" ||
