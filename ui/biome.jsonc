@@ -8,11 +8,11 @@
   "files": {
     "includes": [
       "**",
-      "!.vitest-reports",
-      "!coverage",
-      "!dist",
+      "!**/.vitest-reports",
+      "!**/coverage",
+      "!**/dist",
       "!packages/client/src/generated/*.schema.json",
-      "!storybook-static"
+      "!**/storybook-static"
     ]
   },
   "formatter": {
