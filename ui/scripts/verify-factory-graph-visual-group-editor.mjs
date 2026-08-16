@@ -13,6 +13,7 @@ import {
 const TARGET_WORKSTATION_LABEL = "Plan";
 const TARGET_WORKSTATION_ID = "workstation:plan";
 const GROUP_LABEL = "Planning lane";
+const CUSTOM_GROUP_COLOR = "#a1b2c3";
 
 export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   page,
@@ -100,6 +101,11 @@ async function createAndEditVisualGroup(page, viewport) {
   await warningColorButton.click();
   await expectAttribute(warningColorButton, "aria-pressed", "true");
 
+  const customColorPicker = page.getByLabel("Custom group color");
+  await customColorPicker.fill(CUSTOM_GROUP_COLOR);
+  await expectInputValue(customColorPicker, CUSTOM_GROUP_COLOR);
+  await expectAttribute(warningColorButton, "aria-pressed", "false");
+
   const boundsBeforeResize = await readVisualGroupBounds(page);
   await resizeVisualGroup(page, "sw", { deltaX: -40, deltaY: 30 });
   const boundsAfterResize = await readVisualGroupBounds(page);
@@ -141,9 +147,9 @@ async function saveVisualGroup(page) {
   if (!persistedGroup) {
     throw new Error(`Saved factory did not contain the ${GROUP_LABEL} group.`);
   }
-  if (persistedGroup.color !== "warning") {
+  if (persistedGroup.color !== CUSTOM_GROUP_COLOR) {
     throw new Error(
-      `Expected the saved group color to be warning, found ${persistedGroup.color}.`,
+      `Expected the saved group color to be ${CUSTOM_GROUP_COLOR}, found ${persistedGroup.color}.`,
     );
   }
   if (!persistedGroup.nodeIds?.includes(TARGET_WORKSTATION_ID)) {
@@ -215,11 +221,13 @@ async function verifyVisualGroupAfterReload({
     page.getByRole("checkbox", { name: "Include Implement in this group" }),
     true,
   );
+  const customColorAfterReload = page.getByLabel("Custom group color");
+  await expectInputValue(customColorAfterReload, CUSTOM_GROUP_COLOR);
   const warningColorAfterReload = page.getByRole("button", {
     exact: true,
     name: "Use warning group color",
   });
-  await expectAttribute(warningColorAfterReload, "aria-pressed", "true");
+  await expectAttribute(warningColorAfterReload, "aria-pressed", "false");
   await expectEditorGraphInteractions(page);
   await captureEvidence(page, "visual-group-after-reload-editor");
 }
@@ -410,6 +418,15 @@ async function expectLabelField(page, value) {
   const actual = await labelField.inputValue();
   if (actual !== value) {
     throw new Error(`Expected group label "${value}" but found "${actual}".`);
+  }
+}
+
+async function expectInputValue(locator, expected) {
+  const actual = await locator.inputValue();
+  if (actual !== expected) {
+    throw new Error(
+      `Expected input value "${expected}" but found "${actual}".`,
+    );
   }
 }
 

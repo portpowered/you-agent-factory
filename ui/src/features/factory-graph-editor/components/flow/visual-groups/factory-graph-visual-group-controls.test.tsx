@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: visual-group control states share one focused rendering harness.
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -137,6 +138,100 @@ describe("FactoryGraphVisualGroupControls", () => {
       screen.getByRole("button", { name: "Use danger group color" }),
     );
     expect(onSetGroupColor).toHaveBeenLastCalledWith("danger");
+  });
+
+  it("normalizes custom colors without selecting a preset swatch", () => {
+    const onSetGroupColor = vi.fn();
+    const { rerender } = render(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        customColorLabel="Custom group color"
+        boundsError={null}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          color: "primary",
+          id: "group-1",
+          label: "Review",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={vi.fn()}
+        onSetGroupColor={onSetGroupColor}
+        onToggleNodeMembership={vi.fn()}
+        groupAriaLabel="Visual group Review"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    const customColorInput = screen.getByLabelText("Custom group color");
+    expect(customColorInput).toHaveValue("#808080");
+    expect(
+      screen.getByRole("button", { name: "Use primary group color" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.change(customColorInput, { target: { value: "#AbC123" } });
+    expect(onSetGroupColor).toHaveBeenCalledWith("#abc123");
+
+    rerender(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        customColorLabel="Custom group color"
+        boundsError={null}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          color: "#ABC123",
+          id: "group-1",
+          label: "Review",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeKindLabel={(kind) => kind}
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={vi.fn()}
+        onSetGroupColor={onSetGroupColor}
+        onToggleNodeMembership={vi.fn()}
+        groupAriaLabel="Visual group Review"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    expect(screen.getByLabelText("Custom group color")).toHaveValue("#abc123");
+    for (const token of [
+      "neutral",
+      "primary",
+      "info",
+      "success",
+      "warning",
+      "danger",
+    ]) {
+      expect(
+        screen.getByRole("button", { name: `Use ${token} group color` }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
   });
 
   it("invokes delete when the delete group action is activated", async () => {

@@ -1,5 +1,5 @@
 export { FactoryGraphReplaySurface, projectFactoryGraphReplayFlow, } from "./factory-graph-replay-surface.js";
-export { FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS, FactoryGraphGroupRegionLayer, factoryGraphGroupRegionColorStyle, isValidFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegions, resolveFactoryGraphGroupRegionColor, } from "./group-region-presentation.js";
+export { FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS, FactoryGraphGroupRegionLayer, factoryGraphGroupRegionColorStyle, isValidFactoryGraphGroupRegionBounds, normalizeFactoryGraphGroupRegionCustomColor, projectFactoryGraphGroupRegionBounds, projectFactoryGraphGroupRegions, resolveFactoryGraphGroupRegionColor, } from "./group-region-presentation.js";
 export { assertFactoryGraphHostParity, FACTORY_GRAPH_HOST_PARITY_HANDLE_CONTRACT, FACTORY_GRAPH_HOST_PARITY_HOSTS, projectFactoryGraphHostParity, } from "./host-parity.js";
 export { FACTORY_GRAPH_NODE_FAMILIES, FACTORY_GRAPH_NODE_FAMILY_ROLES, factoryGraphNodeFamilyDimensions, factoryGraphNodeFamilyForShellType, factoryGraphNodeFamilyRole, fitFactoryGraphNodeDimensions, resolveFactoryGraphNodeDimensions, resolveFactoryGraphNodeResizeDimensions, } from "./node-family.js";
 export { FactoryGraphNodeInteractionOverlayView, } from "./node-interaction-overlay.js";

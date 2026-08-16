@@ -102,6 +102,7 @@ export interface FactoryGraphEditorMessages {
   visualGroupColorOptionLabel: (
     token: "neutral" | "primary" | "info" | "success" | "warning" | "danger",
   ) => string;
+  visualGroupCustomColorLabel: string;
   visualGroupEmptyLabelError: string;
   visualGroupInvalidBoundsError: string;
   visualGroupLabelFieldLabel: string;
@@ -729,6 +730,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `${group.label?.trim() ? `Visual group ${group.label.trim()}` : `Visual group ${group.id}`} outline ${edge}`,
       visualGroupColorLabel: "Group color",
       visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
+      visualGroupCustomColorLabel: "Custom group color",
       visualGroupEmptyLabelError: "Enter a group label.",
       visualGroupInvalidBoundsError:
         "Group bounds contain non-finite geometry. Resize the group to correct them before saving.",
@@ -1184,6 +1186,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `${group.label?.trim() ? `视觉分组 ${group.label.trim()}` : `视觉分组 ${group.id}`} 边框 ${edge}`,
       visualGroupColorLabel: "分组颜色",
       visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
+      visualGroupCustomColorLabel: "自定义分组颜色",
       visualGroupEmptyLabelError: "请输入分组标签。",
       visualGroupInvalidBoundsError:
         "分组边界包含非有限几何。请在保存前调整分组大小以修正。",

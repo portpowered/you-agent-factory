@@ -43,10 +43,31 @@ const SUPPORTED_FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS = new Set([
     "success",
     "warning",
 ]);
+const FACTORY_GRAPH_GROUP_REGION_CUSTOM_COLOR_PATTERN = /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i;
+/** Normalize safe hex colors before using them in inline styles. */
+export function normalizeFactoryGraphGroupRegionCustomColor(color) {
+    const normalized = color?.trim().toLowerCase();
+    if (normalized === undefined ||
+        !FACTORY_GRAPH_GROUP_REGION_CUSTOM_COLOR_PATTERN.test(normalized)) {
+        return null;
+    }
+    if (normalized.length === 4) {
+        return `#${normalized
+            .slice(1)
+            .split("")
+            .map((digit) => `${digit}${digit}`)
+            .join("")}`;
+    }
+    return normalized;
+}
 /** Resolve legacy outline and unknown values without interpolating raw CSS. */
 export function resolveFactoryGraphGroupRegionColor(color) {
     if (color === "outline") {
         return "neutral";
+    }
+    const customColor = normalizeFactoryGraphGroupRegionCustomColor(color);
+    if (customColor !== null) {
+        return customColor;
     }
     return color !== undefined &&
         SUPPORTED_FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS.has(color)
@@ -54,7 +75,14 @@ export function resolveFactoryGraphGroupRegionColor(color) {
         : "neutral";
 }
 export function factoryGraphGroupRegionColorStyle(color) {
-    return FACTORY_GRAPH_GROUP_REGION_COLOR_STYLES[resolveFactoryGraphGroupRegionColor(color)];
+    const resolvedColor = resolveFactoryGraphGroupRegionColor(color);
+    if (resolvedColor.startsWith("#")) {
+        return {
+            accent: resolvedColor,
+            fill: `color-mix(in srgb, ${resolvedColor} 18%, transparent)`,
+        };
+    }
+    return FACTORY_GRAPH_GROUP_REGION_COLOR_STYLES[resolvedColor];
 }
 export function isValidFactoryGraphGroupRegionBounds(bounds) {
     return (Number.isFinite(bounds.height) &&

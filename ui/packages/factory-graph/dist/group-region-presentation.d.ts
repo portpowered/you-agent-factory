@@ -1,6 +1,6 @@
 export declare const FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS: readonly ["neutral", "primary", "info", "success", "warning", "danger", "outline"];
 export type FactoryGraphGroupRegionColorToken = (typeof FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS)[number];
-export type FactoryGraphGroupRegionResolvedColor = Exclude<FactoryGraphGroupRegionColorToken, "outline">;
+export type FactoryGraphGroupRegionResolvedColor = Exclude<FactoryGraphGroupRegionColorToken, "outline"> | `#${string}`;
 export interface FactoryGraphGroupRegionBounds {
     height: number;
     width: number;
@@ -30,6 +30,8 @@ export interface FactoryGraphGroupRegionColorStyle {
     accent: string;
     fill: string;
 }
+/** Normalize safe hex colors before using them in inline styles. */
+export declare function normalizeFactoryGraphGroupRegionCustomColor(color: string | undefined): `#${string}` | null;
 /** Resolve legacy outline and unknown values without interpolating raw CSS. */
 export declare function resolveFactoryGraphGroupRegionColor(color: string | undefined): FactoryGraphGroupRegionResolvedColor;
 export declare function factoryGraphGroupRegionColorStyle(color: string | undefined): FactoryGraphGroupRegionColorStyle;

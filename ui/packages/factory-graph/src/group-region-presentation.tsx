@@ -13,10 +13,9 @@ export const FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS = [
 export type FactoryGraphGroupRegionColorToken =
   (typeof FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS)[number];
 
-export type FactoryGraphGroupRegionResolvedColor = Exclude<
-  FactoryGraphGroupRegionColorToken,
-  "outline"
->;
+export type FactoryGraphGroupRegionResolvedColor =
+  | Exclude<FactoryGraphGroupRegionColorToken, "outline">
+  | `#${string}`;
 
 export interface FactoryGraphGroupRegionBounds {
   height: number;
@@ -90,12 +89,43 @@ const SUPPORTED_FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS = new Set<string>([
   "warning",
 ]);
 
+const FACTORY_GRAPH_GROUP_REGION_CUSTOM_COLOR_PATTERN =
+  /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i;
+
+/** Normalize safe hex colors before using them in inline styles. */
+export function normalizeFactoryGraphGroupRegionCustomColor(
+  color: string | undefined,
+): `#${string}` | null {
+  const normalized = color?.trim().toLowerCase();
+  if (
+    normalized === undefined ||
+    !FACTORY_GRAPH_GROUP_REGION_CUSTOM_COLOR_PATTERN.test(normalized)
+  ) {
+    return null;
+  }
+
+  if (normalized.length === 4) {
+    return `#${normalized
+      .slice(1)
+      .split("")
+      .map((digit) => `${digit}${digit}`)
+      .join("")}`;
+  }
+
+  return normalized as `#${string}`;
+}
+
 /** Resolve legacy outline and unknown values without interpolating raw CSS. */
 export function resolveFactoryGraphGroupRegionColor(
   color: string | undefined,
 ): FactoryGraphGroupRegionResolvedColor {
   if (color === "outline") {
     return "neutral";
+  }
+
+  const customColor = normalizeFactoryGraphGroupRegionCustomColor(color);
+  if (customColor !== null) {
+    return customColor;
   }
 
   return color !== undefined &&
@@ -107,9 +137,15 @@ export function resolveFactoryGraphGroupRegionColor(
 export function factoryGraphGroupRegionColorStyle(
   color: string | undefined,
 ): FactoryGraphGroupRegionColorStyle {
-  return FACTORY_GRAPH_GROUP_REGION_COLOR_STYLES[
-    resolveFactoryGraphGroupRegionColor(color)
-  ];
+  const resolvedColor = resolveFactoryGraphGroupRegionColor(color);
+  if (resolvedColor.startsWith("#")) {
+    return {
+      accent: resolvedColor,
+      fill: `color-mix(in srgb, ${resolvedColor} 18%, transparent)`,
+    };
+  }
+
+  return FACTORY_GRAPH_GROUP_REGION_COLOR_STYLES[resolvedColor];
 }
 
 export function isValidFactoryGraphGroupRegionBounds(

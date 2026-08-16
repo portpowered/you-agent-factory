@@ -11,12 +11,16 @@ import {
   type FactoryLayoutGroupColorToken,
   factoryLayoutGroupColorCssVariable,
   isApprovedFactoryLayoutGroupColor,
+  normalizeFactoryLayoutGroupCustomColor,
 } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
+
+const DEFAULT_FACTORY_LAYOUT_GROUP_CUSTOM_COLOR = "#808080";
 
 export function FactoryGraphVisualGroupControls({
   canvasNodeOptions,
   colorLabel,
   colorOptionLabel,
+  customColorLabel = colorLabel,
   deleteGroupLabel,
   fitGroupLabel,
   boundsError,
@@ -40,6 +44,7 @@ export function FactoryGraphVisualGroupControls({
   canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
   colorLabel: string;
   colorOptionLabel: (token: FactoryLayoutGroupColorToken) => string;
+  customColorLabel?: string;
   deleteGroupLabel: string;
   fitGroupLabel?: string;
   boundsError: string | null;
@@ -55,7 +60,7 @@ export function FactoryGraphVisualGroupControls({
   onDeleteGroup: () => void;
   onFitGroup?: () => void;
   onRenameGroup: (label: string) => void;
-  onSetGroupColor: (color: FactoryLayoutGroupColorToken) => void;
+  onSetGroupColor: (color: string) => void;
   onToggleNodeMembership: (nodeId: string, selected: boolean) => void;
   groupAriaLabel: string;
   staleMemberNodeIds: readonly string[];
@@ -63,9 +68,6 @@ export function FactoryGraphVisualGroupControls({
   const labelFieldId = useId();
   const trimmedLabel = group.label?.trim() ?? "";
   const labelError = trimmedLabel.length === 0 ? emptyLabelError : null;
-  const selectedColor = isApprovedFactoryLayoutGroupColor(group.color)
-    ? group.color
-    : "neutral";
 
   return (
     <section
@@ -114,34 +116,13 @@ export function FactoryGraphVisualGroupControls({
           </DashboardActionButton>
         ) : null}
       </div>
-      <fieldset className="mt-3 grid gap-2 border-0 p-0">
-        <legend className="text-sm text-on-surface-subtle">{colorLabel}</legend>
-        <div className="flex flex-wrap gap-2">
-          {FACTORY_LAYOUT_GROUP_COLOR_TOKENS.map((token) => (
-            <DashboardActionButton
-              aria-label={colorOptionLabel(token)}
-              aria-pressed={selectedColor === token}
-              className={cn(
-                "h-8 min-h-8 w-8 min-w-8 rounded-full border-2 p-0",
-                selectedColor === token
-                  ? "border-on-surface ring-2 ring-af-overlay-focus"
-                  : "border-outline",
-              )}
-              data-factory-visual-group-color={token}
-              iconOnly
-              key={token}
-              onClick={() => onSetGroupColor(token)}
-              style={{
-                backgroundColor: factoryLayoutGroupColorCssVariable(token),
-              }}
-              tone={selectedColor === token ? "secondary" : "outline"}
-              type="button"
-            >
-              <span className="sr-only">{colorOptionLabel(token)}</span>
-            </DashboardActionButton>
-          ))}
-        </div>
-      </fieldset>
+      <FactoryGraphVisualGroupColorControls
+        colorLabel={colorLabel}
+        colorOptionLabel={colorOptionLabel}
+        customColorLabel={customColorLabel}
+        groupColor={group.color}
+        onSetGroupColor={onSetGroupColor}
+      />
       <div className="mt-3">
         <DashboardActionButton
           className="w-full"
@@ -212,5 +193,83 @@ export function FactoryGraphVisualGroupControls({
         )}
       </fieldset>
     </section>
+  );
+}
+
+function FactoryGraphVisualGroupColorControls({
+  colorLabel,
+  colorOptionLabel,
+  customColorLabel,
+  groupColor,
+  onSetGroupColor,
+}: {
+  colorLabel: string;
+  colorOptionLabel: (token: FactoryLayoutGroupColorToken) => string;
+  customColorLabel: string;
+  groupColor: string | undefined;
+  onSetGroupColor: (color: string) => void;
+}) {
+  const customColorFieldId = useId();
+  const selectedCustomColor =
+    normalizeFactoryLayoutGroupCustomColor(groupColor);
+  const selectedPresetColor = isApprovedFactoryLayoutGroupColor(groupColor)
+    ? groupColor
+    : selectedCustomColor === null
+      ? "neutral"
+      : null;
+  const customColorValue =
+    selectedCustomColor ?? DEFAULT_FACTORY_LAYOUT_GROUP_CUSTOM_COLOR;
+
+  return (
+    <fieldset className="mt-3 grid gap-2 border-0 p-0">
+      <legend className="text-sm text-on-surface-subtle">{colorLabel}</legend>
+      <div className="flex flex-wrap gap-2">
+        {FACTORY_LAYOUT_GROUP_COLOR_TOKENS.map((token) => (
+          <DashboardActionButton
+            aria-label={colorOptionLabel(token)}
+            aria-pressed={selectedPresetColor === token}
+            className={cn(
+              "h-8 min-h-8 w-8 min-w-8 rounded-full border-2 p-0",
+              selectedPresetColor === token
+                ? "border-on-surface ring-2 ring-af-overlay-focus"
+                : "border-outline",
+            )}
+            data-factory-visual-group-color={token}
+            iconOnly
+            key={token}
+            onClick={() => onSetGroupColor(token)}
+            style={{
+              backgroundColor: factoryLayoutGroupColorCssVariable(token),
+            }}
+            tone={selectedPresetColor === token ? "secondary" : "outline"}
+            type="button"
+          >
+            <span className="sr-only">{colorOptionLabel(token)}</span>
+          </DashboardActionButton>
+        ))}
+      </div>
+      <label
+        className="flex items-center justify-between gap-2 text-sm text-on-surface"
+        htmlFor={customColorFieldId}
+      >
+        <span className="text-on-surface-subtle">{customColorLabel}</span>
+        <input
+          aria-label={customColorLabel}
+          className="h-10 w-16 cursor-pointer rounded-lg border border-outline bg-surface p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus-ring"
+          data-factory-visual-group-custom-color=""
+          id={customColorFieldId}
+          onChange={(event) => {
+            const normalizedColor = normalizeFactoryLayoutGroupCustomColor(
+              event.target.value,
+            );
+            if (normalizedColor !== null) {
+              onSetGroupColor(normalizedColor);
+            }
+          }}
+          type="color"
+          value={customColorValue}
+        />
+      </label>
+    </fieldset>
   );
 }

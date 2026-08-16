@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   FACTORY_GRAPH_GROUP_REGION_COLOR_TOKENS,
   factoryGraphGroupRegionColorStyle,
+  normalizeFactoryGraphGroupRegionCustomColor,
   projectFactoryGraphGroupRegionBounds,
   projectFactoryGraphGroupRegions,
   resolveFactoryGraphGroupRegionColor,
@@ -51,6 +52,20 @@ describe("Factory graph group region presentation", () => {
     ).toEqual(factoryGraphGroupRegionColorStyle("neutral"));
   });
 
+  it("normalizes custom colors and renders them without interpolating unsafe values", () => {
+    expect(normalizeFactoryGraphGroupRegionCustomColor("#ABC123")).toBe(
+      "#abc123",
+    );
+    expect(normalizeFactoryGraphGroupRegionCustomColor("#abc")).toBe("#aabbcc");
+    expect(
+      normalizeFactoryGraphGroupRegionCustomColor("url(javascript:alert(1))"),
+    ).toBeNull();
+    expect(factoryGraphGroupRegionColorStyle("#ABC123")).toEqual({
+      accent: "#abc123",
+      fill: "color-mix(in srgb, #abc123 18%, transparent)",
+    });
+  });
+
   it("projects labels and drops absent or invalid groups safely", () => {
     expect(
       projectFactoryGraphGroupRegions([
@@ -82,5 +97,28 @@ describe("Factory graph group region presentation", () => {
     expect(
       projectFactoryGraphGroupRegionBounds(group.bounds, [10, 20, 0.5]),
     ).toEqual({ height: 60, width: 120, x: 30, y: 50 });
+  });
+
+  it("restores a normalized custom color in the projected region", () => {
+    expect(
+      projectFactoryGraphGroupRegions([{ ...group, color: "#ABC123" }]),
+    ).toEqual([
+      {
+        bounds: group.bounds,
+        color: "#abc123",
+        id: "group-1",
+        label: "Review",
+      },
+    ]);
+    expect(
+      projectFactoryGraphGroupRegions([{ ...group, color: "not-a-color" }]),
+    ).toEqual([
+      {
+        bounds: group.bounds,
+        color: "neutral",
+        id: "group-1",
+        label: "Review",
+      },
+    ]);
   });
 });
