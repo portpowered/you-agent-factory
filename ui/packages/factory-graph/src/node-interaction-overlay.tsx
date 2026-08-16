@@ -37,7 +37,10 @@ export function FactoryGraphNodeInteractionOverlayView({
   if (badges.length === 0 && !overlay.connectionHint) return null;
 
   return (
-    <div className="grid min-w-0 gap-1" data-graph-interaction-overlay>
+    <div
+      className="pointer-events-none grid min-w-0 gap-1"
+      data-graph-interaction-overlay
+    >
       {badges.length > 0 ? (
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           {badges.map((badge) => (

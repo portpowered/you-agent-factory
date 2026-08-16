@@ -15,4 +15,9 @@ describe("factoryGraphWorkProgressMode", () => {
   ] as const)("maps count %d to %s presentation", (count, expected) => {
     expect(factoryGraphWorkProgressMode(count)).toBe(expected);
   });
+
+  it("supports a smaller item threshold for dense workstation nodes", () => {
+    expect(factoryGraphWorkProgressMode(2, 2)).toBe("items");
+    expect(factoryGraphWorkProgressMode(3, 2)).toBe("total");
+  });
 });

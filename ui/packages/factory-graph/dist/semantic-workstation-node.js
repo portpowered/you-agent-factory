@@ -1,12 +1,13 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-import { GraphSemanticIcon } from "./semantic-icon.js";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
-import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeVisualIconClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
+import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
 import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphWorkstationControlRoleLabel, factoryGraphWorkstationGuardLimitLabel, factoryGraphWorkstationGuardLimitValue, factoryGraphWorkstationGuardTargetLabel, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
-const VISIBLE_WORK_ITEM_LIMIT = 3;
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
+const WORKSTATION_WORK_ITEM_MODE_MAXIMUM = 2;
+const WORKSTATION_HEADER_CLASS_NAME = "flex min-w-0 w-full flex-wrap items-start justify-between gap-1 overflow-hidden";
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
 export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelected, }) {
     const presentation = workstationPresentation(data.workstationSemantics, data.locale);
@@ -40,22 +41,20 @@ export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelec
         }, zAxisIncompleteHints: data.zAxisIncompleteHints, children: data.summaryOnly ? (_jsx(Summary, { data: data, presentation: presentation, title: title, visualState: visualState })) : (_jsx(ActiveContent, { data: data, entries: entries, presentation: presentation, title: title, visualState: visualState })) }));
 }
 function Summary({ data, presentation, title, visualState, }) {
-    return (_jsxs("div", { className: "grid min-w-0 gap-1", "data-workstation-control-role": presentation.controlRole, "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [_jsx(GraphNodeButton, { "aria-label": data.onSelectWorkstation
-                    ? selectWorkstationLabel(title, data.locale)
-                    : undefined, "aria-pressed": data.onSelectWorkstation ? visualState.selection : undefined, className: "flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden", "data-selected-workstation": visualState.selection ? "true" : undefined, disabled: data.onSelectWorkstation === undefined, onClick: data.onSelectWorkstation
-                    ? (event) => {
-                        event.stopPropagation();
-                        data.onSelectWorkstation?.(data.workstation.node_id);
-                    }
-                    : undefined, title: title, children: _jsx(Header, { presentation: presentation, title: title, visualState: visualState }) }), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
-}
-function ActiveContent({ data, entries, presentation, title, visualState, }) {
-    const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
-    const header = (_jsx(Header, { presentation: presentation, title: title, visualState: visualState }));
-    return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": visualState.selection ? "true" : undefined, "data-workstation-control-role": presentation.controlRole, "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: "flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden", onClick: (event) => {
+    const header = _jsx(Header, { presentation: presentation, title: title });
+    return (_jsxs("div", { className: "grid min-w-0 gap-0.5", "data-workstation-control-role": presentation.controlRole, "data-workstation-density": "compact", "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: WORKSTATION_HEADER_CLASS_NAME, "data-selected-workstation": visualState.selection ? "true" : undefined, onClick: (event) => {
                     event.stopPropagation();
                     data.onSelectWorkstation?.(data.workstation.node_id);
-                }, title: title, children: header })) : (_jsx("div", { className: "flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden", title: title, children: header })), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation }), _jsx("ul", { className: "mt-2 grid min-w-0 list-none content-start gap-1 p-0", children: visible.map(({ execution, workItem }) => (_jsx(WorkItem, { data: data, execution: execution, workItem: workItem }, `${execution.dispatch_id}:${workItem.work_id}`))) }), _jsx(Overflow, { total: entries.length, visible: visible.length, locale: data.locale })] }));
+                }, title: title, children: header })) : (_jsx("div", { className: WORKSTATION_HEADER_CLASS_NAME, title: title, children: header })), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
+}
+function ActiveContent({ data, entries, presentation, title, visualState, }) {
+    const progressMode = factoryGraphWorkProgressMode(entries.length, WORKSTATION_WORK_ITEM_MODE_MAXIMUM);
+    const visible = progressMode === "items" ? entries : [];
+    const header = _jsx(Header, { presentation: presentation, title: title });
+    return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": visualState.selection ? "true" : undefined, "data-workstation-control-role": presentation.controlRole, "data-workstation-density": "compact", "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: WORKSTATION_HEADER_CLASS_NAME, onClick: (event) => {
+                    event.stopPropagation();
+                    data.onSelectWorkstation?.(data.workstation.node_id);
+                }, title: title, children: header })) : (_jsx("div", { className: WORKSTATION_HEADER_CLASS_NAME, title: title, children: header })), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation }), _jsx("ul", { className: "mt-1 grid min-w-0 list-none content-start gap-0.5 p-0", children: visible.map(({ execution, workItem }) => (_jsx(WorkItem, { data: data, execution: execution, workItem: workItem }, `${execution.dispatch_id}:${workItem.work_id}`))) }), _jsx(Overflow, { total: entries.length, visible: visible.length, locale: data.locale })] }));
 }
 function WorkItem({ data, execution, workItem, }) {
     const selected = data.selectedWorkID === workItem.work_id;
@@ -72,25 +71,20 @@ function WorkItem({ data, execution, workItem, }) {
                 });
             }, title: `${label} - ${durationTitle}`, children: content })) : (_jsx("div", { className: className, "data-selected": selected ? "true" : undefined, title: `${label} - ${durationTitle}`, children: content })) }));
 }
-function Header({ compact = false, presentation, title, visualState, }) {
+function Header({ compact = false, presentation, title, }) {
     return (_jsxs(_Fragment, { children: [_jsx("span", { className: compact
-                    ? "flex min-h-4 items-center"
-                    : "flex min-h-5 shrink-0 items-center", "data-factory-entity-semantic-icon": true, "data-workstation-semantic-icon": true, title: presentation.label, children: _jsx(GraphSemanticIcon, { className: classNames("h-4 w-4", factoryGraphNodeVisualIconClassName(visualState, presentation.className)), kind: presentation.iconKind, label: presentation.label }) }), _jsx("span", { className: compact
                     ? factoryGraphNodeWrappedTextClassName("block font-mono text-[0.74rem] font-bold leading-tight text-on-surface")
-                    : workstationTitleClassName(title), "data-factory-entity-title": true, "data-workstation-title": true, children: title }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"), "data-workstation-runtime-label": true, title: presentation.label, children: presentation.label }), presentation.schedulingLabel ? (_jsx("span", { className: factoryGraphNodeWrappedTextClassName("shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"), "data-workstation-scheduling-label": true, title: presentation.schedulingLabel, children: presentation.schedulingLabel })) : null] }));
+                    : workstationTitleClassName(title), "data-factory-entity-title": true, "data-workstation-title": true, children: title }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"), "data-workstation-runtime-label": true, title: presentation.label, children: presentation.label }), presentation.schedulingLabel ? (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle", "data-workstation-scheduling-label": true, title: presentation.schedulingLabel, children: presentation.schedulingLabel })) : null] }));
 }
 export function FactoryGraphWorkstationGuardedControlCard({ locale, presentation, }) {
     const control = presentation.guardedControl;
     if (presentation.controlRole !== "LOOP_BREAKER" || !control)
         return null;
     const roleLabel = factoryGraphWorkstationControlRoleLabel(presentation.controlRole, locale);
-    return (_jsxs("fieldset", { "aria-label": roleLabel, className: "grid min-w-0 gap-1 rounded-md border border-af-warning-border bg-warning-container px-2 py-1.5 text-[0.68rem] text-on-warning-container", "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, "data-workstation-control-role": presentation.controlRole, children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName("font-semibold uppercase tracking-[0.06em]"), "data-workstation-control-role-label": true, children: roleLabel }), _jsxs("dl", { className: "m-0 grid min-w-0 gap-0.5", children: [_jsxs("div", { className: "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1", children: [_jsx("dt", { className: "shrink-0", children: factoryGraphWorkstationGuardTargetLabel(locale) }), _jsx("dd", { className: factoryGraphNodeWrappedTextClassName("m-0 font-mono"), "data-workstation-guard-target": true, title: control.targetWorkstation, children: control.targetWorkstation })] }), _jsxs("div", { className: "grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1", children: [_jsx("dt", { className: "shrink-0", children: factoryGraphWorkstationGuardLimitLabel(locale) }), _jsx("dd", { className: factoryGraphNodeWrappedTextClassName("m-0 font-mono"), "data-workstation-guard-limit": true, title: factoryGraphWorkstationGuardLimitValue(control), children: factoryGraphWorkstationGuardLimitValue(control) })] })] })] }));
+    return (_jsxs("fieldset", { "aria-label": roleLabel, className: "grid min-w-0 max-w-full gap-0.5 overflow-hidden rounded-md border border-af-warning-border bg-warning-container px-1.5 py-1 text-[0.68rem] leading-tight text-on-warning-container", "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, "data-workstation-control-role": presentation.controlRole, children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName("font-semibold uppercase leading-none tracking-[0.06em]"), "data-workstation-control-role-label": true, children: roleLabel }), _jsxs("dl", { className: "m-0 grid min-w-0 gap-0.5", children: [_jsxs("div", { className: "flex min-w-0 items-center gap-1", "data-workstation-guard-row": "target", children: [_jsx("dt", { className: "shrink-0 whitespace-nowrap", children: factoryGraphWorkstationGuardTargetLabel(locale) }), _jsx("dd", { className: "m-0 min-w-0 truncate font-mono leading-tight", "data-workstation-guard-target": true, title: control.targetWorkstation, children: control.targetWorkstation })] }), _jsxs("div", { className: "flex min-w-0 items-center gap-1", "data-workstation-guard-row": "limit", children: [_jsx("dt", { className: "shrink-0 whitespace-nowrap", children: factoryGraphWorkstationGuardLimitLabel(locale) }), _jsx("dd", { className: "m-0 min-w-0 truncate font-mono leading-tight", "data-workstation-guard-limit": true, title: factoryGraphWorkstationGuardLimitValue(control), children: factoryGraphWorkstationGuardLimitValue(control) })] })] })] }));
 }
 function Overflow({ locale, total, visible, }) {
-    const remaining = Math.max(0, total - visible);
-    if (!remaining)
+    if (total <= visible)
         return null;
-    if (remaining > 10)
-        return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-2 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
-    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-2 flex min-h-7 gap-1 rounded-lg px-2", "data-workstation-work-progress": "dots", dotClassName: "h-1.5 w-1.5", dotCount: remaining, dotDataAttribute: "data-workstation-work-progress-dot", kind: "dots", suffix: _jsxs("span", { className: "ml-1 font-mono text-[0.68rem] font-bold text-success", children: ["+", remaining] }) }));
+    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
 }

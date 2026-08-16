@@ -68,14 +68,17 @@ function renderWorkstationNode(
   );
 }
 
-describe("Factory workstation node semantics", () => {
+describe("Factory workstation authored semantics", () => {
   it("renders authored runtime and scheduling semantics as visible node metadata", () => {
     const repeater = renderWorkstationNode({
       workstationSemantics: repeaterAgentSemantics,
     });
 
-    expect(repeater.getByText("Agent workstation")).toBeTruthy();
-    expect(repeater.getByText("Repeater schedule")).toBeTruthy();
+    expect(repeater.getByText("Agent")).toBeTruthy();
+    expect(repeater.getByText("Repeater")).toBeTruthy();
+    expect(
+      repeater.container.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
     expect(
       repeater.container.querySelector(
         '[data-workstation-scheduling-behavior="REPEATER"]',
@@ -87,7 +90,9 @@ describe("Factory workstation node semantics", () => {
       ),
     ).toBeTruthy();
   });
+});
 
+describe("Factory workstation guard card semantics", () => {
   it("renders a guarded logical move card without making it selectable", () => {
     const loopBreaker = renderWorkstationNode({
       workstationSemantics: loopBreakerSemantics,
@@ -101,8 +106,31 @@ describe("Factory workstation node semantics", () => {
       "VISIT_COUNT",
     );
     expect(loopBreaker.getByText("Loop breaker")).toBeTruthy();
+    expect(loopBreaker.getByText("Logical move")).toBeTruthy();
     expect(loopBreaker.getByText("review")).toBeTruthy();
     expect(loopBreaker.getByText("3")).toBeTruthy();
+    expect(
+      loopBreaker.container.querySelectorAll("[data-workstation-guard-row]"),
+    ).toHaveLength(2);
+    const targetRow = loopBreaker.container.querySelector(
+      '[data-workstation-guard-row="target"]',
+    );
+    const limitRow = loopBreaker.container.querySelector(
+      '[data-workstation-guard-row="limit"]',
+    );
+    expect(targetRow?.textContent).toContain("Target workstation");
+    expect(targetRow?.textContent).toContain("review");
+    expect(limitRow?.textContent).toContain("Visit limit");
+    expect(limitRow?.textContent).toContain("3");
+    expect(
+      targetRow?.querySelector("[data-workstation-guard-target]")?.className,
+    ).toContain("truncate");
+    expect(
+      targetRow?.querySelector("[data-workstation-guard-target]")?.className,
+    ).not.toContain("break-words");
+    expect(
+      limitRow?.querySelector("[data-workstation-guard-limit]")?.className,
+    ).toContain("truncate");
     expect(loopBreaker.container.querySelector("button")).toBeNull();
 
     const shell = loopBreaker.container.querySelector(
@@ -156,7 +184,9 @@ describe("Factory workstation node semantics", () => {
     expect(failedLoopBreaker.getByText("3")).toBeTruthy();
     expect(failedLoopBreaker.container.querySelector("button")).toBeNull();
   });
+});
 
+describe("Factory workstation fallback and localization semantics", () => {
   it("keeps missing semantic metadata neutral instead of inferring exhaustion", () => {
     const unknown = renderWorkstationNode();
 
@@ -173,8 +203,83 @@ describe("Factory workstation node semantics", () => {
     expect(
       unknown.container.querySelector("[data-workstation-guard-card]"),
     ).toBeNull();
+    expect(unknown.getByText("Default scheduler")).toBeTruthy();
     expect(unknown.container.textContent?.toLowerCase()).not.toContain(
       "exhaustion",
     );
+  });
+
+  it("localizes concise workstation semantics in zh-CN", () => {
+    const localized = renderWorkstationNode({
+      locale: "zh-CN",
+      workstationSemantics: repeaterAgentSemantics,
+    });
+
+    expect(localized.getByText("代理")).toBeTruthy();
+    expect(localized.getByText("重复器")).toBeTruthy();
+    expect(
+      localized.container.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
+
+    const defaultScheduler = renderWorkstationNode({ locale: "zh-CN" });
+    expect(defaultScheduler.getByText("默认调度器")).toBeTruthy();
+  });
+});
+
+describe("Factory workstation density", () => {
+  it("keeps the default scheduler single-line beside a guarded card", () => {
+    const unknownScheduling = renderWorkstationNode({
+      workstationSemantics: {
+        ...loopBreakerSemantics,
+        schedulingBehavior: "UNKNOWN",
+      },
+    });
+
+    const scheduler = unknownScheduling.container.querySelector(
+      "[data-workstation-scheduling-label]",
+    );
+    expect(scheduler?.textContent).toContain("Default scheduler");
+    expect(scheduler?.className).toContain("truncate");
+    expect(scheduler?.className).toContain("whitespace-nowrap");
+  });
+
+  it("does not put a disabled summary button over read-only graph nodes", () => {
+    const readOnlySummary = renderWorkstationNode({ summaryOnly: true });
+
+    expect(readOnlySummary.container.querySelector("button")).toBeNull();
+    expect(
+      readOnlySummary.container.querySelector(
+        "[data-workstation-scheduling-label]",
+      )?.textContent,
+    ).toContain("Default scheduler");
+  });
+
+  it("keeps the interaction overlay and workstation selection control usable", () => {
+    const onSelectWorkstation = vi.fn();
+    const workstationNode = renderWorkstationNode({
+      interactionOverlay: {
+        badges: [{ label: "Connection ready", tone: "info" }],
+        connectionHint: "Choose a connection point",
+      },
+      onSelectWorkstation,
+      workstationSemantics: loopBreakerSemantics,
+    });
+
+    expect(
+      workstationNode.container.querySelector(
+        "[data-graph-interaction-overlay]",
+      ),
+    ).toBeTruthy();
+    expect(
+      workstationNode.container.querySelector("[data-workstation-guard-card]"),
+    ).toBeTruthy();
+    const button = workstationNode.getByRole("button", {
+      name: "Select Draft workstation",
+    });
+    expect(button.getAttribute("type")).toBe("button");
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.click();
+    expect(onSelectWorkstation).toHaveBeenCalledWith("workstation:draft");
   });
 });

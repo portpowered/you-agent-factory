@@ -120,6 +120,19 @@ function snapshotWithActiveWorkItemCount(count: number): DashboardSnapshot {
   return snapshot;
 }
 
+function snapshotWithDefaultSchedulerLoopBreaker(): DashboardSnapshot {
+  const snapshot = structuredClone(mixedFactorySemanticsDashboardSnapshot);
+  const poller = snapshot.factory?.workstations?.find(
+    (workstation) => workstation.id === "poller",
+  );
+
+  if (poller) {
+    poller.behavior = undefined;
+  }
+
+  return snapshot;
+}
+
 function snapshotWithLongWorkstationName(): DashboardSnapshot {
   const snapshot = snapshotWithActiveWorkItemCount(0);
   const longWorkstationName =
@@ -278,7 +291,7 @@ function workstationShell(button: HTMLElement): HTMLElement {
 
 function expectFixedWorkstationDimensions(node: HTMLElement): void {
   expect(node.getAttribute("style")).toContain("width: 156px");
-  expect(node.getAttribute("style")).toContain("height: 196px");
+  expect(node.getAttribute("style")).toContain("height: 156px");
 }
 
 function expectFittedWorkstationDimensions(node: HTMLElement): void {
@@ -290,7 +303,22 @@ function expectFittedWorkstationDimensions(node: HTMLElement): void {
     style.match(/height: ([\d.]+)px/u)?.[1] ?? "0",
   );
   expect(width).toBeGreaterThan(156);
-  expect(height).toBeGreaterThanOrEqual(196);
+  expect(height).toBeGreaterThanOrEqual(156);
+}
+
+function expectWorkstationContentContained(node: HTMLElement): void {
+  const nodeBounds = node.getBoundingClientRect();
+  const renderedDescendants = Array.from(node.querySelectorAll("*"));
+
+  for (const element of renderedDescendants) {
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) continue;
+
+    expect(bounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
+    expect(bounds.right).toBeLessThanOrEqual(nodeBounds.right);
+    expect(bounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
+    expect(bounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
+  }
 }
 
 function expectNoImplementationLabels(canvasElement: HTMLElement): void {
@@ -524,13 +552,14 @@ export const SemanticWorkflow = {
     const reviewButton = await canvas.findByRole("button", {
       name: "Select Review workstation",
     });
+    await expect(within(reviewButton).getByText("Inference")).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Inference workstation" }),
-    ).toBeVisible();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).not.toBeInTheDocument();
     await expect(
       within(
         await canvas.findByRole("button", { name: "Select Plan workstation" }),
-      ).getByRole("img", { name: "Inference workstation" }),
+      ).getByText("Inference"),
     ).toBeVisible();
     await expect(
       reviewButton
@@ -607,9 +636,10 @@ export const WorkstationIdle = {
     const reviewNode = workstationNode(reviewButton);
 
     expectFixedWorkstationDimensions(reviewNode);
+    await expect(within(reviewButton).getByText("Inference")).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Inference workstation" }),
-    ).toBeVisible();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).not.toBeInTheDocument();
     await expect(
       reviewNode.querySelector("[data-active='true']"),
     ).not.toBeInTheDocument();
@@ -656,9 +686,9 @@ export const WorkstationOneActive = {
   },
 };
 
-export const WorkstationFiveActive = {
+export const WorkstationTwoActive = {
   render: () => (
-    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(5)} />
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(2)} />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -672,15 +702,75 @@ export const WorkstationFiveActive = {
       await canvas.findByRole("button", { name: /Active Story 1/ }),
     ).toBeVisible();
     await expect(
-      await canvas.findByRole("button", { name: /Active Story 3/ }),
+      await canvas.findByRole("button", { name: /Active Story 2/ }),
     ).toBeVisible();
-    await expect(
-      canvas.queryByRole("button", { name: /Active Story 4/ }),
-    ).not.toBeInTheDocument();
+    expect(reviewNode.querySelector("[data-workstation-work-progress]")).toBe(
+      null,
+    );
+    expectWorkstationContentContained(reviewNode);
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const WorkstationThreeActive = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(3)} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const reviewButton = await canvas.findByRole("button", {
+      name: "Select Review workstation",
+    });
+    const reviewNode = workstationNode(reviewButton);
+    const count = within(reviewNode).getByRole("status", {
+      name: "3 active items",
+    });
+    const title = reviewNode.querySelector<HTMLElement>(
+      "[data-workstation-title]",
+    );
+
+    expectFixedWorkstationDimensions(reviewNode);
+    await expect(count).toBeVisible();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expect(
+      reviewNode.querySelector('[data-workstation-work-progress="dots"]'),
+    ).toBe(null);
+    expect(
+      reviewNode.querySelector('[data-workstation-work-progress="numeric"]'),
+    ).toBe(count);
+    const countFontSize = await count.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    const titleFontSize = await title?.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    expect(countFontSize).toBeGreaterThanOrEqual(titleFontSize ?? 0);
+    expectWorkstationContentContained(reviewNode);
+    await reviewButton.focus();
+    await expect(reviewButton).toHaveAttribute("aria-pressed", "false");
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const WorkstationFiveActive = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(5)} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const reviewButton = await canvas.findByRole("button", {
+      name: "Select Review workstation",
+    });
+    const reviewNode = workstationNode(reviewButton);
+
+    expectFixedWorkstationDimensions(reviewNode);
     await expect(
       within(reviewNode).getByLabelText("5 active items"),
     ).toBeVisible();
-    await expect(within(reviewNode).getByText("+2")).toBeVisible();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expectWorkstationContentContained(reviewNode);
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -698,12 +788,9 @@ export const HighOccupancyWorkstation = {
 
     expectFixedWorkstationDimensions(reviewNode);
     await expect(await canvas.findByLabelText("6 active items")).toBeVisible();
-    await expect(
-      await canvas.findByRole("button", { name: /Active Story 1/ }),
-    ).toBeVisible();
-    await expect(
-      canvas.queryByRole("button", { name: /Active Story 4/ }),
-    ).not.toBeInTheDocument();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expectWorkstationContentContained(reviewNode);
     await userEvent.click(reviewButton);
     await expect(reviewButton).toHaveAttribute("aria-pressed", "true");
   },
@@ -789,21 +876,38 @@ export const WorkstationKindParity = {
       const button = await canvas.findByRole("button", {
         name: expectation.buttonName,
       });
-      const icon = within(button).getByRole("img", {
-        name: expectation.metadata.label,
-      });
 
       expectFixedWorkstationDimensions(workstationNode(button));
-      await expect(icon).toBeVisible();
-      await expect(icon).toHaveAttribute(
-        "data-graph-semantic-icon",
-        expectation.metadata.iconKind,
-      );
+      await expect(within(button).getByText("Inference")).toBeVisible();
+      await expect(
+        button.querySelector("[data-workstation-semantic-icon]"),
+      ).not.toBeInTheDocument();
       await expect(
         within(button).getByText(expectation.workstationName),
       ).toBeVisible();
-      expect(button.textContent).toContain(expectation.metadata.label);
     }
+
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Review workstation",
+        }),
+      ).getByText("Repeater"),
+    ).toBeVisible();
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Nightly Cron workstation",
+        }),
+      ).getByText("Cron"),
+    ).toBeVisible();
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Linear Poller workstation",
+        }),
+      ).getByText("Poller"),
+    ).toBeVisible();
 
     const cronExpectation = workstationKindParityExpectations.find(
       (expectation) => expectation.nodeID === "nightly-cron",
@@ -821,28 +925,36 @@ export const WorkstationKindParity = {
 
 export const MixedWorkstationSemantics = {
   render: () => (
-    <CurrentActivityStory snapshot={mixedFactorySemanticsDashboardSnapshot} />
+    <CurrentActivityStory
+      snapshot={snapshotWithDefaultSchedulerLoopBreaker()}
+    />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const expectedNodes = [
-      ["Classifier route", "Classifier workstation"],
-      ["Logical route", "Logical move workstation"],
+      ["Classifier route", "Classifier"],
       [
         "Inference workstation with a deliberately long authored title",
-        "Inference workstation",
+        "Inference",
       ],
-      ["Agent worker", "Agent workstation"],
-      ["execute-goal", "Repeater schedule"],
-      ["Script cron", "Cron schedule"],
-      ["Poller source", "Poller schedule"],
+      ["Logical route", "Logical move"],
+      ["Agent worker", "Agent"],
+      ["execute-goal", "Repeater"],
+      ["Script cron", "Cron"],
+      ["Poller source", "Default scheduler"],
     ] as const;
 
     for (const [name, semanticLabel] of expectedNodes) {
       const button = await canvas.findByRole("button", {
         name: `Select ${name} workstation`,
       });
-      await expect(within(button).getByText(semanticLabel)).toBeVisible();
+      const semanticLabelElement = Array.from(
+        button.querySelectorAll(
+          "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+        ),
+      ).find((element) => element.textContent?.trim() === semanticLabel);
+      await expect(semanticLabelElement).toBeInTheDocument();
+      await expect(semanticLabelElement).toBeVisible();
     }
 
     const loopTitle = await canvas.findByText("goal-loop-breaker", {
@@ -854,7 +966,31 @@ export const MixedWorkstationSemantics = {
     await expect(loopScope.getByText("Loop breaker")).toBeVisible();
     await expect(loopScope.getByText("execute-goal")).toBeVisible();
     await expect(loopScope.getByText("3")).toBeVisible();
-    await expect(loopScope.getByText("Logical move workstation")).toBeVisible();
+    await expect(loopScope.getByText("Logical move")).toBeVisible();
+
+    const guardCard = loopNode?.querySelector("[data-workstation-guard-card]");
+    expect(guardCard).toBeTruthy();
+    const guardRows = loopNode?.querySelectorAll(
+      "[data-workstation-guard-row]",
+    );
+    expect(guardRows).toHaveLength(2);
+    expectWorkstationContentContained(loopNode as HTMLElement);
+
+    for (const value of loopNode?.querySelectorAll<HTMLElement>(
+      "[data-workstation-guard-target], [data-workstation-guard-limit]",
+    ) ?? []) {
+      const style = getComputedStyle(value);
+      expect(style.overflow).toBe("hidden");
+      expect(style.textOverflow).toBe("ellipsis");
+      expect(style.whiteSpace).toBe("nowrap");
+    }
+
+    const defaultScheduler = await canvas.findByText("Default scheduler", {
+      exact: true,
+    });
+    const defaultSchedulerNode = defaultScheduler.closest(".react-flow__node");
+    expect(defaultSchedulerNode).toBeTruthy();
+    expectWorkstationContentContained(defaultSchedulerNode as HTMLElement);
   },
 };
 
@@ -1215,7 +1351,9 @@ export const NarrowViewport = {
 export const TouchPanePanning = {
   render: () => (
     <div style={{ maxWidth: "100%", width: "360px" }}>
-      <CurrentActivityStory snapshot={mixedFactorySemanticsDashboardSnapshot} />
+      <CurrentActivityStory
+        snapshot={snapshotWithDefaultSchedulerLoopBreaker()}
+      />
     </div>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {

@@ -364,14 +364,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const reviewWorkstationButton = screen.getByRole("button", {
       name: "Select Review workstation",
     });
+    expect(within(reviewWorkstationButton).getByText("Agent")).toBeTruthy();
+    expect(within(reviewWorkstationButton).getByText("Repeater")).toBeTruthy();
     expect(
-      within(reviewWorkstationButton)
-        .getByRole("img", { name: "Agent workstation" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("workstation");
-    expect(
-      within(reviewWorkstationButton).getByText("Repeater schedule"),
-    ).toBeTruthy();
+      reviewWorkstationButton.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
     expect(
       reviewWorkstationButton
         .closest("[data-current-activity-node-type='workstation']")
@@ -577,12 +574,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       name: "Select Review workstation",
     });
     expect(reviewButton).toBeTruthy();
+    expect(within(reviewButton).getByText("Inference")).toBeTruthy();
+    expect(within(reviewButton).getByText("Repeater")).toBeTruthy();
     expect(
-      within(reviewButton)
-        .getByRole("img", { name: "Inference workstation" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("processing");
-    expect(within(reviewButton).getByText("Repeater schedule")).toBeTruthy();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
     expect(
       reviewButton
         .closest("[data-current-activity-node-type='workstation']")

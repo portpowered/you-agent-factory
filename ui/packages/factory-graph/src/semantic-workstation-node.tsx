@@ -2,7 +2,6 @@ import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
-import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
@@ -11,7 +10,6 @@ import {
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
-  factoryGraphNodeVisualIconClassName,
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
@@ -34,6 +32,7 @@ import {
   factoryGraphWorkstationTitleClassName as workstationTitleClassName,
 } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import type { FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
 
 export type {
@@ -79,7 +78,9 @@ export type FactoryGraphWorkstationNode = Node<
   "workstation"
 >;
 
-const VISIBLE_WORK_ITEM_LIMIT = 3;
+const WORKSTATION_WORK_ITEM_MODE_MAXIMUM = 2;
+const WORKSTATION_HEADER_CLASS_NAME =
+  "flex min-w-0 w-full flex-wrap items-start justify-between gap-1 overflow-hidden";
 
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
 export function FactoryGraphWorkstationNodeView({
@@ -170,41 +171,35 @@ function Summary({
   title: string;
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
+  const header = <Header presentation={presentation} title={title} />;
+
   return (
     <div
-      className="grid min-w-0 gap-1"
+      className="grid min-w-0 gap-0.5"
       data-workstation-control-role={presentation.controlRole}
+      data-workstation-density="compact"
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
     >
-      <GraphNodeButton
-        aria-label={
-          data.onSelectWorkstation
-            ? selectWorkstationLabel(title, data.locale)
-            : undefined
-        }
-        aria-pressed={
-          data.onSelectWorkstation ? visualState.selection : undefined
-        }
-        className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
-        data-selected-workstation={visualState.selection ? "true" : undefined}
-        disabled={data.onSelectWorkstation === undefined}
-        onClick={
-          data.onSelectWorkstation
-            ? (event) => {
-                event.stopPropagation();
-                data.onSelectWorkstation?.(data.workstation.node_id);
-              }
-            : undefined
-        }
-        title={title}
-      >
-        <Header
-          presentation={presentation}
+      {data.onSelectWorkstation ? (
+        <GraphNodeButton
+          aria-label={selectWorkstationLabel(title, data.locale)}
+          aria-pressed={visualState.selection}
+          className={WORKSTATION_HEADER_CLASS_NAME}
+          data-selected-workstation={visualState.selection ? "true" : undefined}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onSelectWorkstation?.(data.workstation.node_id);
+          }}
           title={title}
-          visualState={visualState}
-        />
-      </GraphNodeButton>
+        >
+          {header}
+        </GraphNodeButton>
+      ) : (
+        <div className={WORKSTATION_HEADER_CLASS_NAME} title={title}>
+          {header}
+        </div>
+      )}
       <FactoryGraphWorkstationGuardedControlCard
         locale={data.locale}
         presentation={presentation}
@@ -229,14 +224,12 @@ function ActiveContent({
   title: string;
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
-  const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
-  const header = (
-    <Header
-      presentation={presentation}
-      title={title}
-      visualState={visualState}
-    />
+  const progressMode = factoryGraphWorkProgressMode(
+    entries.length,
+    WORKSTATION_WORK_ITEM_MODE_MAXIMUM,
   );
+  const visible = progressMode === "items" ? entries : [];
+  const header = <Header presentation={presentation} title={title} />;
   return (
     <div
       className="grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]"
@@ -244,6 +237,7 @@ function ActiveContent({
       data-selected-work={data.selectedWorkID !== null ? "true" : undefined}
       data-selected-workstation={visualState.selection ? "true" : undefined}
       data-workstation-control-role={presentation.controlRole}
+      data-workstation-density="compact"
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
     >
@@ -251,7 +245,7 @@ function ActiveContent({
         <GraphNodeButton
           aria-label={selectWorkstationLabel(title, data.locale)}
           aria-pressed={visualState.selection}
-          className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
+          className={WORKSTATION_HEADER_CLASS_NAME}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorkstation?.(data.workstation.node_id);
@@ -261,10 +255,7 @@ function ActiveContent({
           {header}
         </GraphNodeButton>
       ) : (
-        <div
-          className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
-          title={title}
-        >
+        <div className={WORKSTATION_HEADER_CLASS_NAME} title={title}>
           {header}
         </div>
       )}
@@ -272,7 +263,7 @@ function ActiveContent({
         locale={data.locale}
         presentation={presentation}
       />
-      <ul className="mt-2 grid min-w-0 list-none content-start gap-1 p-0">
+      <ul className="mt-1 grid min-w-0 list-none content-start gap-0.5 p-0">
         {visible.map(({ execution, workItem }) => (
           <WorkItem
             data={data}
@@ -360,37 +351,13 @@ function Header({
   compact = false,
   presentation,
   title,
-  visualState,
 }: {
   compact?: boolean;
   presentation: WorkstationPresentation;
   title: string;
-  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   return (
     <>
-      <span
-        className={
-          compact
-            ? "flex min-h-4 items-center"
-            : "flex min-h-5 shrink-0 items-center"
-        }
-        data-factory-entity-semantic-icon
-        data-workstation-semantic-icon
-        title={presentation.label}
-      >
-        <GraphSemanticIcon
-          className={classNames(
-            "h-4 w-4",
-            factoryGraphNodeVisualIconClassName(
-              visualState,
-              presentation.className,
-            ),
-          )}
-          kind={presentation.iconKind}
-          label={presentation.label}
-        />
-      </span>
       <span
         className={
           compact
@@ -415,9 +382,7 @@ function Header({
       </span>
       {presentation.schedulingLabel ? (
         <span
-          className={factoryGraphNodeWrappedTextClassName(
-            "shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle",
-          )}
+          className="min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"
           data-workstation-scheduling-label
           title={presentation.schedulingLabel}
         >
@@ -445,38 +410,44 @@ export function FactoryGraphWorkstationGuardedControlCard({
   return (
     <fieldset
       aria-label={roleLabel}
-      className="grid min-w-0 gap-1 rounded-md border border-af-warning-border bg-warning-container px-2 py-1.5 text-[0.68rem] text-on-warning-container"
+      className="grid min-w-0 max-w-full gap-0.5 overflow-hidden rounded-md border border-af-warning-border bg-warning-container px-1.5 py-1 text-[0.68rem] leading-tight text-on-warning-container"
       data-workstation-guard-card
       data-workstation-guard-type={control.guardType}
       data-workstation-control-role={presentation.controlRole}
     >
       <span
         className={factoryGraphNodeWrappedTextClassName(
-          "font-semibold uppercase tracking-[0.06em]",
+          "font-semibold uppercase leading-none tracking-[0.06em]",
         )}
         data-workstation-control-role-label
       >
         {roleLabel}
       </span>
       <dl className="m-0 grid min-w-0 gap-0.5">
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1">
-          <dt className="shrink-0">
+        <div
+          className="flex min-w-0 items-center gap-1"
+          data-workstation-guard-row="target"
+        >
+          <dt className="shrink-0 whitespace-nowrap">
             {factoryGraphWorkstationGuardTargetLabel(locale)}
           </dt>
           <dd
-            className={factoryGraphNodeWrappedTextClassName("m-0 font-mono")}
+            className="m-0 min-w-0 truncate font-mono leading-tight"
             data-workstation-guard-target
             title={control.targetWorkstation}
           >
             {control.targetWorkstation}
           </dd>
         </div>
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1">
-          <dt className="shrink-0">
+        <div
+          className="flex min-w-0 items-center gap-1"
+          data-workstation-guard-row="limit"
+        >
+          <dt className="shrink-0 whitespace-nowrap">
             {factoryGraphWorkstationGuardLimitLabel(locale)}
           </dt>
           <dd
-            className={factoryGraphNodeWrappedTextClassName("m-0 font-mono")}
+            className="m-0 min-w-0 truncate font-mono leading-tight"
             data-workstation-guard-limit
             title={factoryGraphWorkstationGuardLimitValue(control)}
           >
@@ -497,32 +468,14 @@ function Overflow({
   total: number;
   visible: number;
 }) {
-  const remaining = Math.max(0, total - visible);
-  if (!remaining) return null;
-  if (remaining > 10)
-    return (
-      <FactoryGraphWorkProgressMarker
-        ariaLabel={activeItemsLabel(total, locale)}
-        className="mt-2 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]"
-        count={total}
-        data-workstation-work-progress="numeric"
-        kind="numeric"
-      />
-    );
+  if (total <= visible) return null;
   return (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemsLabel(total, locale)}
-      className="mt-2 flex min-h-7 gap-1 rounded-lg px-2"
-      data-workstation-work-progress="dots"
-      dotClassName="h-1.5 w-1.5"
-      dotCount={remaining}
-      dotDataAttribute="data-workstation-work-progress-dot"
-      kind="dots"
-      suffix={
-        <span className="ml-1 font-mono text-[0.68rem] font-bold text-success">
-          +{remaining}
-        </span>
-      }
+      className="mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base"
+      count={total}
+      data-workstation-work-progress="numeric"
+      kind="numeric"
     />
   );
 }

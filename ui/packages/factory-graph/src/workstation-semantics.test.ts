@@ -147,7 +147,7 @@ describe("Factory workstation axis resolution", () => {
     expect(factoryGraphWorkstationPresentation(semantics, "en")).toMatchObject({
       controlRole: "HUMAN_APPROVAL",
       iconKind: "constraint",
-      label: "Human approval workstation",
+      label: "Human approval",
     });
   });
 
@@ -214,19 +214,43 @@ describe("Factory workstation presentation", () => {
       borderClassName: "border-double",
       iconKind: "processing",
       runtimeType: WorkstationType.INFERENCE_RUN,
-      schedulingLabel: "Repeater schedule",
+      schedulingLabel: "Repeater",
       schedulingBehavior: WorkstationKind.REPEATER,
     });
 
     expect(factoryGraphWorkstationPresentation()).toMatchObject({
       iconKind: "workstation",
-      label: "Unknown workstation semantics",
+      label: "Unknown",
       runtimeType: "UNKNOWN",
       schedulingBehavior: "UNKNOWN",
+      schedulingLabel: "Default scheduler",
     });
     expect(factoryGraphWorkstationPresentation()).not.toHaveProperty(
       "semanticKind",
     );
+  });
+
+  test("uses concise localized runtime and scheduler labels", () => {
+    const presentation = factoryGraphWorkstationPresentation(
+      {
+        controlRole: "NONE",
+        runtimeRole: "LOGICAL_MOVE",
+        runtimeType: WorkstationType.LOGICAL_MOVE,
+        schedulingBehavior: WorkstationKind.REPEATER,
+      },
+      "zh-CN",
+    );
+
+    expect(presentation).toMatchObject({
+      label: "逻辑移动",
+      schedulingLabel: "重复器",
+    });
+    expect(
+      factoryGraphWorkstationPresentation(undefined, "zh-CN"),
+    ).toMatchObject({
+      label: "未知",
+      schedulingLabel: "默认调度器",
+    });
   });
 });
 

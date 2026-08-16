@@ -290,11 +290,11 @@ describe("factory graph editor edge labels", () => {
       reviewNode.querySelector(
         "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='workstation']",
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       reviewNode.querySelector("[data-factory-entity-title]")?.textContent,
     ).toContain("review");
-    expect(reviewNode.textContent).toContain("Unknown workstation semantics");
+    expect(reviewNode.textContent).toContain("Default scheduler");
     expect(reviewNode.textContent).toContain("Pending");
 
     expect(
@@ -399,8 +399,8 @@ describe("factory graph editor edge labels", () => {
     );
 
     expect(workstationNode).not.toBeNull();
-    expect(workstationNode?.textContent).toContain("Agent workstation");
-    expect(workstationNode?.textContent).toContain("Repeater schedule");
+    expect(workstationNode?.textContent).toContain("Agent");
+    expect(workstationNode?.textContent).toContain("Repeater");
   });
 
   it("keeps inline labels hidden by default while preserving accessible edge names", async () => {

@@ -6,7 +6,7 @@ export function FactoryGraphNodeInteractionOverlayView({ overlay, }) {
     const badges = overlay.badges ?? [];
     if (badges.length === 0 && !overlay.connectionHint)
         return null;
-    return (_jsxs("div", { className: "grid min-w-0 gap-1", "data-graph-interaction-overlay": true, children: [badges.length > 0 ? (_jsx("div", { className: "flex min-w-0 flex-wrap items-center gap-1", children: badges.map((badge) => (_jsx("span", { className: badgeClassName(badge.tone), "data-graph-interaction-badge": true, role: "status", children: badge.label }, `${badge.tone ?? "neutral"}-${String(badge.label)}`))) })) : null, overlay.connectionHint ? (_jsx("p", { className: factoryGraphNodeWrappedTextClassName("m-0 text-[0.65rem] leading-5 text-on-surface-subtle"), "data-graph-interaction-hint": true, children: overlay.connectionHint })) : null] }));
+    return (_jsxs("div", { className: "pointer-events-none grid min-w-0 gap-1", "data-graph-interaction-overlay": true, children: [badges.length > 0 ? (_jsx("div", { className: "flex min-w-0 flex-wrap items-center gap-1", children: badges.map((badge) => (_jsx("span", { className: badgeClassName(badge.tone), "data-graph-interaction-badge": true, role: "status", children: badge.label }, `${badge.tone ?? "neutral"}-${String(badge.label)}`))) })) : null, overlay.connectionHint ? (_jsx("p", { className: factoryGraphNodeWrappedTextClassName("m-0 text-[0.65rem] leading-5 text-on-surface-subtle"), "data-graph-interaction-hint": true, children: overlay.connectionHint })) : null] }));
 }
 function badgeClassName(tone = "neutral") {
     const toneClassName = {

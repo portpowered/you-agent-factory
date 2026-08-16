@@ -618,6 +618,73 @@ const logicalMoveComparisonTopology: FactoryGraphTopology = {
   ],
 };
 
+const loopBreakerGeometryWorkstation: FactoryWorkstation = {
+  ...logicalMoveWorkstation,
+  guards: [
+    {
+      maxVisits: 3,
+      type: "VISIT_COUNT",
+      workstation: "execute-goal",
+    },
+  ],
+  name: "goal-loop-breaker",
+};
+
+const LOOP_BREAKER_GEOMETRY_TOPOLOGY: FactoryGraphTopology = {
+  edges: [],
+  nodes: [
+    {
+      id: "workstation:goal-loop-breaker",
+      key: { kind: "workstation", name: "goal-loop-breaker" },
+      kind: "workstation",
+      label: "goal-loop-breaker",
+    },
+  ],
+};
+
+const LOOP_BREAKER_GEOMETRY_LAYOUT = {
+  nodes: [
+    {
+      id: "workstation:goal-loop-breaker",
+      position: { x: 0, y: 0 },
+      size: { height: 280, width: 240 },
+    },
+  ],
+  schemaVersion: 1,
+};
+
+function LoopBreakerGeometryStory() {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: true,
+    onConnectionAnchorClick: () => undefined,
+    pendingAdditionEdgeIds: new Set<string>(),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: LOOP_BREAKER_GEOMETRY_TOPOLOGY,
+    layout: LOOP_BREAKER_GEOMETRY_LAYOUT,
+    workstations: [loopBreakerGeometryWorkstation],
+  });
+
+  return (
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-outline bg-surface-container-high p-4">
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
 function ProgressOutcomeRoutesStory(input: {
   factoryDefinition?: CanonicalFactoryDefinition;
   topology?: FactoryGraphTopology;
@@ -1120,6 +1187,46 @@ export const ConnectionAnchors = {
 
     await userEvent.click(failureSource);
     await expect(failureSource).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const LoopBreakerDensityWithInteractionOverlay = {
+  render: () => <LoopBreakerGeometryStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const loopTitle = await canvas.findByText("goal-loop-breaker", {
+      exact: true,
+    });
+    const loopNode = loopTitle.closest(".react-flow__node");
+
+    if (!(loopNode instanceof HTMLElement)) {
+      throw new Error("Expected the loop-breaker workstation React Flow node.");
+    }
+
+    await expect(within(loopNode).getByText("Loop breaker")).toBeVisible();
+    await expect(within(loopNode).getByText("Default scheduler")).toBeVisible();
+    await expect(within(loopNode).getByText("execute-goal")).toBeVisible();
+    await expect(within(loopNode).getByText("3")).toBeVisible();
+    await expect(
+      loopNode.querySelector("[data-graph-interaction-overlay]"),
+    ).toBeVisible();
+    expect(
+      loopNode.querySelectorAll("[data-node-handle-badge]").length,
+    ).toBeGreaterThan(0);
+    expect(
+      loopNode.querySelectorAll("[data-workstation-guard-row]"),
+    ).toHaveLength(2);
+
+    const nodeBounds = loopNode.getBoundingClientRect();
+    for (const descendant of loopNode.querySelectorAll("*")) {
+      const bounds = descendant.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) continue;
+
+      expect(bounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
+      expect(bounds.right).toBeLessThanOrEqual(nodeBounds.right);
+      expect(bounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
+      expect(bounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
+    }
   },
 };
 

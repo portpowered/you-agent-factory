@@ -1,17 +1,26 @@
 import { chromium } from "playwright";
 
+import { assertWorkstationDescendantsContained } from "./factory-graph-browser-geometry.mjs";
+
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
-const storyURL = new URL(
-  "/iframe.html?id=agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning&viewMode=story",
-  storybookURL,
-).toString();
+const touchStoryID =
+  "agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning";
+const denseWorkStoryID =
+  "agent-factory-dashboard-react-flow-current-activity-card--workstation-three-active";
 
-async function openStory(browser, contextOptions) {
+function storyURL(storyID) {
+  return new URL(
+    `/iframe.html?id=${storyID}&viewMode=story`,
+    storybookURL,
+  ).toString();
+}
+
+async function openStory(browser, contextOptions, storyID = touchStoryID) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
-  await page.goto(storyURL, {
+  await page.goto(storyURL(storyID), {
     timeout: 60_000,
     waitUntil: "domcontentloaded",
   });
@@ -54,38 +63,7 @@ async function viewportTransform(page) {
     .evaluate((viewport) => viewport.style.transform);
 }
 
-async function verifyMixedWorkstationSemantics(page) {
-  const viewportTransformValue = await viewportTransform(page);
-  if (!/scale\([^)]*\)/.test(viewportTransformValue)) {
-    throw new Error(
-      `Factory graph did not settle at fit-to-view zoom: ${viewportTransformValue}`,
-    );
-  }
-
-  const expectedWorkstations = [
-    ["Classifier route", "Classifier workstation"],
-    ["Logical route", "Logical move workstation"],
-    [
-      "Inference workstation with a deliberately long authored title",
-      "Inference workstation",
-    ],
-    ["Agent worker", "Agent workstation"],
-    ["execute-goal", "Repeater schedule"],
-    ["Script cron", "Cron schedule"],
-    ["Poller source", "Poller schedule"],
-  ];
-
-  for (const [name, semanticLabel] of expectedWorkstations) {
-    const button = page.getByRole("button", {
-      name: `Select ${name} workstation`,
-    });
-    await button.waitFor({ state: "visible" });
-    await button.getByText(semanticLabel, { exact: true }).waitFor({
-      state: "visible",
-    });
-  }
-
-  const guardCard = page.locator("[data-workstation-guard-card]");
+async function verifyLoopBreakerCard(guardCard) {
   await guardCard.waitFor({ state: "visible" });
   const guardText = await guardCard.textContent();
   if (
@@ -95,6 +73,211 @@ async function verifyMixedWorkstationSemantics(page) {
   ) {
     throw new Error(
       `Guarded workstation card did not expose its authored target and limit: ${guardText ?? "<empty>"}`,
+    );
+  }
+
+  const guardRows = guardCard.locator("[data-workstation-guard-row]");
+  if ((await guardRows.count()) !== 2) {
+    throw new Error(
+      `Expected loop-breaker details to have two single-line rows, found ${await guardRows.count()}`,
+    );
+  }
+
+  const guardNode = guardCard.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  const selectionControl = guardNode.getByRole("button", {
+    name: "Select goal-loop-breaker workstation",
+  });
+  await selectionControl.waitFor({ state: "visible" });
+  await selectionControl.hover();
+
+  const guardNodeBounds = await guardNode.boundingBox();
+  const guardCardBounds = await guardCard.boundingBox();
+  if (!guardNodeBounds || !guardCardBounds) {
+    throw new Error("Could not measure the loop-breaker node and guard card");
+  }
+  if (
+    guardCardBounds.x < guardNodeBounds.x ||
+    guardCardBounds.y < guardNodeBounds.y ||
+    guardCardBounds.x + guardCardBounds.width >
+      guardNodeBounds.x + guardNodeBounds.width ||
+    guardCardBounds.y + guardCardBounds.height >
+      guardNodeBounds.y + guardNodeBounds.height
+  ) {
+    throw new Error(
+      `Loop-breaker card escaped its workstation node: card=${JSON.stringify(guardCardBounds)} node=${JSON.stringify(guardNodeBounds)}`,
+    );
+  }
+
+  const guardRowStyles = await guardCard
+    .locator("[data-workstation-guard-target], [data-workstation-guard-limit]")
+    .evaluateAll((values) =>
+      values.map((value) => {
+        const style = getComputedStyle(value);
+        return {
+          overflow: style.overflow,
+          textOverflow: style.textOverflow,
+          whiteSpace: style.whiteSpace,
+        };
+      }),
+    );
+  if (
+    guardRowStyles.some(
+      (style) =>
+        style.overflow !== "hidden" ||
+        style.textOverflow !== "ellipsis" ||
+        style.whiteSpace !== "nowrap",
+    )
+  ) {
+    throw new Error(
+      `Loop-breaker detail values are not single-line truncating fields: ${JSON.stringify(guardRowStyles)}`,
+    );
+  }
+
+  const loopNodeStyle = await guardNode.getAttribute("style");
+  if (!loopNodeStyle?.includes("height: 156px")) {
+    throw new Error(
+      `Expected the default loop-breaker workstation height to be 156px: ${loopNodeStyle ?? "<missing>"}`,
+    );
+  }
+
+  return guardNode;
+}
+
+async function verifyMixedWorkstationSemantics(page) {
+  const viewportTransformValue = await viewportTransform(page);
+  if (!/scale\([^)]*\)/.test(viewportTransformValue)) {
+    throw new Error(
+      `Factory graph did not settle at fit-to-view zoom: ${viewportTransformValue}`,
+    );
+  }
+
+  const expectedWorkstations = [
+    ["Classifier route", "Classifier"],
+    ["Logical route", "Logical move"],
+    [
+      "Inference workstation with a deliberately long authored title",
+      "Inference",
+    ],
+    ["Agent worker", "Agent"],
+    ["execute-goal", "Repeater"],
+    ["Script cron", "Cron"],
+    ["Poller source", "Default scheduler"],
+  ];
+
+  for (const [name, semanticLabel] of expectedWorkstations) {
+    const button = page.getByRole("button", {
+      name: `Select ${name} workstation`,
+    });
+    await button.waitFor({ state: "visible" });
+    await button
+      .locator(
+        "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+        { hasText: semanticLabel },
+      )
+      .first()
+      .waitFor({
+        state: "visible",
+      });
+  }
+
+  const guardCard = page.locator("[data-workstation-guard-card]");
+  const guardNode = await verifyLoopBreakerCard(guardCard);
+
+  await assertWorkstationDescendantsContained(guardNode, "Loop-breaker");
+
+  const defaultScheduler = page.locator("[data-workstation-scheduling-label]", {
+    hasText: "Default scheduler",
+  });
+  await defaultScheduler.waitFor({ state: "visible" });
+  const defaultSchedulerNode = defaultScheduler.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  await assertWorkstationDescendantsContained(
+    defaultSchedulerNode,
+    "Default scheduler",
+  );
+}
+
+async function verifyDenseActiveWork(page) {
+  const reviewButton = page.getByRole("button", {
+    name: "Select Review workstation",
+  });
+  await reviewButton.waitFor({ state: "visible" });
+  const reviewNode = reviewButton.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  const count = reviewNode.getByRole("status", { name: "3 active items" });
+  await count.waitFor({ state: "visible" });
+
+  const details = await reviewNode.evaluate((node) => {
+    const nodeBounds = node.getBoundingClientRect();
+    const title = node.querySelector("[data-workstation-title]");
+    const marker = node.querySelector(
+      '[data-workstation-work-progress="numeric"]',
+    );
+    const content = Array.from(node.querySelectorAll("*")).filter((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0;
+    });
+    const escaped = content
+      .map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          selector:
+            element
+              .getAttributeNames()
+              .find((name) => name.startsWith("data-")) ?? element.tagName,
+          left: bounds.left < nodeBounds.left,
+          right: bounds.right > nodeBounds.right,
+          top: bounds.top < nodeBounds.top,
+          bottom: bounds.bottom > nodeBounds.bottom,
+        };
+      })
+      .filter(
+        (bounds) => bounds.left || bounds.right || bounds.top || bounds.bottom,
+      );
+
+    return {
+      countFontSize: marker
+        ? Number.parseFloat(getComputedStyle(marker).fontSize)
+        : Number.NaN,
+      titleFontSize: title
+        ? Number.parseFloat(getComputedStyle(title).fontSize)
+        : Number.NaN,
+      escaped,
+      hasLabels: Boolean(
+        node.querySelector(
+          "[data-active-work-label], [data-active-work-duration]",
+        ),
+      ),
+    };
+  });
+
+  if (details.hasLabels) {
+    throw new Error(
+      "Dense workstation rendered active-work names or durations",
+    );
+  }
+  if (details.escaped.length > 0) {
+    throw new Error(
+      `Dense workstation content escaped its node: ${JSON.stringify(details.escaped)}`,
+    );
+  }
+  if (
+    !Number.isFinite(details.countFontSize) ||
+    !Number.isFinite(details.titleFontSize) ||
+    details.countFontSize < details.titleFontSize
+  ) {
+    throw new Error(
+      `Dense workstation count was not title-sized: ${JSON.stringify(details)}`,
+    );
+  }
+  await reviewButton.focus();
+  if ((await reviewButton.getAttribute("aria-pressed")) !== "false") {
+    throw new Error(
+      "Dense workstation selection control was not keyboard-ready",
     );
   }
 }
@@ -244,6 +427,18 @@ async function verifyDesktopPaneSelectionDrag(browser) {
 
 const browser = await chromium.launch({ headless: true });
 try {
+  const denseStory = await openStory(
+    browser,
+    {
+      viewport: { height: 900, width: 1280 },
+    },
+    denseWorkStoryID,
+  );
+  try {
+    await verifyDenseActiveWork(denseStory.page);
+  } finally {
+    await denseStory.context.close();
+  }
   await verifyTouchGestures(browser);
   await verifyDesktopPaneSelectionDrag(browser);
   console.log(

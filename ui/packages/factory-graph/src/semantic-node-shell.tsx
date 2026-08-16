@@ -97,6 +97,8 @@ export function FactoryGraphNodeShell({
         aria-invalid={visualState.validation === "error" || undefined}
         className={classNames(
           "shadow-none",
+          nodeType === "workstation" &&
+            "[&>div:last-of-type]:gap-0.5 [&>div:last-of-type]:py-2",
           className,
           interactionOverlayClassName(interactionOverlay?.draftStatus),
           factoryGraphNodeVisualStateClassName(visualState),

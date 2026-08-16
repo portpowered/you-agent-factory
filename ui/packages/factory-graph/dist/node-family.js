@@ -65,10 +65,10 @@ const FACTORY_GRAPH_NODE_FAMILY_ROLE_DEFINITIONS = {
     },
     workstation: {
         allowedAxes: { height: true, width: true },
-        defaultDimensions: { height: 196, width: 156 },
+        defaultDimensions: { height: 156, width: 156 },
         family: "workstation",
         maximumDimensions: { height: 720, width: 520 },
-        minimumDimensions: { height: 196, width: 156 },
+        minimumDimensions: { height: 156, width: 156 },
         shape: "workstation",
     },
 };

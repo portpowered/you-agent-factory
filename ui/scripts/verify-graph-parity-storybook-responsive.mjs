@@ -15,9 +15,16 @@ export async function verifyObserverGraphParity(
   await expectVisible(reviewWorkstation, "Observer review workstation");
   await expectVisible(activeWorkItem, "Observer active work item");
   await expectVisible(
-    reviewWorkstation.getByRole("img", { name: "Repeater workstation" }),
-    "Observer workstation semantic icon",
+    reviewWorkstation.getByText("Repeater", { exact: true }),
+    "Observer workstation scheduling label",
   );
+  if (
+    await reviewWorkstation.locator("[data-workstation-semantic-icon]").count()
+  ) {
+    throw new Error(
+      "Workstation nodes must not render a leading semantic icon.",
+    );
+  }
   await expectNoHorizontalOverflow(
     page,
     `Observer graph parity at ${viewport.label}`,
