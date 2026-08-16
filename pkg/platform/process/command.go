@@ -120,13 +120,22 @@ func (r ExecCommandRunner) run(
 		return CommandResult{}, err
 	}
 
-	tree, _ := attachCommandProcessTree(cmd)
+	cleanupLogger := logging.EnsureLogger(r.Logger)
+	tree, attachErr := attachCommandProcessTree(cmd)
+	if attachErr != nil {
+		cleanupLogger.Warn(
+			"command runner: process tree attach failed",
+			"event_name", "command_runner.process_tree_attach_failed",
+			"command", req.Command,
+			"args_count", len(req.Args),
+			"error", attachErr.Error(),
+		)
+	}
 	waitCh := make(chan error, 1)
 	go func() {
 		waitCh <- cmd.Wait()
 	}()
 
-	cleanupLogger := logging.EnsureLogger(r.Logger)
 	cancelCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonCancel)
 	postRunCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonPostRun)
 
@@ -135,7 +144,16 @@ func (r ExecCommandRunner) run(
 	case runErr = <-waitCh:
 	case <-ctx.Done():
 		_ = terminateCommandProcessTree(cmd, tree, r.Clock, cancelCleanup)
-		<-waitCh
+		grace := postRunCleanupGracePeriod()
+		if !waitForCommandExit(waitCh, r.Clock, grace) {
+			cleanupLogger.Warn(
+				"command runner: process did not reap after cancellation",
+				"event_name", "command_runner.cancel_reap_timeout",
+				"command", req.Command,
+				"args_count", len(req.Args),
+				"grace_ms", grace.Milliseconds(),
+			)
+		}
 		closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
 		return CommandResult{
 			Stdout: stdout.Bytes(),
@@ -160,6 +178,35 @@ func (r ExecCommandRunner) run(
 		return result, runErr
 	}
 	return result, nil
+}
+
+const commandReapPollInterval = 10 * time.Millisecond
+
+// waitForCommandExit bounds the cancellation path even when an inherited
+// stdout/stderr pipe remains open in a descendant that process-tree cleanup
+// could not reach. The injected clock controls the deadline; the short sleep
+// only prevents a busy loop while waiting for either the process or the clock.
+func waitForCommandExit(waitCh <-chan error, clock Clock, grace time.Duration) bool {
+	if grace <= 0 {
+		select {
+		case <-waitCh:
+			return true
+		default:
+			return false
+		}
+	}
+	deadline := clock.Now().Add(grace)
+	for {
+		select {
+		case <-waitCh:
+			return true
+		default:
+		}
+		if !clock.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(commandReapPollInterval)
+	}
 }
 
 var _ CommandRunner = ExecCommandRunner{}

@@ -54,11 +54,7 @@ func resolveExecutionTimeout(
 		}
 	}
 
-	if workerDef != nil && workerDef.Type != "" {
-		return defaultSubprocessExecutionTimeout, nil
-	}
-
-	return 0, nil
+	return defaultSubprocessExecutionTimeout, nil
 }
 
 func timeoutWorkResult(dispatch work.WorkDispatch, duration time.Duration) workerexecution.WorkResult {

@@ -3,6 +3,7 @@ package process
 import (
 	"context"
 	"io"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
@@ -40,6 +41,7 @@ func (r StreamingExecCommandRunner) Run(ctx context.Context, req CommandRequest)
 }
 
 type observedBuffer struct {
+	mu        sync.Mutex
 	stream    string
 	observer  OutputChunkObserver
 	buf       []byte
@@ -52,12 +54,16 @@ func (b *observedBuffer) Write(p []byte) (int, error) {
 		chunk := append([]byte(nil), p...)
 		b.observer(b.stream, chunk)
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.retain(p)
 	return len(p), nil
 }
 
 func (b *observedBuffer) Bytes() []byte {
-	return b.buf
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.buf...)
 }
 
 func (b *observedBuffer) retain(p []byte) {

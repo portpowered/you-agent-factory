@@ -799,6 +799,9 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		os.Exit(0)
 	case "spawn-child", "spawn-child-success", "spawn-child-side-effect":
 		runCommandHelperSpawnMode(mode)
+	case "spawn-child-orphan-pipe":
+		spawnCommandHelperEscapedChildMode()
+		time.Sleep(10 * time.Second)
 	case "child-sleep", "delayed-side-effect":
 		runCommandHelperChildMode(mode)
 	case "pid-sleep":
@@ -816,6 +819,8 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "pid-ignore-term":
 		writeCommandHelperPID()
 		signal.Ignore(syscall.SIGTERM)
+		select {}
+	case "escaped-child":
 		select {}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
