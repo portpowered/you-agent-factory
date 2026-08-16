@@ -57,6 +57,39 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	}
 }
 
+func TestResultResponseToAPI_PreservesOrderedMixedTerminalContentParts(t *testing.T) {
+	mapped := factorysession.ResultResponseToAPI(factorysessionexecution.ResultReadResult{
+		SessionID:     "dur-sess-terminal-001",
+		ResultStatus:  factorysessionexecution.ResultStatusFinal,
+		SessionStatus: factorysessionexecution.LifecycleStatusSucceeded,
+		Mode:          factorysessionexecution.ResultModeFinal,
+		PrimaryResult: json.RawMessage(`[{"type":"text","text":"first"},{"type":"JSON","json":{"answer":42}},{"type":"image","url":"you-artifact://dur-sess-terminal-001/image-1"}]`),
+	})
+	if mapped.ResultStatus != factoryapi.FactorySessionResultStatusFinal || mapped.PrimaryResult == nil {
+		t.Fatalf("mapped terminal result = %#v, want FINAL result with content", mapped)
+	}
+	if len(*mapped.PrimaryResult) != 3 {
+		t.Fatalf("primaryResult = %#v, want three ordered parts", mapped.PrimaryResult)
+	}
+
+	textPart, err := (*mapped.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil || textPart.Text != "first" {
+		t.Fatalf("primaryResult[0] = %#v (decode error %v), want first text part", textPart, err)
+	}
+	jsonPart, err := (*mapped.PrimaryResult)[1].AsWorkJsonContentPart()
+	if err != nil || jsonPart.Type != factoryapi.WorkContentPartTypeJSON {
+		t.Fatalf("primaryResult[1] = %#v (decode error %v), want JSON part", jsonPart, err)
+	}
+	jsonValue, ok := jsonPart.Json.(map[string]any)
+	if !ok || jsonValue["answer"] != float64(42) {
+		t.Fatalf("primaryResult[1].json = %#v, want answer=42", jsonPart.Json)
+	}
+	imagePart, err := (*mapped.PrimaryResult)[2].AsWorkImageContentPart()
+	if err != nil || imagePart.Type != factoryapi.WorkContentPartTypeImage || imagePart.Url != "you-artifact://dur-sess-terminal-001/image-1" {
+		t.Fatalf("primaryResult[2] = %#v (decode error %v), want image artifact reference", imagePart, err)
+	}
+}
+
 func TestListDispatchesResponseToAPI_EmitsEmptyTypedList(t *testing.T) {
 	mapped := factorysession.ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
 		SessionID: "dur-sess-js-awaiting-001",
