@@ -526,21 +526,34 @@ function workerPresentationMetadata(
     return {};
   }
 
-  const workstationRunner = factory.workstations?.find(
-    (workstation) =>
-      workstation.worker === worker.name &&
-      typeof workstation.runner === "string" &&
-      workstation.runner.trim().length > 0,
-  )?.runner;
-  const runnerSelection = resolveRunnerSelection(
-    workstationRunner,
-    factory.runner,
-    worker.modelProvider,
+  const workerWorkstations = (factory.workstations ?? []).filter(
+    (workstation) => workstation.worker === worker.name,
   );
+  const runnerSelections =
+    workerWorkstations.length > 0
+      ? workerWorkstations.map((workstation) =>
+          resolveRunnerSelection(
+            workstation.runner,
+            factory.runner,
+            worker.modelProvider,
+          ),
+        )
+      : [
+          resolveRunnerSelection(
+            undefined,
+            factory.runner,
+            worker.modelProvider,
+          ),
+        ];
+  const runnerIds = new Set(
+    runnerSelections.map((runnerSelection) => runnerSelection.runnerId),
+  );
+  const runnerSelection =
+    runnerIds.size === 1 ? runnerSelections[0] : undefined;
 
   return {
     ...(worker.type ? { workerType: worker.type } : {}),
-    ...(runnerSelection.source !== "default"
+    ...(runnerSelection && runnerSelection.source !== "default"
       ? { runnerId: runnerSelection.runnerId }
       : {}),
   };

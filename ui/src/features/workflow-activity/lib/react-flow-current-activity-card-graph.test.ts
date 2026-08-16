@@ -194,6 +194,63 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+  it("uses the generic worker glyph when reusable workstation runners conflict regardless of order", async () => {
+    const worker = {
+      ...baseFactoryDefinition.workers?.[0],
+      modelProvider: "CODEX",
+      name: "writer",
+      type: "AGENT_WORKER",
+    };
+    const workstations = ["codex", "claude"].map((runner) => ({
+      ...baseFactoryDefinition.workstations?.[0],
+      name: `draft-${runner}`,
+      runner,
+      worker: "writer",
+    }));
+
+    for (const orderedWorkstations of [
+      workstations,
+      [...workstations].reverse(),
+    ]) {
+      const factory = {
+        ...baseFactoryDefinition,
+        workers: [worker],
+        workstations: orderedWorkstations,
+      } satisfies CanonicalFactoryDefinition;
+      const snapshot = buildSampleFactorySnapshot(factory);
+      const graphLayout =
+        await buildCurrentActivityGraphLayoutFromFactory(factory);
+      const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+      const nodes = buildCurrentActivityNodes({
+        activeExecutionsByWorkstationNodeID: {},
+        activeGraphHighlights: buildActiveGraphHighlights(
+          [],
+          visibleGraphEdges,
+          graphLayout.nodes,
+        ),
+        activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+        graphLayout,
+        now: Date.parse("2026-05-24T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        selection: null,
+        snapshot,
+      });
+      const workerNode = nodes.find((node) => node.id === "worker:writer");
+
+      expect(workerNode).toMatchObject({
+        data: { kind: "worker", workerType: "AGENT_WORKER" },
+        type: "worker",
+      });
+      expect(workerNode).not.toHaveProperty("data.runnerId");
+    }
+  });
+
   it("marks factory-derived workstation nodes active from runtime execution ids", async () => {
     const factory = baseFactoryDefinition;
     const graphLayout =
