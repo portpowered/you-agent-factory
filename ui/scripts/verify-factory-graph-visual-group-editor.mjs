@@ -91,7 +91,8 @@ async function createAndEditVisualGroup(page, viewport) {
   const secondaryMembershipCheckbox = page.getByRole("checkbox", {
     name: "Include Implement in this group",
   });
-  await secondaryMembershipCheckbox.check();
+  await secondaryMembershipCheckbox.focus();
+  await page.keyboard.press("Space");
   await expectChecked(secondaryMembershipCheckbox, true);
 
   const warningColorButton = page.getByRole("button", {
