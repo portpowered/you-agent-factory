@@ -38,6 +38,10 @@ type runtimeDelegateProvider interface {
 	RuntimeDelegate() factoryruntime.Service
 }
 
+type runtimeAPIFactoryProvider interface {
+	RuntimeAPIFactory() factoryruntime.APIFactory
+}
+
 // Root retains process-scoped Factory Runtime dependencies. It is inert until
 // an injected activation operation has initialized and published a complete
 // Runtime delegate.
@@ -59,6 +63,7 @@ var _ factoryruntime.Service = (*Root)(nil)
 type runtimeActivationState struct {
 	request factoryruntime.RuntimeActivationRequest
 	service factoryruntime.Service
+	api     factoryruntime.APIFactory
 	view    factoryruntime.RuntimeActivationView
 	close   func(context.Context) error
 }
@@ -267,6 +272,7 @@ func (r *Root) finishActivation(
 	r.active[request.RuntimeID] = &runtimeActivationState{
 		request: request,
 		service: activation.Service,
+		api:     runtimeAPIFactory(activation.Service),
 		view:    view,
 		close:   activation.Close,
 	}
@@ -552,6 +558,19 @@ func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
 	return runtimeDelegate(active.service)
 }
 
+func (r *Root) apiForRuntime(runtimeID string) factoryruntime.APIFactory {
+	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	active := r.active[runtimeID]
+	if active == nil {
+		return nil
+	}
+	return active.api
+}
+
 func runtimeDelegate(service factoryruntime.Service) factoryruntime.Service {
 	if provider, ok := service.(runtimeDelegateProvider); ok {
 		if delegate := provider.RuntimeDelegate(); delegate != nil {
@@ -559,6 +578,16 @@ func runtimeDelegate(service factoryruntime.Service) factoryruntime.Service {
 		}
 	}
 	return service
+}
+
+func runtimeAPIFactory(service factoryruntime.Service) factoryruntime.APIFactory {
+	if provider, ok := service.(runtimeAPIFactoryProvider); ok {
+		if api := provider.RuntimeAPIFactory(); api != nil {
+			return api
+		}
+	}
+	api, _ := service.(factoryruntime.APIFactory)
+	return api
 }
 
 // boundRuntimeService is the detached capability returned in RuntimeBinding.
@@ -654,8 +683,11 @@ func (service *boundRuntimeService) InvokeWorker(ctx context.Context, req factor
 }
 
 func (service *boundRuntimeService) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	target, ok := service.target().(runtimeWorkSubmitter)
-	if !ok {
+	if service == nil || service.root == nil {
+		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
+	}
+	target := service.root.apiForRuntime(service.runtimeID)
+	if target == nil {
 		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
 	}
 	return target.SubmitWorkRequest(ctx, request)
@@ -666,8 +698,11 @@ func (service *boundRuntimeService) SubscribeFactoryEvents(
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
 ) (*interfaces.FactoryEventStream, error) {
-	target, ok := service.target().(runtimeEventSubscriber)
-	if !ok {
+	if service == nil || service.root == nil {
+		return nil, factoryruntime.ErrNotRunning
+	}
+	target := service.root.apiForRuntime(service.runtimeID)
+	if target == nil {
 		return nil, factoryruntime.ErrNotRunning
 	}
 	return target.SubscribeFactoryEvents(ctx, reconnect, scope)

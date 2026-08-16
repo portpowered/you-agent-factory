@@ -98,10 +98,9 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) 
 		t.Fatalf("NewRoot() error = %v", err)
 	}
 	engine := &wideOperationRuntimeFake{}
-	wrapper := &runtimeDelegateWrapper{Service: engine, delegate: engine}
-	root.active["runtime-1"] = &runtimeActivationState{service: wrapper}
-
 	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
+	wrapper := &runtimeDelegateWrapper{Service: engine, delegate: binding, api: engine}
+	root.active["runtime-1"] = &runtimeActivationState{service: wrapper, api: engine}
 	if _, err := binding.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
 		t.Fatalf("SubmitWorkRequest() error = %v", err)
 	}
@@ -119,12 +118,17 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) 
 type runtimeDelegateWrapper struct {
 	factoryruntime.Service
 	delegate    factoryruntime.Service
+	api         factoryruntime.APIFactory
 	submitCalls int
 	eventCalls  int
 }
 
 func (wrapper *runtimeDelegateWrapper) RuntimeDelegate() factoryruntime.Service {
 	return wrapper.delegate
+}
+
+func (wrapper *runtimeDelegateWrapper) RuntimeAPIFactory() factoryruntime.APIFactory {
+	return wrapper.api
 }
 
 func (wrapper *runtimeDelegateWrapper) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
