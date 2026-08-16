@@ -6,7 +6,6 @@ import {
   type FactoryGraphEditorToolbarSelectionState,
   resolveFactoryGraphEditorToolbarSelectionState,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-toolbar-selection";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   type GraphEditorAddNodePlacementViewport,
@@ -43,8 +42,6 @@ export function useCurrentActivityGraphCardViewModel(
   const graphProjection = currentActivityGraphRenderProjection(
     editorGraphProjection,
   );
-  const fitLayoutNode = publicEditor.layoutControls.fitNode;
-  const resetLayoutNodeSize = publicEditor.layoutControls.resetNodeSize;
   const resizeLayoutNode = publicEditor.layoutControls.resizeNode;
   const nodeResizeControls = useMemo<CurrentActivityNodeResizeController>(
     () => ({
@@ -52,23 +49,6 @@ export function useCurrentActivityGraphCardViewModel(
         publicEditor.editorControls.isEditing &&
         publicEditor.editorControls.canInteract &&
         publicEditor.editorControls.activeTool !== "delete",
-      labels: {
-        fitToContent: getFactoryGraphEditorMessages(input.locale)
-          .nodeFitToContentLabel,
-        resetSize: getFactoryGraphEditorMessages(input.locale)
-          .nodeResetSizeLabel,
-      },
-      onFitToContent: (target, dimensions) => {
-        fitLayoutNode(
-          target.nodeId,
-          target.family,
-          dimensions,
-          target.position,
-        );
-      },
-      onResetSize: (target) => {
-        resetLayoutNodeSize(target.nodeId);
-      },
       onResizeEnd: (target, dimensions) => {
         resizeLayoutNode(
           target.nodeId,
@@ -79,12 +59,9 @@ export function useCurrentActivityGraphCardViewModel(
       },
     }),
     [
-      input.locale,
       publicEditor.editorControls.activeTool,
       publicEditor.editorControls.canInteract,
       publicEditor.editorControls.isEditing,
-      fitLayoutNode,
-      resetLayoutNodeSize,
       resizeLayoutNode,
     ],
   );
@@ -97,6 +74,10 @@ export function useCurrentActivityGraphCardViewModel(
       graphProjection,
       handleConnectionAnchorClick: connectionControls.handleAnchorClick,
       nodeResizeControls,
+      edgePointerInteraction:
+        publicEditor.edgeWaypointControls.edgePointerInteraction,
+      edgeWaypointPreviews:
+        publicEditor.edgeWaypointControls.edgeWaypointPreviews,
       pendingConnectionSource: connectionControls.pendingSource,
       selectedWaypointEdgeId:
         publicEditor.edgeWaypointControls.selectedWaypointEdgeId,

@@ -82,7 +82,7 @@ export function FactoryGraphVisualGroupLayer({
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-[1]"
+      className="pointer-events-none absolute inset-0 z-[5]"
       data-factory-visual-group-layer=""
     >
       <FactoryGraphGroupRegionLayer groups={resolvedGroups} />

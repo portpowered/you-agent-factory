@@ -2331,9 +2331,6 @@ describe("current activity graph active item labels", () => {
       await buildCurrentActivityGraphLayoutFromFactory(factory);
     const resizeController = {
       enabled: true,
-      labels: { fitToContent: "Fit to content", resetSize: "Reset size" },
-      onFitToContent: vi.fn(),
-      onResetSize: vi.fn(),
       onResizeEnd: vi.fn(),
     };
     const editorNodes = buildCurrentActivityNodes({

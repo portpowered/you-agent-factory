@@ -733,6 +733,93 @@ describe("FactoryGraphVisualGroupLayer", () => {
     restoreBrowserShims();
   });
 
+  it("previews one delta for every member while leaving unrelated nodes stable", () => {
+    const restoreBrowserShims = installDashboardBrowserTestShims();
+    const onMoveGroup = vi.fn();
+
+    render(
+      <ReactFlowProvider>
+        <div style={{ height: 480, position: "relative", width: 640 }}>
+          <ReactFlow
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            edges={[]}
+            defaultNodes={[
+              {
+                data: { factoryGraphNodeId: "workstation:draft" },
+                id: "workstation:draft",
+                position: { x: 40, y: 60 },
+              },
+              {
+                data: { factoryGraphNodeId: "worker:writer" },
+                id: "worker:writer",
+                position: { x: 160, y: 90 },
+              },
+              {
+                data: { factoryGraphNodeId: "workstation:unrelated" },
+                id: "workstation:unrelated",
+                position: { x: 420, y: 300 },
+              },
+            ]}
+          >
+            <FactoryGraphVisualGroupLayer
+              canEdit
+              groupAriaLabel={(group) => group.label ?? group.id}
+              groupOutlineAriaLabel={(group, edge) =>
+                `${group.label ?? group.id} outline ${edge}`
+              }
+              groups={[
+                {
+                  ...sampleGroup,
+                  nodeIds: ["workstation:draft", "worker:writer"],
+                },
+              ]}
+              onMoveGroup={onMoveGroup}
+              onSelectGroup={vi.fn()}
+              resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
+              selectedGroupId="group-1"
+            />
+          </ReactFlow>
+        </div>
+      </ReactFlowProvider>,
+    );
+
+    const groupBody = screen.getByRole("button", { name: "Review" });
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 9,
+    });
+    fireEvent.pointerMove(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 9,
+    });
+
+    expect(screen.getByTestId("rf__node-workstation:draft")).not.toHaveStyle({
+      transform: "translate(40px,60px)",
+    });
+    expect(screen.getByTestId("rf__node-worker:writer")).not.toHaveStyle({
+      transform: "translate(160px,90px)",
+    });
+    expect(screen.getByTestId("rf__node-workstation:unrelated")).toHaveStyle({
+      transform: "translate(420px,300px)",
+    });
+
+    fireEvent.pointerUp(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 9,
+    });
+
+    expect(onMoveGroup).toHaveBeenCalledWith(
+      "group-1",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+      expect.any(Map),
+    );
+    restoreBrowserShims();
+  });
+
   it("commits group moves that include saved member node ids", () => {
     const onMoveGroup = vi.fn();
 

@@ -6,7 +6,7 @@ import {
   renderHook,
   waitFor,
 } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import "@xyflow/react/dist/style.css";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import { FACTORY_GRAPH_NODE_TYPES } from "@you-agent-factory/factory-graph";
@@ -1080,7 +1080,77 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: related edge projection cases share one graph view-model fixture.
 describe("useCurrentActivityGraphViewModel edge waypoints", () => {
+  it("projects direct edge pointer interactions onto factory edge types", () => {
+    const edgeId =
+      "workstation-output:workstation:review->work-state:story:done";
+    const interaction = {
+      onPointerDown: vi.fn(),
+    };
+    const graphLayout: GraphLayout = {
+      edges: [
+        {
+          canonicalEdgeId: edgeId,
+          edgeId,
+          fromNodeId: "workstation:review",
+          label: "done",
+          labelX: 0,
+          labelY: 0,
+          outcomeKind: "success",
+          path: "",
+          sourcePlaceKind: undefined,
+          stateCategory: "TERMINAL",
+          targetPlaceKind: "work_state",
+          toNodeId: "work-state:story:done",
+        },
+      ],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+        {
+          column: 1,
+          height: 120,
+          nodeId: "work-state:story:done",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:done",
+            state_category: "TERMINAL",
+            state_value: "done",
+            type_id: "story",
+          },
+          row: 0,
+          width: 140,
+          x: 420,
+          y: 100,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      editor: {
+        edgePointerInteraction: () => interaction,
+      },
+      visibleGraphEdges: graphLayout.edges,
+    });
+
+    expect(result.current.edges[0]).toMatchObject({
+      data: { interaction },
+      type: "factoryEditorEdge",
+    });
+  });
+
   it("decorates React Flow edges with waypoints from the rendered graph layout", () => {
     const edgeId =
       "workstation-output:workstation:review->work-state:story:done";

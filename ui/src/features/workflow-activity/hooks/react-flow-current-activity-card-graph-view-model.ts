@@ -5,12 +5,12 @@ import type {
   NodeChange,
   OnSelectionChangeFunc,
 } from "@xyflow/react";
+import type { GraphEdgeInteraction } from "@you-agent-factory/components/graphs";
 import {
   type FactoryGraphNodeDimensions,
   resolveFactoryGraphNodeResizeDimensions,
 } from "@you-agent-factory/factory-graph";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -21,7 +21,6 @@ import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
 import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
@@ -71,6 +70,11 @@ export type CurrentActivityGraphViewModelEditorInput = Omit<
   CurrentActivityEditorState,
   "onConnectionAnchorClick" | "validationTargets"
 > & {
+  edgePointerInteraction?: (edgeId: string) => GraphEdgeInteraction | undefined;
+  edgeWaypointPreviews?: ReadonlyMap<
+    string,
+    readonly { x: number; y: number }[]
+  >;
   graphProjection: CurrentActivityGraphRenderProjection;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
   selectedWaypointEdgeId?: string | null;
@@ -220,20 +224,6 @@ function useCurrentActivityNodeResizeState(input: {
     },
     [],
   );
-  const resetDimensions = useCallback(
-    (target: CurrentActivityNodeResizeTarget) => {
-      setDimensionsByNodeId((currentDimensions) => {
-        if (!currentDimensions.has(target.nodeId)) {
-          return currentDimensions;
-        }
-
-        const nextDimensions = new Map(currentDimensions);
-        nextDimensions.delete(target.nodeId);
-        return nextDimensions;
-      });
-    },
-    [],
-  );
   const hostController = input.editor.nodeResizeControls;
   const localController = useMemo<CurrentActivityNodeResizeController>(
     () => ({
@@ -241,41 +231,18 @@ function useCurrentActivityNodeResizeState(input: {
         input.editor.editorMode &&
         input.editor.canInteractWithEditor &&
         input.editor.activeTool !== "delete",
-      labels: {
-        fitToContent: getFactoryGraphEditorMessages(input.locale)
-          .nodeFitToContentLabel,
-        resetSize: getFactoryGraphEditorMessages(input.locale)
-          .nodeResetSizeLabel,
-      },
-      onFitToContent: updateDimensions,
-      onResetSize: resetDimensions,
       onResizeEnd: updateDimensions,
     }),
     [
       input.editor.activeTool,
       input.editor.canInteractWithEditor,
       input.editor.editorMode,
-      input.locale,
-      resetDimensions,
       updateDimensions,
     ],
   );
   const controller = useMemo<CurrentActivityNodeResizeController>(
     () => ({
       enabled: hostController?.enabled ?? localController.enabled,
-      labels: hostController?.labels ?? localController.labels,
-      onFitToContent: (target, dimensions) => {
-        if (!hostController) {
-          updateDimensions(target, dimensions);
-        }
-        hostController?.onFitToContent(target, dimensions);
-      },
-      onResetSize: (target) => {
-        if (!hostController) {
-          resetDimensions(target);
-        }
-        hostController?.onResetSize(target);
-      },
       onResizeEnd: (target, dimensions) => {
         if (!hostController) {
           updateDimensions(target, dimensions);
@@ -283,13 +250,7 @@ function useCurrentActivityNodeResizeState(input: {
         hostController?.onResizeEnd(target, dimensions);
       },
     }),
-    [
-      hostController,
-      localController.enabled,
-      localController.labels,
-      resetDimensions,
-      updateDimensions,
-    ],
+    [hostController, localController.enabled, updateDimensions],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: graph identity and edit availability intentionally reset presentation-only resize state.
@@ -444,6 +405,8 @@ function useCurrentActivityGraphEdges({
   graphSelection,
   handleAssignments,
   layout,
+  edgePointerInteraction,
+  edgeWaypointPreviews,
   pendingAdditionEdgeIds,
   selectedWaypointEdgeId,
   visibleGraphEdges,
@@ -453,6 +416,11 @@ function useCurrentActivityGraphEdges({
   graphSelection: FactoryGraphEditorSelectionController;
   handleAssignments: ReturnType<typeof buildHandleAssignments>;
   layout: FactoryLayout;
+  edgePointerInteraction?: (edgeId: string) => GraphEdgeInteraction | undefined;
+  edgeWaypointPreviews?: ReadonlyMap<
+    string,
+    readonly { x: number; y: number }[]
+  >;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   selectedWaypointEdgeId?: string | null;
   visibleGraphEdges: GraphLayout["edges"];
@@ -469,6 +437,7 @@ function useCurrentActivityGraphEdges({
     return decorateProjectedEdgesWithWaypoints({
       edges: edges as FactoryGraphReactFlowEdge[],
       layout,
+      waypointPreviews: edgeWaypointPreviews,
       selectedWaypointEdgeId: selectedWaypointEdgeId ?? null,
     }).map((edge) => {
       const layoutEdgeId =
@@ -479,19 +448,23 @@ function useCurrentActivityGraphEdges({
         graphSelection.isEdgeSelected(edge.id) ||
         graphSelection.isEdgeSelected(layoutEdgeId);
 
-      if (!selected) {
+      const interaction = edgePointerInteraction?.(layoutEdgeId);
+      if (!selected && !interaction) {
         return edge;
       }
 
       return {
         ...edge,
-        selected: true,
-        type: edge.type ?? "factoryEditorEdge",
+        data: interaction ? { ...edge.data, interaction } : edge.data,
+        selected: selected || edge.selected,
+        type: "factoryEditorEdge",
       };
     });
   }, [
     activeGraphHighlights,
     displayNodes,
+    edgePointerInteraction,
+    edgeWaypointPreviews,
     graphSelection,
     handleAssignments,
     layout,
@@ -645,6 +618,8 @@ export function useCurrentActivityGraphViewModel({
   const edges = useCurrentActivityGraphEdges({
     activeGraphHighlights,
     displayNodes,
+    edgePointerInteraction: editor.edgePointerInteraction,
+    edgeWaypointPreviews: editor.edgeWaypointPreviews,
     graphSelection,
     handleAssignments,
     layout: renderedLayout,

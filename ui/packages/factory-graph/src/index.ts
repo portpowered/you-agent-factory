@@ -69,7 +69,6 @@ export {
 export {
   FactoryGraphNodeResizeControls,
   type FactoryGraphNodeResizeControlsProps,
-  type FactoryGraphNodeResizeLabels,
 } from "./node-resize-controls.js";
 export {
   type FactoryGraphDocNode,

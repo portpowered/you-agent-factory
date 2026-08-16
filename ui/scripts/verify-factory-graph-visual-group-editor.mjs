@@ -2,13 +2,25 @@
  * Drives the real factory graph editor surface for visual group save/reload coverage.
  */
 
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+// biome-ignore lint/style/noExcessiveLinesPerFile: this browser workflow composes the full editor save, reload, and interaction scenario.
 import {
+  assertNodeSizeMatches,
+  expectNoObsoleteNodeResizeActions,
+  readNodeSize,
+  resizeSelectedNode,
+} from "./verify-factory-graph-node-size-browser-helpers.mjs";
+import { expectVisualGroupDragWithMembers } from "./verify-factory-graph-visual-group-editor-group-drag.mjs";
+import {
+  expectDirectEdgeDrag,
   expectEditorGraphInteractions,
   expectGraphSurfaceBasics,
+  expectPersistedEdgeWaypoint,
   expectRegionPointerThrough,
 } from "./verify-factory-graph-visual-group-editor-interactions.mjs";
+import {
+  captureEvidence,
+  selectGraphNodeWithMarquee,
+} from "./verify-factory-graph-visual-group-editor-workflow-helpers.mjs";
 
 const TARGET_WORKSTATION_LABEL = "Plan";
 const TARGET_WORKSTATION_ID = "workstation:plan";
@@ -32,11 +44,16 @@ export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   await waitForStoryRender(page);
 
   const { toolbar, viewport } = await enterVisualGroupEditor(page);
-  await createAndEditVisualGroup(page, viewport);
-  await saveVisualGroup(page);
+  const { edgeId, resizedNode } = await createAndEditVisualGroup(
+    page,
+    viewport,
+  );
+  const savedNodeSize = await saveVisualGroup(page, resizedNode, edgeId);
 
   await verifyVisualGroupAfterReload({
     currentUrl: page.url(),
+    expectedEdgeId: edgeId,
+    expectedNodeSize: savedNodeSize,
     page,
     toolbar,
     waitForStoryRender,
@@ -73,7 +90,17 @@ async function createAndEditVisualGroup(page, viewport) {
     })
     .first();
   await targetWorkstationNode.waitFor({ state: "visible" });
-  await selectGraphNodeWithMarquee(page, viewport, targetWorkstationNode);
+  await selectGraphNodeWithMarquee(
+    page,
+    viewport,
+    targetWorkstationNode,
+    TARGET_WORKSTATION_LABEL,
+  );
+  const resizedNode = await resizeSelectedNode(
+    page,
+    targetWorkstationNode,
+    TARGET_WORKSTATION_ID,
+  );
 
   await page.getByRole("button", { name: "Create group" }).click();
   await page
@@ -106,6 +133,13 @@ async function createAndEditVisualGroup(page, viewport) {
   await expectChecked(secondaryMembershipCheckbox, false);
   await page.keyboard.press("Space");
   await expectChecked(secondaryMembershipCheckbox, true);
+  const unrelatedMembershipCheckbox = page.getByRole("checkbox", {
+    name: "Include Review in this group",
+  });
+  if (await unrelatedMembershipCheckbox.isChecked()) {
+    await unrelatedMembershipCheckbox.uncheck();
+  }
+  await expectChecked(unrelatedMembershipCheckbox, false);
 
   const warningColorButton = page.getByRole("button", {
     exact: true,
@@ -128,20 +162,20 @@ async function createAndEditVisualGroup(page, viewport) {
   const boundsAfterFit = await readVisualGroupBounds(page);
   expectFiniteBounds(boundsAfterFit, "fit group");
 
-  await dragVisualGroup(page, { deltaX: 12, deltaY: 8 });
+  await expectVisualGroupDragWithMembers(page, {
+    memberNodeIds: [TARGET_WORKSTATION_ID, "workstation:implement"],
+    unrelatedNodeId: "workstation:review",
+  });
   await resizeVisualGroup(page, "sw", { deltaX: -560, deltaY: 420 });
-  await dragVisualGroup(page, { deltaX: 8, deltaY: 6 });
 
-  const undoButton = page.getByRole("button", { name: "Undo" });
-  await undoButton.waitFor({ state: "visible" });
-  await expectEnabled(undoButton, true);
-  await undoButton.click();
-  const redoButton = page.getByRole("button", { name: "Redo" });
-  await expectEnabled(redoButton, true);
-  await redoButton.click();
+  const edgeId = await expectDirectEdgeDrag(
+    page,
+    page.locator("[data-factory-visual-group]").first(),
+  );
+  return { edgeId, resizedNode };
 }
 
-async function saveVisualGroup(page) {
+async function saveVisualGroup(page, resizedNode, edgeId) {
   await page.getByRole("button", { name: "Save changes" }).click();
   await page
     .getByRole("heading", { name: "Save factory graph changes?" })
@@ -169,11 +203,26 @@ async function saveVisualGroup(page) {
     );
   }
   expectFiniteBounds(persistedGroup.bounds, "saved group");
+  const persistedNode = persistedFactory?.layout?.nodes?.find(
+    (node) => node.id === TARGET_WORKSTATION_ID,
+  )?.size;
+  assertNodeSizeMatches(persistedNode, resizedNode, "saved");
+  const persistedEdge = persistedFactory?.layout?.edges?.find(
+    (edge) => edge.id === edgeId,
+  );
+  if (!persistedEdge?.waypoints?.length) {
+    throw new Error(
+      `Saved Factory layout did not retain the directly dragged waypoint for ${edgeId}.`,
+    );
+  }
   await captureEvidence(page, "visual-group-before-reload");
+  return persistedNode;
 }
 
 async function verifyVisualGroupAfterReload({
   currentUrl,
+  expectedEdgeId,
+  expectedNodeSize,
   page,
   toolbar,
   waitForStoryRender,
@@ -191,6 +240,17 @@ async function verifyVisualGroupAfterReload({
     name: GROUP_LABEL,
   });
   await restoredRegion.waitFor({ state: "visible" });
+  const restoredNode = page.locator(
+    `.react-flow__node[data-id="${TARGET_WORKSTATION_ID}"]`,
+  );
+  await restoredNode.waitFor({ state: "visible" });
+  assertNodeSizeMatches(
+    await readNodeSize(restoredNode),
+    expectedNodeSize,
+    "reloaded read-only",
+  );
+  await expectNoObsoleteNodeResizeActions(page);
+  await expectInlineGroupLabel(restoredRegion);
   await expectRegionPointerThrough(page, restoredRegion);
   const intakeObserverButton = page.getByRole("button", {
     exact: true,
@@ -203,11 +263,43 @@ async function verifyVisualGroupAfterReload({
     .waitFor({ state: "hidden" });
   await captureEvidence(page, "visual-group-after-reload-observer");
 
+  await page.setViewportSize({ height: 720, width: 768 });
+  await page.reload({ waitUntil: "networkidle" });
+  await waitForStoryRender(page);
+  const constrainedRegion = page.getByRole("region", {
+    exact: true,
+    name: GROUP_LABEL,
+  });
+  await constrainedRegion.waitFor({ state: "visible" });
+  await expectInlineGroupLabel(constrainedRegion);
+  await expectRegionPointerThrough(page, constrainedRegion);
+
   const editModeAfterReload = page.getByRole("button", { name: "Edit mode" });
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await page.reload({ waitUntil: "networkidle" });
+  await waitForStoryRender(page);
   await editModeAfterReload.waitFor({ state: "visible" });
   await editModeAfterReload.click();
   await toolbar.waitFor({ state: "visible" });
   await expectGraphSurfaceBasics(page);
+  const reloadedNode = page.locator(
+    `.react-flow__node[data-id="${TARGET_WORKSTATION_ID}"]`,
+  );
+  await reloadedNode
+    .getByRole("button", {
+      exact: true,
+      name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
+    })
+    .click();
+  await reloadedNode.locator(".factory-graph-node-resize-edge").waitFor({
+    state: "visible",
+  });
+  assertNodeSizeMatches(
+    await readNodeSize(reloadedNode),
+    expectedNodeSize,
+    "reloaded editor",
+  );
+  await expectNoObsoleteNodeResizeActions(page);
   await page
     .getByRole("button", {
       exact: true,
@@ -239,77 +331,9 @@ async function verifyVisualGroupAfterReload({
     name: "Use warning group color",
   });
   await expectAttribute(warningColorAfterReload, "aria-pressed", "false");
-  await expectEditorGraphInteractions(page);
+  await expectPersistedEdgeWaypoint(page, reloadedGroup, expectedEdgeId);
+  await expectEditorGraphInteractions(page, { skipEdgeDrag: true });
   await captureEvidence(page, "visual-group-after-reload-editor");
-}
-
-async function captureEvidence(page, name) {
-  const directory = process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR;
-  if (!directory) {
-    return;
-  }
-
-  await mkdir(directory, { recursive: true });
-  await page.screenshot({
-    fullPage: true,
-    path: join(directory, `${name}.png`),
-  });
-}
-
-async function selectGraphNodeWithMarquee(page, viewport, locator) {
-  const nodeBox = await locator.boundingBox();
-  const viewportBox = await viewport.boundingBox();
-  if (!nodeBox || !viewportBox) {
-    throw new Error(
-      "Could not measure the graph node and viewport for selection.",
-    );
-  }
-
-  const startX = Math.max(viewportBox.x + 4, nodeBox.x - 20);
-  const startY = Math.max(viewportBox.y + 4, nodeBox.y - 20);
-  const endX = Math.min(
-    viewportBox.x + viewportBox.width - 4,
-    nodeBox.x + nodeBox.width + 20,
-  );
-  const endY = Math.min(
-    viewportBox.y + viewportBox.height - 4,
-    nodeBox.y + nodeBox.height + 20,
-  );
-
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move(endX, endY, { steps: 5 });
-  await page.mouse.up();
-  await expectNodeSelected(page, locator);
-}
-
-async function expectNodeSelected(page, locator) {
-  const handle = await locator.elementHandle();
-  if (!handle) {
-    throw new Error(
-      `Could not resolve the ${TARGET_WORKSTATION_LABEL} graph node for selection.`,
-    );
-  }
-
-  try {
-    await page.waitForFunction(
-      (node) => node.classList.contains("selected"),
-      handle,
-      { timeout: 5_000 },
-    );
-  } catch (error) {
-    const details = await locator.evaluate((node) => ({
-      ariaSelected: node.getAttribute("aria-selected"),
-      className: node.className,
-      html: node.outerHTML.slice(0, 800),
-    }));
-    throw new Error(
-      `${TARGET_WORKSTATION_LABEL} node did not become selected: ${JSON.stringify(details)}`,
-      {
-        cause: error,
-      },
-    );
-  }
 }
 
 async function expectAttribute(locator, name, expected) {
@@ -403,23 +427,6 @@ function expectFiniteBounds(bounds, description) {
   }
 }
 
-async function dragVisualGroup(page, { deltaX, deltaY }) {
-  const groupLabel = page.locator("[data-factory-visual-group-label]").first();
-  await groupLabel.waitFor({ state: "visible" });
-  const box = await groupLabel.boundingBox();
-  if (!box) {
-    throw new Error("Could not measure visual group label for drag.");
-  }
-
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move(startX + deltaX, startY + deltaY);
-  await page.mouse.up();
-  await page.waitForTimeout(100);
-}
-
 async function resizeVisualGroup(page, corner, { deltaX, deltaY }) {
   const handle = page
     .locator(`[data-factory-visual-group-resize="${corner}"]`)
@@ -481,18 +488,63 @@ async function expectInputValue(locator, expected) {
   }
 }
 
+async function expectInlineGroupLabel(region) {
+  const label = region.locator("[data-factory-graph-group-region-label]");
+  await label.waitFor({ state: "visible" });
+
+  const [regionBounds, labelBounds, presentation] = await Promise.all([
+    region.boundingBox(),
+    label.boundingBox(),
+    label.evaluate((element) => {
+      const wrapper = element.parentElement;
+      const style = getComputedStyle(element);
+      const wrapperStyle = wrapper ? getComputedStyle(wrapper) : null;
+      return {
+        backgroundColor: style.backgroundColor,
+        boxShadow: style.boxShadow,
+        className: element.className,
+        hasBorder:
+          style.borderWidth !== "0px" || wrapperStyle?.borderWidth !== "0px",
+        maxWidth: wrapperStyle?.maxWidth ?? "none",
+        transform: style.transform,
+      };
+    }),
+  ]);
+
+  if (!regionBounds || !labelBounds) {
+    throw new Error("Could not measure the rendered visual group label.");
+  }
+
+  if (
+    labelBounds.x < regionBounds.x ||
+    labelBounds.y < regionBounds.y ||
+    labelBounds.x >= regionBounds.x + regionBounds.width ||
+    labelBounds.y >= regionBounds.y + regionBounds.height
+  ) {
+    throw new Error(
+      `Expected the group label to start inside the region's top-left border: ${JSON.stringify({ labelBounds, regionBounds })}`,
+    );
+  }
+
+  if (
+    presentation.hasBorder ||
+    presentation.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+    presentation.boxShadow !== "none" ||
+    presentation.transform !== "none" ||
+    presentation.maxWidth === "none" ||
+    /border|rounded|shadow|backdrop/.test(presentation.className)
+  ) {
+    throw new Error(
+      `Expected an unboxed, bounded inline group label, found ${JSON.stringify(presentation)}.`,
+    );
+  }
+}
+
 async function expectChecked(locator, checked) {
   const actual = await locator.isChecked();
   if (actual !== checked) {
     throw new Error(
       `Expected checkbox checked=${checked} but found ${actual}.`,
     );
-  }
-}
-
-async function expectEnabled(locator, enabled) {
-  const actual = await locator.isEnabled();
-  if (actual !== enabled) {
-    throw new Error(`Expected control enabled=${enabled} but found ${actual}.`);
   }
 }
