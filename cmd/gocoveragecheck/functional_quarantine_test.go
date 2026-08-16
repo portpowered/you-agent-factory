@@ -72,11 +72,32 @@ func TestFunctionalQuarantineValidationFailsClosed(t *testing.T) {
 		Packages: []string{packagePath},
 		Tests:    map[string][]string{packagePath: {"TestKnown"}},
 	}
-	tests := []struct {
-		name    string
-		entries []functionalQuarantineEntry
-		want    string
-	}{
+	for _, test := range functionalQuarantineValidationCases(packagePath) {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := functionalQuarantine{Version: functionalQuarantineVersion, Suite: functionalSuiteName, Entries: test.entries}
+			err := validateFunctionalQuarantine(manifest, inventory)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("validateFunctionalQuarantine() error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
+type functionalQuarantineValidationCase struct {
+	name    string
+	entries []functionalQuarantineEntry
+	want    string
+}
+
+func functionalQuarantineValidationCases(packagePath string) []functionalQuarantineValidationCase {
+	return append(
+		functionalQuarantineValidationSelectorCases(packagePath),
+		functionalQuarantineValidationMeasurementCases(packagePath)...,
+	)
+}
+
+func functionalQuarantineValidationSelectorCases(packagePath string) []functionalQuarantineValidationCase {
+	return []functionalQuarantineValidationCase{
 		{
 			name:    "unknown package",
 			entries: []functionalQuarantineEntry{{Package: modulePath + "/tests/functional/missing", Bucket: functionalBucketEnvironment, Reason: "missing precondition"}},
@@ -113,6 +134,11 @@ func TestFunctionalQuarantineValidationFailsClosed(t *testing.T) {
 			entries: []functionalQuarantineEntry{{Package: packagePath, Test: "TestKnown", Bucket: functionalBucketEnvironment, Reason: "not measurable", Measurement: "randomized"}},
 			want:    "unsupported measurement",
 		},
+	}
+}
+
+func functionalQuarantineValidationMeasurementCases(packagePath string) []functionalQuarantineValidationCase {
+	return []functionalQuarantineValidationCase{
 		{
 			name:    "package measurement requires test",
 			entries: []functionalQuarantineEntry{{Package: packagePath, Bucket: functionalBucketEnvironment, Reason: "package context", Measurement: functionalMeasurementPackageContext}},
@@ -161,16 +187,6 @@ func TestFunctionalQuarantineValidationFailsClosed(t *testing.T) {
 			},
 			want: "overlaps",
 		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			manifest := functionalQuarantine{Version: functionalQuarantineVersion, Suite: functionalSuiteName, Entries: test.entries}
-			err := validateFunctionalQuarantine(manifest, inventory)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("validateFunctionalQuarantine() error = %v, want substring %q", err, test.want)
-			}
-		})
 	}
 }
 
