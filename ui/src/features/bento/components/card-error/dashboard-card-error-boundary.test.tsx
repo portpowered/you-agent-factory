@@ -9,12 +9,12 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import {
   AgentBentoCard,
   AgentBentoLayout,
   type AgentBentoLayoutCard,
-} from "./agent-bento";
+} from "../agent-bento";
 
 const layout = [
   { h: 2, id: "broken", widgetType: "broken", w: 6, x: 0, y: 0 },

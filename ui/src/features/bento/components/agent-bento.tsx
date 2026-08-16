@@ -10,14 +10,16 @@ import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
 import type { DashboardCardAsyncState } from "../../dashboard/lib/dashboard-card-state";
+import { useDashboardLayoutTouch } from "../hooks/touch/dashboardLayoutTouch";
 import { getAgentBentoMessages } from "../messages/agent-bento";
+import { DashboardCardErrorBoundary } from "./card-error/dashboard-card-error-boundary";
 import { DashboardCardStateBanner } from "./card-state/dashboard-card-state-banner";
-import { DashboardCardErrorBoundary } from "./dashboard-card-error-boundary";
 import {
   DashboardLayoutKeyboardContext,
   type DashboardLayoutKeyboardContextValue,
   DashboardLayoutKeyboardControls,
 } from "./keyboard/dashboard-layout-keyboard-controls";
+import { renderBentoResizeHandle } from "./resize/bento-resize-handle";
 
 export interface AgentBentoLayoutItem {
   h: number;
@@ -283,6 +285,16 @@ export function AgentBentoLayout({
     : allowsInteractiveGrid
       ? renderedLayout
       : toNonInteractiveGridLayout(renderedLayout);
+  const touchHandlers = useDashboardLayoutTouch({
+    columns: BENTO_COLUMNS,
+    enabled: allowsInteractiveGrid,
+    layout: renderedLayout,
+    margin: BENTO_MARGIN,
+    onCommitLayout: commitLayoutChange,
+    onPreviewLayout: previewLayoutChange,
+    rowHeight: BENTO_ROW_HEIGHT,
+    width: renderedWidth,
+  });
   const cardsForRender = usesCompactLayout
     ? [...cards].sort((left, right) => {
         const leftIndex = effectiveLayout.findIndex(
@@ -299,6 +311,8 @@ export function AgentBentoLayout({
     <section
       aria-label={messages.boardLabel}
       className={layoutClassName}
+      onPointerDownCapture={touchHandlers.onPointerDownCapture}
+      onTouchStartCapture={touchHandlers.onTouchStartCapture}
       ref={containerRef}
     >
       <GridLayout
@@ -323,6 +337,7 @@ export function AgentBentoLayout({
         onResizeStop={handleGridInteractionStop}
         resizeConfig={{
           enabled: allowsInteractiveGrid,
+          handleComponent: renderBentoResizeHandle,
           handles: [...BENTO_RESIZE_HANDLES],
         }}
         width={renderedWidth}
@@ -451,6 +466,7 @@ export function AgentBentoCardHeader({
       className={cn(
         BENTO_CARD_HEADER_CLASS,
         compactChrome && BENTO_CARD_HEADER_COMPACT_CLASS,
+        "touch-none",
       )}
       data-bento-drag-handle="true"
     >

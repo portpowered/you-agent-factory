@@ -84,6 +84,10 @@ function expectNoVerticalScrollContainer(element: HTMLElement) {
   );
 }
 
+function createTouch(identifier: number, clientX: number, clientY: number) {
+  return { clientX, clientY, identifier };
+}
+
 function installMeasuredBoardWidth(initialWidth: number) {
   const previousResizeObserver = globalThis.ResizeObserver;
   let measuredWidth = initialWidth;
@@ -411,6 +415,206 @@ describe("AgentBentoLayout", () => {
     ).toBeTruthy();
   });
 
+  it("moves a card with touch and commits through the canonical layout seam", async () => {
+    const onLayoutChange = vi.fn();
+    renderBentoBoard(onLayoutChange);
+
+    const activityItem = getGridItem("Current activity");
+    const dragHandle = within(activityItem).getByRole("heading", {
+      name: "Current activity",
+    });
+    const start = createTouch(1, 120, 40);
+    const end = createTouch(1, 220, 40);
+
+    fireEvent.touchStart(dragHandle, {
+      changedTouches: [start],
+      touches: [start],
+    });
+    fireEvent.touchMove(document, {
+      changedTouches: [end],
+      touches: [end],
+    });
+    fireEvent.touchEnd(document, {
+      changedTouches: [end],
+      touches: [],
+    });
+
+    await waitFor(() => {
+      expect(onLayoutChange).toHaveBeenCalledTimes(1);
+    });
+    expect(onLayoutChange).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "activity", x: 1, y: 0 }),
+      ]),
+    );
+  });
+
+  it("resizes a card with touch through the same canonical layout seam", async () => {
+    const onLayoutChange = vi.fn();
+    renderBentoBoard(onLayoutChange);
+
+    const activityItem = getGridItem("Current activity");
+    const resizeHandle = activityItem.querySelector(
+      "[data-bento-touch-resize-handle='e']",
+    );
+    if (!(resizeHandle instanceof HTMLElement)) {
+      throw new Error("expected the activity card east resize handle");
+    }
+
+    const start = createTouch(2, 520, 120);
+    const end = createTouch(2, 620, 120);
+    fireEvent.touchStart(resizeHandle, {
+      changedTouches: [start],
+      touches: [start],
+    });
+    fireEvent.touchMove(document, {
+      changedTouches: [end],
+      touches: [end],
+    });
+    fireEvent.touchEnd(document, {
+      changedTouches: [end],
+      touches: [],
+    });
+
+    await waitFor(() => {
+      expect(onLayoutChange).toHaveBeenCalledTimes(1);
+    });
+    expect(onLayoutChange).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "activity", w: 7 }),
+      ]),
+    );
+  });
+
+  it("restores the stored layout when a touch gesture is cancelled", async () => {
+    const onLayoutChange = vi.fn();
+    renderBentoBoard(onLayoutChange);
+
+    const board = screen.getByRole("region", {
+      name: "you-agent-factory bento board",
+    });
+    const activityItem = getGridItem("Current activity");
+    const initialSignature = activityItem.dataset.layoutSignature;
+    const dragHandle = within(activityItem).getByRole("heading", {
+      name: "Current activity",
+    });
+    const start = createTouch(3, 120, 40);
+    const moved = createTouch(3, 220, 40);
+
+    fireEvent.touchStart(dragHandle, {
+      changedTouches: [start],
+      touches: [start],
+    });
+    fireEvent.touchMove(document, {
+      changedTouches: [moved],
+      touches: [moved],
+    });
+    fireEvent.touchCancel(document, {
+      changedTouches: [moved],
+      touches: [],
+    });
+
+    await waitFor(() => {
+      expect(activityItem.dataset.layoutSignature).toBe(initialSignature);
+    });
+    expect(onLayoutChange).not.toHaveBeenCalled();
+    expect(board.querySelector(".react-draggable-dragging")).toBeNull();
+  });
+
+  it("keeps dashboard controls tappable and ignores their touch gestures", () => {
+    const onLayoutChange = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard
+                headerAction={
+                  <button onClick={onClick} type="button">
+                    Open activity
+                  </button>
+                }
+                title="Current activity"
+              >
+                <p>Active workstation graph goes here.</p>
+              </AgentBentoCard>
+            ),
+          },
+        ]}
+        initialWidth={960}
+        layout={[
+          {
+            h: 2,
+            id: "activity",
+            widgetType: "activity",
+            w: 6,
+            x: 0,
+            y: 0,
+          },
+        ]}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Open activity" });
+    const start = createTouch(4, 120, 40);
+    const end = createTouch(4, 220, 40);
+    fireEvent.touchStart(button, {
+      changedTouches: [start],
+      touches: [start],
+    });
+    fireEvent.touchMove(document, {
+      changedTouches: [end],
+      touches: [end],
+    });
+    fireEvent.touchEnd(document, {
+      changedTouches: [end],
+      touches: [],
+    });
+    fireEvent.click(button);
+
+    expect(onLayoutChange).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels touch-pointer gestures without persisting a preview", async () => {
+    const onLayoutChange = vi.fn();
+    renderBentoBoard(onLayoutChange);
+
+    const activityItem = getGridItem("Current activity");
+    const initialSignature = activityItem.dataset.layoutSignature;
+    const dragHandle = within(activityItem).getByRole("heading", {
+      name: "Current activity",
+    });
+
+    fireEvent.pointerDown(dragHandle, {
+      clientX: 120,
+      clientY: 40,
+      pointerId: 5,
+      pointerType: "touch",
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 220,
+      clientY: 40,
+      pointerId: 5,
+      pointerType: "touch",
+    });
+    fireEvent.pointerCancel(document, {
+      clientX: 220,
+      clientY: 40,
+      pointerId: 5,
+      pointerType: "touch",
+    });
+
+    await waitFor(() => {
+      expect(activityItem.dataset.layoutSignature).toBe(initialSignature);
+    });
+    expect(onLayoutChange).not.toHaveBeenCalled();
+  });
+
   it("moves and resizes the focused card with keyboard input through the persistence seam", () => {
     const onLayoutChange = vi.fn();
     renderBentoBoard(onLayoutChange);
@@ -509,6 +713,13 @@ describe("AgentBentoLayout", () => {
       expect(gridItem.querySelector(".react-resizable-handle-e")).toBeTruthy();
       expect(gridItem.querySelector(".react-resizable-handle-s")).toBeTruthy();
       expect(gridItem.querySelector(".react-resizable-handle-se")).toBeTruthy();
+      for (const handle of gridItem.querySelectorAll<HTMLElement>(
+        "[data-bento-touch-resize-handle]",
+      )) {
+        expect(handle.style.width).toBe("44px");
+        expect(handle.style.height).toBe("44px");
+        expect(handle.style.touchAction).toBe("none");
+      }
     }
   });
 

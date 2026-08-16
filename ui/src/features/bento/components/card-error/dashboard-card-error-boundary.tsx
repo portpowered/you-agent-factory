@@ -6,9 +6,9 @@ import {
   type ReactNode,
   useId,
 } from "react";
-import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
-import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import { getAgentBentoMessages } from "../messages/agent-bento";
+import { DashboardActionButton } from "../../../../components/ui/dashboard-action-button";
+import { DashboardPanelShell } from "../../../../components/ui/dashboard-shell";
+import { getAgentBentoMessages } from "../../messages/agent-bento";
 
 export interface DashboardCardErrorBoundaryProps {
   children: ReactNode;
