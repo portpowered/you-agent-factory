@@ -11,6 +11,10 @@ import (
 
 func resolveRunnerIdentity(target workers.ExecutionTarget) string {
 	runnerID := workers.NormalizeRunnerID(target.RunnerID)
+	switch runnerID {
+	case runners.ScriptIdentity, runners.InferenceIdentity, runners.AgentIdentity, runners.MockIdentity:
+		return runnerID
+	}
 	// Managed-model attempts enter the private Inference Runner even when the
 	// request carries a provider runner for delegate fallback. The runner
 	// preserves that provider identity in its normalized attempt.
@@ -19,10 +23,6 @@ func resolveRunnerIdentity(target workers.ExecutionTarget) string {
 		models.RuntimeModelLocalityLocal,
 	) && strings.TrimSpace(target.Model.Name) != "" {
 		return runners.InferenceIdentity
-	}
-	switch runnerID {
-	case runners.ScriptIdentity, runners.InferenceIdentity, runners.AgentIdentity, runners.MockIdentity:
-		return runnerID
 	}
 	if runnerID != "" {
 		return runners.AgentIdentity
