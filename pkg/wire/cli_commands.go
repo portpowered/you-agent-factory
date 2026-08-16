@@ -95,13 +95,14 @@ func provideRunRuntimeRunnerBuilder(
 	}
 	return func(
 		ctx context.Context,
-		request factorysessionwire.ApplicationOpeningRequest,
+		request *factorysessions.RuntimeOpeningRequest,
+		sinkID factorysessions.VisualizationSinkID,
 	) (initializer.LocalRuntimeRunner, error) {
 		var replay *factorysessions.HistoricalReplayInspection
 		var hostedInvocation runcli.HostedInvocationOperation
 		var cleanInvocation factoryruntime.Service
 		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request)
+			opened, err := open.OpenApplication(openCtx, request, sinkID)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}

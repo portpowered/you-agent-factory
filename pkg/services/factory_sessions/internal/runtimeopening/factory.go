@@ -569,6 +569,7 @@ func (f *Factory) openRuntimeWithOptions(
 		f.workerService,
 		f.modelService,
 		f.automationService,
+		f.factorySessionsService,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsRoot,

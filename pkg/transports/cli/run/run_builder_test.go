@@ -71,7 +71,7 @@ type testRuntimeSelections struct {
 func testRuntimeOpeningRequestFactory(
 	cfg RunConfig,
 	mockWorkers *workers.MockWorkersConfig,
-) factorysessions.ApplicationOpeningRequest {
+) *factorysessions.RuntimeOpeningRequest {
 	mode := interfaces.RuntimeModeBatch
 	if cfg.Continuously {
 		mode = interfaces.RuntimeModeService
@@ -86,7 +86,7 @@ func testRuntimeOpeningRequestFactory(
 			metricsDirectory = metrics.RuntimeMetricsRoot(cfg.HomeDir)
 		}
 	}
-	return factorysessions.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{
+	return &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: interfaces.RuntimeOpeningRequest{
 			Directory: cfg.Dir, ExecutionBaseDir: cfg.ExecutionBaseDir,
 		},
@@ -117,7 +117,7 @@ func testRuntimeOpeningRequestFactory(
 		},
 		ModelCacheDirectory: cfg.ModelCacheDir,
 		OperatorDefaults:    cfg.OperatorDefaults,
-	}}
+	}
 }
 
 func flattenTestRuntimeRequest(request *factorysessions.RuntimeOpeningRequest) *testRuntimeSelections {
@@ -189,12 +189,13 @@ type testRunnerOpeners struct {
 
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
-	request factorysessions.ApplicationOpeningRequest,
+	request *factorysessions.RuntimeOpeningRequest,
+	_ factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {
 		return nil, errors.New("construct local runtime: dependency-injected builder is required")
 	}
-	selections := flattenTestRuntimeRequest(request.Runtime)
+	selections := flattenTestRuntimeRequest(request)
 	edges := serviceedges.Edges{}
 	var ready chan initializer.RuntimeHostBinding
 	if selections != nil && selections.Port > 0 {

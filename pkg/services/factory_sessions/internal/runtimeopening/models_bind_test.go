@@ -247,6 +247,7 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		nil,
 		nil,
 		nil,
+		nil,
 		modelsRuntimeBind{Root: root, Scope: scope},
 		nil,
 		inertHostedInstance{},
@@ -260,20 +261,22 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		func() error { return nil },
 	)
 
-	if opened.application.HTTP.Models != root {
+	if opened.application.Models != root {
 		t.Fatal("opened application runtime did not retain the process-scoped Models root")
 	}
-	if opened.application.HTTP.ModelsScope != scope {
-		t.Fatalf("opened HTTP Models scope = %q, want %q", opened.application.HTTP.ModelsScope, scope)
+	if opened.application.ModelsScope != scope {
+		t.Fatalf("opened Models scope = %q, want %q", opened.application.ModelsScope, scope)
 	}
 }
 
 func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(t *testing.T) {
 	t.Parallel()
 
+	root := &runtimeProductsSessionsRole{}
 	gateway := &runtimeProductsSessionsRole{}
 	opened := assembleRuntimeProducts(
 		nil,
+		root,
 		gateway,
 		nil,
 		nil,
@@ -294,11 +297,11 @@ func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(
 		func() error { return nil },
 	)
 
-	if got := opened.application.HTTP.FactorySessions; got != gateway {
-		t.Fatalf("FactorySessions = %T, want original runtime gateway %T", got, gateway)
+	if got := opened.application.FactorySessions; got != root {
+		t.Fatalf("FactorySessions = %T, want process Sessions root %T", got, root)
 	}
-	if got := opened.application.HTTP.LiveControl; got == nil || any(got) != any(gateway) {
-		t.Fatalf("LiveControl = %T, want the same runtime gateway %T", got, gateway)
+	if got := opened.application.LiveControl; got == nil || any(got) != any(root) {
+		t.Fatalf("LiveControl = %T, want the same process Sessions root %T", got, root)
 	}
 }
 
@@ -317,6 +320,7 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 	})
 
 	opened := assembleRuntimeProducts(
+		nil,
 		nil,
 		nil,
 		nil,

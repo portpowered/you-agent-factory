@@ -31,12 +31,13 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 		0,
 		func(
 			_ context.Context,
-			_ factorysessions.ApplicationOpeningRequest,
+			_ *factorysessions.RuntimeOpeningRequest,
+			_ factorysessions.VisualizationSinkID,
 		) (initializer.LocalRuntimeRunner, error) {
 			return WithHostedInvocation(hostedInvocationCompletionRunner{}, sessions), nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig) factorysessions.ApplicationOpeningRequest {
-			return factorysessions.ApplicationOpeningRequest{}
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.RuntimeOpeningRequest {
+			return &factorysessions.RuntimeOpeningRequest{}
 		},
 		nil,
 		nil,

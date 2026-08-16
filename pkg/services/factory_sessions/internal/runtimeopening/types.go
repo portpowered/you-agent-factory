@@ -33,18 +33,6 @@ type workerSessionsObservationProvider interface {
 	WorkerSessionsObservation() workersessions.ObservationService
 }
 
-type detachedOperationsProvider interface {
-	DetachedOperations() factorysessions.DetachedService
-}
-
-func detachedOperationsFromAssembly(assembly roles.RuntimeAssembly) factorysessions.DetachedService {
-	provider, ok := assembly.(detachedOperationsProvider)
-	if !ok {
-		return nil
-	}
-	return provider.DetachedOperations()
-}
-
 func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,
@@ -64,6 +52,7 @@ func historicalReplayRuntimeProducts(
 
 func assembleRuntimeProducts(
 	factoryDefinitions factorydefinitions.Service,
+	factorySessionRoot factorysessions.Service,
 	factorySessionGateway factorysessions.Service,
 	sessionInvocation roles.SessionInvoker,
 	factoryRuntime factoryruntime.Service,
@@ -111,26 +100,23 @@ func assembleRuntimeProducts(
 	resources.Directory = directory
 	resources.RuntimeInstanceID = runtimeInstanceID
 	resources.BackendScopeID = backendScopeID
-	httpServices := roles.RuntimeHTTPServices{
-		FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
-		WorkflowPreview: workflowPreview,
-		FactorySessions: factorySessionGateway, LiveControl: factorySessionGateway,
-		Work:   workService,
-		Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
-		ModelInvoker: NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
-			Models: modelsBind.Root, Scope: modelsBind.Scope,
-			Sessions: factorySessionGateway, Workers: workerService,
-			RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
-			FactoryDirectory: directory, WorkingDirectory: directory,
-		}),
-		Workers: workerService, ProviderSessions: providerSessions,
-		WorkerSessions: workerSessions,
-		WorkerPrompts:  workerPrompts, Logger: resources.Logger,
-	}
+	modelInvoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+		Models: modelsBind.Root, Scope: modelsBind.Scope,
+		Sessions: factorySessionGateway, Workers: workerService,
+		RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
+		FactoryDirectory: directory, WorkingDirectory: directory,
+	})
 	return runtimeProducts{
 		bindRuntime: bindRuntime,
 		application: roles.OpenedApplicationRuntime{
-			Process: process, HTTP: httpServices,
+			Process:        process,
+			FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
+			WorkflowPreview: workflowPreview,
+			FactorySessions: factorySessionRoot, LiveControl: factorySessionRoot,
+			Work: workService, Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
+			ModelInvoker: modelInvoker, Workers: workerService,
+			ProviderSessions: providerSessions, WorkerSessions: workerSessions,
+			WorkerPrompts: workerPrompts, Logger: resources.Logger,
 			Visualization: roles.RuntimeVisualizationServices{
 				Reader: reader, Projections: projections,
 			},
@@ -138,13 +124,8 @@ func assembleRuntimeProducts(
 		},
 		invocation: roles.OpenedInvocationRuntime{
 			Workers: workerService, Sessions: factorySessionGateway,
-			ModelInvoker: NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
-				Models: modelsBind.Root, Scope: modelsBind.Scope,
-				Sessions: factorySessionGateway, Workers: workerService,
-				RuntimeID: runtimeInstanceID, GenerationID: startup.StreamGeneration(),
-				FactoryDirectory: directory, WorkingDirectory: directory,
-			}),
-			Invoker: sessionInvocation, InputResolver: inputResolver,
+			ModelInvoker: modelInvoker,
+			Invoker:      sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,
 			ModelsScope: modelsBind.Scope,
 			RuntimeID:   runtimeInstanceID, GenerationID: startup.StreamGeneration(),

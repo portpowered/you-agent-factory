@@ -50,9 +50,7 @@ func TestHistoricalReplayPlanRunsDetachedNoopTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{},
-	}); err != nil {
+	if _, err := service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, ""); err != nil {
 		t.Fatalf("OpenApplication: %v", err)
 	}
 	if transport == nil {

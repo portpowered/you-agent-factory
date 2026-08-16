@@ -118,9 +118,7 @@ func TestOpenApplicationUsesValueRequestAndTypedVisualizationOwner(t *testing.T)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: request, VisualizationSinkID: "sink-1",
-	}); err != nil {
+	if _, err := service.OpenApplication(context.Background(), request, "sink-1"); err != nil {
 		t.Fatalf("OpenApplication: %v", err)
 	}
 	if gotSink == nil {
@@ -146,9 +144,7 @@ func TestOpenApplicationReturnsDetachedHistoricalReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{},
-	})
+	opened, err := service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "")
 	if err != nil {
 		t.Fatalf("OpenApplication: %v", err)
 	}
@@ -175,9 +171,7 @@ func TestOpenApplicationClosesOpenedResourcesOnBindingFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{}, VisualizationSinkID: "sink-1",
-	})
+	_, err = service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "sink-1")
 	if !errors.Is(err, bindErr) || !errors.Is(err, closeErr) || closed != 1 {
 		t.Fatalf("OpenApplication error = %v, close count = %d", err, closed)
 	}
@@ -203,9 +197,7 @@ func TestOpenApplicationRejectsUnavailableVisualizationSink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{}, VisualizationSinkID: "missing",
-	})
+	_, err = service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "missing")
 	if err == nil || !strings.Contains(err.Error(), "Visualization sink") {
 		t.Fatalf("OpenApplication error = %v, want unavailable sink", err)
 	}
@@ -244,9 +236,7 @@ func TestOpenApplicationStopsAtRuntimeInputAndOpenFailures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
-			_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-				Runtime: &factorysessions.RuntimeOpeningRequest{},
-			})
+			_, err = service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "")
 			want := test.resolveErr
 			if want == nil {
 				want = test.openErr
@@ -278,9 +268,7 @@ func TestOpenApplicationClosesOpenedResourcesWhenLifecyclePlanningFails(t *testi
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{},
-	})
+	_, err = service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "")
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) || closed != 1 {
 		t.Fatalf("OpenApplication error = %v, close count = %d", err, closed)
 	}
@@ -291,19 +279,15 @@ func TestOpenApplicationReturnsReadinessAndHostedInvocationCapabilities(t *testi
 	resolve, open, adapt, plan, owner := validApplicationOpeningDependencies()
 	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
 		return roles.OpenedApplicationRuntime{
-			Process: &applicationProcessStub{ready: ready},
-			HTTP: roles.RuntimeHTTPServices{
-				FactorySessions: hostedServiceStub{},
-			},
+			Process:         &applicationProcessStub{ready: ready},
+			FactorySessions: hostedServiceStub{},
 		}, nil
 	})
 	service, err := New(resolve, open, adapt, plan, owner)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{},
-	})
+	opened, err := service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "")
 	if err != nil {
 		t.Fatalf("OpenApplication: %v", err)
 	}
@@ -344,9 +328,7 @@ func TestOpenApplicationReturnsHistoricalReplayPlanningAndCleanupFailures(t *tes
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: &factorysessions.RuntimeOpeningRequest{},
-	})
+	_, err = service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, "")
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) || closed != 1 {
 		t.Fatalf("OpenApplication error = %v, close count = %d", err, closed)
 	}
@@ -354,7 +336,7 @@ func TestOpenApplicationReturnsHistoricalReplayPlanningAndCleanupFailures(t *tes
 
 func TestOpenApplicationRejectsNilService(t *testing.T) {
 	var service *Service
-	_, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{})
+	_, err := service.OpenApplication(context.Background(), nil, "")
 	if err == nil || !strings.Contains(err.Error(), "service is required") {
 		t.Fatalf("OpenApplication error = %v, want missing service", err)
 	}

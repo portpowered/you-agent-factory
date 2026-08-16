@@ -700,7 +700,15 @@ func provideApplicationRuntimeAdapter(
 				},
 			}
 		}
-		handler, err := httpHandler.Bind(opened.HTTP)
+		handler, err := httpHandler.Bind(httpapplication.Binding{
+			FactoryRuntime: opened.FactoryRuntime, FactoryDefinitions: opened.FactoryDefinitions,
+			WorkflowPreview: opened.WorkflowPreview, FactorySessions: opened.FactorySessions,
+			LiveControl: opened.LiveControl, Work: opened.Work, Models: opened.Models,
+			ModelsScope: opened.ModelsScope, ModelInvoker: opened.ModelInvoker,
+			Workers: opened.Workers, ProviderSessions: opened.ProviderSessions,
+			WorkerSessions: opened.WorkerSessions, WorkerPrompts: opened.WorkerPrompts,
+			Logger: opened.Logger,
+		})
 		if err != nil {
 			return factorysessions.BoundProcessComponents{}, err
 		}

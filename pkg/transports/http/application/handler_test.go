@@ -102,7 +102,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 	sessions := &sessionRole{}
-	opened := factorysessions.RuntimeHTTPServices{
+	opened := Binding{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
 		FactorySessions: sessions, LiveControl: sessions,
 		Work: &workRole{}, Models: &modelRole{},
@@ -142,7 +142,7 @@ func TestHandlerBindsLiveControlAtApplicationEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
-	opened := factorysessions.RuntimeHTTPServices{
+	opened := Binding{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
 		FactorySessions: &sessionRootRole{}, LiveControl: &sessionRole{},
 		Work: &workRole{}, Models: &modelRole{},
@@ -184,7 +184,7 @@ func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{
+	bound, err := handler.Bind(Binding{
 		FactoryRuntime:     &runtimeWithoutAPIRole{},
 		FactoryDefinitions: &definitionRole{}, FactorySessions: &sessionRole{}, LiveControl: &sessionRole{},
 		Work: &workRole{}, Models: &modelRole{}, Workers: &workerRole{},
@@ -198,7 +198,7 @@ func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
 func TestBindRejectsMissingProcessScopedHandler(t *testing.T) {
 	t.Parallel()
 
-	if bound, err := (*Handler)(nil).Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+	if bound, err := (*Handler)(nil).Bind(Binding{}); err == nil || bound != nil {
 		t.Fatalf("Bind = (%T, %v), want missing process-scoped handler error", bound, err)
 	}
 }
@@ -211,7 +211,7 @@ func TestBindRejectsMissingModelsBinding(t *testing.T) {
 		t.Fatalf("NewHTTPBinder: %v", err)
 	}
 	handler := &Handler{mappings: mappings, modelsContent: &contentPreparationRole{}}
-	if bound, err := handler.Bind(factorysessions.RuntimeHTTPServices{}); err == nil || bound != nil {
+	if bound, err := handler.Bind(Binding{}); err == nil || bound != nil {
 		t.Fatalf("Bind = (%T, %v), want missing Models binding error", bound, err)
 	}
 }

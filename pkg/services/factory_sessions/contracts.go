@@ -8,14 +8,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
 
 // DefinitionActivationGateway is retained as the Sessions implementation's
@@ -141,43 +137,6 @@ type OpeningPresentationOwner interface {
 		}, FactoryInvocationOutcome) error
 	}, error)
 	Close(OpeningScopeID)
-}
-
-// ApplicationOpeningRequest carries only immutable runtime selections and the
-// typed Factory Visualization sink identity selected for one application
-// opening. Transport streams and event consumers remain with their owner.
-type ApplicationOpeningRequest struct {
-	Runtime             *RuntimeOpeningRequest
-	VisualizationSinkID VisualizationSinkID
-}
-
-// RuntimeHTTPServices is the detached set of opened runtime services consumed
-// by the HTTP transport binding.
-type RuntimeHTTPServices struct {
-	FactoryRuntime     factoryruntime.Service
-	FactoryDefinitions interfaces.Service
-	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
-	FactorySessions    Service
-	// FactorySessionOperations is the process-root detached operation view.
-	// Runtime-bound legacy services remain available during the migration, while
-	// new consumers can route through the one root-owned capability.
-	FactorySessionOperations DetachedService
-	// LiveControl is the same runtime-bound Factory Sessions authority as
-	// FactorySessions, narrowed for clients that only manage live sessions.
-	// The broad root remains available here for stream, reconnect, invocation,
-	// durable, and inspection consumers that need excluded operations.
-	LiveControl LiveControlService
-	Work        work.Service
-	Models      models.Service
-	ModelsScope models.RuntimeScopeRef
-	// ModelInvoker is the opened-runtime model path. The process Workers root
-	// intentionally does not retain Factory Session or Models scope state.
-	ModelInvoker     workers.ModelInvoker
-	Workers          workers.Service
-	ProviderSessions providersessions.Service
-	WorkerSessions   workersessions.ObservationService
-	WorkerPrompts    workers.PromptTemplates
-	Logger           *zap.Logger
 }
 
 // HistoricalReplayInspection is the detached public read model restored from

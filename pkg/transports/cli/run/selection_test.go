@@ -40,7 +40,7 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, factorysessions.ApplicationOpeningRequest) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.RuntimeOpeningRequest, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{},
@@ -115,7 +115,7 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 					t.Fatal("regular run opener called for direct JavaScript")
 					return nil, nil
 				},
-				func(context.Context, factorysessions.ApplicationOpeningRequest) (initializer.LocalRuntimeRunner, error) {
+				func(context.Context, *factorysessions.RuntimeOpeningRequest, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 					return nil, nil
 				},
 				testInvocationOperation{}, testResponsePresentation(), direct,
@@ -155,7 +155,7 @@ func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, factorysessions.ApplicationOpeningRequest) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.RuntimeOpeningRequest, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
