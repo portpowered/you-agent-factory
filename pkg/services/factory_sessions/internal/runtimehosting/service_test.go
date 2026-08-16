@@ -57,7 +57,7 @@ func (runtime *lifecycleRuntime) FailStartup(err error) error {
 	return runtime.failErr
 }
 
-func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance {
+func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
 	return runtime.hosted
 }
 

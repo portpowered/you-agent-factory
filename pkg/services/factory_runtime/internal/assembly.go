@@ -107,11 +107,11 @@ func (a *Assembly) Assemble(
 	automationService automations.Service,
 	serviceMode bool,
 ) (
-	factoryruntime.ReplacementBuilder,
-	factoryruntime.HostedInstance,
+	factoryruntime.RuntimeReplacementBuilder,
+	factoryruntime.RuntimeRecord,
 	factoryruntime.SessionBuildSpec,
-	factoryruntime.Lifecycle,
-	factoryruntime.Sidecars,
+	factoryruntime.RuntimeLifecycle,
+	factoryruntime.RuntimeSidecars,
 	error,
 ) {
 	if a == nil || a.runtimeFactory == nil {
@@ -215,11 +215,11 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
-	return builder,
+	return adaptRuntimeReplacementBuilder(builder),
 		instance,
 		spec,
-		lifecycle,
-		NewRuntimeSidecars(automationService, serviceMode),
+		adaptRuntimeLifecycle(lifecycle),
+		adaptRuntimeSidecars(NewRuntimeSidecars(automationService, serviceMode)),
 		nil
 }
 
