@@ -147,7 +147,6 @@ The manifest still lists the entire legacy `execution/internal/provider` tree fo
 - `agy`
 - `claude`
 - `codex`
-- `conductor`
 - `cursor`
 - `gemini`
 - `inferencecontract`

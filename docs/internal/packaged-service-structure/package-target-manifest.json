@@ -484,7 +484,6 @@
     "pkg/services/workers/internal/providercompat/agy",
     "pkg/services/workers/internal/providercompat/claude",
     "pkg/services/workers/internal/providercompat/codex",
-    "pkg/services/workers/internal/providercompat/conductor",
     "pkg/services/workers/internal/providercompat/inferencecontract",
     "pkg/services/workers/internal/providercompat/registry",
     "pkg/services/workers/internal/service",
@@ -2801,11 +2800,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/providercompat/codex",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/conductor",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

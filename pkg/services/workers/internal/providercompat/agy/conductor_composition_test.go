@@ -6,14 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/conductor"
+	agypkg "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry"
 )
@@ -41,94 +38,103 @@ func TestBuiltInRegistrySelectsAntigravityThroughAuthoritativeManifestIdentity(t
 		t.Fatalf("MaximumCapabilities() = %v, want prompt_submission and message_snapshots", maximum.Values())
 	}
 	if providers.UsesNativeRunner(string(modelprovider.ProviderAntigravity)) {
-		t.Fatal("UsesNativeRunner(agy) = true, want conductor route for migrated Agy")
+		t.Fatal("UsesNativeRunner(agy) = true, want migrated Agy route")
 	}
 }
 
-func TestConductorInvokesAgyWithoutConcreteProviderSwitch(t *testing.T) {
+func TestAgyIntegrationInvokesProviderThroughProvidersRoot(t *testing.T) {
 	t.Parallel()
 
 	mock := &workers.MockPTYAllocator{
-		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy conductor answer"},
+		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy provider answer"},
 	}
-	providers := newAgyRegistryWithPTY(t, mock)
-	destination := &recordingDestination{}
-
-	err := conductor.New(providers).Invoke(
+	providersService := newAgyProvidersServiceWithPTY(t, mock)
+	registryProviders := newAgyRegistryWithService(t, providersService)
+	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
+		ProvidersService: providersService,
+	})
+	destination := &orderedWriter{}
+	providerSession := inference.NewProviderSession(
+		string(modelprovider.ProviderAntigravity),
+		"transcript",
+		"prior-session",
+		map[string]string{"source": "test"},
+	)
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID:    "inv-agy-integration",
+		Model:           "agy-default",
+		UserMessage:     "say hello",
+		Required:        inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+		ProviderSession: &providerSession,
+		Execution: workers.ProviderInferenceRequest{
+			Dispatch: work.WorkDispatch{
+				DispatchID: "inv-agy-integration",
+			},
+			WorkingDirectory: t.TempDir(),
+		},
+	})
+	if _, err := registryProviders.Capabilities(
 		context.Background(),
 		string(modelprovider.ProviderAntigravity),
-		inference.NewInvocationRequest(inference.InvocationInput{
-			InvocationID: "inv-agy-conductor",
-			Model:        "agy-default",
-			UserMessage:  "say hello",
-			Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
-			Execution: workers.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{
-					DispatchID: "inv-agy-conductor",
-				},
-				WorkingDirectory: t.TempDir(),
-			},
-		}),
+		request,
+	); err != nil {
+		t.Fatalf("registry.Capabilities(antigravity) error = %v", err)
+	}
+	err := inference.ExecuteInvocation(
+		context.Background(),
+		integration,
+		request,
 		destination,
 	)
 	if err != nil {
-		t.Fatalf("conductor.Invoke(agy) error = %v", err)
+		t.Fatalf("ExecuteInvocation(agy) error = %v", err)
 	}
 	if destination.completion == nil || destination.completion.Response() == nil {
 		t.Fatalf("completion = %#v, want successful response", destination.completion)
 	}
-	if got := destination.completion.Response().Content(); got != "agy conductor answer" {
-		t.Fatalf("response content = %q, want agy conductor answer", got)
+	if got := destination.completion.Response().Content(); got != "agy provider answer" {
+		t.Fatalf("response content = %q, want agy provider answer", got)
 	}
 	if len(mock.Sessions) != 1 {
 		t.Fatalf("pty sessions = %d, want 1", len(mock.Sessions))
 	}
 }
 
-func TestConductorRejectsAgyCapabilityEscalationBeforeProviderIO(t *testing.T) {
+func TestAgyRegistryRejectsCapabilityEscalationBeforeProviderIO(t *testing.T) {
 	t.Parallel()
 
 	mock := &workers.MockPTYAllocator{
 		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "should-not-run"},
 	}
 	providers := newAgyRegistryWithPTY(t, mock)
-	destination := &recordingDestination{}
-
-	err := conductor.New(providers).Invoke(
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-agy-escalate",
+		UserMessage:  "hello",
+		Required: inference.NewCapabilitySet(
+			inference.CapabilityPromptSubmission,
+			inference.CapabilityNativeStreaming,
+			inference.CapabilityNativeStreaming,
+		),
+	})
+	_, err := providers.Capabilities(
 		context.Background(),
 		string(modelprovider.ProviderAntigravity),
-		inference.NewInvocationRequest(inference.InvocationInput{
-			InvocationID: "inv-agy-escalate",
-			UserMessage:  "hello",
-			Required: inference.NewCapabilitySet(
-				inference.CapabilityPromptSubmission,
-				inference.CapabilityNativeStreaming,
-			),
-		}),
-		destination,
+		request,
 	)
 	if err == nil {
-		t.Fatal("conductor.Invoke(escalation) error = nil, want rejection")
+		t.Fatal("registry.Capabilities(escalation) error = nil, want rejection")
 	}
-	var rejection *conductor.Rejection
-	if !errors.As(err, &rejection) {
-		t.Fatalf("error = %v, want *conductor.Rejection", err)
-	}
-	if rejection.Invariant() != conductor.InvariantCapabilityEscalation {
-		t.Fatalf("Invariant() = %q, want %q", rejection.Invariant(), conductor.InvariantCapabilityEscalation)
-	}
-	if rejection.Capability() != string(inference.CapabilityNativeStreaming) {
-		t.Fatalf("Capability() = %q, want native_streaming", rejection.Capability())
+	var validation *inference.ValidationError
+	if !errors.As(err, &validation) ||
+		!strings.Contains(validation.Message, string(inference.CapabilityNativeStreaming)) {
+		t.Fatalf("registry.Capabilities(escalation) error = %v, want native_streaming validation", err)
 	}
 	if len(mock.Sessions) != 0 {
 		t.Fatalf("provider I/O occurred: pty sessions = %d", len(mock.Sessions))
 	}
-	if destination.completion != nil {
-		t.Fatalf("destination received completion %#v despite preflight rejection", destination.completion)
-	}
 }
 
-func TestConductorClassifiesAgyNativeFailureSafely(t *testing.T) {
+func TestAgyIntegrationClassifiesNativeFailureSafely(t *testing.T) {
 	t.Parallel()
 
 	mock := &workers.MockPTYAllocator{
@@ -137,21 +143,32 @@ func TestConductorClassifiesAgyNativeFailureSafely(t *testing.T) {
 			RawBytes: []byte("failed reading /tmp/secret-key and private prompt"),
 		},
 	}
-	providers := newAgyRegistryWithPTY(t, mock)
-	destination := &recordingDestination{}
-
-	err := conductor.New(providers).Invoke(
+	providersService := newAgyProvidersServiceWithPTY(t, mock)
+	registryProviders := newAgyRegistryWithService(t, providersService)
+	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
+		ProvidersService: providersService,
+	})
+	destination := &orderedWriter{}
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-agy-failure",
+		UserMessage:  "private prompt",
+		Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+	})
+	if _, err := registryProviders.Capabilities(
 		context.Background(),
 		string(modelprovider.ProviderAntigravity),
-		inference.NewInvocationRequest(inference.InvocationInput{
-			InvocationID: "inv-agy-failure",
-			UserMessage:  "private prompt",
-			Required:     inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
-		}),
+		request,
+	); err != nil {
+		t.Fatalf("registry.Capabilities(antigravity) error = %v", err)
+	}
+	err := inference.ExecuteInvocation(
+		context.Background(),
+		integration,
+		request,
 		destination,
 	)
 	if err != nil {
-		t.Fatalf("conductor.Invoke(failure) error = %v", err)
+		t.Fatalf("ExecuteInvocation(agy failure) error = %v", err)
 	}
 	if destination.completion == nil || destination.completion.Failure() == nil {
 		t.Fatalf("completion = %#v, want normalized failure", destination.completion)
@@ -162,6 +179,39 @@ func TestConductorClassifiesAgyNativeFailureSafely(t *testing.T) {
 		strings.Contains(failure.Message(), "private prompt") {
 		t.Fatalf("failure message leaked unsafe detail: %q", failure.Message())
 	}
+}
+
+func TestAgyIntegrationPropagatesCancellationWithTerminalFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	integration := agypkg.NewIntegration(agypkg.IntegrationDependencies{
+		ProvidersService: canceledProvidersFake{},
+	})
+	destination := &orderedWriter{}
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-agy-canceled",
+		UserMessage:  "hello",
+	})
+	err := inference.ExecuteInvocation(ctx, integration, request, destination)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExecuteInvocation(canceled) error = %v, want context.Canceled", err)
+	}
+	if destination.completion == nil || destination.completion.Failure() == nil {
+		t.Fatalf("completion = %#v, want cancellation failure", destination.completion)
+	}
+	if got := destination.completion.Failure().Kind(); got != inference.FailureCanceled {
+		t.Fatalf("failure kind = %q, want %q", got, inference.FailureCanceled)
+	}
+}
+
+type canceledProvidersFake struct {
+	providers.Service
+}
+
+func (canceledProvidersFake) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, context.Canceled
 }
 
 func newProductionAgyRegistry(t *testing.T) *registry.Registry {
@@ -179,17 +229,12 @@ func newProductionAgyRegistry(t *testing.T) *registry.Registry {
 
 func newAgyRegistryWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) *registry.Registry {
 	t.Helper()
-	providersService, err := providerswire.NewService(
-		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
-		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
-			Allocator: allocator,
-			Locator:   platformprocess.HostExecutableLocator{},
-			Inspector: platformfilesystem.Local{},
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
+	providersService := newAgyProvidersServiceWithPTY(t, allocator)
+	return newAgyRegistryWithService(t, providersService)
+}
+
+func newAgyRegistryWithService(t *testing.T, providersService providers.Service) *registry.Registry {
+	t.Helper()
 	registrations, err := registry.BuiltInRegistrations(registry.BuiltInDependencies{
 		ProvidersService: providersService,
 	})
@@ -201,20 +246,4 @@ func newAgyRegistryWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) *r
 		t.Fatalf("registry.New() error = %v", err)
 	}
 	return providers
-}
-
-type recordingDestination struct {
-	events     []inference.EventDraft
-	completion *inference.Completion
-}
-
-func (d *recordingDestination) WriteEvent(_ context.Context, event inference.EventDraft) error {
-	d.events = append(d.events, event)
-	return nil
-}
-
-func (d *recordingDestination) Close(_ context.Context, completion inference.Completion) error {
-	clone := completion
-	d.completion = &clone
-	return nil
 }
