@@ -1,8 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-import { GraphSemanticIcon } from "./semantic-icon.js";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
-import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeVisualIconClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
+import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
 import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphWorkstationControlRoleLabel, factoryGraphWorkstationGuardLimitLabel, factoryGraphWorkstationGuardLimitValue, factoryGraphWorkstationGuardTargetLabel, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
@@ -47,11 +46,11 @@ function Summary({ data, presentation, title, visualState, }) {
                         event.stopPropagation();
                         data.onSelectWorkstation?.(data.workstation.node_id);
                     }
-                    : undefined, title: title, children: _jsx(Header, { presentation: presentation, title: title, visualState: visualState }) }), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
+                    : undefined, title: title, children: _jsx(Header, { presentation: presentation, title: title }) }), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
 }
 function ActiveContent({ data, entries, presentation, title, visualState, }) {
     const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
-    const header = (_jsx(Header, { presentation: presentation, title: title, visualState: visualState }));
+    const header = (_jsx(Header, { presentation: presentation, title: title }));
     return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": visualState.selection ? "true" : undefined, "data-workstation-control-role": presentation.controlRole, "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: "flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden", onClick: (event) => {
                     event.stopPropagation();
                     data.onSelectWorkstation?.(data.workstation.node_id);
@@ -72,10 +71,8 @@ function WorkItem({ data, execution, workItem, }) {
                 });
             }, title: `${label} - ${durationTitle}`, children: content })) : (_jsx("div", { className: className, "data-selected": selected ? "true" : undefined, title: `${label} - ${durationTitle}`, children: content })) }));
 }
-function Header({ compact = false, presentation, title, visualState, }) {
+function Header({ compact = false, presentation, title, }) {
     return (_jsxs(_Fragment, { children: [_jsx("span", { className: compact
-                    ? "flex min-h-4 items-center"
-                    : "flex min-h-5 shrink-0 items-center", "data-factory-entity-semantic-icon": true, "data-workstation-semantic-icon": true, title: presentation.label, children: _jsx(GraphSemanticIcon, { className: classNames("h-4 w-4", factoryGraphNodeVisualIconClassName(visualState, presentation.className)), kind: presentation.iconKind, label: presentation.label }) }), _jsx("span", { className: compact
                     ? factoryGraphNodeWrappedTextClassName("block font-mono text-[0.74rem] font-bold leading-tight text-on-surface")
                     : workstationTitleClassName(title), "data-factory-entity-title": true, "data-workstation-title": true, children: title }), _jsx("span", { className: factoryGraphNodeWrappedTextClassName("text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"), "data-workstation-runtime-label": true, title: presentation.label, children: presentation.label }), presentation.schedulingLabel ? (_jsx("span", { className: factoryGraphNodeWrappedTextClassName("shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"), "data-workstation-scheduling-label": true, title: presentation.schedulingLabel, children: presentation.schedulingLabel })) : null] }));
 }

@@ -218,7 +218,7 @@ describe("CurrentActivity node hover surfaces", () => {
     ).toBeNull();
     expect(
       headerButton.querySelector("[data-workstation-semantic-icon]"),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       headerButton.querySelector("[data-workstation-title]")?.textContent,
     ).toBe("Draft");

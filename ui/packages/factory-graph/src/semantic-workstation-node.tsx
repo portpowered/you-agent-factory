@@ -2,7 +2,6 @@ import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
 import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
-import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
   type FactoryGraphNodeHandle,
   FactoryGraphNodeShell,
@@ -11,7 +10,6 @@ import {
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
-  factoryGraphNodeVisualIconClassName,
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
@@ -199,11 +197,7 @@ function Summary({
         }
         title={title}
       >
-        <Header
-          presentation={presentation}
-          title={title}
-          visualState={visualState}
-        />
+        <Header presentation={presentation} title={title} />
       </GraphNodeButton>
       <FactoryGraphWorkstationGuardedControlCard
         locale={data.locale}
@@ -230,13 +224,7 @@ function ActiveContent({
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
-  const header = (
-    <Header
-      presentation={presentation}
-      title={title}
-      visualState={visualState}
-    />
-  );
+  const header = <Header presentation={presentation} title={title} />;
   return (
     <div
       className="grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]"
@@ -360,37 +348,13 @@ function Header({
   compact = false,
   presentation,
   title,
-  visualState,
 }: {
   compact?: boolean;
   presentation: WorkstationPresentation;
   title: string;
-  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   return (
     <>
-      <span
-        className={
-          compact
-            ? "flex min-h-4 items-center"
-            : "flex min-h-5 shrink-0 items-center"
-        }
-        data-factory-entity-semantic-icon
-        data-workstation-semantic-icon
-        title={presentation.label}
-      >
-        <GraphSemanticIcon
-          className={classNames(
-            "h-4 w-4",
-            factoryGraphNodeVisualIconClassName(
-              visualState,
-              presentation.className,
-            ),
-          )}
-          kind={presentation.iconKind}
-          label={presentation.label}
-        />
-      </span>
       <span
         className={
           compact

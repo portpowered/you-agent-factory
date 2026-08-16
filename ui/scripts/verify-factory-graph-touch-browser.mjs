@@ -63,16 +63,16 @@ async function verifyMixedWorkstationSemantics(page) {
   }
 
   const expectedWorkstations = [
-    ["Classifier route", "Classifier workstation"],
-    ["Logical route", "Logical move workstation"],
+    ["Classifier route", "Classifier"],
+    ["Logical route", "Logical move"],
     [
       "Inference workstation with a deliberately long authored title",
-      "Inference workstation",
+      "Inference",
     ],
-    ["Agent worker", "Agent workstation"],
-    ["execute-goal", "Repeater schedule"],
-    ["Script cron", "Cron schedule"],
-    ["Poller source", "Poller schedule"],
+    ["Agent worker", "Agent"],
+    ["execute-goal", "Repeater"],
+    ["Script cron", "Cron"],
+    ["Poller source", "Poller"],
   ];
 
   for (const [name, semanticLabel] of expectedWorkstations) {

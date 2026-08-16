@@ -16,14 +16,14 @@ function runtimePresentation(runtimeType, locale) {
     const chinese = locale === "zh-CN";
     const runtimeRole = factoryGraphWorkstationRuntimeRole(runtimeType);
     const labels = {
-        AGENT: chinese ? "代理工作站" : "Agent workstation",
-        CLASSIFIER: chinese ? "分类器工作站" : "Classifier workstation",
-        HUMAN_APPROVAL: chinese ? "人工审批工作站" : "Human approval workstation",
-        INFERENCE: chinese ? "推理工作站" : "Inference workstation",
-        LOGICAL_MOVE: chinese ? "逻辑移动工作站" : "Logical move workstation",
-        POLLER: chinese ? "轮询运行工作站" : "Poller-run workstation",
-        SCRIPT: chinese ? "脚本工作站" : "Script workstation",
-        UNKNOWN: chinese ? "未知工作站语义" : "Unknown workstation semantics",
+        AGENT: chinese ? "代理" : "Agent",
+        CLASSIFIER: chinese ? "分类器" : "Classifier",
+        HUMAN_APPROVAL: chinese ? "人工审批" : "Human approval",
+        INFERENCE: chinese ? "推理" : "Inference",
+        LOGICAL_MOVE: chinese ? "逻辑移动" : "Logical move",
+        POLLER: chinese ? "轮询" : "Poller",
+        SCRIPT: chinese ? "脚本" : "Script",
+        UNKNOWN: chinese ? "未知" : "Unknown",
     };
     const iconKinds = {
         AGENT: "workstation",
@@ -47,25 +47,25 @@ function schedulingPresentation(behavior, locale) {
         case WorkstationKind.CRON:
             return {
                 borderClassName: "border-dashed",
-                schedulingLabel: chinese ? "Cron 调度" : "Cron schedule",
+                schedulingLabel: "Cron",
             };
         case WorkstationKind.POLLER:
             return {
                 borderClassName: "border-dotted",
-                schedulingLabel: chinese ? "轮询调度" : "Poller schedule",
+                schedulingLabel: chinese ? "轮询" : "Poller",
             };
         case WorkstationKind.REPEATER:
             return {
                 borderClassName: "border-double",
-                schedulingLabel: chinese ? "重复调度" : "Repeater schedule",
+                schedulingLabel: chinese ? "重复器" : "Repeater",
             };
         case WorkstationKind.STANDARD:
             return { schedulingLabel: undefined };
         case "UNKNOWN":
             return {
                 schedulingLabel: chinese
-                    ? "调度语义未知"
-                    : "Unknown scheduling behavior",
+                    ? "默认调度器"
+                    : "Default scheduler",
             };
     }
 }

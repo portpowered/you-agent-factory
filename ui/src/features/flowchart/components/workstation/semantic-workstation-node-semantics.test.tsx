@@ -74,8 +74,11 @@ describe("Factory workstation node semantics", () => {
       workstationSemantics: repeaterAgentSemantics,
     });
 
-    expect(repeater.getByText("Agent workstation")).toBeTruthy();
-    expect(repeater.getByText("Repeater schedule")).toBeTruthy();
+    expect(repeater.getByText("Agent")).toBeTruthy();
+    expect(repeater.getByText("Repeater")).toBeTruthy();
+    expect(
+      repeater.container.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
     expect(
       repeater.container.querySelector(
         '[data-workstation-scheduling-behavior="REPEATER"]',
@@ -101,6 +104,7 @@ describe("Factory workstation node semantics", () => {
       "VISIT_COUNT",
     );
     expect(loopBreaker.getByText("Loop breaker")).toBeTruthy();
+    expect(loopBreaker.getByText("Logical move")).toBeTruthy();
     expect(loopBreaker.getByText("review")).toBeTruthy();
     expect(loopBreaker.getByText("3")).toBeTruthy();
     expect(loopBreaker.container.querySelector("button")).toBeNull();
@@ -173,8 +177,25 @@ describe("Factory workstation node semantics", () => {
     expect(
       unknown.container.querySelector("[data-workstation-guard-card]"),
     ).toBeNull();
+    expect(unknown.getByText("Default scheduler")).toBeTruthy();
     expect(unknown.container.textContent?.toLowerCase()).not.toContain(
       "exhaustion",
     );
+  });
+
+  it("localizes concise workstation semantics in zh-CN", () => {
+    const localized = renderWorkstationNode({
+      locale: "zh-CN",
+      workstationSemantics: repeaterAgentSemantics,
+    });
+
+    expect(localized.getByText("代理")).toBeTruthy();
+    expect(localized.getByText("重复器")).toBeTruthy();
+    expect(
+      localized.container.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
+
+    const defaultScheduler = renderWorkstationNode({ locale: "zh-CN" });
+    expect(defaultScheduler.getByText("默认调度器")).toBeTruthy();
   });
 });

@@ -524,13 +524,14 @@ export const SemanticWorkflow = {
     const reviewButton = await canvas.findByRole("button", {
       name: "Select Review workstation",
     });
+    await expect(within(reviewButton).getByText("Inference")).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Inference workstation" }),
-    ).toBeVisible();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).not.toBeInTheDocument();
     await expect(
       within(
         await canvas.findByRole("button", { name: "Select Plan workstation" }),
-      ).getByRole("img", { name: "Inference workstation" }),
+      ).getByText("Inference"),
     ).toBeVisible();
     await expect(
       reviewButton
@@ -607,9 +608,10 @@ export const WorkstationIdle = {
     const reviewNode = workstationNode(reviewButton);
 
     expectFixedWorkstationDimensions(reviewNode);
+    await expect(within(reviewButton).getByText("Inference")).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Inference workstation" }),
-    ).toBeVisible();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).not.toBeInTheDocument();
     await expect(
       reviewNode.querySelector("[data-active='true']"),
     ).not.toBeInTheDocument();
@@ -789,21 +791,38 @@ export const WorkstationKindParity = {
       const button = await canvas.findByRole("button", {
         name: expectation.buttonName,
       });
-      const icon = within(button).getByRole("img", {
-        name: expectation.metadata.label,
-      });
 
       expectFixedWorkstationDimensions(workstationNode(button));
-      await expect(icon).toBeVisible();
-      await expect(icon).toHaveAttribute(
-        "data-graph-semantic-icon",
-        expectation.metadata.iconKind,
-      );
+      await expect(within(button).getByText("Inference")).toBeVisible();
+      await expect(
+        button.querySelector("[data-workstation-semantic-icon]"),
+      ).not.toBeInTheDocument();
       await expect(
         within(button).getByText(expectation.workstationName),
       ).toBeVisible();
-      expect(button.textContent).toContain(expectation.metadata.label);
     }
+
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Review workstation",
+        }),
+      ).getByText("Repeater"),
+    ).toBeVisible();
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Nightly Cron workstation",
+        }),
+      ).getByText("Cron"),
+    ).toBeVisible();
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Linear Poller workstation",
+        }),
+      ).getByText("Poller"),
+    ).toBeVisible();
 
     const cronExpectation = workstationKindParityExpectations.find(
       (expectation) => expectation.nodeID === "nightly-cron",
@@ -826,16 +845,16 @@ export const MixedWorkstationSemantics = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const expectedNodes = [
-      ["Classifier route", "Classifier workstation"],
-      ["Logical route", "Logical move workstation"],
+      ["Classifier route", "Classifier"],
       [
         "Inference workstation with a deliberately long authored title",
-        "Inference workstation",
+        "Inference",
       ],
-      ["Agent worker", "Agent workstation"],
-      ["execute-goal", "Repeater schedule"],
-      ["Script cron", "Cron schedule"],
-      ["Poller source", "Poller schedule"],
+      ["Logical route", "Logical move"],
+      ["Agent worker", "Agent"],
+      ["execute-goal", "Repeater"],
+      ["Script cron", "Cron"],
+      ["Poller source", "Poller"],
     ] as const;
 
     for (const [name, semanticLabel] of expectedNodes) {
@@ -854,7 +873,7 @@ export const MixedWorkstationSemantics = {
     await expect(loopScope.getByText("Loop breaker")).toBeVisible();
     await expect(loopScope.getByText("execute-goal")).toBeVisible();
     await expect(loopScope.getByText("3")).toBeVisible();
-    await expect(loopScope.getByText("Logical move workstation")).toBeVisible();
+    await expect(loopScope.getByText("Logical move")).toBeVisible();
   },
 };
 
