@@ -26,8 +26,10 @@ import { applyTraceFactoryGraphLayoutToNode } from "../lib/trace-factory-graph-l
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
+import type { TraceSelectionIdentity } from "../lib/trace-selection";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import { TraceRelationPath } from "./trace-relation-path";
 
 const GRAPH_SHELL_STYLE = { height: 352, minHeight: 288 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
@@ -36,16 +38,28 @@ const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
 export interface TraceRelationFlowProps {
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  renderGraph?: boolean;
   relations: DashboardWorkRelation[];
+  selectedTraceSelection?: TraceSelectionIdentity | null;
   selectedWorkID?: string | null;
+  selectionIdentitiesByWorkID?: ReadonlyMap<
+    string,
+    readonly TraceSelectionIdentity[]
+  >;
   workItemsByWorkId?: ReadonlyMap<string, DashboardWorkItemRef>;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph layout, React Flow, textual fallback, and selection wiring share one projection-driven surface.
 export function TraceRelationFlow({
   locale,
   onSelectWorkID,
+  onSelectTraceSelection,
+  renderGraph = true,
   relations,
+  selectedTraceSelection,
   selectedWorkID,
+  selectionIdentitiesByWorkID,
   workItemsByWorkId,
 }: TraceRelationFlowProps) {
   const graph = useMemo(
@@ -53,10 +67,18 @@ export function TraceRelationFlow({
       buildTraceRelationFactoryGraphFlow(relations, {
         locale,
         onSelectWorkID,
+        selectionIdentitiesByWorkID,
         selectedWorkID,
         workItemsByWorkId,
       }),
-    [locale, onSelectWorkID, relations, selectedWorkID, workItemsByWorkId],
+    [
+      locale,
+      onSelectWorkID,
+      relations,
+      selectedWorkID,
+      selectionIdentitiesByWorkID,
+      workItemsByWorkId,
+    ],
   );
   const topologyKey = useMemo(
     () => traceRelationTopologyLayoutKey(graph.topology),
@@ -143,33 +165,42 @@ export function TraceRelationFlow({
   const { graphViewportReady, graphViewportRef } =
     useMeasuredTraceGraphViewport();
 
-  if (relations.length === 0) {
-    return <span>{getTraceDrilldownMessages(locale).noBatchRelations}</span>;
-  }
-
   return (
-    <DashboardGraphFrame
-      aria-label={getTraceDrilldownMessages(locale).batchRelationGraphLabel}
-      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-transparent"
-      data-trace-relation-flow
-      style={GRAPH_SHELL_STYLE}
-    >
-      <div
-        className="h-full min-w-0 w-full"
-        data-trace-graph-viewport
-        ref={graphViewportRef}
-        style={GRAPH_VIEWPORT_STYLE}
-      >
-        {graphViewportReady ? (
-          <TraceRelationReactFlow
-            edges={graph.edges}
-            fitViewKey={fitViewKey}
-            nodes={renderedNodes}
-            onNodesChange={handleNodesChange}
-          />
-        ) : null}
-      </div>
-    </DashboardGraphFrame>
+    <div className="grid min-w-0 gap-3">
+      <TraceRelationPath
+        entries={graph.relations}
+        locale={locale}
+        onSelectTraceSelection={onSelectTraceSelection}
+        onSelectWorkID={onSelectWorkID}
+        selectedTraceSelection={selectedTraceSelection}
+      />
+      {renderGraph && graph.relations.length > 0 ? (
+        <DashboardGraphFrame
+          aria-label={getTraceDrilldownMessages(locale).batchRelationGraphLabel}
+          className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-transparent"
+          data-trace-relation-flow
+          style={GRAPH_SHELL_STYLE}
+        >
+          <div
+            className="h-full min-w-0 w-full"
+            data-trace-graph-viewport
+            ref={graphViewportRef}
+            style={GRAPH_VIEWPORT_STYLE}
+          >
+            {graphViewportReady ? (
+              <TraceRelationReactFlow
+                edges={graph.edges}
+                fitViewKey={fitViewKey}
+                nodes={renderedNodes}
+                onNodesChange={handleNodesChange}
+              />
+            ) : null}
+          </div>
+        </DashboardGraphFrame>
+      ) : relations.length === 0 ? (
+        <span>{getTraceDrilldownMessages(locale).noBatchRelations}</span>
+      ) : null}
+    </div>
   );
 }
 

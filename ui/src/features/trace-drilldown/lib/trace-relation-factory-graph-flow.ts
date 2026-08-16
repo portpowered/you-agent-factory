@@ -12,6 +12,7 @@ import {
   projectTraceRelationsToFactoryGraph,
   type TraceRelationNodeOverlay,
 } from "./trace-relation-factory-graph";
+import type { TraceRelationPathEntry } from "./trace-relation-path";
 
 const TRACE_RELATION_SOURCE_HANDLE_ID = "trace-relation-source";
 const TRACE_RELATION_TARGET_HANDLE_ID = "trace-relation-target";
@@ -34,6 +35,7 @@ export interface TraceRelationFactoryGraphFlow {
   edges: FactoryGraphReactFlowEdge[];
   endpointKeyByNodeId: ReadonlyMap<string, string>;
   nodes: TraceRelationFlowNode[];
+  relations: readonly TraceRelationPathEntry[];
   topology: FactoryGraphTopology;
 }
 
@@ -44,9 +46,16 @@ export function buildTraceRelationFactoryGraphFlow(
     selectedWorkID?: string | null;
   } = {},
 ): TraceRelationFactoryGraphFlow {
-  const { locale, onSelectWorkID, selectedWorkID, workItemsByWorkId } = options;
+  const {
+    locale,
+    onSelectWorkID,
+    selectedWorkID,
+    selectionIdentitiesByWorkID,
+    workItemsByWorkId,
+  } = options;
   const traceProjection = projectTraceRelationsToFactoryGraph(relations, {
     locale,
+    selectionIdentitiesByWorkID,
     workItemsByWorkId,
   });
   const factoryProjection = projectFactoryGraphToReactFlow({
@@ -135,6 +144,7 @@ export function buildTraceRelationFactoryGraphFlow(
     edges,
     endpointKeyByNodeId: traceProjection.endpointKeyByNodeId,
     nodes,
+    relations: traceProjection.relations,
     topology: traceProjection.topology,
   };
 }

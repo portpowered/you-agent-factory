@@ -1,5 +1,11 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: trace workstation path coverage shares one mocked React Flow harness for lineage, layout bounds, and semantics regressions.
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -373,7 +379,11 @@ describe("TraceWorkstationPath fallback lineage", () => {
       expect(renderedEdgePairs()).toEqual([]);
     });
 
-    expect(screen.getByRole("status").textContent).toBe(
+    expect(
+      document.querySelector<HTMLElement>(
+        '[data-trace-lineage-status="unresolved"]',
+      )?.textContent,
+    ).toBe(
       "Lineage is unresolved: no recorded relationship connects one or more dispatches, so no predecessor was inferred.",
     );
   });
@@ -416,8 +426,10 @@ describe("TraceWorkstationPath localization", () => {
       ).toBe("true");
     });
 
-    expect(screen.getByText("计划")).toBeTruthy();
-    expect(screen.getByText("实现")).toBeTruthy();
+    const graph = screen.getByRole("region", { name: "分派关系图" });
+    expect(graph.querySelector('[data-workstation-title="true"]')).toBeTruthy();
+    expect(within(graph).getByText("计划")).toBeTruthy();
+    expect(within(graph).getByText("实现")).toBeTruthy();
     expect(
       screen
         .getByTestId("trace-react-flow-controls")
@@ -565,17 +577,28 @@ describe("TraceWorkstationPath semantics", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("dispatch-plan")).toBeTruthy();
+      expect(
+        within(screen.getByTestId("trace-react-flow")).getByText(
+          "dispatch-plan",
+        ),
+      ).toBeTruthy();
     });
 
-    expect(screen.queryByText("Dispatch")).toBeNull();
+    expect(
+      within(
+        screen.getByRole("region", { name: "Textual relation path" }),
+      ).getByText("Dispatch"),
+    ).toBeTruthy();
     expect(screen.queryByText("Workstation")).toBeNull();
     expect(screen.queryByText("Accepted")).toBeNull();
     expect(screen.queryByText("Failed")).toBeNull();
     expect(screen.queryByText(/^In:/)).toBeNull();
     expect(screen.queryByText(/^Out:/)).toBeNull();
 
-    const acceptedNode = screen.getByText("dispatch-plan").closest("article");
+    const graph = screen.getByTestId("trace-react-flow");
+    const acceptedNode = within(graph)
+      .getByText("dispatch-plan")
+      .closest("article");
     if (!acceptedNode) {
       throw new Error("Expected accepted workstation node to render.");
     }
@@ -584,7 +607,9 @@ describe("TraceWorkstationPath semantics", () => {
     );
     expect(acceptedNode.className).toContain("border-info-border");
 
-    const failedNode = screen.getByText("dispatch-repair").closest("article");
+    const failedNode = within(graph)
+      .getByText("dispatch-repair")
+      .closest("article");
     if (!failedNode) {
       throw new Error("Expected failed workstation node to render.");
     }

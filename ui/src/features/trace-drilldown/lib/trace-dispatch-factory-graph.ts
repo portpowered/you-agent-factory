@@ -12,6 +12,10 @@ import {
   type FactoryGraphTopology,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import type {
+  TraceRelationPathEndpoint,
+  TraceRelationPathEntry,
+} from "./trace-relation-path";
 import {
   type TraceSelectionIdentity,
   traceSelectionAttempt,
@@ -31,6 +35,7 @@ export interface TraceDispatchFactoryGraphProjection {
   lineageStatus: "resolved" | "unresolved";
   nodeIdByDispatchId: ReadonlyMap<string, string>;
   overlaysByNodeId: ReadonlyMap<string, TraceDispatchNodeOverlay>;
+  relations: readonly TraceRelationPathEntry[];
   selectionIdentitiesByNodeId: ReadonlyMap<
     string,
     readonly TraceSelectionIdentity[]
@@ -70,7 +75,7 @@ export function projectTraceDispatchesToFactoryGraph(
   const traceNodeIdByFactoryNodeId = new Map(
     nodes.map(({ node, traceNodeId }) => [node.id, traceNodeId]),
   );
-  const { edges, lineageStatus } = buildTraceLineageEdges(
+  const { edges, lineageStatus, relations } = buildTraceLineageEdges(
     dispatches,
     nodes,
     dispatchIdByNodeId,
@@ -81,6 +86,7 @@ export function projectTraceDispatchesToFactoryGraph(
     lineageStatus,
     nodeIdByDispatchId,
     overlaysByNodeId,
+    relations,
     selectionIdentitiesByNodeId,
     traceNodeIdByFactoryNodeId,
     topology: {
@@ -149,10 +155,13 @@ function buildTraceLineageEdges(
 ): {
   edges: FactoryGraphEdge[];
   lineageStatus: "resolved" | "unresolved";
+  relations: TraceRelationPathEntry[];
 } {
   const edgeKeys = new Set<string>();
   const latestNodeIDByChainingTraceID = new Map<string, string>();
   const nodeIDsByIndex = nodes.map(({ node }) => node.id);
+  const nodesByID = new Map(nodes.map(({ node, ...rest }) => [node.id, rest]));
+  const relations: TraceRelationPathEntry[] = [];
   let hasUnresolvedLineage = false;
 
   for (
@@ -188,6 +197,17 @@ function buildTraceLineageEdges(
         dispatchIdByNodeId.has(producerNodeID)
       ) {
         edgeKeys.add(`${producerNodeID}->${currentNodeId}`);
+        const sourceNode = nodesByID.get(producerNodeID);
+        const targetNode = nodesByID.get(currentNodeId);
+        if (sourceNode && targetNode) {
+          relations.push({
+            id: `predecessor|${sourceNode.traceNodeId}|${targetNode.traceNodeId}`,
+            kind: "predecessor",
+            relationType: "PREDECESSOR",
+            source: traceDispatchPathEndpoint(sourceNode),
+            target: traceDispatchPathEndpoint(targetNode),
+          });
+        }
       }
     }
 
@@ -225,6 +245,23 @@ function buildTraceLineageEdges(
   return {
     edges,
     lineageStatus: hasUnresolvedLineage ? "unresolved" : "resolved",
+    relations: relations.sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
+function traceDispatchPathEndpoint({
+  dispatch,
+  overlay,
+  selectionIdentities,
+}: Omit<
+  TraceDispatchProjectionNode,
+  "node" | "traceNodeId"
+>): TraceRelationPathEndpoint {
+  return {
+    dispatchID: dispatch.dispatch_id,
+    label: overlay.displayLabel,
+    selectionIdentities,
+    workID: selectionIdentities[0]?.work_id || undefined,
   };
 }
 

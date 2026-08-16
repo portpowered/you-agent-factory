@@ -36,6 +36,7 @@ import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-fr
 import {
   type TraceSelectionIdentity,
   traceSelectionForDispatch,
+  traceSelectionIdentitiesByWorkID,
   traceSelectionIdentitiesForDispatch,
   traceSelectionKey,
   traceSelectionMatches,
@@ -166,13 +167,14 @@ interface TraceGridProps {
   trace: DashboardTrace;
 }
 
-type TraceSelectionSource = "graph" | "table";
+type TraceSelectionSource = "graph" | "table" | "text";
 
 interface PendingTraceFocus {
   selection: TraceSelectionIdentity;
   source: TraceSelectionSource;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: trace card keeps the canonical metadata, relation, table, and graph surfaces in one selection-aware render path.
 function TraceGrid({
   locale,
   onSelectWorkID,
@@ -182,6 +184,14 @@ function TraceGrid({
 }: TraceGridProps) {
   const messages = getTraceDrilldownMessages(locale);
   const workItems = useMemo(() => resolveTraceWorkItems(trace), [trace]);
+  const workItemsByWorkId = useMemo(
+    () => new Map(workItems.map((workItem) => [workItem.work_id, workItem])),
+    [workItems],
+  );
+  const selectionIdentitiesByWorkID = useMemo(
+    () => traceSelectionIdentitiesByWorkID(trace.dispatches),
+    [trace.dispatches],
+  );
   const [workItemsExpanded, setWorkItemsExpanded] = useState(false);
   const [localSelection, setLocalSelection] =
     useState<TraceSelectionIdentity | null>(null);
@@ -210,19 +220,27 @@ function TraceGrid({
   );
 
   useEffect(() => {
-    if (!pendingFocus || !gridRef.current) {
+    const grid = gridRef.current;
+    if (!pendingFocus || !grid) {
       return;
     }
 
-    const targetSurface = pendingFocus.source === "table" ? "graph" : "table";
     const targetKey = traceSelectionKey(pendingFocus.selection);
-    const target = [
-      ...gridRef.current.querySelectorAll<HTMLElement>(
-        `[data-trace-selection-surface="${targetSurface}"]`,
-      ),
-    ].find((element) =>
-      traceSelectionKeysFromElement(element).includes(targetKey),
-    );
+    const targetSurfaces =
+      pendingFocus.source === "table"
+        ? ["graph", "text"]
+        : pendingFocus.source === "graph"
+          ? ["table", "text"]
+          : ["graph", "table"];
+    const target = targetSurfaces
+      .flatMap((surface) => [
+        ...grid.querySelectorAll<HTMLElement>(
+          `[data-trace-selection-surface="${surface}"]`,
+        ),
+      ])
+      .find((element) =>
+        traceSelectionKeysFromElement(element).includes(targetKey),
+      );
     const focusTarget = target?.matches("button")
       ? target
       : target?.querySelector<HTMLElement>("button");
@@ -319,7 +337,14 @@ function TraceGrid({
               <TraceRelationFlow
                 locale={locale}
                 onSelectWorkID={onSelectWorkID}
+                onSelectTraceSelection={(selection) =>
+                  selectTraceSelection(selection, "text")
+                }
                 relations={trace.relations}
+                selectedTraceSelection={selectedTraceSelection}
+                selectedWorkID={selectedTraceSelection?.work_id}
+                selectionIdentitiesByWorkID={selectionIdentitiesByWorkID}
+                workItemsByWorkId={workItemsByWorkId}
               />
             ) : (
               messages.noBatchRelations

@@ -21,6 +21,7 @@ import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import type { TraceSelectionIdentity } from "../lib/trace-selection";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import { TraceRelationPath } from "./trace-relation-path";
 
 const GRAPH_SHELL_STYLE = { height: 320, minHeight: 256 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
@@ -33,6 +34,7 @@ export interface TraceWorkstationPathProps {
   dispatches: DashboardTraceDispatch[];
   locale?: string;
   onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  renderGraph?: boolean;
   selectedTraceSelection?: TraceSelectionIdentity | null;
 }
 
@@ -40,6 +42,7 @@ export function TraceWorkstationPath({
   dispatches,
   locale,
   onSelectTraceSelection,
+  renderGraph = true,
   selectedTraceSelection,
 }: TraceWorkstationPathProps) {
   const messages = getTraceDrilldownMessages(locale);
@@ -113,12 +116,14 @@ export function TraceWorkstationPath({
   const { graphViewportReady, graphViewportRef } =
     useMeasuredTraceGraphViewport();
 
-  if (graph.nodes.length === 0) {
-    return <span>{messages.dispatchPathEmpty}</span>;
-  }
-
   return (
     <div className="grid max-w-full min-w-80 gap-2">
+      <TraceRelationPath
+        entries={graph.relations}
+        locale={locale}
+        onSelectTraceSelection={onSelectTraceSelection}
+        selectedTraceSelection={selectedTraceSelection}
+      />
       {graph.lineageStatus === "unresolved" ? (
         <p
           aria-live="polite"
@@ -129,31 +134,35 @@ export function TraceWorkstationPath({
           {messages.unresolvedLineageMessage}
         </p>
       ) : null}
-      <div
-        className="relative max-w-full resize overflow-hidden"
-        style={GRAPH_SHELL_STYLE}
-      >
-        <GraphViewportSurface
-          aria-label={messages.dispatchPathGraphLabel}
-          className="h-full border-transparent"
-          data-trace-workstation-path
+      {renderGraph && graph.nodes.length > 0 ? (
+        <div
+          className="relative max-w-full resize overflow-hidden"
+          style={GRAPH_SHELL_STYLE}
         >
-          <div
-            className="h-full min-w-0 w-full"
-            data-trace-graph-viewport
-            ref={graphViewportRef}
-            style={GRAPH_VIEWPORT_STYLE}
+          <GraphViewportSurface
+            aria-label={messages.dispatchPathGraphLabel}
+            className="h-full border-transparent"
+            data-trace-workstation-path
           >
-            {graphViewportReady ? (
-              <TraceWorkstationReactFlow
-                edges={graph.edges}
-                nodes={nodes}
-                onNodesChange={handleNodesChange}
-              />
-            ) : null}
-          </div>
-        </GraphViewportSurface>
-      </div>
+            <div
+              className="h-full min-w-0 w-full"
+              data-trace-graph-viewport
+              ref={graphViewportRef}
+              style={GRAPH_VIEWPORT_STYLE}
+            >
+              {graphViewportReady ? (
+                <TraceWorkstationReactFlow
+                  edges={graph.edges}
+                  nodes={nodes}
+                  onNodesChange={handleNodesChange}
+                />
+              ) : null}
+            </div>
+          </GraphViewportSurface>
+        </div>
+      ) : graph.nodes.length === 0 ? (
+        <span>{messages.dispatchPathEmpty}</span>
+      ) : null}
     </div>
   );
 }

@@ -102,6 +102,28 @@ describe("projectTraceDispatchesToFactoryGraph explicit lineage", () => {
         (edge) => edge.kind === "workstation-on-continue",
       ),
     ).toBe(true);
+    expect(projection.relations).toHaveLength(2);
+    expect(projection.relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "predecessor",
+          relationType: "PREDECESSOR",
+          source: expect.objectContaining({
+            dispatchID: "dispatch-plan",
+            selectionIdentities: [
+              {
+                attempt: 1,
+                dispatch_id: "dispatch-plan",
+                work_id: "work-reviewed",
+              },
+            ],
+          }),
+          target: expect.objectContaining({
+            dispatchID: "dispatch-implement",
+          }),
+        }),
+      ]),
+    );
   });
 });
 
@@ -119,6 +141,9 @@ describe("projectTraceDispatchesToFactoryGraph recorded lineage", () => {
     expect(dispatchEdgePairs(projection)).toEqual([
       "dispatch-plan->dispatch-implement",
     ]);
+    expect(projection.relations.map((relation) => relation.kind)).toEqual([
+      "predecessor",
+    ]);
   });
 
   it("marks missing lineage unresolved instead of inventing sequential edges", () => {
@@ -133,6 +158,7 @@ describe("projectTraceDispatchesToFactoryGraph recorded lineage", () => {
 
       expect(projection.lineageStatus).toBe("unresolved");
       expect(dispatchEdgePairs(projection)).toEqual([]);
+      expect(projection.relations).toEqual([]);
     }
   });
 });

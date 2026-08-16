@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  traceSelectionIdentitiesByWorkID,
   traceSelectionIdentitiesForDispatch,
   traceSelectionKey,
   traceSelectionMatches,
@@ -56,5 +57,33 @@ describe("trace selection identity", () => {
       },
     ]);
     expect(new Set(identities.map(traceSelectionKey)).size).toBe(2);
+  });
+
+  it("indexes every Work identity without collapsing attempts", () => {
+    const selectionsByWorkID = traceSelectionIdentitiesByWorkID([
+      {
+        attempt: 1,
+        dispatch_id: "dispatch-retry",
+        input_items: [{ work_id: "work-shared" }],
+      },
+      {
+        attempt: 2,
+        dispatch_id: "dispatch-retry",
+        input_items: [{ work_id: "work-shared" }],
+      },
+    ]);
+
+    expect(selectionsByWorkID.get("work-shared")).toEqual([
+      {
+        attempt: 1,
+        dispatch_id: "dispatch-retry",
+        work_id: "work-shared",
+      },
+      {
+        attempt: 2,
+        dispatch_id: "dispatch-retry",
+        work_id: "work-shared",
+      },
+    ]);
   });
 });

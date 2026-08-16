@@ -31,6 +31,21 @@ export interface TraceDrilldownMessages {
   noBatchRelations: string;
   noInputItems: string;
   noOutputItems: string;
+  predecessorRelationLabel: string;
+  predecessorSourceLabel: string;
+  predecessorTargetLabel: string;
+  relationPathEmpty: string;
+  relationPathLabel: string;
+  relationPathRequestIDLabel: string;
+  relationPathRequiredStateLabel: string;
+  relationPathSourceLabel: string;
+  relationPathTargetLabel: string;
+  selectWorkLabel: (workID: string) => string;
+  traceSelectionIdentityLabel: (
+    dispatchID: string,
+    workID: string,
+    attempt: number,
+  ) => string;
   unresolvedLineageMessage: string;
   noTraceHistoryMessage: string;
   noTraceHistoryTitle: string;
@@ -84,6 +99,18 @@ const traceDrilldownMessagesByLocale = {
     noBatchRelations: "None",
     noInputItems: "No input items recorded.",
     noOutputItems: "No output items recorded.",
+    predecessorRelationLabel: "Predecessor",
+    predecessorSourceLabel: "Predecessor",
+    predecessorTargetLabel: "Dispatch",
+    relationPathEmpty: "No recorded relations.",
+    relationPathLabel: "Textual relation path",
+    relationPathRequestIDLabel: "Request ID",
+    relationPathRequiredStateLabel: "Required state",
+    relationPathSourceLabel: "Source",
+    relationPathTargetLabel: "Target",
+    selectWorkLabel: (workID) => `Select work ${workID}.`,
+    traceSelectionIdentityLabel: (dispatchID, workID, attempt) =>
+      `${dispatchID} · Work ${workID || "Unavailable"} · attempt ${attempt}`,
     unresolvedLineageMessage:
       "Lineage is unresolved: no recorded relationship connects one or more dispatches, so no predecessor was inferred.",
     noTraceHistoryMessage:
@@ -201,6 +228,18 @@ const traceDrilldownMessagesByLocale = {
     noBatchRelations: "无",
     noInputItems: "没有记录输入项。",
     noOutputItems: "没有记录输出项。",
+    predecessorRelationLabel: "前置分派",
+    predecessorSourceLabel: "前置分派",
+    predecessorTargetLabel: "分派",
+    relationPathEmpty: "没有记录的关系。",
+    relationPathLabel: "文本关系路径",
+    relationPathRequestIDLabel: "请求 ID",
+    relationPathRequiredStateLabel: "所需状态",
+    relationPathSourceLabel: "来源",
+    relationPathTargetLabel: "目标",
+    selectWorkLabel: (workID) => `选择工作 ${workID}。`,
+    traceSelectionIdentityLabel: (dispatchID, workID, attempt) =>
+      `${dispatchID} · 工作 ${workID || "不可用"} · 第 ${attempt} 次尝试`,
     unresolvedLineageMessage:
       "谱系未解析：一个或多个分派之间没有记录的关系，因此未推断前置分派。",
     noTraceHistoryMessage: "当前这个工作项暂时没有可保留的分派历史。",

@@ -14,6 +14,7 @@ import {
   type TraceDispatchFactoryGraphProjection,
   type TraceDispatchNodeOverlay,
 } from "./trace-dispatch-factory-graph";
+import type { TraceRelationPathEntry } from "./trace-relation-path";
 import {
   type TraceSelectionIdentity,
   traceSelectionKey,
@@ -39,6 +40,7 @@ export interface TraceDispatchFactoryGraphFlow {
   edges: FactoryGraphReactFlowEdge[];
   lineageStatus: "resolved" | "unresolved";
   nodes: TraceDispatchFlowNode[];
+  relations: readonly TraceRelationPathEntry[];
   selectionIdentitiesByNodeId: ReadonlyMap<
     string,
     readonly TraceSelectionIdentity[]
@@ -132,6 +134,7 @@ export function buildTraceDispatchFactoryGraphFlow(
     edges,
     lineageStatus: traceProjection.lineageStatus,
     nodes,
+    relations: traceProjection.relations,
     selectionIdentitiesByNodeId,
     topology: traceProjection.topology,
   };

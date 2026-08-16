@@ -102,6 +102,32 @@ export function traceSelectionKeysForDispatch(
   return traceSelectionIdentitiesForDispatch(dispatch).map(traceSelectionKey);
 }
 
+export function traceSelectionIdentitiesByWorkID(
+  dispatches: readonly DashboardTraceDispatch[],
+): ReadonlyMap<string, readonly TraceSelectionIdentity[]> {
+  const selectionsByWorkID = new Map<string, TraceSelectionIdentity[]>();
+
+  for (const dispatch of dispatches) {
+    for (const selection of traceSelectionIdentitiesForDispatch(dispatch)) {
+      if (!selection.work_id) {
+        continue;
+      }
+
+      const selections = selectionsByWorkID.get(selection.work_id) ?? [];
+      if (
+        !selections.some((candidate) =>
+          traceSelectionMatches(candidate, selection),
+        )
+      ) {
+        selections.push(selection);
+        selectionsByWorkID.set(selection.work_id, selections);
+      }
+    }
+  }
+
+  return selectionsByWorkID;
+}
+
 function addWorkID(workIDs: Set<string>, workID: string | undefined): void {
   const normalized = workID?.trim();
   if (normalized) {

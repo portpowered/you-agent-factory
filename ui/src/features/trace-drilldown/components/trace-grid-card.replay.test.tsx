@@ -176,8 +176,11 @@ describe("TraceGridBentoCard replayed world state", () => {
       ).toBeTruthy();
     });
 
-    expect(within(card).getByText("Plan story")).toBeTruthy();
-    expect(within(card).getByText("Implement story")).toBeTruthy();
+    const relationGraph = within(card).getByRole("region", {
+      name: "Batch relation graph",
+    });
+    expect(within(relationGraph).getByText("Plan story")).toBeTruthy();
+    expect(within(relationGraph).getByText("Implement story")).toBeTruthy();
     expect(within(card).queryByText("Trace history unavailable")).toBeNull();
     expect(
       within(card).queryByText(
@@ -223,8 +226,14 @@ describe("TraceGridBentoCard replayed world state", () => {
       expect(button).toBeTruthy();
       return button;
     });
-    const graphSurface = card.querySelector<HTMLElement>(
-      '[data-trace-selection-surface="graph"]',
+    const graphSurface = [
+      ...card.querySelectorAll<HTMLElement>(
+        '[data-trace-selection-surface="graph"]',
+      ),
+    ].find((candidate) =>
+      candidate
+        .getAttribute("data-trace-selection-keys")
+        ?.includes("dispatch-retry|work-shared|2"),
     );
     if (!graphSurface) {
       throw new Error("Expected a trace graph selection surface.");
@@ -243,6 +252,93 @@ describe("TraceGridBentoCard replayed world state", () => {
     await waitFor(() => {
       expect(dispatchButton.getAttribute("aria-pressed")).toBe("true");
       expect(document.activeElement).toBe(dispatchButton);
+    });
+  });
+
+  it("returns textual relation selection to the matching dispatch graph item", async () => {
+    const trace: DashboardTrace = {
+      dispatches: [
+        {
+          attempt: 1,
+          current_chaining_trace_id: "trace-plan-chain",
+          dispatch_id: "dispatch-plan",
+          duration_millis: 1000,
+          end_time: "2026-05-27T14:15:24.172854+07:00",
+          output_items: [{ work_id: "work-shared" }],
+          outcome: "ACCEPTED",
+          start_time: "2026-05-27T14:13:35.734332+07:00",
+          transition_id: "plan",
+          workstation_name: "Plan",
+        },
+        {
+          attempt: 2,
+          dispatch_id: "dispatch-retry",
+          duration_millis: 1000,
+          end_time: "2026-05-27T14:15:25.614203+07:00",
+          input_items: [{ work_id: "work-shared" }],
+          outcome: "ACCEPTED",
+          start_time: "2026-05-27T14:15:24.183895+07:00",
+          transition_id: "retry",
+          workstation_name: "Retry",
+        },
+      ],
+      relations: [
+        {
+          source_work_id: "work-shared",
+          source_work_name: "Shared work",
+          target_work_id: "work-shared",
+          target_work_name: "Shared work",
+          type: "RETRY",
+        },
+      ],
+      trace_id: "trace-text-selection",
+      transition_ids: ["plan", "retry"],
+      work_ids: ["work-shared"],
+      workstation_sequence: ["Plan", "Retry"],
+    };
+
+    render(<TraceGridBentoCard state={{ status: "ready", trace }} />);
+
+    const card = screen.getByRole("article", { name: "Trace drill-down" });
+    const textPath = await waitFor(() => {
+      const path = within(card)
+        .getAllByRole("region", { name: "Textual relation path" })
+        .find((candidate) =>
+          candidate.querySelector(
+            '[data-trace-relation-id^="work-type-state|"]',
+          ),
+        );
+      expect(path).toBeTruthy();
+      return path;
+    });
+    const textSelectionButtons = within(textPath).getAllByRole("button", {
+      name: "dispatch-retry · Work work-shared · attempt 2",
+    });
+    expect(textSelectionButtons).toHaveLength(2);
+    const textSelectionButton = textSelectionButtons[1];
+    if (!textSelectionButton) {
+      throw new Error("Expected the target relation identity to render.");
+    }
+    const graphSurface = [
+      ...card.querySelectorAll<HTMLElement>(
+        '[data-trace-selection-surface="graph"]',
+      ),
+    ].find((candidate) =>
+      candidate
+        .getAttribute("data-trace-selection-keys")
+        ?.includes("dispatch-retry|work-shared|2"),
+    );
+    if (!graphSurface) {
+      throw new Error("Expected a dispatch graph selection surface.");
+    }
+    const retryGraphButton = within(graphSurface).getByRole("button", {
+      name: "Select Retry workstation",
+    });
+
+    fireEvent.click(textSelectionButton);
+    await waitFor(() => {
+      expect(retryGraphButton.getAttribute("aria-pressed")).toBe("true");
+      expect(document.activeElement).toBe(retryGraphButton);
     });
   });
 });
