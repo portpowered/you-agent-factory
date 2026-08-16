@@ -76,7 +76,7 @@ func (binder *HTTPBinder) Bind(
 	durable := NewDurableAPI(durableExecution)
 	return HTTPBinding{
 		Runtime:            NewRuntimeAPI(runtime, definitions),
-		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
+		FactoryStatus:      newFactoryStatusAPI(sessions),
 		Sessions:           NewLiveSessionAPI(liveControl, sessions),
 		Invocation:         NewInvocationAPI(sessions),
 		FactoryDefinitions: NewFactoryDefinitionAPI(definitions),

@@ -13,35 +13,20 @@ type factoryStatusSessionReader interface {
 }
 
 type factoryStatusAPI struct {
-	runtime  factoryruntime.Service
 	sessions factoryStatusSessionReader
 }
 
-func newFactoryStatusAPI(
-	runtime factoryruntime.Service,
-	sessions factoryStatusSessionReader,
-) apisurface.FactoryStatusAPI {
-	return &factoryStatusAPI{runtime: runtime, sessions: sessions}
+// newFactoryStatusAPI takes only the session reader: Bind rejects a nil
+// factorysessions.Service before constructing this API, so every Factory status
+// projection -- current Factory included -- resolves through Factory Sessions.
+// There is no legacy Factory Runtime observation fallback left to reach.
+func newFactoryStatusAPI(sessions factoryStatusSessionReader) apisurface.FactoryStatusAPI {
+	return &factoryStatusAPI{sessions: sessions}
 }
 
 func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
 	if sessionID == "" {
-		if api.sessions != nil {
-			result, err := api.sessions.ObserveForSession(ctx, factorysessions.DefaultSessionID, factoryruntime.ObserveRequest{
-				Scope: factoryruntime.ObservationScopeFull,
-			})
-			if err != nil {
-				return factoryruntime.FactoryStatus{}, err
-			}
-			return factoryruntime.FactoryStatusFromObservation(result.Observation), nil
-		}
-		result, err := api.runtime.Observe(ctx, factoryruntime.ObserveRequest{
-			Scope: factoryruntime.ObservationScopeFull,
-		})
-		if err != nil {
-			return factoryruntime.FactoryStatus{}, err
-		}
-		return factoryruntime.FactoryStatusFromObservation(result.Observation), nil
+		sessionID = factorysessions.DefaultSessionID
 	}
 
 	result, err := api.sessions.ObserveForSession(ctx, sessionID, factoryruntime.ObserveRequest{

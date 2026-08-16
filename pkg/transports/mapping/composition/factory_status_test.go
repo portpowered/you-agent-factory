@@ -8,15 +8,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-type factoryStatusRuntimeRole struct {
-	factoryruntime.Service
-	observation factoryruntime.Observation
-}
-
-func (role factoryStatusRuntimeRole) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{Observation: role.observation}, nil
-}
-
 type factoryStatusSessionRole struct {
 	observation factoryruntime.Observation
 	sessionID   string
@@ -37,19 +28,7 @@ func TestFactoryStatusAPIRoutesCurrentAndSessionObservationsThroughNeutralProjec
 		Health: factoryruntime.ObservationHealth{FactoryState: "SCOPED"},
 	}
 	sessions := &factoryStatusSessionRole{observation: scopedObservation}
-	api := newFactoryStatusAPI(factoryStatusRuntimeRole{observation: factoryruntime.Observation{
-		Status: factoryruntime.ObservationStatusActive,
-		Progress: factoryruntime.ObservationProgress{
-			TotalWorkCount: 3,
-			WorkCategories: factoryruntime.ObservationWorkCategories{Processing: 2, Terminal: 1},
-		},
-		Resources: []factoryruntime.ObservationResourceView{{
-			ResourceID: "worker-slot", InUseCount: 1, AvailableCount: 2,
-		}},
-		Health: factoryruntime.ObservationHealth{
-			FactoryState: "CURRENT", LifecycleControlStatus: "RUNNING",
-		},
-	}}, sessions)
+	api := newFactoryStatusAPI(sessions)
 
 	got, err := api.ProjectFactoryStatus(context.Background(), "")
 	if err != nil || got.FactoryState != "SCOPED" || got.RuntimeStatus != "ACTIVE" ||
