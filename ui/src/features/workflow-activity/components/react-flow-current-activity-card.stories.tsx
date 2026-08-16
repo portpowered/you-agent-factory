@@ -278,7 +278,7 @@ function workstationShell(button: HTMLElement): HTMLElement {
 
 function expectFixedWorkstationDimensions(node: HTMLElement): void {
   expect(node.getAttribute("style")).toContain("width: 156px");
-  expect(node.getAttribute("style")).toContain("height: 196px");
+  expect(node.getAttribute("style")).toContain("height: 156px");
 }
 
 function expectFittedWorkstationDimensions(node: HTMLElement): void {
@@ -290,7 +290,7 @@ function expectFittedWorkstationDimensions(node: HTMLElement): void {
     style.match(/height: ([\d.]+)px/u)?.[1] ?? "0",
   );
   expect(width).toBeGreaterThan(156);
-  expect(height).toBeGreaterThanOrEqual(196);
+  expect(height).toBeGreaterThanOrEqual(156);
 }
 
 function expectNoImplementationLabels(canvasElement: HTMLElement): void {
@@ -861,7 +861,13 @@ export const MixedWorkstationSemantics = {
       const button = await canvas.findByRole("button", {
         name: `Select ${name} workstation`,
       });
-      await expect(within(button).getByText(semanticLabel)).toBeVisible();
+      const semanticLabelElement = Array.from(
+        button.querySelectorAll(
+          "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+        ),
+      ).find((element) => element.textContent?.trim() === semanticLabel);
+      await expect(semanticLabelElement).toBeInTheDocument();
+      await expect(semanticLabelElement).toBeVisible();
     }
 
     const loopTitle = await canvas.findByText("goal-loop-breaker", {
@@ -874,6 +880,19 @@ export const MixedWorkstationSemantics = {
     await expect(loopScope.getByText("execute-goal")).toBeVisible();
     await expect(loopScope.getByText("3")).toBeVisible();
     await expect(loopScope.getByText("Logical move")).toBeVisible();
+
+    const guardCard = loopNode?.querySelector("[data-workstation-guard-card]");
+    expect(guardCard).toBeTruthy();
+    const guardRows = loopNode?.querySelectorAll(
+      "[data-workstation-guard-row]",
+    );
+    expect(guardRows).toHaveLength(2);
+    const guardBounds = (guardCard as HTMLElement).getBoundingClientRect();
+    const nodeBounds = (loopNode as HTMLElement).getBoundingClientRect();
+    expect(guardBounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
+    expect(guardBounds.right).toBeLessThanOrEqual(nodeBounds.right);
+    expect(guardBounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
+    expect(guardBounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
   },
 };
 

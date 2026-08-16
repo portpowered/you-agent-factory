@@ -18,7 +18,7 @@ describe("Factory graph node family roles", () => {
     ["worker", "worker", 156, 58],
     ["work-state", "work-state", 164, 86],
     ["work-type", "work-type", 156, 58],
-    ["workstation", "workstation", 156, 196],
+    ["workstation", "workstation", 156, 156],
   ] as const)(
     "keeps %s family shape and defaults in the package contract",
     (family, shape, width, height) => {

@@ -63,9 +63,7 @@ function schedulingPresentation(behavior, locale) {
             return { schedulingLabel: undefined };
         case "UNKNOWN":
             return {
-                schedulingLabel: chinese
-                    ? "默认调度器"
-                    : "Default scheduler",
+                schedulingLabel: chinese ? "默认调度器" : "Default scheduler",
             };
     }
 }

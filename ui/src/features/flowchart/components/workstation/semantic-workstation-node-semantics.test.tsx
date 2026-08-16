@@ -107,6 +107,28 @@ describe("Factory workstation node semantics", () => {
     expect(loopBreaker.getByText("Logical move")).toBeTruthy();
     expect(loopBreaker.getByText("review")).toBeTruthy();
     expect(loopBreaker.getByText("3")).toBeTruthy();
+    expect(
+      loopBreaker.container.querySelectorAll("[data-workstation-guard-row]"),
+    ).toHaveLength(2);
+    const targetRow = loopBreaker.container.querySelector(
+      '[data-workstation-guard-row="target"]',
+    );
+    const limitRow = loopBreaker.container.querySelector(
+      '[data-workstation-guard-row="limit"]',
+    );
+    expect(targetRow?.textContent).toContain("Target workstation");
+    expect(targetRow?.textContent).toContain("review");
+    expect(limitRow?.textContent).toContain("Visit limit");
+    expect(limitRow?.textContent).toContain("3");
+    expect(
+      targetRow?.querySelector("[data-workstation-guard-target]")?.className,
+    ).toContain("truncate");
+    expect(
+      targetRow?.querySelector("[data-workstation-guard-target]")?.className,
+    ).not.toContain("break-words");
+    expect(
+      limitRow?.querySelector("[data-workstation-guard-limit]")?.className,
+    ).toContain("truncate");
     expect(loopBreaker.container.querySelector("button")).toBeNull();
 
     const shell = loopBreaker.container.querySelector(
@@ -197,5 +219,52 @@ describe("Factory workstation node semantics", () => {
 
     const defaultScheduler = renderWorkstationNode({ locale: "zh-CN" });
     expect(defaultScheduler.getByText("默认调度器")).toBeTruthy();
+  });
+});
+
+describe("Factory workstation density", () => {
+  it("keeps the default scheduler single-line beside a guarded card", () => {
+    const unknownScheduling = renderWorkstationNode({
+      workstationSemantics: {
+        ...loopBreakerSemantics,
+        schedulingBehavior: "UNKNOWN",
+      },
+    });
+
+    const scheduler = unknownScheduling.container.querySelector(
+      "[data-workstation-scheduling-label]",
+    );
+    expect(scheduler?.textContent).toContain("Default scheduler");
+    expect(scheduler?.className).toContain("truncate");
+    expect(scheduler?.className).toContain("whitespace-nowrap");
+  });
+
+  it("keeps the interaction overlay and workstation selection control usable", () => {
+    const onSelectWorkstation = vi.fn();
+    const workstationNode = renderWorkstationNode({
+      interactionOverlay: {
+        badges: [{ label: "Connection ready", tone: "info" }],
+        connectionHint: "Choose a connection point",
+      },
+      onSelectWorkstation,
+      workstationSemantics: loopBreakerSemantics,
+    });
+
+    expect(
+      workstationNode.container.querySelector(
+        "[data-graph-interaction-overlay]",
+      ),
+    ).toBeTruthy();
+    expect(
+      workstationNode.container.querySelector("[data-workstation-guard-card]"),
+    ).toBeTruthy();
+    const button = workstationNode.getByRole("button", {
+      name: "Select Draft workstation",
+    });
+    expect(button.getAttribute("type")).toBe("button");
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    button.click();
+    expect(onSelectWorkstation).toHaveBeenCalledWith("workstation:draft");
   });
 });

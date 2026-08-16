@@ -395,7 +395,7 @@ describe("useCurrentActivityGraphLayout", () => {
     const initialWorkstation = result.current.nodes.find(
       (node) => node.nodeId === "workstation:draft",
     );
-    expect(initialWorkstation).toMatchObject({ height: 196, width: 156 });
+    expect(initialWorkstation).toMatchObject({ height: 156, width: 156 });
     const callsAfterInitialLayout = buildLayout.mock.calls.length;
 
     rerender({ canonicalLayout: authoredCanonicalLayout });

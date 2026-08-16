@@ -78,6 +78,8 @@ export type FactoryGraphWorkstationNode = Node<
 >;
 
 const VISIBLE_WORK_ITEM_LIMIT = 3;
+const WORKSTATION_HEADER_CLASS_NAME =
+  "flex min-w-0 w-full flex-wrap items-start justify-between gap-1 overflow-hidden";
 
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
 export function FactoryGraphWorkstationNodeView({
@@ -170,8 +172,9 @@ function Summary({
 }) {
   return (
     <div
-      className="grid min-w-0 gap-1"
+      className="grid min-w-0 gap-0.5"
       data-workstation-control-role={presentation.controlRole}
+      data-workstation-density="compact"
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
     >
@@ -184,7 +187,7 @@ function Summary({
         aria-pressed={
           data.onSelectWorkstation ? visualState.selection : undefined
         }
-        className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
+        className={WORKSTATION_HEADER_CLASS_NAME}
         data-selected-workstation={visualState.selection ? "true" : undefined}
         disabled={data.onSelectWorkstation === undefined}
         onClick={
@@ -232,6 +235,7 @@ function ActiveContent({
       data-selected-work={data.selectedWorkID !== null ? "true" : undefined}
       data-selected-workstation={visualState.selection ? "true" : undefined}
       data-workstation-control-role={presentation.controlRole}
+      data-workstation-density="compact"
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
     >
@@ -239,7 +243,7 @@ function ActiveContent({
         <GraphNodeButton
           aria-label={selectWorkstationLabel(title, data.locale)}
           aria-pressed={visualState.selection}
-          className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
+          className={WORKSTATION_HEADER_CLASS_NAME}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorkstation?.(data.workstation.node_id);
@@ -249,10 +253,7 @@ function ActiveContent({
           {header}
         </GraphNodeButton>
       ) : (
-        <div
-          className="flex min-w-0 w-full flex-wrap items-start justify-between gap-2 overflow-hidden"
-          title={title}
-        >
+        <div className={WORKSTATION_HEADER_CLASS_NAME} title={title}>
           {header}
         </div>
       )}
@@ -260,7 +261,7 @@ function ActiveContent({
         locale={data.locale}
         presentation={presentation}
       />
-      <ul className="mt-2 grid min-w-0 list-none content-start gap-1 p-0">
+      <ul className="mt-1 grid min-w-0 list-none content-start gap-0.5 p-0">
         {visible.map(({ execution, workItem }) => (
           <WorkItem
             data={data}
@@ -379,9 +380,7 @@ function Header({
       </span>
       {presentation.schedulingLabel ? (
         <span
-          className={factoryGraphNodeWrappedTextClassName(
-            "shrink-0 rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle",
-          )}
+          className="min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"
           data-workstation-scheduling-label
           title={presentation.schedulingLabel}
         >
@@ -409,38 +408,44 @@ export function FactoryGraphWorkstationGuardedControlCard({
   return (
     <fieldset
       aria-label={roleLabel}
-      className="grid min-w-0 gap-1 rounded-md border border-af-warning-border bg-warning-container px-2 py-1.5 text-[0.68rem] text-on-warning-container"
+      className="grid min-w-0 max-w-full gap-0.5 overflow-hidden rounded-md border border-af-warning-border bg-warning-container px-1.5 py-1 text-[0.68rem] leading-tight text-on-warning-container"
       data-workstation-guard-card
       data-workstation-guard-type={control.guardType}
       data-workstation-control-role={presentation.controlRole}
     >
       <span
         className={factoryGraphNodeWrappedTextClassName(
-          "font-semibold uppercase tracking-[0.06em]",
+          "font-semibold uppercase leading-none tracking-[0.06em]",
         )}
         data-workstation-control-role-label
       >
         {roleLabel}
       </span>
       <dl className="m-0 grid min-w-0 gap-0.5">
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1">
-          <dt className="shrink-0">
+        <div
+          className="flex min-w-0 items-center gap-1"
+          data-workstation-guard-row="target"
+        >
+          <dt className="shrink-0 whitespace-nowrap">
             {factoryGraphWorkstationGuardTargetLabel(locale)}
           </dt>
           <dd
-            className={factoryGraphNodeWrappedTextClassName("m-0 font-mono")}
+            className="m-0 min-w-0 truncate font-mono leading-tight"
             data-workstation-guard-target
             title={control.targetWorkstation}
           >
             {control.targetWorkstation}
           </dd>
         </div>
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1">
-          <dt className="shrink-0">
+        <div
+          className="flex min-w-0 items-center gap-1"
+          data-workstation-guard-row="limit"
+        >
+          <dt className="shrink-0 whitespace-nowrap">
             {factoryGraphWorkstationGuardLimitLabel(locale)}
           </dt>
           <dd
-            className={factoryGraphNodeWrappedTextClassName("m-0 font-mono")}
+            className="m-0 min-w-0 truncate font-mono leading-tight"
             data-workstation-guard-limit
             title={factoryGraphWorkstationGuardLimitValue(control)}
           >
@@ -467,7 +472,7 @@ function Overflow({
     return (
       <FactoryGraphWorkProgressMarker
         ariaLabel={activeItemsLabel(total, locale)}
-        className="mt-2 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]"
+        className="mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]"
         count={total}
         data-workstation-work-progress="numeric"
         kind="numeric"
@@ -476,7 +481,7 @@ function Overflow({
   return (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemsLabel(total, locale)}
-      className="mt-2 flex min-h-7 gap-1 rounded-lg px-2"
+      className="mt-1 flex min-h-7 gap-1 rounded-lg px-2"
       data-workstation-work-progress="dots"
       dotClassName="h-1.5 w-1.5"
       dotCount={remaining}

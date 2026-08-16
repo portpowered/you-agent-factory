@@ -80,9 +80,15 @@ async function verifyMixedWorkstationSemantics(page) {
       name: `Select ${name} workstation`,
     });
     await button.waitFor({ state: "visible" });
-    await button.getByText(semanticLabel, { exact: true }).waitFor({
-      state: "visible",
-    });
+    await button
+      .locator(
+        "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+        { hasText: semanticLabel },
+      )
+      .first()
+      .waitFor({
+        state: "visible",
+      });
   }
 
   const guardCard = page.locator("[data-workstation-guard-card]");
@@ -95,6 +101,66 @@ async function verifyMixedWorkstationSemantics(page) {
   ) {
     throw new Error(
       `Guarded workstation card did not expose its authored target and limit: ${guardText ?? "<empty>"}`,
+    );
+  }
+
+  const guardRows = guardCard.locator("[data-workstation-guard-row]");
+  if ((await guardRows.count()) !== 2) {
+    throw new Error(
+      `Expected loop-breaker details to have two single-line rows, found ${await guardRows.count()}`,
+    );
+  }
+
+  const guardNode = guardCard.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  const guardNodeBounds = await guardNode.boundingBox();
+  const guardCardBounds = await guardCard.boundingBox();
+  if (!guardNodeBounds || !guardCardBounds) {
+    throw new Error("Could not measure the loop-breaker node and guard card");
+  }
+  if (
+    guardCardBounds.x < guardNodeBounds.x ||
+    guardCardBounds.y < guardNodeBounds.y ||
+    guardCardBounds.x + guardCardBounds.width >
+      guardNodeBounds.x + guardNodeBounds.width ||
+    guardCardBounds.y + guardCardBounds.height >
+      guardNodeBounds.y + guardNodeBounds.height
+  ) {
+    throw new Error(
+      `Loop-breaker card escaped its workstation node: card=${JSON.stringify(guardCardBounds)} node=${JSON.stringify(guardNodeBounds)}`,
+    );
+  }
+
+  const guardRowStyles = await guardCard
+    .locator("[data-workstation-guard-target], [data-workstation-guard-limit]")
+    .evaluateAll((values) =>
+      values.map((value) => {
+        const style = getComputedStyle(value);
+        return {
+          overflow: style.overflow,
+          textOverflow: style.textOverflow,
+          whiteSpace: style.whiteSpace,
+        };
+      }),
+    );
+  if (
+    guardRowStyles.some(
+      (style) =>
+        style.overflow !== "hidden" ||
+        style.textOverflow !== "ellipsis" ||
+        style.whiteSpace !== "nowrap",
+    )
+  ) {
+    throw new Error(
+      `Loop-breaker detail values are not single-line truncating fields: ${JSON.stringify(guardRowStyles)}`,
+    );
+  }
+
+  const loopNodeStyle = await guardNode.getAttribute("style");
+  if (!loopNodeStyle?.includes("height: 156px")) {
+    throw new Error(
+      `Expected the default loop-breaker workstation height to be 156px: ${loopNodeStyle ?? "<missing>"}`,
     );
   }
 }
