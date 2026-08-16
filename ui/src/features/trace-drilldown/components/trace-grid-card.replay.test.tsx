@@ -1,5 +1,6 @@
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -102,6 +103,7 @@ function nodeIDsForFlow(flow: HTMLElement): string[] {
   return JSON.parse(flow.getAttribute("data-node-ids") ?? "[]") as string[];
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Replay coverage keeps the captured trace and bidirectional selection scenario together.
 describe("TraceGridBentoCard replayed world state", () => {
   let restoreBrowserShims: (() => void) | undefined;
 
@@ -182,5 +184,65 @@ describe("TraceGridBentoCard replayed world state", () => {
         "No retained dispatch history is currently available for this work item.",
       ),
     ).toBeNull();
+  });
+
+  it("synchronizes table and graph selection by the full trace identity", async () => {
+    const trace: DashboardTrace = {
+      dispatches: [
+        {
+          attempt: 2,
+          dispatch_id: "dispatch-retry",
+          duration_millis: 1000,
+          end_time: "2026-05-27T14:15:24.172854+07:00",
+          input_items: [
+            {
+              display_name: "Shared work",
+              work_id: "work-shared",
+              work_type_id: "story",
+            },
+          ],
+          outcome: "ACCEPTED",
+          start_time: "2026-05-27T14:13:35.734332+07:00",
+          transition_id: "retry",
+          workstation_name: "Retry",
+          work_ids: ["work-shared"],
+        },
+      ],
+      trace_id: "trace-retry-selection",
+      transition_ids: ["retry"],
+      work_ids: ["work-shared"],
+    };
+
+    render(<TraceGridBentoCard state={{ status: "ready", trace }} />);
+
+    const card = screen.getByRole("article", { name: "Trace drill-down" });
+    const dispatchButton = await waitFor(() => {
+      const button = within(card).getByRole("button", {
+        name: "Select dispatch dispatch-retry, Work work-shared, attempt 2.",
+      });
+      expect(button).toBeTruthy();
+      return button;
+    });
+    const graphSurface = card.querySelector<HTMLElement>(
+      '[data-trace-selection-surface="graph"]',
+    );
+    if (!graphSurface) {
+      throw new Error("Expected a trace graph selection surface.");
+    }
+    const graphButton = within(graphSurface).getByRole("button", {
+      name: "Select Retry workstation",
+    });
+
+    fireEvent.click(dispatchButton);
+    await waitFor(() => {
+      expect(graphButton.getAttribute("aria-pressed")).toBe("true");
+      expect(document.activeElement).toBe(graphButton);
+    });
+
+    fireEvent.click(graphButton);
+    await waitFor(() => {
+      expect(dispatchButton.getAttribute("aria-pressed")).toBe("true");
+      expect(document.activeElement).toBe(dispatchButton);
+    });
   });
 });

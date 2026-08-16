@@ -18,6 +18,7 @@ import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-
 import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import { applyTraceFactoryGraphLayoutToNode } from "../lib/trace-factory-graph-layout";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
+import type { TraceSelectionIdentity } from "../lib/trace-selection";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
@@ -31,16 +32,25 @@ const TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS = {
 export interface TraceWorkstationPathProps {
   dispatches: DashboardTraceDispatch[];
   locale?: string;
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  selectedTraceSelection?: TraceSelectionIdentity | null;
 }
 
 export function TraceWorkstationPath({
   dispatches,
   locale,
+  onSelectTraceSelection,
+  selectedTraceSelection,
 }: TraceWorkstationPathProps) {
   const messages = getTraceDrilldownMessages(locale);
   const graph = useMemo(
-    () => buildTraceDispatchFactoryGraphFlow(dispatches, locale),
-    [dispatches, locale],
+    () =>
+      buildTraceDispatchFactoryGraphFlow(dispatches, {
+        locale,
+        onSelectTraceSelection,
+        selectedTraceSelection,
+      }),
+    [dispatches, locale, onSelectTraceSelection, selectedTraceSelection],
   );
   const topologyKey = useMemo(
     () => traceDispatchTopologyLayoutKey(graph.topology),
@@ -167,7 +177,7 @@ function TraceWorkstationReactFlow({
       minZoom={0.35}
       nodes={nodes}
       nodesDraggable={true}
-      nodeTypes={FACTORY_GRAPH_NODE_TYPES}
+      nodeTypes={TRACE_DISPATCH_NODE_TYPES}
       onNodesChange={onNodesChange}
       onError={failOnTraceReactFlowError}
       panOnDrag
@@ -179,5 +189,27 @@ function TraceWorkstationReactFlow({
         fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
       />
     </ReactFlow>
+  );
+}
+
+type FactoryWorkstationNodeProps = Parameters<
+  (typeof FACTORY_GRAPH_NODE_TYPES)["workstation"]
+>[0];
+
+const TRACE_DISPATCH_NODE_TYPES = {
+  ...FACTORY_GRAPH_NODE_TYPES,
+  workstation: TraceDispatchWorkstationNode,
+};
+
+function TraceDispatchWorkstationNode(props: FactoryWorkstationNodeProps) {
+  const data = props.data as TraceDispatchFlowNode["data"];
+
+  return (
+    <div
+      data-trace-selection-keys={JSON.stringify(data.traceSelectionKeys ?? [])}
+      data-trace-selection-surface="graph"
+    >
+      <FACTORY_GRAPH_NODE_TYPES.workstation {...props} />
+    </div>
   );
 }

@@ -15,6 +15,11 @@ export interface TraceDrilldownMessages {
   dispatchPathInputPrefix: string;
   dispatchPathOutputPrefix: string;
   dispatchPathPendingOutcome: string;
+  selectDispatchLabel: (
+    dispatchID: string,
+    workID: string,
+    attempt: number,
+  ) => string;
   emptyMessage: string;
   emptyTitle: string;
   errorTitle: string;
@@ -63,6 +68,8 @@ const traceDrilldownMessagesByLocale = {
     dispatchPathInputPrefix: "In",
     dispatchPathOutputPrefix: "Out",
     dispatchPathPendingOutcome: "Observed",
+    selectDispatchLabel: (dispatchID, workID, attempt) =>
+      `Select dispatch ${dispatchID}, Work ${workID || "Unavailable"}, attempt ${attempt}.`,
     emptyMessage:
       "No retained dispatch history is currently available for this work item.",
     emptyTitle: "Trace history unavailable",
@@ -181,6 +188,8 @@ const traceDrilldownMessagesByLocale = {
     dispatchPathInputPrefix: "输入",
     dispatchPathOutputPrefix: "输出",
     dispatchPathPendingOutcome: "已观测",
+    selectDispatchLabel: (dispatchID, workID, attempt) =>
+      `选择分派 ${dispatchID}，工作 ${workID || "不可用"}，第 ${attempt} 次尝试。`,
     emptyMessage: "当前这个工作项暂时没有可保留的分派历史。",
     emptyTitle: "追踪历史不可用",
     errorTitle: "追踪查询失败",

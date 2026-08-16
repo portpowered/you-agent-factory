@@ -83,6 +83,7 @@ function buildReplayWorkstationFlow() {
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Flow coverage keeps shared-node parity and retry identity assertions together.
 describe("buildTraceDispatchFactoryGraphFlow", () => {
   it("projects dispatch history into shared workstation nodes and editor edges", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
@@ -151,6 +152,52 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     );
 
     expect(flow.nodes[0]?.data.locale).toBe("zh");
+  });
+
+  it("keeps retry nodes distinct when dispatch and work identifiers repeat", () => {
+    const flow = buildTraceDispatchFactoryGraphFlow(
+      [
+        buildDispatch("dispatch-retry", {
+          attempt: 1,
+          work_ids: ["work-shared"],
+        }),
+        buildDispatch("dispatch-retry", {
+          attempt: 2,
+          work_ids: ["work-shared"],
+        }),
+      ],
+      {
+        selectedTraceSelection: {
+          attempt: 2,
+          dispatch_id: "dispatch-retry",
+          work_id: "work-shared",
+        },
+      },
+    );
+
+    expect(flow.nodes.map((node) => node.id)).toEqual([
+      "dispatch-retry#work-shared#attempt-1",
+      "dispatch-retry#work-shared#attempt-2",
+    ]);
+    expect(flow.nodes.map((node) => node.data.selectionIdentities)).toEqual([
+      [
+        {
+          attempt: 1,
+          dispatch_id: "dispatch-retry",
+          work_id: "work-shared",
+        },
+      ],
+      [
+        {
+          attempt: 2,
+          dispatch_id: "dispatch-retry",
+          work_id: "work-shared",
+        },
+      ],
+    ]);
+    expect(flow.nodes[0]?.data.selectedWorkstation).toBe(false);
+    expect(flow.nodes[1]?.data.selectedWorkstation).toBe(true);
+    expect(flow.nodes[1]?.data.selectedWorkID).toBe("work-shared");
   });
 
   it("registers only shared workstation graph React Flow node types", () => {
