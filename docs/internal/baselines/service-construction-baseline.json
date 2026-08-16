@@ -27,6 +27,6 @@
       "count": 1,
       "stage": "wire-injection-full-blow",
       "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
-    },
+    }
   ]
 }
