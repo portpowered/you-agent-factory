@@ -317,8 +317,13 @@ func assertUnifiedSmokeCanonicalEventOrdering(t *testing.T, events []factoryapi.
 		indices.factoryState < indices.runResponse) {
 		t.Fatalf("canonical event ordering mismatch in %v", functionalEventTypes(events))
 	}
-	if indices.runResponse != len(events)-1 {
-		t.Fatalf("final event type = %s, want RUN_RESPONSE in %v", events[len(events)-1].Type, functionalEventTypes(events))
+	// RUN_RESPONSE now precedes session completion, so the recorded timeline may carry
+	// SESSION_RESULT_UPDATED and SESSION_COMPLETED afterward; no run-scoped event may
+	// follow it (PR #1997).
+	for _, event := range events[indices.runResponse+1:] {
+		if event.Type != factoryapi.FactoryEventTypeSessionResultUpdated && event.Type != factoryapi.FactoryEventTypeSessionCompleted {
+			t.Fatalf("event type = %s follows RUN_RESPONSE, want session-lifecycle trailer in %v", event.Type, functionalEventTypes(events))
+		}
 	}
 }
 
