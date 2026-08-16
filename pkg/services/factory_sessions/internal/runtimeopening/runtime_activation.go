@@ -56,12 +56,7 @@ func (f *Factory) activateRuntime(
 		return nil, fmt.Errorf("activate Factory Runtime: opened runtime legacy observation is required")
 	}
 	return &factoryruntime.RuntimeActivation{
-		Service:        &activatedRuntimeService{Service: service, APIFactory: legacyObservation, products: products},
-		HostedInstance: products.startup,
-		Replacement:    products.replacement,
-		BuildSpec:      products.buildSpec,
-		Lifecycle:      products.lifecycle,
-		Sidecars:       products.sidecars,
+		Service: &activatedRuntimeService{Service: service, APIFactory: legacyObservation, products: products},
 		Close: func(closeCtx context.Context) error {
 			if products.application.Resources.Close == nil {
 				return nil

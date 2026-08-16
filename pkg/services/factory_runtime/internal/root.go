@@ -243,11 +243,6 @@ func (r *Root) finishActivation(
 		FactorySessionID: request.FactorySessionID,
 		Binding:          binding,
 		Service:          activation.Service,
-		HostedInstance:   activation.HostedInstance,
-		Replacement:      activation.Replacement,
-		BuildSpec:        activation.BuildSpec,
-		Lifecycle:        activation.Lifecycle,
-		Sidecars:         activation.Sidecars,
 	}
 	r.active[request.RuntimeID] = &runtimeActivationState{
 		request: request,

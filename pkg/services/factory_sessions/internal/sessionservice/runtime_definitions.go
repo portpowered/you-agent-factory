@@ -6,10 +6,10 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 )
 
 type DefinitionHostCallbacks struct {
@@ -133,7 +133,7 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 			runtime.requireIdleRuntimeForSession,
 			runtime.requireIdleRuntime,
 			runtime.ReplaceSessionRuntime,
-			func(rootDir, name string, replacement factory.HostedInstance) error {
+			func(rootDir, name string, replacement runtimeports.RuntimeInstance) error {
 				return ActivateStartupRuntime(
 					rootDir, name, replacement, &runtime.runtimeState, runtime.syncActiveSessionDir,
 					runtime.namedPaths.WriteCurrentPointer,

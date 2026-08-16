@@ -15,25 +15,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 
 	"go.uber.org/zap"
 )
 
-// factoryRuntimeBundle is the public capability view owned by Factory Runtime.
-type factoryRuntimeBundle = factory.HostedInstance
+// factoryRuntimeBundle is the compatibility record retained by the binding
+// edge while Runtime exposes the private instance-host operations.
+type factoryRuntimeBundle = runtimeports.RuntimeInstance
 
-// liveRuntimeHandle is the public lifecycle handle owned by Factory Runtime.
-type liveRuntimeHandle = factory.HostedHandle
+type liveRuntimeHandle = runtimeports.RuntimeHandle
 
 type RuntimeSidecars interface {
-	Preseed(context.Context, factory.HostedInstance) error
-	Start(context.Context, factory.HostedHandle) error
-	Stop(factory.HostedHandle)
+	Preseed(context.Context, runtimeports.RuntimeInstance) error
+	Start(context.Context, runtimeports.RuntimeHandle) error
+	Stop(runtimeports.RuntimeHandle)
 }
 
-func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance factory.HostedInstance) error {
+func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance runtimeports.RuntimeInstance) error {
 	if fs == nil || fs.runtimeSidecars == nil {
 		return fmt.Errorf("runtime sidecar service is required")
 	}
@@ -51,8 +52,8 @@ type SessionRuntime struct {
 	runtimeState     runtimebinding.State
 	sessionState     *sessionruntime.Service
 	sessionGateway   sessionGateway
-	runtimeBuild     factory.ReplacementBuilder
-	runtimeLifecycle factory.Lifecycle
+	runtimeBuild     runtimeports.RuntimeReplacementBuilder
+	runtimeLifecycle runtimeports.RuntimeLifecycle
 	runtimeSidecars  RuntimeSidecars
 	factoryRootDir   string
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -175,7 +176,7 @@ func (fs *SessionRuntime) currentRuntimeBundle() factoryRuntimeBundle {
 
 // CurrentRuntimeBundle returns the active Factory Runtime bundle for
 // initializer-owned startup diagnostics.
-func (fs *SessionRuntime) CurrentRuntimeBundle() factory.HostedInstance {
+func (fs *SessionRuntime) CurrentRuntimeBundle() runtimeports.RuntimeInstance {
 	return fs.currentRuntimeBundle()
 }
 

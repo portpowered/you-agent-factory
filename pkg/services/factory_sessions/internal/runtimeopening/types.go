@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -21,11 +22,11 @@ type runtimeProducts struct {
 	invocation  roles.OpenedInvocationRuntime
 	execution   roles.OpenedExecutionRuntime
 	bindRuntime func(factoryruntime.RuntimeBinding) error
-	startup     factoryruntime.HostedInstance
-	replacement factoryruntime.ReplacementBuilder
+	startup     runtimeports.RuntimeInstance
+	replacement runtimeports.RuntimeReplacementBuilder
 	buildSpec   factoryruntime.SessionBuildSpec
-	lifecycle   factoryruntime.Lifecycle
-	sidecars    factoryruntime.Sidecars
+	lifecycle   runtimeports.RuntimeLifecycle
+	sidecars    runtimeports.RuntimeSidecarService
 }
 
 type workerSessionsObservationProvider interface {
@@ -60,7 +61,7 @@ func assembleRuntimeProducts(
 	workerService workers.Service,
 	modelsBind modelsRuntimeBind,
 	providerSessions providersessions.Service,
-	startup factoryruntime.HostedInstance,
+	startup runtimeports.RuntimeInstance,
 	lifecycle roles.LifecycleRuntime,
 	process roles.ProcessRuntime,
 	reader roles.RuntimeReader,
