@@ -234,6 +234,71 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 	}
 }
 
+func TestRun_FactoryInvocationPreservesOrderedPrimaryContentParts(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		jsonOutput bool
+		wantText   string
+	}{
+		{name: "text", wantText: "first part\nsecond part"},
+		{name: "json", jsonOutput: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			preserveRunGlobals(t)
+
+			text := "preserve these parts"
+			var output bytes.Buffer
+			openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
+				return stubInvocationService{
+					run: func(ctx context.Context) error {
+						<-ctx.Done()
+						return nil
+					},
+					invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+						return apisurface.FactoryInvocationResult{
+							RequestID: "request-multipart",
+							TraceID:   "trace-multipart",
+							Status:    interfaces.InvocationTerminalStatusCompleted,
+							PrimaryResult: []work.WorkContentPart{
+								{Type: work.WorkContentPartTypeText, Text: "first part"},
+								{Type: work.WorkContentPartTypeText, Text: "second part"},
+							},
+						}, nil
+					},
+				}, nil
+			}
+
+			err := Run(context.Background(), RunConfig{
+				FactoryConfigPath:        "/tmp/factory.json",
+				InvocationPositionalText: &text,
+				StdinIsTTY:               func() bool { return true },
+				JSONOutput:               test.jsonOutput,
+				Output:                   &output,
+				Port:                     7437,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+
+			if !test.jsonOutput {
+				if got := output.String(); got != test.wantText {
+					t.Fatalf("stdout = %q, want ordered text parts", got)
+				}
+				return
+			}
+
+			var response factoryapi.InvocationResponse
+			if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+				t.Fatalf("decode JSON response: %v\n%s", err, output.String())
+			}
+			assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "first part"},
+				{Type: work.WorkContentPartTypeText, Text: "second part"},
+			})
+		})
+	}
+}
+
 func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	preserveRunGlobals(t)
 

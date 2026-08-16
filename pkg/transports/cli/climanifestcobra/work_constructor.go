@@ -359,7 +359,29 @@ func NewResolvedWorkCommand(
 		return nil, fmt.Errorf("build resolved work command: find projected work command: %w", err)
 	}
 	root.RemoveCommand(work)
+	// The generic constructor guards non-runnable groups with a help-producing
+	// RunE. This detached family is attached beneath the existing root, whose
+	// compatibility contract keeps `you work` and `you work approval`
+	// non-runnable; preserve that shape while retaining the generated leaves.
+	if err := clearWorkGroupExecution(work); err != nil {
+		return nil, fmt.Errorf("build resolved work command: preserve group behavior: %w", err)
+	}
 	return work, nil
+}
+
+func clearWorkGroupExecution(work *cobra.Command) error {
+	groups := []*cobra.Command{work}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		return err
+	}
+	groups = append(groups, approval)
+	for _, group := range groups {
+		group.RunE = nil
+		group.Args = nil
+		group.DisableFlagParsing = false
+	}
+	return nil
 }
 
 var resolvedWorkRunnableCommandIDs = [...]string{

@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	workcmd "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"go.uber.org/zap"
 )
 
@@ -191,6 +192,39 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("typed Sessions adapter was not invoked through production composition")
+	}
+}
+
+func TestWorkCommandCompositionUsesResolvedOwnerAdapter(t *testing.T) {
+	t.Parallel()
+
+	var got workcmd.ListConfig
+	factory := NewCommandFactory(CommandOperations{
+		ListWork: func(cfg workcmd.ListConfig) error {
+			got = cfg
+			_, err := fmt.Fprintln(cfg.Output, "owner-list")
+			return err
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"work", "list", "--name", "review"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list: %v", err)
+	}
+	if got.Name != "review" {
+		t.Fatalf("work list name = %q, want review", got.Name)
+	}
+	if got.Context == nil || got.Output == nil {
+		t.Fatalf("work list owner config = %#v, want CLI context and output boundaries", got)
+	}
+	if stdout.String() != "owner-list\n" {
+		t.Fatalf("stdout = %q, want owner adapter output", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 

@@ -695,13 +695,41 @@ func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	if len(injected) > 0 {
 		dependencies = injected[0]
 	}
-	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics, dependencies)
-	if err != nil {
-		panic(fmt.Sprintf("build work handler registry: %v", err))
+	// The resolved-input owner adapters are the canonical production path. The
+	// live-binding registry remains available below as a compatibility edge for
+	// callers that have not moved to the generated stable-input contract yet.
+	handlers := commandregistry.ResolvedWorkHandlers{
+		ApprovalList: commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{
+			ListHumanApprovals: dependencies.ListHumanApprovals,
+			DiagnosticsWriter:  diagnostics.writer,
+		}),
+		ApprovalShow: commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{
+			ShowHumanApproval: dependencies.ShowHumanApproval,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		List: commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{
+			ListWork:          dependencies.ListWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
+			WatchWork:         dependencies.WatchWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Show: commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{
+			ShowWork:          dependencies.ShowWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Move: commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{
+			MoveWork:          dependencies.MoveWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Visualize: commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{
+			VisualizeWork: dependencies.VisualizeWork,
+		}),
 	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	work, err := climanifestcobra.NewResolvedWorkCommand(handlers)
 	if err != nil {
-		panic(fmt.Sprintf("build work family command: %v", err))
+		panic(fmt.Sprintf("build resolved work command: %v", err))
 	}
 	return work
 }

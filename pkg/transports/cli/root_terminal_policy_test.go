@@ -420,6 +420,13 @@ func TestProductionWorkCommandUsesGeneratedFamily(t *testing.T) {
 	if work.RunE != nil {
 		t.Fatal("generated work parent must remain non-runnable")
 	}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(approval) error = %v", err)
+	}
+	if approval.RunE != nil {
+		t.Fatal("generated work approval parent must remain non-runnable")
+	}
 	for _, path := range []string{"list", "watch", "show", "move", "visualize"} {
 		if _, _, err := work.Find([]string{path}); err != nil {
 			t.Fatalf("generated work tree missing %q: %v", path, err)
@@ -474,6 +481,13 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 	}
 	if work.RunE != nil {
 		t.Fatal("you work must remain non-runnable through generated cutover")
+	}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(work approval) error = %v", err)
+	}
+	if approval.RunE != nil {
+		t.Fatal("you work approval must remain non-runnable through generated cutover")
 	}
 	for _, path := range []string{"list", "watch", "show", "move", "visualize"} {
 		leaf, _, err := root.Find([]string{"work", path})

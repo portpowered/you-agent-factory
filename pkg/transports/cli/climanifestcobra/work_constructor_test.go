@@ -838,6 +838,16 @@ func TestNewResolvedWorkCommandReturnsDetachedSubtree(t *testing.T) {
 			len(work.Commands()),
 		)
 	}
+	if work.RunE != nil || work.DisableFlagParsing {
+		t.Fatal("detached work group must preserve non-runnable compatibility behavior")
+	}
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(approval) error = %v", err)
+	}
+	if approval.RunE != nil || approval.DisableFlagParsing {
+		t.Fatal("detached approval group must preserve non-runnable compatibility behavior")
+	}
 }
 
 func executeResolvedWorkList(t *testing.T, args []string) resolvedinput.Inputs {
