@@ -414,6 +414,7 @@ func openRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
 		cleanup.Close,
+		sessionID,
 	)
 	opened.startup = startupRuntime
 	opened.replacement = runtimebuildService

@@ -57,18 +57,31 @@ type RuntimeActivationResult struct {
 type RuntimeBinding struct {
 	identity string
 	service  Service
+	owner    *runtimeBindingOwner
+}
+
+type runtimeBindingOwner struct {
+	deactivate func(context.Context) (RuntimeDeactivationResult, error)
 }
 
 // NewRuntimeBinding creates a detached binding for a Runtime service view.
 // It performs no lifecycle work and returns a zero binding for incomplete
 // inputs. The identity is retained privately so bindings from distinct
 // activations cannot be confused by the owning root.
-func NewRuntimeBinding(identity string, service Service) RuntimeBinding {
+func NewRuntimeBinding(
+	identity string,
+	service Service,
+	deactivate ...func(context.Context) (RuntimeDeactivationResult, error),
+) RuntimeBinding {
 	identity = strings.TrimSpace(identity)
 	if identity == "" || service == nil {
 		return RuntimeBinding{}
 	}
-	return RuntimeBinding{identity: identity, service: service}
+	var owner *runtimeBindingOwner
+	if len(deactivate) > 0 && deactivate[0] != nil {
+		owner = &runtimeBindingOwner{deactivate: deactivate[0]}
+	}
+	return RuntimeBinding{identity: identity, service: service, owner: owner}
 }
 
 // Service returns the detached Factory Runtime capability for this binding.
@@ -81,6 +94,20 @@ func (binding RuntimeBinding) Service() Service {
 // IsZero reports whether the binding contains no Runtime capability.
 func (binding RuntimeBinding) IsZero() bool {
 	return binding.identity == "" || binding.service == nil
+}
+
+// Deactivate asks the Runtime root that issued this binding to release the
+// activation it owns. The capability keeps cleanup adjacent to the identity
+// used for Runtime operations, so callers do not need a second process-wide
+// lookup or a hosted Runtime handle.
+func (binding RuntimeBinding) Deactivate(ctx context.Context) (RuntimeDeactivationResult, error) {
+	if binding.IsZero() || binding.owner == nil || binding.owner.deactivate == nil {
+		return RuntimeDeactivationResult{}, &RuntimeActivationError{
+			Kind:    RuntimeActivationErrorNotActive,
+			Message: "deactivate Factory Runtime: Runtime binding cannot deactivate its owner",
+		}
+	}
+	return binding.owner.deactivate(ctx)
 }
 
 // Equal reports whether two bindings name the same Runtime activation.
@@ -110,6 +137,9 @@ type RuntimeActivationView struct {
 // be closed. Deactivation is deliberately separate from a control terminate so
 // cleanup ownership is explicit at the root boundary.
 type RuntimeDeactivationRequest struct {
+	// Binding is the preferred opaque selector. RuntimeID remains for
+	// migration callers and failed-start cleanup that has no published binding.
+	Binding   RuntimeBinding
 	RuntimeID string
 }
 

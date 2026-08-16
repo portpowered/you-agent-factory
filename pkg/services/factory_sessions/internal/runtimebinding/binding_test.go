@@ -196,6 +196,53 @@ func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
 	}
 }
 
+func TestOpaqueBindingRoutesSessionServiceAndCleanup(t *testing.T) {
+	t.Parallel()
+
+	sessions := newRuntimeBindingState()
+	fallback := &replacementFactory{}
+	bound := &replacementFactory{}
+	instance := &hostedInstanceFake{service: fallback}
+	handle := newHostedHandleFake(instance)
+	deactivationCalls := 0
+	binding := factory.NewRuntimeBinding(
+		"runtime-bound",
+		bound,
+		func(context.Context) (factory.RuntimeDeactivationResult, error) {
+			deactivationCalls++
+			return factory.RuntimeDeactivationResult{RuntimeID: "runtime-bound", State: factory.RuntimeLifecycleStateStopped}, nil
+		},
+	)
+	sessions.Register(sessionruntime.Registration{
+		SessionID: "bound-session",
+		Handle:    &runtimebinding.SessionState{Instance: instance, Handle: handle},
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: fallback,
+			Binding: binding,
+		},
+	})
+
+	resolved, err := runtimebinding.FactoryForSession(sessions, "bound-session")
+	if err != nil {
+		t.Fatalf("FactoryForSession: %v", err)
+	}
+	if resolved != bound {
+		t.Fatalf("FactoryForSession = %p, want opaque binding service %p", resolved, bound)
+	}
+
+	var runtimeState runtimebinding.State
+	runtimeState.SetActive(context.Background(), "bound-session", handle)
+	if err := runtimebinding.StopSession(sessions, &runtimeState, "bound-session", func(factory.HostedHandle) error { return nil }); err != nil {
+		t.Fatalf("StopSession: %v", err)
+	}
+	if deactivationCalls != 1 {
+		t.Fatalf("binding deactivation calls = %d, want one", deactivationCalls)
+	}
+	if sessions.Resolve("bound-session") != nil {
+		t.Fatal("bound session remains registered after cleanup")
+	}
+}
+
 func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 	state := newRuntimeBindingState()
 	keep := registerTestSession(state, "keep")

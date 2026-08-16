@@ -151,6 +151,22 @@ func (s *Service) WithRuntimeRead(fn func(*factorysessions.LiveRuntime) error) e
 	return fn(runtime)
 }
 
+// UpdateRuntime mutates one session's runtime view while activation and
+// replacement are excluded. It is used by the opening boundary to publish the
+// opaque Runtime binding after the process root has atomically activated it.
+func (s *Service) UpdateRuntime(sessionID string, update func(*factorysessions.LiveRuntime) error) error {
+	if s == nil || update == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	s.activation.Lock()
+	defer s.activation.Unlock()
+	session := s.Resolve(sessionID)
+	if session == nil || session.Runtime == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	return update(session.Runtime)
+}
+
 // WithActivationLock serializes definition activation against runtime operations.
 func (s *Service) WithActivationLock(fn func() error) error {
 	if s == nil {

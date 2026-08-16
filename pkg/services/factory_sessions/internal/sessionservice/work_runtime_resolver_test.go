@@ -74,6 +74,37 @@ func TestServiceRoutesWorkThroughRegisteredSessionRuntime(t *testing.T) {
 	}
 }
 
+func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
+	t.Parallel()
+
+	state := newWorkResolverSessionState()
+	fallback := &registeredWorkRuntime{}
+	bound := &registeredWorkRuntime{}
+	state.Register(sessionruntime.Registration{
+		SessionID: "session-bound",
+		Handle:    struct{}{},
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: fallback,
+		},
+	})
+
+	runtime := &SessionRuntime{sessionState: state}
+	binding := factory.NewRuntimeBinding("runtime-bound", bound)
+	if err := runtime.BindRuntime("session-bound", binding); err != nil {
+		t.Fatalf("BindRuntime: %v", err)
+	}
+	registered := state.Resolve("session-bound")
+	if registered == nil || registered.Runtime == nil {
+		t.Fatal("bound session runtime is unavailable")
+	}
+	if !registered.Runtime.Binding.Equal(binding) {
+		t.Fatal("session did not retain the published opaque binding")
+	}
+	if got := registered.Runtime.Factory; got != bound {
+		t.Fatalf("session Factory = %p, want bound Runtime service %p", got, bound)
+	}
+}
+
 func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	assembly := &Assembly{
 		state: newWorkResolverSessionState(),
