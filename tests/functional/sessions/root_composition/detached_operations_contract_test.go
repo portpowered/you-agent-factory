@@ -301,6 +301,10 @@ type functionalDetachedOwner struct {
 	controlResult       factorysessions.LifecycleControlResult
 	closeSessionID      string
 	resultRead          factorysessions.ResultReadResult
+	liveResultID        string
+	partialResultID     string
+	liveResult          factorysessions.LiveSessionResult
+	partialResult       factorysessions.PartialSessionResult
 	subscriptionRequest factorysessions.ResponseEventSubscriptionRequest
 	subscriptionCursor  *factorysessions.ResponseEventCursor
 }
@@ -331,6 +335,8 @@ func newFunctionalDetachedOwner() *functionalDetachedOwner {
 		},
 		liveProjections:    []factorysessions.ReadProjection{{Context: factorysessions.ProjectionContext{FactorySessionID: "live-functional"}, Runtime: factorysessions.RuntimeProjection{Status: "RUNNING"}, RuntimeAvailable: true}},
 		durableProjections: []factorysessions.DurableSessionListSummary{{SessionID: "durable-functional", Status: factorysessions.LifecycleStatusSucceeded, ResolvedSource: factorysessions.ResolvedSource{SourceRef: "factory.js"}}},
+		liveResult:         factorysessions.LiveSessionResult{SessionID: "live-functional", Status: "SUCCEEDED"},
+		partialResult:      factorysessions.PartialSessionResult{SessionID: "live-functional", Phase: "draft"},
 	}
 }
 
@@ -423,6 +429,16 @@ func (owner *functionalDetachedOwner) InterruptDispatch(context.Context, string,
 
 func (owner *functionalDetachedOwner) GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
 	return owner.resultRead, nil
+}
+
+func (owner *functionalDetachedOwner) GetFactorySessionResult(_ context.Context, sessionID string) (factorysessions.LiveSessionResult, error) {
+	owner.liveResultID = sessionID
+	return owner.liveResult, nil
+}
+
+func (owner *functionalDetachedOwner) GetFactorySessionPartialResult(_ context.Context, sessionID string) (factorysessions.PartialSessionResult, error) {
+	owner.partialResultID = sessionID
+	return owner.partialResult, nil
 }
 
 func (owner *functionalDetachedOwner) SubscribeFactoryResponseEvents(_ context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {

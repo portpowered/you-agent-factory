@@ -174,6 +174,12 @@ type LiveResultService interface {
 	GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error)
 }
 
+// LiveSessionResult and PartialSessionResult name the public P5B capability
+// projections without requiring capability implementors to import the runtime
+// package directly.
+type LiveSessionResult = factoryruntime.LiveSessionResult
+type PartialSessionResult = factoryruntime.PartialSessionResult
+
 // LiveChangeService is the owner-published Factory Sessions capability for
 // normalized, revisioned live changes and idempotent recovery.
 //
