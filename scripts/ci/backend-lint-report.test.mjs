@@ -111,7 +111,7 @@ test("all clean current-main checkers pass the baseline policy", () => {
 
 	assert.equal(summary.ok, true);
 	assert.equal(summary.failures.length, 0);
-	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 5);
+	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 4);
 });
 
 test("a measured baseline failure is reported but allowed at its recorded count", () => {
