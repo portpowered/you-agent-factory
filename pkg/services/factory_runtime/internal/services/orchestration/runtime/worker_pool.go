@@ -26,6 +26,13 @@ var (
 	ErrAttemptLifecycleUnavailable = errors.New("Factory Runtime worker-attempt lifecycle is unavailable")
 )
 
+func normalizeRuntimeMode(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
+
 const defaultRuntimeAttemptCapacity = 64
 
 type attemptTerminalFunc func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error)

@@ -34,6 +34,13 @@ type RuntimeSidecars interface {
 	Stop(runtimeports.RuntimeHandle)
 }
 
+func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
+
 func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance runtimeports.RuntimeInstance) error {
 	if fs == nil || fs.runtimeSidecars == nil {
 		return fmt.Errorf("runtime sidecar service is required")
@@ -237,7 +244,7 @@ func (fs *SessionRuntime) waitForActiveRuntime(ctx context.Context) error {
 		if fs.runtimeState.ActiveHandle() != handle {
 			continue
 		}
-		if factory.RuntimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService &&
+		if runtimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService &&
 			fs.sessionState.Registry() != nil && fs.sessionState.Registry().Count() == 0 {
 			continue
 		}

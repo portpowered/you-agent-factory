@@ -29,6 +29,17 @@ type activatedRuntimeService struct {
 	products runtimeProducts
 }
 
+// RuntimeDelegate exposes only the concrete Runtime service to the owning
+// Factory Runtime root. The wrapper still carries opening products for the
+// Factory Sessions handoff, but widened Work and event operations must never
+// resolve through that wrapper again.
+func (s *activatedRuntimeService) RuntimeDelegate() factoryruntime.Service {
+	if s == nil {
+		return nil
+	}
+	return s.Service
+}
+
 type runtimeWorkSubmitter interface {
 	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 }

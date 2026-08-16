@@ -63,7 +63,7 @@ func TestActivationCloserDeactivatesConcurrentCallsExactlyOnce(t *testing.T) {
 
 	service := &activationServiceFake{}
 	var calls atomic.Int32
-	binding := factoryruntime.NewRuntimeBinding(
+	binding := factoryruntime.RuntimeBinding{}.New(
 		"runtime-1",
 		service,
 		func(context.Context) (factoryruntime.RuntimeDeactivationResult, error) {

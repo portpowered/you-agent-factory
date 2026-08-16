@@ -273,6 +273,7 @@
     "pkg/services/factory_sessions/internal/runtimeopening",
     "pkg/services/factory_sessions/internal/runtimeopening/invocation",
     "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
+    "pkg/services/factory_sessions/internal/runtimeports",
     "pkg/services/factory_sessions/internal/scopedlisting",
     "pkg/services/factory_sessions/internal/service",
     "pkg/services/factory_sessions/internal/services/durable_execution",
@@ -1747,6 +1748,11 @@
       "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
       "disposition": "move",
       "destination": "factory_sessions/internal/services/runtime_opening"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeports",
+      "disposition": "retain",
+      "destination": "factory_sessions"
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/scopedlisting",

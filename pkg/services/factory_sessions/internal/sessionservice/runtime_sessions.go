@@ -238,7 +238,7 @@ func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
 		sessionID,
 		runtimeBundle,
 		target,
-		factory.RuntimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService,
+		runtimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService,
 		fs.runtimeLifecycle,
 		fs.StartLiveRuntimeSidecars,
 		fs.StopLiveRuntime,
@@ -293,7 +293,7 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
 	previousScope, previousScopeErr := fs.sessionPersistenceScopeFromSession(ctx, session)
-	serviceMode := factory.RuntimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService
+	serviceMode := runtimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService
 	updated, err := runtimebinding.Replace(
 		ctx,
 		fs.sessionState,
