@@ -112,31 +112,6 @@ func (s *Server) finishRootLifecycleControl(
 	s.writeLifecycleControlSuccess(w, factorysession.LifecycleControlResponseToAPI(result))
 }
 
-func (s *Server) invokeRootDurableLifecycleControl(
-	w http.ResponseWriter,
-	ctx context.Context,
-	sessionID factoryapi.SessionID,
-	operation string,
-	control factorysessions.ControlRequest,
-) {
-	switch operation {
-	case "pause":
-		result, err := s.sessionsRoot.PauseDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	case "resume":
-		result, err := s.sessionsRoot.ResumeDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	case "cancel":
-		result, err := s.sessionsRoot.CancelDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	case "terminate":
-		result, err := s.sessionsRoot.TerminateDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	default:
-		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control failed", "INTERNAL_ERROR")
-	}
-}
-
 func (s *Server) invokeRootLiveLifecycleControl(
 	w http.ResponseWriter,
 	ctx context.Context,

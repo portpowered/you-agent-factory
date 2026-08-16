@@ -311,7 +311,10 @@ func (fake *httpSessionsRootFake) GetSession(context.Context, string) (factoryse
 	return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) Pause(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+func (fake *httpSessionsRootFake) Pause(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onPauseDurable != nil {
+		return fake.onPauseDurable(ctx, sessionID, control)
+	}
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrDurableSessionNotFound
 }
 

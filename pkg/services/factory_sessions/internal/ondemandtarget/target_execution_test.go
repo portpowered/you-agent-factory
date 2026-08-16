@@ -1048,7 +1048,7 @@ func TestCloseRespectsCallerCancellationDuringCleanupAndRetries(t *testing.T) {
 
 // TestCloseFactorySessionUnknownIdentityIsNoOpSuccess proves closing an
 // unknown or already-closed identity succeeds without effect, matching
-// factorysessions.Service.CloseFactorySession's documented idempotent
+// factorysessions.LiveControlService.CloseFactorySession's documented idempotent
 // close semantics.
 func TestCloseFactorySessionUnknownIdentityIsNoOpSuccess(t *testing.T) {
 	svc := newTestService(t, &fakeOpener{}, nil, sequentialIDs("wrapper"))

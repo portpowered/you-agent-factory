@@ -131,6 +131,30 @@ func (fake *detachedRouterOwnerFake) PauseLiveFactorySession(_ context.Context, 
 	}, nil
 }
 
+func (fake *detachedRouterOwnerFake) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) CloseFactorySession(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) GetFactorySessionResult(context.Context, string) (factory.LiveSessionResult, error) {
+	return factory.LiveSessionResult{}, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) GetFactorySessionPartialResult(context.Context, string) (factory.PartialSessionResult, error) {
+	return factory.PartialSessionResult{}, errors.New("not implemented")
+}
+
 func TestDetachedRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
 	first := &detachedRouterOwnerFake{name: "first"}
 	second := &detachedRouterOwnerFake{name: "second"}

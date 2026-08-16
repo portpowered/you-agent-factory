@@ -114,17 +114,25 @@ func (err *InvocationValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", err.Field, err.Message)
 }
 
-// DetachedOperations is a compatibility view over an existing Factory
+// DetachedOperations is the canonical detached view over an existing Factory
 // Sessions operation owner. It owns no registry and constructs no child
 // service; each method translates a value-only request to the existing live
-// or durable owner operation and returns a detached projection.
+// or durable owner operation and returns a detached projection. Transport
+// compatibility capabilities remain explicit on the owner and are not
+// folded back into the aggregate Service.
+type DetachedOperationsOwner interface {
+	Service
+	LiveControlService
+	LiveResultService
+}
+
 type DetachedOperations struct {
-	owner Service
+	owner DetachedOperationsOwner
 }
 
 // Bind attaches the P4-A operation view to the already-composed Sessions root.
 // Binding is inert: it retains the owner and constructs no child service.
-func (operations *DetachedOperations) Bind(owner Service) (DetachedService, error) {
+func (operations *DetachedOperations) Bind(owner DetachedOperationsOwner) (DetachedService, error) {
 	if owner == nil {
 		return nil, ErrDetachedServiceUnavailable
 	}

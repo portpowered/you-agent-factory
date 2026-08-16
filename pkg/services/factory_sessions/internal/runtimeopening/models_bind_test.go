@@ -529,6 +529,26 @@ func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, se
 	return role.readLiveSession(sessionID), nil
 }
 
+func (role *runtimeProductsSessionsRole) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) CloseFactorySession(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
 type openingCoordinatorBoundSessions struct {
 	factorysessions.Service
 	roles.RuntimeAssembly

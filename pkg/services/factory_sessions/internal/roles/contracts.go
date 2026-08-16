@@ -94,6 +94,7 @@ type OpenedInvocationRuntime struct {
 	Workers        workers.Service
 	ModelInvoker   workers.ModelInvoker
 	Sessions       factorysessions.Service
+	LiveControl    factorysessions.LiveControlService
 	Invoker        SessionInvoker
 	InputResolver  InvocationInputResolver
 	Execution      durableexecution.Service

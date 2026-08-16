@@ -113,23 +113,11 @@ type Service interface {
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
 	GetFactorySession(context.Context, string) (SessionProjection, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error)
-	GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error)
-	GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error)
 	SubscribeFactoryResponseEvents(context.Context, ResponseEventSubscriptionRequest) (*ResponseEventCursor, error)
 	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
 	ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
 	ReadDurableFactorySessionEventStream(context.Context, string, EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
 	ProbeDurableFactorySessionEvents(context.Context, string, EventReconnectRequest) error
-	PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
-	ResumeLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
-	CloseFactorySession(context.Context, string) error
-	PauseDurableFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
-	ResumeDurableFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
-	CancelDurableFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
-	TerminateDurableFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
-	ApproveDurableFactorySession(context.Context, string, ApproveRequest) (LifecycleControlResult, error)
-	RetryDurableFactorySessionDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error)
-	InterruptDurableFactorySessionDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
 	ApplyLiveChange(context.Context, string, LiveChangeRequest) (LiveChangeResult, error)
 	RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error)
 }
@@ -151,16 +139,17 @@ type Service interface {
 //   - *ControlError for rejected lifecycle transitions (Outcome InvalidState or
 //     TerminalSession), without nested live-runtime imports
 //
-// Live-control operations remain methods on Service and are also exposed as
-// the narrow LiveControlService capability for peers that need no other
-// Factory Sessions behavior.
+// Live-control operations are published through the narrow LiveControlService
+// capability so peers that need no other Factory Sessions behavior do not
+// depend on the aggregate Service.
 
 // LiveControlService is the owner-published Factory Sessions capability for
 // opening, listing, reading, pausing, resuming, and closing live Factory
-// Sessions. It uses the existing public request, projection, result, and
-// typed-error vocabulary, so the authoritative Service satisfies it
-// structurally without an adapter, duplicate registry, or second construction
-// path.
+// Sessions. It is retained as the P5A transport compatibility capability
+// while canonical callers use Service's mode-neutral operations. It uses the
+// existing public request, projection, result, and typed-error vocabulary, so
+// the authoritative root implementation satisfies it structurally without an
+// adapter, duplicate registry, or second construction path.
 //
 // A peer that receives only this capability cannot access durable execution,
 // invocation, response-event streaming, inspection, or runtime-opening
@@ -174,9 +163,16 @@ type LiveControlService interface {
 	CloseFactorySession(context.Context, string) error
 }
 
-// Service satisfies LiveControlService structurally. This assertion keeps the
-// narrow public capability synchronized with its authoritative implementation.
-var _ LiveControlService = (Service)(nil)
+// LiveResultService is the owner-published Factory Sessions capability for
+// complete and partial live-session result inspection. It is retained as the
+// P5B live-result transport compatibility capability. Result inspection is
+// intentionally separate from live control and from the aggregate Service so
+// canonical callers cannot accidentally depend on the retired mode-specific
+// surface.
+type LiveResultService interface {
+	GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error)
+	GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error)
+}
 
 // LiveChangeService is the owner-published Factory Sessions capability for
 // normalized, revisioned live changes and idempotent recovery.
@@ -750,9 +746,10 @@ type SessionResponseSubscriptionResult struct {
 	Cursor *ResponseEventCursor
 }
 
-// DetachedService is the compatibility-facing concrete operation view used by
-// callers that only need the new detached operation family. The final root
-// interface remains Service; P4-A keeps this view alongside the legacy methods.
+// DetachedService is the canonical detached operation view used by callers
+// that need the mode-neutral operation family. The process root remains the
+// Service authority; P5A/P5B transport capabilities stay separate until their
+// owning packets complete the corresponding cutovers.
 type DetachedService = *DetachedOperations
 
 // DetachedStartRequest and related aliases make the new vocabulary easy to

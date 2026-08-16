@@ -87,6 +87,7 @@ func assembleRuntimeProducts(
 		}
 	}
 	workerPrompts, _ := workerService.(workers.PromptTemplates)
+	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	var workerSessions workersessions.ObservationService
 	if provider, ok := factoryRuntime.(workerSessionsObservationProvider); ok {
 		workerSessions = provider.WorkerSessionsObservation()
@@ -111,7 +112,7 @@ func assembleRuntimeProducts(
 			Process:        process,
 			FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 			WorkflowPreview: workflowPreview,
-			FactorySessions: factorySessionGateway, LiveControl: factorySessionGateway,
+			FactorySessions: factorySessionGateway, LiveControl: liveControl,
 			Work: workService, Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
 			ModelInvoker: modelInvoker, Workers: workerService,
 			ProviderSessions: providerSessions, WorkerSessions: workerSessions,
@@ -122,7 +123,7 @@ func assembleRuntimeProducts(
 			Resources: resources,
 		},
 		invocation: roles.OpenedInvocationRuntime{
-			Workers: workerService, Sessions: factorySessionGateway,
+			Workers: workerService, Sessions: factorySessionGateway, LiveControl: liveControl,
 			ModelInvoker: modelInvoker,
 			Invoker:      sessionInvocation, InputResolver: inputResolver,
 			Execution: factorySessionGateway, Lifecycle: lifecycle,

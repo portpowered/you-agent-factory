@@ -64,7 +64,10 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	if root == nil {
 		t.Fatal("constructed root is nil")
 	}
-	var liveControl factorysessions.LiveControlService = service
+	liveControl, ok := service.(factorysessions.LiveControlService)
+	if !ok {
+		t.Fatal("constructed root does not publish the live-control capability")
+	}
 	if liveControl == nil {
 		t.Fatal("constructed live-control capability is nil")
 	}

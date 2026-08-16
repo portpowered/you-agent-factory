@@ -420,6 +420,30 @@ func (a *Assembly) detachedOwner(sessionID string) (factorysessions.Service, err
 	return owner, nil
 }
 
+func (a *Assembly) detachedLiveControlOwner(sessionID string) (factorysessions.LiveControlService, error) {
+	owner, err := a.detachedOwner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	control, ok := owner.(factorysessions.LiveControlService)
+	if !ok {
+		return nil, fmt.Errorf("%w: live control capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
+	}
+	return control, nil
+}
+
+func (a *Assembly) detachedLiveResultOwner(sessionID string) (factorysessions.LiveResultService, error) {
+	owner, err := a.detachedOwner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	results, ok := owner.(factorysessions.LiveResultService)
+	if !ok {
+		return nil, fmt.Errorf("%w: live result capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
+	}
+	return results, nil
+}
+
 func (a *Assembly) activeDetachedOwner() (factorysessions.Service, error) {
 	if a == nil {
 		return nil, factorysessions.ErrDetachedServiceUnavailable
@@ -609,7 +633,7 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 }
 
 func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedOwner(sessionID)
+	owner, err := a.detachedLiveControlOwner(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -617,7 +641,7 @@ func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string
 }
 
 func (a *Assembly) ResumeLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedOwner(sessionID)
+	owner, err := a.detachedLiveControlOwner(sessionID)
 	if err != nil {
 		return factorysessions.LifecycleControlResult{}, err
 	}
@@ -625,7 +649,7 @@ func (a *Assembly) ResumeLiveFactorySession(ctx context.Context, sessionID strin
 }
 
 func (a *Assembly) CloseFactorySession(ctx context.Context, sessionID string) error {
-	owner, err := a.detachedOwner(sessionID)
+	owner, err := a.detachedLiveControlOwner(sessionID)
 	if err != nil {
 		return err
 	}
@@ -694,7 +718,7 @@ func (a *Assembly) GetResult(ctx context.Context, sessionID string, request fact
 }
 
 func (a *Assembly) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryruntime.LiveSessionResult, error) {
-	owner, err := a.detachedOwner(sessionID)
+	owner, err := a.detachedLiveResultOwner(sessionID)
 	if err != nil {
 		return factoryruntime.LiveSessionResult{}, err
 	}
@@ -702,7 +726,7 @@ func (a *Assembly) GetFactorySessionResult(ctx context.Context, sessionID string
 }
 
 func (a *Assembly) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryruntime.PartialSessionResult, error) {
-	owner, err := a.detachedOwner(sessionID)
+	owner, err := a.detachedLiveResultOwner(sessionID)
 	if err != nil {
 		return factoryruntime.PartialSessionResult{}, err
 	}

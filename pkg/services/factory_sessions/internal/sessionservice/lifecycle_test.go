@@ -249,13 +249,13 @@ func TestService_LifecycleGatewayRoutesLiveAndDurableSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PauseLiveFactorySession: %v", err)
 	}
-	durable, err := gateway.PauseDurableFactorySession(
+	durable, err := gateway.Pause(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
-		t.Fatalf("PauseDurableFactorySession: %v", err)
+		t.Fatalf("Pause: %v", err)
 	}
 
 	if live.Status != factorysessionexecution.LifecycleStatusPaused {
