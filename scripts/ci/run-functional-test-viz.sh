@@ -17,7 +17,9 @@ markdown_path="${FUNCTIONAL_TEST_VIZ_MARKDOWN:-$artifact_root/functional-tests.m
 status_path="$artifact_root/diagnostic-status.txt"
 
 mkdir -p "$artifact_root"
-rm -f "$status_path"
+# Each invocation owns these outputs. Remove them before starting so a later
+# timeout cannot publish a complete artifact produced by an earlier run.
+rm -f "$status_path" "$timing_path" "$coverage_path" "$profile_path" "$markdown_path"
 
 printf '%s\n' \
   "Functional CI runner: tier=$tier trigger=$trigger short=$short budget=$budget selection=subtractive quarantine=$quarantine" \

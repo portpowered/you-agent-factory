@@ -15,7 +15,7 @@ if [ -z "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 if [ ! -f "$markdown_path" ]; then
-  if [ -z "${FUNCTIONAL_TEST_VIZ_DIR:-}" ] && [ ! -f "$status_path" ] && [ ! -f "$timing_path" ] && [ ! -f "$coverage_path" ] && [ ! -f "$profile_path" ]; then
+  if [ ! -f "$status_path" ] && [ ! -f "$timing_path" ] && [ ! -f "$coverage_path" ] && [ ! -f "$profile_path" ]; then
     echo "functional-test-viz markdown not found at $markdown_path; skipping job summary (diagnostics unavailable)."
     exit 0
   fi

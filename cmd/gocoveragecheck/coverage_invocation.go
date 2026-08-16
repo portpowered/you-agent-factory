@@ -328,46 +328,9 @@ func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPac
 }
 
 func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string) error {
-	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
 	started := time.Now()
-	var snapshotter *functionalTimingSnapshotter
-	if cfg.stream || timingEnabled {
-		tracker := newFunctionalTimingTracker(testPackages, started)
-		observer := func(event goTestTimingEvent) {
-			if snapshotter != nil {
-				snapshotter.observe(event)
-				return
-			}
-			tracker.observe(event)
-		}
-		var reporter *functionalStreamReporter
-		if cfg.stream {
-			reporter = configureCoverageInvocationStreaming(&plan, true, observer)
-		} else {
-			reporter = configureCoverageInvocationObservation(&plan, observer)
-		}
-		sink := io.Writer(nil)
-		var sinkMu *sync.Mutex
-		if cfg.stream {
-			sink = stdoutWriter
-			sinkMu = &reporter.sinkMu
-		}
-		snapshotter = newFunctionalTimingSnapshotter(
-			tracker,
-			cfg.timingOutput,
-			sink,
-			sinkMu,
-			func() error {
-				return writePartialCoverageSnapshot(
-					cfg.jsonOutput,
-					profilePath,
-					repoRoot,
-					coverPackages,
-					partialCoverageReason(nil),
-				)
-			},
-		)
-		snapshotter.publish(false, "functional run started", false)
+	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages)
+	if snapshotter != nil {
 		defer snapshotter.stopAndWait()
 	}
 	var stdout strings.Builder
@@ -405,27 +368,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	}
 	wallSeconds := time.Since(started).Seconds()
 
-	var timingWriteErr error
-	if timingEnabled {
-		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
-		timingReason := ""
-		if !summary.Complete {
-			timingReason = "functional timing capture ended before every package reported a terminal result"
-			if laneErr != nil {
-				timingReason += ": " + compactDiagnosticError(laneErr)
-			}
-		}
-		if snapshotter != nil {
-			timingWriteErr = snapshotter.finish(summary, timingReason)
-		} else {
-			timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
-		}
-		if timingWriteErr == nil && cfg.suite == "functional" {
-			writeFunctionalTimingInventorySummary(summary, cfg.short)
-		}
-	} else if snapshotter != nil {
-		snapshotter.stopAndWait()
-	}
+	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr)
 
 	var mergeErr error
 	if len(plan.profilePaths) > 1 {
@@ -436,16 +379,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		}
 	}
 
-	partialCoverageErr := error(nil)
-	if laneErr != nil || mergeErr != nil {
-		partialCoverageErr = writePartialCoverageSnapshot(
-			cfg.jsonOutput,
-			profilePath,
-			repoRoot,
-			coverPackages,
-			partialCoverageReason(errors.Join(laneErr, mergeErr)),
-		)
-	}
+	partialCoverageErr := publishPartialCoverageIfNeeded(cfg, profilePath, repoRoot, coverPackages, laneErr, mergeErr)
 	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, partialCoverageErr, plan.cleanup())
 	if !testFailureObserved {
 		return runErr
@@ -455,6 +389,87 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		failedTestCount:      failedTestCount,
 		failedTestCountKnown: failedTestCountKnown && failedTestCount > 0,
 	}
+}
+
+func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config, testPackages []string, started time.Time, profilePath string, repoRoot string, coverPackages []string) *functionalTimingSnapshotter {
+	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
+	if !cfg.stream && !timingEnabled {
+		return nil
+	}
+
+	tracker := newFunctionalTimingTracker(testPackages, started)
+	var snapshotter *functionalTimingSnapshotter
+	observer := func(event goTestTimingEvent) {
+		if snapshotter != nil {
+			snapshotter.observe(event)
+			return
+		}
+		tracker.observe(event)
+	}
+	var reporter *functionalStreamReporter
+	if cfg.stream {
+		reporter = configureCoverageInvocationStreaming(plan, true, observer)
+	} else {
+		reporter = configureCoverageInvocationObservation(plan, observer)
+	}
+	sink := io.Writer(nil)
+	var sinkMu *sync.Mutex
+	if cfg.stream {
+		sink = stdoutWriter
+		sinkMu = &reporter.sinkMu
+	}
+	snapshotter = newFunctionalTimingSnapshotter(
+		tracker,
+		cfg.timingOutput,
+		sink,
+		sinkMu,
+		func() error {
+			return writePartialCoverageSnapshot(cfg.jsonOutput, profilePath, repoRoot, coverPackages, partialCoverageReason(nil))
+		},
+	)
+	snapshotter.publish(false, "functional run started", false)
+	return snapshotter
+}
+
+func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshotter, stdout string, testPackages []string, wallSeconds float64, laneErr error) error {
+	if strings.TrimSpace(cfg.timingOutput) == "" {
+		if snapshotter != nil {
+			snapshotter.stopAndWait()
+		}
+		return nil
+	}
+
+	summary := buildFunctionalTimingSummary(stdout, testPackages, wallSeconds)
+	timingReason := ""
+	if !summary.Complete {
+		timingReason = "functional timing capture ended before every package reported a terminal result"
+		if laneErr != nil {
+			timingReason += ": " + compactDiagnosticError(laneErr)
+		}
+	}
+	var err error
+	if snapshotter != nil {
+		err = snapshotter.finish(summary, timingReason)
+	} else {
+		err = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+	}
+	if err == nil && cfg.suite == "functional" {
+		writeFunctionalTimingInventorySummary(summary, cfg.short)
+	}
+	return err
+}
+
+func publishPartialCoverageIfNeeded(cfg config, profilePath string, repoRoot string, coverPackages []string, laneErr error, mergeErr error) error {
+	if laneErr == nil && mergeErr == nil {
+		return nil
+	}
+	return writePartialCoverageSnapshot(
+		cfg.jsonOutput,
+		profilePath,
+		repoRoot,
+		coverPackages,
+		partialCoverageReason(errors.Join(laneErr, mergeErr)),
+	)
 }
 
 func coverageTestFailureDetails(commandErr error, stdout string, stderr string) (int, bool, bool) {
