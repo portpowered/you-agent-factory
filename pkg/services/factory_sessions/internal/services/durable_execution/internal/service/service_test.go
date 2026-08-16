@@ -136,7 +136,7 @@ func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	service.BindWorkerInvoker(func(string) factoryruntime.Service { return nil })
+	service.SetWorkerInvoker(nil)
 	cursor, err := service.SubscribeResponseEvents(
 		context.Background(),
 		"session-1",
@@ -155,7 +155,7 @@ func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
 	}
 	service.PublishWorkerProgress(workers.ProgressFragment{DispatchID: "dispatch-1", Kind: workers.ProgressFragmentKind})
 
-	if stub.bindCalls != 1 || stub.subscribeCalls != 1 || stub.applyCalls != 1 || stub.recoverCalls != 1 || stub.progressCalls != 1 {
+	if stub.setCalls != 1 || stub.subscribeCalls != 1 || stub.applyCalls != 1 || stub.recoverCalls != 1 || stub.progressCalls != 1 {
 		t.Fatalf("optional capability calls = %#v, want one call each", stub)
 	}
 }
@@ -167,7 +167,7 @@ func TestServiceOptionalCapabilitiesReturnUnavailableWhenUnsupported(t *testing.
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	service.BindWorkerInvoker(nil)
+	service.SetWorkerInvoker(nil)
 	service.PublishWorkerProgress(workers.ProgressFragment{})
 	if _, err := service.SubscribeResponseEvents(context.Background(), "session-1", factorysessions.ResponseEventSubscriptionRequest{}); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
 		t.Fatalf("SubscribeResponseEvents error = %v, want ErrRuntimeNotAvailable", err)
@@ -191,15 +191,15 @@ func TestServiceOptionalCapabilitiesReturnUnavailableWhenUnsupported(t *testing.
 type executionCapabilitiesStub struct {
 	durableexecution.Service
 	cursor         *factorysessions.ResponseEventCursor
-	bindCalls      int
+	setCalls       int
 	subscribeCalls int
 	applyCalls     int
 	recoverCalls   int
 	progressCalls  int
 }
 
-func (s *executionCapabilitiesStub) BindWorkerInvoker(func(string) factoryruntime.Service) {
-	s.bindCalls++
+func (s *executionCapabilitiesStub) SetWorkerInvoker(factoryruntime.Service) {
+	s.setCalls++
 }
 
 func (s *executionCapabilitiesStub) SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {

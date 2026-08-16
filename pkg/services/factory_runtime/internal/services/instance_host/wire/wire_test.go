@@ -21,7 +21,7 @@ func TestNewComposesInertInstanceHostThroughRuntimeRoot(t *testing.T) {
 		t.Fatal("New() = nil, want composed instance host")
 	}
 
-	var lifecycle factoryruntime.Lifecycle = host
+	var lifecycle factoryruntime.RuntimeLifecycle = host
 	if lifecycle == nil {
 		t.Fatal("composed host does not satisfy Factory Runtime lifecycle contract")
 	}

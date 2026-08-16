@@ -6,7 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -43,7 +43,7 @@ func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigg
 	}}
 	schedules := &recordingInvocationSchedules{}
 	wrapped := &invocationScheduleFactory{
-		Factory: underlying, schedules: schedules, factoryDir: "factory-loop",
+		Engine: underlying, schedules: schedules, factoryDir: "factory-loop",
 		factoryConfig: invocationScheduleRecoveryConfig(), ctx: context.Background(),
 	}
 
@@ -84,7 +84,7 @@ func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigg
 }
 
 type invocationScheduleRecoveryFactory struct {
-	factory.Factory
+	factoryhost.Engine
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 }
 
@@ -121,5 +121,5 @@ func invocationScheduleRecoveryConfig() *interfaces.FactoryConfig {
 	}}
 }
 
-var _ factory.Factory = (*invocationScheduleRecoveryFactory)(nil)
+var _ factoryhost.Engine = (*invocationScheduleRecoveryFactory)(nil)
 var _ invocationScheduleService = (*recordingInvocationSchedules)(nil)

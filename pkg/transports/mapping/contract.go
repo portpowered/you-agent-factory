@@ -7,7 +7,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -26,17 +25,17 @@ type FactorySaveAPI interface {
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
-// RuntimeAPI owns the legacy unscoped runtime reads and work submission
-// operations retained by the HTTP compatibility routes.
+// RuntimeAPI owns the compatibility unscoped runtime reads and work submission
+// operations retained by the HTTP routes. It is deliberately a detached
+// mapping contract rather than an embedding of the Factory Runtime host API.
 type RuntimeAPI interface {
-	factory.APIFactory
-	// GetEngineStateSnapshot is migration-only and not part of the APIFactory peer contract.
-	GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
+	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
+	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
 }
 
 // FactoryStatusAPI is the exact detached Factory Runtime status read used by
-// protocol transports. An empty session ID selects the compatibility current
+// protocol transports. An empty session ID selects the default Factory Session
 // runtime; a non-empty ID selects that Factory Session.
 type FactoryStatusAPI interface {
 	ProjectFactoryStatus(ctx context.Context, sessionID string) (factory.FactoryStatus, error)

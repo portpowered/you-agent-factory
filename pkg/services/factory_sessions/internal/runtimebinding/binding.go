@@ -14,6 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
@@ -28,7 +29,8 @@ type LiveSessionResolver interface {
 type Registration struct {
 	SessionID      string
 	FactoryRootDir string
-	Handle         factory.HostedHandle
+	Handle         RuntimeHandle
+	Binding        factory.RuntimeBinding
 	Target         factorysessions.Target
 	Select         bool
 }
@@ -36,7 +38,7 @@ type Registration struct {
 // SyncActiveDirectory updates the process compatibility directory to match the
 // selected runtime bundle. Domain services should use the bundle directly;
 // this helper exists while legacy process configuration remains observable.
-func SyncActiveDirectory(mu *sync.RWMutex, configured *string, factoryRoot string, bundle factory.HostedInstance) {
+func SyncActiveDirectory(mu *sync.RWMutex, configured *string, factoryRoot string, bundle RuntimeInstance) {
 	if mu == nil || configured == nil {
 		return
 	}
@@ -59,14 +61,14 @@ func StartDefault(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	factoryRootDir string,
-	bundle factory.HostedInstance,
+	bundle RuntimeInstance,
 	target factorysessions.Target,
 	serviceMode bool,
 	runtimeMode interfaces.RuntimeMode,
-	lifecycle factory.Lifecycle,
-	startSidecars func(context.Context, factory.HostedHandle) error,
-	stop func(factory.HostedHandle) error,
-) (factory.HostedHandle, error) {
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
+) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
 	}
@@ -125,11 +127,11 @@ func Replace(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	session *livesession.LiveSession,
-	replacement factory.HostedInstance,
+	replacement RuntimeInstance,
 	serviceMode bool,
-	lifecycle factory.Lifecycle,
-	startSidecars func(context.Context, factory.HostedHandle) error,
-	stop func(factory.HostedHandle) error,
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
 	report func(error),
 ) (*livesession.LiveSession, error) {
 	if session == nil {
@@ -214,6 +216,9 @@ func Replace(
 			report(fmt.Errorf("stop prior session runtime: %w", err))
 		}
 	}
+	if err := deactivateRuntimeBinding(BindingForSession(session)); err != nil && report != nil {
+		report(fmt.Errorf("deactivate prior Factory Runtime binding: %w", err))
+	}
 	return updated, nil
 }
 
@@ -225,13 +230,13 @@ func Start(
 	runtimeState *State,
 	factoryRootDir string,
 	sessionID string,
-	bundle factory.HostedInstance,
+	bundle RuntimeInstance,
 	target factorysessions.Target,
 	serviceMode bool,
-	lifecycle factory.Lifecycle,
-	startSidecars func(context.Context, factory.HostedHandle) error,
-	stop func(factory.HostedHandle) error,
-) (factory.HostedHandle, error) {
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
+) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
 	}
@@ -269,7 +274,7 @@ func Start(
 	return handle, nil
 }
 
-func stopStartedHandle(stop func(factory.HostedHandle) error, handle factory.HostedHandle) {
+func stopStartedHandle(stop func(RuntimeHandle) error, handle RuntimeHandle) {
 	if stop != nil {
 		_ = stop(handle)
 		return
@@ -279,11 +284,25 @@ func stopStartedHandle(stop func(factory.HostedHandle) error, handle factory.Hos
 	}
 }
 
+func deactivateRuntimeBinding(binding factory.RuntimeBinding) error {
+	if binding.IsZero() {
+		return nil
+	}
+	if _, err := binding.Deactivate(context.Background()); err != nil && !errors.Is(err, factory.ErrRuntimeNotActive) {
+		return err
+	}
+	return nil
+}
+
 func Register(state *sessionruntime.Service, input Registration) string {
 	if state == nil || strings.TrimSpace(input.SessionID) == "" || input.Handle == nil || input.Handle.RuntimeInstance() == nil {
 		return ""
 	}
 	bundle := input.Handle.RuntimeInstance()
+	runtimeService := bundle.RuntimeService()
+	if boundService := input.Binding.Service(); boundService != nil {
+		runtimeService = boundService
+	}
 	runtimeBaseDir := ""
 	if runtimeConfig := bundle.LoadedRuntimeConfig(); runtimeConfig != nil {
 		runtimeBaseDir = runtimeConfig.RuntimeBaseDir()
@@ -298,17 +317,46 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
 		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
 		Runtime: &factorysessions.LiveRuntime{
-			Factory: bundle.RuntimeService(), BackendScopeID: bundle.BackendScope(),
+			Factory: runtimeService, Binding: input.Binding, BackendScopeID: bundle.BackendScope(),
 			Clock:                 state.Clock(),
 			RuntimeConfig:         loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig()),
 			LiveChangeEvents:      NewLiveChangeEventLog(bundle.RecordingLedger()),
-			LiveChangeApplication: NewLiveChangeApplication(bundle.RuntimeService()),
-			LiveChangeAdmission:   NewLiveChangeAdmission(bundle.RuntimeService()),
+			LiveChangeApplication: NewLiveChangeApplication(runtimeService),
+			LiveChangeAdmission:   NewLiveChangeAdmission(runtimeService),
 			LiveChangeLogger:      bundle.RuntimeLogger(),
 		},
 		Default: logicaltarget.IsLiveSessionDefaultSelector(input.SessionID), Project: metadata.Project,
 		Select: input.Select, AllocateDefaultID: true, AddEventTypeRecorder: bundle.AddEventTypeRecorder,
 	})
+}
+
+// ServiceForLiveRuntime returns the current opaque Runtime capability and
+// falls back to the hosted-era field while older openings are still in flight.
+func ServiceForLiveRuntime(runtime *factorysessions.LiveRuntime) factory.Service {
+	if runtime == nil {
+		return nil
+	}
+	if service := runtime.Binding.Service(); service != nil {
+		return service
+	}
+	return runtime.Factory
+}
+
+// ServiceForSession returns the session's bound Runtime capability without
+// requiring callers to know how the session was hosted.
+func ServiceForSession(session *livesession.LiveSession) factory.Service {
+	if session == nil {
+		return nil
+	}
+	return ServiceForLiveRuntime(session.Runtime)
+}
+
+// BindingForSession returns the opaque binding published for a live session.
+func BindingForSession(session *livesession.LiveSession) factory.RuntimeBinding {
+	if session == nil || session.Runtime == nil {
+		return factory.RuntimeBinding{}
+	}
+	return session.Runtime.Binding
 }
 
 func SessionStateFrom(session *livesession.LiveSession) *SessionState {
@@ -319,7 +367,7 @@ func SessionStateFrom(session *livesession.LiveSession) *SessionState {
 	return state
 }
 
-func HandleFromSession(session *livesession.LiveSession) factory.HostedHandle {
+func HandleFromSession(session *livesession.LiveSession) RuntimeHandle {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -327,7 +375,7 @@ func HandleFromSession(session *livesession.LiveSession) factory.HostedHandle {
 	return state.Handle
 }
 
-func BundleFromSession(session *livesession.LiveSession) factory.HostedInstance {
+func BundleFromSession(session *livesession.LiveSession) RuntimeInstance {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -343,11 +391,11 @@ func BundleFromSession(session *livesession.LiveSession) factory.HostedInstance 
 func CurrentBundle(
 	state *sessionruntime.Service,
 	runtimeState *State,
-) factory.HostedInstance {
+) RuntimeInstance {
 	if runtimeState == nil {
 		return nil
 	}
-	return runtimeState.Current(func() factory.HostedInstance {
+	return runtimeState.Current(func() RuntimeInstance {
 		if state == nil {
 			return nil
 		}
@@ -375,6 +423,11 @@ func BackendScopeID(configured string, session *livesession.LiveSession) string 
 	if configured = strings.TrimSpace(configured); configured != "" {
 		return configured
 	}
+	if session != nil && session.Runtime != nil {
+		if scope := strings.TrimSpace(session.Runtime.BackendScopeID); scope != "" {
+			return scope
+		}
+	}
 	if bundle := BundleFromSession(session); bundle != nil {
 		return strings.TrimSpace(bundle.BackendScope())
 	}
@@ -384,6 +437,18 @@ func BackendScopeID(configured string, session *livesession.LiveSession) string 
 // StreamGenerationID resolves the canonical ledger generation, runtime
 // snapshot generation, then runtime start timestamp.
 func StreamGenerationID(session *livesession.LiveSession) string {
+	if binding := BindingForSession(session); !binding.IsZero() {
+		if runtime := binding.Service(); runtime != nil {
+			observeResult, observeErr := runtime.Observe(context.Background(), factory.ObserveRequest{
+				Scope: factory.ObservationScopeHealth,
+			})
+			if observeErr == nil {
+				if generation := strings.TrimSpace(observeResult.Observation.Health.StreamGenerationID); generation != "" {
+					return generation
+				}
+			}
+		}
+	}
 	instance := BundleFromSession(session)
 	if instance != nil {
 		if generation := strings.TrimSpace(instance.StreamGeneration()); generation != "" {
@@ -502,7 +567,7 @@ func StopSession(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	sessionID string,
-	stop func(factory.HostedHandle) error,
+	stop func(RuntimeHandle) error,
 ) error {
 	if state == nil {
 		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
@@ -516,6 +581,7 @@ func StopSession(
 		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
 	sessionID = session.ID
+	binding := BindingForSession(session)
 	if active := runtimeState.Active(); active != nil && active.SessionID == sessionID {
 		if successor := NextLiveSession(state, sessionID); successor != nil {
 			runtimeState.SetActive(active.Context, successor.ID, HandleFromSession(successor))
@@ -523,13 +589,19 @@ func StopSession(
 			runtimeState.ClearActive()
 		}
 	}
-	state.Unregister(sessionID)
-	if stop == nil {
-		return nil
+	var cleanupErrs []error
+	if stop != nil {
+		if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
+			cleanupErrs = append(cleanupErrs, err)
+		}
 	}
-	if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
+	if err := deactivateRuntimeBinding(binding); err != nil {
+		cleanupErrs = append(cleanupErrs, fmt.Errorf("deactivate Factory Runtime binding: %w", err))
+	}
+	if err := errors.Join(cleanupErrs...); err != nil {
 		return err
 	}
+	state.Unregister(sessionID)
 	return nil
 }
 
@@ -539,8 +611,8 @@ func FailStartup(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	sessionID string,
-	handle factory.HostedHandle,
-	stop func(factory.HostedHandle) error,
+	handle RuntimeHandle,
+	stop func(RuntimeHandle) error,
 	startupErr error,
 ) error {
 	runtimeState.ClearActive()
@@ -575,8 +647,8 @@ func HandleStartFailure(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	sessionID string,
-	handle factory.HostedHandle,
-	stop func(factory.HostedHandle) error,
+	handle RuntimeHandle,
+	stop func(RuntimeHandle) error,
 	startErr error,
 	mode interfaces.RuntimeMode,
 ) error {
@@ -614,8 +686,8 @@ func HandleStartFailure(
 // supplied runtime handle.
 func ShutdownOtherLiveSessions(
 	state *sessionruntime.Service,
-	except factory.HostedHandle,
-	stop func(factory.HostedHandle) error,
+	except RuntimeHandle,
+	stop func(RuntimeHandle) error,
 ) error {
 	if state == nil || state.Registry() == nil {
 		return nil
@@ -630,17 +702,21 @@ func ShutdownOtherLiveSessions(
 		if handle == except {
 			continue
 		}
+		binding := BindingForSession(session)
 		if handle != nil && stop != nil {
 			if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
 				errs = append(errs, err)
 			}
+		}
+		if err := deactivateRuntimeBinding(binding); err != nil {
+			errs = append(errs, err)
 		}
 		state.Unregister(sessionID)
 	}
 	return errors.Join(errs...)
 }
 
-func BundleForSession(resolver LiveSessionResolver, sessionID string) (factory.HostedInstance, error) {
+func BundleForSession(resolver LiveSessionResolver, sessionID string) (RuntimeInstance, error) {
 	session, err := RequireLiveSession(resolver, sessionID)
 	if err != nil {
 		return nil, err
@@ -649,6 +725,13 @@ func BundleForSession(resolver LiveSessionResolver, sessionID string) (factory.H
 }
 
 func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.Service, error) {
+	if resolver != nil {
+		if session := resolver.Resolve(sessionID); session != nil {
+			if runtime := ServiceForSession(session); runtime != nil {
+				return runtime, nil
+			}
+		}
+	}
 	bundle, err := BundleForSession(resolver, sessionID)
 	if err != nil {
 		return nil, err
@@ -658,8 +741,8 @@ func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.
 
 // LegacyObservationForService isolates migration-era Petri snapshot access
 // from the singular Factory Runtime Service contract.
-func LegacyObservationForService(runtime factory.Service) (factory.LegacySnapshotProvider, error) {
-	observation, ok := runtime.(factory.LegacySnapshotProvider)
+func LegacyObservationForService(runtime factory.Service) (legacysnapshot.Provider, error) {
+	observation, ok := runtime.(legacysnapshot.Provider)
 	if !ok || observation == nil {
 		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
 	}
@@ -685,7 +768,7 @@ func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, er
 
 // LegacyInvocationSourcesForService resolves the paired compatibility
 // capabilities still needed by invocation observation in one boundary check.
-func LegacyInvocationSourcesForService(runtime factory.Service) (factory.LegacySnapshotProvider, LegacyEventSource, error) {
+func LegacyInvocationSourcesForService(runtime factory.Service) (legacysnapshot.Provider, LegacyEventSource, error) {
 	observation, err := LegacyObservationForService(runtime)
 	if err != nil {
 		return nil, nil, err
@@ -695,6 +778,11 @@ func LegacyInvocationSourcesForService(runtime factory.Service) (factory.LegacyS
 }
 
 func RuntimeConfigForSession(resolver LiveSessionResolver, sessionID string) (interfaces.LoadedFactorySource, error) {
+	if resolver != nil {
+		if session := resolver.Resolve(sessionID); session != nil && session.Runtime != nil && session.Runtime.RuntimeConfig != nil {
+			return session.Runtime.RuntimeConfig, nil
+		}
+	}
 	bundle, err := BundleForSession(resolver, sessionID)
 	if err != nil {
 		return nil, err

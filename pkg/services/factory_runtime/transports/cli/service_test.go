@@ -41,6 +41,10 @@ func (stub stubRuntimeRoot) Observe(context.Context, factoryruntime.ObserveReque
 	return factoryruntime.ObserveResult{}, stub.observeErr
 }
 
+func (stub stubRuntimeRoot) CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+}
+
 func (stub stubRuntimeRoot) PlanDispatch(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
 	return factoryruntime.PlanDispatchResult{}, factoryruntime.ErrNotRunning
 }

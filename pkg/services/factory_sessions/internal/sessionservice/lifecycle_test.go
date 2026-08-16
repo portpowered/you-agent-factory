@@ -104,6 +104,10 @@ func (f *gatewayLifecycleFactory) Observe(_ context.Context, req factory.Observe
 	}, nil
 }
 
+func (*gatewayLifecycleFactory) CleanInvocationSnapshot(context.Context) (factory.CleanInvocationSnapshot, error) {
+	return factory.CleanInvocationSnapshot{}, nil
+}
+
 func (f *gatewayLifecycleFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return factory.PlanDispatchResult{
 		Outcome:       factory.DispatchPlanOutcomeAccepted,

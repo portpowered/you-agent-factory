@@ -41,7 +41,7 @@ func (runtime *lifecycleRuntime) StopLifecycle(context.Context) error {
 
 func (*lifecycleRuntime) FailStartup(err error) error { return err }
 
-func (*lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+func (*lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 type hostOperation struct {
 	events  *[]string

@@ -11,6 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -258,6 +262,135 @@ func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
 	impl.state = interfaces.FactoryState("unknown")
 	_, err = impl.Observe(ctx, factory.ObserveRequest{})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "Observe(unknown)")
+}
+
+func TestFactoryImpl_CleanInvocationSnapshotProjectsDetachedRuntimeFacts(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	if _, err := submitWorkRequests(context.Background(), impl, []work.SubmitRequest{{
+		WorkID: "work-clean-snapshot", WorkTypeID: "task", TraceID: "trace-clean-snapshot",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if err := impl.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	snapshot, err := impl.CleanInvocationSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("CleanInvocationSnapshot: %v", err)
+	}
+	assertCleanInvocationSnapshot(t, snapshot)
+}
+
+func assertCleanInvocationSnapshot(t *testing.T, snapshot factory.CleanInvocationSnapshot) {
+	t.Helper()
+	if len(snapshot.Work) != 1 {
+		t.Fatalf("clean Work = %#v, want one terminal item", snapshot.Work)
+	}
+	terminal := snapshot.Work[0]
+	if terminal.WorkID != "work-clean-snapshot" || terminal.WorkTypeID != "task" ||
+		terminal.StateCategory != string(factory.StateCategoryTerminal) ||
+		terminal.Output != "done" || terminal.TraceID != "trace-clean-snapshot" {
+		t.Fatalf("clean terminal Work = %#v, want detached terminal facts", terminal)
+	}
+	if len(snapshot.DispatchHistory) != 1 {
+		t.Fatalf("clean dispatch history = %#v, want one completion", snapshot.DispatchHistory)
+	}
+	completion := snapshot.DispatchHistory[0]
+	if completion.Outcome != string(workers.OutcomeAccepted) || len(completion.Consumed) != 1 || len(completion.Outputs) != 1 {
+		t.Fatalf("clean dispatch completion = %#v, want accepted consumed/output facts", completion)
+	}
+	if completion.Consumed[0].WorkID != terminal.WorkID || completion.Outputs[0].WorkID != terminal.WorkID {
+		t.Fatalf("clean dispatch lineage = %#v, want Work %q", completion, terminal.WorkID)
+	}
+}
+
+func TestCleanInvocationWorkFromTokenHandlesNilAndUnknownTopology(t *testing.T) {
+	if got := cleanInvocationWorkFromToken(nil, nil); got != (factory.CleanInvocationWork{}) {
+		t.Fatalf("nil token projection = %#v, want zero value", got)
+	}
+	got := cleanInvocationWorkFromToken(nil, &factorytoken.Token{
+		PlaceID: "unknown-place",
+		Color: factorytoken.Color{
+			WorkID: "work-processing", WorkTypeID: "task", TraceID: "trace-processing",
+			DataType: factorytoken.DataTypeWork, Payload: []byte("payload"),
+		},
+	})
+	want := factory.CleanInvocationWork{
+		WorkID: "work-processing", WorkTypeID: "task", StateCategory: string(factory.StateCategoryProcessing),
+		Output: "payload", TraceID: "trace-processing", DataType: string(factorytoken.DataTypeWork),
+	}
+	if got != want {
+		t.Fatalf("unknown topology projection = %#v, want %#v", got, want)
+	}
+}
+
+func TestCleanInvocationSnapshotHandlesReaderErrorAndNilSnapshot(t *testing.T) {
+	wantErr := errors.New("snapshot unavailable")
+	if _, err := cleanInvocationSnapshot(context.Background(), func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return nil, wantErr
+	}); !errors.Is(err, wantErr) {
+		t.Fatalf("cleanInvocationSnapshot(error) = %v, want %v", err, wantErr)
+	}
+	got, err := cleanInvocationSnapshot(context.Background(), func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatalf("cleanInvocationSnapshot(nil) = %v, want nil error", err)
+	}
+	if len(got.Work) != 0 || len(got.DispatchHistory) != 0 {
+		t.Fatalf("cleanInvocationSnapshot(nil) = %#v, want zero snapshot", got)
+	}
+}
+
+func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *testing.T) {
+	token := &factorytoken.Token{
+		PlaceID: "unknown-place",
+		Color: factorytoken.Color{
+			WorkID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed",
+			DataType: factorytoken.DataTypeWork, Payload: []byte("failed output"),
+		},
+	}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			"nil-token":    nil,
+			"failed-token": token,
+		}},
+		DispatchHistory: []interfaces.CompletedDispatch{{
+			Outcome:         workers.OutcomeFailed,
+			Reason:          "worker failed",
+			FailureMetadata: &workers.WorkFailureMetadata{Type: workers.WorkFailureTypeTimeout},
+			ConsumedTokens:  []workers.Token{*token},
+			OutputMutations: []interfaces.TokenMutationRecord{{Token: nil}, {Token: token}},
+		}},
+	}
+
+	got := projectCleanInvocationSnapshot(snapshot)
+	if len(got.Work) != 1 || got.Work[0].WorkID != "work-failed" {
+		t.Fatalf("projected Work = %#v, want one nonnil token", got.Work)
+	}
+	if len(got.DispatchHistory) != 1 {
+		t.Fatalf("projected dispatch history = %#v, want one completion", got.DispatchHistory)
+	}
+	completion := got.DispatchHistory[0]
+	if completion.Outcome != string(workers.OutcomeFailed) || completion.FailureType != string(workers.WorkFailureTypeTimeout) ||
+		len(completion.Consumed) != 1 || len(completion.Outputs) != 1 {
+		t.Fatalf("projected failure completion = %#v, want failure metadata and nonnil lineage", completion)
+	}
+}
+
+func TestFactoryImpl_RuntimeConfigurationAccessorsRemainSafe(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	impl.SetProgressPublisher(nil)
+	impl.SetMockWorkersConfig(&workers.MockWorkersConfig{})
+	impl.SetPromptSourceReader(nil)
+	if impl.WorkflowContext() != nil {
+		t.Fatalf("WorkflowContext() = %#v, want nil for the default test runtime", impl.WorkflowContext())
+	}
+	var adapter *schedulerAdapter
+	if adapter.SupportsRepeatedTransitionBindings() {
+		t.Fatal("nil scheduler adapter reports repeated transition bindings")
+	}
 }
 
 func TestFactoryImpl_DispatchContracts_UseCanonicalPlanningState(t *testing.T) {
@@ -637,7 +770,7 @@ func canceledWorkersResult(
 
 func assertCanonicalResultProgression(
 	t *testing.T,
-	runtime factory.Factory,
+	runtime factoryhost.Engine,
 	ledger interface {
 		CallCount(string) int
 		CallsSnapshot() []string

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -19,11 +18,6 @@ type WorkflowContextProvider interface {
 	WorkflowContext() *factorycontext.FactoryContext
 }
 
-// WorkMover is synchronous operator control ingress for relocating work tokens.
-type WorkMover interface {
-	MoveWork(ctx context.Context, workID string, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error)
-}
-
 // APIFactory is the migration-only factory boundary required by legacy HTTP
 // API and Factory Sessions adapters. New cross-service peers use Service and
 // do not require Petri-shaped engine snapshots.
@@ -36,10 +30,6 @@ type APIFactory interface {
 	// is non-nil, only events newer than the acknowledged cursor are replayed.
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 }
-
-// LegacySnapshotProvider is migration-only Petri snapshot access retained for
-// hosted runtimes. It is not part of the APIFactory or Service peer contracts.
-type LegacySnapshotProvider = legacysnapshot.Provider
 
 // Service is the singular Factory Runtime root contract and the only
 // cross-service runtime authority for control, observation, and dispatch-plan
@@ -84,6 +74,10 @@ type Service interface {
 	// source of truth for this published slice.
 	Observe(ctx context.Context, req ObserveRequest) (ObserveResult, error)
 
+	// CleanInvocationSnapshot projects the current Runtime state into the
+	// detached vocabulary consumed by clean invocation result classification.
+	CleanInvocationSnapshot(ctx context.Context) (CleanInvocationSnapshot, error)
+
 	// PlanDispatch publishes a stable dispatch intent into Runtime-owned
 	// planning/outbox vocabulary. Workers remains the execution owner. Returns
 	// ErrDuplicateDispatchIntent, ErrNotRunning, or ErrNotFound for typed
@@ -116,22 +110,6 @@ type Service interface {
 	//
 	// Returns ErrNotRunning when the instance is not running.
 	InvokeWorker(ctx context.Context, req InvokeWorkerRequest) (InvokeWorkerResult, error)
-}
-
-// Factory retains the migration-era engine and blocking run-loop surface for
-// hosting-owned construction. Concrete hosted runtimes also implement Service;
-// cross-service root-slice peers depend on Service rather than this engine seam.
-type Factory interface {
-	APIFactory
-	LegacySnapshotProvider
-	WorkMover
-	Pause(ctx context.Context) error
-	Resume(ctx context.Context) error
-	GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error)
-	WaitToComplete() <-chan struct{}
-	// Run starts the factory loop. Blocks until ctx is cancelled or all
-	// work reaches terminal states.
-	Run(ctx context.Context) error
 }
 
 // WorldStateProjector reconstructs canonical query state from recorded events.

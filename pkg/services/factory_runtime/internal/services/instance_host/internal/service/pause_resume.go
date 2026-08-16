@@ -10,7 +10,7 @@ import (
 
 func (h *Host) Pause(
 	ctx context.Context,
-	handle factoryruntime.HostedHandle,
+	handle factoryruntime.RuntimeRun,
 ) (factoryruntime.PauseResult, error) {
 	concrete, err := h.requireControllableHandle(handle)
 	if err != nil {
@@ -25,7 +25,7 @@ func (h *Host) Pause(
 
 func (h *Host) Resume(
 	ctx context.Context,
-	handle factoryruntime.HostedHandle,
+	handle factoryruntime.RuntimeRun,
 ) (factoryruntime.ResumeResult, error) {
 	concrete, err := h.requireControllableHandle(handle)
 	if err != nil {
@@ -38,7 +38,7 @@ func (h *Host) Resume(
 	return service.ControlResume(ctx, factoryruntime.ResumeRequest{})
 }
 
-func (h *Host) requireControllableHandle(handle factoryruntime.HostedHandle) (*factoryhost.Handle, error) {
+func (h *Host) requireControllableHandle(handle factoryruntime.RuntimeRun) (*factoryhost.Handle, error) {
 	concrete, ok := handle.(*factoryhost.Handle)
 	if !ok || concrete == nil {
 		return nil, fmt.Errorf("factory runtime host requires a runtime handle")

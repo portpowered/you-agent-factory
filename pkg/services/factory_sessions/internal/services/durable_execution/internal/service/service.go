@@ -43,22 +43,22 @@ func (s *Service) forwardLiveChange(
 	return capability.ApplyLiveChange(ctx, sessionID, request)
 }
 
-// BindWorkerInvoker forwards the session's Factory Runtime to the underlying
-// JavaScript runtime, which invokes its workflow children as Workers through
-// it. An execution backend that runs no Workers of its own -- the fake and
-// replay backends -- does not implement the binder, and skipping it is correct
-// rather than a missing wire.
-func (s *Service) BindWorkerInvoker(resolve func(sessionID string) factoryruntime.Service) {
+// SetWorkerInvoker forwards the session's opaque Factory Runtime capability to
+// the underlying JavaScript runtime, which invokes its workflow children as
+// Workers through it. An execution backend that runs no Workers of its own --
+// the fake and replay backends -- does not implement the setter, and skipping
+// it is correct rather than a missing wire.
+func (s *Service) SetWorkerInvoker(runtime factoryruntime.Service) {
 	if s == nil || s.Service == nil {
 		return
 	}
-	binder, ok := s.Service.(interface {
-		BindWorkerInvoker(func(sessionID string) factoryruntime.Service)
+	setter, ok := s.Service.(interface {
+		SetWorkerInvoker(factoryruntime.Service)
 	})
 	if !ok {
 		return
 	}
-	binder.BindWorkerInvoker(resolve)
+	setter.SetWorkerInvoker(runtime)
 }
 
 // SubscribeResponseEvents forwards durable-session response-event subscriptions

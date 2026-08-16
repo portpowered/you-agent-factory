@@ -26,6 +26,13 @@ var (
 	ErrAttemptLifecycleUnavailable = errors.New("Factory Runtime worker-attempt lifecycle is unavailable")
 )
 
+func normalizeRuntimeMode(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
+
 const defaultRuntimeAttemptCapacity = 64
 
 type attemptTerminalFunc func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error)
@@ -901,10 +908,7 @@ func recordDetachedAgentRunResponse(
 	if outcome == "" && executeErr != nil {
 		outcome = workers.ExecutionOutcomeFailed
 	}
-	eventTime := time.Now()
-	if cfg.clock != nil {
-		eventTime = cfg.clock.Now()
-	}
+	eventTime := cfg.clock.Now()
 	recorder.RecordAgentRunEvent(workers.AgentRunResponseEvent{
 		ID:         fmt.Sprintf("factory-event/agent-run-response/%s", dispatchID),
 		DispatchID: dispatchID,

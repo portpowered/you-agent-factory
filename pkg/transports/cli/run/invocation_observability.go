@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
@@ -515,7 +514,6 @@ type CleanInvocationMetricsSnapshot struct {
 
 type cleanInvocationCompletionLogInput struct {
 	Duration time.Duration
-	Snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net]
 	Target   *cleanInvocationWorkTarget
 	Success  *cleanInvocationSuccess
 	Err      error

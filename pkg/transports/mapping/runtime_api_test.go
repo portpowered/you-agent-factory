@@ -12,9 +12,8 @@ import (
 )
 
 type runtimeAPIFactory struct {
-	factory.Factory
+	factory.Service
 	submitted string
-	snapshot  *interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]
 }
 
 func (f *runtimeAPIFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
@@ -26,10 +25,6 @@ func (f *runtimeAPIFactory) SubscribeFactoryEvents(context.Context, *interfaces.
 	return &interfaces.FactoryEventStream{}, nil
 }
 
-func (f *runtimeAPIFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
-	return f.snapshot, nil
-}
-
 type currentFactoryReader struct{ value factoryapi.Factory }
 
 func (r currentFactoryReader) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error) {
@@ -37,15 +32,12 @@ func (r currentFactoryReader) GetCurrentNamedFactory(context.Context) (factoryap
 }
 
 func TestRuntimeAPIComposesFactoryRuntimeAndDefinition(t *testing.T) {
-	runtimeFactory := &runtimeAPIFactory{snapshot: &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{}}
+	runtimeFactory := &runtimeAPIFactory{}
 	wantFactory := factoryapi.Factory{Name: "current"}
 	api := apisurface.NewRuntimeAPI(runtimeFactory, currentFactoryReader{value: wantFactory})
 
 	if _, err := api.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
-	}
-	if got, err := api.GetEngineStateSnapshot(context.Background()); err != nil || got != runtimeFactory.snapshot {
-		t.Fatalf("GetEngineStateSnapshot = (%v, %v)", got, err)
 	}
 	if got, err := api.GetCurrentFactory(context.Background()); err != nil || got.Name != wantFactory.Name {
 		t.Fatalf("GetCurrentFactory = (%q, %v)", got.Name, err)

@@ -35,6 +35,9 @@ func (p *rootOnlyPeer) ControlMoveWork(_ context.Context, req factory.MoveWorkRe
 func (p *rootOnlyPeer) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
 	return factory.ObserveResult{Observation: factory.Observation{Status: factory.ObservationStatusActive}}, p.err
 }
+func (p *rootOnlyPeer) CleanInvocationSnapshot(context.Context) (factory.CleanInvocationSnapshot, error) {
+	return factory.CleanInvocationSnapshot{}, p.err
+}
 func (p *rootOnlyPeer) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return factory.PlanDispatchResult{Outcome: factory.DispatchPlanOutcomeAccepted, DispatchID: req.DispatchID}, p.err
 }

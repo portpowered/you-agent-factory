@@ -29,7 +29,7 @@ type workerSessionsObservationProvider interface {
 }
 
 type invocationScheduleFactory struct {
-	factory.Factory
+	factoryhost.Engine
 	schedules     invocationScheduleService
 	runtimeID     string
 	factoryDir    string
@@ -41,14 +41,14 @@ type invocationScheduleFactory struct {
 	recovered     bool
 }
 
-func attachInvocationScheduleFactory(ctx context.Context, automation automations.Service, instance factory.HostedInstance) {
+func attachInvocationScheduleFactory(ctx context.Context, automation automations.Service, instance factory.RuntimeRecord) {
 	schedules, ok := automation.(invocationScheduleService)
 	bundle, bundleOK := instance.(*factoryhost.Bundle)
 	if !ok || !bundleOK || bundle == nil || bundle.Factory == nil || bundle.RuntimeCfg == nil {
 		return
 	}
 	bundle.Factory = &invocationScheduleFactory{
-		Factory: bundle.Factory, schedules: schedules,
+		Engine: bundle.Factory, schedules: schedules,
 		runtimeID:  bundle.RuntimeInstanceID,
 		factoryDir: bundle.RuntimeCfg.FactoryDir(), factoryConfig: bundle.RuntimeCfg.FactoryConfig(),
 		runtimeConfig: bundle.RuntimeCfg, ctx: ctx,
@@ -71,7 +71,7 @@ func (wrapped *invocationScheduleFactory) scheduleContext() context.Context {
 }
 
 func (wrapped *invocationScheduleFactory) runtimeService() factory.Service {
-	service, _ := wrapped.Factory.(factory.Service)
+	service, _ := wrapped.Engine.(factory.Service)
 	return service
 }
 
@@ -80,7 +80,7 @@ func (wrapped *invocationScheduleFactory) runtimeService() factory.Service {
 // installed, so dropping the capability here would make the public Worker
 // Sessions routes appear unavailable only in service mode.
 func (wrapped *invocationScheduleFactory) WorkerSessionsObservation() workersessions.ObservationService {
-	provider, _ := wrapped.Factory.(workerSessionsObservationProvider)
+	provider, _ := wrapped.Engine.(workerSessionsObservationProvider)
 	if provider == nil {
 		return nil
 	}
@@ -111,6 +111,10 @@ func (wrapped *invocationScheduleFactory) Observe(ctx context.Context, request f
 	return wrapped.runtimeService().Observe(ctx, request)
 }
 
+func (wrapped *invocationScheduleFactory) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
+	return wrapped.runtimeService().CleanInvocationSnapshot(ctx)
+}
+
 func (wrapped *invocationScheduleFactory) PlanDispatch(ctx context.Context, request factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return wrapped.runtimeService().PlanDispatch(ctx, request)
 }
@@ -127,7 +131,7 @@ func (wrapped *invocationScheduleFactory) PreviewResourceCapacity(
 	ctx context.Context,
 	request factory.ResourceCapacityRequest,
 ) (factory.ResourceCapacityResult, error) {
-	service, ok := wrapped.Factory.(factory.ResourceCapacityService)
+	service, ok := wrapped.Engine.(factory.ResourceCapacityService)
 	if !ok {
 		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime resource capacity is unavailable")
 	}
@@ -138,7 +142,7 @@ func (wrapped *invocationScheduleFactory) SetResourceCapacity(
 	ctx context.Context,
 	request factory.ResourceCapacityRequest,
 ) (factory.ResourceCapacityResult, error) {
-	service, ok := wrapped.Factory.(factory.ResourceCapacityService)
+	service, ok := wrapped.Engine.(factory.ResourceCapacityService)
 	if !ok {
 		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime resource capacity is unavailable")
 	}
@@ -149,7 +153,7 @@ func (wrapped *invocationScheduleFactory) PreviewResourceCapacityAdmitted(
 	ctx context.Context,
 	request factory.ResourceCapacityRequest,
 ) (factory.ResourceCapacityResult, error) {
-	service, ok := wrapped.Factory.(factory.AdmittedResourceCapacityService)
+	service, ok := wrapped.Engine.(factory.AdmittedResourceCapacityService)
 	if !ok {
 		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime admitted resource capacity is unavailable")
 	}
@@ -160,7 +164,7 @@ func (wrapped *invocationScheduleFactory) SetResourceCapacityAdmitted(
 	ctx context.Context,
 	request factory.ResourceCapacityRequest,
 ) (factory.ResourceCapacityResult, error) {
-	service, ok := wrapped.Factory.(factory.AdmittedResourceCapacityService)
+	service, ok := wrapped.Engine.(factory.AdmittedResourceCapacityService)
 	if !ok {
 		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime admitted resource capacity is unavailable")
 	}
@@ -168,7 +172,7 @@ func (wrapped *invocationScheduleFactory) SetResourceCapacityAdmitted(
 }
 
 func (wrapped *invocationScheduleFactory) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
-	service, ok := wrapped.Factory.(factory.ResourceCapacityAdmission)
+	service, ok := wrapped.Engine.(factory.ResourceCapacityAdmission)
 	if !ok {
 		return nil, fmt.Errorf("Factory Runtime resource admission is unavailable")
 	}
@@ -179,7 +183,7 @@ func (wrapped *invocationScheduleFactory) AcquireResourceCapacityLease(
 	ctx context.Context,
 	request factory.ResourceCapacityLeaseRequest,
 ) (*factory.ResourceCapacityLease, error) {
-	service, ok := wrapped.Factory.(factory.ResourceCapacityLeaseAdmission)
+	service, ok := wrapped.Engine.(factory.ResourceCapacityLeaseAdmission)
 	if !ok {
 		return nil, fmt.Errorf("Factory Runtime resource lease admission is unavailable")
 	}
@@ -187,7 +191,7 @@ func (wrapped *invocationScheduleFactory) AcquireResourceCapacityLease(
 }
 
 func (wrapped *invocationScheduleFactory) CurrentFactoryRevision() int {
-	service, ok := wrapped.Factory.(factory.ResourceCapacityRevisionService)
+	service, ok := wrapped.Engine.(factory.ResourceCapacityRevisionService)
 	if !ok {
 		return 0
 	}
@@ -195,7 +199,7 @@ func (wrapped *invocationScheduleFactory) CurrentFactoryRevision() int {
 }
 
 func (wrapped *invocationScheduleFactory) SetFactoryRevision(revision int) {
-	if service, ok := wrapped.Factory.(factory.ResourceCapacityRevisionService); ok {
+	if service, ok := wrapped.Engine.(factory.ResourceCapacityRevisionService); ok {
 		service.SetFactoryRevision(revision)
 	}
 }
@@ -217,7 +221,7 @@ func (wrapped *invocationScheduleFactory) SubmitWorkRequest(
 	}
 	request = annotateInvocationScheduleRequest(request, wrapped.factoryConfig)
 
-	result, err := wrapped.Factory.SubmitWorkRequest(ctx, request)
+	result, err := wrapped.Engine.SubmitWorkRequest(ctx, request)
 	if err != nil {
 		prepared.Abort()
 		return work.WorkRequestSubmitResult{}, err
@@ -230,7 +234,7 @@ func (wrapped *invocationScheduleFactory) submitScheduledWork(
 	ctx context.Context,
 	request work.WorkRequest,
 ) error {
-	_, err := wrapped.Factory.SubmitWorkRequest(ctx, request)
+	_, err := wrapped.Engine.SubmitWorkRequest(ctx, request)
 	return err
 }
 
@@ -238,7 +242,7 @@ func (wrapped *invocationScheduleFactory) failInvocationScheduleController(
 	ctx context.Context,
 	workID string,
 ) error {
-	_, err := wrapped.Factory.MoveWork(
+	_, err := wrapped.Engine.MoveWork(
 		ctx, workID, "failed", work.WorkStateChangeSourceCascadingFailure,
 		"invocation-schedule-failure-"+workID,
 	)
@@ -256,7 +260,7 @@ func (wrapped *invocationScheduleFactory) recoverInvocationSchedules(ctx context
 		return nil
 	}
 
-	snapshot, err := wrapped.Factory.GetEngineStateSnapshot(ctx)
+	snapshot, err := wrapped.Engine.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return err
 	}
@@ -424,7 +428,7 @@ func (wrapped *invocationScheduleFactory) observeInvocationSchedule(
 	ctx context.Context,
 	request automations.InvocationScheduleObservationRequest,
 ) (automations.InvocationScheduleObservation, error) {
-	snapshot, err := wrapped.Factory.GetEngineStateSnapshot(ctx)
+	snapshot, err := wrapped.Engine.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return automations.InvocationScheduleObservation{}, err
 	}
@@ -522,7 +526,7 @@ func consecutiveScheduleFailures(outcomes map[int64]interfaces.StateType) int {
 	return failures
 }
 
-var _ factory.Factory = (*invocationScheduleFactory)(nil)
+var _ factoryhost.Engine = (*invocationScheduleFactory)(nil)
 var _ factory.Service = (*invocationScheduleFactory)(nil)
 var _ factory.ResourceCapacityService = (*invocationScheduleFactory)(nil)
 var _ factory.AdmittedResourceCapacityService = (*invocationScheduleFactory)(nil)

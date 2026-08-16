@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
@@ -130,10 +131,10 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 	session := a.Resolve(sessionID)
-	if session == nil || session.Runtime == nil || session.Runtime.Factory == nil {
+	if session == nil || runtimebinding.ServiceForSession(session) == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
-	return workRuntimeAdapter{sessionID: sessionID, runtime: session.Runtime.Factory}, nil
+	return workRuntimeAdapter{sessionID: sessionID, runtime: runtimebinding.ServiceForSession(session)}, nil
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
@@ -164,10 +165,10 @@ func (a *Assembly) Complete(
 	clock factoryruntime.Clock,
 	baseLogger *zap.Logger,
 	logger *zap.Logger,
-	runtimeBuild factoryruntime.ReplacementBuilder,
-	startupRuntime factoryruntime.HostedInstance,
+	runtimeBuild runtimeports.RuntimeReplacementBuilder,
+	startupRuntime runtimeports.RuntimeInstance,
 	startupSpec factoryruntime.SessionBuildSpec,
-	runtimeLifecycle factoryruntime.Lifecycle,
+	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars factorysessions.RuntimeSidecars,
 	durableExecution durableexecution.Service,
 	factoryDefinitions factorydefinitions.Service,

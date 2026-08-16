@@ -26,7 +26,7 @@ type lifecycleRuntime struct {
 	failErr       error
 	completeErr   error
 	failedBecause error
-	hosted        factoryruntime.HostedInstance
+	hosted        factoryruntime.RuntimeRecord
 }
 
 func (*lifecycleRuntime) StartLifecycle(context.Context, context.Context) error {
@@ -57,7 +57,7 @@ func (runtime *lifecycleRuntime) FailStartup(err error) error {
 	return runtime.failErr
 }
 
-func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance {
+func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
 	return runtime.hosted
 }
 
@@ -400,7 +400,7 @@ func (runtime *cancellationLifecycleRuntime) StopLifecycle(context.Context) erro
 
 func (*cancellationLifecycleRuntime) FailStartup(err error) error { return err }
 
-func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 func TestServiceRunCancellationStopsRuntimeBeforeTransport(t *testing.T) {
 	t.Parallel()

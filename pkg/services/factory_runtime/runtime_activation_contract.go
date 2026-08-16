@@ -35,11 +35,84 @@ type RuntimeActivationRequest struct {
 type RuntimeActivationResult struct {
 	RuntimeID string
 	State     RuntimeLifecycleState
-	// Runtime contains the initialized, root-owned capabilities needed by the
-	// caller to finish composing its public session view. Cleanup is deliberately
-	// absent; the Runtime root retains that ownership and performs it through
-	// Deactivate.
+	// Binding is the detached, per-activation capability that callers retain
+	// for Runtime operations. Its identity and delegate are intentionally
+	// unexported; callers can only use the published Service contract.
+	Binding RuntimeBinding
+	// Runtime contains the initialized Runtime service view needed by the root
+	// to publish the binding. Cleanup is deliberately absent; the Runtime root
+	// retains that ownership and performs it through Deactivate.
 	Runtime RuntimeActivationView
+}
+
+// RuntimeBinding is an opaque capability for one activated Runtime. The
+// process-scoped Runtime root owns the identity and lifecycle associated with
+// bindings it publishes; callers cannot inspect hosted implementation state.
+//
+// The constructor is intentionally limited to attaching a published Service
+// view. Runtime root implementations use it while publishing an activation;
+// callers should retain the returned value and use Service for operations.
+type RuntimeBinding struct {
+	identity string
+	service  Service
+	owner    *runtimeBindingOwner
+}
+
+type runtimeBindingOwner struct {
+	deactivate func(context.Context) (RuntimeDeactivationResult, error)
+}
+
+// New creates a detached binding for a Runtime service view. It performs no
+// lifecycle work and returns a zero binding for incomplete inputs. The
+// identity is retained privately so bindings from distinct activations cannot
+// be confused by the owning root. Runtime root implementations call this
+// method while publishing an activation; ordinary callers only receive the
+// resulting opaque value.
+func (RuntimeBinding) New(
+	identity string,
+	service Service,
+	deactivate ...func(context.Context) (RuntimeDeactivationResult, error),
+) RuntimeBinding {
+	identity = strings.TrimSpace(identity)
+	if identity == "" || service == nil {
+		return RuntimeBinding{}
+	}
+	var owner *runtimeBindingOwner
+	if len(deactivate) > 0 && deactivate[0] != nil {
+		owner = &runtimeBindingOwner{deactivate: deactivate[0]}
+	}
+	return RuntimeBinding{identity: identity, service: service, owner: owner}
+}
+
+// Service returns the detached Factory Runtime capability for this binding.
+// A zero binding returns nil. A binding whose Runtime was deactivated retains
+// its capability value, but the owning root rejects operations on it.
+func (binding RuntimeBinding) Service() Service {
+	return binding.service
+}
+
+// IsZero reports whether the binding contains no Runtime capability.
+func (binding RuntimeBinding) IsZero() bool {
+	return binding.identity == "" || binding.service == nil
+}
+
+// Deactivate asks the Runtime root that issued this binding to release the
+// activation it owns. The capability keeps cleanup adjacent to the identity
+// used for Runtime operations, so callers do not need a second process-wide
+// lookup or a hosted Runtime handle.
+func (binding RuntimeBinding) Deactivate(ctx context.Context) (RuntimeDeactivationResult, error) {
+	if binding.IsZero() || binding.owner == nil || binding.owner.deactivate == nil {
+		return RuntimeDeactivationResult{}, &RuntimeActivationError{
+			Kind:    RuntimeActivationErrorNotActive,
+			Message: "deactivate Factory Runtime: Runtime binding cannot deactivate its owner",
+		}
+	}
+	return binding.owner.deactivate(ctx)
+}
+
+// Equal reports whether two bindings name the same Runtime activation.
+func (binding RuntimeBinding) Equal(other RuntimeBinding) bool {
+	return !binding.IsZero() && !other.IsZero() && binding.identity == other.identity
 }
 
 // RuntimeActivationView is the published handoff for one successfully
@@ -49,18 +122,19 @@ type RuntimeActivationResult struct {
 type RuntimeActivationView struct {
 	RuntimeID        string
 	FactorySessionID string
-	Service          Service
-	HostedInstance   HostedInstance
-	Replacement      ReplacementBuilder
-	BuildSpec        SessionBuildSpec
-	Lifecycle        Lifecycle
-	Sidecars         Sidecars
+	// Binding is the successor capability for callers migrating away from the
+	// hosted handoff below.
+	Binding RuntimeBinding
+	Service Service
 }
 
 // RuntimeDeactivationRequest selects the Runtime whose owned resources should
 // be closed. Deactivation is deliberately separate from a control terminate so
 // cleanup ownership is explicit at the root boundary.
 type RuntimeDeactivationRequest struct {
+	// Binding is the preferred opaque selector. RuntimeID remains for
+	// migration callers and failed-start cleanup that has no published binding.
+	Binding   RuntimeBinding
 	RuntimeID string
 }
 
@@ -173,15 +247,9 @@ func (e *RuntimeActivationError) Is(target error) bool {
 // invokes during deactivation or failed publication.
 type RuntimeActivation struct {
 	Service Service
-	// The remaining fields are returned as a RuntimeActivationView after the
-	// root publishes the delegate. They are optional for narrow callers that
-	// only need the Service contract.
-	HostedInstance HostedInstance
-	Replacement    ReplacementBuilder
-	BuildSpec      SessionBuildSpec
-	Lifecycle      Lifecycle
-	Sidecars       Sidecars
-	Close          func(context.Context) error
+	// Close is retained by the Runtime root as its private cleanup edge. It is
+	// deliberately not returned to callers in RuntimeActivationResult.
+	Close func(context.Context) error
 }
 
 // RuntimeActivationOperation is injected when the process root is composed.

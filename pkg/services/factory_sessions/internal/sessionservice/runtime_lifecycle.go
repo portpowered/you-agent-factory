@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
@@ -21,7 +20,7 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 		return errors.New("start runtime: Factory Session runtime is required")
 	}
 	runtime.startTime = runtime.clock.Now()
-	serviceMode := factory.RuntimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
+	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if !serviceMode {
 		bundle := runtime.currentRuntimeBundle()
 		if err := runtime.PreseedRuntimeInputs(ctx, bundle); err != nil {
@@ -47,7 +46,7 @@ func (runtime *SessionRuntime) StartWorkerLifecycle(ctx context.Context) (Runtim
 	if current == nil || current.RuntimeInstance() == nil {
 		return nil, errors.New("start runtime automation: runtime is not started")
 	}
-	serviceMode := factory.RuntimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
+	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode {
 		if err := runtime.PreseedRuntimeInputs(ctx, current.RuntimeInstance()); err != nil {
 			return nil, err
@@ -69,7 +68,7 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 		return errors.New("complete runtime startup: Factory Session runtime is required")
 	}
 	current := runtime.runtimeState.ActiveHandle()
-	serviceMode := factory.RuntimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
+	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode && runtime.workFile != "" {
 		if err := runtime.submitWorkFile(ctx); err != nil {
 			return runtimebinding.FailStartup(
@@ -105,7 +104,7 @@ func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
 		if runtime.runtimeState.ActiveHandle() != current {
 			continue
 		}
-		if factory.RuntimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService && runtime.sessionState.Registry() != nil && runtime.sessionState.Registry().Count() == 0 {
+		if runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService && runtime.sessionState.Registry() != nil && runtime.sessionState.Registry().Count() == 0 {
 			continue
 		}
 		return current.Result()

@@ -109,6 +109,7 @@ type typedNilRuntimeRoot struct {
 }
 
 type runtimeRootFake struct {
+	factoryruntime.Service
 	observe              func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
 	pause                func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
 	resume               func(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error)

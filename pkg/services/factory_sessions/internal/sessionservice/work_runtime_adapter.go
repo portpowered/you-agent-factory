@@ -7,8 +7,10 @@ import (
 	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -22,10 +24,25 @@ type workRuntimeAdapter struct {
 	runtime   factoryruntime.Service
 }
 
+type runtimeWorkSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
+// runtimeEventSubscriber is retained only for the P5B event-backbone seam.
+// Recordings will become the sole event-read owner before this capability is
+// removed from Factory Runtime.
+type runtimeEventSubscriber interface {
+	SubscribeFactoryEvents(
+		context.Context,
+		*interfaces.FactoryEventReconnectCursor,
+		interfaces.FactoryEventReconnectScope,
+	) (*interfaces.FactoryEventStream, error)
+}
+
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	submitter, ok := a.runtime.(factoryruntime.APIFactory)
+	submitter, ok := a.runtime.(runtimeWorkSubmitter)
 	if !ok {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
 	return submitter.SubmitWorkRequest(ctx, request)
 }
@@ -78,7 +95,7 @@ func runtimeHumanApprovalForWork(
 	sessionID string,
 	workID string,
 	dispatches map[string]*factoryruntime.DispatchEntry,
-	topology *factoryruntime.Net,
+	topology *legacysnapshot.RuntimeTopology,
 ) *work.HumanApprovalReadModel {
 	if workID == "" || topology == nil || len(dispatches) == 0 {
 		return nil
@@ -124,7 +141,7 @@ type runtimeReadFacts struct {
 
 func runtimeWorkItem(
 	token *workers.Token,
-	net *factoryruntime.Net,
+	net *legacysnapshot.RuntimeTopology,
 	inFlight bool,
 	names map[string]string,
 	facts ...runtimeReadFacts,
@@ -141,7 +158,7 @@ func runtimeWorkItem(
 	return item
 }
 
-func runtimeWorkState(token *workers.Token, net *factoryruntime.Net, inFlight bool) *work.State {
+func runtimeWorkState(token *workers.Token, net *legacysnapshot.RuntimeTopology, inFlight bool) *work.State {
 	if token == nil {
 		return nil
 	}
@@ -164,7 +181,7 @@ func runtimeWorkState(token *workers.Token, net *factoryruntime.Net, inFlight bo
 	return &work.State{Name: stateName, Type: category}
 }
 
-func runtimeWorkTypes(net *factoryruntime.Net) map[string]*factoryruntime.WorkType {
+func runtimeWorkTypes(net *legacysnapshot.RuntimeTopology) map[string]*legacysnapshot.RuntimeWorkType {
 	if net == nil {
 		return nil
 	}

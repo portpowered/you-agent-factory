@@ -136,6 +136,7 @@ func (service *Service) bindLiveApplication(
 		Plan:             plan,
 		Diagnostics:      opened.Resources.Diagnostics,
 		Ready:            runtimeReady(opened.Process),
+		CleanInvocation:  opened.HTTP.FactoryRuntime,
 		HostedInvocation: hostedInvocation(opened.HTTP.FactorySessions),
 	}, nil
 }

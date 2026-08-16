@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // RuntimeSidecars owns runtime-scoped background services without exposing
 // their concrete host implementation to Factory Sessions consumers.
-type RuntimeSidecars = factoryruntime.Sidecars
+type RuntimeSidecars = runtimeports.RuntimeSidecarService
 
 type DefinitionHost = factorydefinitions.SessionHost
 

@@ -434,7 +434,7 @@ func (l *capturedTurnTargetLifecycle) StopLifecycle(context.Context) error {
 
 func (*capturedTurnTargetLifecycle) FailStartup(err error) error { return err }
 
-func (l *capturedTurnTargetLifecycle) CurrentRuntimeBundle() factoryruntime.HostedInstance {
+func (l *capturedTurnTargetLifecycle) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
 	return capturedTurnTargetHostedInstance{runtime: l.runtime}
 }
 
@@ -451,7 +451,7 @@ func (l *capturedTurnTargetLifecycle) cleanupCallsSnapshot() []workers.Workstati
 }
 
 type capturedTurnTargetHostedInstance struct {
-	factoryruntime.HostedInstance
+	factoryruntime.RuntimeRecord
 	runtime factoryruntime.Service
 }
 

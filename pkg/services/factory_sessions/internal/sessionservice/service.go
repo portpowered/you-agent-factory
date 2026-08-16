@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
@@ -283,7 +284,7 @@ func (s *Service) runLiveChange(
 		result, applyErr = s.liveChange.ApplyLiveChange(ctx, canonicalID, request, operation)
 	}
 	if applyErr == nil && (result.Outcome == factorysessions.LiveChangeOutcomeApplied || result.Outcome == factorysessions.LiveChangeOutcomeReplayed) {
-		if revision, ok := runtime.Factory.(factoryruntime.ResourceCapacityRevisionService); ok {
+		if revision, ok := runtimebinding.ServiceForLiveRuntime(runtime).(factoryruntime.ResourceCapacityRevisionService); ok {
 			revision.SetFactoryRevision(result.NewRevision)
 		}
 	}
@@ -369,10 +370,11 @@ func acquireLiveChangeAdmission(
 
 func liveChangeStateProvider(runtime *factorysessions.LiveRuntime) livechange.StateProvider {
 	return func(ctx context.Context, id string) (factorysessions.LiveChangeSessionState, error) {
-		if runtime == nil || runtime.Factory == nil || runtime.LiveChangeEvents == nil {
+		service := runtimebinding.ServiceForLiveRuntime(runtime)
+		if service == nil || runtime.LiveChangeEvents == nil {
 			return factorysessions.LiveChangeSessionState{}, factorysessions.ErrRuntimeNotAvailable
 		}
-		observed, err := runtime.Factory.Observe(ctx, factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeFull})
+		observed, err := service.Observe(ctx, factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeFull})
 		if err != nil {
 			return factorysessions.LiveChangeSessionState{}, err
 		}

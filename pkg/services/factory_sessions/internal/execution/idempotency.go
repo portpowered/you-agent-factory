@@ -638,7 +638,7 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 	if err != nil {
 		return factorysessions.LiveChangeResult{}, err
 	}
-	runtime := s.workerInvoker(id)
+	runtime := s.workerInvoker()
 	if runtime == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
 			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,

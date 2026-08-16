@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -23,8 +24,32 @@ import (
 // activation result that published the service.
 type activatedRuntimeService struct {
 	factoryruntime.Service
-	factoryruntime.APIFactory
+	runtimeWorkSubmitter
+	runtimeEventSubscriber
 	products runtimeProducts
+}
+
+// RuntimeDelegate exposes only the concrete Runtime service to the owning
+// Factory Runtime root. The wrapper still carries opening products for the
+// Factory Sessions handoff, but widened Work and event operations must never
+// resolve through that wrapper again.
+func (s *activatedRuntimeService) RuntimeDelegate() factoryruntime.Service {
+	if s == nil {
+		return nil
+	}
+	return s.Service
+}
+
+type runtimeWorkSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
+type runtimeEventSubscriber interface {
+	SubscribeFactoryEvents(
+		context.Context,
+		*factorydefinitions.FactoryEventReconnectCursor,
+		factorydefinitions.FactoryEventReconnectScope,
+	) (*factorydefinitions.FactoryEventStream, error)
 }
 
 func (s *activatedRuntimeService) runtimeProducts() runtimeProducts {
@@ -46,21 +71,25 @@ func (f *Factory) activateRuntime(
 	if err != nil {
 		return nil, err
 	}
-	service := products.application.HTTP.FactoryRuntime
+	service := runtimeEngineService(products)
 	if service == nil {
-		return nil, fmt.Errorf("activate Factory Runtime: opened runtime service is required")
+		return nil, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
 	}
-	legacyObservation, ok := service.(factoryruntime.APIFactory)
+	legacySubmission, ok := service.(runtimeWorkSubmitter)
 	if !ok {
-		return nil, fmt.Errorf("activate Factory Runtime: opened runtime legacy observation is required")
+		return nil, fmt.Errorf("activate Factory Runtime: opened runtime work submission is required")
+	}
+	legacyEvents, ok := service.(runtimeEventSubscriber)
+	if !ok {
+		return nil, fmt.Errorf("activate Factory Runtime: opened runtime event subscription is required until Recordings migration")
 	}
 	return &factoryruntime.RuntimeActivation{
-		Service:        &activatedRuntimeService{Service: service, APIFactory: legacyObservation, products: products},
-		HostedInstance: products.startup,
-		Replacement:    products.replacement,
-		BuildSpec:      products.buildSpec,
-		Lifecycle:      products.lifecycle,
-		Sidecars:       products.sidecars,
+		Service: &activatedRuntimeService{
+			Service:                service,
+			runtimeWorkSubmitter:   legacySubmission,
+			runtimeEventSubscriber: legacyEvents,
+			products:               products,
+		},
 		Close: func(closeCtx context.Context) error {
 			if products.application.Resources.Close == nil {
 				return nil
@@ -68,6 +97,18 @@ func (f *Factory) activateRuntime(
 			return products.application.Resources.Close()
 		},
 	}, nil
+}
+
+// runtimeEngineService selects the live engine from the detached opening
+// record. The application HTTP view is intentionally not used here: during
+// the migration it is allowed to be a Factory Sessions resolver proxy, and
+// publishing that proxy as the binding would re-enter the same session lookup
+// for every Work or Worker operation.
+func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
+	if products.startup == nil {
+		return nil
+	}
+	return products.startup.RuntimeService()
 }
 
 func runtimeOpeningRequestFromActivation(
@@ -229,40 +270,71 @@ func (f *Factory) openActivatedRuntimeWithReplayInput(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	binding := result.Binding
+	if binding.IsZero() {
+		binding = result.Runtime.Binding
+	}
 	handoff, ok := result.Runtime.Service.(*activatedRuntimeService)
 	if !ok || handoff == nil {
+		if cleanupErr := f.activationCloser(binding, result.RuntimeID)(); cleanupErr != nil {
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable; cleanup: %w", cleanupErr)
+		}
 		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable")
 	}
 	products := handoff.runtimeProducts()
-	closeRuntime := f.activationCloser(result.RuntimeID)
-	products.application.HTTP.FactoryRuntime = f.runtimeRoot
+	closeRuntime := f.activationCloser(binding, result.RuntimeID)
+	if !binding.IsZero() && products.bindRuntime != nil {
+		if err := products.bindRuntime(binding); err != nil {
+			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
+		}
+	}
+	if binding.Service() != nil {
+		products.application.HTTP.FactoryRuntime = binding.Service()
+	} else {
+		products.application.HTTP.FactoryRuntime = f.runtimeRoot
+	}
 	products.application.Resources.Close = closeRuntime
 	products.invocation.CloseArtifacts = closeRuntime
 	products.execution.Resources.Close = closeRuntime
 	return products, nil
 }
 
-func (f *Factory) activationCloser(runtimeID string) func() error {
+func (f *Factory) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
 	var mu sync.Mutex
 	closed := false
 	return func() error {
 		mu.Lock()
+		defer mu.Unlock()
 		if closed {
-			mu.Unlock()
 			return nil
 		}
-		mu.Unlock()
-		_, err := f.runtimeRoot.Deactivate(
-			context.Background(),
-			factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
-		)
-		mu.Lock()
+		var err error
+		if !binding.IsZero() {
+			_, err = binding.Deactivate(context.Background())
+		} else {
+			_, err = f.runtimeRoot.Deactivate(
+				context.Background(),
+				factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
+			)
+		}
+		if errors.Is(err, factoryruntime.ErrRuntimeNotActive) {
+			err = nil
+		}
 		if err == nil {
 			closed = true
 		}
-		mu.Unlock()
 		return err
 	}
+}
+
+func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
+	if cleanupErr == nil {
+		return fmt.Errorf("open Factory Runtime: publish Runtime binding to Factory Session: %w", bindErr)
+	}
+	return fmt.Errorf(
+		"open Factory Runtime: publish Runtime binding to Factory Session: %w",
+		errors.Join(bindErr, fmt.Errorf("cleanup activated Runtime: %w", cleanupErr)),
+	)
 }
 
 func (f *Factory) activationRequest(

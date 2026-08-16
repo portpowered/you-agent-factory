@@ -1,14 +1,17 @@
 package internal
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -74,8 +77,86 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("instancehostwire.New() error = %v", err)
 	}
-	var _ factoryruntime.Lifecycle = lifecycle
+	var _ factoryruntime.RuntimeLifecycle = lifecycle
 	if _, ok := lifecycle.(instancehost.Service); !ok {
 		t.Fatalf("composed lifecycle type = %T, want instance_host.Service", lifecycle)
 	}
+}
+
+func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewRoot(
+		func() string { return "runtime-test-id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	engine := &wideOperationRuntimeFake{}
+	wrapper := &runtimeDelegateWrapper{Service: engine, delegate: engine}
+	root.active["runtime-1"] = &runtimeActivationState{service: wrapper}
+
+	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
+	if _, err := binding.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
+		t.Fatalf("SubmitWorkRequest() error = %v", err)
+	}
+	if _, err := binding.SubscribeFactoryEvents(context.Background(), nil, interfaces.FactoryEventReconnectScope{}); err != nil {
+		t.Fatalf("SubscribeFactoryEvents() error = %v", err)
+	}
+	if engine.submitCalls != 1 || engine.eventCalls != 1 {
+		t.Fatalf("engine wide-operation calls = (%d, %d), want (1, 1)", engine.submitCalls, engine.eventCalls)
+	}
+	if wrapper.submitCalls != 0 || wrapper.eventCalls != 0 {
+		t.Fatalf("compatibility wrapper wide-operation calls = (%d, %d), want (0, 0)", wrapper.submitCalls, wrapper.eventCalls)
+	}
+}
+
+type runtimeDelegateWrapper struct {
+	factoryruntime.Service
+	delegate    factoryruntime.Service
+	submitCalls int
+	eventCalls  int
+}
+
+func (wrapper *runtimeDelegateWrapper) RuntimeDelegate() factoryruntime.Service {
+	return wrapper.delegate
+}
+
+func (wrapper *runtimeDelegateWrapper) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	wrapper.submitCalls++
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (wrapper *runtimeDelegateWrapper) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	wrapper.eventCalls++
+	return nil, nil
+}
+
+type wideOperationRuntimeFake struct {
+	factoryruntime.Service
+	submitCalls int
+	eventCalls  int
+}
+
+func (service *wideOperationRuntimeFake) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	service.submitCalls++
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (service *wideOperationRuntimeFake) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	service.eventCalls++
+	return nil, nil
 }

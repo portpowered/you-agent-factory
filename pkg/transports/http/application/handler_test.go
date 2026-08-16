@@ -190,8 +190,8 @@ func TestHandlerBindRejectsRuntimeWithoutLegacyHTTPRole(t *testing.T) {
 		Work: &workRole{}, Models: &modelRole{}, Workers: &workerRole{},
 		ProviderSessions: &providerSessionRole{}, Logger: zap.NewNop(),
 	})
-	if err == nil || bound != nil || !strings.Contains(err.Error(), "legacy Factory Runtime observation") {
-		t.Fatalf("Bind = (%T, %v), want legacy HTTP role error", bound, err)
+	if err == nil || bound != nil || !strings.Contains(err.Error(), "Factory Runtime work submission") {
+		t.Fatalf("Bind = (%T, %v), want missing Runtime work capability error", bound, err)
 	}
 }
 

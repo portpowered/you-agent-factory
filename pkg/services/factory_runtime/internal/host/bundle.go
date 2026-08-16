@@ -20,8 +20,8 @@ type Bundle struct {
 	RuntimeInstanceID    string
 	BackendScopeID       string
 	StartedAtUTC         time.Time
-	EventHistory         factory.HostedLedger
-	Factory              factory.Factory
+	EventHistory         recordings.RuntimeLedger
+	Factory              Engine
 	InputFiles           factory.InputFileSystem
 	InputDirectoryWalker factory.InputDirectoryWalker
 	WorkRequestIDs       work.RequestIDGenerator
@@ -43,7 +43,7 @@ func NewBundle(
 	runtimeInstanceID string,
 	backendScopeID string,
 	startedAtUTC time.Time,
-	eventHistory factory.HostedLedger,
+	eventHistory recordings.RuntimeLedger,
 	net *state.Net,
 	runtimeCfg factory.LoadedConfig,
 	logger *zap.Logger,

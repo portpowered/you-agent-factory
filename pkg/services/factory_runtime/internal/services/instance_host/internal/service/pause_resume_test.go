@@ -105,6 +105,10 @@ func (f *lifecycleControlFactory) Observe(
 	return factory.ObserveResult{Observation: factory.Observation{Status: factory.ObservationStatusActive}}, nil
 }
 
+func (*lifecycleControlFactory) CleanInvocationSnapshot(context.Context) (factory.CleanInvocationSnapshot, error) {
+	return factory.CleanInvocationSnapshot{}, nil
+}
+
 func (f *lifecycleControlFactory) PlanDispatch(
 	_ context.Context,
 	req factory.PlanDispatchRequest,
@@ -132,9 +136,9 @@ func (f *lifecycleControlFactory) AcceptDispatchResult(
 func startReadyHostedHandle(
 	t *testing.T,
 	host *Host,
-	factoryStub factory.Factory,
+	factoryStub factoryhost.Engine,
 	instanceID string,
-) factory.HostedHandle {
+) factory.RuntimeRun {
 	t.Helper()
 	factoryStub.(*lifecycleControlFactory).setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,

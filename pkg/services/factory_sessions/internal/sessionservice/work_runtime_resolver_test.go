@@ -42,7 +42,6 @@ func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 }
 
 type registeredWorkRuntime struct {
-	factory.Factory
 	factory.Service
 }
 
@@ -74,6 +73,37 @@ func TestServiceRoutesWorkThroughRegisteredSessionRuntime(t *testing.T) {
 	}
 }
 
+func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
+	t.Parallel()
+
+	state := newWorkResolverSessionState()
+	fallback := &registeredWorkRuntime{}
+	bound := &registeredWorkRuntime{}
+	state.Register(sessionruntime.Registration{
+		SessionID: "session-bound",
+		Handle:    struct{}{},
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: fallback,
+		},
+	})
+
+	runtime := &SessionRuntime{sessionState: state}
+	binding := factory.RuntimeBinding{}.New("runtime-bound", bound)
+	if err := runtime.BindRuntime("session-bound", binding); err != nil {
+		t.Fatalf("BindRuntime: %v", err)
+	}
+	registered := state.Resolve("session-bound")
+	if registered == nil || registered.Runtime == nil {
+		t.Fatal("bound session runtime is unavailable")
+	}
+	if !registered.Runtime.Binding.Equal(binding) {
+		t.Fatal("session did not retain the published opaque binding")
+	}
+	if got := registered.Runtime.Factory; got != bound {
+		t.Fatalf("session Factory = %p, want bound Runtime service %p", got, bound)
+	}
+}
+
 func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	assembly := &Assembly{
 		state: newWorkResolverSessionState(),
@@ -85,7 +115,6 @@ func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 }
 
 type submitWorkFactory struct {
-	factory.Factory
 	factory.Service
 	request work.WorkRequest
 	result  work.WorkRequestSubmitResult
@@ -118,7 +147,7 @@ func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *t
 	adapter := workRuntimeAdapter{runtime: serviceOnlyRuntime{}}
 
 	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
-	if err == nil || !strings.Contains(err.Error(), "legacy Factory Runtime submission is required") {
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
 		t.Fatalf("SubmitWorkRequest() error = %v, want safe legacy-submission-required error", err)
 	}
 }

@@ -3,27 +3,25 @@ package runtimebinding
 import (
 	"context"
 	"sync"
-
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 // ActiveRuntime is Factory Session's selection of one running runtime handle.
 type ActiveRuntime struct {
 	Context   context.Context
 	SessionID string
-	Handle    factory.HostedHandle
+	Handle    RuntimeHandle
 }
 
 // State owns startup and active runtime selection without depending on a
 // concrete Factory Runtime host.
 type State struct {
 	startupMu sync.RWMutex
-	startup   factory.HostedInstance
+	startup   RuntimeInstance
 	activeMu  sync.RWMutex
 	active    *ActiveRuntime
 }
 
-func (s *State) Startup() factory.HostedInstance {
+func (s *State) Startup() RuntimeInstance {
 	if s == nil {
 		return nil
 	}
@@ -32,7 +30,7 @@ func (s *State) Startup() factory.HostedInstance {
 	return s.startup
 }
 
-func (s *State) SetStartup(instance factory.HostedInstance) {
+func (s *State) SetStartup(instance RuntimeInstance) {
 	if s == nil {
 		return
 	}
@@ -56,7 +54,7 @@ func (s *State) Active() *ActiveRuntime {
 	return &copy
 }
 
-func (s *State) ActiveHandle() factory.HostedHandle {
+func (s *State) ActiveHandle() RuntimeHandle {
 	active := s.Active()
 	if active == nil {
 		return nil
@@ -64,7 +62,7 @@ func (s *State) ActiveHandle() factory.HostedHandle {
 	return active.Handle
 }
 
-func (s *State) SetActive(ctx context.Context, sessionID string, handle factory.HostedHandle) {
+func (s *State) SetActive(ctx context.Context, sessionID string, handle RuntimeHandle) {
 	if s == nil {
 		return
 	}
@@ -86,7 +84,7 @@ func (s *State) ClearActive() {
 	s.activeMu.Unlock()
 }
 
-func (s *State) Current(defaultInstance func() factory.HostedInstance) factory.HostedInstance {
+func (s *State) Current(defaultInstance func() RuntimeInstance) RuntimeInstance {
 	if handle := s.ActiveHandle(); handle != nil {
 		if instance := handle.RuntimeInstance(); instance != nil {
 			return instance
@@ -110,7 +108,7 @@ func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Con
 // SessionState is the opaque Factory Runtime payload retained by a live
 // Factory Session.
 type SessionState struct {
-	Instance factory.HostedInstance
-	Handle   factory.HostedHandle
+	Instance RuntimeInstance
+	Handle   RuntimeHandle
 	Spec     any
 }

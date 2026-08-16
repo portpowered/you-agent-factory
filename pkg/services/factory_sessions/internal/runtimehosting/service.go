@@ -16,10 +16,18 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"go.uber.org/zap"
 )
 
 const startupReadabilityDelay = 250 * time.Millisecond
+
+func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
 
 // Service hosts the API edge and completes the startup protocol for one
 // already-started Factory Session runtime.
@@ -62,7 +70,7 @@ func (service *Service) Run(
 
 	bound := make(chan platformhttpserver.Binding, 1)
 	apiExit := service.startAPI(transportCtx, &transport, handler, request, logger, bound)
-	serviceMode := factoryruntime.RuntimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
+	serviceMode := runtimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
 	binding, err := service.waitForStartupReadability(
 		ctx, serviceMode, request.WorkFile, apiExit, request.Port, bound,
 	)
@@ -168,7 +176,7 @@ func (service *Service) waitForStartupReadability(
 
 func logStartup(
 	logger *zap.Logger,
-	runtime factoryruntime.HostedInstance,
+	runtime runtimeports.RuntimeInstance,
 	request factorysessions.RuntimeHostRequest,
 ) {
 	if logger == nil || runtime == nil {
@@ -193,7 +201,7 @@ func logStartup(
 		zap.String("runtime_failure_command_output", logging.RuntimeFailureCommandOutputPolicy),
 		zap.String("runtime_verbose_command_output", logging.RuntimeVerboseCommandOutputPolicy),
 		zap.String("record_command_diagnostics", logging.RuntimeRecordCommandDiagnosticsMode),
-		zap.String("runtime_mode", string(factoryruntime.RuntimeModeOrDefault(request.RuntimeMode))),
+		zap.String("runtime_mode", string(runtimeModeOrDefault(request.RuntimeMode))),
 		zap.Bool("mock-workers", request.MockWorkers),
 		zap.Int("port", request.Port),
 	)

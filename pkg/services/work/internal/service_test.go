@@ -29,6 +29,10 @@ type workRuntimeResolver struct {
 
 type rootOnlyRuntime struct{ factoryruntime.Service }
 
+func (rootOnlyRuntime) ControlMoveWork(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
+	return factoryruntime.MoveWorkResult{}, errors.New("Factory Runtime work move is required")
+}
+
 type rootRuntimeResolver struct {
 	runtime *factorysessions.LiveRuntime
 }
@@ -255,15 +259,15 @@ func TestLegacySessionOperationsFailClosedForRootOnlyRuntime(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := service.SubmitWorkRequestForSession(ctx, "session-1", work.WorkRequest{}); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime submission is required") {
+		!strings.Contains(err.Error(), "Factory Runtime work submission is required") {
 		t.Fatalf("SubmitWorkRequestForSession error = %v, want missing legacy submission capability", err)
 	}
 	if _, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1"); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime work move is required") {
+		!strings.Contains(err.Error(), "Factory Runtime work move is required") {
 		t.Fatalf("MoveWorkForSession error = %v, want missing legacy move capability", err)
 	}
 	if _, err := service.SubscribeFactoryEventsForSession(ctx, "session-1", nil); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime event subscription is required") {
+		!strings.Contains(err.Error(), "Factory Runtime event subscription is required until Recordings migration") {
 		t.Fatalf("SubscribeFactoryEventsForSession error = %v, want missing legacy event capability", err)
 	}
 }

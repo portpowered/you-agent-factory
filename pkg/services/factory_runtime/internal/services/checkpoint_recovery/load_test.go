@@ -10,9 +10,9 @@ func TestCompatibilityForSchema(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		stored    int
-		expected  int
+		name       string
+		stored     int
+		expected   int
 		compatible bool
 	}{
 		{name: "zero expected skips compatibility", stored: 1, expected: 0, compatible: false},

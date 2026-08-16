@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
@@ -38,7 +39,7 @@ const defaultRuntimeBufferSize = 64
 // Used by the test harness to drive the engine step-by-step without
 // starting the async Run loop.
 type TickableFactory interface {
-	factory.Factory
+	factoryhost.Engine
 	Tick(ctx context.Context) error
 	TickN(ctx context.Context, n int) error
 	TickUntil(ctx context.Context, pred func(*petri.MarkingSnapshot) bool, maxTicks int) error
@@ -120,7 +121,7 @@ type runtimeConfig struct {
 	progressPublisher          workers.ProgressPublisher
 }
 
-var _ factory.Factory = (*factoryImpl)(nil)
+var _ factoryhost.Engine = (*factoryImpl)(nil)
 var _ factory.Service = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
 
@@ -160,7 +161,7 @@ func New(
 	newID factory.IDGenerator,
 	expectedArtifactFileSystemValue any,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
-) (factory.Factory, error) {
+) (factoryhost.Engine, error) {
 	if net == nil {
 		return nil, fmt.Errorf("a factory specification is required")
 	}
@@ -295,13 +296,6 @@ func New(
 	}
 	impl.engine = runtimeEngine
 	return impl, nil
-}
-
-func normalizeRuntimeMode(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
-	if mode == "" {
-		return interfaces.RuntimeModeBatch
-	}
-	return mode
 }
 
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {

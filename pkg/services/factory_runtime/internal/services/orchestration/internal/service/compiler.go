@@ -9,14 +9,14 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 )
 
 const (
-	diagnosticCodeUnsupportedKind       = "ORCHESTRATION_UNSUPPORTED_KIND"
-	diagnosticCodeDefinitionUnavailable = "ORCHESTRATION_DEFINITION_UNAVAILABLE"
-	diagnosticCodeInvalidDefinition     = "ORCHESTRATION_INVALID_DEFINITION"
+	diagnosticCodeUnsupportedKind         = "ORCHESTRATION_UNSUPPORTED_KIND"
+	diagnosticCodeDefinitionUnavailable   = "ORCHESTRATION_DEFINITION_UNAVAILABLE"
+	diagnosticCodeInvalidDefinition       = "ORCHESTRATION_INVALID_DEFINITION"
 	diagnosticCodeJavaScriptMissingSource = "ORCHESTRATION_JAVASCRIPT_MISSING_SOURCE"
 )
 
@@ -422,8 +422,8 @@ func compileError(
 	diagnostics ...orchestration.Diagnostic,
 ) *orchestration.CompileError {
 	return &orchestration.CompileError{
-		Err:         err,
+		Err:          err,
 		Orchestrator: kind,
-		Diagnostics: diagnostics,
+		Diagnostics:  diagnostics,
 	}
 }

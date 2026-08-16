@@ -297,9 +297,6 @@ func TestService_ObserveForSessionReturnsNeutralObservationWithoutLegacySnapshot
 		result.Observation.Health.FactoryState != want.Health.FactoryState {
 		t.Fatalf("observation = %#v, want %#v", result.Observation, want)
 	}
-	if _, ok := any(factory).(factoryruntime.LegacySnapshotProvider); ok {
-		t.Fatal("peer-shaped session runtime must not implement LegacySnapshotProvider")
-	}
 }
 
 type liveChangeCompositionEventLog struct {

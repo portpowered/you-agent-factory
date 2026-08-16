@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"go.uber.org/zap"
@@ -20,9 +21,9 @@ func NewSessionRuntime(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	logger *zap.Logger,
-	runtimeBuild factory.ReplacementBuilder,
-	startupBundle factory.HostedInstance,
-	runtimeLifecycle factory.Lifecycle,
+	runtimeBuild runtimeports.RuntimeReplacementBuilder,
+	startupBundle runtimeports.RuntimeInstance,
+	runtimeLifecycle runtimeports.RuntimeLifecycle,
 	runtimeSidecars RuntimeSidecars,
 	durableExecution durableexecution.Service,
 	factoryDefinitions interfaces.Service,

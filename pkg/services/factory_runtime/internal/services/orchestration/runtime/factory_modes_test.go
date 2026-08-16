@@ -13,7 +13,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -652,7 +652,7 @@ func TestRuntimeVisitCountReplayPreservesSharedTraceSiblingRouting(t *testing.T)
 func runVisitCountSiblingIsolationScenario(
 	t *testing.T,
 	maxReviews int,
-) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger) {
+) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger) {
 	t.Helper()
 	f, history, err := newTestFactoryWithScriptedLedger(
 		withNet(buildVisitCountSiblingIsolationNet(maxReviews)),
@@ -748,7 +748,7 @@ func sharedTraceSiblingSubmissions(sharedTrace string) []work.SubmitRequest {
 	}
 }
 
-func runtimeSnapshot(t *testing.T, f factory.Factory) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+func runtimeSnapshot(t *testing.T, f factoryhost.Engine) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 	snapshot, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {

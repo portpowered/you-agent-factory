@@ -10,10 +10,8 @@ import (
 	"strings"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 )
@@ -27,7 +25,7 @@ func emitCleanInvocationOutcome(
 	duration time.Duration,
 ) error {
 	logger := cleanInvocationLogger(cfg.Logger)
-	provider, ok := runner.(state.LegacySnapshotProvider)
+	provider, ok := runner.(factoryruntime.Service)
 	if !ok {
 		if runErr == nil {
 			err := &InvocationError{
@@ -47,7 +45,7 @@ func emitCleanInvocationOutcome(
 		})
 		return err
 	}
-	snapshot, err := provider.GetEngineStateSnapshot(ctx)
+	snapshotValue, err := provider.CleanInvocationSnapshot(ctx)
 	if err != nil {
 		if runErr == nil {
 			invocationErr := &InvocationError{
@@ -68,11 +66,11 @@ func emitCleanInvocationOutcome(
 		})
 		return invocationErr
 	}
+	snapshot := &snapshotValue
 	if runErr != nil {
 		invocationErr := newInvocationErrorForRunFailure(runErr, snapshot)
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
 			Duration: duration,
-			Snapshot: snapshot,
 			Err:      invocationErr,
 		})
 		return invocationErr
@@ -85,7 +83,6 @@ func emitCleanInvocationOutcome(
 	if err != nil {
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
 			Duration: duration,
-			Snapshot: snapshot,
 			Err:      err,
 		})
 		return err
@@ -95,7 +92,6 @@ func emitCleanInvocationOutcome(
 		invocationErr := cleanInvocationFailureFromSnapshot(snapshot, target)
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
 			Duration: duration,
-			Snapshot: snapshot,
 			Target:   &target,
 			Err:      invocationErr,
 		})
@@ -104,7 +100,6 @@ func emitCleanInvocationOutcome(
 	if err := writeCleanInvocationSuccess(cfg, result); err != nil {
 		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
 			Duration: duration,
-			Snapshot: snapshot,
 			Target:   &target,
 			Err:      err,
 		})
@@ -112,7 +107,6 @@ func emitCleanInvocationOutcome(
 	}
 	recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
 		Duration: duration,
-		Snapshot: snapshot,
 		Target:   &target,
 		Success:  &result,
 	})
@@ -121,7 +115,7 @@ func emitCleanInvocationOutcome(
 
 func newInvocationErrorForRunFailure(
 	runErr error,
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 ) error {
 	var recorded *InvocationError
 	if errors.As(runErr, &recorded) {
@@ -153,7 +147,7 @@ func newInvocationErrorForRunFailure(
 }
 
 func cleanInvocationFailureFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 	target cleanInvocationWorkTarget,
 ) error {
 	if timeoutFailure, ok := cleanInvocationTimeoutForTarget(snapshot, target); ok {
@@ -176,14 +170,14 @@ func cleanInvocationFailureFromSnapshot(
 }
 
 func cleanInvocationTimeoutFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 ) (*InvocationError, bool) {
 	if snapshot == nil {
 		return nil, false
 	}
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
-		failure := snapshot.DispatchHistory[i].FailureMetadata
-		if failure != nil && failure.Type == workerexecution.WorkFailureTypeTimeout {
+		failureType := snapshot.DispatchHistory[i].FailureType
+		if failureType == string(workerexecution.WorkFailureTypeTimeout) {
 			return &InvocationError{
 				Code:    InvocationErrorCodeTimeout,
 				Message: "clean invocation timed out",
@@ -194,7 +188,7 @@ func cleanInvocationTimeoutFromSnapshot(
 }
 
 func cleanInvocationTimeoutForTarget(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 	target cleanInvocationWorkTarget,
 ) (*InvocationError, bool) {
 	if snapshot == nil {
@@ -205,7 +199,7 @@ func cleanInvocationTimeoutForTarget(
 		if !cleanInvocationCompletionMatchesTarget(completion, target) {
 			continue
 		}
-		if completion.FailureMetadata != nil && completion.FailureMetadata.Type == workerexecution.WorkFailureTypeTimeout {
+		if completion.FailureType == string(workerexecution.WorkFailureTypeTimeout) {
 			return &InvocationError{
 				Code:    InvocationErrorCodeTimeout,
 				Message: "clean invocation timed out",
@@ -216,7 +210,7 @@ func cleanInvocationTimeoutForTarget(
 }
 
 func cleanInvocationFailedForTarget(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 	target cleanInvocationWorkTarget,
 ) (string, bool) {
 	if snapshot == nil {
@@ -224,7 +218,7 @@ func cleanInvocationFailedForTarget(
 	}
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
 		completion := snapshot.DispatchHistory[i]
-		if completion.Outcome != workerexecution.OutcomeFailed {
+		if completion.Outcome != string(workerexecution.OutcomeFailed) {
 			continue
 		}
 		if !cleanInvocationCompletionMatchesTarget(completion, target) {
@@ -232,17 +226,11 @@ func cleanInvocationFailedForTarget(
 		}
 		return strings.TrimSpace(completion.Reason), true
 	}
-	if snapshot.Topology == nil {
-		return "", false
-	}
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil {
+	for _, token := range snapshot.Work {
+		if token.WorkID != target.WorkID || token.WorkTypeID != target.WorkTypeName {
 			continue
 		}
-		if token.Color.WorkID != target.WorkID || token.Color.WorkTypeID != target.WorkTypeName {
-			continue
-		}
-		if snapshot.Topology.StateCategoryForPlace(token.PlaceID) == state.StateCategoryFailed {
+		if token.StateCategory == string(factoryruntime.StateCategoryFailed) {
 			return "", true
 		}
 	}
@@ -272,10 +260,10 @@ func cleanInvocationWorkTargetFromFile(
 }
 
 func cleanInvocationSuccessFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
-	if snapshot == nil || snapshot.Topology == nil {
+	if snapshot == nil {
 		return cleanInvocationSuccess{}, false
 	}
 	if result, ok := cleanInvocationSuccessFromTerminalTokens(snapshot, target); ok {
@@ -285,20 +273,18 @@ func cleanInvocationSuccessFromSnapshot(
 }
 
 func cleanInvocationSuccessFromTerminalTokens(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
-	tokens := make([]*factorytoken.Token, 0, len(snapshot.Marking.Tokens))
-	for _, token := range snapshot.Marking.Tokens {
-		if token != nil {
-			tokens = append(tokens, token)
-		}
-	}
+	tokens := append([]factoryruntime.CleanInvocationWork(nil), snapshot.Work...)
 	sort.Slice(tokens, func(i, j int) bool {
-		return tokens[i].ID < tokens[j].ID
+		if tokens[i].WorkID != tokens[j].WorkID {
+			return tokens[i].WorkID < tokens[j].WorkID
+		}
+		return tokens[i].TraceID < tokens[j].TraceID
 	})
 	for _, token := range tokens {
-		if cleanInvocationTokenMatches(snapshot.Topology, token, target) {
+		if cleanInvocationTokenMatches(token, target) {
 			return cleanInvocationSuccessFromToken(token), true
 		}
 	}
@@ -306,42 +292,39 @@ func cleanInvocationSuccessFromTerminalTokens(
 }
 
 func cleanInvocationSuccessFromDispatchHistory(
-	snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	snapshot *factoryruntime.CleanInvocationSnapshot,
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
 		completion := snapshot.DispatchHistory[i]
-		if completion.Outcome != workerexecution.OutcomeAccepted {
+		if completion.Outcome != string(workerexecution.OutcomeAccepted) {
 			continue
 		}
-		for _, mutation := range completion.OutputMutations {
-			if cleanInvocationTokenMatches(snapshot.Topology, mutation.Token, target) {
-				return cleanInvocationSuccessFromToken(mutation.Token), true
+		for _, output := range completion.Outputs {
+			if cleanInvocationTokenMatches(output, target) {
+				return cleanInvocationSuccessFromToken(output), true
 			}
 		}
 	}
 	return cleanInvocationSuccess{}, false
 }
 
-func cleanInvocationTokenMatches(net *state.Net, token *factorytoken.Token, target cleanInvocationWorkTarget) bool {
-	if net == nil || token == nil {
+func cleanInvocationTokenMatches(token factoryruntime.CleanInvocationWork, target cleanInvocationWorkTarget) bool {
+	if token.DataType == string(workerexecution.DataTypeResource) {
 		return false
 	}
-	if token.Color.DataType == factorytoken.DataTypeResource {
+	if token.WorkID != target.WorkID || token.WorkTypeID != target.WorkTypeName {
 		return false
 	}
-	if token.Color.WorkID != target.WorkID || token.Color.WorkTypeID != target.WorkTypeName {
-		return false
-	}
-	return net.StateCategoryForPlace(token.PlaceID) == state.StateCategoryTerminal
+	return token.StateCategory == string(factoryruntime.StateCategoryTerminal)
 }
 
-func cleanInvocationSuccessFromToken(token *factorytoken.Token) cleanInvocationSuccess {
+func cleanInvocationSuccessFromToken(token factoryruntime.CleanInvocationWork) cleanInvocationSuccess {
 	return cleanInvocationSuccess{
-		Output:       string(token.Color.Payload),
-		WorkID:       token.Color.WorkID,
-		WorkTypeName: token.Color.WorkTypeID,
-		TraceID:      token.Color.TraceID,
+		Output:       token.Output,
+		WorkID:       token.WorkID,
+		WorkTypeName: token.WorkTypeID,
+		TraceID:      token.TraceID,
 		SessionID:    defaultFactorySessionID,
 	}
 }
@@ -364,19 +347,16 @@ func writeCleanInvocationSuccess(cfg RunConfig, result cleanInvocationSuccess) e
 }
 
 func cleanInvocationCompletionMatchesTarget(
-	completion interfaces.CompletedDispatch,
+	completion factoryruntime.CleanInvocationDispatch,
 	target cleanInvocationWorkTarget,
 ) bool {
-	for _, token := range completion.ConsumedTokens {
-		if token.Color.WorkID == target.WorkID && token.Color.WorkTypeID == target.WorkTypeName {
+	for _, token := range completion.Consumed {
+		if token.WorkID == target.WorkID && token.WorkTypeID == target.WorkTypeName {
 			return true
 		}
 	}
-	for _, mutation := range completion.OutputMutations {
-		if mutation.Token == nil {
-			continue
-		}
-		if mutation.Token.Color.WorkID == target.WorkID && mutation.Token.Color.WorkTypeID == target.WorkTypeName {
+	for _, token := range completion.Outputs {
+		if token.WorkID == target.WorkID && token.WorkTypeID == target.WorkTypeName {
 			return true
 		}
 	}

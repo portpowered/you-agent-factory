@@ -1,6 +1,7 @@
 package composition
 
 import (
+	"context"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -31,6 +32,18 @@ type HTTPBinder struct {
 	content         work.ContentPreparation
 }
 
+type runtimeHTTPSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
+type runtimeHTTPEventSubscriber interface {
+	SubscribeFactoryEvents(
+		context.Context,
+		*factorydefinitions.FactoryEventReconnectCursor,
+		factorydefinitions.FactoryEventReconnectScope,
+	) (*factorydefinitions.FactoryEventStream, error)
+}
+
 func NewHTTPBinder(
 	statusProjector factoryruntime.FactoryStatusProjector,
 	content work.ContentPreparation,
@@ -51,15 +64,19 @@ func (binder *HTTPBinder) Bind(
 		binder == nil || binder.content == nil {
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: opened Factory Session roles are required")
 	}
-	legacyObservation, ok := runtime.(factoryruntime.APIFactory)
-	if !ok {
-		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: legacy Factory Runtime observation is required")
+	if _, ok := runtime.(runtimeHTTPSubmitter); !ok {
+		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: Factory Runtime work submission is required")
+	}
+	if _, ok := runtime.(runtimeHTTPEventSubscriber); !ok {
+		// TODO(P5B): bind event reads from Recordings and remove this
+		// compatibility capability check from the HTTP mapping boundary.
+		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: Factory Runtime event subscription is required")
 	}
 	var durableExecution factorysessionmapping.DurableExecution = sessions
 	durable := NewDurableAPI(durableExecution)
 	return HTTPBinding{
-		Runtime:            NewRuntimeAPI(legacyObservation, definitions),
-		FactoryStatus:      newFactoryStatusAPI(runtime, sessions),
+		Runtime:            NewRuntimeAPI(runtime, definitions),
+		FactoryStatus:      newFactoryStatusAPI(sessions),
 		Sessions:           NewLiveSessionAPI(liveControl, sessions),
 		Invocation:         NewInvocationAPI(sessions),
 		FactoryDefinitions: NewFactoryDefinitionAPI(definitions),

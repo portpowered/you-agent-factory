@@ -204,7 +204,7 @@ func (invocationLifecycleStub) StopLifecycle(context.Context) error { return nil
 
 func (invocationLifecycleStub) FailStartup(error) error { return nil }
 
-func (invocationLifecycleStub) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+func (invocationLifecycleStub) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 func TestModelInvocationContextAppliesOwnerTimeout(t *testing.T) {
 	t.Parallel()

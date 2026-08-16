@@ -107,11 +107,11 @@ func (a *Assembly) Assemble(
 	automationService automations.Service,
 	serviceMode bool,
 ) (
-	factoryruntime.ReplacementBuilder,
-	factoryruntime.HostedInstance,
+	factoryruntime.RuntimeReplacementBuilder,
+	factoryruntime.RuntimeRecord,
 	factoryruntime.SessionBuildSpec,
-	factoryruntime.Lifecycle,
-	factoryruntime.Sidecars,
+	factoryruntime.RuntimeLifecycle,
+	factoryruntime.RuntimeSidecars,
 	error,
 ) {
 	if a == nil || a.runtimeFactory == nil {

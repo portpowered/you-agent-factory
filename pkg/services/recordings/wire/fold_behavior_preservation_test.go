@@ -13,6 +13,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Fold-behavior preservation tests construct Recordings exclusively through
@@ -249,6 +251,100 @@ func TestWireFoldPreservesSubscriptionCursorOrderThroughPublishedRoot(t *testing
 		if outcome.Event.Sequence != recordings.CanonicalEventSequence(sequence) {
 			t.Fatalf("reconnect sequence at %d = %d, want %d", sequence, outcome.Event.Sequence, sequence)
 		}
+	}
+}
+
+func TestWireFoldReconstructsCanonicalDispatchReplayWithWorkLineage(t *testing.T) {
+	t.Parallel()
+
+	const (
+		generationID = "wire-fold-dispatch-replay-gen"
+		workID       = "wire-fold-dispatch-work"
+		dispatchID   = "wire-fold-dispatch"
+	)
+	now := time.Unix(1_700_000_100, 0).UTC()
+	ledger := recordingswire.NewRuntimeLedger(nil, func() time.Time { return now }, generationID, nil)
+	workItem := work.FactoryWorkItem{
+		ID:          workID,
+		WorkTypeID:  "task",
+		State:       "ready",
+		PlaceID:     "task:ready",
+		DisplayName: "replay work",
+		TraceID:     "wire-fold-trace",
+	}
+	ledger.RecordWorkRequest(1, work.WorkRequestRecord{
+		RequestID: "wire-fold-work-request",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		TraceID:   workItem.TraceID,
+		WorkItems: []work.FactoryWorkItem{workItem},
+	}, now)
+	token := workers.Token{
+		ID:      "wire-fold-token",
+		PlaceID: workItem.PlaceID,
+		Color: workers.Color{
+			DataType:   workers.DataTypeWork,
+			Name:       workItem.DisplayName,
+			RequestID:  "wire-fold-work-request",
+			WorkID:     workID,
+			WorkTypeID: workItem.WorkTypeID,
+			TraceID:    workItem.TraceID,
+		},
+		CreatedAt: now,
+		EnteredAt: now,
+	}
+	dispatch := work.WorkDispatch{
+		DispatchID:      dispatchID,
+		TransitionID:    "t-process",
+		WorkstationName: "Process",
+		InputTokens:     workers.InputTokens(token),
+		Execution: work.ExecutionMetadata{
+			RequestID: "wire-fold-dispatch-request",
+			ReplayKey: "t-process/wire-fold-trace/wire-fold-dispatch-work",
+			WorkIDs:   []string{workID},
+		},
+	}
+	ledger.RecordWorkstationRequest(2, factorydefinitions.FactoryDispatchRecord{
+		DispatchID: dispatchID,
+		Dispatch:   dispatch,
+	}, now.Add(time.Second))
+	ledger.RecordDispatchWorkerSessionAssociation(
+		2,
+		dispatchID,
+		"wire-fold-worker-session",
+		"wire-fold-dispatch-request",
+		now.Add(time.Second),
+	)
+	result := workers.WorkResult{
+		DispatchID:   dispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workers.OutcomeAccepted,
+		Output:       "completed through canonical replay",
+	}
+	ledger.RecordWorkstationResponse(3, result, factorydefinitions.CompletedDispatch{
+		DispatchID:      dispatchID,
+		TransitionID:    dispatch.TransitionID,
+		WorkstationName: dispatch.WorkstationName,
+		Outcome:         workers.OutcomeAccepted,
+		StartTime:       now.Add(time.Second),
+		EndTime:         now.Add(2 * time.Second),
+		Duration:        time.Second,
+		ConsumedTokens:  []workers.Token{token},
+	})
+
+	projection := recordingswire.NewProjectionService()
+	state, err := projection.ReconstructFactoryWorldState(ledger.CanonicalEvents(), 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState() = %v", err)
+	}
+	if len(state.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want one canonical dispatch completion", state.CompletedDispatches)
+	}
+	completion := state.CompletedDispatches[0]
+	if completion.DispatchID != dispatchID || completion.Result.Outcome != "ACCEPTED" {
+		t.Fatalf("replayed completion = %#v, want accepted dispatch %q", completion, dispatchID)
+	}
+	if len(completion.WorkItemIDs) != 1 || completion.WorkItemIDs[0] != workID {
+		t.Fatalf("replayed completion Work lineage = %#v, want [%q]", completion.WorkItemIDs, workID)
 	}
 }
 
