@@ -182,6 +182,38 @@ func TestBuildModelInvocationExecutorReachesConstructionInjectedProviderCommandR
 	}
 }
 
+// expectedProgressFragment states the exact facts one published fragment must
+// carry. matchPayload separates a fragment whose payload is part of the claim
+// from a terminal fragment where only kind and correlation are asserted.
+type expectedProgressFragment struct {
+	kind         string
+	dispatchID   string
+	payload      string
+	matchPayload bool
+}
+
+// matchProgressFragments reports the first way published departs from want, or
+// nil when every fragment matches in order. Keeping the comparison here rather
+// than in one boolean chain lets the caller name which fragment broke the
+// claim instead of only that the whole sequence did.
+func matchProgressFragments(published []workers.ProgressFragment, want []expectedProgressFragment) error {
+	if len(published) != len(want) {
+		return fmt.Errorf("fragment count = %d, want %d", len(published), len(want))
+	}
+	for i, expected := range want {
+		got := published[i]
+		switch {
+		case got.Kind != expected.kind:
+			return fmt.Errorf("fragment %d kind = %q, want %q", i, got.Kind, expected.kind)
+		case got.DispatchID != expected.dispatchID:
+			return fmt.Errorf("fragment %d dispatch ID = %q, want %q", i, got.DispatchID, expected.dispatchID)
+		case expected.matchPayload && got.Payload != expected.payload:
+			return fmt.Errorf("fragment %d payload = %q, want %q", i, got.Payload, expected.payload)
+		}
+	}
+	return nil
+}
+
 // TestCanonicalProviderAttemptThroughModelWorkstationEmitsResponseAndCompletion
 // proves the surviving canonical Providers contract remains observable through
 // the Workers model/workstation executor after the providercompat root removal:
@@ -223,16 +255,13 @@ func TestCanonicalProviderAttemptThroughModelWorkstationEmitsResponseAndCompleti
 	if len(requests) != 1 || requests[0].Command != string(providers.IDCodex) || requests[0].DispatchID != dispatchID {
 		t.Fatalf("provider command requests = %#v, want one codex request for %q", requests, dispatchID)
 	}
-	if len(published) != 3 ||
-		published[0].Kind != workers.ProgressFragmentKind ||
-		published[0].DispatchID != dispatchID ||
-		published[0].Payload != "canonical provider progress" ||
-		published[1].Kind != workers.ProgressFragmentKind ||
-		published[1].DispatchID != dispatchID ||
-		published[1].Payload != "canonical provider response" ||
-		published[2].Kind != workers.CompletedFragmentKind ||
-		published[2].DispatchID != dispatchID {
-		t.Fatalf("published fragments = %#v, want provider progress, response, then completion for %q", published, dispatchID)
+	wantFragments := []expectedProgressFragment{
+		{kind: workers.ProgressFragmentKind, dispatchID: dispatchID, payload: "canonical provider progress", matchPayload: true},
+		{kind: workers.ProgressFragmentKind, dispatchID: dispatchID, payload: "canonical provider response", matchPayload: true},
+		{kind: workers.CompletedFragmentKind, dispatchID: dispatchID},
+	}
+	if err := matchProgressFragments(published, wantFragments); err != nil {
+		t.Fatalf("published fragments = %#v, want provider progress, response, then completion for %q: %v", published, dispatchID, err)
 	}
 }
 
