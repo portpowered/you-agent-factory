@@ -201,6 +201,9 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	} else if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
 		t.Fatalf("WorkerRecordingReaderFromProcess snapshot = %#v, want empty snapshot", snapshot)
 	}
+	if operations := DetachedOperationsFromProcess(process); operations == nil {
+		t.Fatal("DetachedOperationsFromProcess(composed process) returned nil, want the composed view")
+	}
 
 	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{
 		WorkerRecordingWriter: recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
