@@ -17,10 +17,11 @@ import (
 
 func (s *JavaScriptRuntimeService) ensureSessionResponseEventsIfNeeded(state *runtimeSessionState) error {
 	// Only a runtime-backed session publishes provider progress through this
-	// store: its children are Workers, invoked through the Factory Runtime bound
-	// as the worker invoker. A fake session, a replay, or the standalone
-	// `you run script.js` composition has no such runtime and needs no store.
-	if s == nil || !s.workerInvokerBound() {
+	// store: its children are Workers, invoked through the narrow Execute
+	// capability bound after the Runtime has opened. A fake session, a replay,
+	// or the standalone `you run script.js` composition has no such capability
+	// and needs no store.
+	if s == nil || !s.workerExecutionBound() {
 		return nil
 	}
 	if state == nil {
@@ -152,12 +153,12 @@ func completeSessionResponseEvents(state *runtimeSessionState) {
 // PublishWorkerProgress routes one Worker's progress fragment to the durable
 // session that owns that Worker.
 //
-// A JavaScript child is a Worker, so its output reaches this service the way
-// every Worker's output reaches its runtime: through the Workers progress
-// publisher, addressed by dispatch. Workers knows the dispatch and nothing
-// about durable sessions, which is why the session that started the Worker
-// registers the mapping before it invokes and drops it afterwards. A fragment
-// for a dispatch this service does not own is not its business and is ignored.
+// A JavaScript child is a Worker, so its output reaches this service through
+// the request-scoped Workers progress publisher, addressed by dispatch.
+// Workers knows the dispatch and nothing about durable sessions, which is why
+// the session that started the Worker registers the mapping before it invokes
+// and drops it afterwards. A fragment for a dispatch this service does not own
+// is not its business and is ignored.
 func (s *JavaScriptRuntimeService) PublishWorkerProgress(fragment workers.ProgressFragment) {
 	if s == nil {
 		return

@@ -692,13 +692,14 @@ func provideStandaloneSessionExecutionFactory(
 	sessionIDs factorysessions.SessionIDGenerator,
 	fixtureFiles factorysessionwire.ContractFixtureReader,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+	execution factorysessionwire.WorkerExecution,
 ) factorysessionwire.StandaloneSessionExecutionFactory {
 	return func(
 		provider factorysessions.ExecutionProvider,
 		projectRoot string,
 		fixtureCatalogPath string,
 		childExecutorMode string,
-		executor workers.InvocationExecutor,
+		workerExecution factorysessionwire.WorkerExecution,
 		clock factoryruntime.Clock,
 	) (factorysessionwire.DurableExecutionService, error) {
 		return factorysessionwire.NewStandaloneExecution(
@@ -707,7 +708,7 @@ func provideStandaloneSessionExecutionFactory(
 			stores,
 			fixtureCatalogPath,
 			childExecutorMode,
-			executor,
+			workerExecution,
 			clock,
 			syncWaits,
 			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
@@ -1038,14 +1039,6 @@ func provideWorkerInvocationWithProgressFactory(
 ) factorysessionwire.WorkerInvocationWithProgressFactory {
 	return func(_ workers.CommandRunner, _ workers.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 		return workerswire.NewInvocationWithProgressFromService(executionService, publisher), nil
-	}
-}
-
-func provideWorkerInvocationFactory(
-	executionService workers.Service,
-) factorysessionwire.WorkerInvocationFactory {
-	return func(_ workers.CommandRunner, _ workers.PTYAllocator) (workers.InvocationExecutor, error) {
-		return workerswire.NewInvocationFromService(executionService), nil
 	}
 }
 

@@ -128,7 +128,7 @@ type (
 	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
-	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
+	WorkerExecution                     = executionopening.WorkerExecution
 	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService

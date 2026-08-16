@@ -357,18 +357,15 @@ func provideFactoryRuntimeScriptCommandRunner(
 
 func provideSessionExecutionOpeningFactory(
 	runtimes factorysessionwire.ExecutionRuntimeOpening,
-	providerCommandRunner factorysessionwire.ProviderCommandRunner,
+	workerExecution workers.Service,
 	build factorysessionwire.StandaloneSessionExecutionFactory,
-	invocation factorysessionwire.WorkerInvocationFactory,
 	resolveClock factoryruntime.ClockResolver,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	paths factorysessionwire.ExecutionOpeningFileSystem,
-	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 ) (*factorysessionwire.ExecutionOpeningFactory, error) {
 	return factorysessionwire.NewExecutionOpeningFactory(
-		runtimes, providerCommandRunner, allocator,
-		build, invocation, resolveClock, artifactRoots, paths, logger,
+		runtimes, workerExecution, build, resolveClock, artifactRoots, paths, logger,
 	)
 }
 

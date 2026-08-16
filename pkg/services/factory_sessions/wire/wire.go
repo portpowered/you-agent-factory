@@ -25,7 +25,6 @@ import (
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewRequestPreparation constructs the private request-normalization
@@ -205,7 +204,7 @@ func NewStandaloneExecution(
 	stores RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	execution factorysessionexecution.WorkerExecution,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -218,7 +217,7 @@ func NewStandaloneExecution(
 ) (durableexecution.Service, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		executor,
+		execution,
 		clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
 		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)

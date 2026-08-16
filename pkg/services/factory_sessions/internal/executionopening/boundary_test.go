@@ -84,12 +84,8 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		executionOpeningCommandRunner{},
-		&workers.MockPTYAllocator{},
-		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (durableexecution.Service, error) {
-			return nil, nil
-		},
-		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		workersRootExecutionProbe{},
+		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
@@ -107,12 +103,8 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		executionOpeningCommandRunner{},
-		&workers.MockPTYAllocator{},
-		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (durableexecution.Service, error) {
-			return nil, nil
-		},
-		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		workersRootExecutionProbe{},
+		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },

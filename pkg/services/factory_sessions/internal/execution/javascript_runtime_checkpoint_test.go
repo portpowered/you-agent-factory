@@ -841,8 +841,8 @@ func TestPublishWorkerProgress_StopsOnceTheWorkerIsReleased(t *testing.T) {
 // as single-use for its whole life. Two sessions submitting an unqualified
 // dispatch-1 would leave the second refused outright.
 func TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession(t *testing.T) {
-	first := newChildWorkerExecutor("dur-sess-first", nil, nil, nil, nil, 0, "")
-	second := newChildWorkerExecutor("dur-sess-second", nil, nil, nil, nil, 0, "")
+	first := newChildWorkerExecutor("dur-sess-first", nil, nil, nil, nil, "")
+	second := newChildWorkerExecutor("dur-sess-second", nil, nil, nil, nil, "")
 
 	firstID := first.workerDispatchIdentity("dispatch-1")
 	secondID := second.workerDispatchIdentity("dispatch-1")

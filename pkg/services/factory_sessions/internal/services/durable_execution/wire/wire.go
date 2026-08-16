@@ -12,7 +12,6 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewService binds an existing durable implementation behind the private
@@ -61,7 +60,7 @@ func NewStandalone(
 	stores roles.RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	execution factorysessionexecution.WorkerExecution,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -75,7 +74,7 @@ func NewStandalone(
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		executor,
+		execution,
 		clock, syncWaits, checkpointSummaries, workflows, orchestration, childValues,
 		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)

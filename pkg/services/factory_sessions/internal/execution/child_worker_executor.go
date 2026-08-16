@@ -7,12 +7,33 @@ import (
 	"strings"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// SetWorkerInvoker attaches the Runtime capability JavaScript children invoke
-// their Workers through. Binding nothing leaves children unable to run, which
-// is deliberate: there is no second execution route to fall back to.
+type WorkerExecution interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
+type childExecuteService = WorkerExecution
+
+type childWorkerProgressPublisher func(string, workers.ProgressFragment)
+
+type childWorkerExecutionBinding struct {
+	execute               childExecuteService
+	resourceLeaseAcquirer childResourceLeaseAcquirer
+	runtimeID             string
+	generationID          string
+	providerOverride      providers.Service
+	mockWorkers           *workers.MockWorkersConfig
+	commandRunnerOverride workers.CommandRunner
+	publish               childWorkerProgressPublisher
+}
+
+// SetWorkerInvoker attaches the Runtime capability used by durable live-change
+// control. Child execution deliberately does not use this broad capability;
+// it receives the narrow Workers Execute binding below.
 func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 	if s == nil {
 		return
@@ -22,8 +43,89 @@ func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 	s.invokerMu.Unlock()
 }
 
+// SetDirectWorkerExecution attaches the already-composed Workers Execute
+// operation to the standalone JavaScript composition. The standalone path has
+// no Factory Runtime to contribute identity or capacity, but it still enters
+// Workers through the same detached request/result boundary.
+func (s *JavaScriptRuntimeService) SetDirectWorkerExecution(
+	execution interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	},
+) {
+	if s == nil {
+		return
+	}
+	s.invokerMu.Lock()
+	s.directChildExecution = execution
+	s.invokerMu.Unlock()
+}
+
+// SetWorkerExecution attaches the already-composed Workers Execute operation
+// to the durable child path. The binding is request-scoped at the Workers
+// boundary: Sessions supplies detached identity and policy values, while
+// Workers retains runner/provider ownership and terminal normalization.
+func (s *JavaScriptRuntimeService) SetWorkerExecution(
+	execution interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	},
+	admission factory.ResourceCapacityLeaseAdmission,
+	runtimeID string,
+	generationID string,
+	providerOverride providers.Service,
+	mockWorkers *workers.MockWorkersConfig,
+	commandRunnerOverride workers.CommandRunner,
+) {
+	if s == nil {
+		return
+	}
+	binding := &childWorkerExecutionBinding{
+		execute:               execution,
+		runtimeID:             strings.TrimSpace(runtimeID),
+		generationID:          strings.TrimSpace(generationID),
+		providerOverride:      providerOverride,
+		mockWorkers:           mockWorkers.Clone(),
+		commandRunnerOverride: commandRunnerOverride,
+	}
+	if admission != nil {
+		binding.resourceLeaseAcquirer = func(
+			ctx context.Context,
+			request factory.ResourceCapacityLeaseRequest,
+		) (*childResourceLease, error) {
+			lease, err := admission.AcquireResourceCapacityLease(ctx, request)
+			if err != nil || lease == nil {
+				return nil, err
+			}
+			return &childResourceLease{
+				factoryRevision: lease.FactoryRevision,
+				release:         lease.Release,
+			}, nil
+		}
+	}
+	// The publisher is intentionally installed on the request rather than on
+	// the process Workers root. That keeps each child response stream scoped to
+	// its owning durable session and prevents one child from observing another's
+	// progress.
+	binding.publish = func(workerDispatchID string, fragment workers.ProgressFragment) {
+		if strings.TrimSpace(fragment.DispatchID) == "" {
+			fragment.DispatchID = workerDispatchID
+		}
+		if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+			fragment.Correlation.DispatchID = workerDispatchID
+		}
+		s.PublishWorkerProgress(fragment)
+	}
+	s.invokerMu.Lock()
+	if execution == nil {
+		s.workerExecution = nil
+	} else {
+		s.workerExecution = binding
+	}
+	s.invokerMu.Unlock()
+}
+
 // workerInvokerBound reports whether this service was composed with a Factory
-// Runtime behind it, which is what makes its children Workers.
+// Runtime behind it. This remains a live-change capability; child response
+// stores use workerExecutionBound so they do not depend on the Runtime root.
 func (s *JavaScriptRuntimeService) workerInvokerBound() bool {
 	if s == nil {
 		return false
@@ -43,22 +145,52 @@ func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {
 	return runtime
 }
 
+func (s *JavaScriptRuntimeService) workerExecutionBound() bool {
+	return s.workerExecutionBinding() != nil
+}
+
+func (s *JavaScriptRuntimeService) workerExecutionBinding() *childWorkerExecutionBinding {
+	if s == nil {
+		return nil
+	}
+	s.invokerMu.RLock()
+	binding := s.workerExecution
+	s.invokerMu.RUnlock()
+	if binding == nil || binding.execute == nil {
+		return nil
+	}
+	return binding
+}
+
+func (s *JavaScriptRuntimeService) directWorkerExecution() childExecuteService {
+	if s == nil {
+		return nil
+	}
+	s.invokerMu.RLock()
+	execution := s.directChildExecution
+	s.invokerMu.RUnlock()
+	return execution
+}
+
 // childWorkerExecutor runs one JavaScript workflow child as an ordinary Worker.
 //
-// It holds no executor, no provider, and no retry loop of its own. Everything a
-// Worker needs -- identity, the dispatch/Worker Session association that makes
-// it visible, the publication window its output streams through, controls, and
-// retry -- belongs to Worker Sessions, reached through the runtime's InvokeWorker
-// operation. What remains here is translation: a child spec in, a child result
-// out.
+// It holds no executor, provider, runner registry, or Runtime root. Everything
+// a Worker needs is translated into one detached ExecuteRequest and handed to
+// the already-composed Workers operation. What remains here is the durable
+// session projection: a child spec in, a child result out.
 type childWorkerExecutor struct {
 	sessionID             string
-	invoke                factory.Service
+	execute               childExecuteService
 	records               factory.JavaScriptChildRecordSink
 	childValues           factory.JavaScriptChildValues
 	observe               workerDispatchObserver
+	publish               childWorkerProgressPublisher
 	workingDir            string
-	maxAttempts           int
+	runtimeID             string
+	generationID          string
+	providerOverride      providers.Service
+	mockWorkers           *workers.MockWorkersConfig
+	commandRunnerOverride workers.CommandRunner
 	resourceLeaseAcquirer childResourceLeaseAcquirer
 }
 
@@ -87,27 +219,19 @@ type workerDispatchObserver func(workerDispatchID, sessionID string) func()
 
 func newChildWorkerExecutor(
 	sessionID string,
-	invoke factory.Service,
+	execution childExecuteService,
 	records factory.JavaScriptChildRecordSink,
 	childValues factory.JavaScriptChildValues,
 	observe workerDispatchObserver,
-	maxRetries int,
 	workingDir string,
 ) *childWorkerExecutor {
-	// MaxRetries counts retries after the first attempt; Worker Sessions bounds
-	// total attempts, so the budget is one greater.
-	attempts := maxRetries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
 	return &childWorkerExecutor{
 		sessionID:             sessionID,
-		invoke:                invoke,
+		execute:               execution,
 		records:               records,
 		childValues:           childValues,
 		observe:               observe,
 		workingDir:            strings.TrimSpace(workingDir),
-		maxAttempts:           attempts,
 		resourceLeaseAcquirer: nil,
 	}
 }
@@ -126,9 +250,9 @@ func (e *childWorkerExecutor) Execute(
 	if err := ctx.Err(); err != nil {
 		return factory.JavaScriptChildExecutionResult{}, err
 	}
-	if e == nil || e.invoke == nil {
+	if e == nil || e.execute == nil {
 		return factory.JavaScriptChildExecutionResult{}, fmt.Errorf(
-			"javascript child execution requires a Factory Runtime worker invoker",
+			"javascript child execution requires the Workers Execute capability",
 		)
 	}
 	lease, err := e.acquireResourceLease(ctx, req)
@@ -157,33 +281,18 @@ func (e *childWorkerExecutor) Execute(
 	releaseWorker := e.observeWorker(workerDispatchID)
 	defer releaseWorker()
 
-	invoked, err := e.invoke.InvokeWorker(ctx, factory.InvokeWorkerRequest{
-		DispatchID:       workerDispatchID,
-		WorkerName:       req.Preset,
-		Prompt:           req.Prompt,
-		Model:            req.Model,
-		ModelProvider:    req.ModelProvider,
-		ReasoningEffort:  req.ReasoningEffort,
-		ExecutorProvider: req.ExecutorProvider,
-		RunnerID:         base.RunnerID,
-		OutputSchema:     childOutputSchemaJSON(req.OutputSchema),
-		WorkingDirectory: e.workingDir,
-		SkipPermissions:  req.SkipPermissions,
-		MaxAttempts:      e.maxAttempts,
-	})
-	if err != nil {
-		return e.failedChild(base, req, dispatchID, childIndex, factory.InvokeWorkerResult{Diagnostic: err.Error()})
+	request := e.executeRequest(req, base, workerDispatchID)
+	invoked, err := e.execute.Execute(ctx, request)
+	if err != nil || !childExecutionSucceeded(invoked.Outcome) {
+		return e.failedChild(base, req, dispatchID, childIndex, invoked, err)
 	}
-	base.Attempt = invoked.Attempts
-	if invoked.Outcome != factory.InvokeWorkerOutcomeCompleted {
-		return e.failedChild(base, req, dispatchID, childIndex, invoked)
-	}
-
-	output := childWorkerOutput(req, invoked.Output)
+	base.Attempt = request.Attempt.Number
+	provider, providerSessionRef := childProviderSession(invoked)
 	completed := base
 	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
-	completed.Provider = invoked.Provider
-	completed.ProviderSessionRef = invoked.ProviderSessionRef
+	completed.Provider = provider
+	completed.ProviderSessionRef = providerSessionRef
+	output := childWorkerOutputFromExecute(req, invoked)
 	completed.Output = e.childValues.CloneOutputMap(output)
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,
@@ -197,9 +306,127 @@ func (e *childWorkerExecutor) Execute(
 		ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
 		Output:             output,
 		ArtifactRef:        base.ArtifactRef,
-		ProviderSessionRef: invoked.ProviderSessionRef,
+		ProviderSessionRef: providerSessionRef,
 		Request:            req,
 	}, nil
+}
+
+func (e *childWorkerExecutor) executeRequest(
+	req factory.JavaScriptChildExecutionRequest,
+	base factory.JavaScriptChildDispatchRecord,
+	workerDispatchID string,
+) workers.ExecuteRequest {
+	requestID := strings.TrimSpace(e.sessionID)
+	traceID := workerDispatchID
+	dispatch := work.WorkDispatch{
+		DispatchID:      workerDispatchID,
+		WorkerType:      req.Preset,
+		WorkstationName: workers.ProviderInvocationRoute,
+		Execution: work.ExecutionMetadata{
+			RequestID: requestID,
+			TraceID:   traceID,
+		},
+	}
+	progress := workers.ProgressPublisher(nil)
+	if e.publish != nil {
+		progress = func(fragment workers.ProgressFragment) {
+			if strings.TrimSpace(fragment.DispatchID) == "" {
+				fragment.DispatchID = workerDispatchID
+			}
+			if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+				fragment.Correlation.DispatchID = workerDispatchID
+			}
+			e.publish(workerDispatchID, fragment)
+		}
+	}
+	return workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: requestID,
+			RuntimeID:        firstNonBlank(e.runtimeID, "runtime-"+requestID),
+			GenerationID:     firstNonBlank(e.generationID, "generation-"+requestID),
+			DispatchID:       workerDispatchID,
+			AttemptID:        workerDispatchID + "/attempt/1",
+			RequestID:        requestID,
+			TraceID:          traceID,
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName:       req.Preset,
+			WorkerType:       req.Preset,
+			WorkstationName:  workers.ProviderInvocationRoute,
+			RunnerID:         base.RunnerID,
+			ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
+			Command:          strings.TrimSpace(req.Command),
+			FactoryDirectory: e.workingDir,
+			Provider: workers.ProviderReference{
+				ID:    strings.TrimSpace(req.ModelProvider),
+				Alias: strings.TrimSpace(req.ModelProvider),
+			},
+			Model: workers.ModelReference{
+				Name:            strings.TrimSpace(req.Model),
+				Provider:        strings.TrimSpace(req.ModelProvider),
+				ReasoningEffort: strings.TrimSpace(req.ReasoningEffort),
+			},
+			Prompt: workers.PromptPolicy{
+				UserMessage:  req.Prompt,
+				OutputSchema: childOutputSchemaJSON(req.OutputSchema),
+			},
+			Environment: workers.EnvironmentPolicy{
+				WorkingDirectory:    e.workingDir,
+				WorkingDirectorySet: strings.TrimSpace(e.workingDir) != "",
+			},
+			Workspace: workers.WorkspacePolicy{
+				WorkingDirectory: e.workingDir,
+				FactoryDirectory: e.workingDir,
+			},
+			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+		},
+		Input: workers.ExecutionInput{
+			Dispatch:              dispatch,
+			MockWorkers:           e.mockWorkers.Clone(),
+			ProviderOverride:      e.providerOverride,
+			CommandRunnerOverride: e.commandRunnerOverride,
+			WorkflowContext:       &workers.Context{FactoryDirectory: e.workingDir, WorkDirectory: e.workingDir, SessionID: requestID},
+			ProgressPublisher:     progress,
+		},
+		Attempt: workers.AttemptContext{Number: 1},
+	}
+}
+
+func childExecutionSucceeded(outcome workers.ExecutionOutcome) bool {
+	return outcome == workers.ExecutionOutcomeAccepted || outcome == workers.ExecutionOutcomeContinue
+}
+
+func childProviderSession(result workers.ExecuteResult) (string, string) {
+	if result.Continuation == nil {
+		return "", ""
+	}
+	session := result.Continuation.SessionMetadata()
+	if session == nil {
+		return "", ""
+	}
+	provider := providers.ID(session.Provider).CanonicalSessionProvider()
+	if provider == "" {
+		provider = strings.TrimSpace(session.Provider)
+	}
+	return provider, strings.TrimSpace(session.ID)
+}
+
+func childWorkerOutputFromExecute(
+	req factory.JavaScriptChildExecutionRequest,
+	result workers.ExecuteResult,
+) map[string]any {
+	if result.StructuredResultPresent {
+		if structured, ok := result.StructuredResult.(map[string]any); ok {
+			return structured
+		}
+	}
+	var text strings.Builder
+	for _, part := range result.Output.Primary {
+		if part.Type.Normalized() == work.WorkContentPartTypeText || part.Type.Normalized() == "" {
+			text.WriteString(part.Text)
+		}
+	}
+	return childWorkerOutput(req, text.String())
 }
 
 func (e *childWorkerExecutor) acquireResourceLease(
@@ -214,24 +441,10 @@ func (e *childWorkerExecutor) acquireResourceLease(
 	if e.resourceLeaseAcquirer != nil {
 		return e.resourceLeaseAcquirer(ctx, request)
 	}
-	admission, ok := e.invoke.(factory.ResourceCapacityLeaseAdmission)
-	if !ok {
-		return nil, fmt.Errorf(
-			"javascript child resource %q requires Factory Runtime resource lease admission",
-			resourceID,
-		)
-	}
-	lease, err := admission.AcquireResourceCapacityLease(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	if lease == nil {
-		return nil, nil
-	}
-	return &childResourceLease{
-		factoryRevision: lease.FactoryRevision,
-		release:         lease.Release,
-	}, nil
+	return nil, fmt.Errorf(
+		"javascript child resource %q requires injected resource lease admission",
+		resourceID,
+	)
 }
 
 // openChild resolves everything the session records about one child before its
@@ -290,13 +503,20 @@ func (e *childWorkerExecutor) failedChild(
 	req factory.JavaScriptChildExecutionRequest,
 	dispatchID string,
 	childIndex int,
-	invoked factory.InvokeWorkerResult,
+	result workers.ExecuteResult,
+	executeErr error,
 ) (factory.JavaScriptChildExecutionResult, error) {
-	diagnostic := strings.TrimSpace(invoked.Diagnostic)
+	diagnostic := ""
+	if result.Failure != nil {
+		diagnostic = strings.TrimSpace(result.Failure.Message)
+	}
+	if diagnostic == "" && executeErr != nil {
+		diagnostic = strings.TrimSpace(executeErr.Error())
+	}
 	if diagnostic == "" {
 		diagnostic = "Provider execution failed."
 	}
-	providerSessionRef := invoked.ProviderSessionRef
+	provider, providerSessionRef := childProviderSession(result)
 	failed := base
 	failed.Status = factory.JavaScriptChildDispatchStatusFailed
 	// The provider travels with its session reference or not at all. A
@@ -304,15 +524,19 @@ func (e *childWorkerExecutor) failedChild(
 	// mapped to canonical events, which fails the whole execution rather than
 	// the child -- so a failed Worker would surface as an internal error
 	// instead of a failed session.
-	failed.Provider = invoked.Provider
+	failed.Provider = provider
 	failed.ProviderSessionRef = providerSessionRef
-	failed.Retryable = invoked.Retryable
-	if reason := strings.TrimSpace(invoked.FailureReason); reason != "" {
-		failed.FailureClassification = workers.WorkFailureType(reason)
-		failed.FailureDetail = &workers.FailureDetail{
-			Reason:  workers.WorkFailureType(reason),
-			Message: diagnostic,
+	if result.Failure != nil {
+		failed.FailureClassification = result.Failure.Type
+		failed.FailureDetail = workers.CloneFailureDetail(result.Failure.Detail)
+		if failed.FailureDetail == nil {
+			failed.FailureDetail = &workers.FailureDetail{
+				Reason:  result.Failure.Type,
+				Message: diagnostic,
+			}
 		}
+		retryable := result.Failure.RetryHint
+		failed.Retryable = &retryable
 	}
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,

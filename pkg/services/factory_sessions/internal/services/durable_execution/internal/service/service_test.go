@@ -9,6 +9,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -137,6 +138,7 @@ func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
 	}
 
 	service.SetWorkerInvoker(nil)
+	service.SetWorkerExecution(nil, nil, "runtime-1", "generation-1", nil, nil, nil)
 	cursor, err := service.SubscribeResponseEvents(
 		context.Background(),
 		"session-1",
@@ -155,7 +157,7 @@ func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
 	}
 	service.PublishWorkerProgress(workers.ProgressFragment{DispatchID: "dispatch-1", Kind: workers.ProgressFragmentKind})
 
-	if stub.setCalls != 1 || stub.subscribeCalls != 1 || stub.applyCalls != 1 || stub.recoverCalls != 1 || stub.progressCalls != 1 {
+	if stub.setCalls != 1 || stub.setExecutionCalls != 1 || stub.subscribeCalls != 1 || stub.applyCalls != 1 || stub.recoverCalls != 1 || stub.progressCalls != 1 {
 		t.Fatalf("optional capability calls = %#v, want one call each", stub)
 	}
 }
@@ -168,6 +170,7 @@ func TestServiceOptionalCapabilitiesReturnUnavailableWhenUnsupported(t *testing.
 		t.Fatalf("New: %v", err)
 	}
 	service.SetWorkerInvoker(nil)
+	service.SetWorkerExecution(nil, nil, "", "", nil, nil, nil)
 	service.PublishWorkerProgress(workers.ProgressFragment{})
 	if _, err := service.SubscribeResponseEvents(context.Background(), "session-1", factorysessions.ResponseEventSubscriptionRequest{}); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
 		t.Fatalf("SubscribeResponseEvents error = %v, want ErrRuntimeNotAvailable", err)
@@ -190,16 +193,31 @@ func TestServiceOptionalCapabilitiesReturnUnavailableWhenUnsupported(t *testing.
 
 type executionCapabilitiesStub struct {
 	durableexecution.Service
-	cursor         *factorysessions.ResponseEventCursor
-	setCalls       int
-	subscribeCalls int
-	applyCalls     int
-	recoverCalls   int
-	progressCalls  int
+	cursor            *factorysessions.ResponseEventCursor
+	setCalls          int
+	setExecutionCalls int
+	subscribeCalls    int
+	applyCalls        int
+	recoverCalls      int
+	progressCalls     int
 }
 
 func (s *executionCapabilitiesStub) SetWorkerInvoker(factoryruntime.Service) {
 	s.setCalls++
+}
+
+func (s *executionCapabilitiesStub) SetWorkerExecution(
+	interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	},
+	factoryruntime.ResourceCapacityLeaseAdmission,
+	string,
+	string,
+	providers.Service,
+	*workers.MockWorkersConfig,
+	workers.CommandRunner,
+) {
+	s.setExecutionCalls++
 }
 
 func (s *executionCapabilitiesStub) SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {

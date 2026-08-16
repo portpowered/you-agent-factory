@@ -210,9 +210,14 @@ func resolvedDialect(resolved ResolvedSource) string {
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
 // workflow runtime and projects outcomes through shared durable session read models.
 type JavaScriptRuntimeService struct {
-	projectRoot             string
-	childExecutorMode       string
+	projectRoot       string
+	childExecutorMode string
+	// directChildInvocation remains only for legacy in-package construction
+	// helpers and tests. Production standalone opening supplies the narrow
+	// Workers Execute capability through directChildExecution; P6-C can remove
+	// this compatibility input after those callers are retired.
 	directChildInvocation   workers.InvocationExecutor
+	directChildExecution    childExecuteService
 	persistence             runtimepersist.Store
 	clock                   factory.Clock
 	syncWaits               SyncWaitScheduler
@@ -232,6 +237,7 @@ type JavaScriptRuntimeService struct {
 	// session lock; sharing one mutex between them deadlocks.
 	invokerMu            sync.RWMutex
 	workerInvokerService factory.Service
+	workerExecution      *childWorkerExecutionBinding
 
 	// workerSessions maps one Workers dispatch identity to the durable session
 	// that owns that Worker. A Worker's progress arrives from Workers, which
@@ -941,23 +947,51 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
 		// Which executor serves a session is decided by which composition built
 		// this service, not by anything on the request. A runtime-backed session
-		// invokes its children as Workers through the Factory Runtime that owns
-		// its Worker Sessions service; the standalone `you run script.js`
-		// composition builds no runtime and reaches the provider directly.
-		if invoke := s.workerInvoker(); invoke != nil {
-			return newChildWorkerExecutor(
+		// invokes its children as Workers through the already-composed Execute
+		// capability; the standalone `you run script.js` composition builds no
+		// runtime and reaches the same Execute capability directly.
+		if binding := s.workerExecutionBinding(); binding != nil {
+			executor := newChildWorkerExecutor(
 				childSessionID,
-				invoke,
+				binding.execute,
 				records,
 				s.childValues,
 				s.observeWorkerDispatch,
-				policy.MaxRetries,
+				s.projectRoot,
+			)
+			executor.resourceLeaseAcquirer = binding.resourceLeaseAcquirer
+			executor.runtimeID = binding.runtimeID
+			executor.generationID = binding.generationID
+			executor.providerOverride = binding.providerOverride
+			executor.mockWorkers = binding.mockWorkers.Clone()
+			executor.commandRunnerOverride = binding.commandRunnerOverride
+			executor.publish = binding.publish
+			return executor
+		}
+		if execution := s.directWorkerExecution(); execution != nil {
+			return newDirectChildExecutor(
+				childSessionID,
+				execution,
+				records,
+				s.childValues,
+				s.projectRoot,
+			)
+		}
+		// Compatibility is retained for in-package callers that have not yet
+		// moved to the standalone Workers binding. It is not part of the Wire
+		// production path and is the P6-C retirement survivor.
+		if s.directChildInvocation == nil {
+			return newDirectChildExecutor(
+				childSessionID,
+				nil,
+				records,
+				s.childValues,
 				s.projectRoot,
 			)
 		}
 		return newDirectChildExecutor(
 			childSessionID,
-			s.directChildInvocation,
+			legacyDirectChildExecution{invocation: s.directChildInvocation},
 			records,
 			s.childValues,
 			s.projectRoot,

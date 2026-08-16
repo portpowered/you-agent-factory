@@ -385,13 +385,25 @@ func openRuntime(
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
 	}
-	// A JavaScript workflow's children are Workers, and Workers are supervised
-	// by the runtime that owns this session's Worker Sessions service and
-	// canonical ledger. That runtime only exists here, after the execution
-	// service it must be handed to was already constructed. The eventual root
-	// activation operation must preserve this dependency ordering without
-	// publishing a second post-construction binding path.
+	// A JavaScript workflow's children are detached Workers. The Workers root is
+	// already composed before opening; Runtime contributes only the identity and
+	// resource-admission capability that the child request needs. The existing
+	// live-change Runtime bind remains separate and is not an execution route.
 	setWorkerInvoker(durableExecution.Service, rootRuntime)
+	var resourceLeaseAdmission factoryruntime.ResourceCapacityLeaseAdmission
+	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
+		resourceLeaseAdmission = admission
+	}
+	setWorkerExecution(
+		durableExecution.Service,
+		workerService,
+		resourceLeaseAdmission,
+		configured.Runtime.RuntimeInstanceID,
+		startupRuntime.StreamGeneration(),
+		providerForDurable,
+		configured.Workers.MockWorkers,
+		providerCommandRunner,
+	)
 	opened := assembleRuntimeProducts(
 		factoryDefinitions,
 		service4,
@@ -560,4 +572,39 @@ func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
 		return
 	}
 	setter.SetWorkerInvoker(runtime)
+}
+
+// workerExecutionSetter is the narrow live-session child capability. The
+// Workers service is already composed by process Wire; only its Execute method
+// crosses into the child projection, while Runtime contributes the separate
+// resource-lease admission and identity metadata.
+type workerExecutionSetter interface {
+	SetWorkerExecution(
+		interface {
+			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+		},
+		factoryruntime.ResourceCapacityLeaseAdmission,
+		string,
+		string,
+		providers.Service,
+		*workers.MockWorkersConfig,
+		workers.CommandRunner,
+	)
+}
+
+func setWorkerExecution(
+	execution any,
+	workerService workers.Service,
+	admission factoryruntime.ResourceCapacityLeaseAdmission,
+	runtimeID string,
+	generationID string,
+	providerOverride providers.Service,
+	mockWorkers *workers.MockWorkersConfig,
+	commandRunnerOverride workers.CommandRunner,
+) {
+	setter, ok := execution.(workerExecutionSetter)
+	if !ok || workerService == nil {
+		return
+	}
+	setter.SetWorkerExecution(workerService, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
 }
