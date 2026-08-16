@@ -188,6 +188,7 @@ export {
 } from "./work-state-presentation.js";
 export {
   type FactoryGraphWorkerIconKind,
+  factoryGraphWorkerIconClassName,
   factoryGraphWorkerIconKind,
 } from "./worker-icon.js";
 export {

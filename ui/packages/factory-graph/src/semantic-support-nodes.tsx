@@ -16,7 +16,10 @@ import {
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
-import { factoryGraphWorkerIconKind } from "./worker-icon.js";
+import {
+  factoryGraphWorkerIconClassName,
+  factoryGraphWorkerIconKind,
+} from "./worker-icon.js";
 
 /** The portion of a Factory place needed by the original semantic node views. */
 export interface FactoryGraphPlaceRef {
@@ -126,7 +129,7 @@ export function FactoryGraphWorkerNodeView({
       <GraphSemanticIcon
         className={classNames(
           "h-3.5 w-3.5 shrink-0",
-          factoryGraphNodeVisualIconClassName(visualState, "text-info"),
+          factoryGraphWorkerIconClassName(visualState),
         )}
         kind={workerIconKind}
         label={workerLabel}

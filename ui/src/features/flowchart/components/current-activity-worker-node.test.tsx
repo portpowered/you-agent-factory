@@ -35,8 +35,15 @@ const workerNodeProps: NodeProps<CurrentActivityWorkerNode> = {
   zIndex: 0,
 };
 
-function renderWorkerNode() {
-  return render(<WorkerNodeView {...workerNodeProps} />);
+function renderWorkerNode(
+  overrides: Partial<CurrentActivityWorkerNode["data"]> = {},
+) {
+  return render(
+    <WorkerNodeView
+      {...workerNodeProps}
+      data={{ ...workerNodeProps.data, ...overrides }}
+    />,
+  );
 }
 
 function renderWorkerIcon(overrides: {
@@ -155,6 +162,42 @@ describe("CurrentActivity worker node icons", () => {
       expect(icon?.getAttribute("data-graph-semantic-icon")).toBe("worker");
       expect(icon?.querySelectorAll("path, circle").length).toBeGreaterThan(0);
       expect(icon?.getAttribute("aria-label")).toBe("Worker");
+    },
+  );
+
+  it.each([
+    {
+      activeFlow: false,
+      iconClassName: "text-info",
+      name: "quiet",
+      surfaceClassName: "bg-info-container",
+      surface: "quiet",
+    },
+    {
+      activeFlow: true,
+      iconClassName: "text-warning",
+      name: "active",
+      surfaceClassName: "!bg-warning-container",
+      surface: "active",
+    },
+  ] as const)(
+    "keeps the $name worker icon on its node backing tone",
+    ({ activeFlow, iconClassName, surface, surfaceClassName }) => {
+      const { container } = renderWorkerNode({
+        activeFlow,
+        focused: true,
+        muted: true,
+        selectedWorker: true,
+        validationError: true,
+      });
+      const shell = container.querySelector(
+        "[data-current-activity-node-type='worker']",
+      );
+      const icon = container.querySelector("[data-graph-semantic-icon]");
+
+      expect(shell?.getAttribute("data-graph-visual-surface")).toBe(surface);
+      expect(shell?.className).toContain(surfaceClassName);
+      expect(icon?.getAttribute("class")).toContain(iconClassName);
     },
   );
 });
