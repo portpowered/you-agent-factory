@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -63,6 +64,12 @@ type FactoryEngine struct {
 	resourceLeases      map[string]resourceCapacityLease
 	nextResourceLeaseID uint64
 	factoryRevision     int
+
+	// publishedSnapshot is the last complete runtime boundary. Readers use it
+	// when the engine is busy in a tick so read-only observation never waits on
+	// dispatch, submission hooks, or other work performed under mu.
+	publishedSnapshot           atomic.Pointer[engineStateSnapshot]
+	pendingProjectionRequestIDs map[string]struct{}
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -142,8 +149,11 @@ func NewFactoryEngine(
 		admissionGate:         make(chan struct{}, 1),
 		capacityChanged:       make(chan struct{}),
 		resourceLeases:        make(map[string]resourceCapacityLease),
+
+		pendingProjectionRequestIDs: make(map[string]struct{}),
 	}
 	e.admissionGate <- struct{}{}
+	e.publishRuntimeSnapshotLocked()
 	e.submissionHooks = append([]factory.SubmissionHook{e.submissionHook}, e.submissionHooks...)
 	e.submissionHooks = sortedSubmissionHooks(e.submissionHooks)
 	return e, nil
@@ -765,6 +775,8 @@ func containsHumanApprovalDispatch(net *state.Net, records []interfaces.Dispatch
 func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
 	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
 	e.runtimeState.Results = nil
+	e.publishRuntimeSnapshotLocked()
+	e.signalPendingObservableProjections()
 	if keepAlive {
 		shouldTerminate = false
 		e.terminationResult = nil
@@ -776,6 +788,13 @@ func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDi
 		"shouldTerminate", shouldTerminate,
 		"tokens", len(snapshot.Marking.Tokens))
 	return shouldTerminate
+}
+
+func (e *FactoryEngine) signalPendingObservableProjections() {
+	for requestID := range e.pendingProjectionRequestIDs {
+		e.signalObservableProjection(requestID)
+		delete(e.pendingProjectionRequestIDs, requestID)
+	}
 }
 
 func cloneActiveThrottlePauses(pauses []interfaces.ActiveThrottlePause) []interfaces.ActiveThrottlePause {

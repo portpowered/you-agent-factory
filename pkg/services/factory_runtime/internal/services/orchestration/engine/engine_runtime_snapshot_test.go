@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestRuntimeStateSnapshot_IncludesActiveThrottlePausesFromSubsystem(t *testing.T) {
@@ -101,5 +102,55 @@ func TestRuntimeStateSnapshot_ClearsActiveThrottlePausesWhenObservedEmpty(t *tes
 	second := eng.GetRuntimeStateSnapshot()
 	if len(second.ActiveThrottlePauses) != 0 {
 		t.Fatalf("second ActiveThrottlePauses = %d, want 0", len(second.ActiveThrottlePauses))
+	}
+}
+
+func TestRuntimeStateSnapshotDoesNotWaitForActiveDispatchHandler(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(context.Context, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			return &interfaces.TickResult{
+				Dispatches: []interfaces.DispatchRecord{{
+					Dispatch: work.WorkDispatch{DispatchID: "dispatch-blocked", TransitionID: "transition-blocked"},
+				}},
+			}, nil
+		},
+	}
+	eng := newTestFactoryEngine(
+		&state.Net{ID: "net", Places: map[string]*petri.Place{}},
+		petri.NewMarking("net"),
+		[]subsystems.Subsystem{dispatchSub},
+		WithDispatchHandler(func(work.WorkDispatch) {
+			close(started)
+			<-release
+		}),
+	)
+
+	tickDone := make(chan error, 1)
+	go func() { tickDone <- eng.Tick(context.Background()) }()
+	<-started
+
+	snapshotReady := make(chan interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], 1)
+	go func() { snapshotReady <- eng.GetRuntimeStateSnapshot() }()
+	select {
+	case snapshot := <-snapshotReady:
+		if snapshot.TickCount != 0 || len(snapshot.Dispatches) != 0 {
+			t.Fatalf("busy-tick snapshot = tick %d, dispatches %d; want last complete boundary", snapshot.TickCount, len(snapshot.Dispatches))
+		}
+	case <-time.After(time.Second):
+		close(release)
+		<-tickDone
+		t.Fatal("GetRuntimeStateSnapshot waited for the active dispatch handler")
+	}
+
+	close(release)
+	if err := <-tickDone; err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	final := eng.GetRuntimeStateSnapshot()
+	if final.TickCount != 1 || len(final.Dispatches) != 1 {
+		t.Fatalf("final snapshot = tick %d, dispatches %d; want completed tick boundary", final.TickCount, len(final.Dispatches))
 	}
 }
