@@ -15,8 +15,8 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -33,16 +33,16 @@ func TestHTTPModelInvocationMapsAudioWorkContent(t *testing.T) {
 	}
 
 	providerStub := &httpWorkContentProvider{
-		response: workerexecution.InferenceResponse{
+		response: providers.ExecuteResult{
 			Content: mustMarshalHTTPWorkContentAudioResponse(t, audioPath),
-			Diagnostics: &workerexecution.WorkDiagnostics{
+			Diagnostics: &providers.ExecuteDiagnostics{
 				Metadata: map[string]string{
-					workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+					"completion_evidence": "provider_response",
 				},
 			},
 		},
 	}
-	providerStub.ProviderServiceAdapter.InferFunc = providerStub.Infer
+	providerStub.NativeProvider.ExecuteFunc = providerStub.Execute
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -215,15 +215,15 @@ func stringPointerValue[T ~string](value *T) string {
 }
 
 type httpWorkContentProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	mu       sync.Mutex
-	response workerexecution.InferenceResponse
+	response providers.ExecuteResult
 }
 
-func (provider *httpWorkContentProvider) Infer(
+func (provider *httpWorkContentProvider) Execute(
 	_ context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 	return provider.response, nil

@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
@@ -207,7 +208,7 @@ func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testin
 }
 
 type providerStub struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 }
 
 type runnerFunc func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
@@ -227,6 +228,6 @@ var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 
 func testFactoryDocs(string) (map[string]string, error) { return map[string]string{}, nil }
 
-func (providerStub) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{}, nil
+func (providerStub) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, nil
 }

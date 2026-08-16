@@ -2007,12 +2007,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/providercompat/functionaltests/provider_invocation_error_compatibility_test.go#TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFailureTypes",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/providercompat/inference_provider_error_normalization_test.go#assertNormalizedProviderFailure",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."

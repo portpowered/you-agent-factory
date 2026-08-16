@@ -12,7 +12,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter"
 )
 
 const (
@@ -186,10 +185,6 @@ func NewInferenceProgressPublishingCommandRunnerWithRunner(
 type progressStreamObserver interface {
 	observe(ctx context.Context, stream string, chunk []byte) bool
 	flush(ctx context.Context, result CommandResult, err error)
-}
-
-func progressStreamIdentity(command string) adapter.Identity {
-	return adapter.NormalizeIdentity(adapter.Identity(command))
 }
 
 func newProgressStreamObserver(

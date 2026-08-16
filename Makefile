@@ -105,8 +105,6 @@ CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationSwitchesPersistedFactories
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
-CROSS_PROVIDER_PARITY_SMOKE_TEST := TestCrossProviderParity
-CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT ?= 120s
 CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
@@ -241,7 +239,7 @@ endef
 
 .PHONY: docs-reference-check docs-reference-smoke
 
-.PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
+.PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
 .PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
@@ -354,7 +352,6 @@ api-smoke:
 	node scripts/check-api-generated-drift.js
 	$(GO) test ./pkg/transports/http/contracttests -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
 	node --test scripts/package-export-validation.test.mjs scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
@@ -510,7 +507,7 @@ test-integration:
 	$(GO) test ./pkg/services/workers/internal/providercompat -run '^TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-contract:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/workers/internal/providercompat/functionaltests ./pkg/services/workers/internal/providercompat/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 # Cache-aware developer feedback; use test-functional-fresh for an
 # unconditional rerun.
@@ -697,9 +694,6 @@ cron-time-work-smoke:
 
 current-factory-watcher-switch-smoke:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/factory/current -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
-
-provider-parity-smoke:
-	$(GO) test ./pkg/services/workers/internal/providercompat/paritytests -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
 
 javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .

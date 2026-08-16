@@ -5,6 +5,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -347,6 +348,147 @@ func TestProviderFailureBoundaryHelpersPreserveSafeObservableBehavior(t *testing
 	}
 	if got := WorkFailureMetadataFromError(nil); got != nil {
 		t.Fatalf("WorkFailureMetadataFromError(nil) = %#v, want nil", got)
+	}
+}
+
+func TestProviderCompatibilityHelpers_RedactInvocationArguments(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name     string
+		provider string
+		args     []string
+		want     []string
+	}{
+		{
+			name:     "sensitive flags and inline values",
+			provider: string(modelprovider.ProviderClaude),
+			args: []string{
+				"exec", "--model", "safe-model", "--prompt", "private prompt",
+				"--api-key=secret", "user prompt",
+			},
+			want: []string{
+				"exec", "--model", "safe-model", "--prompt", RedactedProviderArgValue,
+				"--api-key=" + RedactedProviderArgValue, RedactedProviderPrompt,
+			},
+		},
+		{
+			name:     "codex command and hyphen remain visible",
+			provider: string(modelprovider.ProviderCodex),
+			args:     []string{"run", "-", "--sandbox", "workspace-write", "prompt"},
+			want:     []string{"run", "-", "--sandbox", "workspace-write", RedactedProviderPrompt},
+		},
+		{
+			name:     "flags without values remain unchanged",
+			provider: string(modelprovider.ProviderClaude),
+			args:     []string{"--verbose", "--prompt"},
+			want:     []string{"--verbose", "--prompt"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitizeProviderArgs(tc.provider, tc.args); strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Fatalf("sanitizeProviderArgs() = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProviderCompatibilityHelpers_ClassifySensitiveArgumentsAndModels(t *testing.T) {
+	t.Parallel()
+
+	if got := providerModelForLog(" "); got != ProviderDefaultModel {
+		t.Fatalf("providerModelForLog(blank) = %q, want %q", got, ProviderDefaultModel)
+	}
+	if got := providerModelForLog(" claude-sonnet "); got != "claude-sonnet" {
+		t.Fatalf("providerModelForLog(model) = %q, want trimmed model", got)
+	}
+
+	for _, tc := range []struct {
+		arg  string
+		want bool
+	}{
+		{arg: "--api-key=secret", want: true},
+		{arg: "--prompt=private", want: true},
+		{arg: "--model=safe", want: false},
+		{arg: "--prompt", want: false},
+	} {
+		if got := providerInlineArgIsSensitive(tc.arg); got != tc.want {
+			t.Fatalf("providerInlineArgIsSensitive(%q) = %t, want %t", tc.arg, got, tc.want)
+		}
+	}
+
+	if !providerArgIsSensitivePositional(string(modelprovider.ProviderClaude), []string{"exec", "prompt"}, 1) {
+		t.Fatal("Claude free-form positional argument was not classified as sensitive")
+	}
+	if providerArgIsSensitivePositional(string(modelprovider.ProviderCodex), []string{"run", "-"}, 1) {
+		t.Fatal("Codex hyphen positional argument was classified as sensitive")
+	}
+	if providerArgIsSensitivePositional(string(modelprovider.ProviderClaude), []string{"--verbose"}, 0) {
+		t.Fatal("flag argument was classified as positional sensitive input")
+	}
+	if providerArgIsSensitivePositional(string(modelprovider.ProviderClaude), []string{"exec"}, 0) {
+		t.Fatal("provider command was classified as sensitive input")
+	}
+}
+
+func TestSafeProviderFailureLogMessage_UsesStablePublicMessages(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		reason workerexecution.WorkFailureType
+		want   string
+	}{
+		{reason: workerexecution.WorkFailureTypeAuthFailure, want: "Provider authentication failed."},
+		{reason: workerexecution.WorkFailureTypePermanentBadRequest, want: "Provider rejected the request as invalid."},
+		{reason: workerexecution.WorkFailureTypeThrottled, want: "Provider is temporarily unavailable due to usage or capacity limits."},
+		{reason: workerexecution.WorkFailureTypeInternalServerError, want: "Provider encountered a temporary server error."},
+		{reason: workerexecution.WorkFailureTypeTimeout, want: "Provider request timed out."},
+		{reason: workerexecution.WorkFailureTypeMisconfigured, want: "Provider command could not be started."},
+		{reason: workerexecution.WorkFailureTypeMissingExecutable, want: "Provider executable could not be found."},
+		{reason: workerexecution.WorkFailureTypeCommandLineTooLong, want: "Provider command exceeded the operating system command-line limit."},
+		{reason: workerexecution.WorkFailureTypeUnknown, want: "Provider execution failed."},
+	}
+
+	for _, tc := range testCases {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			providerErr := NewProviderError(tc.reason, "raw provider output", errors.New("secret cause"))
+			if got := safeProviderFailureLogMessage(string(modelprovider.ProviderClaude), providerErr); got != tc.want {
+				t.Fatalf("safeProviderFailureLogMessage() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	codexExit := NewProviderError(workerexecution.WorkFailureTypeUnknown, "bounded parsed failure", errors.New("provider output"))
+	if got := safeProviderFailureLogMessage(string(modelprovider.ProviderCodex), codexExit); got != "bounded parsed failure" {
+		t.Fatalf("Codex parsed failure message = %q, want bounded parsed message", got)
+	}
+	codexExecution := NewProviderError(workerexecution.WorkFailureTypeTimeout, "raw timeout output", context.DeadlineExceeded)
+	if got := safeProviderFailureLogMessage(string(modelprovider.ProviderCodex), codexExecution); got != "Provider request timed out." {
+		t.Fatalf("Codex execution failure message = %q, want fixed timeout message", got)
+	}
+}
+
+func TestIsProviderExecutionCause_RecognizesExecutionFailuresOnly(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", want: false},
+		{name: "not found", err: exec.ErrNotFound, want: true},
+		{name: "deadline", err: context.DeadlineExceeded, want: true},
+		{name: "canceled", err: context.Canceled, want: true},
+		{name: "exec error", err: &exec.Error{Name: "provider", Err: errors.New("failed")}, want: true},
+		{name: "ordinary error", err: errors.New("provider rejected request"), want: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isProviderExecutionCause(tc.err); got != tc.want {
+				t.Fatalf("isProviderExecutionCause(%v) = %t, want %t", tc.err, got, tc.want)
+			}
+		})
 	}
 }
 

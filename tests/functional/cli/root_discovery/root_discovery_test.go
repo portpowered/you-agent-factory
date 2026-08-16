@@ -19,7 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -691,17 +691,17 @@ const idleCurrentFactoryJSON = `{
 }`
 
 type countingProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	calls *atomic.Int32
 }
 
 func newCountingProvider(calls *atomic.Int32) countingProvider {
 	provider := countingProvider{calls: calls}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (provider countingProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (provider countingProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	provider.calls.Add(1)
-	return workers.InferenceResponse{}, nil
+	return providers.ExecuteResult{}, nil
 }

@@ -3,13 +3,13 @@ package wire
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -225,8 +225,21 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if override.calls.Load() != 1 || override.request.Correlation != request.Correlation {
+	gotCorrelation := override.request.Correlation
+	wantCorrelation := request.Correlation
+	if override.calls.Load() != 1 {
 		t.Fatalf("provider override calls/request = %d/%#v, want one detached request", override.calls.Load(), override.request)
+	}
+	if !reflect.DeepEqual(gotCorrelation, providers.ExecuteCorrelation{
+		FactorySessionID: wantCorrelation.FactorySessionID,
+		RuntimeID:        wantCorrelation.RuntimeID,
+		GenerationID:     wantCorrelation.GenerationID,
+		DispatchID:       wantCorrelation.DispatchID,
+		AttemptID:        wantCorrelation.AttemptID,
+		RequestID:        wantCorrelation.RequestID,
+		TraceID:          wantCorrelation.TraceID,
+	}) {
+		t.Fatalf("provider override correlation = %#v, want %#v", gotCorrelation, wantCorrelation)
 	}
 	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 ||
 		result.Output.Primary[0].Text != "override output\n<COMPLETE>" {
@@ -767,75 +780,96 @@ func (invoker *statelessTestLocalInvoker) Requests() []models.LocalInvocationReq
 }
 
 type statelessTestProviders struct {
-	providers.Service
+	statelessProviderContract
 	executeCalls atomic.Int32
 	mu           sync.Mutex
 	content      string
 }
 
 type statelessProviderOverride struct {
-	testutil.ProviderServiceAdapter
+	statelessProviderContract
 	calls   atomic.Int32
-	request workers.ProviderInferenceRequest
+	mu      sync.Mutex
+	request providers.ExecuteRequest
 	content string
 }
 
-func (provider *statelessProviderOverride) Infer(
-	_ context.Context,
-	request workers.ProviderInferenceRequest,
-) (workers.InferenceResponse, error) {
-	provider.calls.Add(1)
-	provider.request = request
-	content := provider.content
-	if content == "" {
-		content = "override output\n<COMPLETE>"
-	}
-	return workers.InferenceResponse{
-		Content: content,
-		Continuation: (&providers.SessionMetadata{
-			Provider: "codex",
-			Kind:     "session-id",
-			ID:       "session-attempt-override",
-		}).ContinuationRef(),
-	}, nil
-}
-
 func (provider *statelessProviderOverride) ResolveIdentity(
-	ctx context.Context,
+	_ context.Context,
 	request providers.ResolveIdentityRequest,
 ) (providers.ResolveIdentityResult, error) {
-	if request.Identity == "" {
-		request.Identity = "codex"
+	identity := strings.ToLower(strings.TrimSpace(request.Identity))
+	if identity == "" {
+		identity = string(providers.IDCodex)
 	}
-	return provider.ProviderServiceAdapter.ResolveIdentity(ctx, request)
+	switch identity {
+	case string(providers.IDCodex), "openai":
+		return providers.ResolveIdentityResult{ID: providers.IDCodex}, nil
+	default:
+		return providers.ResolveIdentityResult{}, providers.ErrUnknownProvider
+	}
 }
 
 func (provider *statelessProviderOverride) ValidatePrerequisites(
-	ctx context.Context,
+	_ context.Context,
 	request providers.ValidatePrerequisitesRequest,
 ) error {
 	if request.ID == "" {
 		request.ID = providers.IDCodex
 	}
-	return provider.ProviderServiceAdapter.ValidatePrerequisites(ctx, request)
+	if err := request.Validate(); err != nil {
+		return err
+	}
+	if request.ID != providers.IDCodex {
+		return providers.ErrUnknownProvider
+	}
+	return nil
 }
 
 func (provider *statelessProviderOverride) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
-	adapter := provider.ProviderServiceAdapter
-	adapter.InferFunc = provider.Infer
-	return adapter.Execute(ctx, request)
+	if err := request.Validate(); err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	provider.calls.Add(1)
+	provider.mu.Lock()
+	provider.request = request.Clone()
+	content := provider.content
+	provider.mu.Unlock()
+	if content == "" {
+		content = "override output\n<COMPLETE>"
+	}
+	return providers.ExecuteResult{
+		Content: content,
+		SessionRef: &providers.SessionRef{
+			Provider: request.Provider,
+			Kind:     providers.SessionIDKind,
+			ID:       "session-attempt-override",
+		},
+	}, nil
 }
 
 func (provider *statelessProviderOverride) Continue(
 	ctx context.Context,
 	request providers.ContinueRequest,
 ) (providers.ContinueResult, error) {
-	adapter := provider.ProviderServiceAdapter
-	adapter.InferFunc = provider.Infer
-	return adapter.Continue(ctx, request)
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	result, err := provider.Execute(ctx, request.Attempt)
+	if err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    result,
+	}, nil
 }
 
 func (provider *statelessTestProviders) SetContent(content string) {

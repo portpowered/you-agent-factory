@@ -13,7 +13,6 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agypty"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/conductor"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/registry"
@@ -49,8 +48,8 @@ func TestBuiltInRegistrySelectsAntigravityThroughAuthoritativeManifestIdentity(t
 func TestConductorInvokesAgyWithoutConcreteProviderSwitch(t *testing.T) {
 	t.Parallel()
 
-	mock := &agypty.MockAllocator{
-		Result: agypty.SessionResult{ExitCode: 0, CleanedText: "agy conductor answer"},
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy conductor answer"},
 	}
 	providers := newAgyRegistryWithPTY(t, mock)
 	destination := &recordingDestination{}
@@ -89,8 +88,8 @@ func TestConductorInvokesAgyWithoutConcreteProviderSwitch(t *testing.T) {
 func TestConductorRejectsAgyCapabilityEscalationBeforeProviderIO(t *testing.T) {
 	t.Parallel()
 
-	mock := &agypty.MockAllocator{
-		Result: agypty.SessionResult{ExitCode: 0, CleanedText: "should-not-run"},
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "should-not-run"},
 	}
 	providers := newAgyRegistryWithPTY(t, mock)
 	destination := &recordingDestination{}
@@ -132,8 +131,8 @@ func TestConductorRejectsAgyCapabilityEscalationBeforeProviderIO(t *testing.T) {
 func TestConductorClassifiesAgyNativeFailureSafely(t *testing.T) {
 	t.Parallel()
 
-	mock := &agypty.MockAllocator{
-		Result: agypty.SessionResult{
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{
 			ExitCode: 1,
 			RawBytes: []byte("failed reading /tmp/secret-key and private prompt"),
 		},
@@ -178,7 +177,7 @@ func newProductionAgyRegistry(t *testing.T) *registry.Registry {
 	return providers
 }
 
-func newAgyRegistryWithPTY(t *testing.T, allocator *agypty.MockAllocator) *registry.Registry {
+func newAgyRegistryWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) *registry.Registry {
 	t.Helper()
 	providersService, err := providerswire.NewService(
 		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),

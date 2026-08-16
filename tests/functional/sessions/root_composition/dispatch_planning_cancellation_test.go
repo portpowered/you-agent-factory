@@ -12,7 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -64,8 +64,8 @@ func TestFactoryRuntimeDispatchPlanningCancellationReachesPublishedWorkerThrough
 		t.Fatal("durable dispatch ID is empty")
 	}
 	wantWorkerSessionID := started.SessionId + "/" + dispatch.Id
-	if request.Dispatch.DispatchID != wantWorkerSessionID {
-		t.Fatalf("provider worker-session ID = %q, want session-qualified public dispatch ID %q", request.Dispatch.DispatchID, wantWorkerSessionID)
+	if request.Correlation.DispatchID != wantWorkerSessionID {
+		t.Fatalf("provider worker-session ID = %q, want session-qualified public dispatch ID %q", request.Correlation.DispatchID, wantWorkerSessionID)
 	}
 
 	cancel := postDispatchPlanningCancellation(t, server.URL(), started.SessionId, "dispatch-planning-cancel-once")
@@ -76,8 +76,8 @@ func TestFactoryRuntimeDispatchPlanningCancellationReachesPublishedWorkerThrough
 	}
 
 	cancelled := provider.waitCancelled(t)
-	if cancelled.Dispatch.DispatchID != wantWorkerSessionID {
-		t.Fatalf("cancelled provider worker-session ID = %q, want %q", cancelled.Dispatch.DispatchID, wantWorkerSessionID)
+	if cancelled.Correlation.DispatchID != wantWorkerSessionID {
+		t.Fatalf("cancelled provider worker-session ID = %q, want %q", cancelled.Correlation.DispatchID, wantWorkerSessionID)
 	}
 	if provider.cancellationCount() != 1 {
 		t.Fatalf("provider cancellation observations = %d, want one", provider.cancellationCount())
@@ -208,9 +208,9 @@ func postDispatchPlanningCancellation(
 }
 
 type dispatchPlanningCancellationProvider struct {
-	testutil.ProviderServiceAdapter
-	started   chan workers.ProviderInferenceRequest
-	cancelled chan workers.ProviderInferenceRequest
+	testutil.NativeProvider
+	started   chan providers.ExecuteRequest
+	cancelled chan providers.ExecuteRequest
 
 	mu            sync.Mutex
 	cancellations int
@@ -218,21 +218,21 @@ type dispatchPlanningCancellationProvider struct {
 
 func newDispatchPlanningCancellationProvider() *dispatchPlanningCancellationProvider {
 	provider := &dispatchPlanningCancellationProvider{
-		started:   make(chan workers.ProviderInferenceRequest, 1),
-		cancelled: make(chan workers.ProviderInferenceRequest, 1),
+		started:   make(chan providers.ExecuteRequest, 1),
+		cancelled: make(chan providers.ExecuteRequest, 1),
 	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (p *dispatchPlanningCancellationProvider) Infer(
+func (p *dispatchPlanningCancellationProvider) Execute(
 	ctx context.Context,
-	request workers.ProviderInferenceRequest,
-) (workers.InferenceResponse, error) {
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	select {
 	case p.started <- request:
 	case <-ctx.Done():
-		return workers.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
 	<-ctx.Done()
@@ -240,28 +240,28 @@ func (p *dispatchPlanningCancellationProvider) Infer(
 	p.cancellations++
 	p.mu.Unlock()
 	p.cancelled <- request
-	return workers.InferenceResponse{}, ctx.Err()
+	return providers.ExecuteResult{}, ctx.Err()
 }
 
-func (p *dispatchPlanningCancellationProvider) waitStarted(t *testing.T) workers.ProviderInferenceRequest {
+func (p *dispatchPlanningCancellationProvider) waitStarted(t *testing.T) providers.ExecuteRequest {
 	t.Helper()
 	select {
 	case request := <-p.started:
 		return request
 	case <-t.Context().Done():
 		t.Fatalf("provider did not observe a published dispatch before test cancellation: %v", t.Context().Err())
-		return workers.ProviderInferenceRequest{}
+		return providers.ExecuteRequest{}
 	}
 }
 
-func (p *dispatchPlanningCancellationProvider) waitCancelled(t *testing.T) workers.ProviderInferenceRequest {
+func (p *dispatchPlanningCancellationProvider) waitCancelled(t *testing.T) providers.ExecuteRequest {
 	t.Helper()
 	select {
 	case request := <-p.cancelled:
 		return request
 	case <-t.Context().Done():
 		t.Fatalf("provider did not observe deterministic dispatch cancellation: %v", t.Context().Err())
-		return workers.ProviderInferenceRequest{}
+		return providers.ExecuteRequest{}
 	}
 }
 

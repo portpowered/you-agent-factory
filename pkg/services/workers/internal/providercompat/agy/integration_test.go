@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	agypkg "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agy"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agypty"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 )
 
@@ -20,8 +19,8 @@ func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {
 	t.Parallel()
 
 	factoryRoot := t.TempDir()
-	mock := &agypty.MockAllocator{
-		Result: agypty.SessionResult{ExitCode: 0, CleanedText: "agy conductor answer"},
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy conductor answer"},
 	}
 	providersService, err := providerswire.NewService(
 		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),

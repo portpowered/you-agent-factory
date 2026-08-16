@@ -99,13 +99,6 @@ func committedMisplacedGuards() []MisplacedGuardEntry {
 func committedPublicSurfaces() []PublicSurfaceEntry {
 	return []PublicSurfaceEntry{
 		{
-			ID:               "behavior_test:provider-functionaltests",
-			Kind:             PublicSurfaceKindBehaviorTest,
-			SurfacePath:      "pkg/services/workers/internal/providercompat/functionaltests",
-			ReplacementOwner: "providers",
-			Note:             "Provider compatibility/behavior tests follow the Providers Execution successor after cutover.",
-		},
-		{
 			ID:               "behavior_test:workers-hosted-poller",
 			Kind:             PublicSurfaceKindBehaviorTest,
 			SurfacePath:      "pkg/services/workers/services/hosted_logic",

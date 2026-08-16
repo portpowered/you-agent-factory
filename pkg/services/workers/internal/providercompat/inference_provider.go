@@ -17,8 +17,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	provideradapter "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/commandenv"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -40,7 +38,14 @@ const (
 	providerSessionKindResponseID     = "response_id"
 )
 
-var providerAutomationEnvDefaults = commandenv.AutomationDefaults()
+var providerAutomationEnvDefaults = []workerexecution.CommandEnvEntry{
+	{Name: "GIT_EDITOR", Value: "true"},
+	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
+	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
+	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
+	{Name: "EDITOR", Value: "true"},
+	{Name: "VISUAL", Value: "true"},
+}
 
 var providerSessionPatterns = []struct {
 	kind    string
@@ -280,7 +285,11 @@ func ContainsStopToken(output, stopToken string) bool {
 // buildProviderEnv merges subprocess environment sources with deterministic
 // precedence: process environment, provider env vars, then automation defaults.
 func buildProviderEnv(processEnvironment []string, envVars map[string]string) []string {
-	return commandenv.Build(processEnvironment, envVars)
+	return workerexecution.MergeCommandEnv(
+		processEnvironment,
+		workerexecution.CommandEnvEntriesFromMap(envVars),
+		providerAutomationEnvDefaults,
+	)
 }
 
 func providerRequestValidationFailure(
@@ -345,18 +354,6 @@ type parsedProviderFailure struct {
 	failure         ProviderFailureResult
 	internalCause   string
 	providerSession *providers.SessionMetadata
-}
-
-func providerErrorFromAdapterFailure(
-	failure *provideradapter.FailureFacts,
-	cause error,
-	diagnostics *workerexecution.WorkDiagnostics,
-) *ProviderError {
-	return &ProviderError{
-		Family: failure.Family, Type: failure.Type, Message: failure.Message,
-		Continuation: (failure.ProviderSession).ContinuationRef(),
-		Diagnostics:  workerexecution.CloneWorkDiagnostics(diagnostics), Cause: cause,
-	}
 }
 
 func parseProviderExitFailure(provider string, result CommandResult) parsedProviderFailure {

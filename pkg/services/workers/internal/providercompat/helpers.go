@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agypty"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -31,7 +30,7 @@ import (
 type Factory struct {
 	commandRunner       CommandRunner
 	commandClock        workers.Clock
-	agyPTYAllocator     agypty.PTYAllocator
+	agyPTYAllocator     workers.PTYAllocator
 	contentMaterializer work.ContentMaterializer
 	resolveSymlinks     workerexecution.ResolveExecutableSymlinks
 	executableLocator   platformprocess.ExecutableLocator
@@ -45,7 +44,7 @@ type Factory struct {
 func NewFactory(
 	commandRunner CommandRunner,
 	commandClock workers.Clock,
-	agyPTYAllocator agypty.PTYAllocator,
+	agyPTYAllocator workers.PTYAllocator,
 	resolveSymlinks workerexecution.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,

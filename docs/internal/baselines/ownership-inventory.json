@@ -1456,8 +1456,6 @@
       "fromOwner": "factory_sessions",
       "toOwner": "providers",
       "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
       "evidence": "pkg/services/factory_sessions/internal/execution -> pkg/services/providers"
     },
     {
@@ -1656,14 +1654,6 @@
     },
     {
       "fromOwner": "providers",
-      "toOwner": "factory_sessions",
-      "class": "command",
-      "bidirectional": true,
-      "unresolved": true,
-      "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/factory_sessions"
-    },
-    {
-      "fromOwner": "providers",
       "toOwner": "models",
       "class": "command",
       "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/models"
@@ -1694,7 +1684,7 @@
       "class": "command",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/workers/internal/providercompat/adapter -> pkg/services/workers"
+      "evidence": "pkg/services/workers/internal/providercompat/agy -> pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -2304,13 +2294,6 @@
   ],
   "misplacedGuards": [],
   "publicSurfaces": [
-    {
-      "id": "behavior_test:provider-functionaltests",
-      "kind": "behavior_test",
-      "surfacePath": "pkg/services/workers/internal/providercompat/functionaltests",
-      "replacementOwner": "providers",
-      "note": "Provider compatibility/behavior tests follow the Providers Execution successor after cutover."
-    },
     {
       "id": "behavior_test:workers-hosted-poller",
       "kind": "behavior_test",
@@ -5438,31 +5421,7 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/internal/providercompat/adapter",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/adapter/testkit",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/providercompat/agy",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/agypty",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",
@@ -5486,23 +5445,7 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/internal/providercompat/commandenv",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/providercompat/conductor",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/functionaltests",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",
@@ -5518,39 +5461,7 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract/testkit",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/paritytests",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/providersroot",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/providercompat/registry",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/structured",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

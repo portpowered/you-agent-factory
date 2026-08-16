@@ -19,6 +19,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -52,7 +53,7 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 		t, baseURL, cancelledSessionID, survivingSessionID, cancelledPrompt, survivingPrompt,
 	)
 
-	requests := map[string]workers.ProviderInferenceRequest{}
+	requests := map[string]providers.ExecuteRequest{}
 	for range []string{cancelledSessionID, survivingSessionID} {
 		request := provider.waitStartedAny(t)
 		requests[request.Correlation.FactorySessionID] = request
@@ -324,7 +325,7 @@ func concurrentSessionWorkersFactoryConfig() map[string]any {
 
 func assertConcurrentSessionRequest(
 	t *testing.T,
-	request workers.ProviderInferenceRequest,
+	request providers.ExecuteRequest,
 	wantSessionID string,
 	wantPromptMarker string,
 ) {
@@ -344,15 +345,15 @@ func assertConcurrentSessionRequest(
 	if correlation.FactorySessionID != wantSessionID {
 		t.Fatalf("provider request session = %q, want %q", correlation.FactorySessionID, wantSessionID)
 	}
-	if len(request.Dispatch.Execution.WorkIDs) == 0 {
-		t.Fatalf("provider request Work IDs are empty: %#v", request.Dispatch.Execution)
+	if len(request.Correlation.WorkIDs) == 0 {
+		t.Fatalf("provider request Work IDs are empty: %#v", request.Correlation)
 	}
 	if !providerRequestContainsPrompt(request, wantPromptMarker) {
 		t.Fatalf("provider request prompt/input = %#v, want session-specific marker %q", request, wantPromptMarker)
 	}
 }
 
-func providerRequestContainsPrompt(request workers.ProviderInferenceRequest, marker string) bool {
+func providerRequestContainsPrompt(request providers.ExecuteRequest, marker string) bool {
 	if prompt := request.SystemPrompt + "\n" + request.UserMessage; strings.Contains(prompt, marker) {
 		return true
 	}
@@ -372,8 +373,8 @@ func providerRequestContainsPrompt(request workers.ProviderInferenceRequest, mar
 
 func assertDistinctConcurrentAttemptIdentity(
 	t *testing.T,
-	first workers.ProviderInferenceRequest,
-	second workers.ProviderInferenceRequest,
+	first providers.ExecuteRequest,
+	second providers.ExecuteRequest,
 ) {
 	t.Helper()
 	if first.Correlation.FactorySessionID == second.Correlation.FactorySessionID {
@@ -409,28 +410,28 @@ func assertConcurrentInvocationPrimaryResult(
 }
 
 type concurrentSessionWorkersProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	mu sync.Mutex
 
 	cancelSessionID string
-	cancelled       []workers.ProviderInferenceRequest
-	seenRequests    []workers.ProviderInferenceRequest
+	cancelled       []providers.ExecuteRequest
+	seenRequests    []providers.ExecuteRequest
 	active          atomic.Int32
 	holding         atomic.Bool
 
-	started         chan workers.ProviderInferenceRequest
-	cancelledSignal chan workers.ProviderInferenceRequest
+	started         chan providers.ExecuteRequest
+	cancelledSignal chan providers.ExecuteRequest
 	release         chan struct{}
 	releaseOnce     sync.Once
 }
 
 func newConcurrentSessionWorkersProvider() *concurrentSessionWorkersProvider {
 	provider := &concurrentSessionWorkersProvider{
-		started:         make(chan workers.ProviderInferenceRequest, 8),
-		cancelledSignal: make(chan workers.ProviderInferenceRequest, 4),
+		started:         make(chan providers.ExecuteRequest, 8),
+		cancelledSignal: make(chan providers.ExecuteRequest, 4),
 		release:         make(chan struct{}),
 	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	provider.holding.Store(true)
 	return provider
 }
@@ -441,11 +442,11 @@ func (p *concurrentSessionWorkersProvider) configure(cancelSessionID string) {
 	p.cancelSessionID = cancelSessionID
 }
 
-func (p *concurrentSessionWorkersProvider) Infer(
+func (p *concurrentSessionWorkersProvider) Execute(
 	ctx context.Context,
-	request workers.ProviderInferenceRequest,
-) (workers.InferenceResponse, error) {
-	request = workers.CloneProviderInferenceRequest(request)
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	request = request.Clone()
 	p.active.Add(1)
 	defer p.active.Add(-1)
 
@@ -456,7 +457,7 @@ func (p *concurrentSessionWorkersProvider) Infer(
 	select {
 	case p.started <- request:
 	case <-ctx.Done():
-		return workers.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
 	if !p.holding.Load() {
@@ -469,7 +470,7 @@ func (p *concurrentSessionWorkersProvider) Infer(
 		cancelSessionID := p.cancelSessionID
 		p.mu.Unlock()
 		if request.Correlation.FactorySessionID != cancelSessionID {
-			return workers.InferenceResponse{}, fmt.Errorf(
+			return providers.ExecuteResult{}, fmt.Errorf(
 				"unexpected cancellation for Factory Session %q, want %q",
 				request.Correlation.FactorySessionID,
 				cancelSessionID,
@@ -482,41 +483,41 @@ func (p *concurrentSessionWorkersProvider) Infer(
 		case p.cancelledSignal <- request:
 		default:
 		}
-		return workers.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
 	return p.successResponse(request), nil
 }
 
 func (p *concurrentSessionWorkersProvider) successResponse(
-	request workers.ProviderInferenceRequest,
-) workers.InferenceResponse {
+	request providers.ExecuteRequest,
+) providers.ExecuteResult {
 	sessionID := request.Correlation.FactorySessionID
-	return workers.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: sessionID,
 		// Provider overrides own the normalized outcome when they bypass the
 		// native runner. Mark this controlled response as accepted so the
 		// test exercises concurrent session isolation rather than stop-token
 		// classification.
-		Outcome: workers.OutcomeAccepted,
-		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+		Outcome: providers.ExecuteOutcomeAccepted,
+		Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
 			"test_factory_session_id": sessionID,
 		}},
 	}
 }
 
-func (p *concurrentSessionWorkersProvider) waitStartedAny(t *testing.T) workers.ProviderInferenceRequest {
+func (p *concurrentSessionWorkersProvider) waitStartedAny(t *testing.T) providers.ExecuteRequest {
 	t.Helper()
 	select {
 	case request := <-p.started:
 		return request
 	case <-time.After(concurrentSessionWorkersTimeout):
 		t.Fatal("provider did not observe a Factory Session entering execution")
-		return workers.ProviderInferenceRequest{}
+		return providers.ExecuteRequest{}
 	}
 }
 
-func (p *concurrentSessionWorkersProvider) waitCancelled(t *testing.T, wantSessionID string) workers.ProviderInferenceRequest {
+func (p *concurrentSessionWorkersProvider) waitCancelled(t *testing.T, wantSessionID string) providers.ExecuteRequest {
 	t.Helper()
 	select {
 	case request := <-p.cancelledSignal:
@@ -526,7 +527,7 @@ func (p *concurrentSessionWorkersProvider) waitCancelled(t *testing.T, wantSessi
 		return request
 	case <-time.After(concurrentSessionWorkersTimeout):
 		t.Fatalf("provider did not observe Factory Session %q cancellation", wantSessionID)
-		return workers.ProviderInferenceRequest{}
+		return providers.ExecuteRequest{}
 	}
 }
 
@@ -537,12 +538,12 @@ func (p *concurrentSessionWorkersProvider) releaseSurvivingAttempt() {
 	})
 }
 
-func (p *concurrentSessionWorkersProvider) requests() []workers.ProviderInferenceRequest {
+func (p *concurrentSessionWorkersProvider) requests() []providers.ExecuteRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	requests := make([]workers.ProviderInferenceRequest, len(p.seenRequests))
+	requests := make([]providers.ExecuteRequest, len(p.seenRequests))
 	for index, request := range p.seenRequests {
-		requests[index] = workers.CloneProviderInferenceRequest(request)
+		requests[index] = request.Clone()
 	}
 	return requests
 }

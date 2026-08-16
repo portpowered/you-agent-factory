@@ -20,9 +20,7 @@ const (
 var specializedPackageSegments = map[string]Lane{
 	"contracttests":    LaneContract,
 	"exhaustiontests":  LaneMaintenance,
-	"functionaltests":  LaneContract,
 	"integrationtests": LaneIntegration,
-	"paritytests":      LaneContract,
 	"runtimetests":     LaneIntegration,
 	"servertests":      LaneIntegration,
 }

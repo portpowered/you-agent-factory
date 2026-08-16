@@ -15,20 +15,18 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agypty"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/adapter"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewFromInputRejectsMissingRequiredEdges(t *testing.T) {
 	t.Parallel()
-	allocator := &agypty.MockAllocator{}
+	allocator := &workerexecution.MockPTYAllocator{}
 	sequence := []string{}
 	runner := &preparedInvocationTestRunner{sequence: &sequence}
 	resolveSymlinks := func(path string) (string, error) { return path, nil }
@@ -64,7 +62,7 @@ func TestNewFromInputRejectsMissingRequiredEdges(t *testing.T) {
 
 func TestNewFromInputKeepsProviderCommandAndAgyPTYEdgesDistinct(t *testing.T) {
 	t.Parallel()
-	allocator := &agypty.MockAllocator{}
+	allocator := &workerexecution.MockPTYAllocator{}
 	sequence := []string{}
 	runner := &preparedInvocationTestRunner{sequence: &sequence}
 	clock := platformclock.Real{}
@@ -104,7 +102,7 @@ func TestFactoryNewUsesInjectedClockForProviderDiagnostics(t *testing.T) {
 	factory, err := NewFactory(
 		runner,
 		clock,
-		&agypty.MockAllocator{},
+		&workerexecution.MockPTYAllocator{},
 		func(path string) (string, error) { return path, nil },
 		platformprocess.HostExecutableLocator{},
 		platformfilesystem.Local{},
@@ -455,22 +453,6 @@ func assertInferenceExitFailure(t *testing.T, tc exitFailureInferenceTestCase) {
 	}
 	if providerErr.Message != tc.wantMessage {
 		t.Fatalf("provider error message = %q, want %q", providerErr.Message, tc.wantMessage)
-	}
-}
-
-func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		command  string
-		identity adapter.Identity
-	}{
-		{command: "claude", identity: adapter.Identity(modelprovider.ProviderClaude)},
-	}
-	for _, tc := range tests {
-		if got := progressStreamIdentity(tc.command); got != tc.identity {
-			t.Fatalf("progressStreamIdentity(%q) = %q, want %q", tc.command, got, tc.identity)
-		}
 	}
 }
 

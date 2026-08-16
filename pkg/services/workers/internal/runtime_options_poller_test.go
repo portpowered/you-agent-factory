@@ -56,7 +56,7 @@ func TestRuntimeRunnerPreflightUsesProvidersRoot(t *testing.T) {
 }
 
 type runtimePreflightProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	selection    providers.ResolveSelectionRequest
 	identities   []string
 	prerequisite providers.ID

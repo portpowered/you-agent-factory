@@ -1,9 +1,0 @@
-{"type":"system","subtype":"init","session_id":"parity-claude-session"}
-{"type":"stream_event","session_id":"parity-claude-session","event":{"type":"message_start","message":{"id":"parity-msg-full","role":"assistant","content":[]}}}
-{"type":"stream_event","session_id":"parity-claude-session","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}
-{"type":"stream_event","session_id":"parity-claude-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Parity "}}}
-{"type":"stream_event","session_id":"parity-claude-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello "}}}
-{"type":"stream_event","session_id":"parity-claude-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"world"}}}
-{"type":"stream_event","session_id":"parity-claude-session","event":{"type":"message_stop"}}
-{"type":"assistant","session_id":"parity-claude-session","message":{"id":"parity-msg-full","role":"assistant","content":[{"type":"text","text":"Parity hello world"}]}}
-{"type":"result","subtype":"success","is_error":false,"result":"Parity hello world","session_id":"parity-claude-session"}

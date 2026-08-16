@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,14 +22,12 @@ import (
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider interface {
-		Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
-	},
+	provider providers.Service,
 ) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProviderOverride: support.ProviderServiceFromInference(provider),
+		ProviderOverride: provider,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)

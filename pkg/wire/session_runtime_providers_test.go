@@ -36,14 +36,6 @@ func codexWireTestOutput(content string) []byte {
 	return []byte("{\"type\":\"turn.started\"}\n" + string(item) + "\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
 }
 
-type wireTestProvider struct {
-	testutil.ProviderServiceAdapter
-}
-
-func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
-	return workers.InferenceResponse{}, nil
-}
-
 type wireTestProviderRegistry struct{}
 
 func (wireTestProviderRegistry) UsesNativeRunner(string) bool { return false }
@@ -149,6 +141,10 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
+	provider, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
 	workflowFiles := provideFactoryRuntimeWorkflowSources(edges)
 	workflowHome := provideFactoryRuntimeWorkflowHome(edges)
 	workflowSymlinks := provideFactoryRuntimeWorkflowSourceResolveSymlinks(edges)
@@ -188,7 +184,6 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 
-	provider := wireTestProvider{}
 	clock := platformclock.Real{}
 	for _, mockWorkers := range []*workers.MockWorkersConfig{
 		nil,
@@ -772,7 +767,7 @@ func TestCanonicalWorkerCompositionBindingsRemainConstructible(t *testing.T) {
 	}
 
 	overrideFactory := provideProviderInvocationExecutorFactory(
-		nil, nil, nil, wireTestProvider{}, workers.AdaptCommandRunner(testutil.NewProviderCommandRunner()),
+		nil, nil, nil, providersService, workers.AdaptCommandRunner(testutil.NewProviderCommandRunner()),
 	)
 	executor, err := overrideFactory(nil, nil)
 	if err != nil || executor == nil {

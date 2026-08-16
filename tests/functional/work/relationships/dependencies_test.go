@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -140,8 +140,8 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewMockProviderWithErrors(
-		[]workerexecution.InferenceResponse{
+	provider := testutil.NewNativeMockProviderWithErrors(
+		[]providers.ExecuteResult{
 			{Content: "COMPLETE"},
 			{Content: "COMPLETE"},
 		},
@@ -171,10 +171,10 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		t.Fatalf("dependent work %q reached processing after prerequisite failure: %#v", dependentWorkID, listed)
 	}
 
-	if got := len(support.ProviderCallsForWorker(provider, "starter")); got != 1 {
+	if got := len(provider.CallsForWorker("starter")); got != 1 {
 		t.Fatalf("starter provider calls = %d, want 1 (prerequisite only)", got)
 	}
-	if got := len(support.ProviderCallsForWorker(provider, "finisher")); got != 1 {
+	if got := len(provider.CallsForWorker("finisher")); got != 1 {
 		t.Fatalf("finisher provider calls = %d, want 1 (prerequisite only)", got)
 	}
 
@@ -671,15 +671,13 @@ func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEve
 func startDependencyFactory(
 	t *testing.T,
 	dir string,
-	provider interface {
-		Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
-	},
+	provider providers.Service,
 ) (baseURL string, daemon *support.ProcessCommand) {
 	t.Helper()
 
 	server := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderOverride: support.ProviderServiceFromInference(provider),
+		ProviderOverride: provider,
 		APIServerStarter: server.Start,
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -846,7 +844,7 @@ func fanInDispatchOrdering(
 }
 
 type fanInSecondFinisherGateProvider struct {
-	testutil.ProviderServiceAdapter
+	testutil.NativeProvider
 	secondFinisherReached chan struct{}
 	release               chan struct{}
 	releaseOnce           sync.Once
@@ -860,18 +858,15 @@ func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
 		secondFinisherReached: make(chan struct{}, 1),
 		release:               make(chan struct{}),
 	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
-func (p *fanInSecondFinisherGateProvider) Infer(
+func (p *fanInSecondFinisherGateProvider) Execute(
 	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	workerType := req.WorkerType
-	if workerType == "" {
-		workerType = req.Dispatch.WorkerType
-	}
 
 	p.mu.Lock()
 	switch workerType {
@@ -890,25 +885,25 @@ func (p *fanInSecondFinisherGateProvider) Infer(
 			select {
 			case <-p.release:
 			case <-ctx.Done():
-				return workerexecution.InferenceResponse{}, ctx.Err()
+				return providers.ExecuteResult{}, ctx.Err()
 			}
 		}
 		return fanInGateProviderCompleteResponse(), nil
 	default:
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, errors.New("unexpected worker type: " + workerType)
+		return providers.ExecuteResult{}, errors.New("unexpected worker type: " + workerType)
 	}
 
 	p.mu.Unlock()
 	return fanInGateProviderCompleteResponse(), nil
 }
 
-func fanInGateProviderCompleteResponse() workerexecution.InferenceResponse {
-	return workerexecution.InferenceResponse{
+func fanInGateProviderCompleteResponse() providers.ExecuteResult {
+	return providers.ExecuteResult{
 		Content: "COMPLETE",
-		Diagnostics: &workerexecution.WorkDiagnostics{
+		Diagnostics: &providers.ExecuteDiagnostics{
 			Metadata: map[string]string{
-				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+				"completion_evidence": "provider_response",
 			},
 		},
 	}

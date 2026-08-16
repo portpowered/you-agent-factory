@@ -147,18 +147,14 @@ The manifest still lists the entire legacy `execution/internal/provider` tree fo
 - `agy`
 - `claude`
 - `codex`
-- `commandenv`
 - `conductor`
 - `cursor`
 - `gemini`
-- `inferencecontract`, `inferencecontract/testkit`
+- `inferencecontract`
 - `kiro`
 - `opencode`
 - `pi`
-- `providersroot`
 - `registry`
-- `structured`
-- `agypty`
 
 The live tree has moved again, and the authoritative package-target and ownership
 ledgers now reflect that state:
