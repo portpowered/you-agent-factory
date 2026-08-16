@@ -191,6 +191,7 @@ async function verifyVisualGroupAfterReload({
     name: GROUP_LABEL,
   });
   await restoredRegion.waitFor({ state: "visible" });
+  await expectInlineGroupLabel(restoredRegion);
   await expectRegionPointerThrough(page, restoredRegion);
   const intakeObserverButton = page.getByRole("button", {
     exact: true,
@@ -477,6 +478,57 @@ async function expectInputValue(locator, expected) {
   if (actual !== expected) {
     throw new Error(
       `Expected input value "${expected}" but found "${actual}".`,
+    );
+  }
+}
+
+async function expectInlineGroupLabel(region) {
+  const label = region.locator("[data-factory-graph-group-region-label]");
+  await label.waitFor({ state: "visible" });
+
+  const [regionBounds, labelBounds, presentation] = await Promise.all([
+    region.boundingBox(),
+    label.boundingBox(),
+    label.evaluate((element) => {
+      const wrapper = element.parentElement;
+      const style = getComputedStyle(element);
+      const wrapperStyle = wrapper ? getComputedStyle(wrapper) : null;
+      return {
+        backgroundColor: style.backgroundColor,
+        boxShadow: style.boxShadow,
+        className: element.className,
+        borderStyle: style.borderStyle,
+        maxWidth: wrapperStyle?.maxWidth ?? "none",
+        transform: style.transform,
+      };
+    }),
+  ]);
+
+  if (!regionBounds || !labelBounds) {
+    throw new Error("Could not measure the rendered visual group label.");
+  }
+
+  if (
+    labelBounds.x < regionBounds.x ||
+    labelBounds.y < regionBounds.y ||
+    labelBounds.x >= regionBounds.x + regionBounds.width ||
+    labelBounds.y >= regionBounds.y + regionBounds.height
+  ) {
+    throw new Error(
+      `Expected the group label to start inside the region's top-left border: ${JSON.stringify({ labelBounds, regionBounds })}`,
+    );
+  }
+
+  if (
+    presentation.borderStyle !== "none" ||
+    presentation.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+    presentation.boxShadow !== "none" ||
+    presentation.transform !== "none" ||
+    presentation.maxWidth === "none" ||
+    /border|rounded|shadow|backdrop/.test(presentation.className)
+  ) {
+    throw new Error(
+      `Expected an unboxed, bounded inline group label, found ${JSON.stringify(presentation)}.`,
     );
   }
 }

@@ -253,16 +253,12 @@ export function FactoryGraphGroupRegionLayer({
               zIndex: index,
             }}
           >
-            <span className="pointer-events-none absolute top-0 right-3 left-3 -translate-y-1/2">
+            <span className="pointer-events-none absolute top-2 left-2 max-w-[calc(100%-1rem)]">
               <span
                 aria-hidden="true"
-                className="block max-w-full truncate rounded-lg border px-2 py-1 text-xs font-semibold leading-5 text-on-surface shadow-sm backdrop-blur-sm"
+                className="block max-w-full truncate text-xs font-semibold leading-5 text-on-surface"
                 data-factory-graph-group-region-label=""
                 title={region.label}
-                style={{
-                  backgroundColor: colorStyle.fill,
-                  borderColor: colorStyle.accent,
-                }}
               >
                 {region.label}
               </span>

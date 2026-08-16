@@ -71,6 +71,30 @@ describe("FactoryGraphGroupRegionLayer", () => {
     expect(screen.getByRole("region", { name: "Review" })).toBeInTheDocument();
   });
 
+  it("renders the group label as bounded, unboxed text inside the top-left border", () => {
+    renderLayer([sampleGroup]);
+
+    const label = screen.getByText("Review");
+    const labelWrapper = label.parentElement;
+
+    expect(labelWrapper).toHaveClass(
+      "absolute",
+      "top-2",
+      "left-2",
+      "max-w-[calc(100%-1rem)]",
+    );
+    expect(labelWrapper).not.toHaveClass("right-3", "-translate-y-1/2");
+    expect(label).toHaveClass("block", "max-w-full", "truncate");
+    expect(label).not.toHaveClass(
+      "rounded-lg",
+      "border",
+      "px-2",
+      "py-1",
+      "shadow-sm",
+      "backdrop-blur-sm",
+    );
+  });
+
   it("leaves an explicit foreground graph target able to receive a pointer", () => {
     const onPointerDown = vi.fn();
 
