@@ -227,11 +227,11 @@ type JavaScriptRuntimeService struct {
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
 	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
-	// resolveWorkerInvoker is guarded by its own lock, not the session lock.
-	// It is bound once, after construction, and read on paths that already hold
-	// the session lock; sharing one mutex between them deadlocks.
+	// workerInvokerService is guarded by its own lock, not the session lock. It
+	// is attached once after construction and read on paths that already hold the
+	// session lock; sharing one mutex between them deadlocks.
 	invokerMu            sync.RWMutex
-	resolveWorkerInvoker WorkerInvokerResolver
+	workerInvokerService factory.Service
 
 	// workerSessions maps one Workers dispatch identity to the durable session
 	// that owns that Worker. A Worker's progress arrives from Workers, which
@@ -944,7 +944,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		// invokes its children as Workers through the Factory Runtime that owns
 		// its Worker Sessions service; the standalone `you run script.js`
 		// composition builds no runtime and reaches the provider directly.
-		if invoke := s.workerInvoker(sessionID); invoke != nil {
+		if invoke := s.workerInvoker(); invoke != nil {
 			return newChildWorkerExecutor(
 				childSessionID,
 				invoke,

@@ -70,7 +70,7 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 		sessions: map[string]*runtimeSessionState{
 			sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
 		},
-		resolveWorkerInvoker: func(string) factory.Service { return runtime },
+		workerInvokerService: runtime,
 	}
 	request := factorysessions.LiveChangeRequest{
 		RequestID:        "request-live-capacity-admission",

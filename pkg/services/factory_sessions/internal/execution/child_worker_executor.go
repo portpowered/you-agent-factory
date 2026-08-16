@@ -10,30 +10,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// WorkerInvokerResolver resolves the Factory Runtime that owns one session's
-// Worker Sessions service and canonical event ledger.
-//
-// It is late-bound rather than a constructor argument because of ordering, not
-// availability: the live-session registry that can resolve a session lives on
-// the Factory Sessions service, and this execution service is a dependency of
-// that service. Factory Runtime already solves the identical problem the same
-// way with Root.BindActiveService.
-//
-// It is an alias rather than a defined type on purpose: the durable-execution
-// wrapper and the runtime opener both reach this binder through structural
-// interface assertions, and a defined type would make those method sets
-// disagree with an identically-shaped declaration made anywhere else.
-type WorkerInvokerResolver = func(sessionID string) factory.Service
-
-// BindWorkerInvoker attaches the resolver JavaScript children invoke their
-// Workers through. Binding nothing leaves children unable to run, which is
-// deliberate: there is no second execution route to fall back to.
-func (s *JavaScriptRuntimeService) BindWorkerInvoker(resolve WorkerInvokerResolver) {
+// SetWorkerInvoker attaches the Runtime capability JavaScript children invoke
+// their Workers through. Binding nothing leaves children unable to run, which
+// is deliberate: there is no second execution route to fall back to.
+func (s *JavaScriptRuntimeService) SetWorkerInvoker(runtime factory.Service) {
 	if s == nil {
 		return
 	}
 	s.invokerMu.Lock()
-	s.resolveWorkerInvoker = resolve
+	s.workerInvokerService = runtime
 	s.invokerMu.Unlock()
 }
 
@@ -45,20 +30,17 @@ func (s *JavaScriptRuntimeService) workerInvokerBound() bool {
 	}
 	s.invokerMu.RLock()
 	defer s.invokerMu.RUnlock()
-	return s.resolveWorkerInvoker != nil
+	return s.workerInvokerService != nil
 }
 
-func (s *JavaScriptRuntimeService) workerInvoker(sessionID string) factory.Service {
+func (s *JavaScriptRuntimeService) workerInvoker() factory.Service {
 	if s == nil {
 		return nil
 	}
 	s.invokerMu.RLock()
-	resolve := s.resolveWorkerInvoker
+	runtime := s.workerInvokerService
 	s.invokerMu.RUnlock()
-	if resolve == nil {
-		return nil
-	}
-	return resolve(sessionID)
+	return runtime
 }
 
 // childWorkerExecutor runs one JavaScript workflow child as an ordinary Worker.
