@@ -18,12 +18,6 @@ const ICON_KIND_BY_PHASE = {
     TERMINAL: "terminal",
     FAILED: "failed",
 };
-const ICON_CLASS_BY_PHASE = {
-    INITIAL: "text-info",
-    PROCESSING: "text-warning",
-    TERMINAL: "text-success",
-    FAILED: "text-error",
-};
 export function workStatePhaseSwatchClassName(workStateType) {
     return workStatePhaseSurfaceClassName(workStateType);
 }
@@ -39,11 +33,8 @@ export function workStatePhaseSemanticIconKind(workStateType) {
     return workStateType ? ICON_KIND_BY_PHASE[workStateType] : "queue";
 }
 export function workStatePhaseSemanticIconClassName(workStateType) {
-    const fallback = workStateType
-        ? ICON_CLASS_BY_PHASE[workStateType]
-        : "text-on-surface-variant";
     return factoryGraphNodeVisualIconClassName(resolveFactoryGraphVisualState({
         family: "work-state",
         lifecycle: workStateType,
-    }), fallback);
+    }), "text-on-surface-variant");
 }

@@ -1,6 +1,14 @@
 import type { FactoryGraphNodeFamily } from "./node-family.js";
 export type FactoryGraphVisualLifecycleRole = "unknown" | "initial" | "processing" | "terminal" | "failed";
 export type FactoryGraphVisualStatusRole = "quiet" | "waiting" | "active" | "success" | "danger";
+/** Semantic role used by nested accents owned by a graph node. */
+export type FactoryGraphVisualNestedAccentRole = "neutral" | "info" | "warning" | "success" | "danger";
+/**
+ * Derive the semantic role for a nested accent from its parent's resolved
+ * visual status. Callers can use the result for surfaces, borders, readable
+ * foregrounds, glows, rings, badges, and icons without copying this policy.
+ */
+export declare function factoryGraphVisualNestedAccentRole(parentStatus: FactoryGraphVisualStatusRole): FactoryGraphVisualNestedAccentRole;
 export type FactoryGraphVisualBorderRole = FactoryGraphVisualStatusRole | "selection" | "validation";
 export type FactoryGraphVisualGlowRole = "none" | "active" | "danger" | "selection" | "validation";
 export type FactoryGraphVisualStatusTreatment = "none" | "waiting" | "processing" | "completed" | "failed";

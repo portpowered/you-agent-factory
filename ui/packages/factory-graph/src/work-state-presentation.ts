@@ -33,13 +33,6 @@ const ICON_KIND_BY_PHASE: Record<
   FAILED: "failed",
 };
 
-const ICON_CLASS_BY_PHASE: Record<FactoryGraphWorkStateType, string> = {
-  INITIAL: "text-info",
-  PROCESSING: "text-warning",
-  TERMINAL: "text-success",
-  FAILED: "text-error",
-};
-
 export function workStatePhaseSwatchClassName(
   workStateType: FactoryGraphWorkStateType,
 ): string {
@@ -67,14 +60,11 @@ export function workStatePhaseSemanticIconKind(
 export function workStatePhaseSemanticIconClassName(
   workStateType: FactoryGraphWorkStateType | undefined,
 ): string {
-  const fallback = workStateType
-    ? ICON_CLASS_BY_PHASE[workStateType]
-    : "text-on-surface-variant";
   return factoryGraphNodeVisualIconClassName(
     resolveFactoryGraphVisualState({
       family: "work-state",
       lifecycle: workStateType,
     }),
-    fallback,
+    "text-on-surface-variant",
   );
 }

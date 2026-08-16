@@ -1,3 +1,18 @@
+const NESTED_ACCENT_ROLE_BY_STATUS = {
+    quiet: "neutral",
+    waiting: "info",
+    active: "warning",
+    success: "success",
+    danger: "danger",
+};
+/**
+ * Derive the semantic role for a nested accent from its parent's resolved
+ * visual status. Callers can use the result for surfaces, borders, readable
+ * foregrounds, glows, rings, badges, and icons without copying this policy.
+ */
+export function factoryGraphVisualNestedAccentRole(parentStatus) {
+    return NESTED_ACCENT_ROLE_BY_STATUS[parentStatus];
+}
 /**
  * Resolve one composable visual grammar for a semantic Factory node.
  *

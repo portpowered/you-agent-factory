@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: workstation-kind regression matrix stays grouped around one metadata fixture.
+import type { FactoryGraphVisualStatusRole } from "@you-agent-factory/factory-graph";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
   CRON_WORKSTATION_KIND,
@@ -10,6 +11,24 @@ import {
   workstationIconMetadata,
   workstationSemanticKind,
 } from "./workstation-icon-metadata";
+
+const PARENT_STATUS_ICON_CLASS_CASES = [
+  ["quiet", "text-on-surface-variant"],
+  ["waiting", "text-info"],
+  ["active", "text-warning"],
+  ["success", "text-success"],
+  ["danger", "text-error"],
+] as const satisfies ReadonlyArray<
+  readonly [FactoryGraphVisualStatusRole, string]
+>;
+
+const WORKSTATION_KINDS = [
+  STANDARD_WORKSTATION_KIND,
+  REPEATER_WORKSTATION_KIND,
+  CRON_WORKSTATION_KIND,
+  POLLER_WORKSTATION_KIND,
+  UNKNOWN_WORKSTATION_KIND,
+] as const;
 
 function dashboardWorkstationNode(
   overrides: Partial<DashboardWorkstationNode> = {},
@@ -34,19 +53,19 @@ describe("workstationIconMetadata", () => {
         semanticKind: STANDARD_WORKSTATION_KIND,
       },
       {
-        className: "text-info",
+        className: "text-on-surface-subtle",
         iconKind: "repeater",
         label: "Repeater workstation",
         semanticKind: REPEATER_WORKSTATION_KIND,
       },
       {
-        className: "text-success",
+        className: "text-on-surface-subtle",
         iconKind: "cron",
         label: "Cron workstation",
         semanticKind: CRON_WORKSTATION_KIND,
       },
       {
-        className: "text-primary",
+        className: "text-on-surface-subtle",
         iconKind: "poller",
         label: "Poller workstation",
         semanticKind: POLLER_WORKSTATION_KIND,
@@ -74,7 +93,7 @@ describe("workstationIconMetadata", () => {
         }),
       ),
     ).toEqual({
-      className: "text-info",
+      className: "text-on-surface-subtle",
       iconKind: "repeater",
       label: "Repeater workstation",
       semanticKind: REPEATER_WORKSTATION_KIND,
@@ -84,7 +103,7 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: CRON_WORKSTATION_KIND }),
       ),
     ).toEqual({
-      className: "text-success",
+      className: "text-on-surface-subtle",
       iconKind: "cron",
       label: "Cron workstation",
       semanticKind: CRON_WORKSTATION_KIND,
@@ -94,12 +113,27 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: POLLER_WORKSTATION_KIND }),
       ),
     ).toEqual({
-      className: "text-primary",
+      className: "text-on-surface-subtle",
       iconKind: "poller",
       label: "Poller workstation",
       semanticKind: POLLER_WORKSTATION_KIND,
     });
   });
+
+  it.each(PARENT_STATUS_ICON_CLASS_CASES)(
+    "uses the %s parent tone for every workstation kind instead of kind color",
+    (parentStatus, expectedClassName) => {
+      for (const workstationKind of WORKSTATION_KINDS) {
+        expect(
+          workstationIconMetadata(
+            dashboardWorkstationNode({ workstation_kind: workstationKind }),
+            undefined,
+            parentStatus,
+          ).className,
+        ).toBe(expectedClassName);
+      }
+    },
+  );
 
   it("normalizes legacy lowercase workstation kinds to the API enum icon contract", () => {
     expect(
@@ -107,7 +141,7 @@ describe("workstationIconMetadata", () => {
         dashboardWorkstationNode({ workstation_kind: "repeater" }),
       ),
     ).toEqual({
-      className: "text-info",
+      className: "text-on-surface-subtle",
       iconKind: "repeater",
       label: "Repeater workstation",
       semanticKind: REPEATER_WORKSTATION_KIND,
@@ -150,7 +184,7 @@ describe("workstationIconMetadata", () => {
         "zh-CN",
       ),
     ).toEqual({
-      className: "text-info",
+      className: "text-on-surface-subtle",
       iconKind: "repeater",
       label: "重复器工作站",
       semanticKind: REPEATER_WORKSTATION_KIND,

@@ -1,3 +1,8 @@
+import {
+  type FactoryGraphVisualNestedAccentRole,
+  type FactoryGraphVisualStatusRole,
+  factoryGraphVisualNestedAccentRole,
+} from "@you-agent-factory/factory-graph";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
   type components,
@@ -38,9 +43,34 @@ export interface WorkstationIconMetadata {
   semanticKind: WorkstationSemanticKind;
 }
 
+const NEUTRAL_WORKSTATION_ICON_CLASS_NAME = "text-on-surface-subtle";
+
+const WORKSTATION_ICON_CLASS_NAME_BY_NESTED_ACCENT_ROLE: Record<
+  FactoryGraphVisualNestedAccentRole,
+  string
+> = {
+  neutral: "text-on-surface-variant",
+  info: "text-info",
+  warning: "text-warning",
+  success: "text-success",
+  danger: "text-error",
+};
+
+function workstationIconClassName(
+  parentStatus?: FactoryGraphVisualStatusRole,
+): string {
+  if (parentStatus === undefined) {
+    return NEUTRAL_WORKSTATION_ICON_CLASS_NAME;
+  }
+
+  return WORKSTATION_ICON_CLASS_NAME_BY_NESTED_ACCENT_ROLE[
+    factoryGraphVisualNestedAccentRole(parentStatus)
+  ];
+}
+
 const WORKSTATION_ICON_METADATA_BY_KIND = {
   [CRON_WORKSTATION_KIND]: {
-    className: "text-success",
+    className: workstationIconClassName(),
     iconKind: "cron",
     label: getActivityGraphMessages().workstationIconLabel(
       CRON_WORKSTATION_KIND,
@@ -48,7 +78,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: CRON_WORKSTATION_KIND,
   },
   [POLLER_WORKSTATION_KIND]: {
-    className: "text-primary",
+    className: workstationIconClassName(),
     iconKind: "poller",
     label: getActivityGraphMessages().workstationIconLabel(
       POLLER_WORKSTATION_KIND,
@@ -56,7 +86,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: POLLER_WORKSTATION_KIND,
   },
   [REPEATER_WORKSTATION_KIND]: {
-    className: "text-info",
+    className: workstationIconClassName(),
     iconKind: "repeater",
     label: getActivityGraphMessages().workstationIconLabel(
       REPEATER_WORKSTATION_KIND,
@@ -64,7 +94,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: REPEATER_WORKSTATION_KIND,
   },
   [STANDARD_WORKSTATION_KIND]: {
-    className: "text-on-surface-subtle",
+    className: workstationIconClassName(),
     iconKind: "workstation",
     label: getActivityGraphMessages().workstationIconLabel(
       STANDARD_WORKSTATION_KIND,
@@ -72,7 +102,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: STANDARD_WORKSTATION_KIND,
   },
   [UNKNOWN_WORKSTATION_KIND]: {
-    className: "text-on-surface-subtle",
+    className: workstationIconClassName(),
     iconKind: "workstation",
     label: getActivityGraphMessages().workstationIconLabel(
       UNKNOWN_WORKSTATION_KIND,
@@ -114,12 +144,14 @@ export function workstationSemanticKind(
 export function workstationIconMetadata(
   workstation: DashboardWorkstationNode,
   locale?: string | null,
+  parentStatus?: FactoryGraphVisualStatusRole,
 ): WorkstationIconMetadata {
   const metadata =
     WORKSTATION_ICON_METADATA_BY_KIND[workstationSemanticKind(workstation)];
 
   return {
     ...metadata,
+    className: workstationIconClassName(parentStatus),
     label: getActivityGraphMessages(locale).workstationIconLabel(
       metadata.semanticKind,
     ),
