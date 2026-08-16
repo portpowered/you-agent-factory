@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -80,6 +81,120 @@ function expectNoVerticalScrollContainer(element: HTMLElement) {
   expect(element.className).not.toMatch(/overflow-y-(auto|scroll)/);
   expect(window.getComputedStyle(element).overflowY).not.toMatch(
     /^(auto|scroll)$/,
+  );
+}
+
+function installMeasuredBoardWidth(initialWidth: number) {
+  const previousResizeObserver = globalThis.ResizeObserver;
+  let measuredWidth = initialWidth;
+  const observers: ControlledResizeObserver[] = [];
+
+  class ControlledResizeObserver {
+    private readonly callback: ResizeObserverCallback;
+    private target: Element | null = null;
+
+    public constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+      observers.push(this);
+    }
+
+    public disconnect(): void {
+      this.target = null;
+    }
+
+    public observe(target: Element): void {
+      this.target = target;
+      this.emit();
+    }
+
+    public unobserve(): void {
+      this.target = null;
+    }
+
+    public emit(): void {
+      if (!this.target) {
+        return;
+      }
+
+      this.callback(
+        [
+          {
+            contentRect: { width: measuredWidth } as DOMRectReadOnly,
+            target: this.target,
+          } as ResizeObserverEntry,
+        ],
+        this as unknown as ResizeObserver,
+      );
+    }
+  }
+
+  globalThis.ResizeObserver =
+    ControlledResizeObserver as unknown as typeof ResizeObserver;
+
+  return {
+    restore() {
+      globalThis.ResizeObserver = previousResizeObserver;
+      observers.length = 0;
+    },
+    setWidth(width: number) {
+      measuredWidth = width;
+      for (const observer of observers) {
+        observer.emit();
+      }
+    },
+  };
+}
+
+function renderCompactBoard(onLayoutChange = vi.fn()) {
+  return render(
+    <AgentBentoLayout
+      cards={[
+        {
+          id: "activity",
+          widgetType: "activity",
+          children: (
+            <AgentBentoCard
+              headerAction={<button type="button">Open activity</button>}
+              title="Current activity"
+            >
+              <p>Active workstation graph goes here.</p>
+            </AgentBentoCard>
+          ),
+        },
+        {
+          id: "trace",
+          widgetType: "trace",
+          children: (
+            <AgentBentoCard title="Trace grid">
+              <p>Trace dispatches stay visible.</p>
+            </AgentBentoCard>
+          ),
+        },
+        {
+          id: "terminal",
+          widgetType: "terminal",
+          children: (
+            <AgentBentoCard title="Terminal work">
+              <p>Completed work remains available.</p>
+            </AgentBentoCard>
+          ),
+        },
+      ]}
+      initialWidth={768}
+      layout={[
+        { h: 2, id: "activity", widgetType: "activity", w: 4, x: 0, y: 5 },
+        { h: 3, id: "trace", widgetType: "trace", w: 3, x: 6, y: 0 },
+        {
+          h: 1,
+          id: "terminal",
+          widgetType: "terminal",
+          w: 6,
+          x: 0,
+          y: 0,
+        },
+      ]}
+      onLayoutChange={onLayoutChange}
+    />,
   );
 }
 
@@ -439,6 +554,100 @@ describe("AgentBentoLayout", () => {
         y: 5,
       },
     ]);
+  });
+
+  it.each([320, 390, 640, 768])(
+    "projects a %spx board into stable full-width order without horizontal overflow",
+    async (boardWidth) => {
+      const measuredBoard = installMeasuredBoardWidth(boardWidth);
+
+      try {
+        renderCompactBoard();
+
+        const board = screen.getByRole("region", {
+          name: "you-agent-factory bento board",
+        });
+
+        await waitFor(() => {
+          const items = [
+            ...board.querySelectorAll<HTMLElement>(".react-grid-item"),
+          ];
+
+          expect(items).toHaveLength(3);
+          expect(items.map((item) => item.dataset.bentoCardId)).toEqual([
+            "terminal",
+            "trace",
+            "activity",
+          ]);
+
+          for (const item of items) {
+            expect(Number.parseFloat(item.style.width)).toBeCloseTo(boardWidth);
+            expect(item.style.transform).toMatch(/translate\(0px,[-\d.]+px\)/);
+            expect(item.classList.contains("react-draggable")).toBe(false);
+            expect(item.classList.contains("react-resizable-hide")).toBe(true);
+          }
+        });
+
+        expect(
+          within(
+            screen.getByRole("article", { name: "Current activity" }),
+          ).getByRole("button", { name: "Open activity" }),
+        ).toBeTruthy();
+        expect(
+          screen.getByText("Completed work remains available."),
+        ).toBeTruthy();
+      } finally {
+        measuredBoard.restore();
+      }
+    },
+  );
+
+  it("does not persist compact geometry and restores the canonical layout above the breakpoint", async () => {
+    const measuredBoard = installMeasuredBoardWidth(768);
+    const onLayoutChange = vi.fn();
+
+    try {
+      renderCompactBoard(onLayoutChange);
+
+      const board = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      const activityItem = board.querySelector<HTMLElement>(
+        '[data-bento-card-id="activity"]',
+      );
+      if (!activityItem) {
+        throw new Error("expected the activity card to render");
+      }
+
+      const canonicalSignature = activityItem.dataset.layoutSignature;
+      await waitFor(() => {
+        expect(Number.parseFloat(activityItem.style.width)).toBeCloseTo(768);
+      });
+
+      const compactWidth = activityItem.style.width;
+      expect(onLayoutChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        measuredBoard.setWidth(1024);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(activityItem.style.width).not.toBe(compactWidth);
+      });
+
+      expect(Number.parseFloat(activityItem.style.width)).toBeLessThan(768);
+      expect(activityItem.dataset.layoutSignature).toBe(canonicalSignature);
+      expect(onLayoutChange).not.toHaveBeenCalled();
+      expect(board.querySelector(".react-resizable-handle-e")).toBeTruthy();
+      expect(
+        within(
+          screen.getByRole("article", { name: "Current activity" }),
+        ).getByRole("button", { name: "Move Current activity card" }),
+      ).toBeTruthy();
+    } finally {
+      measuredBoard.restore();
+    }
   });
 
   it("renders a localized accessible name for the movable board", () => {

@@ -1,5 +1,5 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -69,9 +69,8 @@ export interface AgentBentoCardHeaderProps {
 
 const DEFAULT_BENTO_WIDTH = 1180;
 const BENTO_COLUMNS = 12;
-const BENTO_INTERACTION_BREAKPOINT_PX = 768;
 export const BENTO_ROW_HEIGHT = 72;
-const BENTO_COMPACT_BREAKPOINT_PX = 640;
+const BENTO_COMPACT_BREAKPOINT_PX = 768;
 export const BENTO_MARGIN = [16, 16] as const;
 
 export function getBentoGridItemHeightPx(h: number): number {
@@ -211,6 +210,7 @@ export function AgentBentoLayout({
     [layout],
   );
   const [currentLayout, setCurrentLayout] = useState<Layout>(normalizedLayout);
+  const isGridInteractionActiveRef = useRef(false);
   const { containerRef, width } = useContainerWidth({ initialWidth });
   const renderedLayout = hasSameLayoutItems(currentLayout, normalizedLayout)
     ? currentLayout
@@ -229,10 +229,10 @@ export function AgentBentoLayout({
   const renderedWidth = Math.max(measuredWidth, 320);
   const usesCompactLayout =
     responsiveMode === "adaptive" &&
-    renderedWidth < BENTO_COMPACT_BREAKPOINT_PX;
+    renderedWidth <= BENTO_COMPACT_BREAKPOINT_PX;
   const allowsInteractiveGrid =
     responsiveMode === "interactive" ||
-    (renderedWidth > BENTO_INTERACTION_BREAKPOINT_PX && !usesCompactLayout);
+    (renderedWidth > BENTO_COMPACT_BREAKPOINT_PX && !usesCompactLayout);
 
   const previewLayoutChange = (nextLayout: Layout) => {
     if (allowsInteractiveGrid) {
@@ -250,7 +250,7 @@ export function AgentBentoLayout({
   };
 
   const handleLayoutChange = (nextLayout: Layout) => {
-    if (!allowsInteractiveGrid) {
+    if (!allowsInteractiveGrid || !isGridInteractionActiveRef.current) {
       return;
     }
 
@@ -260,7 +260,20 @@ export function AgentBentoLayout({
       return;
     }
 
-    commitLayoutChange(nextLayout);
+    setCurrentLayout(nextLayout);
+  };
+
+  const handleGridInteractionStart = () => {
+    isGridInteractionActiveRef.current = allowsInteractiveGrid;
+  };
+
+  const handleGridInteractionStop = (nextLayout: Layout) => {
+    const wasActive = isGridInteractionActiveRef.current;
+    isGridInteractionActiveRef.current = false;
+
+    if (wasActive) {
+      commitLayoutChange(nextLayout);
+    }
   };
 
   const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
@@ -269,6 +282,17 @@ export function AgentBentoLayout({
     : allowsInteractiveGrid
       ? renderedLayout
       : toNonInteractiveGridLayout(renderedLayout);
+  const cardsForRender = usesCompactLayout
+    ? [...cards].sort((left, right) => {
+        const leftIndex = effectiveLayout.findIndex(
+          (item) => item.i === left.id,
+        );
+        const rightIndex = effectiveLayout.findIndex(
+          (item) => item.i === right.id,
+        );
+        return leftIndex - rightIndex;
+      })
+    : cards;
 
   return (
     <section
@@ -291,14 +315,18 @@ export function AgentBentoLayout({
           rowHeight: BENTO_ROW_HEIGHT,
         }}
         layout={effectiveLayout}
+        onDragStart={handleGridInteractionStart}
+        onDragStop={handleGridInteractionStop}
         onLayoutChange={handleLayoutChange}
+        onResizeStart={handleGridInteractionStart}
+        onResizeStop={handleGridInteractionStop}
         resizeConfig={{
           enabled: allowsInteractiveGrid,
           handles: [...BENTO_RESIZE_HANDLES],
         }}
         width={renderedWidth}
       >
-        {cards.map((card) => (
+        {cardsForRender.map((card) => (
           <div
             className="min-w-0 overflow-visible"
             data-bento-card-id={card.widgetType}
