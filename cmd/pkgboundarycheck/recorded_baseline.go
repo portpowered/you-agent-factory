@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
@@ -321,8 +322,38 @@ func clearVisibleRecordedFindings(visible *scanResult) {
 	visible.recordedPetriPublicSurfaceFindings = nil
 }
 
+// volatileBoundaryFindingFields names finding fields that move when unrelated
+// code moves. A recorded baseline identifies a known finding across two trees,
+// so it must survive code motion: splitting a file, extracting a helper, or
+// adding an import above a pre-existing violation all shift its line number
+// without changing what the violation is. Including the line made every such
+// edit re-surface the whole file's recorded findings as new, which failed
+// Backend Lint for lanes that introduced no violation at all.
+//
+// Occurrence counts stay in the fingerprint on purpose: a second construction
+// added to a file raises count, and that is genuine growth the ratchet must
+// still catch.
+var volatileBoundaryFindingFields = map[string]struct{}{"line": {}}
+
 func boundaryFindingFingerprint(category string, finding any) string {
-	return fmt.Sprintf("%s:%T:%#v", category, finding, finding)
+	value := reflect.ValueOf(finding)
+	if value.Kind() != reflect.Struct {
+		return fmt.Sprintf("%s:%T:%#v", category, finding, finding)
+	}
+
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "%s:%T:", category, finding)
+	fields := value.Type()
+	for index := range value.NumField() {
+		name := fields.Field(index).Name
+		if _, volatile := volatileBoundaryFindingFields[strings.ToLower(name)]; volatile {
+			continue
+		}
+		// Format the reflect.Value itself: these finding structs keep their
+		// fields unexported, so Interface() would panic here.
+		fmt.Fprintf(&builder, "%s=%v;", name, value.Field(index))
+	}
+	return builder.String()
 }
 
 func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
