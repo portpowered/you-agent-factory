@@ -206,6 +206,5 @@ Same exclusions as `agy-pty-boundary.md`:
 | `agy-pty-threat-review.md` | T1–T10 controls and Story 17 security checklist |
 | `pkg/services/workers/process/doc.go` | Supervision and cleanup escape documentation |
 | `pkg/services/providers/internal/services/execution/internal/commandenv/environment.go` | Environment merge policy |
-| `pkg/services/workers/worktree/paths.go` | Relative name normalization reference |
-
+| `pkg/services/workers/internal/worktree/paths.go` | Relative name normalization reference |
 

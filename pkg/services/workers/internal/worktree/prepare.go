@@ -162,7 +162,7 @@ func PrepareFactoryGitWorktree(
 	}, nil
 }
 
-// FailedWorkResultFromPreparation maps a preparation error to a failed workstation result.
+// FailedWorkResultFromPreparation maps a preparation error to a failed Worker result.
 func FailedWorkResultFromPreparation(
 	dispatchID string,
 	transitionID string,

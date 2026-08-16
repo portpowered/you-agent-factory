@@ -481,7 +481,7 @@ func committedWorkersRationales() []OwnerRationaleCard {
 			"workers",
 			"workers",
 			"pkg/services/workers/internal/services/workstations",
-			"Context/environment, interpolation, prompting, optional worktree, behavior routing, dispatch, final output.",
+			"Context/environment, interpolation, behavior routing, dispatch, and final output.",
 			"Workstation execution context for a dispatch.",
 			"Dispatch execution path lifecycle under Workers.",
 			"Runner registry and Factory Runtime dispatch consumers via Workers root.",

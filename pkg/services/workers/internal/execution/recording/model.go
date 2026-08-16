@@ -95,6 +95,11 @@ func (r *runner) Execute(ctx context.Context, request workerexecution.RunnerExec
 
 func (r *runner) record(event workerexecution.ModelEvent) {
 	if r != nil && r.recorder != nil {
+		// Recording is a detached observation side effect. A recorder panic must
+		// not rewrite the inner runner result or prevent terminal response work.
+		defer func() {
+			_ = recover()
+		}()
 		r.recorder(event)
 	}
 }

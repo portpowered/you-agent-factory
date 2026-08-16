@@ -202,13 +202,15 @@ The old public directories recorded in the baseline have mostly been deleted; th
 
 - `internal`
 - `internal/diagnostics`
+- `internal/execution`
 - `internal/interface`
 - `internal/testhelpers`
+- `internal/worktree`
 - `runners/{agents,inference,process,runner,testing}`
 - `runtime_assembly/construction`
 - `internal/inferencefailure`
 - `internal/skippermissions`
-- `workstations/{execution,executor,invocation,poolboundary,worktree}`
+- `workstations/{executor,invocation,poolboundary}`
 
 `workstation_pool_boundary_impl.go` remains explicitly documented as a temporary root implementation exception. It should be relocated once a cycle-free bridge exists.
 

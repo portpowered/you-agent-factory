@@ -1,5 +1,5 @@
-// Package workerexecution retains same-service compatibility names while the
-// canonical Worker execution contracts live at pkg/services/workers.
+// Package workerexecution contains request-scoped Workers execution contracts
+// and aliases for the canonical public Worker result types.
 package workerexecution
 
 import (

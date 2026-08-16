@@ -41,6 +41,30 @@ var workersCommittedOwnerPackageMappingCases = []committedOwnerPackageMappingCas
 		},
 	},
 	{
+		path: "pkg/services/workers/internal/execution",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/internal/execution",
+			Disposition: DispositionRetain,
+			Destination: "workers/internal",
+		},
+	},
+	{
+		path: "pkg/services/workers/internal/execution/recording",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/internal/execution/recording",
+			Disposition: DispositionRetain,
+			Destination: "workers/internal",
+		},
+	},
+	{
+		path: "pkg/services/workers/internal/worktree",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/internal/worktree",
+			Disposition: DispositionRetain,
+			Destination: "workers/internal",
+		},
+	},
+	{
 		path: "pkg/services/workers/construction",
 		want: PackageMapping{
 			PackagePath: "pkg/services/workers/construction",

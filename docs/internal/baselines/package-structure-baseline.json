@@ -2794,11 +2794,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/execution",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/executor",
       "target": "pkg/services/workers/internal/services/workstations"
     },
@@ -2810,11 +2805,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/worktree",
       "target": "pkg/services/workers/internal/services/workstations"
     }
   ]

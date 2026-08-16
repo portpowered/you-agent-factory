@@ -988,7 +988,7 @@
       "kind": "nested",
       "parentServiceId": "workers",
       "targetPath": "pkg/services/workers/internal/services/workstations",
-      "authority": "Context/environment, interpolation, prompting, optional worktree, behavior routing, dispatch, final output.",
+      "authority": "Context/environment, interpolation, behavior routing, dispatch, and final output.",
       "stateStore": "Workstation execution context for a dispatch.",
       "lifecycle": "Dispatch execution path lifecycle under Workers.",
       "consumers": "Runner registry and Factory Runtime dispatch consumers via Workers root.",
@@ -1085,7 +1085,7 @@
       "owner": "workers",
       "clusterId": "prompting_worktree",
       "name": "Prompting and worktree preparation",
-      "note": "Supporting modules under Workstation Execution without independent lifecycle."
+      "note": "Request-scoped Workers modules without independent lifecycle."
     },
     {
       "owner": "workers",
@@ -2156,7 +2156,7 @@
       "class": "query",
       "bidirectional": true,
       "unresolved": true,
-      "evidence": "pkg/services/workers/internal -> pkg/services/factory_definitions"
+      "evidence": "pkg/services/workers/internal/execution/recording -> pkg/services/factory_definitions"
     },
     {
       "fromOwner": "workers",
@@ -5395,6 +5395,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/execution",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/execution/recording",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/inferencefailure",
       "disposition": "retain",
       "destination": "workers",
@@ -5531,18 +5543,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/execution",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/execution/recording",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/executor",
       "disposition": "retain",
       "destination": "workers",
@@ -5579,12 +5579,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/worktree",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/skippermissions",
       "disposition": "retain",
       "destination": "workers",
@@ -5597,6 +5591,12 @@
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal",
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/worktree",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/workers/wire",

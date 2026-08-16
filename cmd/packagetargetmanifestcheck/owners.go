@@ -186,7 +186,7 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	if owner == "workers" && rest == "internal/service" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
 	}
-	if owner == "workers" && (rest == "internal/draftvalidation" || strings.HasPrefix(rest, "internal/draftvalidation/") || rest == "internal/inferencefailure" || strings.HasPrefix(rest, "internal/inferencefailure/") || rest == "internal/prompting" || strings.HasPrefix(rest, "internal/prompting/") || rest == "internal/skippermissions" || strings.HasPrefix(rest, "internal/skippermissions/")) {
+	if owner == "workers" && (rest == "internal/draftvalidation" || strings.HasPrefix(rest, "internal/draftvalidation/") || rest == "internal/execution" || strings.HasPrefix(rest, "internal/execution/") || rest == "internal/inferencefailure" || strings.HasPrefix(rest, "internal/inferencefailure/") || rest == "internal/prompting" || strings.HasPrefix(rest, "internal/prompting/") || rest == "internal/skippermissions" || strings.HasPrefix(rest, "internal/skippermissions/") || rest == "internal/worktree" || strings.HasPrefix(rest, "internal/worktree/")) {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
 	}
 	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
@@ -337,9 +337,11 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal", dest: "workers/internal"},
 		{exact: "internal/diagnostics", prefix: "internal/diagnostics/", dest: "workers/internal"},
 		{exact: "internal/draftvalidation", prefix: "internal/draftvalidation/", dest: "workers/internal"},
+		{exact: "internal/execution", prefix: "internal/execution/", dest: "workers/internal"},
 		{exact: "internal/interface", prefix: "internal/interface/", dest: "workers/internal"},
 		{exact: "internal/prompting", prefix: "internal/prompting/", dest: "workers/internal"},
 		{exact: "internal/testhelpers", prefix: "internal/testhelpers/", dest: "workers/internal"},
+		{exact: "internal/worktree", prefix: "internal/worktree/", dest: "workers/internal"},
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},

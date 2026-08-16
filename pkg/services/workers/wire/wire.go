@@ -27,7 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 
-	worktree "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree"
+	worktree "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree"
 )
 
 var (

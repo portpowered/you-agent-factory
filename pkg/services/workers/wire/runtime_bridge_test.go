@@ -9,7 +9,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
 
 func TestRuntimeBridgeLocalRuntimeHooksConstructs(t *testing.T) {

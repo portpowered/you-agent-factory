@@ -2839,7 +2839,7 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -2849,7 +2849,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording",
       "minimum": 38.46
     },
     {
@@ -2901,7 +2901,7 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree",
       "minimum": 48.96
     },
     {

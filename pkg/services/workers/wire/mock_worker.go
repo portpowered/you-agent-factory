@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
 
 // NewContextualMockWorkerCommandRunner decorates a process command edge with

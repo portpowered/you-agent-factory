@@ -74,6 +74,8 @@ func isWorkersCanonicalRetain(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/runners"):
 		return true
+	case strings.HasPrefix(rest, "internal/execution"):
+		return true
 	case strings.HasPrefix(rest, "internal/draftvalidation"):
 		return true
 	case strings.HasPrefix(rest, "internal/inferencefailure"):
@@ -81,6 +83,8 @@ func isWorkersCanonicalRetain(rest string) bool {
 	case strings.HasPrefix(rest, "internal/prompting"):
 		return true
 	case strings.HasPrefix(rest, "internal/skippermissions"):
+		return true
+	case strings.HasPrefix(rest, "internal/worktree"):
 		return true
 	default:
 		return false

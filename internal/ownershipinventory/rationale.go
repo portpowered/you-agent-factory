@@ -145,7 +145,7 @@ func committedResponsibilityClusters() []ResponsibilityCluster {
 		cluster("system_initialization", "legacy_migration", "Legacy Factory migration module", "Deletion-only private module, not a nested subservice; removed when input inventory reaches zero."),
 		cluster("work", "invocation_return_policy", "Invocation input and return-policy modules", "Deterministic parent-internal transformations exposed only through the Work root."),
 		cluster("work", "lineage_graph_modules", "Lineage and dependency-graph modules", "Deterministic projections over Work contracts used by State Access; no separate store."),
-		cluster("workers", "prompting_worktree", "Prompting and worktree preparation", "Supporting modules under Workstation Execution without independent lifecycle."),
+		cluster("workers", "prompting_worktree", "Prompting and worktree preparation", "Request-scoped Workers modules without independent lifecycle."),
 		cluster("workers", "runner_registry", "Runner contract and registry mechanics", "Private Workers registry backing runner subservices; not a separate product owner."),
 	}
 }

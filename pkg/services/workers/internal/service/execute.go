@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution"
-	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 

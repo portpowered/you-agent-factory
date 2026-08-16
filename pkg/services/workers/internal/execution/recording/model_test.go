@@ -35,6 +35,85 @@ func TestRunnerRequiresInjectedClock(t *testing.T) {
 	}
 }
 
+func TestModelRecorderPanicDoesNotRewriteRunnerResult(t *testing.T) {
+	runner := NewRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{Content: "model-result"}, nil
+		}),
+		nil,
+		&workerconfig.FactoryWorkerConfig{Name: "worker", Model: "model"},
+		func(workerexecution.ModelEvent) { panic("recording sink unavailable") },
+		func() time.Time { return time.Unix(600, 0).UTC() },
+	)
+
+	response, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-model-sink"},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want inner runner result", err)
+	}
+	if response.Content != "model-result" {
+		t.Fatalf("response content = %q, want model-result", response.Content)
+	}
+}
+
+func TestProviderRecorderPanicDoesNotRewriteRunnerResult(t *testing.T) {
+	runner := NewProviderRunner(
+		runnerFunc(func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{Content: "provider-result"}, nil
+		}),
+		func(workerexecution.InferenceEvent) { panic("recording sink unavailable") },
+		func() time.Time { return time.Unix(601, 0).UTC() },
+	)
+
+	response, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-provider-sink"},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want inner runner result", err)
+	}
+	if response.Content != "provider-result" {
+		t.Fatalf("response content = %q, want provider-result", response.Content)
+	}
+}
+
+func TestProviderRunnerPreservesCanceledAttemptLineage(t *testing.T) {
+	start := time.Unix(602, 0).UTC()
+	var events []workerexecution.InferenceEvent
+	runner := NewProviderRunner(
+		runnerFunc(func(ctx context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{}, ctx.Err()
+		}),
+		func(event workerexecution.InferenceEvent) { events = append(events, event) },
+		func() time.Time { return start },
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	request := workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID: "dispatch-canceled",
+			Execution:  work.ExecutionMetadata{RequestID: "request-canceled"},
+		},
+	}
+
+	if _, err := runner.Execute(ctx, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+	if len(events) != 2 || events[0].Request == nil || events[1].Response == nil {
+		t.Fatalf("events = %#v, want correlated request and terminal response", events)
+	}
+	if events[0].Request.InferenceRequestID != "dispatch-canceled/inference-request/1" ||
+		events[1].Response.InferenceRequestID != events[0].Request.InferenceRequestID {
+		t.Fatalf("inference request lineage = %q/%q, want matching canceled attempt IDs", events[0].Request.InferenceRequestID, events[1].Response.InferenceRequestID)
+	}
+	if events[0].RequestID != request.Dispatch.Execution.RequestID || events[1].RequestID != request.Dispatch.Execution.RequestID {
+		t.Fatalf("request IDs = %q/%q, want %q", events[0].RequestID, events[1].RequestID, request.Dispatch.Execution.RequestID)
+	}
+	if events[1].Response.Outcome != workerexecution.InferenceOutcomeFailed {
+		t.Fatalf("canceled response outcome = %q, want failed terminal observation", events[1].Response.Outcome)
+	}
+}
+
 func TestRunnerAndHooksRecordOneCanonicalTrace(t *testing.T) {
 	start := time.Unix(100, 0).UTC()
 	hooks := Hooks()

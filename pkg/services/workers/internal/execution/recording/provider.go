@@ -81,6 +81,11 @@ func (r *providerRunner) Execute(
 
 func (r *providerRunner) record(event workers.InferenceEvent) {
 	if r != nil && r.recorder != nil {
+		// Recording is a detached observation side effect. A recorder panic must
+		// not rewrite the inner runner result or prevent terminal response work.
+		defer func() {
+			_ = recover()
+		}()
 		r.recorder(event)
 	}
 }

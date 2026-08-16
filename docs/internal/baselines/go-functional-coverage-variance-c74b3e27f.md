@@ -387,7 +387,7 @@ The table preserves exact covered/total statement counts for every measured back
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/internal/service` | 1/82 | 1/82 | 1/82 | 1/82 | 1/82 | 1.2195% | 1.2195% | 0.0000 pp | 1.21% | 1.21% | +0.0095 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire` | 3/5 | 3/5 | 3/5 | 3/5 | 3/5 | 60.0000% | 60.0000% | 0.0000 pp | 60.00% | 60.00% | 0.0000 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/draftvalidation` | 95/190 | 95/190 | 95/190 | 95/190 | 95/190 | 50.0000% | 50.0000% | 0.0000 pp | 50.00% | 0.00% | +50.0000 pp |
-| `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording` | 138/174 | 138/174 | 138/174 | 138/174 | 138/174 | 79.3103% | 79.3103% | 0.0000 pp | 79.31% | 67.08% | +12.2303 pp |
+| `github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording` | 138/174 | 138/174 | 138/174 | 138/174 | 138/174 | 79.3103% | 79.3103% | 0.0000 pp | 79.31% | 67.08% | +12.2303 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor` | 1047/1354 | 1047/1354 | 1047/1354 | 1047/1354 | 1047/1354 | 77.3264% | 77.3264% | 0.0000 pp | 77.32% | 76.47% | +0.8564 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun` | 290/619 | 290/619 | 290/619 | 290/619 | 290/619 | 46.8498% | 46.8498% | 0.0000 pp | 46.84% | 43.76% | +3.0898 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure` | 24/131 | 24/131 | 24/131 | 24/131 | 24/131 | 18.3206% | 18.3206% | 0.0000 pp | 18.32% | 0.00% | +18.3206 pp |
@@ -396,7 +396,7 @@ The table preserves exact covered/total statement counts for every measured back
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting` | 347/588 | 347/588 | 347/588 | 347/588 | 347/588 | 59.0136% | 59.0136% | 0.0000 pp | 59.01% | 23.80% | +35.2136 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions` | 6/43 | 6/43 | 6/43 | 6/43 | 6/43 | 13.9535% | 13.9535% | 0.0000 pp | 13.95% | 13.95% | +0.0035 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire` | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 100.0000% | 100.0000% | 0.0000 pp | 100.00% | 100.00% | 0.0000 pp |
-| `github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree` | 80/145 | 80/145 | 80/145 | 80/145 | 80/145 | 55.1724% | 55.1724% | 0.0000 pp | 55.17% | 53.54% | +1.6324 pp |
+| `github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree` | 80/145 | 80/145 | 80/145 | 80/145 | 80/145 | 55.1724% | 55.1724% | 0.0000 pp | 55.17% | 53.54% | +1.6324 pp |
 | `github.com/portpowered/infinite-you/pkg/services/workers/wire` | 97/132 | 97/132 | 97/132 | 97/132 | 97/132 | 73.4848% | 73.4848% | 0.0000 pp | 73.48% | exception | n/a pp |
 | `github.com/portpowered/infinite-you/pkg/transports/acp` | 10/30 | 10/30 | 10/30 | 10/30 | 10/30 | 33.3333% | 33.3333% | 0.0000 pp | 33.33% | exception | n/a pp |
 | `github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope` | 17/39 | 17/39 | 17/39 | 17/39 | 17/39 | 43.5897% | 43.5897% | 0.0000 pp | 43.58% | exception | n/a pp |

@@ -39,6 +39,16 @@ var workersMappingCases = []packageMappingCase{
 		retainOwner: "workers",
 	},
 	{
+		path:        "pkg/services/workers/internal/execution",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/execution/recording",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
 		path:        "pkg/services/workers/internal/draftvalidation",
 		wantRetain:  true,
 		retainOwner: "workers",
@@ -55,6 +65,16 @@ var workersMappingCases = []packageMappingCase{
 	},
 	{
 		path:        "pkg/services/workers/internal/skippermissions",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/worktree",
+		wantRetain:  true,
+		retainOwner: "workers",
+	},
+	{
+		path:        "pkg/services/workers/internal/worktree/paths",
 		wantRetain:  true,
 		retainOwner: "workers",
 	},
@@ -240,6 +260,8 @@ func workersCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/runners"):
 		return true
+	case strings.HasPrefix(rest, "internal/execution"):
+		return true
 	case strings.HasPrefix(rest, "internal/draftvalidation"):
 		return true
 	case strings.HasPrefix(rest, "internal/inferencefailure"):
@@ -247,6 +269,8 @@ func workersCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/prompting"):
 		return true
 	case strings.HasPrefix(rest, "internal/skippermissions"):
+		return true
+	case strings.HasPrefix(rest, "internal/worktree"):
 		return true
 	default:
 		return false
