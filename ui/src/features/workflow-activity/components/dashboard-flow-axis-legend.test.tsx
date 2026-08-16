@@ -228,7 +228,7 @@ describe("DashboardFlowAxisLegend", () => {
     expect(swatches.length).toBe(4);
     const expectedSwatches = [
       "border-info-border bg-info-container",
-      "border-af-success-border bg-warning-container",
+      "border-af-warning-border bg-warning-container",
       "border-af-success-border bg-success-container",
       "border-af-danger-border bg-error-container",
     ];

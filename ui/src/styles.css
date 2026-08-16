@@ -147,6 +147,8 @@
   --color-af-graph-focus-indicator: var(--color-af-foundation-ink);
   --shadow-af-graph-danger: 0 0 0 2px
     rgb(from var(--color-af-danger) r g b / 0.2);
+  --shadow-af-graph-warning: 0 0 0 2px
+    rgb(from var(--color-warning) r g b / 0.2);
   --shadow-af-graph-validation-warning: 0 0 0 2px var(--color-warning);
   --shadow-af-graph-validation-danger: 0 0 0 2px var(--color-error);
 }

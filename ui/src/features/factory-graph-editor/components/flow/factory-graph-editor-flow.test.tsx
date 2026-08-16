@@ -533,7 +533,7 @@ describe("factory graph editor work state lifecycle styling", () => {
     await expectSurface("story:queued", "border-info-border bg-info-container");
     await expectSurface(
       "story:review",
-      "border-af-success-border bg-warning-container",
+      "border-af-warning-border bg-warning-container",
     );
     await expectSurface(
       "story:done",

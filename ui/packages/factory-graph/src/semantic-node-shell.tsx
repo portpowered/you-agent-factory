@@ -16,8 +16,12 @@ import {
   FactoryGraphNodeResizeControls,
   type FactoryGraphNodeResizeControlsProps,
 } from "./node-resize-controls.js";
-import { factoryGraphNodeVisualStateClassName } from "./semantic-node-style.js";
 import {
+  factoryGraphNodeVisualNestedAccentClassName,
+  factoryGraphNodeVisualStateClassName,
+} from "./semantic-node-style.js";
+import {
+  factoryGraphVisualNestedAccentRole,
   type FactoryGraphVisualStateInput,
   resolveFactoryGraphVisualState,
 } from "./visual-state.js";
@@ -83,6 +87,9 @@ export function FactoryGraphNodeShell({
     family: familyRole.family,
     ...visualStateInput,
   });
+  const nestedAccentRole = factoryGraphVisualNestedAccentRole(
+    visualState.surface,
+  );
 
   return (
     <div className="relative h-full min-w-0 w-full">
@@ -93,6 +100,7 @@ export function FactoryGraphNodeShell({
           className,
           interactionOverlayClassName(interactionOverlay?.draftStatus),
           factoryGraphNodeVisualStateClassName(visualState),
+          factoryGraphNodeVisualNestedAccentClassName(visualState),
         )}
         data-current-activity-node-type={nodeType}
         data-graph-node-family={familyRole.family}
@@ -105,6 +113,7 @@ export function FactoryGraphNodeShell({
         data-graph-visual-icon={visualState.icon}
         data-graph-visual-lifecycle={visualState.lifecycle}
         data-graph-visual-muted={visualState.muted || undefined}
+        data-graph-visual-nested-accent={nestedAccentRole}
         data-graph-visual-selection={visualState.selection || undefined}
         data-graph-visual-status={visualState.status}
         data-graph-visual-surface={visualState.surface}

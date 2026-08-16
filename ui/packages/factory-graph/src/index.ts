@@ -98,6 +98,7 @@ export {
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeTitleClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeVisualNestedAccentClassName,
   factoryGraphNodeVisualStateClassName,
   factoryGraphNodeVisualStatusSurfaceClassName,
   factoryGraphNodeWrappedTextClassName,

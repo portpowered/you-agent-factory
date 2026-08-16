@@ -57,7 +57,7 @@ describe("CurrentActivity place node work-state phase styling", () => {
 
   it.each([
     ["INITIAL", "waiting", "border-info-border bg-info-container"],
-    ["PROCESSING", "active", "border-af-success-border bg-warning-container"],
+    ["PROCESSING", "active", "border-af-warning-border bg-warning-container"],
     ["TERMINAL", "success", "border-af-success-border bg-success-container"],
     ["FAILED", "danger", "border-af-danger-border bg-error-container"],
   ] as const)(
@@ -214,8 +214,8 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("border-af-success-border");
-    expect(shell?.className).toContain("shadow-af-success-chip");
+    expect(shell?.className).toContain("border-af-warning-border");
+    expect(shell?.className).toContain("shadow-af-graph-warning");
     expect(shell?.getAttribute("data-graph-visual-emphasis")).toBe("strong");
     expect(shell?.getAttribute("data-graph-visual-treatment")).toBe(
       "processing",
