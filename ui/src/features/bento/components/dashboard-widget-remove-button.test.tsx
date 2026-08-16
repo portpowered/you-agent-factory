@@ -16,8 +16,8 @@ describe("DashboardWidgetRemoveButton", () => {
       name: "Remove Work totals widget from dashboard",
     });
 
-    expect(button.className).toContain("h-10");
-    expect(button.className).toContain("w-10");
+    expect(button.className).toContain("h-11");
+    expect(button.className).toContain("w-11");
     expect(button.className).toContain("focus-visible:ring-2");
     expect(button.className).toContain("border-outline");
     expect(button.className).toContain("bg-surface-container-high");

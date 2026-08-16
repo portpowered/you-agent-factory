@@ -4,7 +4,7 @@ import { cn } from "../utilities/cn";
 import { Button, type ButtonProps } from "./button";
 
 const ICON_BUTTON_SHELL_BASE_CLASS = "relative shrink-0";
-const ICON_BUTTON_SHELL_SIZE_CLASS = "h-10 w-10 rounded-lg";
+const ICON_BUTTON_SHELL_SIZE_CLASS = "h-11 w-11 rounded-lg";
 const ICON_BUTTON_SHELL_TONE_CLASS = {
   dangerGhost:
     "text-on-surface-subtle hover:border-af-danger-border hover:bg-error-container hover:text-on-error-container",

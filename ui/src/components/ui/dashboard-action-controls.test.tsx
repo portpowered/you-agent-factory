@@ -39,7 +39,7 @@ describe("DashboardActionButton", () => {
     const button = screen.getByRole("button", { name: "Save changes" });
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toBeDisabled();
-    expect(button.className).toContain("min-h-10");
+    expect(button.className).toContain("min-h-11");
     const spinner = button.querySelector("svg.animate-spin");
     expect(spinner).toBeTruthy();
     expect(spinner?.classList.contains("size-4")).toBe(true);
