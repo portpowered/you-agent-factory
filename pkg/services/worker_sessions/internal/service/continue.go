@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -686,17 +687,30 @@ func (r *registry) ListWorkerSessionObservations(
 	ctx context.Context,
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
+	listStartedAt := time.Now()
 	query, err := r.parseObservationListQuery(ctx, req)
 	if err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
+	idCollectionStartedAt := time.Now()
 	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	idCollectionDuration := time.Since(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
+	projectionStartedAt := time.Now()
 	observations, err := r.projectObservationList(ctx, pageIDs)
 	if err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	nextToken := observationListNextToken(ids, pageIDs)
+	r.logger.Debug(
+		"worker session top-level observation list phases",
+		"scope", string(query.scope),
+		"candidate_count", len(ids),
+		"result_count", len(observations),
+		"id_collection_duration_ms", idCollectionDuration.Milliseconds(),
+		"projection_duration_ms", time.Since(projectionStartedAt).Milliseconds(),
+		"total_duration_ms", time.Since(listStartedAt).Milliseconds(),
+	)
 	r.logger.Info("worker session top-level observation list", "scope", string(query.scope), "state_count", len(req.States), "result_count", len(observations), "has_next", nextToken != "")
 	return workersessions.ListWorkerSessionObservationsResult{
 		Observations: observations,

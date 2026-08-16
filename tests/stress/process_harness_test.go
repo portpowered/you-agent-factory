@@ -93,6 +93,7 @@ func startStressProcess(
 				"you", "run",
 				"--dir", dir,
 				"--continuously",
+				"--with-server",
 				"--quiet",
 				"--no-record",
 			},
