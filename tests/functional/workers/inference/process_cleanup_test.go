@@ -2,6 +2,7 @@ package inference_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -132,6 +134,7 @@ func TestProcessGoneReconciliationThroughRootProcess(t *testing.T) {
 	assertProcessCleanupDispatchOutcomeSequence(t, events, []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 	}, "process")
+	assertDirectProcessGoneWorkerSession(t)
 }
 
 // processGoneFunctionalCommandRunner is a root.BuildProcess edge, not a
@@ -156,6 +159,64 @@ func (processGoneFunctionalCommandRunner) RunStreaming(
 		observer.ProcessExited(platformprocess.ProcessInfo{PID: 1})
 	}
 	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+type processGoneFunctionalProvider struct {
+	testutil.NativeProvider
+}
+
+func (provider processGoneFunctionalProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	if observer := request.ProcessLifecycleObserver; observer != nil {
+		observer.ProcessStarted(platformprocess.ProcessInfo{PID: 1})
+		observer.ProcessExited(platformprocess.ProcessInfo{PID: 1})
+	}
+	return providers.ExecuteResult{}, ctx.Err()
+}
+
+func assertDirectProcessGoneWorkerSession(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderOverride: processGoneFunctionalProvider{},
+	})
+	support.CleanupProcess(t, process)
+
+	homeDir := t.TempDir()
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--json", "worker-sessions", "invoke",
+		"--request-id", "process-gone-direct-request",
+		"--worker-session-id", "process-gone-direct-session",
+		"--dispatch-id", "process-gone-direct-dispatch",
+		"--workstation", "direct",
+		"--worker-type", "direct-worker",
+		"--runner", "codex",
+		"--provider", "codex",
+		"--model", "functional-model",
+		"--user-message", "reconcile the gone process",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("direct Worker Session process-gone invocation succeeded, want terminal failure")
+	}
+
+	var response factoryapi.ErrorResponse
+	for _, output := range []string{inputs.Stderr(), inputs.Stdout()} {
+		if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &response); err == nil && response.Code != "" {
+			if response.Code != factoryapi.ErrorResponseCode("WORKER_SESSION_FAILED") {
+				t.Fatalf("direct process-gone Worker Session code = %q, want WORKER_SESSION_FAILED; stderr=%s stdout=%s", response.Code, inputs.Stderr(), inputs.Stdout())
+			}
+			if !strings.Contains(strings.ToLower(response.Message), "process exited") {
+				t.Fatalf("direct process-gone Worker Session message = %q, want process-exited diagnostic", response.Message)
+			}
+			return
+		}
+	}
+	t.Fatalf("direct process-gone Worker Session emitted no typed failure; stderr=%s stdout=%s", inputs.Stderr(), inputs.Stdout())
 }
 
 // TestProviderTimeoutTerminatesChildProcessTree proves a timed-out script-worker
