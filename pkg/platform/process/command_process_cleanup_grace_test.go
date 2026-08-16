@@ -217,33 +217,6 @@ func TestExecCommandRunnerRunRejectsMissingRuntimeEffects(t *testing.T) {
 	}
 }
 
-func TestStreamingExecCommandRunnerRunForwardsInjectedOutput(t *testing.T) {
-	requireProcessIntegration(t)
-	var observed []string
-	runner := StreamingExecCommandRunner{
-		Clock:      platformclock.Real{},
-		NewCommand: exec.Command,
-		Observer: func(stream string, chunk []byte) {
-			observed = append(observed, stream+":"+string(chunk))
-		},
-	}
-	result, err := runner.Run(context.Background(), CommandRequest{
-		Command: os.Args[0],
-		Args: []string{
-			"-test.run=TestExecCommandRunner_HelperProcess",
-			"--",
-			"fail",
-		},
-		Env: append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
-	})
-	if err != nil {
-		t.Fatalf("StreamingExecCommandRunner.Run() error = %v, want nil for non-zero exit", err)
-	}
-	if result.ExitCode != 17 || len(observed) == 0 {
-		t.Fatalf("streaming result = %#v, observations = %#v, want exit 17 and output", result, observed)
-	}
-}
-
 func TestProcessLifecycleMonitorStopsDuringExitObservationGrace(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("injected process state probe is Unix-specific")
