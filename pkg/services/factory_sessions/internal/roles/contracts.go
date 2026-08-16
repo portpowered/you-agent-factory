@@ -14,6 +14,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -226,7 +227,7 @@ type LifecycleRuntime interface {
 	WaitForRuntime(context.Context) error
 	StopLifecycle(context.Context) error
 	FailStartup(error) error
-	CurrentRuntimeBundle() factoryruntime.HostedInstance
+	CurrentRuntimeBundle() runtimeports.RuntimeInstance
 }
 
 type ProcessRuntime interface {
@@ -292,10 +293,10 @@ type RuntimeAssembly interface {
 		clock factoryruntime.Clock,
 		baseLogger *zap.Logger,
 		logger *zap.Logger,
-		runtimeBuild factoryruntime.ReplacementBuilder,
-		startupRuntime factoryruntime.HostedInstance,
+		runtimeBuild runtimeports.RuntimeReplacementBuilder,
+		startupRuntime runtimeports.RuntimeInstance,
 		startupSpec factoryruntime.SessionBuildSpec,
-		runtimeLifecycle factoryruntime.Lifecycle,
+		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
 		durableExecution durableexecution.Service,
 		factoryDefinitions factorydefinitions.Service,

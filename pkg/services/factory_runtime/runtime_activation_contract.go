@@ -39,11 +39,9 @@ type RuntimeActivationResult struct {
 	// for Runtime operations. Its identity and delegate are intentionally
 	// unexported; callers can only use the published Service contract.
 	Binding RuntimeBinding
-	// Runtime contains the initialized, root-owned capabilities needed by the
-	// caller to finish composing its public session view. Cleanup is deliberately
-	// absent; the Runtime root retains that ownership and performs it through
-	// Deactivate. Runtime is a migration-only compatibility handoff for the
-	// existing host edge and is owned for removal by P3-B.
+	// Runtime contains the initialized Runtime service view needed by the root
+	// to publish the binding. Cleanup is deliberately absent; the Runtime root
+	// retains that ownership and performs it through Deactivate.
 	Runtime RuntimeActivationView
 }
 
@@ -124,13 +122,8 @@ type RuntimeActivationView struct {
 	FactorySessionID string
 	// Binding is the successor capability for callers migrating away from the
 	// hosted handoff below.
-	Binding        RuntimeBinding
-	Service        Service
-	HostedInstance HostedInstance
-	Replacement    ReplacementBuilder
-	BuildSpec      SessionBuildSpec
-	Lifecycle      Lifecycle
-	Sidecars       Sidecars
+	Binding RuntimeBinding
+	Service Service
 }
 
 // RuntimeDeactivationRequest selects the Runtime whose owned resources should
@@ -252,15 +245,9 @@ func (e *RuntimeActivationError) Is(target error) bool {
 // invokes during deactivation or failed publication.
 type RuntimeActivation struct {
 	Service Service
-	// The remaining fields are returned as a RuntimeActivationView after the
-	// root publishes the delegate. They are optional for narrow callers that
-	// only need the Service contract.
-	HostedInstance HostedInstance
-	Replacement    ReplacementBuilder
-	BuildSpec      SessionBuildSpec
-	Lifecycle      Lifecycle
-	Sidecars       Sidecars
-	Close          func(context.Context) error
+	// Close is retained by the Runtime root as its private cleanup edge. It is
+	// deliberately not returned to callers in RuntimeActivationResult.
+	Close func(context.Context) error
 }
 
 // RuntimeActivationOperation is injected when the process root is composed.

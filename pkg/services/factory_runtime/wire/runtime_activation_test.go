@@ -100,9 +100,6 @@ func TestRuntimeRootActivationReturnsPublishedRuntimeHandoff(t *testing.T) {
 	root := newRuntimeRoot(t, func(_ context.Context, request factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
 		return &factoryruntime.RuntimeActivation{
 			Service: active,
-			BuildSpec: factoryruntime.SessionBuildSpec{
-				RuntimeInstanceID: request.Runtime.RuntimeInstanceID,
-			},
 		}, nil
 	})
 	request := foldRuntimeActivationRequest()
@@ -122,9 +119,6 @@ func TestRuntimeRootActivationReturnsPublishedRuntimeHandoff(t *testing.T) {
 	}
 	if result.Binding.IsZero() || !result.Binding.Equal(result.Runtime.Binding) {
 		t.Fatal("activation result did not publish the same opaque Runtime binding as its handoff")
-	}
-	if result.Runtime.BuildSpec.RuntimeInstanceID != request.RuntimeID {
-		t.Fatalf("published handoff RuntimeInstanceID = %q, want %q", result.Runtime.BuildSpec.RuntimeInstanceID, request.RuntimeID)
 	}
 }
 

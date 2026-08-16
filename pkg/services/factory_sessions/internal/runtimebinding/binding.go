@@ -28,7 +28,7 @@ type LiveSessionResolver interface {
 type Registration struct {
 	SessionID      string
 	FactoryRootDir string
-	Handle         factory.HostedHandle
+	Handle         RuntimeHandle
 	Binding        factory.RuntimeBinding
 	Target         factorysessions.Target
 	Select         bool
@@ -37,7 +37,7 @@ type Registration struct {
 // SyncActiveDirectory updates the process compatibility directory to match the
 // selected runtime bundle. Domain services should use the bundle directly;
 // this helper exists while legacy process configuration remains observable.
-func SyncActiveDirectory(mu *sync.RWMutex, configured *string, factoryRoot string, bundle factory.HostedInstance) {
+func SyncActiveDirectory(mu *sync.RWMutex, configured *string, factoryRoot string, bundle RuntimeInstance) {
 	if mu == nil || configured == nil {
 		return
 	}
@@ -60,14 +60,14 @@ func StartDefault(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	factoryRootDir string,
-	bundle factory.HostedInstance,
+	bundle RuntimeInstance,
 	target factorysessions.Target,
 	serviceMode bool,
 	runtimeMode interfaces.RuntimeMode,
-	lifecycle factory.Lifecycle,
-	startSidecars func(context.Context, factory.HostedHandle) error,
-	stop func(factory.HostedHandle) error,
-) (factory.HostedHandle, error) {
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
+) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
 	}
@@ -126,11 +126,11 @@ func Replace(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	session *livesession.LiveSession,
-	replacement factory.HostedInstance,
+	replacement RuntimeInstance,
 	serviceMode bool,
-	lifecycle factory.Lifecycle,
-	startSidecars func(context.Context, factory.HostedHandle) error,
-	stop func(factory.HostedHandle) error,
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
 	report func(error),
 ) (*livesession.LiveSession, error) {
 	if session == nil {
@@ -229,13 +229,13 @@ func Start(
 	runtimeState *State,
 	factoryRootDir string,
 	sessionID string,
-	bundle factory.HostedInstance,
+	bundle RuntimeInstance,
 	target factorysessions.Target,
 	serviceMode bool,
-	lifecycle factory.Lifecycle,
-	startSidecars func(context.Context, factory.HostedHandle) error,
-	stop func(factory.HostedHandle) error,
-) (factory.HostedHandle, error) {
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
+) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
 	}
@@ -273,7 +273,7 @@ func Start(
 	return handle, nil
 }
 
-func stopStartedHandle(stop func(factory.HostedHandle) error, handle factory.HostedHandle) {
+func stopStartedHandle(stop func(RuntimeHandle) error, handle RuntimeHandle) {
 	if stop != nil {
 		_ = stop(handle)
 		return
@@ -366,7 +366,7 @@ func SessionStateFrom(session *livesession.LiveSession) *SessionState {
 	return state
 }
 
-func HandleFromSession(session *livesession.LiveSession) factory.HostedHandle {
+func HandleFromSession(session *livesession.LiveSession) RuntimeHandle {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -374,7 +374,7 @@ func HandleFromSession(session *livesession.LiveSession) factory.HostedHandle {
 	return state.Handle
 }
 
-func BundleFromSession(session *livesession.LiveSession) factory.HostedInstance {
+func BundleFromSession(session *livesession.LiveSession) RuntimeInstance {
 	state := SessionStateFrom(session)
 	if state == nil {
 		return nil
@@ -390,11 +390,11 @@ func BundleFromSession(session *livesession.LiveSession) factory.HostedInstance 
 func CurrentBundle(
 	state *sessionruntime.Service,
 	runtimeState *State,
-) factory.HostedInstance {
+) RuntimeInstance {
 	if runtimeState == nil {
 		return nil
 	}
-	return runtimeState.Current(func() factory.HostedInstance {
+	return runtimeState.Current(func() RuntimeInstance {
 		if state == nil {
 			return nil
 		}
@@ -566,7 +566,7 @@ func StopSession(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	sessionID string,
-	stop func(factory.HostedHandle) error,
+	stop func(RuntimeHandle) error,
 ) error {
 	if state == nil {
 		return fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
@@ -610,8 +610,8 @@ func FailStartup(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	sessionID string,
-	handle factory.HostedHandle,
-	stop func(factory.HostedHandle) error,
+	handle RuntimeHandle,
+	stop func(RuntimeHandle) error,
 	startupErr error,
 ) error {
 	runtimeState.ClearActive()
@@ -646,8 +646,8 @@ func HandleStartFailure(
 	state *sessionruntime.Service,
 	runtimeState *State,
 	sessionID string,
-	handle factory.HostedHandle,
-	stop func(factory.HostedHandle) error,
+	handle RuntimeHandle,
+	stop func(RuntimeHandle) error,
 	startErr error,
 	mode interfaces.RuntimeMode,
 ) error {
@@ -685,8 +685,8 @@ func HandleStartFailure(
 // supplied runtime handle.
 func ShutdownOtherLiveSessions(
 	state *sessionruntime.Service,
-	except factory.HostedHandle,
-	stop func(factory.HostedHandle) error,
+	except RuntimeHandle,
+	stop func(RuntimeHandle) error,
 ) error {
 	if state == nil || state.Registry() == nil {
 		return nil
@@ -715,7 +715,7 @@ func ShutdownOtherLiveSessions(
 	return errors.Join(errs...)
 }
 
-func BundleForSession(resolver LiveSessionResolver, sessionID string) (factory.HostedInstance, error) {
+func BundleForSession(resolver LiveSessionResolver, sessionID string) (RuntimeInstance, error) {
 	session, err := RequireLiveSession(resolver, sessionID)
 	if err != nil {
 		return nil, err
