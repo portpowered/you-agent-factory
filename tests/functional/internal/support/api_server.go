@@ -45,10 +45,13 @@ type FunctionalAPIServerConfig struct {
 	MockWorkersConfig            *workers.MockWorkersConfig
 	WaitForServiceModeRuntime    bool
 	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
-	Args                         []string
-	Env                          []string
-	ProviderOverride             providers.Service
-	Edges                        serviceedges.Edges
+	// ServerReadyTimeout overrides the bounded startup wait for scenarios whose
+	// process initialization includes a large first-time packaged catalog.
+	ServerReadyTimeout time.Duration
+	Args               []string
+	Env                []string
+	ProviderOverride   providers.Service
+	Edges              serviceedges.Edges
 	// BeforeStart prepares scenario-owned durable state through the same
 	// root-built process that will host the server. The callback runs after
 	// invocation-local environment setup and before the server command starts.
@@ -132,7 +135,15 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	})
 	command := StartProcessCommand(t, process, inputs.Input)
 	server := &FunctionalAPIServer{process: command, api: api, recordingReader: recordingReader}
-	server.url = api.WaitForURL(t)
+	readyTimeout := functionalServerReadyTimeout
+	if cfg.ServerReadyTimeout > 0 {
+		readyTimeout = cfg.ServerReadyTimeout
+	}
+	baseURL, err := api.WaitForBaseURL(readyTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.url = baseURL
 	if cfg.WaitForServiceModeRuntime {
 		WaitForStatus(t, server.url, functionalServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
 			return status.RuntimeStatus != ""

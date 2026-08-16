@@ -14,7 +14,7 @@ func TestProcessAPIServerWaitForURLReportsNeverInvokedStarter(t *testing.T) {
 	server := NewProcessAPIServer()
 
 	startedAt := time.Now()
-	_, err := server.WaitForBaseURL(processAPIServerReadyTimeout)
+	_, err := server.WaitForBaseURL(50 * time.Millisecond)
 	if err == nil {
 		t.Fatal("WaitForBaseURL error = nil, want never-invoked diagnostic")
 	}
@@ -24,8 +24,8 @@ func TestProcessAPIServerWaitForURLReportsNeverInvokedStarter(t *testing.T) {
 	if !strings.Contains(err.Error(), "--with-server was probably omitted") {
 		t.Fatalf("WaitForBaseURL error = %q, want --with-server guidance", err)
 	}
-	if elapsed := time.Since(startedAt); elapsed >= processAPIServerReadyTimeout {
-		t.Fatalf("WaitForBaseURL elapsed = %s, want fast failure before readiness ceiling", elapsed)
+	if elapsed := time.Since(startedAt); elapsed >= time.Second {
+		t.Fatalf("WaitForBaseURL elapsed = %s, want fast failure for the supplied timeout", elapsed)
 	}
 }
 
