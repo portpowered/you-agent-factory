@@ -68,7 +68,7 @@ function renderWorkstationNode(
   );
 }
 
-describe("Factory workstation node semantics", () => {
+describe("Factory workstation authored semantics", () => {
   it("renders authored runtime and scheduling semantics as visible node metadata", () => {
     const repeater = renderWorkstationNode({
       workstationSemantics: repeaterAgentSemantics,
@@ -90,7 +90,9 @@ describe("Factory workstation node semantics", () => {
       ),
     ).toBeTruthy();
   });
+});
 
+describe("Factory workstation guard card semantics", () => {
   it("renders a guarded logical move card without making it selectable", () => {
     const loopBreaker = renderWorkstationNode({
       workstationSemantics: loopBreakerSemantics,
@@ -182,7 +184,9 @@ describe("Factory workstation node semantics", () => {
     expect(failedLoopBreaker.getByText("3")).toBeTruthy();
     expect(failedLoopBreaker.container.querySelector("button")).toBeNull();
   });
+});
 
+describe("Factory workstation fallback and localization semantics", () => {
   it("keeps missing semantic metadata neutral instead of inferring exhaustion", () => {
     const unknown = renderWorkstationNode();
 
