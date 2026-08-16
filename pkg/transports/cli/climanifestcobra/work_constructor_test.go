@@ -170,7 +170,6 @@ func TestNewWorkerSessionsFamilyCommandRejectsInvalidManifestsAndHandlers(t *tes
 			return manifest
 		}, reg: validRegistry},
 		{name: "handler not registered", mutate: func(manifest climanifest.Manifest) climanifest.Manifest { return manifest }, reg: commandregistry.NewRegistry()},
-		{name: "resolved-only handler", mutate: func(manifest climanifest.Manifest) climanifest.Manifest { return manifest }, reg: workerSessionsResolvedOnlyRegistry(t)},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -178,6 +177,20 @@ func TestNewWorkerSessionsFamilyCommandRejectsInvalidManifestsAndHandlers(t *tes
 				t.Fatal("NewWorkerSessionsFamilyCommandFromManifest() error = nil, want rejection")
 			}
 		})
+	}
+}
+
+func TestNewWorkerSessionsFamilyCommandAcceptsResolvedHandlers(t *testing.T) {
+	command, err := NewWorkerSessionsFamilyCommand(workerSessionsResolvedOnlyRegistry(t))
+	if err != nil {
+		t.Fatalf("NewWorkerSessionsFamilyCommand() with resolved handler: %v", err)
+	}
+	list, err := findCommandByPath(command, "worker-sessions list")
+	if err != nil {
+		t.Fatalf("find resolved worker-sessions list: %v", err)
+	}
+	if list.RunE == nil {
+		t.Fatal("resolved worker-sessions list must expose a runnable Cobra handler")
 	}
 }
 

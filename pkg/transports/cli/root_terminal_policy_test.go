@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
@@ -499,32 +498,21 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 		}
 	}
 }
-func TestProductionWorkHandlerRegistryExecutesWatch(t *testing.T) {
+func TestProductionWorkResolvedHandlerExecutesWatch(t *testing.T) {
 	var got workcli.WatchConfig
-	registry, bindings, err := newWorkHandlerRegistry(
-		&cliGlobalOptions{server: "https://factory.example"},
-		&cliDiagnosticsOptions{verbose: true, debug: true},
-		CommandFactory{
-			WatchWork: func(cfg workcli.WatchConfig) error {
-				got = cfg
-				_, err := io.WriteString(cfg.Output, "watched\n")
-				return err
-			},
+	root := withTestInjectedPlatformRoles(CommandFactory{
+		WatchWork: func(cfg workcli.WatchConfig) error {
+			got = cfg
+			_, err := io.WriteString(cfg.Output, "watched\n")
+			return err
 		},
-	)
-	if err != nil {
-		t.Fatalf("newWorkHandlerRegistry() error = %v", err)
-	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
-	if err != nil {
-		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
-	}
+	}).NewCommand(nil, nil, nil)
 
 	var stdout, stderr bytes.Buffer
-	work.SetOut(&stdout)
-	work.SetErr(&stderr)
-	work.SetArgs([]string{"watch", "--session", "session-alpha", "--follow"})
-	if err := work.Execute(); err != nil {
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--server", "https://factory.example", "--verbose", "--debug", "work", "watch", "--session", "session-alpha", "--follow"})
+	if err := root.Execute(); err != nil {
 		t.Fatalf("work watch Execute() error = %v", err)
 	}
 

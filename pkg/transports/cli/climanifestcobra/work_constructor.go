@@ -659,23 +659,41 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 	if err != nil {
 		return nil, fmt.Errorf("build worker sessions family command: %w", err)
 	}
+	cobraHandlers := CobraHandlerRegistry{}
+	resolvedHandlers := ResolvedCobraHandlerRegistry{}
+	for _, binding := range []struct {
+		handlerID string
+		handlers  commandregistry.CommandHandlers
+	}{
+		{workerSessionsInvokeHandlerID, registered.invoke},
+		{workerSessionsContinueHandlerID, registered.continueOperation},
+		{workerSessionsInterruptHandlerID, registered.interrupt},
+		{workerSessionsPauseHandlerID, registered.pause},
+		{workerSessionsResumeHandlerID, registered.resume},
+		{workerSessionsCancelHandlerID, registered.cancel},
+		{workerSessionsTerminateHandlerID, registered.terminate},
+		{workerSessionsListHandlerID, registered.list},
+		{workerSessionsShowHandlerID, registered.show},
+		{workerSessionsReadHandlerID, registered.read},
+		{workerSessionsStreamHandlerID, registered.stream},
+	} {
+		cobraHandler, resolvedHandler, bindingErr := workerSessionsHandlerBindings(binding.handlers)
+		if bindingErr != nil {
+			return nil, fmt.Errorf("build worker sessions family command: %w", bindingErr)
+		}
+		if resolvedHandler != nil {
+			resolvedHandlers[binding.handlerID] = resolvedHandler
+		} else {
+			cobraHandlers[binding.handlerID] = cobraHandler
+		}
+	}
+
 	root, err := NewCommandTree(manifest, GenericBindings{
 		Handlers: HandlerRegistry{
 			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
 		},
-		CobraHandlers: CobraHandlerRegistry{
-			workerSessionsInvokeHandlerID:    resolvedWorkerSessionsHandler(registered.invoke),
-			workerSessionsContinueHandlerID:  resolvedWorkerSessionsHandler(registered.continueOperation),
-			workerSessionsInterruptHandlerID: resolvedWorkerSessionsHandler(registered.interrupt),
-			workerSessionsPauseHandlerID:     resolvedWorkerSessionsHandler(registered.pause),
-			workerSessionsResumeHandlerID:    resolvedWorkerSessionsHandler(registered.resume),
-			workerSessionsCancelHandlerID:    resolvedWorkerSessionsHandler(registered.cancel),
-			workerSessionsTerminateHandlerID: resolvedWorkerSessionsHandler(registered.terminate),
-			workerSessionsListHandlerID:      resolvedWorkerSessionsHandler(registered.list),
-			workerSessionsShowHandlerID:      resolvedWorkerSessionsHandler(registered.show),
-			workerSessionsReadHandlerID:      resolvedWorkerSessionsHandler(registered.read),
-			workerSessionsStreamHandlerID:    resolvedWorkerSessionsHandler(registered.stream),
-		},
+		CobraHandlers:         cobraHandlers,
+		ResolvedCobraHandlers: resolvedHandlers,
 		DeferRequiredValidation: map[string]bool{
 			workerSessionsInvokeHandlerID:    true,
 			workerSessionsContinueHandlerID:  true,
@@ -717,8 +735,11 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 		if err != nil {
 			return workerSessionsHandlers{}, err
 		}
-		if handlers.RunE == nil || handlers.ResolvedRunE != nil {
-			return workerSessionsHandlers{}, fmt.Errorf("handler %q must provide RunE", command.handlerID)
+		if (handlers.RunE == nil) == (handlers.ResolvedRunE == nil) {
+			return workerSessionsHandlers{}, fmt.Errorf(
+				"handler %q must provide exactly one of RunE or ResolvedRunE",
+				command.handlerID,
+			)
 		}
 		found[index] = handlers
 	}
@@ -727,6 +748,30 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 		pause: found[3], resume: found[4], cancel: found[5], terminate: found[6],
 		list: found[7], show: found[8], read: found[9], stream: found[10],
 	}, nil
+}
+
+func workerSessionsHandlerBindings(
+	handlers commandregistry.CommandHandlers,
+) (CobraHandler, ResolvedCobraHandler, error) {
+	if handlers.ResolvedRunE != nil {
+		return nil, handlers.ResolvedRunE, nil
+	}
+	if handlers.RunE == nil {
+		return nil, nil, fmt.Errorf("worker session handler is required")
+	}
+	return func(
+		cmd *cobra.Command,
+		args []string,
+		_ map[string]any,
+		_ resolvedinput.Inputs,
+	) error {
+		if handlers.PreRunE != nil {
+			if err := handlers.PreRunE(cmd, args); err != nil {
+				return err
+			}
+		}
+		return handlers.RunE(cmd, args)
+	}, nil, nil
 }
 
 func resolvedWorkerSessionsHandler(handlers commandregistry.CommandHandlers) func(*cobra.Command, []string, map[string]any, resolvedinput.Inputs) error {
