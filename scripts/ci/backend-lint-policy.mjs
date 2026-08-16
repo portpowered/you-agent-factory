@@ -5,13 +5,6 @@ export const BACKEND_LINT_BASELINE_SOURCE =
 // checker is allowed only while its observed count remains at or below the
 // recorded count; a clean checker and any unlisted failure remain gated.
 export const BACKEND_LINT_ALLOWANCES = Object.freeze({
-	"backend-size": {
-		baselineViolationCount: 2,
-		reason: "Two pre-existing tests exceed the unchanged 100-line function limit.",
-		ownerOrLane: "Backend-size remediation lane; preserve cmd/gocoveragecheck ownership from PR #1980",
-		deadline: "2026-09-30",
-		removalCondition: "Split the two oversized tests without changing the checker limit, then delete this allowance when hosted backend-size passes.",
-	},
 	"package-target-manifest-check": {
 		baselineViolationCount: 5,
 		reason: "The current package inventory omits five production package entries from the live tree, including the factory_definitions runtime_snapshot migration paths.",

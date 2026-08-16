@@ -165,19 +165,16 @@ test("an unallowlisted ui-deadcode failure is the authoritative failed verdict",
 });
 
 test("multiple lint failures are reported independently", () => {
-	const targets = baselineTargets({
-		"backend-size": {
-			status: "fail",
-			output: "LINT_VIOLATION_COUNT: 3",
-		},
-	});
+	const targets = baselineTargets();
 	targets.push(unallowlistedTarget("ui-deadcode", "LINT_VIOLATION_COUNT: 5"));
+	targets.push(unallowlistedTarget("backend-size", "LINT_VIOLATION_COUNT: 3"));
 	const summary = summarizeBackendLintReport(report({ targets }));
 	const verdict = renderBackendLintVerdict(summary);
 
 	assert.equal(summary.ok, false);
 	assert.match(verdict, /ui-deadcode: baseline 0 -> current 5 \(delta \+5; new failure\)/);
-	assert.match(verdict, /backend-size: baseline 2 -> current 3 \(delta \+1; exceeded\)/);
+	assert.equal(BACKEND_LINT_ALLOWANCES["backend-size"], undefined);
+	assert.match(verdict, /backend-size: baseline 0 -> current 3 \(delta \+3; new failure\)/);
 });
 
 test("an unallowlisted ui-deadcode failure reports every bounded named addition", () => {
