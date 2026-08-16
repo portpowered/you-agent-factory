@@ -11,6 +11,7 @@ export interface WorkflowActivityWidgetProps {
   locale?: string;
   now: number;
   onDocAdded?: (targetPath: string) => void;
+  onDirtyStateChange?: (isDirty: boolean) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
@@ -33,6 +34,7 @@ export function WorkflowActivityWidget({
   locale,
   now,
   onDocAdded,
+  onDirtyStateChange,
   onNodeRemovedFromDraft,
   onSelectDoc,
   onSelectResource,
@@ -52,6 +54,7 @@ export function WorkflowActivityWidget({
       locale={locale}
       now={now}
       onDocAdded={onDocAdded}
+      onDirtyStateChange={onDirtyStateChange}
       onNodeRemovedFromDraft={onNodeRemovedFromDraft}
       selection={selection}
       snapshot={snapshot}

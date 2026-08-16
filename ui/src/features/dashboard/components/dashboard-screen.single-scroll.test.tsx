@@ -103,6 +103,7 @@ vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
           undoSelection: vi.fn(),
         },
         dashboardCardStateContext: {
+          dirtyCardInstanceIDs: new Set<string>(),
           hasAuthoritativeSnapshot: true,
           recoveryPending: false,
           streamStatus: dashboardSnapshotState.value.streamState.status,
@@ -110,6 +111,7 @@ vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
           workOutcomeHydrationStatus: "ready" as const,
         },
         materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+        reportDashboardCardDirtyState: vi.fn(),
         selectedSnapshot: snapshot,
         selectedTimelineTick: snapshot.tick_count,
         snapshot,

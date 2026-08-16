@@ -18,6 +18,7 @@ import {
   getDashboardLayoutStorageKey,
 } from "./dashboardLayoutSchema";
 import {
+  type DashboardLayoutStorageWriteResult,
   readStoredDashboardLayoutResult,
   writeStoredDashboardLayout,
 } from "./storage/dashboardLayoutStorage";
@@ -40,8 +41,12 @@ export interface UseDashboardLayoutResult {
   addDashboardWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   dashboardLayout: AgentBentoLayoutItem[];
   dashboardLayoutDiagnostics: DashboardLayoutDiagnostic[];
-  persistDashboardLayout: (layout: AgentBentoLayoutItem[]) => void;
-  removeDashboardWidget: (widgetInstanceID: string) => void;
+  persistDashboardLayout: (
+    layout: AgentBentoLayoutItem[],
+  ) => DashboardLayoutStorageWriteResult;
+  removeDashboardWidget: (
+    widgetInstanceID: string,
+  ) => DashboardLayoutStorageWriteResult;
 }
 
 export type {
@@ -66,11 +71,11 @@ interface DashboardLayoutStoreState {
   persistDashboardLayout: (
     scope: DashboardLayoutScope | null | undefined,
     layout: AgentBentoLayoutItem[],
-  ) => void;
+  ) => DashboardLayoutStorageWriteResult;
   removeDashboardWidget: (
     scope: DashboardLayoutScope | null | undefined,
     widgetInstanceID: string,
-  ) => void;
+  ) => DashboardLayoutStorageWriteResult;
 }
 
 const initialDashboardLayoutStorageResult = readStoredDashboardLayoutResult();
@@ -88,6 +93,11 @@ type DashboardLayoutStoreMutationState = Pick<
   | "instanceHighWaterMarksByStorageKey"
   | "layoutsByStorageKey"
 >;
+
+interface DashboardLayoutPersistenceMutation {
+  mutationState: DashboardLayoutStoreMutationState;
+  writeResult: DashboardLayoutStorageWriteResult;
+}
 
 function getDashboardLayoutStateAtScope(
   state: DashboardLayoutStoreState,
@@ -117,30 +127,33 @@ function persistDashboardLayoutState(
   layoutState: DashboardLayoutStateAtScope,
   nextLayout: AgentBentoLayoutItem[],
   instanceHighWaterMarks: DashboardLayoutInstanceHighWaterMarks,
-): DashboardLayoutStoreMutationState {
+): DashboardLayoutPersistenceMutation {
   const writeResult = writeStoredDashboardLayout(
     nextLayout,
     scope,
     instanceHighWaterMarks,
   );
   return {
-    diagnosticsByStorageKey: {
-      ...state.diagnosticsByStorageKey,
-      [layoutState.storageKey]: combineDashboardLayoutDiagnostics(
-        state.diagnosticsByStorageKey[layoutState.storageKey] ??
-          layoutState.storedResult?.diagnostics ??
-          [],
-        writeResult.diagnostics,
-      ),
+    mutationState: {
+      diagnosticsByStorageKey: {
+        ...state.diagnosticsByStorageKey,
+        [layoutState.storageKey]: combineDashboardLayoutDiagnostics(
+          state.diagnosticsByStorageKey[layoutState.storageKey] ??
+            layoutState.storedResult?.diagnostics ??
+            [],
+          writeResult.diagnostics,
+        ),
+      },
+      instanceHighWaterMarksByStorageKey: {
+        ...state.instanceHighWaterMarksByStorageKey,
+        [layoutState.storageKey]: writeResult.instanceHighWaterMarks,
+      },
+      layoutsByStorageKey: {
+        ...state.layoutsByStorageKey,
+        [layoutState.storageKey]: nextLayout,
+      },
     },
-    instanceHighWaterMarksByStorageKey: {
-      ...state.instanceHighWaterMarksByStorageKey,
-      [layoutState.storageKey]: writeResult.instanceHighWaterMarks,
-    },
-    layoutsByStorageKey: {
-      ...state.layoutsByStorageKey,
-      [layoutState.storageKey]: nextLayout,
-    },
+    writeResult,
   };
 }
 
@@ -176,7 +189,7 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
         layoutState,
         nextLayout,
         allocation.instanceHighWaterMarks,
-      );
+      ).mutationState;
     });
   },
   layoutsByStorageKey: {
@@ -210,36 +223,56 @@ const useDashboardLayoutStore = create<DashboardLayoutStoreState>((set) => ({
     });
   },
   persistDashboardLayout: (scope, layout) => {
+    let writeResult: DashboardLayoutStorageWriteResult | undefined;
     set((state) => {
       const layoutState = getDashboardLayoutStateAtScope(state, scope);
       const nextLayout = mergeDashboardLayout(
         layout,
         layoutState.currentLayout,
       );
-      return persistDashboardLayoutState(
+      const mutation = persistDashboardLayoutState(
         state,
         scope,
         layoutState,
         nextLayout,
         layoutState.currentHighWaterMarks,
       );
+      writeResult = mutation.writeResult;
+      return mutation.mutationState;
     });
+    return (
+      writeResult ?? {
+        diagnostics: [],
+        instanceHighWaterMarks: {},
+        persisted: false,
+      }
+    );
   },
   removeDashboardWidget: (scope, widgetInstanceID) => {
+    let writeResult: DashboardLayoutStorageWriteResult | undefined;
     set((state) => {
       const layoutState = getDashboardLayoutStateAtScope(state, scope);
       const nextLayout = removeDashboardWidgetFromLayout(
         layoutState.currentLayout,
         widgetInstanceID,
       );
-      return persistDashboardLayoutState(
+      const mutation = persistDashboardLayoutState(
         state,
         scope,
         layoutState,
         nextLayout,
         layoutState.currentHighWaterMarks,
       );
+      writeResult = mutation.writeResult;
+      return mutation.mutationState;
     });
+    return (
+      writeResult ?? {
+        diagnostics: [],
+        instanceHighWaterMarks: {},
+        persisted: false,
+      }
+    );
   },
 }));
 
@@ -281,7 +314,7 @@ export function useDashboardLayout(
   );
   const persistDashboardLayout = useCallback(
     (layout: AgentBentoLayoutItem[]) => {
-      useDashboardLayoutStore
+      return useDashboardLayoutStore
         .getState()
         .persistDashboardLayout(normalizedScope, layout);
     },
@@ -289,7 +322,7 @@ export function useDashboardLayout(
   );
   const removeDashboardWidget = useCallback(
     (widgetInstanceID: string) => {
-      useDashboardLayoutStore
+      return useDashboardLayoutStore
         .getState()
         .removeDashboardWidget(normalizedScope, widgetInstanceID);
     },

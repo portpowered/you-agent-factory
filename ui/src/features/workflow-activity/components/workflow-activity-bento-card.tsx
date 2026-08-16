@@ -9,9 +9,9 @@ import { useCurrentActivityGraphState } from "../hooks/use-current-activity-grap
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
+import { WorkflowActivityBentoShell } from "./bento-card/workflow-activity-bento-shell";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { ReactFlowCurrentActivityCardView } from "./react-flow-current-activity-card-view";
-import { WorkflowActivityBentoShell } from "./bento-card/workflow-activity-bento-shell";
 
 interface WorkflowActivityBentoCardProps {
   headerAction?: ReactNode;
@@ -19,6 +19,7 @@ interface WorkflowActivityBentoCardProps {
   locale?: string;
   now: number;
   onDocAdded?: (targetPath: string) => void;
+  onDirtyStateChange?: (isDirty: boolean) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
@@ -41,6 +42,7 @@ export function WorkflowActivityBentoCard({
   locale,
   now,
   onDocAdded,
+  onDirtyStateChange,
   onNodeRemovedFromDraft,
   selection,
   snapshot,
@@ -81,6 +83,21 @@ export function WorkflowActivityBentoCard({
     snapshot,
   });
   const editorControls = viewModel.editorControls;
+
+  useEffect(() => {
+    onDirtyStateChange?.(
+      viewModel.status.hasSharedGraphChanges ||
+        viewModel.status.preferencesDirty,
+    );
+
+    return () => {
+      onDirtyStateChange?.(false);
+    };
+  }, [
+    onDirtyStateChange,
+    viewModel.status.hasSharedGraphChanges,
+    viewModel.status.preferencesDirty,
+  ]);
 
   useEffect(() => {
     if (!editorControls.isEditing) {

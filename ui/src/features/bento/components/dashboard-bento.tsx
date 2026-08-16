@@ -10,6 +10,7 @@ import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-
 import { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
+import { useDashboardWidgetRemoval } from "../hooks/removal/useDashboardWidgetRemoval";
 import {
   type DashboardWorkOutcomeStream,
   useDashboardBentoSnapshot,
@@ -25,8 +26,10 @@ import { AgentBentoLayout } from "./agent-bento";
 import {
   buildDashboardCards,
   type DashboardCardBuilderArgs,
+  getDashboardWidgetTitle,
 } from "./dashboard-bento-cards";
 import { DashboardLayoutDiagnostics } from "./diagnostics/dashboard-layout-diagnostics";
+import { DashboardWidgetRemovalFeedback } from "./removal/dashboard-widget-removal-feedback";
 
 function useDashboardBentoSelectionState() {
   return {
@@ -48,6 +51,7 @@ export interface DashboardBentoProps {
   workOutcomeStream?: DashboardWorkOutcomeStream;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the dashboard composition keeps synchronized card, layout, and session wiring together.
 export function DashboardBento({
   locale,
   workOutcomeStream,
@@ -68,6 +72,7 @@ export function DashboardBento({
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
+    reportDashboardCardDirtyState,
     workOutcomeHydrationStatus,
   } = useDashboardBentoSnapshot(sessionID, workOutcomeStream);
   const layoutScope = createDashboardLayoutScope(
@@ -81,6 +86,14 @@ export function DashboardBento({
     persistDashboardLayout,
     removeDashboardWidget,
   } = useDashboardLayout(layoutScope);
+  const dashboardWidgetRemoval = useDashboardWidgetRemoval({
+    dashboardLayout,
+    dirtyCardInstanceIDs: dashboardCardStateContext.dirtyCardInstanceIDs,
+    getWidgetTitle: (widgetType) =>
+      getDashboardWidgetTitle(widgetType, resolvedLocale),
+    persistDashboardLayout,
+    removeDashboardWidget,
+  });
   const importController = useCurrentActivityImportController({
     currentFactoryDefinition: snapshot.factory,
     locale: resolvedLocale,
@@ -123,7 +136,8 @@ export function DashboardBento({
     isCurrent: selectedTimelineTick === snapshot.tick_count,
     locale: resolvedLocale,
     now,
-    onRemoveDashboardWidget: removeDashboardWidget,
+    onDashboardCardDirtyStateChange: reportDashboardCardDirtyState,
+    onRemoveDashboardWidget: dashboardWidgetRemoval.requestRemoval,
     providerSessionState,
     selectedSessionID: rawSessionID,
     selectedTrace,
@@ -150,6 +164,19 @@ export function DashboardBento({
       <DashboardLayoutDiagnostics
         diagnostics={dashboardLayoutDiagnostics}
         locale={resolvedLocale}
+      />
+      <DashboardWidgetRemovalFeedback
+        locale={resolvedLocale}
+        onCancelRemoval={dashboardWidgetRemoval.cancelRemoval}
+        onConfirmRemoval={dashboardWidgetRemoval.confirmRemoval}
+        onDismissUndo={dashboardWidgetRemoval.dismissUndo}
+        onDialogCloseAutoFocus={
+          dashboardWidgetRemoval.handleDialogCloseAutoFocus
+        }
+        onDialogOpenChange={dashboardWidgetRemoval.handleDialogOpenChange}
+        onUndoRemoval={dashboardWidgetRemoval.undoRemoval}
+        pendingRemoval={dashboardWidgetRemoval.pendingRemoval}
+        undoState={dashboardWidgetRemoval.undoState}
       />
       <AgentBentoLayout
         cards={cards}
@@ -179,6 +206,7 @@ function buildDashboardCardLayouts({
   locale,
   now,
   onRemoveDashboardWidget,
+  onDashboardCardDirtyStateChange,
   providerSessionState,
   selectedSessionID,
   selectedTrace,
@@ -203,6 +231,7 @@ function buildDashboardCardLayouts({
     isCurrent,
     locale,
     now,
+    onDashboardCardDirtyStateChange,
     onRemoveDashboardWidget,
     onSelectInlineWidget: (widgetType) => {
       addDashboardWidget(widgetType);

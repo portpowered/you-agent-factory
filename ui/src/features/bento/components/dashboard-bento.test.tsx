@@ -16,6 +16,7 @@ let mockDashboardLayoutDiagnostics: Array<{
   count: number;
   severity: "repair";
 }> = [];
+let mockGraphDirty = false;
 
 const currentSelectionState = {
   canRedoSelection: false,
@@ -259,17 +260,25 @@ vi.mock(
 vi.mock("../../workflow-activity/components/workflow-activity-widget", () => ({
   WorkflowActivityWidget: ({
     headerAction,
+    onDirtyStateChange,
     widgetInstanceID,
   }: {
     headerAction?: React.ReactNode;
+    onDirtyStateChange?: (isDirty: boolean) => void;
     widgetInstanceID?: string;
-  }) => (
-    <section>
-      {headerAction}
-      Workflow activity card
-      {widgetInstanceID ? `:${widgetInstanceID}` : ""}
-    </section>
-  ),
+  }) => {
+    React.useEffect(() => {
+      onDirtyStateChange?.(mockGraphDirty);
+    }, [onDirtyStateChange]);
+
+    return (
+      <section>
+        {headerAction}
+        Workflow activity card
+        {widgetInstanceID ? `:${widgetInstanceID}` : ""}
+      </section>
+    );
+  },
 }));
 
 vi.mock("./session-controls-widget", () => ({
@@ -403,6 +412,7 @@ describe("DashboardBento", () => {
     mockUseCurrentActivityImportController.mockClear();
     mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
     mockDashboardLayoutDiagnostics = [];
+    mockGraphDirty = false;
     timelineStoreState = defaultTimelineStoreState;
   });
 
@@ -558,6 +568,36 @@ describe("DashboardBento", () => {
       "Add widget card",
     );
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.queryByText(/undo/i)).toBeNull();
+    expect(
+      screen.getByTestId("dashboard-widget-removal-status").textContent,
+    ).toContain("Work outcome chart was removed.");
+    expect(
+      screen.getByRole("button", {
+        name: "Undo removing Work outcome chart",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("confirms dirty graph removal and leaves the layout unchanged when canceled", () => {
+    mockGraphDirty = true;
+    render(<DashboardBento />);
+
+    const graphRemoveButton = screen.getByRole("button", {
+      name: "Remove Factory graph widget from dashboard",
+    });
+    fireEvent.click(graphRemoveButton);
+
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "Factory graph has unsaved changes",
+    );
+    expect(removeDashboardWidget).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep widget" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(removeDashboardWidget).not.toHaveBeenCalled();
+
+    fireEvent.click(graphRemoveButton);
+    fireEvent.click(screen.getByRole("button", { name: "Remove widget" }));
+    expect(removeDashboardWidget).toHaveBeenCalledWith("work-graph::primary");
   });
 });

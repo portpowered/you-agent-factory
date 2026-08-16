@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useState } from "react";
+
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
@@ -16,6 +18,23 @@ export interface DashboardWorkOutcomeStream {
 
 export interface DashboardBentoCardStateContext
   extends DashboardCardStateContext {
+  dirtyCardInstanceIDs: ReadonlySet<string>;
+  workOutcomeHydrationStatus: DashboardWorkOutcomeStream["status"];
+}
+
+export type DashboardBentoDirtyStateReporter = (
+  widgetInstanceID: string,
+  isDirty: boolean,
+) => void;
+
+export interface DashboardBentoSnapshot {
+  currentSelection: ReturnType<typeof useCurrentSelection>;
+  dashboardCardStateContext: DashboardBentoCardStateContext;
+  materializedWorkOutcomeState: unknown;
+  reportDashboardCardDirtyState: DashboardBentoDirtyStateReporter;
+  selectedSnapshot: DashboardSnapshot | undefined;
+  selectedTimelineTick: number;
+  snapshot: DashboardSnapshot;
   workOutcomeHydrationStatus: DashboardWorkOutcomeStream["status"];
 }
 
@@ -83,7 +102,38 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
 export function useDashboardBentoSnapshot(
   sessionID: string | null | undefined,
   workOutcomeStream?: DashboardWorkOutcomeStream,
-) {
+): DashboardBentoSnapshot {
+  const [dirtyCardInstanceIDs, setDirtyCardInstanceIDs] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const reportDashboardCardDirtyState = useCallback(
+    (widgetInstanceID: string, isDirty: boolean) => {
+      setDirtyCardInstanceIDs((currentIDs) => {
+        const nextIDs = new Set(currentIDs);
+        if (isDirty) {
+          nextIDs.add(widgetInstanceID);
+        } else {
+          nextIDs.delete(widgetInstanceID);
+        }
+
+        if (nextIDs.size === currentIDs.size) {
+          const hasSameIDs = [...nextIDs].every((id) => currentIDs.has(id));
+          if (hasSameIDs) {
+            return currentIDs;
+          }
+        }
+
+        return nextIDs;
+      });
+    },
+    [],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: session changes intentionally reset the cross-card dirty registry.
+  useEffect(() => {
+    setDirtyCardInstanceIDs(new Set());
+  }, [sessionID]);
+
   const materializedWorkOutcomeState = useFactoryTimelineStore(
     (state) =>
       selectDashboardWorkOutcomeInput(state, workOutcomeStream)
@@ -130,6 +180,7 @@ export function useDashboardBentoSnapshot(
     selectedTimelineTick,
     snapshot,
     dashboardCardStateContext: {
+      dirtyCardInstanceIDs,
       hasAuthoritativeSnapshot,
       recoveryPending:
         hasRestoredCheckpoint || workOutcomeHydrationStatus === "loading",
@@ -138,5 +189,6 @@ export function useDashboardBentoSnapshot(
       workOutcomeHydrationStatus,
     } satisfies DashboardBentoCardStateContext,
     workOutcomeHydrationStatus,
+    reportDashboardCardDirtyState,
   };
 }

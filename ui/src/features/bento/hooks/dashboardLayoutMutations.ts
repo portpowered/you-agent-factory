@@ -143,6 +143,27 @@ export function removeDashboardWidgetFromLayout(
   return layout.filter((item) => item.id !== widgetInstanceID);
 }
 
+export function restoreDashboardWidgetToLayout(
+  layout: readonly AgentBentoLayoutItem[],
+  removedItem: AgentBentoLayoutItem,
+  originalIndex = layout.length,
+): AgentBentoLayoutItem[] {
+  const existingIndex = layout.findIndex((item) => item.id === removedItem.id);
+  if (existingIndex >= 0) {
+    return layout.map((item, index) =>
+      index === existingIndex ? { ...removedItem } : { ...item },
+    );
+  }
+
+  const restoredLayout = layout.map((item) => ({ ...item }));
+  restoredLayout.splice(
+    Math.min(Math.max(originalIndex, 0), restoredLayout.length),
+    0,
+    { ...removedItem },
+  );
+  return restoredLayout;
+}
+
 function getNextDashboardWidgetInstanceID(
   layout: readonly AgentBentoLayoutItem[],
   widgetType: string,
