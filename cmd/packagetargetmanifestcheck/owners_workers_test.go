@@ -127,14 +127,6 @@ var workersTransitionalDebtCommittedOwnerPackageMappingCases = []committedOwnerP
 			Destination: "workers/internal/services/runners",
 		},
 	},
-	{
-		path: "pkg/services/workers/internal/providercompat_test",
-		want: PackageMapping{
-			PackagePath: "pkg/services/workers/internal/providercompat_test",
-			Disposition: DispositionMove,
-			Destination: "providers/internal/services/execution",
-		},
-	},
 }
 
 func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
@@ -158,22 +150,6 @@ func TestMapCommittedOwnerPackageWorkersProvidersExtractionMoves(t *testing.T) {
 				PackagePath: "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/execution",
-			},
-		},
-		{
-			path: "pkg/services/workers/internal/providercompat",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/internal/providercompat",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/execution",
-			},
-		},
-		{
-			path: "pkg/services/workers/internal/providercompat/registry",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/internal/providercompat/registry",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/catalog",
 			},
 		},
 	}

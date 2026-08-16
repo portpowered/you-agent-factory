@@ -171,36 +171,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_error_normalization_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_test_helpers_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/workers/internal/providercompat/provider_behavior_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/workers/internal/providercompat/provider_errors_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go",
       "owner": "backend-maintainers",
       "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
@@ -2007,24 +1977,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_error_normalization_test.go#assertNormalizedProviderFailure",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_exit_failure_test.go#TestNewFromInputRejectsMissingRequiredEdges",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/providercompat/recording_provider_test.go#TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEvent",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/workers/internal/runtime_concurrency_test.go#TestConcurrentRepeatedExecutionsRetainConstructionInjectedDependencies",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2643,36 +2595,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_error_normalization_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_test_helpers_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/workers/internal/providercompat/provider_behavior_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/workers/internal/providercompat/provider_errors_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go",
       "owner": "backend-maintainers",
       "removalReason": "focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split."
@@ -3012,12 +2934,6 @@
       "target": "pkg/services/worker_sessions/publish_test.go#TestPublish_CommitsRemainingWorkerVocabulary",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/workers/internal/providercompat/inference_provider_error_normalization_test.go#TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCategories",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",

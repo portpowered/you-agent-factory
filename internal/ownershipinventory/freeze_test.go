@@ -53,19 +53,6 @@ func TestMapPackageMarksProcessEdgesAsArchitectureException(t *testing.T) {
 	}
 }
 
-func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
-	row, err := ownershipinventory.MapPackage("pkg/services/workers/internal/providercompat/codex")
-	if err != nil {
-		t.Fatalf("MapPackage() error = %v", err)
-	}
-	if row.Destination != "providers" || row.Disposition != ownershipinventory.DispositionMove {
-		t.Fatalf("row = %#v, want move to providers", row)
-	}
-	if row.Successor == "" || row.DeletionCondition == "" {
-		t.Fatalf("move row missing successor/condition: %#v", row)
-	}
-}
-
 func TestMapPackageRetainsWorkerSessionsPackages(t *testing.T) {
 	row, err := ownershipinventory.MapPackage("pkg/services/worker_sessions/transports/http")
 	if err != nil {

@@ -182,6 +182,89 @@ func TestBuildModelInvocationExecutorReachesConstructionInjectedProviderCommandR
 	}
 }
 
+// expectedProgressFragment states the exact facts one published fragment must
+// carry. matchPayload separates a fragment whose payload is part of the claim
+// from a terminal fragment where only kind and correlation are asserted.
+type expectedProgressFragment struct {
+	kind         string
+	dispatchID   string
+	payload      string
+	matchPayload bool
+}
+
+// matchProgressFragments reports the first way published departs from want, or
+// nil when every fragment matches in order. Keeping the comparison here rather
+// than in one boolean chain lets the caller name which fragment broke the
+// claim instead of only that the whole sequence did.
+func matchProgressFragments(published []workers.ProgressFragment, want []expectedProgressFragment) error {
+	if len(published) != len(want) {
+		return fmt.Errorf("fragment count = %d, want %d", len(published), len(want))
+	}
+	for i, expected := range want {
+		got := published[i]
+		switch {
+		case got.Kind != expected.kind:
+			return fmt.Errorf("fragment %d kind = %q, want %q", i, got.Kind, expected.kind)
+		case got.DispatchID != expected.dispatchID:
+			return fmt.Errorf("fragment %d dispatch ID = %q, want %q", i, got.DispatchID, expected.dispatchID)
+		case expected.matchPayload && got.Payload != expected.payload:
+			return fmt.Errorf("fragment %d payload = %q, want %q", i, got.Payload, expected.payload)
+		}
+	}
+	return nil
+}
+
+// TestCanonicalProviderAttemptThroughModelWorkstationEmitsResponseAndCompletion
+// proves the surviving canonical Providers contract remains observable through
+// the Workers model/workstation executor after the providercompat root removal:
+// one dispatch reaches the selected provider, returns its response, and emits
+// correlated progress followed by stream completion.
+func TestCanonicalProviderAttemptThroughModelWorkstationEmitsResponseAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	const dispatchID = "canonical-provider-dispatch-1"
+	runner := &recordingProviderCommandRunner{stdout: []byte("canonical provider response")}
+	providersService := commandRunnerBackedProvidersService{
+		runner: runner,
+		progress: []providers.ExecuteProgress{
+			{Phase: "provider.progress", Detail: "canonical provider progress"},
+		},
+	}
+
+	var published []workers.ProgressFragment
+	publisher := workers.ProgressPublisher(func(fragment workers.ProgressFragment) {
+		published = append(published, cloneServiceProgressFragment(fragment))
+	})
+
+	service := providerInvocationRuntimeService(runner, providersService, publisher)
+	runtimeCfg := agentInvocationRuntimeConfig()
+	executor, err := service.BuildModelInvocationExecutor(runtimeCfg, runtimeCfg.FactoryConfig(), "agent-worker")
+	if err != nil {
+		t.Fatalf("BuildModelInvocationExecutor() error = %v", err)
+	}
+
+	result, err := executor.Execute(context.Background(), agentInvocationExecutionRequest(dispatchID))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.OutcomeAccepted || result.Output != "canonical provider response" {
+		t.Fatalf("Execute() result = %#v, want accepted canonical provider response", result)
+	}
+
+	requests := runner.requests()
+	if len(requests) != 1 || requests[0].Command != string(providers.IDCodex) || requests[0].DispatchID != dispatchID {
+		t.Fatalf("provider command requests = %#v, want one codex request for %q", requests, dispatchID)
+	}
+	wantFragments := []expectedProgressFragment{
+		{kind: workers.ProgressFragmentKind, dispatchID: dispatchID, payload: "canonical provider progress", matchPayload: true},
+		{kind: workers.ProgressFragmentKind, dispatchID: dispatchID, payload: "canonical provider response", matchPayload: true},
+		{kind: workers.CompletedFragmentKind, dispatchID: dispatchID},
+	}
+	if err := matchProgressFragments(published, wantFragments); err != nil {
+		t.Fatalf("published fragments = %#v, want provider progress, response, then completion for %q: %v", published, dispatchID, err)
+	}
+}
+
 // TestBuildModelInvocationExecutorDeliversProviderCommandRunnerFailure proves
 // a provider command runner's non-zero exit surfaces as a failed WorkResult
 // while still reaching the exact construction-injected provider command

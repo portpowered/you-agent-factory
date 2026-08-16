@@ -21,17 +21,6 @@ const (
 	providersServiceRootPrefix         = "pkg/services/providers/"
 	providersLeafEffectContractImport  = repositoryImportPrefix + providersLeafEffectContractPackage
 
-	// providersExecutionCompatibilityPackage is the current Providers-owned
-	// implementation compatibility path. It is permitted to keep the existing
-	// provider effect declaration while the public Providers Execution leaf is
-	// the canonical owner.
-	providersExecutionCompatibilityPackage = "pkg/services/workers/internal/providercompat/inferencecontract"
-
-	// providersExecutionCompatibilityPrefix contains the current Providers
-	// implementation compatibility surface. Competing forks outside Providers
-	// and this exact compatibility subtree are rejected.
-	providersExecutionCompatibilityPrefix = "pkg/services/workers/internal/providercompat/"
-
 	// workersRequestScopedProviderPortPackage is the sole Workers-root bridge
 	// retained for request-scoped execution construction. It is an adapter over
 	// Providers, not a durable provider protocol or effect owner.
@@ -178,8 +167,7 @@ func providerEffectOwnershipFindingForType(
 		return finding, true
 	}
 	if isWorkersRequestScopedProviderPort(packagePath, typed, imports) ||
-		isDurableProvidersLeafOwner(packagePath) ||
-		packagePath == providersExecutionCompatibilityPackage {
+		isDurableProvidersLeafOwner(packagePath) {
 		return providerEffectOwnershipFinding{}, false
 	}
 	if !isProviderEffectPortDeclaration(typed, imports) &&
@@ -469,7 +457,7 @@ func competingProviderCatalogOrExecutionAbstraction(
 	if typed.Name == nil {
 		return providerEffectOwnershipFinding{}, false
 	}
-	if isProvidersServicePackage(packagePath) || isProvidersExecutionCompatibilitySurface(packagePath) {
+	if isProvidersServicePackage(packagePath) {
 		return providerEffectOwnershipFinding{}, false
 	}
 	if !isCompetingProviderAbstractionPackage(packagePath) {
@@ -497,11 +485,6 @@ func competingProviderCatalogOrExecutionAbstraction(
 		}
 		return providerEffectOwnershipFinding{}, false
 	}
-}
-
-func isProvidersExecutionCompatibilitySurface(packagePath string) bool {
-	return packagePath == strings.TrimSuffix(providersExecutionCompatibilityPrefix, "/") ||
-		strings.HasPrefix(packagePath, providersExecutionCompatibilityPrefix)
 }
 
 func isCompetingProviderAbstractionPackage(packagePath string) bool {

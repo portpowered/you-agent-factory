@@ -102,7 +102,6 @@ var transportPrivateServiceSubpackages = []string{
 	"pkg/services/factory_sessions/internal/sessionservice",
 	"pkg/services/recordings/events",
 	"pkg/services/recordings/internal/events",
-	"pkg/services/workers/internal/providercompat",
 	"pkg/services/workers/runner",
 	"pkg/services/workers/service",
 	"pkg/services/workers/services",
@@ -176,7 +175,6 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":               "providers",
 	"pkg/services/workers/invocation":                                                               "workers",
 	"pkg/services/workers/prompting":                                                                "workers",
-	"pkg/services/workers/internal/providercompat":                                                  "providers",
 	"pkg/services/automations/internal/services/hosted_sources":                                     "automations",
 	"pkg/services/workers/services/testing":                                                         "workers",
 }
