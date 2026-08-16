@@ -111,7 +111,7 @@ test("all clean current-main checkers pass the baseline policy", () => {
 
 	assert.equal(summary.ok, true);
 	assert.equal(summary.failures.length, 0);
-	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 4);
+	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 3);
 });
 
 test("a measured baseline failure is reported but allowed at its recorded count", () => {
@@ -119,7 +119,7 @@ test("a measured baseline failure is reported but allowed at its recorded count"
 		targets: baselineTargets({
 			deadcode: {
 				status: "fail",
-				output: "Repository dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 580\ncurrent findings: 580",
+				output: "Repository dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 562\ncurrent findings: 562",
 			},
 		}),
 	}));
@@ -128,7 +128,7 @@ test("a measured baseline failure is reported but allowed at its recorded count"
 	assert.equal(summary.ok, true);
 	assert.equal(summary.targets.find((target) => target.name === "deadcode").policyStatus, "allowed");
 	assert.match(markdown, /Allowed baseline debt: `1` checker\(s\) within measured limits/);
-	assert.match(markdown, /\| deadcode \| 580 \| 580 \| \+0 \| allowed \|/);
+	assert.match(markdown, /\| deadcode \| 562 \| 562 \| \+0 \| allowed \|/);
 });
 
 test("a measured failure below its baseline remains tolerated with a negative delta", () => {
@@ -136,7 +136,7 @@ test("a measured failure below its baseline remains tolerated with a negative de
 		targets: baselineTargets({
 			deadcode: {
 				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 579",
+				output: "LINT_VIOLATION_COUNT: 561",
 			},
 		}),
 	}));
@@ -144,7 +144,7 @@ test("a measured failure below its baseline remains tolerated with a negative de
 	assert.equal(summary.ok, true);
 	assert.match(
 		renderBackendLintVerdict(summary),
-		/deadcode: baseline 580 -> current 579 \(delta -1; allowed\)/,
+		/deadcode: baseline 562 -> current 561 \(delta -1; allowed\)/,
 	);
 });
 
@@ -243,7 +243,7 @@ test("a no-rise ratchet pass states the baseline rule and tolerated debt", () =>
 		targets: baselineTargets({
 			deadcode: {
 				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 580",
+				output: "LINT_VIOLATION_COUNT: 562",
 			},
 		}),
 	}));
@@ -252,7 +252,7 @@ test("a no-rise ratchet pass states the baseline rule and tolerated debt", () =>
 	assert.equal(summary.ok, true);
 	assert.match(verdict, /BACKEND LINT RATCHET PASSED/);
 	assert.match(verdict, /every observed target is at or below baseline/);
-	assert.match(verdict, /deadcode: baseline 580 -> current 580 \(delta \+0; allowed\)/);
+	assert.match(verdict, /deadcode: baseline 562 -> current 562 \(delta \+0; allowed\)/);
 });
 
 test("the reporter CLI logs the authoritative verdict and exits with that decision", (t) => {
@@ -321,7 +321,7 @@ test("a failed checker without a machine-readable count fails closed", () => {
 	assert.equal(summary.ok, false);
 	assert.equal(summary.targets.find((target) => target.name === "ownership-inventory-check").violationCount, null);
 	assert.match(summary.failures.join("\n"), /without a reliable machine-readable violation count/);
-	assert.match(renderBackendLintVerdict(summary), /ownership-inventory-check: baseline 16 -> current unknown \(delta unknown; unmeasured\)/);
+	assert.match(renderBackendLintVerdict(summary), /ownership-inventory-check: baseline 5 -> current unknown \(delta unknown; unmeasured\)/);
 });
 
 test("a missing allowed target is an explicit failed ratchet condition", () => {
@@ -337,7 +337,7 @@ test("a missing allowed target is an explicit failed ratchet condition", () => {
 	assert.equal(incomplete.ok, false);
 	assert.match(
 		renderBackendLintVerdict(incomplete),
-		/deadcode: baseline 580 -> current unknown \(delta unknown; not observed\)/,
+		/deadcode: baseline 562 -> current unknown \(delta unknown; not observed\)/,
 	);
 });
 
@@ -347,15 +347,15 @@ test("structured finding growth exceeds the ownership allowance even on one diag
 		output: `inventory report: Report{MissingPackages:[]string{${Array.from({ length: count }, (_, index) => `\"finding-${index}\"`).join(", ")}}}\nLINT_VIOLATION_COUNT: ${count}`,
 	});
 	const baseline = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(16) }),
+		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(5) }),
 	}));
 	const grown = summarizeBackendLintReport(report({
-		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(17) }),
+		targets: baselineTargets({ "ownership-inventory-check": ownershipTarget(6) }),
 	}));
 
 	assert.equal(baseline.ok, true);
 	assert.equal(grown.ok, false);
-	assert.match(grown.failures.join("\n"), /ownership-inventory-check reported 17 violation\(s\), exceeding its baseline allowance of 16/);
+	assert.match(grown.failures.join("\n"), /ownership-inventory-check reported 6 violation\(s\), exceeding its baseline allowance of 5/);
 });
 
 test("missing or malformed hosted reports fail closed", () => {
