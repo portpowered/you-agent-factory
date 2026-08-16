@@ -99,7 +99,7 @@ func provideRunRuntimeRunnerBuilder(
 	) (initializer.LocalRuntimeRunner, error) {
 		var replay *factorysessions.HistoricalReplayInspection
 		var hostedInvocation runcli.HostedInvocationOperation
-		var cleanInvocation factoryruntime.CleanInvocationSnapshotProvider
+		var cleanInvocation factoryruntime.Service
 		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
 			opened, err := open.OpenApplication(openCtx, request)
 			if err != nil {

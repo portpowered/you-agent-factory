@@ -105,7 +105,7 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "fileCount": 36,
+      "fileCount": 37,
       "owner": "factory-runtime-maintainers",
       "removalReason": "Split runtime coordination from lifecycle and projection behavior."
     },

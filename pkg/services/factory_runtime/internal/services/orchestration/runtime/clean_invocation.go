@@ -3,24 +3,43 @@ package runtime
 import (
 	"context"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-var _ factory.CleanInvocationSnapshotProvider = (*factoryImpl)(nil)
+var _ factory.Service = (*factoryImpl)(nil)
 
 // CleanInvocationSnapshot projects the engine-owned invocation facts into the
 // narrow transport contract. The raw snapshot remains entirely inside the
 // Factory Runtime implementation package.
 func (f *factoryImpl) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
-	snapshot, err := f.GetEngineStateSnapshot(ctx)
+	return cleanInvocationSnapshot(ctx, f.GetEngineStateSnapshot)
+}
+
+type cleanInvocationSnapshotReader func(
+	context.Context,
+) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+
+func cleanInvocationSnapshot(
+	ctx context.Context,
+	read cleanInvocationSnapshotReader,
+) (factory.CleanInvocationSnapshot, error) {
+	snapshot, err := read(ctx)
 	if err != nil {
 		return factory.CleanInvocationSnapshot{}, err
 	}
+	return projectCleanInvocationSnapshot(snapshot), nil
+}
+
+func projectCleanInvocationSnapshot(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) factory.CleanInvocationSnapshot {
 	if snapshot == nil {
-		return factory.CleanInvocationSnapshot{}, nil
+		return factory.CleanInvocationSnapshot{}
 	}
 	result := factory.CleanInvocationSnapshot{
 		Work:            make([]factory.CleanInvocationWork, 0, len(snapshot.Marking.Tokens)),
@@ -53,7 +72,7 @@ func (f *factoryImpl) CleanInvocationSnapshot(ctx context.Context) (factory.Clea
 		}
 		result.DispatchHistory = append(result.DispatchHistory, projected)
 	}
-	return result, nil
+	return result
 }
 
 func cleanInvocationWorkFromToken(topology *state.Net, token *factorytoken.Token) factory.CleanInvocationWork {

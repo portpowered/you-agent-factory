@@ -49,7 +49,96 @@ type testRuntimeWorkService struct {
 }
 
 func (testRuntimeWorkService) MaterializeWorkerOutput(ctx context.Context, request work.MaterializeWorkerOutputRequest) (work.MaterializeWorkerOutputResult, error) {
-	return work.MaterializeWorkerOutput(ctx, request)
+	if err := ctx.Err(); err != nil {
+		return work.MaterializeWorkerOutputResult{}, err
+	}
+	result := work.MaterializeWorkerOutputResult{
+		PrimaryOutput:  testMaterializationPrimaryOutput(request.Primary),
+		Feedback:       strings.TrimSpace(request.Feedback),
+		Classification: strings.TrimSpace(request.Classification),
+	}
+	for index, proposal := range request.ProposedWork {
+		materialized, err := materializeTestProposal(request, proposal, index)
+		if err != nil {
+			return work.MaterializeWorkerOutputResult{}, err
+		}
+		result.MaterializedWork = append(result.MaterializedWork, materialized)
+	}
+	return result, nil
+}
+
+func materializeTestProposal(
+	request work.MaterializeWorkerOutputRequest,
+	proposal work.ProposedWorkItem,
+	index int,
+) (work.FactoryWorkItem, error) {
+	name := strings.TrimSpace(proposal.Name)
+	if name == "" {
+		name = fmt.Sprintf("proposed-%d", index+1)
+	}
+	workTypeID := strings.TrimSpace(proposal.WorkTypeID)
+	if workTypeID == "" {
+		workTypeID = strings.TrimSpace(request.DefaultWorkTypeID)
+	}
+	if workTypeID == "" {
+		return work.FactoryWorkItem{}, fmt.Errorf("%w: proposed work %q is missing work type", work.ErrInvalidProposedWork, name)
+	}
+	if request.ValidWorkTypes != nil && !request.ValidWorkTypes[workTypeID] {
+		return work.FactoryWorkItem{}, fmt.Errorf("%w: proposed work %q references unknown work type %q", work.ErrUnknownProposedWorkType, name, workTypeID)
+	}
+	state := strings.TrimSpace(proposal.State)
+	if state != "" && request.ValidStatesByType != nil && !request.ValidStatesByType[workTypeID][state] {
+		return work.FactoryWorkItem{}, fmt.Errorf("%w: proposed work %q references unknown state %q", work.ErrInvalidProposedWork, name, state)
+	}
+	identity := fmt.Sprintf("batch-%s-%s", request.Lineage.RequestID, name)
+	if request.IDGenerator != nil {
+		generated := strings.TrimSpace(request.IDGenerator())
+		if generated == "" {
+			return work.FactoryWorkItem{}, fmt.Errorf("%w: ID generator returned an empty identity", work.ErrInvalidProposedWork)
+		}
+		identity = "work-" + generated
+	}
+	parentID := strings.TrimSpace(request.Lineage.ParentWorkID)
+	if parentID == "" && len(request.Lineage.SourceWorkIDs) > 0 {
+		parentID = strings.TrimSpace(request.Lineage.SourceWorkIDs[0])
+	}
+	tags := work.CloneTags(proposal.Tags)
+	if tags == nil {
+		tags = map[string]string{}
+	}
+	tags["_work_name"] = name
+	tags["_work_type"] = workTypeID
+	return work.FactoryWorkItem{
+		ID:                       identity,
+		WorkTypeID:               workTypeID,
+		State:                    state,
+		DisplayName:              name,
+		ChainingTraceDepth:       request.Lineage.ChainingTraceDepth,
+		CurrentChainingTraceID:   request.Lineage.CurrentChainingTraceID,
+		PreviousChainingTraceIDs: append([]string(nil), request.Lineage.PreviousChainingTraceIDs...),
+		TraceID:                  request.Lineage.TraceID,
+		Content:                  work.CloneWorkContentParts(proposal.Content),
+		ParentID:                 parentID,
+		Tags:                     tags,
+	}, nil
+}
+
+func testMaterializationPrimaryOutput(parts []work.WorkContentPart) string {
+	var output strings.Builder
+	for _, part := range parts {
+		if part.Type != work.WorkContentPartTypeText {
+			continue
+		}
+		text := strings.TrimSpace(part.Text)
+		if text == "" {
+			continue
+		}
+		if output.Len() > 0 {
+			output.WriteByte('\n')
+		}
+		output.WriteString(text)
+	}
+	return output.String()
 }
 
 func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {

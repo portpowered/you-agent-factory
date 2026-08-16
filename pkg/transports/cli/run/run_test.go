@@ -55,6 +55,7 @@ func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *tes
 }
 
 type stubFactoryService struct {
+	runtimehost.Service
 	run                   func(context.Context) error
 	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error)
 	runtimeLogDiagnostics runtimehost.RuntimeLogDiagnostics

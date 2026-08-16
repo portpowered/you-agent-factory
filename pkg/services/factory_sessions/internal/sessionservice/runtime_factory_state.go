@@ -75,15 +75,13 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 }
 
 // CleanInvocationSnapshot forwards the Runtime-owned clean-invocation
-// projection through the replaceable Factory Session runtime without adding
-// the projection to the broad Factory Runtime service contract.
+// projection through the replaceable Factory Session runtime.
 func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
 	runtime := fs.currentRuntimeService()
-	provider, ok := runtime.(factory.CleanInvocationSnapshotProvider)
-	if !ok {
+	if runtime == nil {
 		return factory.CleanInvocationSnapshot{}, factory.ErrNotRunning
 	}
-	return provider.CleanInvocationSnapshot(ctx)
+	return runtime.CleanInvocationSnapshot(ctx)
 }
 
 // ControlPause routes root control to the current replaceable runtime.

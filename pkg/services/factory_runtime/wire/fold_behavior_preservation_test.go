@@ -289,6 +289,10 @@ func (s *foldHostedRuntimeStub) Observe(
 	}, nil
 }
 
+func (*foldHostedRuntimeStub) CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	return factoryruntime.CleanInvocationSnapshot{}, nil
+}
+
 func (s *foldHostedRuntimeStub) PlanDispatch(
 	_ context.Context,
 	req factoryruntime.PlanDispatchRequest,

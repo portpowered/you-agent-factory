@@ -25,7 +25,7 @@ func emitCleanInvocationOutcome(
 	duration time.Duration,
 ) error {
 	logger := cleanInvocationLogger(cfg.Logger)
-	provider, ok := runner.(factoryruntime.CleanInvocationSnapshotProvider)
+	provider, ok := runner.(factoryruntime.Service)
 	if !ok {
 		if runErr == nil {
 			err := &InvocationError{

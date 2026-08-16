@@ -111,6 +111,10 @@ func (wrapped *invocationScheduleFactory) Observe(ctx context.Context, request f
 	return wrapped.runtimeService().Observe(ctx, request)
 }
 
+func (wrapped *invocationScheduleFactory) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
+	return wrapped.runtimeService().CleanInvocationSnapshot(ctx)
+}
+
 func (wrapped *invocationScheduleFactory) PlanDispatch(ctx context.Context, request factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return wrapped.runtimeService().PlanDispatch(ctx, request)
 }

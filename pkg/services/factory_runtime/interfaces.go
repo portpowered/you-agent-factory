@@ -74,6 +74,10 @@ type Service interface {
 	// source of truth for this published slice.
 	Observe(ctx context.Context, req ObserveRequest) (ObserveResult, error)
 
+	// CleanInvocationSnapshot projects the current Runtime state into the
+	// detached vocabulary consumed by clean invocation result classification.
+	CleanInvocationSnapshot(ctx context.Context) (CleanInvocationSnapshot, error)
+
 	// PlanDispatch publishes a stable dispatch intent into Runtime-owned
 	// planning/outbox vocabulary. Workers remains the execution owner. Returns
 	// ErrDuplicateDispatchIntent, ErrNotRunning, or ErrNotFound for typed

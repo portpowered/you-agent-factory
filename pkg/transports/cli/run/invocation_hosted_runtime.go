@@ -76,7 +76,7 @@ func (runner historicalReplayRunner) RuntimeLogDiagnostics() runtimeartifact.Dia
 }
 
 func (runner historicalReplayRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
-	provider, ok := runner.runner.(factoryruntime.CleanInvocationSnapshotProvider)
+	provider, ok := runner.runner.(factoryruntime.Service)
 	if !ok {
 		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
 	}
@@ -168,7 +168,7 @@ func WithHostedInvocation(
 
 type cleanInvocationSnapshotRunner struct {
 	runner   initializer.LocalRuntimeRunner
-	provider factoryruntime.CleanInvocationSnapshotProvider
+	provider factoryruntime.Service
 }
 
 func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
@@ -236,7 +236,7 @@ func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.
 // lifecycle runner for clean-invocation result classification.
 func WithCleanInvocationSnapshot(
 	runner initializer.LocalRuntimeRunner,
-	provider factoryruntime.CleanInvocationSnapshotProvider,
+	provider factoryruntime.Service,
 ) initializer.LocalRuntimeRunner {
 	if runner == nil || provider == nil {
 		return runner

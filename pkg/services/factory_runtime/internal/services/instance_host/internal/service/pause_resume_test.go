@@ -105,6 +105,10 @@ func (f *lifecycleControlFactory) Observe(
 	return factory.ObserveResult{Observation: factory.Observation{Status: factory.ObservationStatusActive}}, nil
 }
 
+func (*lifecycleControlFactory) CleanInvocationSnapshot(context.Context) (factory.CleanInvocationSnapshot, error) {
+	return factory.CleanInvocationSnapshot{}, nil
+}
+
 func (f *lifecycleControlFactory) PlanDispatch(
 	_ context.Context,
 	req factory.PlanDispatchRequest,

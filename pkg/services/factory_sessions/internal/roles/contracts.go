@@ -72,7 +72,7 @@ type OpenedProcessApplication struct {
 	Plan            lifecycle.Plan
 	Diagnostics     factoryruntime.RuntimeLogDiagnostics
 	Ready           <-chan initializer.RuntimeHostBinding
-	CleanInvocation factoryruntime.CleanInvocationSnapshotProvider
+	CleanInvocation factoryruntime.Service
 	// HostedInvocation is a narrow operation result for the hosted CLI path;
 	// it is not the opened runtime's HTTP service table.
 	HostedInvocation HostedInvocationOperation

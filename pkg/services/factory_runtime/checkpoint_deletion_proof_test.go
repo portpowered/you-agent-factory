@@ -125,6 +125,9 @@ func (externalConsumerPeer) ControlMoveWork(_ context.Context, req factory.MoveW
 func (externalConsumerPeer) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
 	return factory.ObserveResult{Observation: factory.Observation{Status: factory.ObservationStatusActive}}, nil
 }
+func (externalConsumerPeer) CleanInvocationSnapshot(context.Context) (factory.CleanInvocationSnapshot, error) {
+	return factory.CleanInvocationSnapshot{}, nil
+}
 func (externalConsumerPeer) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {
 	return factory.PlanDispatchResult{Outcome: factory.DispatchPlanOutcomeAccepted, DispatchID: req.DispatchID}, nil
 }

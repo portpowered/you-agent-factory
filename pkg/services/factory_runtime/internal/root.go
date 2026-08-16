@@ -459,6 +459,13 @@ func (r *Root) Observe(ctx context.Context, req factoryruntime.ObserveRequest) (
 	return factoryruntime.ObserveResult{}, factoryruntime.ErrNotRunning
 }
 
+func (r *Root) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	if service := r.delegate(); service != nil {
+		return service.CleanInvocationSnapshot(ctx)
+	}
+	return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+}
+
 func (r *Root) PlanDispatch(ctx context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
 	if service := r.delegate(); service != nil {
 		return service.PlanDispatch(ctx, req)
@@ -624,6 +631,13 @@ func (service *boundRuntimeService) Observe(ctx context.Context, req factoryrunt
 		return target.Observe(ctx, req)
 	}
 	return factoryruntime.ObserveResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	if target := service.target(); target != nil {
+		return target.CleanInvocationSnapshot(ctx)
+	}
+	return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
 }
 
 func (service *boundRuntimeService) PlanDispatch(ctx context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {

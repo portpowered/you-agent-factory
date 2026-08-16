@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -137,14 +136,9 @@ func (service *Service) bindLiveApplication(
 		Plan:             plan,
 		Diagnostics:      opened.Resources.Diagnostics,
 		Ready:            runtimeReady(opened.Process),
-		CleanInvocation:  cleanInvocationProvider(opened.HTTP.FactoryRuntime),
+		CleanInvocation:  opened.HTTP.FactoryRuntime,
 		HostedInvocation: hostedInvocation(opened.HTTP.FactorySessions),
 	}, nil
-}
-
-func cleanInvocationProvider(service factoryruntime.Service) factoryruntime.CleanInvocationSnapshotProvider {
-	provider, _ := service.(factoryruntime.CleanInvocationSnapshotProvider)
-	return provider
 }
 
 func (service *Service) openHistoricalReplayApplication(
