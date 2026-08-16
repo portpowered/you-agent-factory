@@ -1,4 +1,4 @@
 # Baseline for the hardcoded UI copy check.
 # Entries are path|line|column|kind|text.
-src/features/factory-graph-editor/lib/editor-runtime/factory-graph-field-operations.ts|150|16|string-literal|Graph node " " was not found.
-src/features/factory-graph-editor/lib/editor-runtime/factory-graph-field-operations.ts|171|14|string-literal|Graph node " " was not found.
+src/features/factory-graph-editor/lib/editor-runtime/factory-graph-field-operations.ts|118|16|string-literal|Graph node " " was not found.
+src/features/factory-graph-editor/lib/editor-runtime/factory-graph-field-operations.ts|139|14|string-literal|Graph node " " was not found.

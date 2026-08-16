@@ -15,6 +15,7 @@ export function FactoryGraphVisualGroupAffordances({
   groupOutlineAriaLabel,
   handleGroupAffordanceKeyDown,
   handleGroupPointerDown,
+  handlePointerCancel,
   handlePointerMove,
   handlePointerUp,
   handleResizeKeyDown,
@@ -30,6 +31,7 @@ export function FactoryGraphVisualGroupAffordances({
     event: KeyboardEvent<HTMLButtonElement>,
   ) => void;
   handleGroupPointerDown: (event: PointerEvent<HTMLButtonElement>) => void;
+  handlePointerCancel: (event: PointerEvent<HTMLElement>) => void;
   handlePointerMove: (event: PointerEvent<HTMLElement>) => void;
   handlePointerUp: (event: PointerEvent<HTMLElement>) => void;
   handleResizeKeyDown: (
@@ -56,6 +58,7 @@ export function FactoryGraphVisualGroupAffordances({
         data-factory-visual-group-label=""
         onKeyDown={handleGroupAffordanceKeyDown}
         onPointerDown={handleGroupPointerDown}
+        onPointerCancel={handlePointerCancel}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         tabIndex={canEdit ? 0 : -1}
@@ -71,6 +74,7 @@ export function FactoryGraphVisualGroupAffordances({
           key={edge}
           onKeyDown={handleGroupAffordanceKeyDown}
           onPointerDown={handleGroupPointerDown}
+          onPointerCancel={handlePointerCancel}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           style={groupOutlineAffordanceStyle(edge)}
@@ -88,6 +92,7 @@ export function FactoryGraphVisualGroupAffordances({
               key={corner}
               onKeyDown={handleResizeKeyDown(corner)}
               onPointerDown={handleResizePointerDown(corner)}
+              onPointerCancel={handlePointerCancel}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               style={resizeHandleStyle(corner)}

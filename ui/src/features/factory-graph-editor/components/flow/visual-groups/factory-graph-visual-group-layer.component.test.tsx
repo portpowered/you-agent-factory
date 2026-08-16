@@ -21,23 +21,29 @@ const sampleGroup: FactoryLayoutGroup = {
 };
 
 function enablePointerCapture(element: HTMLElement) {
+  const setPointerCapture = vi.fn();
+  const releasePointerCapture = vi.fn();
+  const hasPointerCapture = vi.fn(() => true);
   Object.defineProperty(element, "setPointerCapture", {
     configurable: true,
-    value: vi.fn(),
+    value: setPointerCapture,
   });
   Object.defineProperty(element, "releasePointerCapture", {
     configurable: true,
-    value: vi.fn(),
+    value: releasePointerCapture,
   });
   Object.defineProperty(element, "hasPointerCapture", {
     configurable: true,
-    value: vi.fn(() => true),
+    value: hasPointerCapture,
   });
+
+  return { hasPointerCapture, releasePointerCapture, setPointerCapture };
 }
 
 function renderVisualGroupLayer(
   props: Partial<ComponentProps<typeof FactoryGraphVisualGroupLayer>> = {},
   wrapperStyle: CSSProperties = { height: 480, width: 640 },
+  nodes: ComponentProps<typeof ReactFlow>["nodes"] = [],
 ) {
   const onSelectGroup = props.onSelectGroup ?? vi.fn();
 
@@ -48,7 +54,7 @@ function renderVisualGroupLayer(
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}
           edges={[]}
           fitView={wrapperStyle.position !== "relative"}
-          nodes={[]}
+          defaultNodes={nodes}
         >
           <FactoryGraphVisualGroupLayer
             canEdit
@@ -408,6 +414,143 @@ describe("FactoryGraphVisualGroupLayer", () => {
       }),
     );
   });
+
+  it("leaves Escape untouched when no group gesture is active", () => {
+    const onMoveGroup = vi.fn();
+    const onResizeGroup = vi.fn();
+
+    renderVisualGroupLayer({ onMoveGroup, onResizeGroup });
+
+    const escapeEvent = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "Escape",
+    });
+    window.dispatchEvent(escapeEvent);
+
+    expect(escapeEvent.defaultPrevented).toBe(false);
+    expect(onMoveGroup).not.toHaveBeenCalled();
+    expect(onResizeGroup).not.toHaveBeenCalled();
+  });
+
+  it.each(["Escape", "pointercancel"] as const)(
+    "cancels a moving group through %s and restores its exact preview geometry",
+    (cancelInput) => {
+      const restoreBrowserShims = installDashboardBrowserTestShims();
+      const onMoveGroup = vi.fn();
+
+      renderVisualGroupLayer(
+        {
+          groups: [
+            {
+              ...sampleGroup,
+              nodeIds: ["workstation:draft"],
+            },
+          ],
+          onMoveGroup,
+          selectedGroupId: "group-1",
+        },
+        { height: 480, position: "relative", width: 640 },
+        [
+          {
+            data: { factoryGraphNodeId: "workstation:draft" },
+            id: "workstation:draft",
+            position: { x: 40, y: 60 },
+          },
+        ],
+      );
+
+      const groupBody = screen.getByRole("button", { name: "Review" });
+      groupBody.focus();
+      const pointerCapture = enablePointerCapture(groupBody);
+      fireEvent.pointerDown(groupBody, {
+        clientX: 100,
+        clientY: 120,
+        pointerId: 7,
+      });
+      fireEvent.pointerMove(groupBody, {
+        clientX: 140,
+        clientY: 150,
+        pointerId: 7,
+      });
+
+      const group = document.querySelector(
+        '[data-factory-visual-group="group-1"]',
+      );
+      const memberNode = screen.getByTestId("rf__node-workstation:draft");
+      expect(group).not.toHaveStyle({ left: "40px", top: "60px" });
+      expect(memberNode).not.toHaveStyle({
+        transform: "translate(40px,60px)",
+      });
+
+      if (cancelInput === "Escape") {
+        fireEvent.keyDown(groupBody, { key: "Escape" });
+      } else {
+        fireEvent.pointerCancel(groupBody, { pointerId: 7 });
+      }
+
+      expect(onMoveGroup).not.toHaveBeenCalled();
+      expect(group).toHaveStyle({
+        height: "120px",
+        left: "40px",
+        top: "60px",
+        width: "200px",
+      });
+      expect(memberNode).toHaveStyle({ transform: "translate(40px,60px)" });
+      expect(document.activeElement).toBe(groupBody);
+      expect(pointerCapture.releasePointerCapture).toHaveBeenCalledWith(7);
+      restoreBrowserShims();
+    },
+  );
+
+  it.each(["Escape", "pointercancel"] as const)(
+    "cancels a resizing group through %s and restores its exact preview bounds",
+    (cancelInput) => {
+      const onResizeGroup = vi.fn();
+
+      renderVisualGroupLayer(
+        {
+          onResizeGroup,
+          selectedGroupId: "group-1",
+        },
+        { height: 480, position: "relative", width: 640 },
+      );
+
+      const resizeHandle = screen.getByRole("button", { name: "Resize se" });
+      resizeHandle.focus();
+      const pointerCapture = enablePointerCapture(resizeHandle);
+      fireEvent.pointerDown(resizeHandle, {
+        clientX: 240,
+        clientY: 180,
+        pointerId: 8,
+      });
+      fireEvent.pointerMove(resizeHandle, {
+        clientX: 280,
+        clientY: 220,
+        pointerId: 8,
+      });
+
+      const group = document.querySelector(
+        '[data-factory-visual-group="group-1"]',
+      );
+      expect(group).not.toHaveStyle({ height: "120px", width: "200px" });
+
+      if (cancelInput === "Escape") {
+        fireEvent.keyDown(resizeHandle, { key: "Escape" });
+      } else {
+        fireEvent.pointerCancel(resizeHandle, { pointerId: 8 });
+      }
+
+      expect(onResizeGroup).not.toHaveBeenCalled();
+      expect(group).toHaveStyle({
+        height: "120px",
+        left: "40px",
+        top: "60px",
+        width: "200px",
+      });
+      expect(document.activeElement).toBe(resizeHandle);
+      expect(pointerCapture.releasePointerCapture).toHaveBeenCalledWith(8);
+    },
+  );
 
   it.each(["nw", "ne", "sw"] as const)(
     "commits resize interactions from the %s corner",

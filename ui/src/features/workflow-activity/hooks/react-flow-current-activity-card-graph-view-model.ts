@@ -329,6 +329,7 @@ function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
   graphSelection: FactoryGraphEditorSelectionController,
   dimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
+  positionChangesEnabled: boolean,
 ) {
   const basePositionKey = useMemo(
     () =>
@@ -347,6 +348,10 @@ function useCurrentActivityGraphNodePresentation(
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      if (!positionChangesEnabled) {
+        return;
+      }
+
       const positionChanges: NodeChange[] = [];
 
       for (const change of changes) {
@@ -392,9 +397,20 @@ function useCurrentActivityGraphNodePresentation(
           : currentPositionState;
       });
     },
-    [basePositionKey],
+    [basePositionKey, positionChangesEnabled],
   );
+  useEffect(() => {
+    if (positionChangesEnabled) {
+      return;
+    }
+
+    setTransientPositionState({
+      basePositionKey,
+      positionsByNodeId: EMPTY_TRANSIENT_NODE_POSITIONS,
+    });
+  }, [basePositionKey, positionChangesEnabled]);
   const transientPositionsByNodeId =
+    positionChangesEnabled &&
     transientPositionState.basePositionKey === basePositionKey
       ? transientPositionState.positionsByNodeId
       : EMPTY_TRANSIENT_NODE_POSITIONS;
@@ -616,6 +632,7 @@ export function useCurrentActivityGraphViewModel({
       baseNodes,
       graphSelection,
       nodeResizeState.dimensionsByNodeId,
+      editor.editorMode && editor.canInteractWithEditor,
     );
   const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(
     graphSelection,

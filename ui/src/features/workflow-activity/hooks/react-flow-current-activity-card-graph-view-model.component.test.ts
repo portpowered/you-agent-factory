@@ -368,6 +368,47 @@ function MountedCurrentActivityGraph({
   );
 }
 
+describe("current activity graph observe projection", () => {
+  it("ignores React Flow position callbacks while observe mode is active", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 160,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      editor: {
+        canInteractWithEditor: false,
+        editorMode: false,
+      },
+    });
+
+    act(() => {
+      result.current.handleNodesChange([
+        {
+          id: "workstation:review",
+          position: { x: 999, y: 999 },
+          type: "position",
+        },
+      ]);
+    });
+
+    expect(result.current.nodes[0]?.position).toEqual({ x: 120, y: 80 });
+  });
+});
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: mounted React Flow continuity is intentionally exercised across every live overlay transition.
 describe("mounted current activity graph continuity", () => {
   // biome-ignore lint/complexity/noExcessiveLinesPerFunction: mounted React Flow continuity is intentionally exercised across every live overlay transition.

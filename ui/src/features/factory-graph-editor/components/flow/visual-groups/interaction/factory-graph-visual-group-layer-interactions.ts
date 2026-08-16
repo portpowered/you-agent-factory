@@ -1,6 +1,6 @@
 import { useReactFlow } from "@xyflow/react";
 import type { KeyboardEvent, PointerEvent } from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FactoryLayoutPoint } from "../../../../lib/layout/factory-graph-layout-operations";
 import type { FactoryLayoutGroup } from "../../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import {
@@ -18,6 +18,7 @@ type DragSession =
       groupId: string;
       memberNodeIds: readonly string[];
       pointerId: number;
+      pointerTarget: HTMLElement;
       startFlowPosition: FactoryLayoutPoint;
       startMemberPositions: Map<string, FactoryLayoutPoint>;
       startBounds: FactoryLayoutGroup["bounds"];
@@ -29,6 +30,7 @@ type DragSession =
       corner: ResizeCorner;
       groupId: string;
       pointerId: number;
+      pointerTarget: HTMLElement;
       startBounds: FactoryLayoutGroup["bounds"];
       startFlowPosition: FactoryLayoutPoint;
     };
@@ -104,10 +106,61 @@ export function useFactoryGraphVisualGroupLayerInteractions({
     [setNodes],
   );
 
+  const releasePointerCapture = useCallback((dragSession: DragSession) => {
+    if (dragSession.pointerTarget.hasPointerCapture?.(dragSession.pointerId)) {
+      dragSession.pointerTarget.releasePointerCapture?.(dragSession.pointerId);
+    }
+  }, []);
+
+  const cancelDragSession = useCallback(() => {
+    const dragSession = dragSessionRef.current;
+    if (!dragSession) {
+      return false;
+    }
+
+    dragSessionRef.current = null;
+    releasePointerCapture(dragSession);
+    setPreviewBoundsByGroupId((current) => {
+      const next = { ...current };
+      delete next[dragSession.groupId];
+      return next;
+    });
+
+    if (dragSession.kind === "move") {
+      updateMemberNodePreview(
+        dragSession.memberNodeIds,
+        dragSession.startMemberPositions,
+        { x: 0, y: 0 },
+      );
+    }
+
+    return true;
+  }, [releasePointerCapture, updateMemberNodePreview]);
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || !cancelDragSession()) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => window.removeEventListener("keydown", handleWindowKeyDown);
+  }, [cancelDragSession]);
+
   const handleGroupAffordanceKeyDown = useCallback(
     (group: FactoryLayoutGroup) =>
       (event: KeyboardEvent<HTMLButtonElement>) => {
         if (!canEdit) {
+          return;
+        }
+
+        if (event.key === "Escape" && cancelDragSession()) {
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
 
@@ -135,13 +188,19 @@ export function useFactoryGraphVisualGroupLayerInteractions({
         }
         onMoveGroup(group.id, delta, new Map());
       },
-    [canEdit, onMoveGroup, onSelectGroup, selectedGroupId],
+    [canEdit, cancelDragSession, onMoveGroup, onSelectGroup, selectedGroupId],
   );
 
   const handleResizeKeyDown = useCallback(
     (group: FactoryLayoutGroup, corner: ResizeCorner) =>
       (event: KeyboardEvent<HTMLButtonElement>) => {
         if (!canEdit || !onResizeGroup) {
+          return;
+        }
+
+        if (event.key === "Escape" && cancelDragSession()) {
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
 
@@ -172,7 +231,7 @@ export function useFactoryGraphVisualGroupLayerInteractions({
           resizeBoundsFromCorner(group.bounds, corner, delta),
         );
       },
-    [canEdit, onResizeGroup, onSelectGroup, selectedGroupId],
+    [canEdit, cancelDragSession, onResizeGroup, onSelectGroup, selectedGroupId],
   );
 
   const handleGroupPointerDown = useCallback(
@@ -215,6 +274,7 @@ export function useFactoryGraphVisualGroupLayerInteractions({
         memberNodeIds,
         moved: false,
         pointerId: event.pointerId,
+        pointerTarget: event.currentTarget,
         startBounds: { ...group.bounds },
         startFlowPosition,
         startMemberPositions,
@@ -246,6 +306,7 @@ export function useFactoryGraphVisualGroupLayerInteractions({
           groupId: group.id,
           kind: "resize",
           pointerId: event.pointerId,
+          pointerTarget: event.currentTarget,
           startBounds: { ...group.bounds },
           startFlowPosition: screenToFlowPosition({
             x: event.clientX,
@@ -334,9 +395,7 @@ export function useFactoryGraphVisualGroupLayerInteractions({
       }
 
       dragSessionRef.current = null;
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-        event.currentTarget.releasePointerCapture?.(event.pointerId);
-      }
+      releasePointerCapture(dragSession);
 
       const currentFlowPosition = screenToFlowPosition({
         x: event.clientX,
@@ -390,13 +449,29 @@ export function useFactoryGraphVisualGroupLayerInteractions({
       onSelectGroup,
       screenToFlowPosition,
       updateMemberNodePreview,
+      releasePointerCapture,
     ],
+  );
+
+  const handlePointerCancel = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      const dragSession = dragSessionRef.current;
+      if (!dragSession || dragSession.pointerId !== event.pointerId) {
+        return;
+      }
+
+      cancelDragSession();
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [cancelDragSession],
   );
 
   return {
     handleGroupAffordanceKeyDown,
     handleGroupPointerDown,
     handlePointerMove,
+    handlePointerCancel,
     handlePointerUp,
     handleResizeKeyDown,
     handleResizePointerDown,

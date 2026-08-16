@@ -1,11 +1,16 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: surface coverage keeps related shared graph scenarios in one fixture file.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
+
+const { graphViewportFailure, graphViewportRenderCount } = vi.hoisted(() => ({
+  graphViewportFailure: { current: null as Error | null },
+  graphViewportRenderCount: { current: 0 },
+}));
 
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
@@ -32,51 +37,58 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
     saveControls: { requestConfirmation: () => void };
     saveDisabledReason: string | null;
     nodes: Array<{ id: string; selected?: boolean }>;
-  }) => (
-    <div
-      data-disabled-reason={saveDisabledReason ?? ""}
-      data-selected-node-ids={nodes
-        .filter((node) => node.selected)
-        .map((node) => node.id)
-        .join(",")}
-      data-testid="graph-viewport"
-    >
-      <button onClick={saveControls.requestConfirmation} type="button">
-        Trigger save confirm
-      </button>
-      <button onClick={editorControls.discardPendingChanges} type="button">
-        Trigger discard
-      </button>
-      <button onClick={addControls.startAction} type="button">
-        Trigger add action
-      </button>
-      <button
-        onClick={() => {
-          addControls.setMenuOpen(true);
-        }}
-        type="button"
+  }) => {
+    graphViewportRenderCount.current += 1;
+    if (graphViewportFailure.current) {
+      throw graphViewportFailure.current;
+    }
+
+    return (
+      <div
+        data-disabled-reason={saveDisabledReason ?? ""}
+        data-selected-node-ids={nodes
+          .filter((node) => node.selected)
+          .map((node) => node.id)
+          .join(",")}
+        data-testid="graph-viewport"
       >
-        Trigger add menu
-      </button>
-      <button onClick={onConnect} type="button">
-        Trigger connect
-      </button>
-      <button onClick={onEditorEdgeClick} type="button">
-        Trigger edge delete
-      </button>
-      <button onClick={onEditorNodeClick} type="button">
-        Trigger node delete
-      </button>
-      <button
-        onClick={() => {
-          editorControls.selectTool("connect");
-        }}
-        type="button"
-      >
-        Trigger tool select
-      </button>
-    </div>
-  ),
+        <button onClick={saveControls.requestConfirmation} type="button">
+          Trigger save confirm
+        </button>
+        <button onClick={editorControls.discardPendingChanges} type="button">
+          Trigger discard
+        </button>
+        <button onClick={addControls.startAction} type="button">
+          Trigger add action
+        </button>
+        <button
+          onClick={() => {
+            addControls.setMenuOpen(true);
+          }}
+          type="button"
+        >
+          Trigger add menu
+        </button>
+        <button onClick={onConnect} type="button">
+          Trigger connect
+        </button>
+        <button onClick={onEditorEdgeClick} type="button">
+          Trigger edge delete
+        </button>
+        <button onClick={onEditorNodeClick} type="button">
+          Trigger node delete
+        </button>
+        <button
+          onClick={() => {
+            editorControls.selectTool("connect");
+          }}
+          type="button"
+        >
+          Trigger tool select
+        </button>
+      </div>
+    );
+  },
 }));
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: fixture mirrors the editor/view-model surface contract for component tests.
@@ -337,6 +349,51 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: surface coverage keeps the shared editor chrome fixtures together.
 describe("CurrentActivityGraphSurface", () => {
+  it("contains renderer failures and retries only the graph viewport", async () => {
+    graphViewportFailure.current = new Error("integrity failure");
+    graphViewportRenderCount.current = 0;
+
+    render(
+      <div>
+        <CurrentActivityGraphSurface
+          locale="en"
+          viewModel={createViewModelStub({ editorMode: false }) as never}
+          imports={importControllerStub}
+          selection={null}
+          snapshot={semanticWorkflowDashboardSnapshot}
+        />
+        <aside data-testid="surrounding-dashboard">
+          Dashboard remains mounted
+        </aside>
+      </div>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Graph rendering needs recovery" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This graph could not be rendered safely. The rest of the dashboard is still available.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByTestId("surrounding-dashboard")).toBeTruthy();
+
+    const retry = screen.getByRole("button", { name: "Retry graph" });
+    expect(document.activeElement).toBe(retry);
+    const failedRenderCount = graphViewportRenderCount.current;
+    graphViewportFailure.current = null;
+    fireEvent.click(retry);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("graph-viewport")).toBeTruthy();
+    });
+    expect(graphViewportRenderCount.current).toBeGreaterThan(failedRenderCount);
+    expect(screen.getByTestId("surrounding-dashboard")).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Graph rendering needs recovery" }),
+    ).toBeNull();
+  });
+
   it("uses the semantic graph viewport for observer states", () => {
     render(
       <CurrentActivityGraphSurface

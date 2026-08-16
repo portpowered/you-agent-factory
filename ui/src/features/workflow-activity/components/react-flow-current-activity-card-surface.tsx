@@ -19,6 +19,7 @@ import {
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
+import { CurrentActivityGraphErrorBoundary } from "./react-flow-current-activity-card-error-boundary";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type CurrentActivityGraphSurfaceModel = CurrentActivityGraphCardViewModel;
@@ -207,63 +208,69 @@ function CurrentActivityGraphSurfaceContent({
       className="relative grid max-h-full min-h-0 flex-1 overflow-hidden"
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
     >
-      <CurrentActivityGraphViewport
-        addControls={controller.addControls}
-        canDeleteGraphSelection={model.canDeleteGraphSelection}
-        clearGraphSelection={model.clearGraphSelection}
-        deleteGraphSelection={model.deleteGraphSelection}
-        editorControls={editorControls}
-        graphSelectionToolbarState={model.graphSelectionToolbarState}
-        edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
-        edges={model.edges}
-        flowContainerRef={flowContainerRef}
-        flowInstanceRef={flowInstanceRef}
-        handleEdgesChange={model.handleEdgesChange}
-        handleGraphSelectionChange={model.handleGraphSelectionChange}
-        handleGraphSelectionStart={model.handleGraphSelectionStart}
-        handleNodesChange={model.handleNodesChange}
-        hasPendingChanges={controller.status.hasSharedGraphChanges}
-        headingID={headingID}
-        imports={imports}
-        isSavingDraft={controller.status.isSaving}
-        layoutControls={layoutControls}
-        locale={locale}
-        nodeTypes={NODE_TYPES}
-        nodes={model.nodes}
-        visibilityControls={model.visibilityControls}
-        onConnect={editorControls.connect}
-        onEditorEdgeClick={edgeWaypointControls.handleEditorEdgeClick}
-        onEditorEdgeDoubleClick={
-          edgeWaypointControls.handleEditorEdgeDoubleClick
-        }
-        onMoveEdgeWaypoint={edgeWaypointControls.handleMoveSelectedEdgeWaypoint}
-        onRemoveEdgeWaypoint={
-          edgeWaypointControls.handleRemoveSelectedEdgeWaypoint
-        }
-        selectedEdgeWaypoints={edgeWaypointControls.selectedEdgeWaypoints}
-        selectedWaypointEdgeId={edgeWaypointControls.selectedWaypointEdgeId}
-        waypointAriaLabel={edgeWaypointControls.waypointAriaLabel}
-        waypointControls={edgeWaypointControls.waypointControls}
-        onCreateVisualGroup={visualGroupControls.handleCreateVisualGroup}
-        onEditorNodeClick={(nodeId) => {
-          visualGroupControls.clearSelectedVisualGroup();
-          removalControls.deleteNode(nodeId);
-        }}
-        onMoveVisualGroup={visualGroupControls.handleMoveVisualGroup}
-        onResizeVisualGroup={visualGroupControls.handleResizeVisualGroup}
-        onSelectVisualGroup={visualGroupControls.handleSelectVisualGroup}
-        selectedVisualGroupId={visualGroupControls.selectedGroupId}
-        visualGroupCanEdit={visualGroupControls.canEditVisualGroups}
-        visualGroupResizeHandleAriaLabel={
-          visualGroupControls.resizeHandleAriaLabel
-        }
-        visualGroupControls={visualGroupControls.visualGroupControls}
-        visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
-        visualGroupOutlineAriaLabel={visualGroupControls.groupOutlineAriaLabel}
-        visualGroups={visualGroupControls.groups}
-        saveControls={controller.saveControls}
-        saveDisabledReason={controller.status.saveBlockedReason}
-      />
+      <CurrentActivityGraphErrorBoundary locale={locale}>
+        <CurrentActivityGraphViewport
+          addControls={controller.addControls}
+          canDeleteGraphSelection={model.canDeleteGraphSelection}
+          clearGraphSelection={model.clearGraphSelection}
+          deleteGraphSelection={model.deleteGraphSelection}
+          editorControls={editorControls}
+          graphSelectionToolbarState={model.graphSelectionToolbarState}
+          edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
+          edges={model.edges}
+          flowContainerRef={flowContainerRef}
+          flowInstanceRef={flowInstanceRef}
+          handleEdgesChange={model.handleEdgesChange}
+          handleGraphSelectionChange={model.handleGraphSelectionChange}
+          handleGraphSelectionStart={model.handleGraphSelectionStart}
+          handleNodesChange={model.handleNodesChange}
+          hasPendingChanges={controller.status.hasSharedGraphChanges}
+          headingID={headingID}
+          imports={imports}
+          isSavingDraft={controller.status.isSaving}
+          layoutControls={layoutControls}
+          locale={locale}
+          nodeTypes={NODE_TYPES}
+          nodes={model.nodes}
+          visibilityControls={model.visibilityControls}
+          onConnect={editorControls.connect}
+          onEditorEdgeClick={edgeWaypointControls.handleEditorEdgeClick}
+          onEditorEdgeDoubleClick={
+            edgeWaypointControls.handleEditorEdgeDoubleClick
+          }
+          onMoveEdgeWaypoint={
+            edgeWaypointControls.handleMoveSelectedEdgeWaypoint
+          }
+          onRemoveEdgeWaypoint={
+            edgeWaypointControls.handleRemoveSelectedEdgeWaypoint
+          }
+          selectedEdgeWaypoints={edgeWaypointControls.selectedEdgeWaypoints}
+          selectedWaypointEdgeId={edgeWaypointControls.selectedWaypointEdgeId}
+          waypointAriaLabel={edgeWaypointControls.waypointAriaLabel}
+          waypointControls={edgeWaypointControls.waypointControls}
+          onCreateVisualGroup={visualGroupControls.handleCreateVisualGroup}
+          onEditorNodeClick={(nodeId) => {
+            visualGroupControls.clearSelectedVisualGroup();
+            removalControls.deleteNode(nodeId);
+          }}
+          onMoveVisualGroup={visualGroupControls.handleMoveVisualGroup}
+          onResizeVisualGroup={visualGroupControls.handleResizeVisualGroup}
+          onSelectVisualGroup={visualGroupControls.handleSelectVisualGroup}
+          selectedVisualGroupId={visualGroupControls.selectedGroupId}
+          visualGroupCanEdit={visualGroupControls.canEditVisualGroups}
+          visualGroupResizeHandleAriaLabel={
+            visualGroupControls.resizeHandleAriaLabel
+          }
+          visualGroupControls={visualGroupControls.visualGroupControls}
+          visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
+          visualGroupOutlineAriaLabel={
+            visualGroupControls.groupOutlineAriaLabel
+          }
+          visualGroups={visualGroupControls.groups}
+          saveControls={controller.saveControls}
+          saveDisabledReason={controller.status.saveBlockedReason}
+        />
+      </CurrentActivityGraphErrorBoundary>
       {editorControls.isEditing ? (
         <CurrentActivityGraphEditorNoticePanel
           locale={locale}

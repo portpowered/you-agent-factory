@@ -23,6 +23,7 @@ export function useEditableFactoryGraphSaveController({
   factoryDocumentScopeKey,
   layoutDraftState,
   locale,
+  onDocumentSaved,
   setBlockedOperation,
 }: {
   activeWorkCount: number;
@@ -30,6 +31,7 @@ export function useEditableFactoryGraphSaveController({
   factoryDocumentScopeKey: string | null;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   locale?: string | null;
+  onDocumentSaved: (savedFactory: CanonicalFactoryDefinition) => void;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -75,6 +77,7 @@ export function useEditableFactoryGraphSaveController({
     factoryDocumentScopeKey,
     layoutDraftState,
     locale,
+    onDocumentSaved,
     setBlockedOperation,
   });
 
@@ -104,6 +107,7 @@ function useSaveEditableFactoryGraph({
   factoryDocumentScopeKey,
   layoutDraftState,
   locale,
+  onDocumentSaved,
   setBlockedOperation,
 }: {
   canSave: boolean;
@@ -112,6 +116,7 @@ function useSaveEditableFactoryGraph({
   factoryDocumentScopeKey: string | null;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   locale?: string | null;
+  onDocumentSaved: (savedFactory: CanonicalFactoryDefinition) => void;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
@@ -148,6 +153,7 @@ function useSaveEditableFactoryGraph({
         layoutDraftState.adoptSavedLayout(
           factoryLayoutFromDefinition(saveInput.value),
         );
+        onDocumentSaved(saveInput.value);
         setBlockedOperation(null);
         didSave = true;
       },
@@ -161,6 +167,7 @@ function useSaveEditableFactoryGraph({
     factoryDocumentScopeKey,
     layoutDraftState,
     locale,
+    onDocumentSaved,
     setBlockedOperation,
   ]);
 }

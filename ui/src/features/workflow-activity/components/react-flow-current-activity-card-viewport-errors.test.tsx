@@ -133,7 +133,19 @@ afterEach(() => {
   reactFlowErrorToReport = null;
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: endpoint coverage keeps the representative diagnostics together.
 describe("CurrentActivityGraphViewport React Flow errors", () => {
+  it("keeps recoverable React Flow diagnostics inside the viewport", () => {
+    reactFlowErrorToReport = {
+      errorId: "004",
+      message:
+        "The React Flow parent container needs a width and a height to render the graph.",
+    };
+
+    expect(() => renderViewport()).not.toThrow();
+    expect(screen.getByTestId("mock-react-flow")).toBeTruthy();
+  });
+
   it("throws when React Flow reports an edge endpoint handle mismatch", () => {
     reactFlowErrorToReport = {
       errorId: "008",
