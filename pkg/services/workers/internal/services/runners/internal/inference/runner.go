@@ -89,7 +89,7 @@ func (r *runner) Execute(
 	result, err := r.models.InvokeLocal(ctx, invocation)
 	if !result.Handled {
 		if r.delegate != nil {
-			return r.delegate.Execute(ctx, request)
+			return r.delegate.Execute(ctx, delegateRequest(request))
 		}
 		return workers.RunnerExecutionResult{}, err
 	}
@@ -102,6 +102,18 @@ func (r *runner) Execute(
 			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 		}},
 	}, nil
+}
+
+func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecutionRequest {
+	// A request selected only the private inference strategy when it carried
+	// no provider runner. Delegate fallback still needs the provider identity
+	// that was resolved on the model target.
+	if workers.NormalizeRunnerID(request.RunnerID) == Identity {
+		if provider := workers.NormalizeRunnerID(request.ModelProvider); provider != "" {
+			request.RunnerID = provider
+		}
+	}
+	return request
 }
 
 func (r *runner) localInvocationRequest(

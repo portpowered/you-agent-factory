@@ -138,6 +138,12 @@ func (s *Service) buildConfiguredRuntimeWorkers(
 		if definition.Type == interfaces.WorkerTypeScript {
 			continue
 		}
+		// Inference attempts are assembled by the request-scoped Execute
+		// service and its private inference runner. Do not retain a per-worker
+		// Workstation executor for them.
+		if definition.Type == interfaces.WorkerTypeInference {
+			continue
+		}
 		result, err := s.executorBuilder.Build(
 			runtimeConfig, configured.Name, factoryRunnerID, workflowContext, logger,
 			invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher,

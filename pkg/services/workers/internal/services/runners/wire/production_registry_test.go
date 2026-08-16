@@ -11,6 +11,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
@@ -158,6 +159,47 @@ func TestNewProductionRegistryResolvesAndExecutesConcurrently(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Errorf("concurrent %s: %v", "resolve/execute", err)
+	}
+}
+
+func TestNewProductionRegistryInferenceFallsBackThroughAgentRunner(t *testing.T) {
+	provider := newAgentProvidersFake()
+	modelsEdge := &inferenceConformanceModels{}
+	registry, err := NewProductionRegistry(
+		runners.AgentDependencies{
+			Providers: provider,
+			Publish:   agentNoopPublisher,
+		},
+		runners.ScriptConfig{Command: "fixture"},
+		scriptDependencies(&scriptConformanceCommand{}, func(string) (map[string]string, error) {
+			return nil, nil
+		}),
+		inferenceRegistryConfig(),
+		inferenceDependencies(modelsEdge, nil),
+	)
+	if err != nil {
+		t.Fatalf("NewProductionRegistry() error = %v", err)
+	}
+
+	request := inferenceRequest()
+	request.ModelOperation = inferenceFixtureExecutionFailure
+	request.ModelProvider = workers.RunnerIDCodex
+	request.UserMessage = "provider fallback"
+	result, err := registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: runners.InferenceIdentity,
+		Attempt:  request,
+	})
+	if err != nil {
+		t.Fatalf("inference fallback Execute() error = %v", err)
+	}
+	if result.Content != "fixture output" {
+		t.Fatalf("inference fallback content = %q, want provider output", result.Content)
+	}
+	if provider.calls.Load() != 1 {
+		t.Fatalf("provider calls = %d, want one fallback attempt", provider.calls.Load())
+	}
+	if got := provider.Request().Provider; got != providers.IDCodex {
+		t.Fatalf("fallback provider = %q, want %q", got, providers.IDCodex)
 	}
 }
 

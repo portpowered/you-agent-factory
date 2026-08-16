@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -10,6 +11,15 @@ import (
 
 func resolveRunnerIdentity(target workers.ExecutionTarget) string {
 	runnerID := workers.NormalizeRunnerID(target.RunnerID)
+	// Managed-model attempts enter the private Inference Runner even when the
+	// request carries a provider runner for delegate fallback. The runner
+	// preserves that provider identity in its normalized attempt.
+	if strings.EqualFold(
+		strings.TrimSpace(target.Model.Locality),
+		models.RuntimeModelLocalityLocal,
+	) && strings.TrimSpace(target.Model.Name) != "" {
+		return runners.InferenceIdentity
+	}
 	switch runnerID {
 	case runners.ScriptIdentity, runners.InferenceIdentity, runners.AgentIdentity, runners.MockIdentity:
 		return runnerID

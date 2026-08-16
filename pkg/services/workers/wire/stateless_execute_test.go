@@ -33,6 +33,74 @@ func TestNewServiceExecuteRunsScriptInferenceAndAgentAttempts(t *testing.T) {
 	}
 }
 
+func TestNewServiceExecuteManagedInferenceFallsBackThroughProviderRunner(t *testing.T) {
+	t.Parallel()
+
+	input := newStatelessConstructionInputs()
+	local := &statelessDecliningLocalInvoker{}
+	delegate := &statelessInferenceDelegate{}
+	input.inferenceDependencies = runners.InferenceDependencies{
+		Models:   local,
+		Delegate: delegate,
+	}
+	service, err := NewService(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		func() time.Time { return time.Unix(1, 0) },
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-inference",
+			RuntimeID:        "runtime-inference",
+			GenerationID:     "generation-inference",
+			DispatchID:       "dispatch-inference",
+			AttemptID:        "attempt-inference",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName: "selected-inference-worker",
+			WorkerType: factorydefinitions.WorkerTypeInference,
+			RunnerID:   workers.RunnerIDCodex,
+			Provider:   workers.ProviderReference{ID: workers.RunnerIDCodex},
+			Model: workers.ModelReference{
+				Name:     "selected-model",
+				Provider: workers.RunnerIDCodex,
+				Locality: models.RuntimeModelLocalityLocal,
+			},
+		},
+		Input: workers.ExecutionInput{ModelOperation: "invoke"},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || result.Output.Primary[0].Text != "delegate-output" {
+		t.Fatalf("Execute() result = %#v, want accepted delegate output", result)
+	}
+	if local.calls.Load() != 1 {
+		t.Fatalf("Models calls = %d, want one managed-model attempt", local.calls.Load())
+	}
+	if local.request.Worker.Name != "selected-inference-worker" || local.request.Worker.Model != "selected-model" {
+		t.Fatalf("Models worker = %#v, want request-selected identity", local.request.Worker)
+	}
+	if delegate.request.RunnerID != workers.RunnerIDCodex ||
+		delegate.request.Model != "selected-model" ||
+		delegate.request.ModelProvider != workers.RunnerIDCodex {
+		t.Fatalf("delegate request = %#v, want provider/model identity preserved", delegate.request)
+	}
+}
+
 func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 	t.Parallel()
 	fixture := newStatelessTestFixture(t)
@@ -756,6 +824,32 @@ type statelessTestLocalInvoker struct {
 	calls atomic.Int32
 	mu    sync.Mutex
 	seen  []models.LocalInvocationRequest
+}
+
+type statelessDecliningLocalInvoker struct {
+	calls   atomic.Int32
+	request models.LocalInvocationRequest
+}
+
+func (invoker *statelessDecliningLocalInvoker) InvokeLocal(
+	_ context.Context,
+	request models.LocalInvocationRequest,
+) (models.LocalInvocationResult, error) {
+	invoker.calls.Add(1)
+	invoker.request = request
+	return models.LocalInvocationResult{Handled: false}, nil
+}
+
+type statelessInferenceDelegate struct {
+	request workers.RunnerExecutionRequest
+}
+
+func (delegate *statelessInferenceDelegate) Execute(
+	_ context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	delegate.request = workers.CloneProviderInferenceRequest(request)
+	return workers.RunnerExecutionResult{Content: "delegate-output"}, nil
 }
 
 func (invoker *statelessTestLocalInvoker) InvokeLocal(

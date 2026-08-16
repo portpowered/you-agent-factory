@@ -87,6 +87,12 @@ func newProductionRegistry(
 	if err != nil {
 		return nil, invalidRunnerConstruction(runners.ScriptIdentity, err)
 	}
+	if inferenceDependencies.Delegate == nil {
+		// Managed inference first asks Models and then uses the canonical Agent
+		// Runner for provider fallback. Both strategies remain private registry
+		// entries behind the same Workers.Execute call.
+		inferenceDependencies.Delegate = agentImplementation
+	}
 	inferenceImplementation, err := inferenceImplementation(
 		inferenceConfig,
 		inferenceDependencies,

@@ -87,8 +87,8 @@ const directModelInvocationDispatchID = "direct-model-invocation"
 
 // RuntimeModelInvokerConfig carries the already-opened, session-owned
 // capabilities needed by one direct model operation. It contains no mutable
-// execution state; each call constructs a detached request for Models or
-// Workers.
+// execution state; each call constructs a detached request for Workers while
+// Models remains the authority for scoped readiness.
 type RuntimeModelInvokerConfig struct {
 	Models           models.Service
 	Scope            models.RuntimeScopeRef
@@ -105,8 +105,8 @@ type runtimeModelInvoker struct {
 }
 
 // NewRuntimeModelInvoker binds direct model invocation to one opened runtime.
-// The process-scoped Workers root remains inert for this compatibility surface
-// because it cannot recover Factory Session or Models scope state.
+// The opened Models scope is used for readiness, while the attempt itself
+// enters the same request-scoped Workers path as Factory Runtime execution.
 func NewRuntimeModelInvoker(config RuntimeModelInvokerConfig) workers.ModelInvoker {
 	return &runtimeModelInvoker{config: config}
 }
@@ -161,7 +161,7 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
 	}
 
-	raw, err := invoker.invokeRuntimeModel(ctx, worker, projection.Context.FactoryCfg, request, bindings)
+	raw, err := invoker.invokeRuntimeModel(ctx, worker, request, bindings)
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
 	}
@@ -187,41 +187,6 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 }
 
 func (invoker *runtimeModelInvoker) invokeRuntimeModel(
-	ctx context.Context,
-	worker *factorydefinitions.FactoryWorkerConfig,
-	factoryConfig *factorydefinitions.FactoryConfig,
-	request models.Request,
-	bindings []models.ResolvedModelOperationBinding,
-) (string, error) {
-	localWorker := localRuntimeWorker(worker)
-	if !localWorker.UsesManagedRuntime() {
-		return invoker.invokeRemoteModel(ctx, worker, request, bindings)
-	}
-	invoked, err := invoker.config.Models.InvokeLocal(ctx, models.LocalInvocationRequest{
-		Scope:     invoker.config.Scope,
-		Holder:    directModelInvocationDispatchID,
-		Worker:    localWorker,
-		Resources: localRuntimeResources(factoryConfig),
-		Dispatch: work.WorkDispatch{
-			DispatchID:      directModelInvocationDispatchID,
-			TransitionID:    directModelInvocationDispatchID,
-			WorkerType:      worker.Name,
-			WorkstationName: directModelInvocationDispatchID,
-		},
-		ModelOperation:   strings.TrimSpace(request.Operation),
-		ModelBindings:    bindings,
-		WorkingDirectory: invoker.config.WorkingDirectory,
-	})
-	if err != nil {
-		return "", err
-	}
-	if !invoked.Handled {
-		return "", fmt.Errorf("model worker %q did not handle local invocation", worker.Name)
-	}
-	return invoked.Content, nil
-}
-
-func (invoker *runtimeModelInvoker) invokeRemoteModel(
 	ctx context.Context,
 	worker *factorydefinitions.FactoryWorkerConfig,
 	request models.Request,
@@ -417,40 +382,6 @@ func directRuntimeModelWorker(
 		)
 	}
 	return nil, factorydefinitions.ModelOperation{}, fmt.Errorf("%w: %s", models.ErrNotFound, modelName)
-}
-
-func localRuntimeWorker(worker *factorydefinitions.FactoryWorkerConfig) models.LocalWorker {
-	return models.LocalWorker{
-		Name:          worker.Name,
-		Type:          worker.Type,
-		Model:         worker.Model,
-		ModelLocality: worker.ModelLocality,
-		Resources:     localRuntimeResourcesFromConfigs(worker.Resources),
-	}
-}
-
-func localRuntimeResources(config *factorydefinitions.FactoryConfig) []models.LocalResource {
-	if config == nil {
-		return nil
-	}
-	return localRuntimeResourcesFromConfigs(config.Resources)
-}
-
-func localRuntimeResourcesFromConfigs(
-	resources []factorydefinitions.ResourceConfig,
-) []models.LocalResource {
-	if len(resources) == 0 {
-		return nil
-	}
-	result := make([]models.LocalResource, len(resources))
-	for index, resource := range resources {
-		result[index] = models.LocalResource{
-			ID: resource.ID, Name: resource.Name, Type: resource.Type,
-			Capacity: resource.Capacity, Model: resource.Model, Backend: resource.Backend,
-			LoadPolicy: resource.LoadPolicy, Provider: resource.Provider,
-		}
-	}
-	return result
 }
 
 func resolveRuntimeModelBindings(

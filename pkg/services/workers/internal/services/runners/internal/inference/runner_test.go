@@ -48,6 +48,34 @@ func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
 	}
 }
 
+func TestRunnerDelegateFallbackUsesModelProviderWhenInferenceIdentityIsSelected(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: false},
+	}
+	delegate := &captureDelegateRunner{
+		result: workers.RunnerExecutionResult{Content: "provider output"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{
+		Models: modelsEdge, Delegate: delegate,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := validRequest()
+	request.ModelProvider = workers.RunnerIDCodex
+	result, err := inferenceRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "provider output" {
+		t.Fatalf("result content = %q, want delegate output", result.Content)
+	}
+	if delegate.Request().RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("delegate runner id = %q, want model provider %q", delegate.Request().RunnerID, workers.RunnerIDCodex)
+	}
+}
+
 func TestRunnerCompositionPreservesProviderRunnerIdentityAndDeclinesWithoutModelOperation(t *testing.T) {
 	modelsEdge := &captureModelsService{
 		result: models.LocalInvocationResult{Handled: false},
