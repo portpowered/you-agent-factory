@@ -208,8 +208,8 @@ describe("CurrentActivity node hover surfaces", () => {
       name: "Select Draft workstation",
     });
 
-    expect(workstationShell?.className).toContain("border-af-success-border");
-    expect(workstationShell?.className).toContain("ring-af-success-border");
+    expect(workstationShell?.className).toContain("border-af-warning-border");
+    expect(workstationShell?.className).toContain("ring-af-warning-border");
     expect(
       activeWorkstation.container.querySelector("[data-active='true']"),
     ).toBeTruthy();
@@ -446,10 +446,10 @@ describe("Activity graph node surface tones", () => {
       "bg-surface-container-highest",
     );
     expect(activeWorkstationShell?.className).toContain(
-      "border-af-success-border",
+      "border-af-warning-border",
     );
     expect(activeWorkstationShell?.className).toContain(
-      "ring-af-success-border",
+      "ring-af-warning-border",
     );
     expect(selectedWorkstationShell?.className).toContain(
       "bg-surface-container-highest",

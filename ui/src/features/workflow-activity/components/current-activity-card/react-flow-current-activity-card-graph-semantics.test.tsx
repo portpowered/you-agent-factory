@@ -375,7 +375,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       reviewWorkstationButton
         .closest("[data-current-activity-node-type='workstation']")
-        ?.className.includes("border-af-success-border"),
+        ?.className.includes("border-af-warning-border"),
     ).toBe(true);
     expect(
       within(reviewWorkstationButton).queryByRole("img", { name: "Active" }),
@@ -586,7 +586,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       reviewButton
         .closest("[data-current-activity-node-type='workstation']")
-        ?.className.includes("border-af-success-border"),
+        ?.className.includes("border-af-warning-border"),
     ).toBe(true);
     expect(
       within(reviewButton).queryByRole("img", { name: "Active" }),

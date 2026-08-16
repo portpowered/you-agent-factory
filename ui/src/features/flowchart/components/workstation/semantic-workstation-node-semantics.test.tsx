@@ -104,6 +104,57 @@ describe("Factory workstation node semantics", () => {
     expect(loopBreaker.getByText("review")).toBeTruthy();
     expect(loopBreaker.getByText("3")).toBeTruthy();
     expect(loopBreaker.container.querySelector("button")).toBeNull();
+
+    const shell = loopBreaker.container.querySelector(
+      "[data-current-activity-node-type='workstation']",
+    );
+    expect(shell?.getAttribute("data-graph-visual-status")).toBe("quiet");
+    expect(shell?.getAttribute("data-graph-visual-nested-accent")).toBe(
+      "neutral",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!border-outline",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!bg-surface",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!text-on-surface",
+    );
+  });
+
+  it("derives a danger loop-breaker card from its failed parent workstation", () => {
+    const failedLoopBreaker = renderWorkstationNode({
+      runtimeStatus: "FAILED",
+      workstationSemantics: loopBreakerSemantics,
+    });
+    const shell = failedLoopBreaker.container.querySelector(
+      "[data-current-activity-node-type='workstation']",
+    );
+    const guardCard = failedLoopBreaker.container.querySelector(
+      "[data-workstation-guard-card]",
+    );
+
+    expect(shell?.getAttribute("data-graph-visual-status")).toBe("danger");
+    expect(shell?.getAttribute("data-graph-visual-nested-accent")).toBe(
+      "danger",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!border-af-danger-border",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!bg-error-container",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-workstation-guard-card]]:!text-on-error-container",
+    );
+    expect(guardCard?.getAttribute("aria-label")).toBe("Loop breaker");
+    expect(guardCard?.getAttribute("data-workstation-guard-type")).toBe(
+      "VISIT_COUNT",
+    );
+    expect(failedLoopBreaker.getByText("review")).toBeTruthy();
+    expect(failedLoopBreaker.getByText("3")).toBeTruthy();
+    expect(failedLoopBreaker.container.querySelector("button")).toBeNull();
   });
 
   it("keeps missing semantic metadata neutral instead of inferring exhaustion", () => {

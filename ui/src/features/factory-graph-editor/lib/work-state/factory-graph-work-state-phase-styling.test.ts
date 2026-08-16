@@ -14,7 +14,7 @@ describe("factory graph work state phase styling", () => {
       "PROCESSING",
       "processing",
       "text-warning",
-      "border-af-success-border bg-warning-container",
+      "border-af-warning-border bg-warning-container",
     ],
     [
       "TERMINAL",

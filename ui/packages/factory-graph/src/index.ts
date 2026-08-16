@@ -98,6 +98,7 @@ export {
   factoryGraphNodeSurfaceClassName,
   factoryGraphNodeTitleClassName,
   factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeVisualNestedAccentClassName,
   factoryGraphNodeVisualStateClassName,
   factoryGraphNodeVisualStatusSurfaceClassName,
   factoryGraphNodeWrappedTextClassName,
@@ -162,10 +163,12 @@ export {
   type FactoryGraphVisualFocusRole,
   type FactoryGraphVisualGlowRole,
   type FactoryGraphVisualLifecycleRole,
+  type FactoryGraphVisualNestedAccentRole,
   type FactoryGraphVisualState,
   type FactoryGraphVisualStateInput,
   type FactoryGraphVisualStatusRole,
   type FactoryGraphVisualStatusTreatment,
+  factoryGraphVisualNestedAccentRole,
   resolveFactoryGraphVisualState,
 } from "./visual-state.js";
 export {

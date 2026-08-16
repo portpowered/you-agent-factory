@@ -14,6 +14,36 @@ export type FactoryGraphVisualStatusRole =
   | "success"
   | "danger";
 
+/** Semantic role used by nested accents owned by a graph node. */
+export type FactoryGraphVisualNestedAccentRole =
+  | "neutral"
+  | "info"
+  | "warning"
+  | "success"
+  | "danger";
+
+const NESTED_ACCENT_ROLE_BY_STATUS: Record<
+  FactoryGraphVisualStatusRole,
+  FactoryGraphVisualNestedAccentRole
+> = {
+  quiet: "neutral",
+  waiting: "info",
+  active: "warning",
+  success: "success",
+  danger: "danger",
+};
+
+/**
+ * Derive the semantic role for a nested accent from its parent's resolved
+ * visual status. Callers can use the result for surfaces, borders, readable
+ * foregrounds, glows, rings, badges, and icons without copying this policy.
+ */
+export function factoryGraphVisualNestedAccentRole(
+  parentStatus: FactoryGraphVisualStatusRole,
+): FactoryGraphVisualNestedAccentRole {
+  return NESTED_ACCENT_ROLE_BY_STATUS[parentStatus];
+}
+
 export type FactoryGraphVisualBorderRole =
   | FactoryGraphVisualStatusRole
   | "selection"
