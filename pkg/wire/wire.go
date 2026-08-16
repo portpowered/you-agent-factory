@@ -159,6 +159,7 @@ var servicesSet = wire.NewSet(
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
 	provideFactorySessionsService,
+	provideFactorySessionDetachedOperations,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,

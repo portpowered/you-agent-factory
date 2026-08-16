@@ -1,25 +1,43 @@
 package root_composition_test
 
 import (
+	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil/sessionfixtures"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestFactorySessionsRootPublishesDetachedOperations(t *testing.T) {
+// TestFactorySessionsRootPublishesDetachedOperationsThroughProcess proves the
+// canonical root.BuildProcess composition publishes the Sessions-owned view
+// and that the returned capability performs a detached operation successfully.
+func TestFactorySessionsRootPublishesDetachedOperationsThroughProcess(t *testing.T) {
 	t.Parallel()
 
-	service, err := sessionfixtures.NewService()
-	if err != nil {
-		t.Fatalf("construct Factory Sessions root: %v", err)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	help := support.FakeInputs(context.Background(), []string{"you", "--help"})
+	if err := process.Execute(help.Input); err != nil {
+		t.Fatalf("execute canonical process help: %v", err)
+	}
+	operations := root.DetachedOperationsFromProcess(process)
+	if operations == nil {
+		t.Fatal("canonical process published nil detached operations")
 	}
 
-	operations, err := factorysessionwire.NewDetachedOperations(service)
+	prepared, err := operations.PrepareSync(context.Background(), factorysessions.SessionSyncPreparationRequest{
+		Start: factorysessions.SessionStartRequest{
+			Mode:        factorysessions.SessionOperationModeDurable,
+			Correlation: factorysessions.SessionOperationCorrelation{RequestID: "process-composed"},
+		},
+		Wait: factorysessions.SessionOperationWait{TimeoutMillis: 25, CancelOnTimeout: true},
+	})
 	if err != nil {
-		t.Fatalf("bind detached operations from Factory Sessions root: %v", err)
+		t.Fatalf("prepare detached synchronous operation: %v", err)
 	}
-	if operations == nil {
-		t.Fatal("Factory Sessions root published nil detached operations")
+	if !prepared.Request.Synchronous || prepared.Request.Correlation.RequestID != "process-composed" || prepared.Wait.TimeoutMillis != 25 || !prepared.Wait.CancelOnTimeout {
+		t.Fatalf("prepared detached operation = %#v, want normalized synchronous request", prepared)
 	}
 }

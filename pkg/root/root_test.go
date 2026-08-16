@@ -163,11 +163,15 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	if reader := WorkerRecordingReaderFromProcess(nil); reader != nil {
 		t.Fatalf("WorkerRecordingReaderFromProcess(nil) = %#v, want nil", reader)
 	}
+	if operations := DetachedOperationsFromProcess(nil); operations != nil {
+		t.Fatalf("DetachedOperationsFromProcess(nil) = %#v, want nil", operations)
+	}
 	processWithoutReader, err := initializerapplication.NewProcess(
 		nil,
 		nil,
 		rootWorkerProcessRegistry{},
 		rootWorkerProcessLifecycle{},
+		nil,
 		nil,
 		nil,
 	)
@@ -176,6 +180,9 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	}
 	if reader := WorkerRecordingReaderFromProcess(processWithoutReader); reader != nil {
 		t.Fatalf("WorkerRecordingReaderFromProcess(without reader) = %#v, want nil", reader)
+	}
+	if operations := DetachedOperationsFromProcess(processWithoutReader); operations != nil {
+		t.Fatalf("DetachedOperationsFromProcess(without capability) = %#v, want nil", operations)
 	}
 
 	readerWriter := &rootWorkerRecordingReaderProbe{}
@@ -219,6 +226,7 @@ func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{err: wantErr},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
@@ -243,6 +251,7 @@ func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) 
 		rootWorkerProcessLifecycle{},
 		nil,
 		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)

@@ -6,6 +6,7 @@ import (
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
@@ -27,6 +28,23 @@ func BuildProcess(
 		return nil, fmt.Errorf("build application process: %w", err)
 	}
 	return applicationProcess, nil
+}
+
+// DetachedOperationsFromProcess returns the Factory Sessions detached
+// operation view carried by the canonical process composition. The process is
+// accepted as an opaque value so narrow functional harness interfaces can pass
+// their underlying application process without exposing the application graph.
+func DetachedOperationsFromProcess(process any) factorysessions.DetachedService {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.DetachedOperations()
+	if capability == nil {
+		return nil
+	}
+	operations, _ := capability.DetachedOperations().(factorysessions.DetachedService)
+	return operations
 }
 
 // BuildStatelessWorkers constructs the standalone Workers Execute root. It

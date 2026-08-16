@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -591,6 +592,28 @@ func provideFactorySessionsService(
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator)
+}
+
+// provideFactorySessionDetachedOperations publishes the one detached value
+// capability from the already-composed Sessions root. The neutral process
+// wrapper keeps initializer/application independent of product services while
+// preserving the concrete Sessions view for pkg/root callers.
+func provideFactorySessionDetachedOperations(
+	service factorysessions.Service,
+) (processcontract.DetachedOperationsCapability, error) {
+	operations, err := factorysessionwire.NewDetachedOperations(service)
+	if err != nil {
+		return nil, err
+	}
+	return detachedOperationsCapability{operations: operations}, nil
+}
+
+type detachedOperationsCapability struct {
+	operations factorysessions.DetachedService
+}
+
+func (capability detachedOperationsCapability) DetachedOperations() any {
+	return capability.operations
 }
 
 func provideFactorySessionsRuntimeAssembly(

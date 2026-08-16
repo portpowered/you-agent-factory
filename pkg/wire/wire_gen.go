@@ -720,7 +720,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader)
+	processDetachedOperationsCapability, err := provideFactorySessionDetachedOperations(factorysessionsService)
+	if err != nil {
+		return nil, err
+	}
+	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -904,6 +908,7 @@ var servicesSet = wire5.NewSet(
 	provideTTSObservabilityService,
 	provideAutomationHostedSourceInputs,
 	provideAutomationsRoot, wire5.Bind(new(automations.Service), new(automations.Root)), provideFactorySessionsService,
+	provideFactorySessionDetachedOperations,
 	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,

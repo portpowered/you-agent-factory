@@ -319,7 +319,7 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 			return targetCloseErr
 		},
 	}}
-	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil, nil)
+	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}

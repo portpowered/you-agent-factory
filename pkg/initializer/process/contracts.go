@@ -116,6 +116,14 @@ type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (json.RawMessage, error)
 }
 
+// DetachedOperationsCapability is the neutral process handoff for the
+// Factory Sessions detached operation view. The initializer retains the
+// selected capability without importing the Sessions service; pkg/root
+// reifies the opaque value at the caller-facing boundary.
+type DetachedOperationsCapability interface {
+	DetachedOperations() any
+}
+
 // ACPServer is the neutral application-process capability for serving the ACP
 // protocol. The transport package supplies the concrete implementation at the
 // composition root; the initializer only retains the protocol operation.
