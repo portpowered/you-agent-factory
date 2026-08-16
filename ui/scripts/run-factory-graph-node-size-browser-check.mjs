@@ -35,8 +35,8 @@ try {
 
   const readOnlyButton = await workstationButton(page);
   const initialDimensions = await nodeDimensions(readOnlyButton);
-  if (await page.locator("[data-factory-graph-node-resize-actions]").count()) {
-    throw new Error("Node resize actions rendered before entering edit mode.");
+  if (await page.locator(".factory-graph-node-resize-edge").count()) {
+    throw new Error("Node resize controls rendered before entering edit mode.");
   }
 
   await page.getByRole("button", { name: "Edit mode" }).click();
@@ -46,12 +46,21 @@ try {
   const selectedButton = await selectWorkstation(page);
   await waitForAttachedEdges(page, workstationId);
 
-  const resizeActions = page.locator(
-    "[data-factory-graph-node-resize-actions]",
-  );
-  await resizeActions.waitFor({ state: "visible" });
-  const fitButton = page.getByRole("button", { name: "Fit to content" });
-  await fitButton.waitFor({ state: "visible" });
+  const resizeControl = page.locator(".factory-graph-node-resize-edge");
+  await resizeControl.waitFor({ state: "visible" });
+  if ((await resizeControl.count()) !== 1) {
+    throw new Error(
+      `Expected one bottom-edge node resize control, found ${await resizeControl.count()}.`,
+    );
+  }
+  if (
+    (await page.getByRole("button", { name: "Fit to content" }).count()) > 0 ||
+    (await page.getByRole("button", { name: "Reset size" }).count()) > 0
+  ) {
+    throw new Error(
+      "Obsolete Fit to content or Reset size node actions rendered in edit mode.",
+    );
+  }
 
   const attachedEdgeIdsBeforeResize = await attachedEdgeIds(page);
   if (attachedEdgeIdsBeforeResize.length === 0) {
@@ -73,27 +82,11 @@ try {
     );
   }
 
-  await fitButton.focus();
-  await assertFocused(fitButton, "Fit to content");
-  await page.keyboard.press("Enter");
-  await selectWorkstation(page);
-  const resetButtonAfterFit = page.getByRole("button", { name: "Reset size" });
-  await resetButtonAfterFit.waitFor({ state: "visible" });
-  await resetButtonAfterFit.focus();
-  await assertFocused(resetButtonAfterFit, "Reset size");
-  await page.keyboard.press("Enter");
-
-  const resizeHandles = page.locator(".factory-graph-node-resize-control");
-  if ((await resizeHandles.count()) !== 4) {
-    throw new Error(
-      `Expected four workstation resize handles, found ${await resizeHandles.count()}.`,
-    );
-  }
-  const resizeHandle = resizeHandles.nth(3);
-  await resizeHandle.waitFor({ state: "visible" });
-  const handleBounds = await resizeHandle.boundingBox();
+  const handleBounds = await resizeControl.boundingBox();
   if (!handleBounds) {
-    throw new Error("Could not measure the workstation resize handle.");
+    throw new Error(
+      "Could not measure the workstation bottom-edge resize control.",
+    );
   }
 
   const beforeResize = await nodeDimensions(selectedButton);
@@ -144,6 +137,59 @@ try {
     );
   }
 
+  const undoButton = page.getByRole("button", { name: "Undo" });
+  await undoButton.waitFor({ state: "visible" });
+  await undoButton.click();
+  await page.waitForFunction(
+    ({ id, width, height }) => {
+      const node = document.querySelector(`.react-flow__node[data-id="${id}"]`);
+      if (!node) {
+        return false;
+      }
+      const actualWidth = Number.parseFloat(node.style.width);
+      const actualHeight = Number.parseFloat(node.style.height);
+      return (
+        Math.abs(actualWidth - width) <= 1 &&
+        Math.abs(actualHeight - height) <= 1
+      );
+    },
+    {
+      id: workstationId,
+      width: beforeResize.width,
+      height: beforeResize.height,
+    },
+  );
+  assertDimensionsMatchSaved(
+    await nodeDimensions(selectedButton),
+    beforeResize,
+  );
+
+  const redoButton = page.getByRole("button", { name: "Redo" });
+  await redoButton.click();
+  await page.waitForFunction(
+    ({ id, width, height }) => {
+      const node = document.querySelector(`.react-flow__node[data-id="${id}"]`);
+      if (!node) {
+        return false;
+      }
+      const actualWidth = Number.parseFloat(node.style.width);
+      const actualHeight = Number.parseFloat(node.style.height);
+      return (
+        Math.abs(actualWidth - width) <= 1 &&
+        Math.abs(actualHeight - height) <= 1
+      );
+    },
+    {
+      id: workstationId,
+      width: resizedDimensions.width,
+      height: resizedDimensions.height,
+    },
+  );
+  assertDimensionsMatchSaved(
+    await nodeDimensions(selectedButton),
+    resizedDimensions,
+  );
+
   await page.getByRole("button", { name: "Save changes" }).click();
   await page
     .getByRole("heading", { name: "Save factory graph changes?" })
@@ -171,9 +217,9 @@ try {
   await waitForStoryRender(page);
   const reloadedButton = await workstationButton(page);
   const reloadedDimensions = await nodeDimensions(reloadedButton);
-  if (await page.locator("[data-factory-graph-node-resize-actions]").count()) {
+  if (await page.locator(".factory-graph-node-resize-edge").count()) {
     throw new Error(
-      "Node resize actions rendered in read-only mode after reload.",
+      "Node resize controls rendered in read-only mode after reload.",
     );
   }
   assertDimensionsMatchSaved(reloadedDimensions, savedSize);
@@ -189,7 +235,7 @@ try {
     await reselectedButton.elementHandle(),
   );
   await page
-    .locator("[data-factory-graph-node-resize-actions]")
+    .locator(".factory-graph-node-resize-edge")
     .waitFor({ state: "visible" });
   assertDimensionsMatchSaved(await nodeDimensions(reselectedButton), savedSize);
 
@@ -284,17 +330,6 @@ function assertDimensionsMatchSaved(actual, saved) {
   ) {
     throw new Error(
       `Reloaded Factory graph dimensions differed from authored size: saved=${JSON.stringify(saved)} actual=${JSON.stringify(actual)}.`,
-    );
-  }
-}
-
-async function assertFocused(locator, label) {
-  const isFocused = await locator.evaluate(
-    (element) => element === document.activeElement,
-  );
-  if (!isFocused) {
-    throw new Error(
-      `${label} did not receive focus before keyboard activation.`,
     );
   }
 }

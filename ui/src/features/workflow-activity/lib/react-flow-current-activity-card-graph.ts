@@ -451,7 +451,6 @@ interface BuildCurrentActivityNodesInput {
 }
 
 function resizeControlsForNode(input: {
-  content: readonly (string | null | undefined)[];
   family: FactoryGraphNodeFamily;
   nodeId: string;
   position: GraphNodePosition;
@@ -462,9 +461,7 @@ function resizeControlsForNode(input: {
     return undefined;
   }
 
-  const resolution = resolveFactoryGraphNodeDimensions(input.family, {
-    content: input.content,
-  });
+  const resolution = resolveFactoryGraphNodeDimensions(input.family);
   const target = {
     family: input.family,
     nodeId: input.nodeId,
@@ -474,12 +471,7 @@ function resizeControlsForNode(input: {
   return {
     allowedAxes: resolution.allowedAxes,
     bounds: resolution.bounds,
-    fitDimensions: resolution.fittedDimensions,
-    labels: controller.labels,
     nodeId: input.nodeId,
-    onFitToContent: (dimensions: FactoryGraphNodeDimensions) =>
-      controller.onFitToContent(target, dimensions),
-    onResetSize: () => controller.onResetSize(target),
     onResizeEnd: (dimensions: FactoryGraphNodeDimensions) =>
       controller.onResizeEnd(target, dimensions),
   };
@@ -614,7 +606,6 @@ function buildPlaceNodeData(
         (input.selection?.kind === "node" &&
           input.selection.nodeId === factoryGraphNodeId),
       resizeControls: resizeControlsForNode({
-        content: placeNodeSizingContent(place, factoryGraphNode),
         family: placeNodeFamily(place, factoryGraphNode),
         nodeId: factoryGraphNodeId,
         position: { x: positionedNode.x, y: positionedNode.y },
@@ -778,7 +769,6 @@ function buildDocNode(
         input.selection?.kind === "doc" &&
         input.selection.targetPath === positionedNode.targetPath,
       resizeControls: resizeControlsForNode({
-        content: [positionedNode.displayLabel, positionedNode.targetPath],
         family: "doc",
         nodeId: positionedNode.nodeId,
         position: { x: positionedNode.x, y: positionedNode.y },
@@ -855,11 +845,6 @@ function buildWorkstationNode(
     x: positionedNode.x,
     y: positionedNode.y,
   };
-  const workstationTitle =
-    normalizedWorkstation.workstation_name ||
-    normalizedWorkstation.transition_id ||
-    normalizedWorkstation.node_id;
-
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
     data: {
@@ -892,7 +877,6 @@ function buildWorkstationNode(
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       now: input.now,
       resizeControls: resizeControlsForNode({
-        content: [workstationTitle, workstationSemantics?.runtimeType],
         family: "workstation",
         nodeId: positionedNode.nodeId,
         position,

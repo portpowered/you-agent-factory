@@ -21,7 +21,6 @@ import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
 import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
@@ -220,20 +219,6 @@ function useCurrentActivityNodeResizeState(input: {
     },
     [],
   );
-  const resetDimensions = useCallback(
-    (target: CurrentActivityNodeResizeTarget) => {
-      setDimensionsByNodeId((currentDimensions) => {
-        if (!currentDimensions.has(target.nodeId)) {
-          return currentDimensions;
-        }
-
-        const nextDimensions = new Map(currentDimensions);
-        nextDimensions.delete(target.nodeId);
-        return nextDimensions;
-      });
-    },
-    [],
-  );
   const hostController = input.editor.nodeResizeControls;
   const localController = useMemo<CurrentActivityNodeResizeController>(
     () => ({
@@ -241,41 +226,18 @@ function useCurrentActivityNodeResizeState(input: {
         input.editor.editorMode &&
         input.editor.canInteractWithEditor &&
         input.editor.activeTool !== "delete",
-      labels: {
-        fitToContent: getFactoryGraphEditorMessages(input.locale)
-          .nodeFitToContentLabel,
-        resetSize: getFactoryGraphEditorMessages(input.locale)
-          .nodeResetSizeLabel,
-      },
-      onFitToContent: updateDimensions,
-      onResetSize: resetDimensions,
       onResizeEnd: updateDimensions,
     }),
     [
       input.editor.activeTool,
       input.editor.canInteractWithEditor,
       input.editor.editorMode,
-      input.locale,
-      resetDimensions,
       updateDimensions,
     ],
   );
   const controller = useMemo<CurrentActivityNodeResizeController>(
     () => ({
       enabled: hostController?.enabled ?? localController.enabled,
-      labels: hostController?.labels ?? localController.labels,
-      onFitToContent: (target, dimensions) => {
-        if (!hostController) {
-          updateDimensions(target, dimensions);
-        }
-        hostController?.onFitToContent(target, dimensions);
-      },
-      onResetSize: (target) => {
-        if (!hostController) {
-          resetDimensions(target);
-        }
-        hostController?.onResetSize(target);
-      },
       onResizeEnd: (target, dimensions) => {
         if (!hostController) {
           updateDimensions(target, dimensions);
@@ -283,13 +245,7 @@ function useCurrentActivityNodeResizeState(input: {
         hostController?.onResizeEnd(target, dimensions);
       },
     }),
-    [
-      hostController,
-      localController.enabled,
-      localController.labels,
-      resetDimensions,
-      updateDimensions,
-    ],
+    [hostController, localController.enabled, updateDimensions],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: graph identity and edit availability intentionally reset presentation-only resize state.

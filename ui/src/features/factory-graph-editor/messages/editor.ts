@@ -288,8 +288,6 @@ export interface FactoryGraphEditorMessages {
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
   workStatePhaseLegendAriaLabel: string;
   workStatePhaseLegendLabel: (stateType: FactoryWorkState["type"]) => string;
-  nodeFitToContentLabel: string;
-  nodeResetSizeLabel: string;
   zAxisIncompleteConnectionHint: string;
 }
 
@@ -976,8 +974,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       workerStatusLabel: describeEnglishWorkerStatus,
       workStatePhaseLegendAriaLabel: "Work state lifecycle colors",
       workStatePhaseLegendLabel: describeEnglishWorkStatePhaseLegendLabel,
-      nodeFitToContentLabel: "Fit to content",
-      nodeResetSizeLabel: "Reset size",
       zAxisIncompleteConnectionHint:
         "Configure stop words on this workstation before connecting Continue or Reject routes.",
     },
@@ -1556,8 +1552,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "失败";
         }
       },
-      nodeFitToContentLabel: "适应内容",
-      nodeResetSizeLabel: "重置大小",
       zAxisIncompleteConnectionHint:
         "请在此工作站配置停止词后，再连接“继续”或“拒绝”路由。",
     },

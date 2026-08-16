@@ -2,13 +2,21 @@
  * Drives the real factory graph editor surface for visual group save/reload coverage.
  */
 
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  assertNodeSizeMatches,
+  expectNoObsoleteNodeResizeActions,
+  readNodeSize,
+  resizeSelectedNode,
+} from "./verify-factory-graph-node-size-browser-helpers.mjs";
 import {
   expectEditorGraphInteractions,
   expectGraphSurfaceBasics,
   expectRegionPointerThrough,
 } from "./verify-factory-graph-visual-group-editor-interactions.mjs";
+import {
+  captureEvidence,
+  selectGraphNodeWithMarquee,
+} from "./verify-factory-graph-visual-group-editor-workflow-helpers.mjs";
 
 const TARGET_WORKSTATION_LABEL = "Plan";
 const TARGET_WORKSTATION_ID = "workstation:plan";
@@ -32,11 +40,12 @@ export async function verifyFactoryGraphVisualGroupEditorWorkflow({
   await waitForStoryRender(page);
 
   const { toolbar, viewport } = await enterVisualGroupEditor(page);
-  await createAndEditVisualGroup(page, viewport);
-  await saveVisualGroup(page);
+  const resizedNode = await createAndEditVisualGroup(page, viewport);
+  const savedNodeSize = await saveVisualGroup(page, resizedNode);
 
   await verifyVisualGroupAfterReload({
     currentUrl: page.url(),
+    expectedNodeSize: savedNodeSize,
     page,
     toolbar,
     waitForStoryRender,
@@ -73,7 +82,17 @@ async function createAndEditVisualGroup(page, viewport) {
     })
     .first();
   await targetWorkstationNode.waitFor({ state: "visible" });
-  await selectGraphNodeWithMarquee(page, viewport, targetWorkstationNode);
+  await selectGraphNodeWithMarquee(
+    page,
+    viewport,
+    targetWorkstationNode,
+    TARGET_WORKSTATION_LABEL,
+  );
+  const resizedNode = await resizeSelectedNode(
+    page,
+    targetWorkstationNode,
+    TARGET_WORKSTATION_ID,
+  );
 
   await page.getByRole("button", { name: "Create group" }).click();
   await page
@@ -139,9 +158,11 @@ async function createAndEditVisualGroup(page, viewport) {
   const redoButton = page.getByRole("button", { name: "Redo" });
   await expectEnabled(redoButton, true);
   await redoButton.click();
+
+  return resizedNode;
 }
 
-async function saveVisualGroup(page) {
+async function saveVisualGroup(page, resizedNode) {
   await page.getByRole("button", { name: "Save changes" }).click();
   await page
     .getByRole("heading", { name: "Save factory graph changes?" })
@@ -169,11 +190,17 @@ async function saveVisualGroup(page) {
     );
   }
   expectFiniteBounds(persistedGroup.bounds, "saved group");
+  const persistedNode = persistedFactory?.layout?.nodes?.find(
+    (node) => node.id === TARGET_WORKSTATION_ID,
+  )?.size;
+  assertNodeSizeMatches(persistedNode, resizedNode, "saved");
   await captureEvidence(page, "visual-group-before-reload");
+  return persistedNode;
 }
 
 async function verifyVisualGroupAfterReload({
   currentUrl,
+  expectedNodeSize,
   page,
   toolbar,
   waitForStoryRender,
@@ -191,6 +218,16 @@ async function verifyVisualGroupAfterReload({
     name: GROUP_LABEL,
   });
   await restoredRegion.waitFor({ state: "visible" });
+  const restoredNode = page.locator(
+    `.react-flow__node[data-id="${TARGET_WORKSTATION_ID}"]`,
+  );
+  await restoredNode.waitFor({ state: "visible" });
+  assertNodeSizeMatches(
+    await readNodeSize(restoredNode),
+    expectedNodeSize,
+    "reloaded read-only",
+  );
+  await expectNoObsoleteNodeResizeActions(page);
   await expectInlineGroupLabel(restoredRegion);
   await expectRegionPointerThrough(page, restoredRegion);
   const intakeObserverButton = page.getByRole("button", {
@@ -223,6 +260,24 @@ async function verifyVisualGroupAfterReload({
   await editModeAfterReload.click();
   await toolbar.waitFor({ state: "visible" });
   await expectGraphSurfaceBasics(page);
+  const reloadedNode = page.locator(
+    `.react-flow__node[data-id="${TARGET_WORKSTATION_ID}"]`,
+  );
+  await reloadedNode
+    .getByRole("button", {
+      exact: true,
+      name: `Select ${TARGET_WORKSTATION_LABEL} workstation`,
+    })
+    .click();
+  await reloadedNode.locator(".factory-graph-node-resize-edge").waitFor({
+    state: "visible",
+  });
+  assertNodeSizeMatches(
+    await readNodeSize(reloadedNode),
+    expectedNodeSize,
+    "reloaded editor",
+  );
+  await expectNoObsoleteNodeResizeActions(page);
   await page
     .getByRole("button", {
       exact: true,
@@ -256,75 +311,6 @@ async function verifyVisualGroupAfterReload({
   await expectAttribute(warningColorAfterReload, "aria-pressed", "false");
   await expectEditorGraphInteractions(page);
   await captureEvidence(page, "visual-group-after-reload-editor");
-}
-
-async function captureEvidence(page, name) {
-  const directory = process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR;
-  if (!directory) {
-    return;
-  }
-
-  await mkdir(directory, { recursive: true });
-  await page.screenshot({
-    fullPage: true,
-    path: join(directory, `${name}.png`),
-  });
-}
-
-async function selectGraphNodeWithMarquee(page, viewport, locator) {
-  const nodeBox = await locator.boundingBox();
-  const viewportBox = await viewport.boundingBox();
-  if (!nodeBox || !viewportBox) {
-    throw new Error(
-      "Could not measure the graph node and viewport for selection.",
-    );
-  }
-
-  const startX = Math.max(viewportBox.x + 4, nodeBox.x - 20);
-  const startY = Math.max(viewportBox.y + 4, nodeBox.y - 20);
-  const endX = Math.min(
-    viewportBox.x + viewportBox.width - 4,
-    nodeBox.x + nodeBox.width + 20,
-  );
-  const endY = Math.min(
-    viewportBox.y + viewportBox.height - 4,
-    nodeBox.y + nodeBox.height + 20,
-  );
-
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  await page.mouse.move(endX, endY, { steps: 5 });
-  await page.mouse.up();
-  await expectNodeSelected(page, locator);
-}
-
-async function expectNodeSelected(page, locator) {
-  const handle = await locator.elementHandle();
-  if (!handle) {
-    throw new Error(
-      `Could not resolve the ${TARGET_WORKSTATION_LABEL} graph node for selection.`,
-    );
-  }
-
-  try {
-    await page.waitForFunction(
-      (node) => node.classList.contains("selected"),
-      handle,
-      { timeout: 5_000 },
-    );
-  } catch (error) {
-    const details = await locator.evaluate((node) => ({
-      ariaSelected: node.getAttribute("aria-selected"),
-      className: node.className,
-      html: node.outerHTML.slice(0, 800),
-    }));
-    throw new Error(
-      `${TARGET_WORKSTATION_LABEL} node did not become selected: ${JSON.stringify(details)}`,
-      {
-        cause: error,
-      },
-    );
-  }
 }
 
 async function expectAttribute(locator, name, expected) {

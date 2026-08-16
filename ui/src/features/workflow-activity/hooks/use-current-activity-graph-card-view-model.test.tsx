@@ -236,8 +236,6 @@ describe("useCurrentActivityGraphCardViewModel node resize actions", () => {
     expect(resizeControls?.enabled).toBe(true);
     act(() => {
       resizeControls?.onResizeEnd(target, dimensions);
-      resizeControls?.onFitToContent(target, dimensions);
-      resizeControls?.onResetSize(target);
     });
 
     expect(graphController.layoutControls.resizeNode).toHaveBeenCalledWith(
@@ -245,15 +243,6 @@ describe("useCurrentActivityGraphCardViewModel node resize actions", () => {
       target.family,
       dimensions,
       target.position,
-    );
-    expect(graphController.layoutControls.fitNode).toHaveBeenCalledWith(
-      target.nodeId,
-      target.family,
-      dimensions,
-      target.position,
-    );
-    expect(graphController.layoutControls.resetNodeSize).toHaveBeenCalledWith(
-      target.nodeId,
     );
     expect(result.current.editorControls.isEditing).toBe(true);
   });
