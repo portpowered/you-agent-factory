@@ -22,6 +22,7 @@ export interface TraceDispatchNodeOverlay {
 
 export interface TraceDispatchFactoryGraphProjection {
   dispatchIdByNodeId: ReadonlyMap<string, string>;
+  lineageStatus: "resolved" | "unresolved";
   nodeIdByDispatchId: ReadonlyMap<string, string>;
   overlaysByNodeId: ReadonlyMap<string, TraceDispatchNodeOverlay>;
   topology: FactoryGraphTopology;
@@ -70,6 +71,7 @@ export function projectTraceDispatchesToFactoryGraph(
   );
   const edgeKeys = new Set<string>();
   const latestDispatchIDByChainingTraceID = new Map<string, string>();
+  let hasUnresolvedLineage = false;
 
   for (
     let currentIndex = 0;
@@ -88,8 +90,11 @@ export function projectTraceDispatchesToFactoryGraph(
         latestDispatchIDByChainingTraceID,
       ) ??
       resolveWorkItemProducerDispatchIDs(dispatches, currentIndex) ??
-      resolveSequentialPredecessorDispatchIDs(dispatches, currentIndex) ??
       [];
+
+    if (currentIndex > 0 && predecessorDispatchIDs.length === 0) {
+      hasUnresolvedLineage = true;
+    }
 
     for (const producerDispatchID of predecessorDispatchIDs) {
       if (producerDispatchID === currentDispatch.dispatch_id) {
@@ -142,6 +147,7 @@ export function projectTraceDispatchesToFactoryGraph(
 
   return {
     dispatchIdByNodeId,
+    lineageStatus: hasUnresolvedLineage ? "unresolved" : "resolved",
     nodeIdByDispatchId,
     overlaysByNodeId,
     topology: {
@@ -213,13 +219,6 @@ function resolveWorkItemProducerDispatchIDs(
   }
 
   return producerDispatchIDs.size > 0 ? [...producerDispatchIDs] : null;
-}
-
-function resolveSequentialPredecessorDispatchIDs(
-  dispatches: DashboardTraceDispatch[],
-  currentIndex: number,
-): string[] | null {
-  return currentIndex > 0 ? [dispatches[currentIndex - 1].dispatch_id] : null;
 }
 
 function collectCurrentChainingTraceIDs(

@@ -28,6 +28,7 @@ export type TraceDispatchFlowNode = Node<
 export interface TraceDispatchFactoryGraphFlow {
   dispatchIdByNodeId: ReadonlyMap<string, string>;
   edges: FactoryGraphReactFlowEdge[];
+  lineageStatus: "resolved" | "unresolved";
   nodes: TraceDispatchFlowNode[];
   topology: FactoryGraphTopology;
 }
@@ -120,6 +121,7 @@ export function buildTraceDispatchFactoryGraphFlow(
   return {
     dispatchIdByNodeId: traceProjection.dispatchIdByNodeId,
     edges,
+    lineageStatus: traceProjection.lineageStatus,
     nodes,
     topology: traceProjection.topology,
   };

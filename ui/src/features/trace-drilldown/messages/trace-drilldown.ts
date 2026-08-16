@@ -26,6 +26,7 @@ export interface TraceDrilldownMessages {
   noBatchRelations: string;
   noInputItems: string;
   noOutputItems: string;
+  unresolvedLineageMessage: string;
   noTraceHistoryMessage: string;
   noTraceHistoryTitle: string;
   unknownRelationSource: string;
@@ -76,6 +77,8 @@ const traceDrilldownMessagesByLocale = {
     noBatchRelations: "None",
     noInputItems: "No input items recorded.",
     noOutputItems: "No output items recorded.",
+    unresolvedLineageMessage:
+      "Lineage is unresolved: no recorded relationship connects one or more dispatches, so no predecessor was inferred.",
     noTraceHistoryMessage:
       "No retained dispatch history is currently available for this work item.",
     noTraceHistoryTitle: "Trace history unavailable",
@@ -189,6 +192,8 @@ const traceDrilldownMessagesByLocale = {
     noBatchRelations: "无",
     noInputItems: "没有记录输入项。",
     noOutputItems: "没有记录输出项。",
+    unresolvedLineageMessage:
+      "谱系未解析：一个或多个分派之间没有记录的关系，因此未推断前置分派。",
     noTraceHistoryMessage: "当前这个工作项暂时没有可保留的分派历史。",
     noTraceHistoryTitle: "追踪历史不可用",
     unknownRelationSource: "未知来源",

@@ -108,30 +108,42 @@ export function TraceWorkstationPath({
   }
 
   return (
-    <div
-      className="relative max-w-full min-w-80 resize overflow-hidden"
-      style={GRAPH_SHELL_STYLE}
-    >
-      <GraphViewportSurface
-        aria-label={messages.dispatchPathGraphLabel}
-        className="h-full border-transparent"
-        data-trace-workstation-path
-      >
-        <div
-          className="h-full min-w-0 w-full"
-          data-trace-graph-viewport
-          ref={graphViewportRef}
-          style={GRAPH_VIEWPORT_STYLE}
+    <div className="grid max-w-full min-w-80 gap-2">
+      {graph.lineageStatus === "unresolved" ? (
+        <p
+          aria-live="polite"
+          className="m-0 rounded-md border border-af-warning-border bg-warning-container px-3 py-2 text-sm text-on-warning-container"
+          data-trace-lineage-status="unresolved"
+          role="status"
         >
-          {graphViewportReady ? (
-            <TraceWorkstationReactFlow
-              edges={graph.edges}
-              nodes={nodes}
-              onNodesChange={handleNodesChange}
-            />
-          ) : null}
-        </div>
-      </GraphViewportSurface>
+          {messages.unresolvedLineageMessage}
+        </p>
+      ) : null}
+      <div
+        className="relative max-w-full resize overflow-hidden"
+        style={GRAPH_SHELL_STYLE}
+      >
+        <GraphViewportSurface
+          aria-label={messages.dispatchPathGraphLabel}
+          className="h-full border-transparent"
+          data-trace-workstation-path
+        >
+          <div
+            className="h-full min-w-0 w-full"
+            data-trace-graph-viewport
+            ref={graphViewportRef}
+            style={GRAPH_VIEWPORT_STYLE}
+          >
+            {graphViewportReady ? (
+              <TraceWorkstationReactFlow
+                edges={graph.edges}
+                nodes={nodes}
+                onNodesChange={handleNodesChange}
+              />
+            ) : null}
+          </div>
+        </GraphViewportSurface>
+      </div>
     </div>
   );
 }

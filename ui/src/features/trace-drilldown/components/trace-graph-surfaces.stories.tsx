@@ -1,5 +1,6 @@
 import "../../../styles.css";
 
+import { expect, within } from "storybook/test";
 import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
@@ -80,6 +81,11 @@ const TRACE_RELATIONS: DashboardWorkRelation[] = [
   },
 ];
 
+const UNRESOLVED_TRACE_DISPATCHES: DashboardTraceDispatch[] = [
+  buildDispatch("dispatch-parallel-a", { workstation_name: "Parallel A" }),
+  buildDispatch("dispatch-parallel-b", { workstation_name: "Parallel B" }),
+];
+
 export default {
   title: "Agent Factory/Dashboard/Trace Graph Surfaces",
 };
@@ -100,4 +106,21 @@ export const LocalizedZhCN = {
       <TraceRelationFlow locale="zh-CN" relations={TRACE_RELATIONS} />
     </div>
   ),
+};
+
+export const UnresolvedLineage = {
+  tags: ["test"],
+  render: () => (
+    <TraceWorkstationPath dispatches={UNRESOLVED_TRACE_DISPATCHES} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(canvas.getByRole("status")).toHaveTextContent(
+      "Lineage is unresolved: no recorded relationship connects one or more dispatches, so no predecessor was inferred.",
+    );
+    await expect(
+      canvas.getByRole("region", { name: "Dispatch relationship graph" }),
+    ).toBeVisible();
+  },
 };

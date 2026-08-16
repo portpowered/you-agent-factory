@@ -105,7 +105,7 @@ describe("projectTraceDispatchesToFactoryGraph explicit lineage", () => {
   });
 });
 
-describe("projectTraceDispatchesToFactoryGraph fallback lineage", () => {
+describe("projectTraceDispatchesToFactoryGraph recorded lineage", () => {
   it("falls back to output-to-input work lineage when chaining metadata is absent", () => {
     const projection = projectTraceDispatchesToFactoryGraph([
       buildDispatch("dispatch-plan", {
@@ -121,17 +121,19 @@ describe("projectTraceDispatchesToFactoryGraph fallback lineage", () => {
     ]);
   });
 
-  it("falls back to sequential ordering when no explicit or work-item lineage is available", () => {
-    const projection = projectTraceDispatchesToFactoryGraph([
+  it("marks missing lineage unresolved instead of inventing sequential edges", () => {
+    const dispatches = [
       buildDispatch("dispatch-plan"),
       buildDispatch("dispatch-review"),
-      buildDispatch("dispatch-implement"),
-    ]);
+    ];
 
-    expect(dispatchEdgePairs(projection)).toEqual([
-      "dispatch-plan->dispatch-review",
-      "dispatch-review->dispatch-implement",
-    ]);
+    for (const orderedDispatches of [dispatches, [...dispatches].reverse()]) {
+      const projection =
+        projectTraceDispatchesToFactoryGraph(orderedDispatches);
+
+      expect(projection.lineageStatus).toBe("unresolved");
+      expect(dispatchEdgePairs(projection)).toEqual([]);
+    }
   });
 });
 

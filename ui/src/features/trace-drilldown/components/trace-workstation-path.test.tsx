@@ -359,23 +359,23 @@ describe("TraceWorkstationPath fallback lineage", () => {
     });
   });
 
-  it("falls back to sequential ordering when no explicit or work-item lineage is available", async () => {
+  it("shows unresolved lineage instead of inventing sequential edges", async () => {
     render(
       <TraceWorkstationPath
         dispatches={[
           buildDispatch("dispatch-plan"),
           buildDispatch("dispatch-review"),
-          buildDispatch("dispatch-implement"),
         ]}
       />,
     );
 
     await waitFor(() => {
-      expect(renderedEdgePairs()).toEqual([
-        "dispatch-plan->dispatch-review",
-        "dispatch-review->dispatch-implement",
-      ]);
+      expect(renderedEdgePairs()).toEqual([]);
     });
+
+    expect(screen.getByRole("status").textContent).toBe(
+      "Lineage is unresolved: no recorded relationship connects one or more dispatches, so no predecessor was inferred.",
+    );
   });
 });
 
