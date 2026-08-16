@@ -118,28 +118,30 @@ func (err *InvocationValidationError) Error() string {
 // Sessions operation owner. It owns no registry and constructs no child
 // service; each method translates a value-only request to the existing live
 // or durable owner operation and returns a detached projection. Transport
-// compatibility capabilities remain explicit on the owner and are not
-// folded back into the aggregate Service.
-type DetachedOperationsOwner interface {
-	Service
-	LiveControlService
-	LiveResultService
-}
-
+// compatibility capabilities remain explicit on the owner and are not folded
+// back into the aggregate Service.
 type DetachedOperations struct {
-	owner DetachedOperationsOwner
+	owner       Service
+	liveControl LiveControlService
+	liveResults LiveResultService
 }
 
 // Bind attaches the P4-A operation view to the already-composed Sessions root.
 // Binding is inert: it retains the owner and constructs no child service.
-func (operations *DetachedOperations) Bind(owner DetachedOperationsOwner) (DetachedService, error) {
+func (operations *DetachedOperations) Bind(owner Service) (DetachedService, error) {
 	if owner == nil {
 		return nil, ErrDetachedServiceUnavailable
+	}
+	liveControl, ok := owner.(LiveControlService)
+	if !ok {
+		return nil, fmt.Errorf("%w: live control capability is required", ErrDetachedServiceUnavailable)
 	}
 	if operations == nil {
 		operations = &DetachedOperations{}
 	}
 	operations.owner = owner
+	operations.liveControl = liveControl
+	operations.liveResults, _ = owner.(LiveResultService)
 	return operations, nil
 }
 
@@ -397,8 +399,11 @@ func (operations *DetachedOperations) ReadResult(
 			Durable:   cloneDurableResult(result),
 		}, nil
 	case SessionOperationModeLive:
+		if operations.liveResults == nil {
+			return SessionResultReadResult{}, ErrDetachedServiceUnavailable
+		}
 		if request.Request.Mode == ResultModePartial {
-			result, err := operations.owner.GetFactorySessionPartialResult(ctx, request.SessionID)
+			result, err := operations.liveResults.GetFactorySessionPartialResult(ctx, request.SessionID)
 			if err != nil {
 				return SessionResultReadResult{}, err
 			}
@@ -414,7 +419,7 @@ func (operations *DetachedOperations) ReadResult(
 				},
 			}, nil
 		}
-		result, err := operations.owner.GetFactorySessionResult(ctx, request.SessionID)
+		result, err := operations.liveResults.GetFactorySessionResult(ctx, request.SessionID)
 		if err != nil {
 			return SessionResultReadResult{}, err
 		}
@@ -486,7 +491,7 @@ func (operations *DetachedOperations) controlLive(
 	control ControlRequest,
 ) (SessionControlResult, error) {
 	if request.Operation == SessionControlClose || request.Operation == SessionControlCancel || request.Operation == SessionControlTerminate {
-		if err := operations.owner.CloseFactorySession(ctx, request.SessionID); err != nil {
+		if err := operations.liveControl.CloseFactorySession(ctx, request.SessionID); err != nil {
 			return SessionControlResult{}, err
 		}
 		return SessionControlResult{
@@ -502,9 +507,9 @@ func (operations *DetachedOperations) controlLive(
 	)
 	switch request.Operation {
 	case SessionControlPause:
-		result, err = operations.owner.PauseLiveFactorySession(ctx, request.SessionID, control)
+		result, err = operations.liveControl.PauseLiveFactorySession(ctx, request.SessionID, control)
 	case SessionControlResume:
-		result, err = operations.owner.ResumeLiveFactorySession(ctx, request.SessionID, control)
+		result, err = operations.liveControl.ResumeLiveFactorySession(ctx, request.SessionID, control)
 	default:
 		return SessionControlResult{}, detachedRequestError("operation", "unsupported live control operation")
 	}

@@ -135,7 +135,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/sessionservice",
-      "fileCount": 39,
+      "fileCount": 38,
       "owner": "factory-session-maintainers",
       "removalReason": "Partition session service behavior by lifecycle responsibility."
     },

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -424,14 +423,6 @@ func (owner *functionalDetachedOwner) InterruptDispatch(context.Context, string,
 
 func (owner *functionalDetachedOwner) GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
 	return owner.resultRead, nil
-}
-
-func (*functionalDetachedOwner) GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error) {
-	return factoryruntime.LiveSessionResult{}, nil
-}
-
-func (*functionalDetachedOwner) GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error) {
-	return factoryruntime.PartialSessionResult{}, nil
 }
 
 func (owner *functionalDetachedOwner) SubscribeFactoryResponseEvents(_ context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {

@@ -156,11 +156,7 @@ func NewDetachedOperations(owner factorysessions.Service) (factorysessions.Detac
 			return operations, nil
 		}
 	}
-	detachedOwner, ok := owner.(factorysessions.DetachedOperationsOwner)
-	if !ok {
-		return nil, fmt.Errorf("construct detached Factory Sessions operations: live control and result capabilities are required")
-	}
-	return (&factorysessions.DetachedOperations{}).Bind(detachedOwner)
+	return (&factorysessions.DetachedOperations{}).Bind(owner)
 }
 
 // TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
