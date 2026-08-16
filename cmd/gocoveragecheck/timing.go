@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -19,6 +17,12 @@ const (
 	timingOutcomePass = "pass"
 	timingOutcomeFail = "fail"
 	timingOutcomeSkip = "skip"
+)
+
+const (
+	functionalPackageStateCompleted  = "completed"
+	functionalPackageStateInFlight   = "in_flight"
+	functionalPackageStateUnobserved = "unobserved"
 )
 
 const maxTimingFailureReasonLength = 240
@@ -40,6 +44,18 @@ type functionalPackageTimingJSON struct {
 	Package string  `json:"package"`
 	Seconds float64 `json:"seconds"`
 	Outcome string  `json:"outcome"`
+	Reason  string  `json:"reason,omitempty"`
+}
+
+// functionalPackageStateJSON keeps the package-level state visible while a
+// functional run is still active. Packages with a terminal go test event also
+// appear in Packages; in-flight and unobserved packages are retained here so a
+// timeout snapshot names the work that did not finish.
+type functionalPackageStateJSON struct {
+	Package string  `json:"package"`
+	Seconds float64 `json:"seconds"`
+	State   string  `json:"state"`
+	Outcome string  `json:"outcome,omitempty"`
 	Reason  string  `json:"reason,omitempty"`
 }
 
@@ -65,6 +81,7 @@ type functionalTestTimingJSON struct {
 type functionalTimingSummaryJSON struct {
 	Version                  int                           `json:"version"`
 	Complete                 bool                          `json:"complete"`
+	CaptureReason            string                        `json:"captureReason,omitempty"`
 	WallSeconds              float64                       `json:"wallSeconds"`
 	PackageElapsedSecondsSum float64                       `json:"packageElapsedSecondsSum"`
 	ExpectedPackageCount     int                           `json:"expectedPackageCount"`
@@ -74,6 +91,7 @@ type functionalTimingSummaryJSON struct {
 	TestFailCount            int                           `json:"testFailCount"`
 	TestSkipCount            int                           `json:"testSkipCount"`
 	Packages                 []functionalPackageTimingJSON `json:"packages"`
+	PackageStates            []functionalPackageStateJSON  `json:"packageStates,omitempty"`
 	Tests                    []functionalTestTimingJSON    `json:"tests"`
 }
 
@@ -235,16 +253,11 @@ func writeFunctionalTimingSummaryJSON(path string, summary functionalTimingSumma
 	if path == "" {
 		return nil
 	}
-	if directory := filepath.Dir(path); directory != "" && directory != "." {
-		if err := os.MkdirAll(directory, 0o755); err != nil {
-			return fmt.Errorf("create go functional timing summary directory: %w", err)
-		}
-	}
 	data, err := renderFunctionalTimingSummaryJSON(summary)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeAtomicDiagnosticFile(path, data); err != nil {
 		return fmt.Errorf("write go functional timing summary json: %w", err)
 	}
 	return nil

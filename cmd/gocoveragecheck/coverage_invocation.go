@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,10 +53,10 @@ func writeCoverageTestFailureWarning(err error) {
 	fmt.Fprintln(stderrWriter, "coverage not evaluated: package floors were NOT checked because the coverage test run failed; failed-test count unavailable")
 }
 
-func buildCoverageTestArgs(commonArgs []string, profilePath string, timingEnabled bool, testPackages []string) []string {
+func buildCoverageTestArgs(commonArgs []string, profilePath string, jsonEventsEnabled bool, testPackages []string) []string {
 	args := append([]string(nil), commonArgs...)
 	args = append(args, fmt.Sprintf("-coverprofile=%s", profilePath))
-	if timingEnabled {
+	if jsonEventsEnabled {
 		args = append(args, "-json")
 	}
 	return append(args, testPackages...)
@@ -67,12 +69,12 @@ func buildCoverageTestArgs(commonArgs []string, profilePath string, timingEnable
 // resolved test package exactly once. Each batch writes an isolated profile
 // that the caller merges with mergeCoverageProfiles after execution, including
 // profiles from failed subprocesses when they were produced.
-func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, profilePath string, timingEnabled bool, targetOS string, compactPackageArgs ...[]string) (coverageInvocationPlan, error) {
+func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, profilePath string, jsonEventsEnabled bool, targetOS string, compactPackageArgs ...[]string) (coverageInvocationPlan, error) {
 	directPackageArgs := testPackages
 	if len(compactPackageArgs) > 0 && len(compactPackageArgs[0]) > 0 {
 		directPackageArgs = compactPackageArgs[0]
 	}
-	directArgs := buildCoverageTestArgs(commonArgs, profilePath, timingEnabled, directPackageArgs)
+	directArgs := buildCoverageTestArgs(commonArgs, profilePath, jsonEventsEnabled, directPackageArgs)
 	if targetOS != "windows" || coverageCommandFitsWindowsLimit(directArgs) {
 		return coverageInvocationPlan{
 			invocations: []commandInvocation{{
@@ -105,7 +107,7 @@ func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, pro
 	for _, testPackage := range testPackages {
 		candidateBatch := append(append([]string(nil), currentBatch...), testPackage)
 		candidateProfile := batchProfilePath(batchDir, len(plan.invocations))
-		candidateArgs := buildCoverageTestArgs(commonArgs, candidateProfile, timingEnabled, candidateBatch)
+		candidateArgs := buildCoverageTestArgs(commonArgs, candidateProfile, jsonEventsEnabled, candidateBatch)
 		if coverageCommandFitsWindowsLimit(candidateArgs) {
 			currentBatch = candidateBatch
 			continue
@@ -118,10 +120,10 @@ func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, pro
 			)
 		}
 
-		appendCoverageInvocation(&plan, commonArgs, candidateProfile, timingEnabled, currentBatch)
+		appendCoverageInvocation(&plan, commonArgs, candidateProfile, jsonEventsEnabled, currentBatch)
 		currentBatch = []string{testPackage}
 		candidateProfile = batchProfilePath(batchDir, len(plan.invocations))
-		candidateArgs = buildCoverageTestArgs(commonArgs, candidateProfile, timingEnabled, currentBatch)
+		candidateArgs = buildCoverageTestArgs(commonArgs, candidateProfile, jsonEventsEnabled, currentBatch)
 		if !coverageCommandFitsWindowsLimit(candidateArgs) {
 			return coverageInvocationPlan{}, errors.Join(
 				coverageCommandTooLongError(testPackage, candidateArgs),
@@ -131,16 +133,16 @@ func buildCoverageInvocationPlan(commonArgs []string, testPackages []string, pro
 	}
 
 	if len(currentBatch) > 0 {
-		appendCoverageInvocation(&plan, commonArgs, batchProfilePath(batchDir, len(plan.invocations)), timingEnabled, currentBatch)
+		appendCoverageInvocation(&plan, commonArgs, batchProfilePath(batchDir, len(plan.invocations)), jsonEventsEnabled, currentBatch)
 	}
 	return plan, nil
 }
 
-func appendCoverageInvocation(plan *coverageInvocationPlan, commonArgs []string, profilePath string, timingEnabled bool, testPackages []string) {
+func appendCoverageInvocation(plan *coverageInvocationPlan, commonArgs []string, profilePath string, jsonEventsEnabled bool, testPackages []string) {
 	plan.profilePaths = append(plan.profilePaths, profilePath)
 	plan.invocations = append(plan.invocations, commandInvocation{
 		name: "go",
-		args: buildCoverageTestArgs(commonArgs, profilePath, timingEnabled, testPackages),
+		args: buildCoverageTestArgs(commonArgs, profilePath, jsonEventsEnabled, testPackages),
 		env:  os.Environ(),
 	})
 }
@@ -304,12 +306,12 @@ func windowsCommandLineArgLength(arg string) int {
 
 // runGoTestCoverageLane runs the coverage invocation once on short command
 // lines, or in deterministic test-package batches when Windows needs it. When
-// cfg.timingOutput is set, it combines every batch's -json stdout before
-// writing the timing summary, so a failed or crashed lane still leaves
-// trustworthy (possibly incomplete) diagnostics on disk.
+// timing capture or streaming is enabled, it combines every batch's -json
+// stdout before writing the timing summary, so a failed or crashed lane still
+// leaves trustworthy (possibly incomplete) diagnostics on disk.
 func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, compactPackageArgs ...[]string) error {
-	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, timingEnabled, targetOS, compactPackageArgs...)
+	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
+	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, jsonEventsEnabled, targetOS, compactPackageArgs...)
 	if err != nil {
 		return err
 	}
@@ -317,8 +319,8 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 }
 
 func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, selection functionalCoverageSelection) error {
-	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	plan, err := buildFunctionalCoverageInvocationPlan(commonArgs, selection.Groups, profilePath, timingEnabled, targetOS)
+	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
+	plan, err := buildFunctionalCoverageInvocationPlan(commonArgs, selection.Groups, profilePath, jsonEventsEnabled, targetOS)
 	if err != nil {
 		return err
 	}
@@ -326,10 +328,11 @@ func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPac
 }
 
 func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string) error {
-	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	configureCoverageInvocationStreaming(&plan, cfg.stream)
-
 	started := time.Now()
+	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages)
+	if snapshotter != nil {
+		defer snapshotter.stopAndWait()
+	}
 	var stdout strings.Builder
 	var stderr strings.Builder
 	var laneErr error
@@ -339,6 +342,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	failedTestCountKnown := true
 	for index, invocation := range plan.invocations {
 		batchStdout, batchStderr, commandErr := runCommand(invocation)
+		commandErr = errors.Join(commandErr, flushFunctionalStreamWriter(invocation.stdoutWriter))
 		appendCoverageOutput(&stdout, batchStdout)
 		appendCoverageOutput(&stderr, batchStderr)
 		if commandErr == nil {
@@ -364,14 +368,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	}
 	wallSeconds := time.Since(started).Seconds()
 
-	var timingWriteErr error
-	if timingEnabled {
-		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
-		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
-		if timingWriteErr == nil && cfg.suite == "functional" {
-			writeFunctionalTimingInventorySummary(summary, cfg.short)
-		}
-	}
+	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr)
 
 	var mergeErr error
 	if len(plan.profilePaths) > 1 {
@@ -382,7 +379,8 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		}
 	}
 
-	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, plan.cleanup())
+	partialCoverageErr := publishPartialCoverageIfNeeded(cfg, profilePath, repoRoot, coverPackages, laneErr, mergeErr)
+	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, partialCoverageErr, plan.cleanup())
 	if !testFailureObserved {
 		return runErr
 	}
@@ -391,6 +389,87 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		failedTestCount:      failedTestCount,
 		failedTestCountKnown: failedTestCountKnown && failedTestCount > 0,
 	}
+}
+
+func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config, testPackages []string, started time.Time, profilePath string, repoRoot string, coverPackages []string) *functionalTimingSnapshotter {
+	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
+	if !cfg.stream && !timingEnabled {
+		return nil
+	}
+
+	tracker := newFunctionalTimingTracker(testPackages, started)
+	var snapshotter *functionalTimingSnapshotter
+	observer := func(event goTestTimingEvent) {
+		if snapshotter != nil {
+			snapshotter.observe(event)
+			return
+		}
+		tracker.observe(event)
+	}
+	var reporter *functionalStreamReporter
+	if cfg.stream {
+		reporter = configureCoverageInvocationStreaming(plan, true, observer)
+	} else {
+		reporter = configureCoverageInvocationObservation(plan, observer)
+	}
+	sink := io.Writer(nil)
+	var sinkMu *sync.Mutex
+	if cfg.stream {
+		sink = stdoutWriter
+		sinkMu = &reporter.sinkMu
+	}
+	snapshotter = newFunctionalTimingSnapshotter(
+		tracker,
+		cfg.timingOutput,
+		sink,
+		sinkMu,
+		func() error {
+			return writePartialCoverageSnapshot(cfg.jsonOutput, profilePath, repoRoot, coverPackages, partialCoverageReason(nil))
+		},
+	)
+	snapshotter.publish(false, "functional run started", false)
+	return snapshotter
+}
+
+func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshotter, stdout string, testPackages []string, wallSeconds float64, laneErr error) error {
+	if strings.TrimSpace(cfg.timingOutput) == "" {
+		if snapshotter != nil {
+			snapshotter.stopAndWait()
+		}
+		return nil
+	}
+
+	summary := buildFunctionalTimingSummary(stdout, testPackages, wallSeconds)
+	timingReason := ""
+	if !summary.Complete {
+		timingReason = "functional timing capture ended before every package reported a terminal result"
+		if laneErr != nil {
+			timingReason += ": " + compactDiagnosticError(laneErr)
+		}
+	}
+	var err error
+	if snapshotter != nil {
+		err = snapshotter.finish(summary, timingReason)
+	} else {
+		err = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+	}
+	if err == nil && cfg.suite == "functional" {
+		writeFunctionalTimingInventorySummary(summary, cfg.short)
+	}
+	return err
+}
+
+func publishPartialCoverageIfNeeded(cfg config, profilePath string, repoRoot string, coverPackages []string, laneErr error, mergeErr error) error {
+	if laneErr == nil && mergeErr == nil {
+		return nil
+	}
+	return writePartialCoverageSnapshot(
+		cfg.jsonOutput,
+		profilePath,
+		repoRoot,
+		coverPackages,
+		partialCoverageReason(errors.Join(laneErr, mergeErr)),
+	)
 }
 
 func coverageTestFailureDetails(commandErr error, stdout string, stderr string) (int, bool, bool) {
@@ -431,13 +510,13 @@ func countObservedGoTestFailures(stdout string, stderr string) int {
 	return count
 }
 
-func buildFunctionalCoverageInvocationPlan(commonArgs []string, groups []coverageRunGroup, profilePath string, timingEnabled bool, targetOS string) (coverageInvocationPlan, error) {
+func buildFunctionalCoverageInvocationPlan(commonArgs []string, groups []coverageRunGroup, profilePath string, jsonEventsEnabled bool, targetOS string) (coverageInvocationPlan, error) {
 	if len(groups) == 0 {
 		return coverageInvocationPlan{}, errors.New("prepare functional coverage lane: no selected run groups")
 	}
 	if len(groups) == 1 {
 		args := appendCoverageRunPattern(commonArgs, groups[0].RunPattern)
-		return buildCoverageInvocationPlan(args, groups[0].Packages, profilePath, timingEnabled, targetOS)
+		return buildCoverageInvocationPlan(args, groups[0].Packages, profilePath, jsonEventsEnabled, targetOS)
 	}
 
 	groupDir, err := os.MkdirTemp("", "gocoveragecheck-functional-groups-*")
@@ -449,7 +528,7 @@ func buildFunctionalCoverageInvocationPlan(commonArgs []string, groups []coverag
 	for index, group := range groups {
 		groupProfile := filepath.Join(groupDir, fmt.Sprintf("coverage-%06d.out", index))
 		args := appendCoverageRunPattern(commonArgs, group.RunPattern)
-		groupPlan, groupErr := buildCoverageInvocationPlan(args, group.Packages, groupProfile, timingEnabled, targetOS)
+		groupPlan, groupErr := buildCoverageInvocationPlan(args, group.Packages, groupProfile, jsonEventsEnabled, targetOS)
 		if groupErr != nil {
 			for _, cleanup := range cleanups {
 				groupErr = errors.Join(groupErr, cleanup())
@@ -511,14 +590,29 @@ func runCommand(invocation commandInvocation) (string, string, error) {
 	return commandRunner(invocation)
 }
 
-func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled bool) {
+func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled bool, observers ...func(goTestTimingEvent)) *functionalStreamReporter {
 	if !enabled {
-		return
+		return nil
 	}
+	var observer func(goTestTimingEvent)
+	if len(observers) > 0 {
+		observer = observers[0]
+	}
+	reporter := newFunctionalStreamReporterWithObserver(stdoutWriter, observer)
 	for index := range plan.invocations {
-		plan.invocations[index].stdoutWriter = stdoutWriter
-		plan.invocations[index].stderrWriter = stderrWriter
+		plan.invocations[index].stdoutWriter = reporter.stdoutWriter()
+		plan.invocations[index].stderrWriter = reporter.stderrWriter(stderrWriter)
 	}
+	return reporter
+}
+
+func configureCoverageInvocationObservation(plan *coverageInvocationPlan, observer func(goTestTimingEvent)) *functionalStreamReporter {
+	reporter := newFunctionalStreamReporterWithObserver(io.Discard, observer)
+	for index := range plan.invocations {
+		plan.invocations[index].stdoutWriter = reporter.stdoutWriter()
+		plan.invocations[index].stderrWriter = reporter.stderrWriter(io.Discard)
+	}
+	return reporter
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {

@@ -733,6 +733,7 @@ func TestFunctionalTestSummaryPublishScriptSmoke_AppendsMarkdownWhenPresent(t *t
 		repoRoot,
 		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
 		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", markdownPath),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", tempDir),
 		fmt.Sprintf("GITHUB_STEP_SUMMARY=%s", summaryPath),
 	)
 	if err != nil {
@@ -759,6 +760,7 @@ func TestFunctionalTestSummaryPublishScriptSmoke_SkipsWhenMarkdownMissing(t *tes
 		repoRoot,
 		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
 		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", missingMarkdownPath),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", tempDir),
 		fmt.Sprintf("GITHUB_STEP_SUMMARY=%s", summaryPath),
 	)
 	if err != nil {
@@ -791,6 +793,7 @@ func TestFunctionalTestSummaryPublishScriptSmoke_NoopWhenGithubStepSummaryUnset(
 		repoRoot,
 		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
 		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", markdownPath),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", tempDir),
 		"GITHUB_STEP_SUMMARY=",
 	)
 	if err != nil {

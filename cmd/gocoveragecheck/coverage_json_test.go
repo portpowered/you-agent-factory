@@ -402,7 +402,7 @@ func TestExecuteWritesJSONWhenPackageFloorFails(t *testing.T) {
 	}
 }
 
-func TestExecuteDoesNotWriteJSONWhenMeasurementIncomplete(t *testing.T) {
+func TestExecuteWritesIncompleteJSONWhenMeasurementFailsWithProfile(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
@@ -435,8 +435,22 @@ func TestExecuteDoesNotWriteJSONWhenMeasurementIncomplete(t *testing.T) {
 	if !strings.Contains(err.Error(), "run go test coverage lane") {
 		t.Fatalf("execute() error = %q, want incomplete measurement failure", err.Error())
 	}
-	if _, statErr := os.Stat(jsonPath); !os.IsNotExist(statErr) {
-		t.Fatalf("unexpected json file at %s after incomplete measurement (stat err=%v)", jsonPath, statErr)
+	data, readErr := os.ReadFile(jsonPath)
+	if readErr != nil {
+		t.Fatalf("read incomplete coverage summary json: %v", readErr)
+	}
+	var summary coverageSummaryJSON
+	if decodeErr := json.Unmarshal(data, &summary); decodeErr != nil {
+		t.Fatalf("decode incomplete coverage summary json: %v\n%s", decodeErr, data)
+	}
+	if summary.Complete {
+		t.Fatal("incomplete coverage summary marked complete")
+	}
+	if len(summary.Packages) == 0 {
+		t.Fatalf("incomplete coverage summary packages = %+v, want retained partial package totals", summary.Packages)
+	}
+	if !strings.Contains(summary.MeasurementReason, "did not complete") {
+		t.Fatalf("measurement reason = %q, want incomplete-measurement explanation", summary.MeasurementReason)
 	}
 }
 

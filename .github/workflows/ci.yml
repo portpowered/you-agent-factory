@@ -242,6 +242,10 @@ jobs:
         run: bash scripts/ci/publish-functional-test-summary.sh
         env:
           FUNCTIONAL_TEST_VIZ_MARKDOWN: .artifacts/functional-test-viz/functional-tests.md
+          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+          FUNCTIONAL_TEST_VIZ_TIMING: .artifacts/functional-test-viz/functional-timing-summary.json
+          FUNCTIONAL_TEST_VIZ_JSON: .artifacts/functional-test-viz/coverage-summary.json
+          FUNCTIONAL_TEST_VIZ_PROFILE: .artifacts/functional-test-viz/coverage.out
       - name: Upload functional test diagnostics
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
@@ -253,6 +257,7 @@ jobs:
             .artifacts/functional-test-viz/coverage-summary.json
             .artifacts/functional-test-viz/coverage.out
             .artifacts/functional-test-viz/command.log
+            .artifacts/functional-test-viz/diagnostic-status.txt
             .artifacts/functional-test-viz/real-acpx-evidence.json
           if-no-files-found: ignore
           retention-days: 14
