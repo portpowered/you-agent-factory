@@ -174,6 +174,7 @@ async function verifyViewport(browser, viewport) {
     await waitForSelectedTab(firstTab, navigation, "Initial", viewport.label);
     await waitForRovingTabState(navigation, "Initial", viewport.label);
     await enterTablistWithKeyboard(page, firstTab, viewport.label);
+    await waitForFocusedTab(firstTab, "End", viewport.label);
     await page.keyboard.press("End");
     await waitForSelectedTab(lastTab, navigation, "End", viewport.label);
     await waitForRovingTabState(navigation, "End", viewport.label);
