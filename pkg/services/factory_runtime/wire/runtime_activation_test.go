@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -119,6 +120,9 @@ func TestRuntimeRootActivationReturnsPublishedRuntimeHandoff(t *testing.T) {
 	if result.Runtime.Service != active {
 		t.Fatal("published handoff did not return the activated Service")
 	}
+	if result.Binding.IsZero() || !result.Binding.Equal(result.Runtime.Binding) {
+		t.Fatal("activation result did not publish the same opaque Runtime binding as its handoff")
+	}
 	if result.Runtime.BuildSpec.RuntimeInstanceID != request.RuntimeID {
 		t.Fatalf("published handoff RuntimeInstanceID = %q, want %q", result.Runtime.BuildSpec.RuntimeInstanceID, request.RuntimeID)
 	}
@@ -142,9 +146,9 @@ func TestRuntimeRootActivationRejectsDuplicateAndConflictingIdentity(t *testing.
 		t.Fatalf("Activate(duplicate) error = %v, want already active", err)
 	}
 	conflict := foldRuntimeActivationRequest()
-	conflict.RuntimeID = "fold-runtime-conflict"
+	conflict.Snapshot.EffectiveFactory.Name = "different-factory"
 	if _, err := root.Activate(context.Background(), conflict); !errors.Is(err, factoryruntime.ErrRuntimeActivationConflict) {
-		t.Fatalf("Activate(conflict) error = %v, want conflict", err)
+		t.Fatalf("Activate(conflicting identity) error = %v, want conflict", err)
 	}
 	if starts != 1 {
 		t.Fatalf("activation operation calls = %d, want one successful start", starts)
@@ -156,6 +160,66 @@ func TestRuntimeRootActivationRejectsDuplicateAndConflictingIdentity(t *testing.
 	}
 	if observed.Observation.Health.FactoryState != "RUNNING" {
 		t.Fatalf("active delegate changed after rejected activation: %q", observed.Observation.Health.FactoryState)
+	}
+}
+
+func TestRuntimeRootActivatesDistinctBindingsInIsolation(t *testing.T) {
+	t.Parallel()
+
+	starts := make(map[string]int)
+	active := make(map[string]*foldHostedRuntimeStub)
+	root := newRuntimeRoot(t, func(_ context.Context, request factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		starts[request.RuntimeID]++
+		runtime := newFoldHostedRuntimeStub(interfaces.FactoryState(request.RuntimeID))
+		active[request.RuntimeID] = runtime
+		return &factoryruntime.RuntimeActivation{Service: runtime}, nil
+	})
+
+	firstRequest := foldRuntimeActivationRequest()
+	first, err := root.Activate(context.Background(), firstRequest)
+	if err != nil {
+		t.Fatalf("Activate(first) error = %v", err)
+	}
+	secondRequest := foldRuntimeActivationRequest()
+	secondRequest.RuntimeID = "fold-runtime-2"
+	secondRequest.FactorySessionID = "fold-session-2"
+	second, err := root.Activate(context.Background(), secondRequest)
+	if err != nil {
+		t.Fatalf("Activate(second) error = %v", err)
+	}
+	if first.Binding.IsZero() || second.Binding.IsZero() {
+		t.Fatal("successful activations must publish non-zero Runtime bindings")
+	}
+	if first.Binding.Equal(second.Binding) {
+		t.Fatal("distinct Runtime identities published the same binding")
+	}
+
+	firstObserved, err := first.Binding.Service().Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus})
+	if err != nil {
+		t.Fatalf("first binding Observe() error = %v", err)
+	}
+	if got := firstObserved.Observation.Health.FactoryState; got != firstRequest.RuntimeID {
+		t.Fatalf("first binding observed state %q, want %q", got, firstRequest.RuntimeID)
+	}
+	secondObserved, err := second.Binding.Service().Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus})
+	if err != nil {
+		t.Fatalf("second binding Observe() error = %v", err)
+	}
+	if got := secondObserved.Observation.Health.FactoryState; got != secondRequest.RuntimeID {
+		t.Fatalf("second binding observed state %q, want %q", got, secondRequest.RuntimeID)
+	}
+	if starts[firstRequest.RuntimeID] != 1 || starts[secondRequest.RuntimeID] != 1 {
+		t.Fatalf("activation calls = %#v, want one per identity", starts)
+	}
+
+	if _, err := root.Deactivate(context.Background(), factoryruntime.RuntimeDeactivationRequest{RuntimeID: firstRequest.RuntimeID}); err != nil {
+		t.Fatalf("Deactivate(first) error = %v", err)
+	}
+	if _, err := first.Binding.Service().Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus}); !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("first binding after deactivation error = %v, want ErrNotRunning", err)
+	}
+	if _, err := second.Binding.Service().Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus}); err != nil {
+		t.Fatalf("second binding after first deactivation error = %v", err)
 	}
 }
 

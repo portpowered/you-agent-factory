@@ -28,10 +28,10 @@ type Root struct {
 	activation    factoryruntime.RuntimeActivationOperation
 
 	mu           sync.RWMutex
-	active       *runtimeActivationState
-	failed       *runtimeActivationCleanupState
-	activating   bool
-	deactivating bool
+	active       map[string]*runtimeActivationState
+	failed       map[string]*runtimeActivationCleanupState
+	activating   map[string]bool
+	deactivating map[string]bool
 }
 
 var _ factoryruntime.Service = (*Root)(nil)
@@ -85,6 +85,10 @@ func NewRoot(
 		instanceHost:  instanceHost,
 		dispatchPlan:  dispatchplanningwire.New(workersPublisher, workersCanceler),
 		activation:    activationOperation,
+		active:        make(map[string]*runtimeActivationState),
+		failed:        make(map[string]*runtimeActivationCleanupState),
+		activating:    make(map[string]bool),
+		deactivating:  make(map[string]bool),
 	}, nil
 }
 
@@ -116,7 +120,7 @@ func (r *Root) Activate(
 		return factoryruntime.RuntimeActivationResult{}, err
 	}
 	r.mu.RLock()
-	active := r.active
+	active := r.active[normalized.RuntimeID]
 	if active == nil {
 		r.mu.RUnlock()
 		return factoryruntime.RuntimeActivationResult{}, &factoryruntime.RuntimeActivationError{
@@ -130,6 +134,7 @@ func (r *Root) Activate(
 	return factoryruntime.RuntimeActivationResult{
 		RuntimeID: normalized.RuntimeID,
 		State:     factoryruntime.RuntimeLifecycleStateActive,
+		Binding:   view.Binding,
 		Runtime:   view,
 	}, nil
 }
@@ -149,10 +154,10 @@ func (r *Root) beginActivation(
 ) (factoryruntime.RuntimeActivationOperation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.active != nil {
+	if active := r.active[request.RuntimeID]; active != nil {
 		kind := factoryruntime.RuntimeActivationErrorConflict
-		message := "activate Factory Runtime: another Runtime is already active"
-		if reflect.DeepEqual(r.active.request, request) {
+		message := "activate Factory Runtime: Runtime identity is already active"
+		if reflect.DeepEqual(active.request, request) {
 			kind = factoryruntime.RuntimeActivationErrorAlreadyActive
 			message = "activate Factory Runtime: Runtime is already active"
 		}
@@ -162,14 +167,14 @@ func (r *Root) beginActivation(
 			Message:   message,
 		}
 	}
-	if r.failed != nil {
+	if _, ok := r.failed[request.RuntimeID]; ok {
 		return nil, &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorConflict,
 			RuntimeID: request.RuntimeID,
 			Message:   "activate Factory Runtime: failed activation cleanup is pending",
 		}
 	}
-	if r.activating || r.deactivating {
+	if r.activating[request.RuntimeID] || r.deactivating[request.RuntimeID] {
 		return nil, &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorConflict,
 			RuntimeID: request.RuntimeID,
@@ -183,7 +188,7 @@ func (r *Root) beginActivation(
 			Message:   "activate Factory Runtime: activation operation is unavailable",
 		}
 	}
-	r.activating = true
+	r.activating[request.RuntimeID] = true
 	return r.activation, nil
 }
 
@@ -199,7 +204,7 @@ func (r *Root) finishActivation(
 			r.retainFailedCleanup(request.RuntimeID, activation)
 			operationErr = fmt.Errorf("%w; unwind activation: %v", operationErr, cleanupErr)
 		}
-		r.clearActivating()
+		r.clearActivating(request.RuntimeID)
 		return &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorFailed,
 			RuntimeID: request.RuntimeID,
@@ -215,7 +220,7 @@ func (r *Root) finishActivation(
 		} else {
 			operationErr = fmt.Errorf("activation returned no Runtime service")
 		}
-		r.clearActivating()
+		r.clearActivating(request.RuntimeID)
 		return &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorFailed,
 			RuntimeID: request.RuntimeID,
@@ -223,11 +228,13 @@ func (r *Root) finishActivation(
 			Cause:     operationErr,
 		}
 	}
+	bindingService := &boundRuntimeService{root: r, runtimeID: request.RuntimeID}
 	r.mu.Lock()
-	r.activating = false
+	r.activating[request.RuntimeID] = false
 	view := factoryruntime.RuntimeActivationView{
 		RuntimeID:        request.RuntimeID,
 		FactorySessionID: request.FactorySessionID,
+		Binding:          factoryruntime.NewRuntimeBinding(request.RuntimeID, bindingService),
 		Service:          activation.Service,
 		HostedInstance:   activation.HostedInstance,
 		Replacement:      activation.Replacement,
@@ -235,7 +242,7 @@ func (r *Root) finishActivation(
 		Lifecycle:        activation.Lifecycle,
 		Sidecars:         activation.Sidecars,
 	}
-	r.active = &runtimeActivationState{
+	r.active[request.RuntimeID] = &runtimeActivationState{
 		request: request,
 		service: activation.Service,
 		view:    view,
@@ -253,16 +260,16 @@ func (r *Root) retainFailedCleanup(
 		return
 	}
 	r.mu.Lock()
-	r.failed = &runtimeActivationCleanupState{
+	r.failed[runtimeID] = &runtimeActivationCleanupState{
 		runtimeID: runtimeID,
 		close:     activation.Close,
 	}
 	r.mu.Unlock()
 }
 
-func (r *Root) clearActivating() {
+func (r *Root) clearActivating(runtimeID string) {
 	r.mu.Lock()
-	r.activating = false
+	delete(r.activating, runtimeID)
 	r.mu.Unlock()
 }
 
@@ -294,7 +301,7 @@ func (r *Root) Deactivate(
 	}
 	if closeOwnedResources != nil {
 		if err := closeOwnedResources(ctx); err != nil {
-			r.abortDeactivation()
+			r.abortDeactivation(runtimeID)
 			return factoryruntime.RuntimeDeactivationResult{}, &factoryruntime.RuntimeActivationError{
 				Kind:      factoryruntime.RuntimeActivationErrorDeactivationFailed,
 				RuntimeID: runtimeID,
@@ -303,7 +310,7 @@ func (r *Root) Deactivate(
 			}
 		}
 	}
-	r.completeDeactivation()
+	r.completeDeactivation(runtimeID)
 	return factoryruntime.RuntimeDeactivationResult{
 		RuntimeID: runtimeID,
 		State:     factoryruntime.RuntimeLifecycleStateStopped,
@@ -324,63 +331,53 @@ func validateDeactivationContext(ctx context.Context, runtimeID string) error {
 func (r *Root) beginDeactivation(runtimeID string) (func(context.Context) error, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.active == nil {
-		if r.failed != nil {
-			if r.failed.runtimeID != runtimeID {
-				return nil, &factoryruntime.RuntimeActivationError{
-					Kind:      factoryruntime.RuntimeActivationErrorConflict,
-					RuntimeID: runtimeID,
-					Message:   "deactivate Factory Runtime: Runtime ID does not match pending activation cleanup",
-				}
+	if active, ok := r.active[runtimeID]; ok {
+		if r.activating[runtimeID] || r.deactivating[runtimeID] {
+			return nil, &factoryruntime.RuntimeActivationError{
+				Kind:      factoryruntime.RuntimeActivationErrorConflict,
+				RuntimeID: runtimeID,
+				Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
 			}
-			if r.activating || r.deactivating {
-				return nil, &factoryruntime.RuntimeActivationError{
-					Kind:      factoryruntime.RuntimeActivationErrorConflict,
-					RuntimeID: runtimeID,
-					Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
-				}
-			}
-			r.deactivating = true
-			return r.failed.close, nil
 		}
-		return nil, &factoryruntime.RuntimeActivationError{
-			Kind:      factoryruntime.RuntimeActivationErrorNotActive,
-			RuntimeID: runtimeID,
-			Message:   "deactivate Factory Runtime: Runtime is not active",
-		}
+		r.deactivating[runtimeID] = true
+		return active.close, nil
 	}
-	if r.activating || r.deactivating {
+	if failed, ok := r.failed[runtimeID]; ok {
+		if r.activating[runtimeID] || r.deactivating[runtimeID] {
+			return nil, &factoryruntime.RuntimeActivationError{
+				Kind:      factoryruntime.RuntimeActivationErrorConflict,
+				RuntimeID: runtimeID,
+				Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
+			}
+		}
+		r.deactivating[runtimeID] = true
+		return failed.close, nil
+	}
+	if r.activating[runtimeID] || r.deactivating[runtimeID] {
 		return nil, &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorConflict,
 			RuntimeID: runtimeID,
 			Message:   "deactivate Factory Runtime: lifecycle transition is already in progress",
 		}
 	}
-	if r.active.request.RuntimeID != runtimeID {
-		return nil, &factoryruntime.RuntimeActivationError{
-			Kind:      factoryruntime.RuntimeActivationErrorConflict,
-			RuntimeID: runtimeID,
-			Message:   "deactivate Factory Runtime: Runtime ID does not match the active Runtime",
-		}
+	return nil, &factoryruntime.RuntimeActivationError{
+		Kind:      factoryruntime.RuntimeActivationErrorNotActive,
+		RuntimeID: runtimeID,
+		Message:   "deactivate Factory Runtime: Runtime is not active",
 	}
-	r.deactivating = true
-	return r.active.close, nil
 }
 
-func (r *Root) abortDeactivation() {
+func (r *Root) abortDeactivation(runtimeID string) {
 	r.mu.Lock()
-	r.deactivating = false
+	delete(r.deactivating, runtimeID)
 	r.mu.Unlock()
 }
 
-func (r *Root) completeDeactivation() {
+func (r *Root) completeDeactivation(runtimeID string) {
 	r.mu.Lock()
-	r.deactivating = false
-	if r.active != nil {
-		r.active = nil
-	} else {
-		r.failed = nil
-	}
+	delete(r.active, runtimeID)
+	delete(r.failed, runtimeID)
+	delete(r.deactivating, runtimeID)
 	r.mu.Unlock()
 }
 
@@ -502,10 +499,138 @@ func (r *Root) delegate() factoryruntime.Service {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.active == nil {
+	if len(r.active) != 1 {
 		return nil
 	}
-	return r.active.service
+	for _, active := range r.active {
+		return active.service
+	}
+	return nil
+}
+
+func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
+	if r == nil || r.orchestration == nil || r.instanceHost == nil || r.dispatchPlan == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	active := r.active[runtimeID]
+	if active == nil {
+		return nil
+	}
+	return active.service
+}
+
+// boundRuntimeService is the detached capability returned in RuntimeBinding.
+// It keeps the Runtime identity private and rechecks the process root before
+// every operation, so a binding cannot continue to operate after its owner has
+// been successfully deactivated.
+type boundRuntimeService struct {
+	root      *Root
+	runtimeID string
+}
+
+var _ factoryruntime.Service = (*boundRuntimeService)(nil)
+
+func (service *boundRuntimeService) target() factoryruntime.Service {
+	if service == nil {
+		return nil
+	}
+	return service.root.serviceForRuntime(service.runtimeID)
+}
+
+func (service *boundRuntimeService) ControlPause(ctx context.Context, req factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+	if target := service.target(); target != nil {
+		return target.ControlPause(ctx, req)
+	}
+	return factoryruntime.PauseResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) ControlResume(ctx context.Context, req factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+	if target := service.target(); target != nil {
+		return target.ControlResume(ctx, req)
+	}
+	return factoryruntime.ResumeResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	if target := service.target(); target != nil {
+		return target.ControlTerminate(ctx, req)
+	}
+	return factoryruntime.TerminateResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) ControlWaitToComplete(req factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
+	if target := service.target(); target != nil {
+		return target.ControlWaitToComplete(req)
+	}
+	done := make(chan struct{})
+	close(done)
+	return factoryruntime.WaitToCompleteResult{Done: done}
+}
+
+func (service *boundRuntimeService) ControlMoveWork(ctx context.Context, req factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
+	if target := service.target(); target != nil {
+		return target.ControlMoveWork(ctx, req)
+	}
+	return factoryruntime.MoveWorkResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) Observe(ctx context.Context, req factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	if !validObservationScope(req.Scope) {
+		return factoryruntime.ObserveResult{}, factoryruntime.ErrInvalidObservationScope
+	}
+	if target := service.target(); target != nil {
+		return target.Observe(ctx, req)
+	}
+	return factoryruntime.ObserveResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) PlanDispatch(ctx context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+	if target := service.target(); target != nil {
+		return target.PlanDispatch(ctx, req)
+	}
+	return factoryruntime.PlanDispatchResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) AcceptDispatchResult(ctx context.Context, req factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
+	if req.CorrelationID == "" {
+		return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrUnknownDispatchCorrelation
+	}
+	if target := service.target(); target != nil {
+		return target.AcceptDispatchResult(ctx, req)
+	}
+	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) InvokeWorker(ctx context.Context, req factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	if err := req.Validate(); err != nil {
+		return factoryruntime.InvokeWorkerResult{}, err
+	}
+	if target := service.target(); target != nil {
+		return target.InvokeWorker(ctx, req)
+	}
+	return factoryruntime.InvokeWorkerResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	target, ok := service.target().(factoryruntime.APIFactory)
+	if !ok {
+		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
+	}
+	return target.SubmitWorkRequest(ctx, request)
+}
+
+func (service *boundRuntimeService) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	target, ok := service.target().(factoryruntime.APIFactory)
+	if !ok {
+		return nil, factoryruntime.ErrNotRunning
+	}
+	return target.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 func closeActivation(activation *factoryruntime.RuntimeActivation, ctx context.Context) error {
