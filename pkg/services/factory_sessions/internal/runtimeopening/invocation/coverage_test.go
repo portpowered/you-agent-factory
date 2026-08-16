@@ -466,7 +466,7 @@ func (stub coverageLifecycleStub) StopLifecycle(context.Context) error { return 
 
 func (coverageLifecycleStub) FailStartup(error) error { return nil }
 
-func (coverageLifecycleStub) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+func (coverageLifecycleStub) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 type javascriptExecutionStub struct {
 	executionMethodsStub

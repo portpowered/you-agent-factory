@@ -87,7 +87,7 @@ func (runtime *cancellationTransitionRuntime) Stop(ctx context.Context) error {
 
 func (*cancellationTransitionRuntime) FailStartup(err error) error { return err }
 
-func (*cancellationTransitionRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance {
+func (*cancellationTransitionRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
 	return nil
 }
 
