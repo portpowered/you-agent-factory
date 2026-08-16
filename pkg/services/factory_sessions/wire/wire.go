@@ -143,6 +143,12 @@ func NewService(
 	return service, nil
 }
 
+// NewDetachedOperations binds the build-first Sessions operation view to the
+// already-composed root. It performs no child construction or lifecycle work.
+func NewDetachedOperations(owner factorysessions.Service) (factorysessions.DetachedService, error) {
+	return (&factorysessions.DetachedOperations{}).Bind(owner)
+}
+
 // NewDurableExecution constructs the configured durable execution capability
 // without exposing its implementation package to application Wire.
 func NewDurableExecution(
