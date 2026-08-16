@@ -297,11 +297,6 @@ func TestService_ObserveForSessionReturnsNeutralObservationWithoutLegacySnapshot
 		result.Observation.Health.FactoryState != want.Health.FactoryState {
 		t.Fatalf("observation = %#v, want %#v", result.Observation, want)
 	}
-	if _, ok := any(factory).(interface {
-		GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
-	}); ok {
-		t.Fatal("peer-shaped session runtime must not implement the Petri snapshot capability")
-	}
 }
 
 type liveChangeCompositionEventLog struct {

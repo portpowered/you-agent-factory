@@ -10,6 +10,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -94,7 +95,7 @@ func runtimeHumanApprovalForWork(
 	sessionID string,
 	workID string,
 	dispatches map[string]*factoryruntime.DispatchEntry,
-	topology *factoryruntime.Net,
+	topology *legacysnapshot.RuntimeTopology,
 ) *work.HumanApprovalReadModel {
 	if workID == "" || topology == nil || len(dispatches) == 0 {
 		return nil
@@ -140,7 +141,7 @@ type runtimeReadFacts struct {
 
 func runtimeWorkItem(
 	token *workers.Token,
-	net *factoryruntime.Net,
+	net *legacysnapshot.RuntimeTopology,
 	inFlight bool,
 	names map[string]string,
 	facts ...runtimeReadFacts,
@@ -157,7 +158,7 @@ func runtimeWorkItem(
 	return item
 }
 
-func runtimeWorkState(token *workers.Token, net *factoryruntime.Net, inFlight bool) *work.State {
+func runtimeWorkState(token *workers.Token, net *legacysnapshot.RuntimeTopology, inFlight bool) *work.State {
 	if token == nil {
 		return nil
 	}
@@ -180,7 +181,7 @@ func runtimeWorkState(token *workers.Token, net *factoryruntime.Net, inFlight bo
 	return &work.State{Name: stateName, Type: category}
 }
 
-func runtimeWorkTypes(net *factoryruntime.Net) map[string]*factoryruntime.WorkType {
+func runtimeWorkTypes(net *legacysnapshot.RuntimeTopology) map[string]*legacysnapshot.RuntimeWorkType {
 	if net == nil {
 		return nil
 	}

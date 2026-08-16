@@ -27,6 +27,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
@@ -72,6 +73,86 @@ func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interf
 		return nil, errors.New("snapshot unavailable")
 	}
 	return s.snapshot(ctx)
+}
+
+func (s stubFactoryService) CleanInvocationSnapshot(ctx context.Context) (runtimehost.CleanInvocationSnapshot, error) {
+	snapshot, err := s.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return runtimehost.CleanInvocationSnapshot{}, err
+	}
+	if snapshot == nil {
+		return runtimehost.CleanInvocationSnapshot{}, nil
+	}
+	result := runtimehost.CleanInvocationSnapshot{
+		Work:            make([]runtimehost.CleanInvocationWork, 0, len(snapshot.Marking.Tokens)),
+		DispatchHistory: make([]runtimehost.CleanInvocationDispatch, 0, len(snapshot.DispatchHistory)),
+	}
+	for _, token := range snapshot.Marking.Tokens {
+		if token != nil {
+			category := runtimehost.StateCategoryProcessing
+			if snapshot.Topology != nil {
+				category = snapshot.Topology.StateCategoryForPlace(token.PlaceID)
+			}
+			result.Work = append(result.Work, runtimehost.CleanInvocationWork{
+				WorkID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
+				StateCategory: string(category), Output: string(token.Color.Payload),
+				TraceID: token.Color.TraceID, DataType: string(token.Color.DataType),
+			})
+		}
+	}
+	for _, completion := range snapshot.DispatchHistory {
+		projected := runtimehost.CleanInvocationDispatch{
+			Outcome: string(completion.Outcome),
+			Reason:  completion.Reason,
+		}
+		if completion.FailureMetadata != nil {
+			projected.FailureType = string(completion.FailureMetadata.Type)
+		}
+		for index := range completion.ConsumedTokens {
+			token := &completion.ConsumedTokens[index]
+			category := runtimehost.StateCategoryProcessing
+			if snapshot.Topology != nil {
+				category = snapshot.Topology.StateCategoryForPlace(token.PlaceID)
+			}
+			projected.Consumed = append(projected.Consumed, runtimehost.CleanInvocationWork{
+				WorkID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
+				StateCategory: string(category), Output: string(token.Color.Payload),
+				TraceID: token.Color.TraceID, DataType: string(token.Color.DataType),
+			})
+		}
+		for _, mutation := range completion.OutputMutations {
+			if mutation.Token != nil {
+				token := mutation.Token
+				category := runtimehost.StateCategoryProcessing
+				if snapshot.Topology != nil {
+					category = snapshot.Topology.StateCategoryForPlace(token.PlaceID)
+				}
+				projected.Outputs = append(projected.Outputs, runtimehost.CleanInvocationWork{
+					WorkID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
+					StateCategory: string(category), Output: string(token.Color.Payload),
+					TraceID: token.Color.TraceID, DataType: string(token.Color.DataType),
+				})
+			}
+		}
+		result.DispatchHistory = append(result.DispatchHistory, projected)
+	}
+	return result, nil
+}
+
+func (s stubFactoryService) RuntimeObservation(ctx context.Context) (factoryvisualization.RuntimeObservation, error) {
+	snapshot, err := s.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return factoryvisualization.RuntimeObservation{}, err
+	}
+	if snapshot == nil {
+		return factoryvisualization.RuntimeObservation{}, nil
+	}
+	return factoryvisualization.RuntimeObservation{
+		TickCount:     snapshot.TickCount,
+		FactoryState:  snapshot.FactoryState,
+		RuntimeStatus: snapshot.RuntimeStatus,
+		Uptime:        snapshot.Uptime,
+	}, nil
 }
 
 func buildTransportTestRuntime(

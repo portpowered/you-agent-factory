@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -16,11 +17,262 @@ import (
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// canonicalRuntimeLedger is a Runtime-owned test double for the Recordings
+// root role. It retains the canonical dispatch facts needed by this invariant
+// without constructing the Recordings implementation from a peer service.
+type canonicalRuntimeLedger struct {
+	*recordingfixtures.ScriptedRuntimeLedger
+
+	mu                sync.Mutex
+	now               func() time.Time
+	workIDsByDispatch map[string][]string
+}
+
+var _ recordings.RuntimeEventLedger = (*canonicalRuntimeLedger)(nil)
+
+func newCanonicalRuntimeLedger(now func() time.Time, generationID string) *canonicalRuntimeLedger {
+	return &canonicalRuntimeLedger{
+		ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: generationID},
+		now:                   now,
+		workIDsByDispatch:     make(map[string][]string),
+	}
+}
+
+func (ledger *canonicalRuntimeLedger) RecordWorkstationRequest(
+	tick int,
+	record interfaces.FactoryDispatchRecord,
+	eventTime time.Time,
+) {
+	ledger.ScriptedRuntimeLedger.RecordWorkstationRequest(tick, record, eventTime)
+	dispatch := record.Dispatch
+	workIDs := canonicalWorkIDs(workers.WorkDispatchInputTokens(dispatch))
+	ledger.mu.Lock()
+	ledger.workIDsByDispatch[dispatch.DispatchID] = append([]string(nil), workIDs...)
+	ledger.mu.Unlock()
+	replayKey := dispatch.Execution.ReplayKey
+	var metadata *interfaces.DispatchRequestEventMetadata
+	if replayKey != "" {
+		metadata = &interfaces.DispatchRequestEventMetadata{ReplayKey: &replayKey}
+	}
+	ledger.appendCanonicalEvent(interfaces.FactoryEvent{
+		Type: interfaces.FactoryEventTypeDispatchRequest,
+		Id:   "test/dispatch-request/" + dispatch.DispatchID,
+		Context: interfaces.FactoryEventContext{
+			Tick:       tick,
+			EventTime:  eventTime,
+			DispatchID: canonicalStringPtr(dispatch.DispatchID),
+			RequestID:  canonicalStringPtrIfNotEmpty(dispatch.Execution.RequestID),
+			WorkIDs:    canonicalStringSlicePtr(workIDs),
+		},
+		Payload: mustCanonicalJSON(interfaces.DispatchRequestEventPayload{
+			TransitionID: dispatch.TransitionID,
+			Inputs:       canonicalConsumedWorkRefs(workers.WorkDispatchInputTokens(dispatch)),
+			Metadata:     metadata,
+		}),
+	})
+}
+
+func (ledger *canonicalRuntimeLedger) RecordDispatchWorkerSessionAssociation(
+	tick int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	eventTime time.Time,
+) {
+	ledger.ScriptedRuntimeLedger.RecordDispatchWorkerSessionAssociation(tick, dispatchID, workerSessionID, requestID, eventTime)
+	ledger.appendCanonicalEvent(interfaces.FactoryEvent{
+		Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+		Id:   "test/dispatch-worker-session-association/" + dispatchID,
+		Context: interfaces.FactoryEventContext{
+			Tick:       tick,
+			EventTime:  eventTime,
+			DispatchID: canonicalStringPtr(dispatchID),
+			RequestID:  canonicalStringPtrIfNotEmpty(requestID),
+		},
+		Payload: mustCanonicalJSON(interfaces.DispatchWorkerSessionAssociationEventPayload{
+			WorkerSessionID: workerSessionID,
+		}),
+	})
+}
+
+func (ledger *canonicalRuntimeLedger) RecordWorkstationResponse(
+	tick int,
+	result workers.WorkResult,
+	completed interfaces.CompletedDispatch,
+) {
+	ledger.ScriptedRuntimeLedger.RecordWorkstationResponse(tick, result, completed)
+	workIDs := canonicalWorkIDs(completed.ConsumedTokens)
+	if len(workIDs) == 0 {
+		ledger.mu.Lock()
+		workIDs = append([]string(nil), ledger.workIDsByDispatch[result.DispatchID]...)
+		ledger.mu.Unlock()
+	}
+	eventTime := completed.EndTime
+	if eventTime.IsZero() {
+		if ledger.now != nil {
+			eventTime = ledger.now()
+		} else {
+			eventTime = time.Unix(0, 0).UTC()
+		}
+	}
+	ledger.appendCanonicalEvent(interfaces.FactoryEvent{
+		Type: interfaces.FactoryEventTypeDispatchResponse,
+		Id:   "test/dispatch-response/" + result.DispatchID,
+		Context: interfaces.FactoryEventContext{
+			Tick:       tick,
+			EventTime:  eventTime,
+			DispatchID: canonicalStringPtr(result.DispatchID),
+			WorkIDs:    canonicalStringSlicePtr(workIDs),
+		},
+		Payload: mustCanonicalJSON(workers.DispatchResponseEventPayload{
+			TransitionID: result.TransitionID,
+			Outcome:      result.Outcome,
+			Output:       canonicalStringPtrIfNotEmpty(result.Output),
+		}),
+	})
+}
+
+func (ledger *canonicalRuntimeLedger) appendCanonicalEvent(event interfaces.FactoryEvent) {
+	ledger.ScriptedRuntimeLedger.AppendRecordedEvent(event)
+}
+
+type canonicalProjectionService struct{}
+
+var _ recordings.ProjectionService = canonicalProjectionService{}
+
+func newCanonicalProjectionService() recordings.ProjectionService {
+	return canonicalProjectionService{}
+}
+
+func (canonicalProjectionService) ReconstructFactoryWorldState(
+	events []interfaces.FactoryEvent,
+	tick int,
+) (interfaces.FactoryWorldState, error) {
+	state := interfaces.FactoryWorldState{
+		Tick:          tick,
+		WorkItemsByID: make(map[string]work.FactoryWorkItem),
+	}
+	for _, event := range events {
+		if event.Context.DispatchID == nil {
+			continue
+		}
+		dispatchID := *event.Context.DispatchID
+		switch event.Type {
+		case interfaces.FactoryEventTypeDispatchResponse:
+			var payload workers.DispatchResponseEventPayload
+			if err := event.DecodePayload(&payload); err != nil {
+				return interfaces.FactoryWorldState{}, err
+			}
+			workIDs := canonicalEventWorkIDs(event.Context.WorkIDs)
+			state.CompletedDispatches = append(state.CompletedDispatches, interfaces.FactoryWorldDispatchCompletion{
+				DispatchID:    dispatchID,
+				TransitionID:  payload.TransitionID,
+				CompletedTick: event.Context.Tick,
+				CompletedAt:   event.Context.EventTime,
+				Result: interfaces.WorkstationResult{
+					Outcome: string(payload.Outcome),
+					Output:  canonicalEventOutput(payload.Output),
+				},
+				WorkItemIDs: workIDs,
+			})
+			for _, workID := range workIDs {
+				state.WorkItemsByID[workID] = work.FactoryWorkItem{
+					ID: workID, WorkTypeID: "task", State: "done", PlaceID: "task:done",
+				}
+			}
+		}
+	}
+	return state, nil
+}
+
+func (canonicalProjectionService) SimpleDashboardRenderData(interfaces.FactoryWorldState) recordings.SimpleDashboardRenderData {
+	return recordings.SimpleDashboardRenderData{}
+}
+
+func (canonicalProjectionService) ProjectActiveThrottlePauses(
+	interfaces.InitialStructurePayload,
+	[]recordings.ActiveThrottlePause,
+) []recordings.FactoryWorldThrottlePause {
+	return nil
+}
+
+func (canonicalProjectionService) ProjectWorkstationRequests(interfaces.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
+}
+
+func (canonicalProjectionService) ValidateReconnectReplay(
+	[]interfaces.FactoryEvent,
+	interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) error {
+	return nil
+}
+
+func canonicalWorkIDs(tokens []workers.Token) []string {
+	values := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Color.DataType == workers.DataTypeResource || token.Color.WorkID == "" {
+			continue
+		}
+		values = append(values, token.Color.WorkID)
+	}
+	return values
+}
+
+func canonicalConsumedWorkRefs(tokens []workers.Token) []interfaces.DispatchConsumedWorkRef {
+	workIDs := canonicalWorkIDs(tokens)
+	refs := make([]interfaces.DispatchConsumedWorkRef, len(workIDs))
+	for index, workID := range workIDs {
+		refs[index] = interfaces.DispatchConsumedWorkRef{WorkID: workID}
+	}
+	return refs
+}
+
+func canonicalEventWorkIDs(workIDs *[]string) []string {
+	if workIDs == nil {
+		return nil
+	}
+	return append([]string(nil), (*workIDs)...)
+}
+
+func canonicalStringPtr(value string) *string {
+	return &value
+}
+
+func canonicalStringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func canonicalStringSlicePtr(values []string) *[]string {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := append([]string(nil), values...)
+	return &clone
+}
+
+func canonicalEventOutput(output *string) string {
+	if output == nil {
+		return ""
+	}
+	return *output
+}
+
+func mustCanonicalJSON(value any) []byte {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return payload
+}
 
 // countingWorkerSessionsService wraps a worker_sessions.Service and counts
 // Start calls per session ID so tests can prove a duplicate/retried dispatch
@@ -394,12 +646,7 @@ func TestFactoryImpl_ConcurrentAcceptDispatchResultResolvesExactlyOnce(t *testin
 // to preserve its identity and Work lineage after replay.
 func TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalReplay(t *testing.T) {
 	recordedAt := time.Date(2026, time.August, 4, 15, 0, 0, 0, time.UTC)
-	liveLedger := recordingswire.NewRuntimeLedger(
-		nil,
-		func() time.Time { return recordedAt },
-		"w4-terminal-race-live",
-		nil,
-	)
+	liveLedger := newCanonicalRuntimeLedger(func() time.Time { return recordedAt }, "w4-terminal-race-live")
 	boundary := newControlledWorkstationBoundary()
 	runtime, err := newTestFactory(
 		withNet(buildSimpleNet()),
@@ -447,7 +694,7 @@ func TestFactoryImpl_WorkerSessionCompletionRacesExplicitAcceptanceAndCanonicalR
 	if eventsAfterDuplicate := replayed.ledger.CanonicalEvents(); !reflect.DeepEqual(eventsBeforeDuplicate, eventsAfterDuplicate) {
 		t.Fatalf("replay terminal redelivery changed canonical events:\n before=%#v\n after=%#v", eventsBeforeDuplicate, eventsAfterDuplicate)
 	}
-	projectionAfterDuplicate, err := recordingswire.NewProjectionService().ReconstructFactoryWorldState(
+	projectionAfterDuplicate, err := newCanonicalProjectionService().ReconstructFactoryWorldState(
 		replayed.ledger.CanonicalEvents(),
 		maxCanonicalTick(replayed.ledger.CanonicalEvents()),
 	)
@@ -615,16 +862,14 @@ func reloadCanonicalRuntimeLedger(
 	var loaded []interfaces.FactoryEvent
 	requireNoRootErr(t, json.Unmarshal(persisted, &loaded), "load canonical events")
 
-	replayLedger := recordingswire.NewRuntimeLedger(
-		nil,
+	replayLedger := newCanonicalRuntimeLedger(
 		func() time.Time { return recordedAt.Add(time.Second) },
 		"w4-terminal-race-replay",
-		nil,
 	)
 	for _, event := range loaded {
 		replayLedger.AppendRecordedEvent(event)
 	}
-	projection, err := recordingswire.NewProjectionService().ReconstructFactoryWorldState(
+	projection, err := newCanonicalProjectionService().ReconstructFactoryWorldState(
 		replayLedger.CanonicalEvents(),
 		maxCanonicalTick(replayLedger.CanonicalEvents()),
 	)

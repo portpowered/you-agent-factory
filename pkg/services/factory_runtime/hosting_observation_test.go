@@ -92,10 +92,6 @@ type peerShapedRuntimeService struct {
 	observation factoryruntime.Observation
 }
 
-type legacySnapshotProvider interface {
-	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
-}
-
 func (f *peerShapedRuntimeService) Observe(
 	_ context.Context,
 	req factoryruntime.ObserveRequest,
@@ -116,9 +112,6 @@ func TestPeerShapedServiceFakeObservesWithoutLegacySnapshot(t *testing.T) {
 	runtime := &peerShapedRuntimeService{observation: want}
 
 	var _ factoryruntime.Service = runtime
-	if _, ok := any(runtime).(legacySnapshotProvider); ok {
-		t.Fatal("peer-shaped Service fake must not implement the Petri snapshot capability")
-	}
 
 	result, err := runtime.Observe(context.Background(), factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeHealth,

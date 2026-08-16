@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -58,11 +59,11 @@ type legacyInvocationRuntime struct {
 }
 
 type legacySnapshotProvider interface {
-	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error)
+	GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error)
 }
 
-func (runtime legacyInvocationRuntime) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
-	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
+func (runtime legacyInvocationRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return &legacysnapshot.Snapshot{
 		FactoryState: string(interfaces.FactoryStateIdle),
 	}, nil
 }

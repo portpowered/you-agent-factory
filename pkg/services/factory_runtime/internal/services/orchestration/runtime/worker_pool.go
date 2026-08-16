@@ -908,10 +908,7 @@ func recordDetachedAgentRunResponse(
 	if outcome == "" && executeErr != nil {
 		outcome = workers.ExecutionOutcomeFailed
 	}
-	eventTime := time.Now()
-	if cfg.clock != nil {
-		eventTime = cfg.clock.Now()
-	}
+	eventTime := cfg.clock.Now()
 	recorder.RecordAgentRunEvent(workers.AgentRunResponseEvent{
 		ID:         fmt.Sprintf("factory-event/agent-run-response/%s", dispatchID),
 		DispatchID: dispatchID,

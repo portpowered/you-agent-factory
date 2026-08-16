@@ -4,6 +4,7 @@ import (
 	"context"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -25,6 +26,15 @@ func newFactoryStatusAPI(
 
 func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
 	if sessionID == "" {
+		if api.sessions != nil {
+			result, err := api.sessions.ObserveForSession(ctx, factorysessions.DefaultSessionID, factoryruntime.ObserveRequest{
+				Scope: factoryruntime.ObservationScopeFull,
+			})
+			if err != nil {
+				return factoryruntime.FactoryStatus{}, err
+			}
+			return factoryruntime.FactoryStatusFromObservation(result.Observation), nil
+		}
 		result, err := api.runtime.Observe(ctx, factoryruntime.ObserveRequest{
 			Scope: factoryruntime.ObservationScopeFull,
 		})

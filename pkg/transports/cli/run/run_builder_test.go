@@ -208,17 +208,16 @@ func (f testRunnerOpeners) BuildRunner(
 		return runner, err
 	}
 	if f.visualizationSink != nil {
-		snapshots, ok := runner.(legacySnapshotProvider)
+		snapshots, ok := runner.(interface {
+			RuntimeObservation(context.Context) (factoryvisualization.RuntimeObservation, error)
+		})
 		if ok {
-			snapshot, snapshotErr := snapshots.GetEngineStateSnapshot(ctx)
+			snapshot, snapshotErr := snapshots.RuntimeObservation(ctx)
 			if snapshotErr == nil {
 				runner = testDashboardRenderingRunner{
 					LocalRuntimeRunner: runner,
 					sink:               f.visualizationSink,
-					input: factoryvisualization.View{Runtime: factoryvisualization.RuntimeObservation{
-						TickCount: snapshot.TickCount, FactoryState: snapshot.FactoryState,
-						RuntimeStatus: snapshot.RuntimeStatus, Uptime: snapshot.Uptime,
-					}},
+					input:              factoryvisualization.View{Runtime: snapshot},
 				}
 			}
 		}

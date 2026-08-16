@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -876,6 +875,7 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	}
 	cfg := &runtimeConfig{
 		eventHistory: ledger,
+		clock:        testRuntimeClock{},
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"agent": {Name: "agent", Type: interfaces.WorkstationTypeAgent},
@@ -945,5 +945,5 @@ func (ledger *agentRunRecordingLedger) RecordAgentRunEvent(event workers.AgentRu
 }
 
 func testMaterializationService() work.Service {
-	return workwire.NewRuntimeService(nil, nil, nil, nil, nil)
+	return testRuntimeWorkService{}
 }

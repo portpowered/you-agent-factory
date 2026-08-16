@@ -35,7 +35,7 @@ type RuntimeAPI interface {
 }
 
 // FactoryStatusAPI is the exact detached Factory Runtime status read used by
-// protocol transports. An empty session ID selects the compatibility current
+// protocol transports. An empty session ID selects the default Factory Session
 // runtime; a non-empty ID selects that Factory Session.
 type FactoryStatusAPI interface {
 	ProjectFactoryStatus(ctx context.Context, sessionID string) (factory.FactoryStatus, error)

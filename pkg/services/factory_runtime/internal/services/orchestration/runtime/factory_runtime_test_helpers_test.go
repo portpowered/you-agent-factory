@@ -32,7 +32,6 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -40,6 +39,17 @@ import (
 
 type unavailableProviderSessions struct {
 	providersessions.Service
+}
+
+// testRuntimeWorkService is an inert owner-local Work role for Runtime tests
+// that do not exercise Work output materialization. Tests that cover that
+// behavior inject their own focused Work service fake.
+type testRuntimeWorkService struct {
+	work.Service
+}
+
+func (testRuntimeWorkService) MaterializeWorkerOutput(ctx context.Context, request work.MaterializeWorkerOutputRequest) (work.MaterializeWorkerOutputResult, error) {
+	return work.MaterializeWorkerOutput(ctx, request)
 }
 
 func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
@@ -103,7 +113,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 		) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
 		}),
-		workwire.NewRuntimeService(nil, nil, nil, nil, nil),
+		testRuntimeWorkService{},
 		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
 		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
 		platformfilesystem.Local{},

@@ -74,6 +74,18 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
+// CleanInvocationSnapshot forwards the Runtime-owned clean-invocation
+// projection through the replaceable Factory Session runtime without adding
+// the projection to the broad Factory Runtime service contract.
+func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
+	runtime := fs.currentRuntimeService()
+	provider, ok := runtime.(factory.CleanInvocationSnapshotProvider)
+	if !ok {
+		return factory.CleanInvocationSnapshot{}, factory.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
+}
+
 // ControlPause routes root control to the current replaceable runtime.
 func (fs *SessionRuntime) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
 	runtime := fs.currentRuntimeService()

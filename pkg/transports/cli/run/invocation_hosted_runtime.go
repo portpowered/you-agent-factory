@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
@@ -72,6 +73,14 @@ func (runner historicalReplayRunner) RuntimeHostReadinessConfigured() bool {
 
 func (runner historicalReplayRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
 	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner historicalReplayRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := runner.runner.(factoryruntime.CleanInvocationSnapshotProvider)
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
 }
 
 func (runner historicalReplayRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
@@ -155,6 +164,84 @@ func WithHostedInvocation(
 		return runner
 	}
 	return hostedInvocationRunner{runner: runner, invocation: invocation}
+}
+
+type cleanInvocationSnapshotRunner struct {
+	runner   initializer.LocalRuntimeRunner
+	provider factoryruntime.CleanInvocationSnapshotProvider
+}
+
+func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
+	return runner.runner.Run(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, completion)
+}
+
+func (runner cleanInvocationSnapshotRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	if runner.provider == nil {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return runner.provider.CleanInvocationSnapshot(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeHostReadinessConfigured() bool {
+	provider, ok := runner.runner.(interface{ RuntimeHostReadinessConfigured() bool })
+	return ok && provider.RuntimeHostReadinessConfigured()
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner cleanInvocationSnapshotRunner) HostedInvocation() HostedInvocationOperation {
+	provider, ok := runner.runner.(interface {
+		HostedInvocation() HostedInvocationOperation
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HostedInvocation()
+}
+
+func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
+	provider, ok := runner.runner.(interface {
+		HistoricalReplay() *factorysessions.HistoricalReplayInspection
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HistoricalReplay()
+}
+
+// WithCleanInvocationSnapshot keeps the Runtime-owned projection beside the
+// lifecycle runner for clean-invocation result classification.
+func WithCleanInvocationSnapshot(
+	runner initializer.LocalRuntimeRunner,
+	provider factoryruntime.CleanInvocationSnapshotProvider,
+) initializer.LocalRuntimeRunner {
+	if runner == nil || provider == nil {
+		return runner
+	}
+	return cleanInvocationSnapshotRunner{runner: runner, provider: provider}
 }
 
 func openHostedRuntime(
