@@ -559,8 +559,8 @@ describe("DashboardBento", () => {
       name: "Remove Work totals widget from dashboard",
     });
 
-    expect(workTotalsRemoveButton.className).toContain("h-10");
-    expect(workTotalsRemoveButton.className).toContain("w-10");
+    expect(workTotalsRemoveButton.className).toContain("h-11");
+    expect(workTotalsRemoveButton.className).toContain("w-11");
     expect(workTotalsRemoveButton.className).toContain("focus-visible:ring-2");
     expect(
       screen.queryByRole("button", {

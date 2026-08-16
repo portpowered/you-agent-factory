@@ -63,7 +63,7 @@ actions. It keeps icon-button sizing while applying destructive hover treatment.
 
 `Button` and `ButtonLink` accept `size` values such as `default`, `sm`, `lg`,
 `pill`, `icon`, and `iconPill`. `IconButtonShell` fixes toolbar-friendly
-`h-10 w-10` icon sizing and should be used for compact icon-only controls.
+`h-11 w-11` icon sizing and should be used for compact icon-only controls.
 
 ## Loading buttons
 

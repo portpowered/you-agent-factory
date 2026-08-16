@@ -27,8 +27,8 @@ describe("IconButtonShell", () => {
 
     const button = screen.getByRole("button", { name: "Refresh jobs" });
 
-    expect(button.className).toContain("h-10");
-    expect(button.className).toContain("w-10");
+    expect(button.className).toContain("h-11");
+    expect(button.className).toContain("w-11");
     expect(button.className).toContain("rounded-lg");
   });
 

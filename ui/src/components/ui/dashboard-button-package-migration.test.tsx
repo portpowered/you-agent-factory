@@ -63,8 +63,8 @@ describe("dashboard button package migration", () => {
     expect(loadingIconAction).toBeDisabled();
 
     const iconButton = screen.getByRole("button", { name: "Close" });
-    expect(iconButton.className).toContain("h-10");
-    expect(iconButton.className).toContain("w-10");
+    expect(iconButton.className).toContain("h-11");
+    expect(iconButton.className).toContain("w-11");
   });
 
   it("blocks loading asChild projection and preserves semantic button tones", () => {

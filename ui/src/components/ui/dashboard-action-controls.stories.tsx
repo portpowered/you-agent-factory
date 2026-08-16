@@ -3,6 +3,48 @@ import { expect, within } from "storybook/test";
 import { DashboardActionButton } from "./dashboard-action-button";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
+const DASHBOARD_ACTION_TARGET_MINIMUM = 44;
+
+interface DashboardActionTargetMeasurement {
+  height: number;
+  label: string;
+  width: number;
+}
+
+function measureDashboardActionTargets(
+  root: HTMLElement,
+): DashboardActionTargetMeasurement[] {
+  return Array.from(root.querySelectorAll<HTMLButtonElement>("button")).map(
+    (button) => {
+      const bounds = button.getBoundingClientRect();
+
+      return {
+        height: bounds.height,
+        label:
+          button.getAttribute("aria-label") ??
+          button.textContent?.trim() ??
+          "(unnamed)",
+        width: bounds.width,
+      };
+    },
+  );
+}
+
+function assertDashboardActionTargets(root: HTMLElement): void {
+  const measurements = measureDashboardActionTargets(root);
+  const belowMinimum = measurements.filter(
+    ({ height, width }) =>
+      width < DASHBOARD_ACTION_TARGET_MINIMUM ||
+      height < DASHBOARD_ACTION_TARGET_MINIMUM,
+  );
+
+  if (belowMinimum.length > 0) {
+    throw new Error(
+      `Dashboard action targets below ${DASHBOARD_ACTION_TARGET_MINIMUM}px: ${belowMinimum.length}/${measurements.length} ${JSON.stringify(belowMinimum)}`,
+    );
+  }
+}
+
 function DashboardActionControlsShowcase() {
   return (
     <div className="grid gap-6 p-6">
@@ -186,5 +228,7 @@ export const SharedDashboardActionControls = {
     await expect(sections[1]?.getAttribute("data-action-row-section")).toBe(
       "actions",
     );
+
+    assertDashboardActionTargets(canvasElement);
   },
 };
