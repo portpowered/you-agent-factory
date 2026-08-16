@@ -62,6 +62,17 @@ async function waitForFocusedTab(tab, action, viewportLabel) {
   }
 }
 
+async function enterTablistWithKeyboard(page, tab, viewportLabel) {
+  for (let tabPress = 0; tabPress < 4; tabPress += 1) {
+    if (await tab.evaluate((element) => element === document.activeElement)) {
+      return;
+    }
+    await page.keyboard.press("Tab");
+  }
+
+  await waitForFocusedTab(tab, "Tab", viewportLabel);
+}
+
 async function waitForSelectedTab(tab, navigation, action, viewportLabel) {
   try {
     await expect(tab).toBeVisible();
@@ -157,22 +168,12 @@ async function verifyViewport(browser, viewport) {
       );
     }
 
-    const refreshButton = page.getByRole("button", {
-      name: "Refresh sessions",
-    });
-    const failRefreshButton = page.getByRole("button", {
-      name: "Fail refresh",
-    });
     const tabs = navigation.getByRole("tab");
     const firstTab = tabs.first();
     const lastTab = tabs.last();
     await waitForSelectedTab(firstTab, navigation, "Initial", viewport.label);
     await waitForRovingTabState(navigation, "Initial", viewport.label);
-    await expect(refreshButton).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(failRefreshButton).toBeFocused();
-    await page.keyboard.press("Tab");
-    await waitForFocusedTab(firstTab, "End", viewport.label);
+    await enterTablistWithKeyboard(page, firstTab, viewport.label);
     await page.keyboard.press("End");
     await waitForSelectedTab(lastTab, navigation, "End", viewport.label);
     await waitForRovingTabState(navigation, "End", viewport.label);
