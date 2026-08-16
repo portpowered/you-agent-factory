@@ -2115,20 +2115,12 @@
       "minimum": 50.75
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agypty",
-      "minimum": 89.54
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/claude",
       "minimum": 4.44
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/codex",
       "minimum": 6.34
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/commandenv",
-      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/conductor",

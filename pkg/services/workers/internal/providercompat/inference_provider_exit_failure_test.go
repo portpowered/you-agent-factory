@@ -15,7 +15,6 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/agypty"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -27,7 +26,7 @@ import (
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewFromInputRejectsMissingRequiredEdges(t *testing.T) {
 	t.Parallel()
-	allocator := &agypty.MockAllocator{}
+	allocator := &workerexecution.MockPTYAllocator{}
 	sequence := []string{}
 	runner := &preparedInvocationTestRunner{sequence: &sequence}
 	resolveSymlinks := func(path string) (string, error) { return path, nil }
@@ -63,7 +62,7 @@ func TestNewFromInputRejectsMissingRequiredEdges(t *testing.T) {
 
 func TestNewFromInputKeepsProviderCommandAndAgyPTYEdgesDistinct(t *testing.T) {
 	t.Parallel()
-	allocator := &agypty.MockAllocator{}
+	allocator := &workerexecution.MockPTYAllocator{}
 	sequence := []string{}
 	runner := &preparedInvocationTestRunner{sequence: &sequence}
 	clock := platformclock.Real{}
@@ -103,7 +102,7 @@ func TestFactoryNewUsesInjectedClockForProviderDiagnostics(t *testing.T) {
 	factory, err := NewFactory(
 		runner,
 		clock,
-		&agypty.MockAllocator{},
+		&workerexecution.MockPTYAllocator{},
 		func(path string) (string, error) { return path, nil },
 		platformprocess.HostExecutableLocator{},
 		platformfilesystem.Local{},

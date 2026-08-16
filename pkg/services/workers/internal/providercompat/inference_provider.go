@@ -17,7 +17,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/commandenv"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/inferencecontract"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -39,7 +38,14 @@ const (
 	providerSessionKindResponseID     = "response_id"
 )
 
-var providerAutomationEnvDefaults = commandenv.AutomationDefaults()
+var providerAutomationEnvDefaults = []workerexecution.CommandEnvEntry{
+	{Name: "GIT_EDITOR", Value: "true"},
+	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
+	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
+	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
+	{Name: "EDITOR", Value: "true"},
+	{Name: "VISUAL", Value: "true"},
+}
 
 var providerSessionPatterns = []struct {
 	kind    string
@@ -279,7 +285,11 @@ func ContainsStopToken(output, stopToken string) bool {
 // buildProviderEnv merges subprocess environment sources with deterministic
 // precedence: process environment, provider env vars, then automation defaults.
 func buildProviderEnv(processEnvironment []string, envVars map[string]string) []string {
-	return commandenv.Build(processEnvironment, envVars)
+	return workerexecution.MergeCommandEnv(
+		processEnvironment,
+		workerexecution.CommandEnvEntriesFromMap(envVars),
+		providerAutomationEnvDefaults,
+	)
 }
 
 func providerRequestValidationFailure(
