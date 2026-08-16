@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type CurrentActivityWorkerNode,
   WorkerNodeView,
-} from "./current-activity-worker-node";
+} from "../current-activity-worker-node";
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
