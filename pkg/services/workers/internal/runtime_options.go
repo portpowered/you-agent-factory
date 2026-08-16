@@ -440,20 +440,3 @@ func validateRuntimeRunnerPrerequisites(
 	}
 	return workerrunner.ValidateBuiltInRunnerPrerequisites(executableLocator, runnerID)
 }
-
-func providerRunnerID(id providers.ID) string {
-	return strings.ToLower(strings.TrimSpace(id.String()))
-}
-
-func workerSelectionSource(source providers.SelectionSource) workers.RunnerSelectionSource {
-	switch source {
-	case providers.SelectionSourceWorkstation:
-		return workers.RunnerSelectionSourceWorkstation
-	case providers.SelectionSourceFactory:
-		return workers.RunnerSelectionSourceFactory
-	case providers.SelectionSourceLegacyProvider:
-		return workers.RunnerSelectionSourceLegacyProvider
-	default:
-		return workers.RunnerSelectionSourceDefault
-	}
-}

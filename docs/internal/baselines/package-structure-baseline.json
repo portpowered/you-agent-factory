@@ -2234,16 +2234,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/provider_port.go",
-      "target": "RunnerIdentityForWorker"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/provider_port.go",
-      "target": "UsesNamedProvider"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/pty_contracts.go",
       "target": "DefaultPTYSessionConfig"
     },
@@ -2781,11 +2771,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
       "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runners/agents",
-      "target": "pkg/services/workers/internal/services/runners"
     },
     {
       "rule": "service-root-unexpected-directory",

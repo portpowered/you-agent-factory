@@ -16,11 +16,12 @@ type CommandRunner interface {
 	Run(ctx context.Context, req CommandRequest) (CommandResult, error)
 }
 
-// Clock is the exact wall-clock effect required by process cleanup and
-// diagnostic timing. Production clocks are selected by the application
+// Clock is the exact wall-clock and timer effect required by process cleanup
+// and diagnostic timing. Production clocks are selected by the application
 // injector; callers must not rely on a process-global fallback.
 type Clock interface {
 	Now() time.Time
+	After(time.Duration) <-chan time.Time
 }
 
 // CommandFactory creates one inert host command. Production command creation
@@ -85,35 +86,10 @@ func (r ExecCommandRunner) run(
 	if err := ctx.Err(); err != nil {
 		return CommandResult{}, err
 	}
-	if r.NewCommand == nil {
-		return CommandResult{}, errors.New("platform process command factory is required")
+	cmd, stdout, stderr, err := r.prepareCommand(req, observer, streaming)
+	if err != nil {
+		return CommandResult{}, err
 	}
-	if r.Clock == nil {
-		return CommandResult{}, errors.New("platform process clock is required")
-	}
-
-	cmd := r.NewCommand(req.Command, req.Args...)
-	if cmd == nil {
-		return CommandResult{}, fmt.Errorf("platform process command factory returned nil for %q", req.Command)
-	}
-	if len(req.Stdin) > 0 {
-		cmd.Stdin = bytes.NewReader(req.Stdin)
-	}
-	if len(req.Env) > 0 {
-		cmd.Env = req.Env
-	}
-	if req.WorkDir != "" {
-		cmd.Dir = req.WorkDir
-	}
-
-	outputLimit := 0
-	if streaming {
-		outputLimit = maxStreamingOutputBytes
-	}
-	stdout := &observedBuffer{stream: OutputStreamStdout, observer: observer, maxBytes: outputLimit}
-	stderr := &observedBuffer{stream: OutputStreamStderr, observer: observer, maxBytes: outputLimit}
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
 
 	configureCommandProcessTree(cmd)
 	if err := cmd.Start(); err != nil {
@@ -144,16 +120,7 @@ func (r ExecCommandRunner) run(
 	case runErr = <-waitCh:
 	case <-ctx.Done():
 		_ = terminateCommandProcessTree(cmd, tree, r.Clock, cancelCleanup)
-		grace := postRunCleanupGracePeriod()
-		if !waitForCommandExit(waitCh, r.Clock, grace) {
-			cleanupLogger.Warn(
-				"command runner: process did not reap after cancellation",
-				"event_name", "command_runner.cancel_reap_timeout",
-				"command", req.Command,
-				"args_count", len(req.Args),
-				"grace_ms", grace.Milliseconds(),
-			)
-		}
+		waitForCommandCancellation(waitCh, r.Clock, cleanupLogger, req)
 		closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
 		return CommandResult{
 			Stdout: stdout.Bytes(),
@@ -180,12 +147,56 @@ func (r ExecCommandRunner) run(
 	return result, nil
 }
 
-const commandReapPollInterval = 10 * time.Millisecond
+func (r ExecCommandRunner) prepareCommand(
+	req CommandRequest,
+	observer OutputChunkObserver,
+	streaming bool,
+) (*exec.Cmd, *observedBuffer, *observedBuffer, error) {
+	if r.NewCommand == nil {
+		return nil, nil, nil, errors.New("platform process command factory is required")
+	}
+	if r.Clock == nil {
+		return nil, nil, nil, errors.New("platform process clock is required")
+	}
+	cmd := r.NewCommand(req.Command, req.Args...)
+	if cmd == nil {
+		return nil, nil, nil, fmt.Errorf("platform process command factory returned nil for %q", req.Command)
+	}
+	if len(req.Stdin) > 0 {
+		cmd.Stdin = bytes.NewReader(req.Stdin)
+	}
+	if len(req.Env) > 0 {
+		cmd.Env = req.Env
+	}
+	if req.WorkDir != "" {
+		cmd.Dir = req.WorkDir
+	}
+	outputLimit := 0
+	if streaming {
+		outputLimit = maxStreamingOutputBytes
+	}
+	stdout := &observedBuffer{stream: OutputStreamStdout, observer: observer, maxBytes: outputLimit}
+	stderr := &observedBuffer{stream: OutputStreamStderr, observer: observer, maxBytes: outputLimit}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	return cmd, stdout, stderr, nil
+}
+
+const defaultPostRunCleanupGracePeriod = 10 * time.Second
+
+var postRunCleanupGracePeriodForTest time.Duration
+
+func postRunCleanupGracePeriod() time.Duration {
+	if postRunCleanupGracePeriodForTest > 0 {
+		return postRunCleanupGracePeriodForTest
+	}
+	return defaultPostRunCleanupGracePeriod
+}
 
 // waitForCommandExit bounds the cancellation path even when an inherited
 // stdout/stderr pipe remains open in a descendant that process-tree cleanup
-// could not reach. The injected clock controls the deadline; the short sleep
-// only prevents a busy loop while waiting for either the process or the clock.
+// could not reach. The injected timer, rather than an ambient sleep, controls
+// the grace boundary even when the clock's Now value is static.
 func waitForCommandExit(waitCh <-chan error, clock Clock, grace time.Duration) bool {
 	if grace <= 0 {
 		select {
@@ -195,18 +206,31 @@ func waitForCommandExit(waitCh <-chan error, clock Clock, grace time.Duration) b
 			return false
 		}
 	}
-	deadline := clock.Now().Add(grace)
-	for {
-		select {
-		case <-waitCh:
-			return true
-		default:
-		}
-		if !clock.Now().Before(deadline) {
-			return false
-		}
-		time.Sleep(commandReapPollInterval)
+	select {
+	case <-waitCh:
+		return true
+	case <-clock.After(grace):
+		return false
 	}
+}
+
+func waitForCommandCancellation(
+	waitCh <-chan error,
+	clock Clock,
+	logger logging.Logger,
+	req CommandRequest,
+) {
+	grace := postRunCleanupGracePeriod()
+	if waitForCommandExit(waitCh, clock, grace) {
+		return
+	}
+	logger.Warn(
+		"command runner: process did not reap after cancellation",
+		"event_name", "command_runner.cancel_reap_timeout",
+		"command", req.Command,
+		"args_count", len(req.Args),
+		"grace_ms", grace.Milliseconds(),
+	)
 }
 
 var _ CommandRunner = ExecCommandRunner{}

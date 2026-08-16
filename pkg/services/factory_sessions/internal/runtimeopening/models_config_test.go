@@ -398,6 +398,18 @@ func TestRuntimeModelInvokerUsesSharedWorkersForManagedModel(t *testing.T) {
 		Content:   []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Label: "prompt", Text: "hello"}},
 		Bindings:  []models.ModelOperationBinding{{Slot: "prompt", Selector: &models.ModelOperationBindingSelector{Label: "prompt"}}},
 	})
+	assertManagedModelInvocation(t, result, err, scope, modelsService, workersService)
+}
+
+func assertManagedModelInvocation(
+	t *testing.T,
+	result models.Result,
+	err error,
+	scope models.RuntimeScopeRef,
+	modelsService *runtimeInvokerModelsStub,
+	workersService *runtimeInvokerWorkersStub,
+) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("InvokeModel(local) error = %v, want nil", err)
 	}
@@ -411,6 +423,12 @@ func TestRuntimeModelInvokerUsesSharedWorkersForManagedModel(t *testing.T) {
 		t.Fatalf("Workers Execute requests = %d, want one", len(workersService.requests))
 	}
 	execute := workersService.requests[0]
+	assertManagedModelTarget(t, execute)
+	assertManagedModelInput(t, execute)
+}
+
+func assertManagedModelTarget(t *testing.T, execute workers.ExecuteRequest) {
+	t.Helper()
 	if execute.Target.WorkerName != "local-worker" ||
 		execute.Target.RunnerID != workers.RunnerIDCodex ||
 		execute.Target.Provider.ID != workers.RunnerIDCodex ||
@@ -418,6 +436,10 @@ func TestRuntimeModelInvokerUsesSharedWorkersForManagedModel(t *testing.T) {
 		execute.Target.Model.Locality != factorydefinitions.ModelLocalityLocal {
 		t.Fatalf("managed execution target = %#v, want private inference target", execute.Target)
 	}
+}
+
+func assertManagedModelInput(t *testing.T, execute workers.ExecuteRequest) {
+	t.Helper()
 	if execute.Input.ModelOperation != "invoke" || len(execute.Input.ModelBindings) != 1 ||
 		execute.Input.ModelBindings[0].Source != workers.ModelOperationBindingSourceInput ||
 		execute.Input.WorkflowContext == nil {

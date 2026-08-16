@@ -31,6 +31,52 @@ func TestPostRunCleanupGracePeriod_TestHookOverridesDefault(t *testing.T) {
 	}
 }
 
+type deterministicCommandTimerClock struct {
+	now   time.Time
+	timer chan time.Time
+}
+
+func (clock *deterministicCommandTimerClock) Now() time.Time {
+	return clock.now
+}
+
+func (clock *deterministicCommandTimerClock) After(time.Duration) <-chan time.Time {
+	return clock.timer
+}
+
+func (clock *deterministicCommandTimerClock) Advance(duration time.Duration) {
+	clock.now = clock.now.Add(duration)
+	clock.timer <- clock.now
+}
+
+func TestWaitForCommandExitUsesInjectedTimerWhenClockNowIsStatic(t *testing.T) {
+	clock := &deterministicCommandTimerClock{
+		now:   time.Unix(42, 0),
+		timer: make(chan time.Time, 1),
+	}
+	waitCh := make(chan error)
+	result := make(chan bool, 1)
+	go func() {
+		result <- waitForCommandExit(waitCh, clock, time.Second)
+	}()
+
+	select {
+	case got := <-result:
+		t.Fatalf("waitForCommandExit returned %t before injected timer advanced", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	clock.Advance(time.Second)
+	select {
+	case got := <-result:
+		if got {
+			t.Fatal("waitForCommandExit returned true after injected grace timer fired")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waitForCommandExit did not observe the injected grace timer")
+	}
+}
+
 func TestExecCommandRunner_RunStreamingBoundsRetainedOutputAndForwardsAllChunks(t *testing.T) {
 	requireProcessIntegration(t)
 	const (

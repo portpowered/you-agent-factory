@@ -22,3 +22,7 @@ func commandTestTerminateProcess(pid int) {
 	defer windows.CloseHandle(process)
 	_ = windows.TerminateProcess(process, 1)
 }
+
+func spawnCommandHelperEscapedChildMode() {
+	spawnCommandHelperChildMode("child-sleep")
+}
