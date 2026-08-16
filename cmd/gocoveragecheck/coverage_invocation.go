@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -327,9 +329,47 @@ func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPac
 
 func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string) error {
 	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	configureCoverageInvocationStreaming(&plan, cfg.stream)
-
 	started := time.Now()
+	var snapshotter *functionalTimingSnapshotter
+	if cfg.stream || timingEnabled {
+		tracker := newFunctionalTimingTracker(testPackages, started)
+		observer := func(event goTestTimingEvent) {
+			if snapshotter != nil {
+				snapshotter.observe(event)
+				return
+			}
+			tracker.observe(event)
+		}
+		var reporter *functionalStreamReporter
+		if cfg.stream {
+			reporter = configureCoverageInvocationStreaming(&plan, true, observer)
+		} else {
+			reporter = configureCoverageInvocationObservation(&plan, observer)
+		}
+		sink := io.Writer(nil)
+		var sinkMu *sync.Mutex
+		if cfg.stream {
+			sink = stdoutWriter
+			sinkMu = &reporter.sinkMu
+		}
+		snapshotter = newFunctionalTimingSnapshotter(
+			tracker,
+			cfg.timingOutput,
+			sink,
+			sinkMu,
+			func() error {
+				return writePartialCoverageSnapshot(
+					cfg.jsonOutput,
+					profilePath,
+					repoRoot,
+					coverPackages,
+					partialCoverageReason(nil),
+				)
+			},
+		)
+		snapshotter.publish(false, "functional run started", false)
+		defer snapshotter.stopAndWait()
+	}
 	var stdout strings.Builder
 	var stderr strings.Builder
 	var laneErr error
@@ -368,10 +408,23 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	var timingWriteErr error
 	if timingEnabled {
 		summary := buildFunctionalTimingSummary(stdout.String(), testPackages, wallSeconds)
-		timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+		timingReason := ""
+		if !summary.Complete {
+			timingReason = "functional timing capture ended before every package reported a terminal result"
+			if laneErr != nil {
+				timingReason += ": " + compactDiagnosticError(laneErr)
+			}
+		}
+		if snapshotter != nil {
+			timingWriteErr = snapshotter.finish(summary, timingReason)
+		} else {
+			timingWriteErr = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
+		}
 		if timingWriteErr == nil && cfg.suite == "functional" {
 			writeFunctionalTimingInventorySummary(summary, cfg.short)
 		}
+	} else if snapshotter != nil {
+		snapshotter.stopAndWait()
 	}
 
 	var mergeErr error
@@ -383,7 +436,17 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		}
 	}
 
-	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, plan.cleanup())
+	partialCoverageErr := error(nil)
+	if laneErr != nil || mergeErr != nil {
+		partialCoverageErr = writePartialCoverageSnapshot(
+			cfg.jsonOutput,
+			profilePath,
+			repoRoot,
+			coverPackages,
+			partialCoverageReason(errors.Join(laneErr, mergeErr)),
+		)
+	}
+	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, partialCoverageErr, plan.cleanup())
 	if !testFailureObserved {
 		return runErr
 	}
@@ -512,15 +575,29 @@ func runCommand(invocation commandInvocation) (string, string, error) {
 	return commandRunner(invocation)
 }
 
-func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled bool) {
+func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled bool, observers ...func(goTestTimingEvent)) *functionalStreamReporter {
 	if !enabled {
-		return
+		return nil
 	}
-	reporter := newFunctionalStreamReporter(stdoutWriter)
+	var observer func(goTestTimingEvent)
+	if len(observers) > 0 {
+		observer = observers[0]
+	}
+	reporter := newFunctionalStreamReporterWithObserver(stdoutWriter, observer)
 	for index := range plan.invocations {
 		plan.invocations[index].stdoutWriter = reporter.stdoutWriter()
 		plan.invocations[index].stderrWriter = reporter.stderrWriter(stderrWriter)
 	}
+	return reporter
+}
+
+func configureCoverageInvocationObservation(plan *coverageInvocationPlan, observer func(goTestTimingEvent)) *functionalStreamReporter {
+	reporter := newFunctionalStreamReporterWithObserver(io.Discard, observer)
+	for index := range plan.invocations {
+		plan.invocations[index].stdoutWriter = reporter.stdoutWriter()
+		plan.invocations[index].stderrWriter = reporter.stderrWriter(io.Discard)
+	}
+	return reporter
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {

@@ -16,7 +16,9 @@ import (
 type functionalStreamReporter struct {
 	sink              io.Writer
 	mu                sync.Mutex
+	sinkMu            sync.Mutex
 	completedPackages map[string]struct{}
+	onEvent           func(goTestTimingEvent)
 }
 
 type functionalStreamWriter struct {
@@ -34,6 +36,12 @@ func newFunctionalStreamReporter(sink io.Writer) *functionalStreamReporter {
 		sink:              sink,
 		completedPackages: make(map[string]struct{}),
 	}
+}
+
+func newFunctionalStreamReporterWithObserver(sink io.Writer, observer func(goTestTimingEvent)) *functionalStreamReporter {
+	reporter := newFunctionalStreamReporter(sink)
+	reporter.onEvent = observer
+	return reporter
 }
 
 func (reporter *functionalStreamReporter) stdoutWriter() *functionalStreamWriter {
@@ -81,14 +89,17 @@ func (writer *functionalStreamWriter) Flush() error {
 func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 	var event goTestTimingEvent
 	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil || event.Package == "" {
-		return writeFunctionalStreamBytes(writer.reporter.sink, line)
+		return writer.reporter.writeSink(line)
+	}
+	if writer.reporter.onEvent != nil {
+		writer.reporter.onEvent(event)
 	}
 
 	switch event.Action {
 	case "output":
 		// Keep the child failure text readable in the job log while the
 		// command runner retains the original JSON bytes for timing parsing.
-		return writeFunctionalStreamBytes(writer.reporter.sink, []byte(event.Output))
+		return writer.reporter.writeSink([]byte(event.Output))
 	case timingOutcomePass, timingOutcomeFail, timingOutcomeSkip:
 		if event.Test != "" {
 			return nil
@@ -97,26 +108,45 @@ func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 			return nil
 		}
 		writer.reporter.completedPackages[event.Package] = struct{}{}
-		_, err := fmt.Fprintf(
-			writer.reporter.sink,
-			"Functional package result: package=%s outcome=%s elapsed=%.3fs\n",
-			event.Package,
-			event.Action,
-			event.Elapsed,
-		)
+		var err error
+		writer.reporter.withSink(func(sink io.Writer) {
+			_, err = fmt.Fprintf(
+				sink,
+				"Functional package result: package=%s outcome=%s elapsed=%.3fs\n",
+				event.Package,
+				event.Action,
+				event.Elapsed,
+			)
+		})
 		return err
 	default:
 		// Unknown JSON lines remain visible rather than being silently
 		// discarded if go test adds an event action this reporter does not
 		// understand yet.
-		return writeFunctionalStreamBytes(writer.reporter.sink, line)
+		return writer.reporter.writeSink(line)
 	}
 }
 
 func (writer *lockedFunctionalStreamWriter) Write(data []byte) (int, error) {
 	writer.reporter.mu.Lock()
 	defer writer.reporter.mu.Unlock()
-	return len(data), writeFunctionalStreamBytes(writer.sink, data)
+	return len(data), writer.reporter.writeSinkTo(writer.sink, data)
+}
+
+func (reporter *functionalStreamReporter) writeSink(data []byte) error {
+	return reporter.writeSinkTo(reporter.sink, data)
+}
+
+func (reporter *functionalStreamReporter) writeSinkTo(sink io.Writer, data []byte) error {
+	reporter.sinkMu.Lock()
+	defer reporter.sinkMu.Unlock()
+	return writeFunctionalStreamBytes(sink, data)
+}
+
+func (reporter *functionalStreamReporter) withSink(fn func(io.Writer)) {
+	reporter.sinkMu.Lock()
+	defer reporter.sinkMu.Unlock()
+	fn(reporter.sink)
 }
 
 func writeFunctionalStreamBytes(sink io.Writer, data []byte) error {

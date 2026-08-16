@@ -10,8 +10,14 @@ budget="${FUNCTIONAL_TEST_BUDGET:-35m}"
 short="${FUNCTIONAL_SHORT:-true}"
 quarantine="${FUNCTIONAL_QUARANTINE:-tests/functional/functional-quarantine.json}"
 log_path="$artifact_root/command.log"
+timing_path="${FUNCTIONAL_TEST_VIZ_TIMING:-$artifact_root/functional-timing-summary.json}"
+coverage_path="${FUNCTIONAL_TEST_VIZ_JSON:-$artifact_root/coverage-summary.json}"
+profile_path="${FUNCTIONAL_TEST_VIZ_PROFILE:-$artifact_root/coverage.out}"
+markdown_path="${FUNCTIONAL_TEST_VIZ_MARKDOWN:-$artifact_root/functional-tests.md}"
+status_path="$artifact_root/diagnostic-status.txt"
 
 mkdir -p "$artifact_root"
+rm -f "$status_path"
 
 printf '%s\n' \
   "Functional CI runner: tier=$tier trigger=$trigger short=$short budget=$budget selection=subtractive quarantine=$quarantine" \
@@ -56,6 +62,81 @@ if [ "$tee_status" -ne 0 ]; then
 fi
 
 if [ "$command_status" -eq 124 ]; then
+  if [ -f "$timing_path" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+      timeout 5s python3 - "$timing_path" <<'PY' | tee -a "$log_path" || true
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as stream:
+        summary = json.load(stream)
+    wall_seconds = float(summary.get("wallSeconds", 0) or 0)
+    states = summary.get("packageStates", []) or []
+    if not isinstance(states, list):
+        raise ValueError("packageStates is not an array")
+except Exception as error:
+    print(f"Functional timing snapshot unavailable: path={path} reason={error}")
+    raise SystemExit(0)
+
+print(
+    "Functional timing snapshot: "
+    f"complete={summary.get('complete', False)} "
+    f"packages={summary.get('packageCount', 0)}/{summary.get('expectedPackageCount', 0)} "
+    f"wall={wall_seconds:.3f}s reason={summary.get('captureReason', 'tier budget expired')}"
+)
+for state in states:
+    if not isinstance(state, dict):
+        continue
+    if state.get("state") == "completed":
+        continue
+    try:
+        elapsed = float(state.get("seconds", 0) or 0)
+    except (TypeError, ValueError):
+        elapsed = 0
+    print(
+        "Functional package state: "
+        f"package={state.get('package', '<unknown>')} "
+        f"state={state.get('state', 'unobserved')} "
+        f"elapsed={elapsed:.3f}s"
+    )
+PY
+    else
+      printf '%s\n' "Functional timing snapshot could not be rendered: python3 is unavailable; timing artifact remains at $timing_path." | tee -a "$log_path" >&2
+    fi
+  else
+    printf '%s\n' "Functional timing summary missing: path=$timing_path reason=no incremental timing snapshot was written before the tier budget expired." | tee -a "$log_path" >&2
+  fi
+
+  {
+    printf '%s\n' "Functional diagnostics availability: outcome=tier-timeout budget=$budget"
+    if [ -f "$timing_path" ]; then
+      printf '%s\n' "available: name=timing path=$timing_path status=incomplete-or-partial"
+    else
+      printf '%s\n' "missing: name=timing path=$timing_path reason=no incremental timing snapshot was written before interruption"
+    fi
+    if [ -f "$coverage_path" ]; then
+      printf '%s\n' "available: name=coverage-summary path=$coverage_path status=incomplete-or-partial"
+    else
+      printf '%s\n' "missing: name=coverage-summary path=$coverage_path reason=no trustworthy partial coverage summary was available before interruption"
+    fi
+    if [ -f "$profile_path" ]; then
+      printf '%s\n' "available: name=coverage-profile path=$profile_path status=raw-profile"
+    else
+      printf '%s\n' "missing: name=coverage-profile path=$profile_path reason=go test did not flush a coverage profile before interruption"
+    fi
+    if [ -f "$markdown_path" ]; then
+      printf '%s\n' "available: name=markdown path=$markdown_path"
+    else
+      printf '%s\n' "missing: name=markdown path=$markdown_path reason=catalog rendering did not run because the tier stopped before complete inputs were available"
+    fi
+  } > "$status_path" || true
+  if [ -f "$status_path" ]; then
+    tee -a "$log_path" < "$status_path"
+  else
+    printf '%s\n' "Functional diagnostics status unavailable: path=$status_path reason=status file could not be written." | tee -a "$log_path" >&2
+  fi
   printf '%s\n' "Functional CI runner: tier timed out after budget=$budget; partial diagnostics retained under $artifact_root." \
     | tee -a "$log_path" >&2
   exit 124
