@@ -16,6 +16,10 @@ import {
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import {
+  factoryGraphWorkerIconClassName,
+  factoryGraphWorkerIconKind,
+} from "./worker-icon.js";
 
 /** The portion of a Factory place needed by the original semantic node views. */
 export interface FactoryGraphPlaceRef {
@@ -36,9 +40,11 @@ export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   muted: boolean;
   onSelectWorker?: (workerName: string) => void;
   place: FactoryGraphPlaceRef;
+  runnerId?: string | null;
   resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorker: boolean;
   validationError?: boolean;
+  workerType?: string | null;
 }
 
 export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
@@ -96,6 +102,10 @@ export function FactoryGraphWorkerNodeView({
   const workerName = resolveWorkerName(data);
   const label = `worker:${workerName}`;
   const workerLabel = semanticLabel("worker", data.locale);
+  const workerIconKind = factoryGraphWorkerIconKind(
+    data.workerType,
+    data.runnerId,
+  );
   const selectable = data.onSelectWorker !== undefined;
   const selected = data.selectedWorker || reactFlowSelected;
   const visualState = resolveFactoryGraphVisualState({
@@ -109,7 +119,7 @@ export function FactoryGraphWorkerNodeView({
   const content = (
     <span
       aria-label={label}
-      className="flex min-w-0 items-center gap-1.5 overflow-hidden"
+      className="flex h-full min-h-0 min-w-0 items-center gap-1.5 overflow-hidden"
       data-factory-entity-semantic-icon
       data-worker-label-zone
       role="img"
@@ -119,9 +129,9 @@ export function FactoryGraphWorkerNodeView({
       <GraphSemanticIcon
         className={classNames(
           "h-3.5 w-3.5 shrink-0",
-          factoryGraphNodeVisualIconClassName(visualState, "text-info"),
+          factoryGraphWorkerIconClassName(visualState),
         )}
-        kind="worker"
+        kind={workerIconKind}
         label={workerLabel}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
@@ -129,6 +139,7 @@ export function FactoryGraphWorkerNodeView({
           className={factoryGraphNodeWrappedTextClassName(
             "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
           )}
+          data-worker-kind-label
         >
           {workerLabel}
         </span>
@@ -175,7 +186,7 @@ export function FactoryGraphWorkerNodeView({
         <GraphNodeButton
           aria-label={selectLabel("worker", workerName, data.locale)}
           aria-pressed={selected}
-          className="grid min-w-0 gap-0.5 overflow-hidden"
+          className="grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden"
           data-selected-worker={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();

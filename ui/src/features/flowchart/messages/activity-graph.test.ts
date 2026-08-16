@@ -20,6 +20,9 @@ describe("getActivityGraphMessages", () => {
     const messages = getActivityGraphMessages("en");
     const semanticIconLabels: Array<[GraphSemanticIconKind, string]> = [
       ["active-work", "Active work"],
+      ["antigravity", "Antigravity runner"],
+      ["claude", "Claude runner"],
+      ["codex", "Codex runner"],
       ["constraint", "Constraint"],
       ["cron", "Cron workstation"],
       ["failed", "Failed state"],
@@ -29,6 +32,7 @@ describe("getActivityGraphMessages", () => {
       ["queue", "Queue state"],
       ["repeater", "Repeater workstation"],
       ["resource", "Resource"],
+      ["script", "Script worker"],
       ["terminal", "Terminal state"],
       ["worker", "Worker"],
       ["workstation", "Workstation"],
@@ -82,6 +86,9 @@ describe("getActivityGraphMessages", () => {
     const messages = getActivityGraphMessages("zh-CN");
     const semanticIconLabels: Array<[GraphSemanticIconKind, string]> = [
       ["active-work", "活动工作"],
+      ["antigravity", "Antigravity runner"],
+      ["claude", "Claude runner"],
+      ["codex", "Codex runner"],
       ["constraint", "约束"],
       ["cron", "Cron 工作站"],
       ["failed", "失败状态"],
@@ -91,6 +98,7 @@ describe("getActivityGraphMessages", () => {
       ["queue", "队列状态"],
       ["repeater", "重复器工作站"],
       ["resource", "资源"],
+      ["script", "脚本工作者"],
       ["terminal", "终止状态"],
       ["worker", "工作者"],
       ["workstation", "工作站"],

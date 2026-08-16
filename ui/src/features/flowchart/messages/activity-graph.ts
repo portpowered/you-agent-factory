@@ -97,8 +97,14 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "Active work";
           case "constraint":
             return "Constraint";
+          case "codex":
+            return "Codex runner";
+          case "claude":
+            return "Claude runner";
           case "doc":
             return "Doc";
+          case "antigravity":
+            return "Antigravity runner";
           case "cron":
             return "Cron workstation";
           case "failed":
@@ -115,6 +121,8 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "Repeater workstation";
           case "resource":
             return "Resource";
+          case "script":
+            return "Script worker";
           case "worker":
             return "Worker";
           case "work-type":
@@ -151,8 +159,14 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "活动工作";
           case "constraint":
             return "约束";
+          case "codex":
+            return "Codex runner";
+          case "claude":
+            return "Claude runner";
           case "doc":
             return "文档";
+          case "antigravity":
+            return "Antigravity runner";
           case "cron":
             return "Cron 工作站";
           case "failed":
@@ -169,6 +183,8 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "重复器工作站";
           case "resource":
             return "资源";
+          case "script":
+            return "脚本工作者";
           case "worker":
             return "工作者";
           case "work-type":

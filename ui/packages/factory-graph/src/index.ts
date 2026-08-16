@@ -187,6 +187,11 @@ export {
   workStatePhaseSwatchClassName,
 } from "./work-state-presentation.js";
 export {
+  type FactoryGraphWorkerIconKind,
+  factoryGraphWorkerIconClassName,
+  factoryGraphWorkerIconKind,
+} from "./worker-icon.js";
+export {
   type FactoryGraphWorkstationActivityProjection,
   type FactoryGraphWorkstationControlRole,
   type FactoryGraphWorkstationGuardedControl,
