@@ -108,9 +108,18 @@ func (r ExecCommandRunner) run(
 		)
 	}
 	waitCh := make(chan error, 1)
+	waitDone := make(chan struct{})
 	go func() {
-		waitCh <- cmd.Wait()
+		waitErr := cmd.Wait()
+		close(waitDone)
+		waitCh <- waitErr
 	}()
+	processMonitor := startProcessLifecycleMonitor(
+		cmd,
+		waitDone,
+		processLifecycleObserverFromContext(ctx),
+	)
+	defer processMonitor.stopAndWait()
 
 	cancelCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonCancel)
 	postRunCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonPostRun)

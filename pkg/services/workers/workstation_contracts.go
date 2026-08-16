@@ -22,6 +22,11 @@ type WorkstationPoolLifecycleOutcome string
 // committed for an accepted workstation dispatch.
 type WorkstationDispatchTerminalOutcome string
 
+// WorkstationDispatchReconciliationReason identifies a policy-free execution
+// observation that caused Workers to synthesize a terminal dispatch result.
+// Worker Sessions owns the session-level classification of this fact.
+type WorkstationDispatchReconciliationReason string
+
 // WorkstationDispatchCancelOutcome describes an idempotent explicit
 // cancellation request.
 type WorkstationDispatchCancelOutcome string
@@ -35,6 +40,8 @@ const (
 	WorkstationDispatchTerminalOutcomeCompleted WorkstationDispatchTerminalOutcome = "COMPLETED"
 	WorkstationDispatchTerminalOutcomeFailed    WorkstationDispatchTerminalOutcome = "FAILED"
 	WorkstationDispatchTerminalOutcomeCanceled  WorkstationDispatchTerminalOutcome = "CANCELED"
+
+	WorkstationDispatchReconciliationReasonProcessGone WorkstationDispatchReconciliationReason = "PROCESS_GONE"
 
 	WorkstationDispatchCancelOutcomeCanceled        WorkstationDispatchCancelOutcome = "CANCELED"
 	WorkstationDispatchCancelOutcomeAlreadyCanceled WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
@@ -73,6 +80,9 @@ var (
 	// ErrWorkstationDispatchAlreadyTerminal reports late cancellation after a
 	// non-cancelled terminal result was committed.
 	ErrWorkstationDispatchAlreadyTerminal = errors.New("Workers workstation dispatch is already terminal")
+	// ErrWorkstationDispatchProcessGone reports that the executor's parent
+	// process exited before the dispatch produced a terminal result.
+	ErrWorkstationDispatchProcessGone = errors.New("Workers workstation process exited before dispatch completion")
 )
 
 // WorkstationPoolStartRequest supplies the detached runtime bindings that are
@@ -117,7 +127,10 @@ type WorkstationDispatchResult struct {
 	DispatchID      string
 	WorkstationName string
 	TerminalOutcome WorkstationDispatchTerminalOutcome
-	Result          WorkResult
+	// ReconciliationReason is set only when Workers owns a terminal result
+	// synthesized from an execution-lifecycle observation.
+	ReconciliationReason WorkstationDispatchReconciliationReason
+	Result               WorkResult
 	// ProposedOutput is a transient detached Worker proposal. Runtime passes it
 	// to Work for validation and canonical identity assignment before applying
 	// the result; it must never cross a durable WorkResult boundary directly.

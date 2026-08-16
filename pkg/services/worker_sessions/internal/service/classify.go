@@ -112,6 +112,15 @@ func classifyTerminal(
 ) workersessions.TerminalResult {
 	workResult := dispatchResult.Result
 
+	if dispatchResult.ReconciliationReason == workers.WorkstationDispatchReconciliationReasonProcessGone {
+		return terminalForDispatchResult(
+			workersessions.FailureCauseProcessGone,
+			genericFailureDetail[workersessions.FailureCauseProcessGone],
+			workResult,
+			dispatchErr,
+		)
+	}
+
 	if workResult.Outcome == "" {
 		// The injected Workers boundary never produced a WorkResult: the
 		// attempt could not be handed off (for example, an unavailable or
@@ -363,6 +372,7 @@ var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseAdapterFailure:          "the Workers adapter reported a failure",
 	workersessions.FailureCauseExecutorPanic:           "the Workers executor reported a panic",
 	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
+	workersessions.FailureCauseProcessGone:             "the worker process exited before dispatch completion",
 }
 
 // knownFailureFamilies whitelists the exact WorkFailureFamily constants

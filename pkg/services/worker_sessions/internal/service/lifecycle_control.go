@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -510,6 +511,7 @@ type supervision struct {
 	dispatchID string
 	turnID     string
 	execution  workers.WorkstationDispatchRequest
+	startedAt  time.Time
 
 	mu                 sync.Mutex
 	publishing         bool
@@ -793,6 +795,7 @@ func (r *registry) registerSupervisionOwned(
 	}
 	supervision := newSupervision(dispatchID, turnID, executions...)
 	supervision.serverOwned = serverOwned
+	supervision.startedAt = r.clock.Now()
 	r.supervisions[id] = supervision
 	r.dispatchOwners[dispatchID] = id
 	return supervision, true
@@ -826,13 +829,51 @@ func (r *registry) transitionToRunning(id string) bool {
 	return true
 }
 
+func (r *registry) sessionState(id string) workersessions.State {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if session, ok := r.sessions[id]; ok {
+		return session.State
+	}
+	return ""
+}
+
+func (r *registry) logReconciliation(
+	id, attemptID string,
+	result workers.WorkstationDispatchResult,
+	priorState, resultingState workersessions.State,
+	startedAt time.Time,
+) {
+	elapsedMS := int64(0)
+	if !startedAt.IsZero() {
+		elapsedMS = r.clock.Now().Sub(startedAt).Milliseconds()
+		if elapsedMS < 0 {
+			elapsedMS = 0
+		}
+	}
+	r.logger.Info(
+		"worker session reconciliation",
+		"sessionID", id,
+		"attemptID", attemptID,
+		"dispatchID", result.DispatchID,
+		"reason", string(result.ReconciliationReason),
+		"prior_state", string(priorState),
+		"resulting_state", string(resultingState),
+		"result", string(result.TerminalOutcome),
+		"elapsed_ms", elapsedMS,
+		"deadline", "not_applicable",
+	)
+}
+
 func (r *registry) completeSupervision(id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
 	supervision.mu.Lock()
 	action := supervision.requestedAction
 	continuing := supervision.continuing
 	dispatchID := supervision.dispatchID
 	serverOwned := supervision.serverOwned
+	startedAt := supervision.startedAt
 	supervision.mu.Unlock()
+	priorState := r.sessionState(id)
 	if continuing && !r.continuationResultMatchesAssociation(id, result) {
 		result = invalidContinuationResult(result)
 		r.logger.Info("worker session continuation result rejected", "sessionID", id, "attemptID", dispatchID, "outcome", "reference_mismatch")
@@ -863,6 +904,9 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	// is what keeps controls waiting for the session's real terminal outcome
 	// rather than being satisfied by an attempt that is about to be retried.
 	if r.claimRetryAttempt(supervision, action, result, dispatchErr) {
+		if result.ReconciliationReason != "" {
+			r.logReconciliation(id, dispatchID, result, priorState, workersessions.StateRunning, startedAt)
+		}
 		r.logger.Info(
 			"worker session attempt",
 			"sessionID", id,
@@ -887,6 +931,9 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
 		r.logTerminal(id, dispatchID, final)
+		if result.ReconciliationReason != "" {
+			r.logReconciliation(id, dispatchID, result, priorState, state, startedAt)
+		}
 		terminalContext := context.Background()
 		if serverOwned {
 			terminalContext = r.serverOwnedContext()
