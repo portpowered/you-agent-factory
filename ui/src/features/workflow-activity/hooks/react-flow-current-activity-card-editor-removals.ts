@@ -17,6 +17,7 @@ import {
   type FactoryGraphSelectionBatchRemovalSelection,
   hasDeletableFactoryGraphSelection,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
 export function useFactoryGraphRemovalController({
@@ -27,6 +28,7 @@ export function useFactoryGraphRemovalController({
   hiddenNodeClasses,
   locale,
   onNodeRemovedFromDraft,
+  restoredCardState,
   saveEditableDefinition,
 }: {
   activeTool: FactoryGraphEditorTool;
@@ -36,6 +38,13 @@ export function useFactoryGraphRemovalController({
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string | null;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
+  restoredCardState?: Pick<
+    WorkflowActivityBentoCardState,
+    | "blockedRemovalReason"
+    | "pendingBatchRemovalPlan"
+    | "pendingRemovalEdgeId"
+    | "pendingRemovalNodeId"
+  >;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
 }) {
   const {
@@ -48,7 +57,7 @@ export function useFactoryGraphRemovalController({
     setPendingBatchRemovalPlan,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
-  } = usePendingRemovalIntentState(draftState, locale);
+  } = usePendingRemovalIntentState(draftState, locale, restoredCardState);
 
   useEffect(() => {
     if (activeTool === "delete") {
@@ -304,7 +313,10 @@ export function useFactoryGraphRemovalController({
     handleEditorNodeDelete,
     handleSelectionBatchDelete,
     handleSelectionNodeDelete,
+    pendingBatchRemovalPlan,
     pendingRemovalIntent,
+    pendingRemovalEdgeId,
+    pendingRemovalNodeId,
     setBlockedRemovalReason,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
@@ -505,18 +517,27 @@ function useFactoryGraphDeleteTargetHandlers({
 function usePendingRemovalIntentState(
   draftState: EditableFactoryGraphViewModel["draftState"],
   locale?: string | null,
+  restoredCardState?: Pick<
+    WorkflowActivityBentoCardState,
+    | "blockedRemovalReason"
+    | "pendingBatchRemovalPlan"
+    | "pendingRemovalEdgeId"
+    | "pendingRemovalNodeId"
+  >,
 ) {
   const [pendingRemovalNodeId, setPendingRemovalNodeId] = useState<
     string | null
-  >(null);
+  >(() => restoredCardState?.pendingRemovalNodeId ?? null);
   const [pendingRemovalEdgeId, setPendingRemovalEdgeId] = useState<
     string | null
-  >(null);
+  >(() => restoredCardState?.pendingRemovalEdgeId ?? null);
   const [pendingBatchRemovalPlan, setPendingBatchRemovalPlan] =
-    useState<FactoryGraphSelectionBatchRemovalPlan | null>(null);
+    useState<FactoryGraphSelectionBatchRemovalPlan | null>(
+      () => restoredCardState?.pendingBatchRemovalPlan ?? null,
+    );
   const [blockedRemovalReason, setBlockedRemovalReason] = useState<
     string | null
-  >(null);
+  >(() => restoredCardState?.blockedRemovalReason ?? null);
   const pendingNodeRemovalIntent =
     draftState.latestDocument && pendingRemovalNodeId
       ? (buildFactoryGraphDocRemovalIntent({

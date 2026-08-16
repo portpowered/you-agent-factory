@@ -98,10 +98,14 @@ describe("InlineAddWidgetCard content", () => {
     await user.click(selector);
     const listbox = await screen.findByRole("listbox");
     expect(
-      within(listbox).getByRole("option", { name: "Workflow activity" }),
-    ).not.toHaveAttribute("data-disabled");
+      within(listbox).getByRole("option", {
+        name: "Workflow activity — Already on dashboard",
+      }),
+    ).toHaveAttribute("data-disabled");
     expect(
-      within(listbox).getByRole("option", { name: "Current selection" }),
+      within(listbox).getByRole("option", {
+        name: "Current selection — Already on dashboard",
+      }),
     ).toHaveAttribute("data-disabled");
   });
 

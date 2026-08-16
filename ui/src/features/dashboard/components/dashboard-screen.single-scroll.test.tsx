@@ -53,7 +53,11 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
 
 vi.mock("../session/dashboard-session-provider", () => ({
   DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
-  useDashboardSession: () => ({ rawSessionID: "session-test" }),
+  useDashboardSession: () => ({
+    factoryPath: "/factory-sessions/session-test/factory",
+    rawSessionID: "session-test",
+    sessionID: "session-test",
+  }),
 }));
 
 vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
@@ -99,13 +103,19 @@ vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
           undoSelection: vi.fn(),
         },
         dashboardCardStateContext: {
+          dirtyCardInstanceIDs: new Set<string>(),
           hasAuthoritativeSnapshot: true,
           recoveryPending: false,
           streamStatus: dashboardSnapshotState.value.streamState.status,
           timelineMode: "current" as const,
           workOutcomeHydrationStatus: "ready" as const,
         },
+        getDashboardCardState: vi.fn(),
         materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+        reportDashboardCardState: vi.fn(),
+        reportDashboardCardDirtyState: vi.fn(),
+        restoreDashboardCardState: vi.fn(),
+        restoredDashboardCardStates: {},
         selectedSnapshot: snapshot,
         selectedTimelineTick: snapshot.tick_count,
         snapshot,

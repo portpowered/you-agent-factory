@@ -68,6 +68,7 @@ const BUN_INCOMPATIBLE_WORKSPACE_GRAPH_FILES = new Set([
   "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx",
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.test.tsx",
   "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.component.test.ts",
+  "src/features/workflow-activity/hooks/current-activity-graph-state-restoration.component.test.tsx",
 ]);
 
 const VITEST_COMPATIBILITY_PATTERNS: Array<{

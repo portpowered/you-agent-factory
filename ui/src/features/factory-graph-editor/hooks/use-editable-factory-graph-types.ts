@@ -41,6 +41,8 @@ export interface UseEditableFactoryGraphOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   /** Normalized dashboard session id; graph draft resets when this changes. */
   factoryDocumentScopeKey?: string | null;
+  initialDraft?: FactoryGraphDraft;
+  initialLayout?: import("../lib/layout/factory-graph-layout-operations").FactoryLayout;
   locale?: string | null;
 }
 

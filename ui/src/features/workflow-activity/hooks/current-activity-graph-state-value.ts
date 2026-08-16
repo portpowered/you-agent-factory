@@ -30,6 +30,7 @@ import type { useFactoryGraphRemovalController } from "./react-flow-current-acti
 import type { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
 import type { CurrentActivityGraphLayoutState } from "./use-current-activity-graph-render-state";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 export type CurrentActivityGraphStatusState = {
   dirtyStateSummary: FactoryGraphEditorDirtyState;
@@ -57,6 +58,7 @@ type BuildCurrentActivityGraphStateValueArgs = {
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
   blockedRemovalReason: string | null;
+  cardStateSnapshot: WorkflowActivityBentoCardState;
   canDeleteSelection: ReturnType<
     typeof useFactoryGraphRemovalController
   >["canDeleteSelection"];
@@ -393,6 +395,7 @@ export function buildCurrentActivityGraphStateValue(
 
   return {
     addControls,
+    cardStateSnapshot: args.cardStateSnapshot,
     connectionControls,
     editorControls,
     edgeWaypointControls: args.edgeWaypointControls,
@@ -440,6 +443,7 @@ export type CurrentActivityGraphEditorControls = ReturnType<
 
 export interface CurrentActivityGraphStateValue {
   addControls: CurrentActivityGraphAddControls;
+  cardStateSnapshot: WorkflowActivityBentoCardState;
   connectionControls: CurrentActivityGraphConnectionControls;
   editorControls: CurrentActivityGraphEditorControls;
   edgeWaypointControls: ReturnType<typeof useFactoryGraphEdgeWaypointEditor>;

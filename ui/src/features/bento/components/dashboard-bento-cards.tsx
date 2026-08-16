@@ -10,7 +10,7 @@ import type { useSelectedProviderSessionState } from "../../current-selection/wo
 import {
   type DashboardCardAsyncState,
   type DashboardCardContentState,
-  type DashboardCardStateContext,
+  type DashboardCardStateSnapshot,
   dashboardSnapshotHasRecords,
   resolveDashboardCardAsyncState,
   resolveDashboardCardContentState,
@@ -37,7 +37,13 @@ import { WorkerSessionTimelineWidget } from "../../worker-session-timeline/compo
 import { getWorkerSessionTimelineMessages } from "../../worker-session-timeline/messages/worker-session-timeline";
 import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
 import type { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
+import type { WorkflowActivityBentoCardState } from "../../workflow-activity/hooks/workflow-activity-card-state";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import type {
+  DashboardBentoCardStateContext,
+  DashboardBentoCardStateReporter,
+  DashboardBentoDirtyStateReporter,
+} from "../hooks/use-dashboard-bento-snapshot";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";
 import {
   type DashboardWidgetPickerWidgetType,
@@ -49,12 +55,14 @@ import { SessionControlsWidget } from "./session-controls-widget";
 
 export interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
-  dashboardCardStateContext: DashboardCardStateContext;
+  dashboardCardStateContext: DashboardBentoCardStateContext;
   dashboardLayout: AgentBentoLayoutItem[];
   importController: ReturnType<typeof useCurrentActivityImportController>;
   isCurrent: boolean;
   locale?: string;
   now: number;
+  onDashboardCardStateChange: DashboardBentoCardStateReporter;
+  onDashboardCardDirtyStateChange: DashboardBentoDirtyStateReporter;
   onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   onSelectInlineWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
@@ -69,6 +77,9 @@ export interface DashboardCardBuilderArgs {
   >["selectedWorkRelationshipGraph"];
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
+  restoredDashboardCardStates: Readonly<
+    Record<string, DashboardCardStateSnapshot>
+  >;
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
   workOutcomeHydrationStatus: "loading" | "ready";
   workChartModel: ReturnType<typeof useWorkOutcomeChart>;
@@ -76,12 +87,14 @@ export interface DashboardCardBuilderArgs {
 
 interface DashboardWidgetCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
-  dashboardCardStateContext: DashboardCardStateContext;
+  dashboardCardStateContext: DashboardBentoCardStateContext;
   importController: ReturnType<typeof useCurrentActivityImportController>;
   isCurrent: boolean;
   layoutItem: AgentBentoLayoutItem;
   locale?: string;
   now: number;
+  onDashboardCardStateChange: DashboardBentoCardStateReporter;
+  onDashboardCardDirtyStateChange: DashboardBentoDirtyStateReporter;
   onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
   selectedSessionID: string | null;
@@ -95,6 +108,9 @@ interface DashboardWidgetCardBuilderArgs {
   >["selectedWorkRelationshipGraph"];
   setSelectedTraceID: (traceID: string | null) => void;
   snapshot: DashboardSnapshot;
+  restoredDashboardCardStates: Readonly<
+    Record<string, DashboardCardStateSnapshot>
+  >;
   traceGridState: ReturnType<typeof useTraceDrilldown>["traceGridState"];
   workOutcomeHydrationStatus: "loading" | "ready";
   workChartModel: ReturnType<typeof useWorkOutcomeChart>;
@@ -108,6 +124,8 @@ export function buildDashboardCards({
   isCurrent,
   locale,
   now,
+  onDashboardCardStateChange,
+  onDashboardCardDirtyStateChange,
   onRemoveDashboardWidget,
   onSelectInlineWidget,
   providerSessionState,
@@ -118,6 +136,7 @@ export function buildDashboardCards({
   selectedWorkRelationshipGraph,
   setSelectedTraceID,
   snapshot,
+  restoredDashboardCardStates,
   traceGridState,
   workOutcomeHydrationStatus,
   workChartModel,
@@ -154,6 +173,8 @@ export function buildDashboardCards({
       layoutItem,
       locale,
       now,
+      onDashboardCardDirtyStateChange,
+      onDashboardCardStateChange,
       onRemoveDashboardWidget,
       providerSessionState,
       selectedSessionID,
@@ -163,6 +184,7 @@ export function buildDashboardCards({
       selectedWorkRelationshipGraph,
       setSelectedTraceID,
       snapshot,
+      restoredDashboardCardStates,
       traceGridState,
       workOutcomeHydrationStatus,
       workChartModel,
@@ -323,6 +345,8 @@ function buildWidgetCard({
   layoutItem,
   locale,
   now,
+  onDashboardCardStateChange,
+  onDashboardCardDirtyStateChange,
   onRemoveDashboardWidget,
   providerSessionState,
   selectedSessionID,
@@ -332,6 +356,7 @@ function buildWidgetCard({
   selectedWorkRelationshipGraph,
   setSelectedTraceID,
   snapshot,
+  restoredDashboardCardStates,
   traceGridState,
   workChartModel,
 }: DashboardWidgetCardBuilderArgs): AgentBentoLayoutCard {
@@ -341,6 +366,7 @@ function buildWidgetCard({
       <DashboardWidgetRemoveButton
         locale={locale}
         onClick={() => onRemoveDashboardWidget(layoutItem.id)}
+        widgetInstanceID={layoutItem.id}
         widgetTitle={getDashboardWidgetTitle(layoutItem.widgetType, locale)}
       />
     );
@@ -356,7 +382,10 @@ function buildWidgetCard({
       layoutItem,
       locale,
       now,
+      onDashboardCardStateChange,
+      onDashboardCardDirtyStateChange,
       snapshot,
+      restoredDashboardCardStates,
     });
   }
 
@@ -399,6 +428,9 @@ function buildOverviewWidgetCard({
   layoutItem,
   locale,
   now,
+  onDashboardCardStateChange,
+  onDashboardCardDirtyStateChange,
+  restoredDashboardCardStates,
   snapshot,
 }: Pick<
   DashboardWidgetCardBuilderArgs,
@@ -407,6 +439,9 @@ function buildOverviewWidgetCard({
   | "layoutItem"
   | "locale"
   | "now"
+  | "onDashboardCardStateChange"
+  | "onDashboardCardDirtyStateChange"
+  | "restoredDashboardCardStates"
   | "snapshot"
 > & {
   headerAction: ReactNode;
@@ -434,6 +469,15 @@ function buildOverviewWidgetCard({
             importController={importController}
             locale={locale}
             now={now}
+            onCardStateChange={(state) =>
+              onDashboardCardStateChange(layoutItem.id, {
+                value: state,
+                widgetType: layoutItem.widgetType,
+              })
+            }
+            onDirtyStateChange={(isDirty) =>
+              onDashboardCardDirtyStateChange(layoutItem.id, isDirty)
+            }
             onDocAdded={currentSelection.selectDoc}
             onNodeRemovedFromDraft={(nodeId) => {
               if (nodeId.startsWith("doc:")) {
@@ -468,6 +512,13 @@ function buildOverviewWidgetCard({
             onSelectWorkstation={currentSelection.selectWorkstation}
             selection={currentSelection.selection}
             snapshot={snapshot}
+            restoredCardState={
+              restoredDashboardCardStates[layoutItem.id]?.widgetType ===
+              layoutItem.widgetType
+                ? (restoredDashboardCardStates[layoutItem.id]
+                    ?.value as WorkflowActivityBentoCardState)
+                : undefined
+            }
             widgetInstanceID={layoutItem.id}
           />
         ),
@@ -710,7 +761,10 @@ function buildWorkerSessionTimelineCard({
   };
 }
 
-function getDashboardWidgetTitle(widgetType: string, locale?: string): string {
+export function getDashboardWidgetTitle(
+  widgetType: string,
+  locale?: string,
+): string {
   switch (widgetType) {
     case DASHBOARD_WIDGET_IDS.currentSelection:
       return getCurrentSelectionShellMessages(locale).title;

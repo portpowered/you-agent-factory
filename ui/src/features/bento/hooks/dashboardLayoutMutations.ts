@@ -4,8 +4,14 @@ import {
   type DashboardWidgetPickerWidgetType,
 } from "../lib/dashboard-widget-picker";
 import {
+  getDashboardLayoutInstanceHighWaterMarks,
+  mergeDashboardLayoutInstanceHighWaterMarks,
+} from "./allocation/dashboardLayoutAllocation";
+import {
   createDashboardWidgetInstanceID,
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+  DASHBOARD_WIDGET_IDS,
+  type DashboardLayoutInstanceHighWaterMarks,
   getDefaultInlineAddWidgetLayout,
   getDefaultWidgetLayoutByType,
   getPrimaryInstanceIDForWidgetType,
@@ -14,9 +20,52 @@ import {
 const DASHBOARD_GRID_COLUMNS = 12;
 const DASHBOARD_WIDGET_INSTANCE_SLOT_PREFIX = "instance";
 
+export interface DashboardWidgetInstanceAllocation {
+  instanceID?: string;
+  instanceHighWaterMarks: Record<string, number>;
+}
+
+export function allocateDashboardWidgetInstance(
+  layout: readonly AgentBentoLayoutItem[],
+  widgetType: DashboardWidgetPickerWidgetType,
+  initialHighWaterMarks: DashboardLayoutInstanceHighWaterMarks = {},
+): DashboardWidgetInstanceAllocation {
+  const instanceHighWaterMarks = getDashboardLayoutInstanceHighWaterMarks(
+    layout,
+    initialHighWaterMarks,
+  );
+  if (!canAddDashboardWidgetType(layout, widgetType)) {
+    return { instanceHighWaterMarks };
+  }
+
+  const primaryInstanceID = getPrimaryInstanceIDForWidgetType(widgetType);
+  if (
+    shouldUsePrimaryDashboardWidgetInstance(
+      layout,
+      widgetType,
+      instanceHighWaterMarks,
+    )
+  ) {
+    return { instanceHighWaterMarks, instanceID: primaryInstanceID };
+  }
+
+  const nextInstanceNumber = (instanceHighWaterMarks[widgetType] ?? 0) + 1;
+  return {
+    instanceHighWaterMarks: mergeDashboardLayoutInstanceHighWaterMarks(
+      instanceHighWaterMarks,
+      { [widgetType]: nextInstanceNumber },
+    ),
+    instanceID: createDashboardWidgetInstanceID(
+      widgetType,
+      `${DASHBOARD_WIDGET_INSTANCE_SLOT_PREFIX}-${nextInstanceNumber}`,
+    ),
+  };
+}
+
 export function addDashboardWidgetToLayout(
   layout: AgentBentoLayoutItem[],
   widgetType: DashboardWidgetPickerWidgetType,
+  widgetInstanceID?: string,
 ): AgentBentoLayoutItem[] {
   if (!canAddDashboardWidgetType(layout, widgetType)) {
     return layout;
@@ -39,7 +88,8 @@ export function addDashboardWidgetToLayout(
   const nextWidgetLayout = {
     ...widgetDefaultLayout,
     hidden: undefined,
-    id: getNextDashboardWidgetInstanceID(layout, widgetType),
+    id:
+      widgetInstanceID ?? getNextDashboardWidgetInstanceID(layout, widgetType),
     widgetType,
   };
   const widgetPlacement = findNextOpenDashboardPosition(
@@ -93,26 +143,45 @@ export function removeDashboardWidgetFromLayout(
   return layout.filter((item) => item.id !== widgetInstanceID);
 }
 
+export function restoreDashboardWidgetToLayout(
+  layout: readonly AgentBentoLayoutItem[],
+  removedItem: AgentBentoLayoutItem,
+  originalIndex = layout.length,
+): AgentBentoLayoutItem[] {
+  const existingIndex = layout.findIndex((item) => item.id === removedItem.id);
+  if (existingIndex >= 0) {
+    return layout.map((item, index) =>
+      index === existingIndex ? { ...removedItem } : { ...item },
+    );
+  }
+
+  const restoredLayout = layout.map((item) => ({ ...item }));
+  restoredLayout.splice(
+    Math.min(Math.max(originalIndex, 0), restoredLayout.length),
+    0,
+    { ...removedItem },
+  );
+  return restoredLayout;
+}
+
 function getNextDashboardWidgetInstanceID(
   layout: readonly AgentBentoLayoutItem[],
   widgetType: string,
 ): string {
   const primaryInstanceID = getPrimaryInstanceIDForWidgetType(widgetType);
-  if (!layout.some((item) => item.id === primaryInstanceID && !item.hidden)) {
+  const instanceHighWaterMarks =
+    getDashboardLayoutInstanceHighWaterMarks(layout);
+  if (
+    shouldUsePrimaryDashboardWidgetInstance(
+      layout,
+      widgetType,
+      instanceHighWaterMarks,
+    )
+  ) {
     return primaryInstanceID;
   }
 
-  const nextInstanceNumber =
-    layout.reduce((highestNumber, item) => {
-      if (item.widgetType !== widgetType) {
-        return highestNumber;
-      }
-
-      const instanceNumber = parseDashboardWidgetInstanceNumber(item.id);
-      return instanceNumber === null
-        ? highestNumber
-        : Math.max(highestNumber, instanceNumber);
-    }, 0) + 1;
+  const nextInstanceNumber = (instanceHighWaterMarks[widgetType] ?? 0) + 1;
 
   return createDashboardWidgetInstanceID(
     widgetType,
@@ -120,14 +189,30 @@ function getNextDashboardWidgetInstanceID(
   );
 }
 
-function parseDashboardWidgetInstanceNumber(id: string): number | null {
-  const match = id.match(/::instance-(\d+)$/);
-  if (!match) {
-    return null;
+function shouldUsePrimaryDashboardWidgetInstance(
+  layout: readonly AgentBentoLayoutItem[],
+  widgetType: string,
+  instanceHighWaterMarks: DashboardLayoutInstanceHighWaterMarks,
+): boolean {
+  if (
+    layout.some(
+      (item) =>
+        item.id === getPrimaryInstanceIDForWidgetType(widgetType) &&
+        !item.hidden,
+    )
+  ) {
+    return false;
   }
 
-  const numericValue = Number.parseInt(match[1] ?? "", 10);
-  return Number.isFinite(numericValue) ? numericValue : null;
+  if (widgetType !== DASHBOARD_WIDGET_IDS.workGraph) {
+    return true;
+  }
+
+  return (
+    !layout.some(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+    ) && (instanceHighWaterMarks[widgetType] ?? 0) === 0
+  );
 }
 
 function findNextOpenDashboardPosition(

@@ -7,10 +7,11 @@ import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { composeGraphEditorControllers } from "./state/graph-editor-controller-composition";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
+import { composeGraphEditorControllers } from "./state/graph-editor-controller-composition";
 import { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 export function useGraphEditorControllers({
   activeTool,
@@ -22,6 +23,7 @@ export function useGraphEditorControllers({
   locale,
   onDocAdded,
   onNodeRemovedFromDraft,
+  restoredCardState,
   saveEditableDefinition,
   setActiveTool,
 }: {
@@ -34,6 +36,7 @@ export function useGraphEditorControllers({
   locale?: string | null;
   onDocAdded?: (targetPath: string) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
+  restoredCardState?: WorkflowActivityBentoCardState;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
 }) {
@@ -41,6 +44,7 @@ export function useGraphEditorControllers({
     currentFactoryDefinition,
     editableGraph,
     onDocAdded,
+    restoredCardState,
     setActiveTool,
   });
   const connectionController = useFactoryGraphConnectionController({
@@ -50,6 +54,7 @@ export function useGraphEditorControllers({
     editableGraph,
     hiddenNodeClasses,
     locale,
+    restoredCardState,
   });
   const removalController = useFactoryGraphRemovalController({
     activeTool,
@@ -59,6 +64,7 @@ export function useGraphEditorControllers({
     hiddenNodeClasses,
     locale,
     onNodeRemovedFromDraft,
+    restoredCardState,
     saveEditableDefinition,
   });
 

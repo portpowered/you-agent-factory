@@ -1,8 +1,11 @@
 import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { AgentBentoCard } from "../../bento/components/agent-bento";
 import type { DashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../../bento/messages/inline-add-widget";
-import { getInlineWidgetPickerOptions } from "../../bento/messages/inline-widget-picker";
-import { AgentBentoCard } from "../../bento/components/agent-bento";
+import {
+  getInlineWidgetPickerMessages,
+  getInlineWidgetPickerOptions,
+} from "../../bento/messages/inline-widget-picker";
 import { InlineAddWidgetAddButton } from "./inline-add-widget-add-button";
 import { InlineAddWidgetSelector } from "./inline-add-widget-selector";
 
@@ -20,6 +23,7 @@ export function InlineAddWidgetCard({
   pickerAvailability = [],
 }: InlineAddWidgetCardProps): ReactElement {
   const messages = getInlineAddWidgetMessages(locale);
+  const pickerMessages = getInlineWidgetPickerMessages(locale);
   const options = useMemo(() => getInlineWidgetPickerOptions(locale), [locale]);
   const availabilityByType = useMemo(
     () => new Map(pickerAvailability.map((item) => [item.widgetType, item])),
@@ -76,6 +80,7 @@ export function InlineAddWidgetCard({
           disabled={!hasEnabledWidgets}
           onValueChange={handleWidgetSelection}
           options={options}
+          unavailableOptionLabel={pickerMessages.addedState}
           unavailableLabel={messages.actionUnavailableLabel}
           value={selectedWidgetType}
         />

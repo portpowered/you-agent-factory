@@ -1,15 +1,20 @@
 import type { AgentBentoLayoutItem } from "../components/agent-bento";
+import { mergeDashboardLayoutInstanceHighWaterMarks } from "./allocation/dashboardLayoutAllocation";
+import {
+  collectStoredLayoutDiagnostics,
+  type DashboardLayoutSanitizationResult,
+  isSafeDashboardWidgetInstanceID,
+  repairDashboardLayout,
+  resolveStoredWidgetType,
+} from "./dashboardLayoutSanitization";
 import {
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
-  DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_WIDGET_IDS,
+  type DashboardLayoutInstanceHighWaterMarks,
   DEFAULT_DASHBOARD_LAYOUT,
   getDefaultInlineAddWidgetLayout,
   getDefaultWidgetLayoutByType,
   getPrimaryInstanceIDForWidgetType,
-  isDashboardWidgetID,
-  LEGACY_SELECTION_WIDGET_IDS,
-  LEGACY_WORK_OUTCOME_WIDGET_IDS,
   WORK_OUTCOME_CHART_MIN_GRID_HEIGHT,
   WORK_OUTCOME_CHART_MIN_GRID_WIDTH,
 } from "./dashboardLayoutSchema";
@@ -20,51 +25,81 @@ export function mergeDashboardLayout(
   layout: AgentBentoLayoutItem[],
   baseLayout = DEFAULT_DASHBOARD_LAYOUT,
 ): AgentBentoLayoutItem[] {
+  return sanitizeDashboardLayout(layout, baseLayout).layout;
+}
+
+export function sanitizeDashboardLayout(
+  layout: AgentBentoLayoutItem[],
+  baseLayout = DEFAULT_DASHBOARD_LAYOUT,
+  initialHighWaterMarks: DashboardLayoutInstanceHighWaterMarks = {},
+): DashboardLayoutSanitizationResult {
   const normalizedBaseLayout = migrateDashboardLayout(baseLayout);
   const normalizedLayout = migrateDashboardLayout(layout);
-  const itemsByID = new Map(normalizedLayout.map((item) => [item.id, item]));
-  const mergedBaseLayout = normalizedBaseLayout.map((baseItem) =>
-    mergeDashboardLayoutItem(itemsByID.get(baseItem.id), baseItem),
+  const mergedLayout = mergeNormalizedDashboardLayouts(
+    normalizedLayout,
+    normalizedBaseLayout,
   );
-  const baseIDs = new Set(normalizedBaseLayout.map((item) => item.id));
+  const repaired = repairDashboardLayout(
+    mergedLayout,
+    collectStoredLayoutDiagnostics(layout),
+  );
+  return {
+    ...repaired,
+    instanceHighWaterMarks: mergeDashboardLayoutInstanceHighWaterMarks(
+      initialHighWaterMarks,
+      repaired.instanceHighWaterMarks,
+    ),
+  };
+}
+
+function mergeNormalizedDashboardLayouts(
+  normalizedLayout: AgentBentoLayoutItem[],
+  normalizedBaseLayout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  const hasVisibleGraph = normalizedLayout.some(
+    (item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph && !item.hidden,
+  );
+  const itemsByID = new Map<string, AgentBentoLayoutItem[]>();
+  for (const item of normalizedLayout) {
+    const items = itemsByID.get(item.id) ?? [];
+    items.push(item);
+    itemsByID.set(item.id, items);
+  }
+
+  const mergedBaseLayout: AgentBentoLayoutItem[] = [];
+  const visibleGraph = normalizedLayout.find(
+    (item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph && !item.hidden,
+  );
+  for (const baseItem of normalizedBaseLayout) {
+    if (
+      hasVisibleGraph &&
+      baseItem.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+    ) {
+      if (visibleGraph) {
+        mergedBaseLayout.push(visibleGraph);
+      }
+      continue;
+    }
+
+    const matchingItems = itemsByID.get(baseItem.id) ?? [];
+    const [matchingItem, ...duplicateItems] = matchingItems;
+    mergedBaseLayout.push(
+      mergeDashboardLayoutItem(matchingItem, baseItem),
+      ...duplicateItems,
+    );
+  }
+
+  const baseIDs = new Set([
+    ...normalizedBaseLayout.map((item) => item.id),
+    ...mergedBaseLayout.map((item) => item.id),
+  ]);
   const additionalItems = normalizedLayout.filter(
     (item) => !baseIDs.has(item.id),
   );
 
   return [...mergedBaseLayout, ...additionalItems];
-}
-
-export function readStoredDashboardLayout(): AgentBentoLayoutItem[] {
-  try {
-    const storedLayout = window.localStorage.getItem(
-      DASHBOARD_LAYOUT_STORAGE_KEY,
-    );
-    if (!storedLayout) {
-      return DEFAULT_DASHBOARD_LAYOUT;
-    }
-
-    const parsedLayout: unknown = JSON.parse(storedLayout);
-    if (!Array.isArray(parsedLayout)) {
-      return DEFAULT_DASHBOARD_LAYOUT;
-    }
-
-    return mergeDashboardLayout(parsedLayout as AgentBentoLayoutItem[]);
-  } catch {
-    return DEFAULT_DASHBOARD_LAYOUT;
-  }
-}
-
-export function writeStoredDashboardLayout(
-  layout: AgentBentoLayoutItem[],
-): void {
-  try {
-    window.localStorage.setItem(
-      DASHBOARD_LAYOUT_STORAGE_KEY,
-      JSON.stringify(layout),
-    );
-  } catch {
-    // Layout persistence is a convenience; dashboard interaction should keep working without it.
-  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -91,10 +126,9 @@ function normalizeDashboardLayoutItem(
     return null;
   }
 
-  const id =
-    typeof candidate.id === "string" && candidate.widgetType
-      ? candidate.id
-      : getPrimaryInstanceIDForWidgetType(widgetType);
+  const id = isSafeDashboardWidgetInstanceID(candidate.id, widgetType)
+    ? candidate.id
+    : getPrimaryInstanceIDForWidgetType(widgetType);
 
   return {
     ...defaultItem,
@@ -106,65 +140,6 @@ function normalizeDashboardLayoutItem(
     x: isFiniteNumber(candidate.x) ? candidate.x : defaultItem.x,
     y: isFiniteNumber(candidate.y) ? candidate.y : defaultItem.y,
   };
-}
-
-function resolveStoredWidgetType(
-  item: Partial<AgentBentoLayoutItem> & { widgetType?: unknown },
-): string | null {
-  if (isDashboardWidgetID(item.widgetType)) {
-    return item.widgetType;
-  }
-
-  if (typeof item.id !== "string") {
-    return null;
-  }
-  const itemID = item.id;
-
-  switch (itemID) {
-    case DASHBOARD_WIDGET_IDS.currentSelection:
-      return DASHBOARD_WIDGET_IDS.currentSelection;
-    case DASHBOARD_WIDGET_IDS.providerSession:
-      return DASHBOARD_WIDGET_IDS.providerSession;
-    case DASHBOARD_WIDGET_IDS.submitWork:
-      return DASHBOARD_WIDGET_IDS.submitWork;
-    case DASHBOARD_WIDGET_IDS.terminalWork:
-      return DASHBOARD_WIDGET_IDS.terminalWork;
-    case DASHBOARD_WIDGET_IDS.trace:
-      return DASHBOARD_WIDGET_IDS.trace;
-    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
-      return DASHBOARD_WIDGET_IDS.workerSessionTimeline;
-    case DASHBOARD_WIDGET_IDS.workGraph:
-      return DASHBOARD_WIDGET_IDS.workGraph;
-    case DASHBOARD_WIDGET_IDS.workOutcomeChart:
-      return DASHBOARD_WIDGET_IDS.workOutcomeChart;
-    case DASHBOARD_WIDGET_IDS.workTotals:
-      return DASHBOARD_WIDGET_IDS.workTotals;
-    case DASHBOARD_WIDGET_IDS.addWidget:
-      return DASHBOARD_WIDGET_IDS.addWidget;
-    default:
-      break;
-  }
-
-  if (LEGACY_SELECTION_WIDGET_IDS.some((legacyID) => legacyID === itemID)) {
-    return DASHBOARD_WIDGET_IDS.currentSelection;
-  }
-
-  if (LEGACY_WORK_OUTCOME_WIDGET_IDS.some((legacyID) => legacyID === itemID)) {
-    return DASHBOARD_WIDGET_IDS.workOutcomeChart;
-  }
-
-  if (itemID.startsWith(`${DASHBOARD_WIDGET_IDS.workOutcomeChart}::`)) {
-    return DASHBOARD_WIDGET_IDS.workOutcomeChart;
-  }
-
-  if (itemID.startsWith(`${DASHBOARD_WIDGET_IDS.addWidget}::`)) {
-    return DASHBOARD_WIDGET_IDS.addWidget;
-  }
-
-  const supportedWidgetID = Object.values(DASHBOARD_WIDGET_IDS).find(
-    (widgetID) => itemID.startsWith(`${widgetID}::`),
-  );
-  return supportedWidgetID ?? null;
 }
 
 function mergeDashboardLayoutItem(

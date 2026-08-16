@@ -32,6 +32,11 @@ export interface DashboardCardStateContext {
   timelineMode: FactoryTimelineMode;
 }
 
+export interface DashboardCardStateSnapshot {
+  value: unknown;
+  widgetType: string;
+}
+
 export interface DashboardCardContentInput {
   authoritative: boolean;
   error?: boolean;

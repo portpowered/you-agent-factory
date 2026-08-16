@@ -3,6 +3,7 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
 } from "../hooks/dashboardLayoutSchema";
 import {
+  canAddDashboardWidgetType,
   DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES,
   getDashboardWidgetPickerAvailability,
 } from "./dashboard-widget-picker";
@@ -15,7 +16,6 @@ describe("getDashboardWidgetPickerAvailability", () => {
 
     expect(DUPLICATE_CAPABLE_DASHBOARD_WIDGET_TYPES).toEqual([
       DASHBOARD_WIDGET_IDS.terminalWork,
-      DASHBOARD_WIDGET_IDS.workGraph,
       DASHBOARD_WIDGET_IDS.workOutcomeChart,
       DASHBOARD_WIDGET_IDS.workTotals,
     ]);
@@ -44,5 +44,18 @@ describe("getDashboardWidgetPickerAvailability", () => {
       enabled: false,
       widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
     });
+
+    expect(
+      availability.find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toEqual({
+      duplicateCapable: false,
+      enabled: false,
+      widgetType: DASHBOARD_WIDGET_IDS.workGraph,
+    });
+    expect(
+      canAddDashboardWidgetType(DEFAULT_DASHBOARD_LAYOUT, "work-graph"),
+    ).toBe(false);
   });
 });

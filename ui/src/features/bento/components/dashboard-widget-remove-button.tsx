@@ -6,12 +6,14 @@ import { getAgentBentoMessages } from "../messages/agent-bento";
 export interface DashboardWidgetRemoveButtonProps {
   locale?: string | null;
   onClick?: () => void;
+  widgetInstanceID?: string;
   widgetTitle: string;
 }
 
 export function DashboardWidgetRemoveButton({
   locale,
   onClick,
+  widgetInstanceID,
   widgetTitle,
 }: DashboardWidgetRemoveButtonProps): ReactElement {
   const messages = getAgentBentoMessages(locale);
@@ -19,6 +21,8 @@ export function DashboardWidgetRemoveButton({
   return (
     <DashboardActionButton
       aria-label={messages.removeWidgetLabel(widgetTitle)}
+      data-dashboard-widget-remove="true"
+      data-dashboard-widget-instance-id={widgetInstanceID}
       iconOnly
       onClick={onClick}
       tone="outline"

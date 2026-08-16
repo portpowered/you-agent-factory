@@ -1,4 +1,4 @@
-import "../../../testing/vitest-dom-capabilities.setup";
+import "../../../../testing/vitest-dom-capabilities.setup";
 
 import { act, renderHook } from "@testing-library/react";
 
@@ -9,7 +9,7 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   reloadDashboardLayoutFromStorage,
   useDashboardLayout,
-} from "./useDashboardLayout";
+} from "../useDashboardLayout";
 
 function resetDashboardLayoutStorage() {
   window.localStorage.clear();
@@ -64,8 +64,8 @@ describe("useDashboardLayout inline add-widget reload persistence", () => {
       id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       w: 3,
       widgetType: DASHBOARD_WIDGET_IDS.addWidget,
-      x: 9,
-      y: 27,
+      x: 0,
+      y: 37,
     });
   });
 });
@@ -111,8 +111,8 @@ describe("useDashboardLayout inline add-widget persistence", () => {
       id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       w: 3,
       widgetType: DASHBOARD_WIDGET_IDS.addWidget,
-      x: 5,
-      y: 24,
+      x: 0,
+      y: 37,
     });
   });
 });
