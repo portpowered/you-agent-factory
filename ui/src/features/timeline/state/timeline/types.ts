@@ -50,6 +50,7 @@ export interface WorldDispatch {
 }
 
 export interface WorldCompletion extends WorldDispatch {
+  attempt?: number;
   diagnostics?: DashboardWorkDiagnostics;
   durationMillis: number;
   endTime: string;

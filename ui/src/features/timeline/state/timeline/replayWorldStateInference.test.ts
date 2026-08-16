@@ -63,10 +63,10 @@ const initialStructureRequest = factoryEvent(
 );
 
 describe("reconstructWorldState inference success", () => {
-  it("records inference attempts for an active dispatch", () => {
+  it("projects the recorded retry attempt into the completed trace dispatch", () => {
     const workID = "work-inference";
     const dispatchID = "dispatch-inference";
-    const inferenceRequestID = `${dispatchID}/inference-request/1`;
+    const inferenceRequestID = `${dispatchID}/inference-request/2`;
     const events: FactoryEvent[] = [
       initialStructureRequest,
       factoryEvent(
@@ -110,7 +110,7 @@ describe("reconstructWorldState inference success", () => {
         3,
         FACTORY_EVENT_TYPES.inferenceRequest,
         {
-          attempt: 1,
+          attempt: 2,
           inferenceRequestId: inferenceRequestID,
           prompt: "Review the story.",
           workingDirectory: "/work/project",
@@ -127,7 +127,7 @@ describe("reconstructWorldState inference success", () => {
         4,
         FACTORY_EVENT_TYPES.inferenceResponse,
         {
-          attempt: 1,
+          attempt: 2,
           durationMillis: 500,
           inferenceRequestId: inferenceRequestID,
           outcome: "SUCCEEDED",
@@ -139,13 +139,29 @@ describe("reconstructWorldState inference success", () => {
           workIds: [workID],
         },
       ),
+      factoryEvent(
+        "event-dispatch-response",
+        5,
+        FACTORY_EVENT_TYPES.dispatchResponse,
+        {
+          durationMillis: 500,
+          outcome: "SUCCEEDED",
+          transitionId: "review",
+        },
+        {
+          dispatchId: dispatchID,
+          traceIds: [`trace-${workID}`],
+          workIds: [workID],
+        },
+      ),
     ];
 
-    const state = reconstructFactoryReplayState(events, 4);
+    const state = reconstructFactoryReplayState(events, 5);
     const attempt =
       state.inferenceAttemptsByDispatchID[dispatchID]?.[inferenceRequestID];
     expect(attempt).toEqual(
       expect.objectContaining({
+        attempt: 2,
         dispatch_id: dispatchID,
         inference_request_id: inferenceRequestID,
         outcome: "SUCCEEDED",
@@ -162,6 +178,13 @@ describe("reconstructWorldState inference success", () => {
     expect(
       state.textBlobsByID[`inference:${inferenceRequestID}:response`],
     ).toBe("Looks good.");
+    expect(state.tracesByID[`trace-${workID}`]?.dispatches).toEqual([
+      expect.objectContaining({
+        attempt: 2,
+        dispatch_id: dispatchID,
+        work_ids: [workID],
+      }),
+    ]);
   });
 });
 

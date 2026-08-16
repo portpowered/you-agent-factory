@@ -13,6 +13,11 @@ export interface TraceSelectionIdentity {
   work_id: string;
 }
 
+// Older recordings and non-provider dispatches do not carry an inference
+// attempt. Replay supplies the field for current provider-backed dispatches;
+// retain one only as the compatibility identity for those legacy records.
+const LEGACY_TRACE_SELECTION_ATTEMPT = 1;
+
 export function traceSelectionKey(identity: TraceSelectionIdentity): string {
   return [
     encodeURIComponent(identity.dispatch_id),
@@ -20,8 +25,6 @@ export function traceSelectionKey(identity: TraceSelectionIdentity): string {
     String(identity.attempt),
   ].join("|");
 }
-
-export const traceSelectionIdentityKey = traceSelectionKey;
 
 export function traceSelectionMatches(
   left: TraceSelectionIdentity | null | undefined,
@@ -38,15 +41,13 @@ export function traceSelectionMatches(
   );
 }
 
-export const traceSelectionsMatch = traceSelectionMatches;
-
 export function traceSelectionAttempt(
   dispatch: Pick<DashboardTraceDispatch, "attempt">,
 ): number {
   const attempt = dispatch.attempt;
   return typeof attempt === "number" && Number.isInteger(attempt) && attempt > 0
     ? attempt
-    : 1;
+    : LEGACY_TRACE_SELECTION_ATTEMPT;
 }
 
 export function traceDispatchWorkIDs(
@@ -94,12 +95,6 @@ export function traceSelectionIdentitiesForDispatch(
   return (workIDs.length > 0 ? workIDs : [""]).map((workID) =>
     traceSelectionForDispatch(dispatch, workID),
   );
-}
-
-export function traceSelectionKeysForDispatch(
-  dispatch: Parameters<typeof traceSelectionIdentitiesForDispatch>[0],
-): string[] {
-  return traceSelectionIdentitiesForDispatch(dispatch).map(traceSelectionKey);
 }
 
 export function traceSelectionIdentitiesByWorkID(

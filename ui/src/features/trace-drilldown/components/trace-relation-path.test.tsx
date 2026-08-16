@@ -1,3 +1,4 @@
+// @component-test-runner vitest: imports workspace graph packages that Bun resolves through declaration files.
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
