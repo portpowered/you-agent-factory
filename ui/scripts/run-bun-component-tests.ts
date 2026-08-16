@@ -1,10 +1,8 @@
-import {
-  formatBunFailureReport,
-  runBunComponentTests,
-} from "./bun-component-test-runner";
 import { listComponentTestFiles } from "./component-test-files";
 
 const ISOLATED_COMPONENT_TEST_MARKER = ".isolated.bun.component.test.tsx";
+const PRELOAD_PATH = "./src/testing/bun/component.setup.ts";
+
 const componentTests = listComponentTestFiles()
   .filter((file) => file.runner === "bun")
   .map((file) => file.path);
@@ -24,15 +22,20 @@ function runComponentTests(files: string[]): void {
     return;
   }
 
-  const result = runBunComponentTests(files);
-
-  if (result.exitCode !== 0) {
-    process.stdout.write(
-      `${formatBunFailureReport(`${result.stdout}\n${result.stderr}`)}\n`,
-    );
-  }
-  process.stdout.write(result.stdout);
-  process.stderr.write(result.stderr);
+  const result = Bun.spawnSync({
+    cmd: [
+      process.execPath,
+      "test",
+      "--preload",
+      PRELOAD_PATH,
+      "--reporter=dots",
+      "--timeout=10000",
+      ...files,
+    ],
+    cwd: process.cwd(),
+    stderr: "inherit",
+    stdout: "inherit",
+  });
 
   if (result.exitCode !== 0) {
     process.exit(result.exitCode);
