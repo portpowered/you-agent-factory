@@ -1,8 +1,15 @@
+// Imported from the ./visual-state subpath rather than the package root on
+// purpose. The root entry eagerly re-exports semantic-workstation-presentation,
+// which pulls in @you-agent-factory/client; a clean consumer without that
+// workspace dependency installed fails to resolve the package at all. The
+// visual-state module has no imports of its own, so this path stays runtime
+// safe. The same symbols remain exported from the package root for consumers
+// that already depend on the full graph surface.
 import {
   type FactoryGraphVisualNestedAccentRole,
   type FactoryGraphVisualStatusRole,
   factoryGraphVisualNestedAccentRole,
-} from "@you-agent-factory/factory-graph";
+} from "@you-agent-factory/factory-graph/visual-state";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import {
   type components,

@@ -86,6 +86,12 @@ const sharedReactAliases = [
     ),
   },
   {
+    // Must stay ahead of the package-root alias below: aliases resolve in
+    // order, so the bare-root entry would otherwise swallow this subpath.
+    find: "@you-agent-factory/factory-graph/visual-state",
+    replacement: path.join(factoryGraphPackageRoot, "visual-state.ts"),
+  },
+  {
     find: "@you-agent-factory/factory-graph",
     replacement: path.join(factoryGraphPackageRoot, "index.ts"),
   },

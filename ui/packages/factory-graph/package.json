@@ -28,6 +28,11 @@
       "types": "./dist/group-region-presentation.d.ts",
       "import": "./dist/group-region-presentation.js",
       "default": "./dist/group-region-presentation.js"
+    },
+    "./visual-state": {
+      "types": "./dist/visual-state.d.ts",
+      "import": "./dist/visual-state.js",
+      "default": "./dist/visual-state.js"
     }
   },
   "scripts": {
