@@ -34,9 +34,13 @@ import (
 func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-011-worker-id-cursor")
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-011-worker-id-cursor.replay.json")
+	homeDir := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		ServerReadyTimeout:        60 * time.Second,
+		Env:                       env,
 		Args:                      []string{"--record", artifactPath},
 		ProviderOverride:          support.MockInferenceProvider("first completion", "second completion"),
 	})
@@ -63,6 +67,8 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                t.TempDir(),
 		WaitForServiceModeRuntime: true,
+		ServerReadyTimeout:        60 * time.Second,
+		Env:                       env,
 		Args:                      []string{"--replay", artifactPath, "--no-record"},
 	})
 	resumedHistory := readWSRFT011Events(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", firstWorkerID, url.Values{
@@ -428,21 +434,52 @@ func assertWSRFT011SameRecords(t *testing.T, left, right []factoryapi.WorkerSess
 		t.Fatalf("Worker Session record counts = %d/%d, want equal histories\nleft=%s\nright=%s", len(left), len(right), formatWSRFT011Records(left), formatWSRFT011Records(right))
 	}
 	for index := range left {
-		if left[index].WorkerSessionId != right[index].WorkerSessionId ||
-			!reflect.DeepEqual(left[index].WorkIds, right[index].WorkIds) ||
-			left[index].Event.Position != right[index].Event.Position ||
-			left[index].Event.SourceType != right[index].Event.SourceType ||
-			left[index].Event.SourceId != right[index].Event.SourceId ||
-			left[index].Event.SourceSequence != right[index].Event.SourceSequence ||
-			left[index].Event.SourceEventId != right[index].Event.SourceEventId ||
-			left[index].Event.SchemaId != right[index].Event.SchemaId ||
-			left[index].Event.Cursor.WorkerSessionId != right[index].Event.Cursor.WorkerSessionId ||
-			left[index].Event.Cursor.Position != right[index].Event.Cursor.Position ||
-			!reflect.DeepEqual(left[index].Event.Payload, right[index].Event.Payload) ||
-			wsrft011DeliveryClass(left[index].Delivery) != wsrft011DeliveryClass(right[index].Delivery) {
-			t.Fatalf("Worker Session first divergence at record[%d]:\nleft=%s\nright=%s\nfull-left=%s\nfull-right=%s", index, describeWSRFT011Record(left[index]), describeWSRFT011Record(right[index]), formatWSRFT011Records(left), formatWSRFT011Records(right))
+		differences := wsrft011RecordDifferences(left[index], right[index])
+		if len(differences) > 0 {
+			t.Fatalf("Worker Session first divergence at record[%d] fields=%s:\nleft=%s\nright=%s\nfull-left=%s\nfull-right=%s", index, strings.Join(differences, ","), describeWSRFT011Record(left[index]), describeWSRFT011Record(right[index]), formatWSRFT011Records(left), formatWSRFT011Records(right))
 		}
 	}
+}
+
+func wsrft011RecordDifferences(left, right factoryapi.WorkerSessionEvent) []string {
+	differences := make([]string, 0, 10)
+	if left.WorkerSessionId != right.WorkerSessionId {
+		differences = append(differences, "worker_session_id")
+	}
+	if !reflect.DeepEqual(left.WorkIds, right.WorkIds) {
+		differences = append(differences, "work_ids")
+	}
+	if left.Event.Position != right.Event.Position {
+		differences = append(differences, "position")
+	}
+	if left.Event.SourceType != right.Event.SourceType {
+		differences = append(differences, "source_type")
+	}
+	if left.Event.SourceId != right.Event.SourceId {
+		differences = append(differences, "source_id")
+	}
+	if left.Event.SourceSequence != right.Event.SourceSequence {
+		differences = append(differences, "source_sequence")
+	}
+	if left.Event.SourceEventId != right.Event.SourceEventId {
+		differences = append(differences, "source_event_id")
+	}
+	if left.Event.SchemaId != right.Event.SchemaId {
+		differences = append(differences, "schema_id")
+	}
+	if wsrft011StringPointer(left.Event.Cursor.WorkerSessionId) != wsrft011StringPointer(right.Event.Cursor.WorkerSessionId) {
+		differences = append(differences, "cursor_worker_session_id")
+	}
+	if left.Event.Cursor.Position != right.Event.Cursor.Position {
+		differences = append(differences, "cursor_position")
+	}
+	if !reflect.DeepEqual(left.Event.Payload, right.Event.Payload) {
+		differences = append(differences, "payload")
+	}
+	if wsrft011DeliveryClass(left.Delivery) != wsrft011DeliveryClass(right.Delivery) {
+		differences = append(differences, "delivery")
+	}
+	return differences
 }
 
 func wsrft011DeliveryClass(delivery factoryapi.WorkerSessionEventDelivery) string {
