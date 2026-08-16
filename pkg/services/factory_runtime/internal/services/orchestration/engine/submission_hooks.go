@@ -115,7 +115,7 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []workdomain.G
 		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
 		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
 		if source == externalSubmissionHookName {
-			e.signalObservableProjection(requestID)
+			e.pendingProjectionRequestIDs[requestID] = struct{}{}
 		}
 		total += len(tokens)
 	}

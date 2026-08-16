@@ -753,35 +753,6 @@ func (f *factoryImpl) automaticTicksPaused() bool {
 	return f.state == interfaces.FactoryStatePaused
 }
 
-// GetEngineStateSnapshot returns the aggregate observability snapshot for
-// service-facing callers.
-func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	runtimeSnap := f.engine.GetRuntimeStateSnapshot()
-	runtimeSnap.StreamGenerationID = f.eventHistory.StreamGenerationID()
-
-	f.mu.RLock()
-	currentState := f.state
-	startedAt := f.startedAt
-	now := f.clock.Now()
-	f.mu.RUnlock()
-
-	worldState := f.currentWorldState(runtimeSnap.TickCount)
-	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap, worldState)
-	uptime := time.Duration(0)
-	if !startedAt.IsZero() {
-		uptime = now.Sub(startedAt)
-	}
-
-	snap := state.NewEngineStateSnapshot(runtimeSnap, string(currentState), uptime, f.topology)
-	snap.LifecycleControlStatus = lifecycleControlStatusFromWorldState(worldState, string(currentState))
-	snap.EnabledTransitions = scheduler.NewEnablementEvaluator(
-		f.logger,
-		f.clock.Now,
-		f.cfg.runtimeConfig,
-	).FindEnabledTransitionsWithSnapshot(ctx, f.topology, &snap)
-	return &snap, nil
-}
-
 // GetFactoryEvents returns the current-process canonical event history.
 func (f *factoryImpl) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
 	return f.eventHistory.CanonicalEvents(), nil

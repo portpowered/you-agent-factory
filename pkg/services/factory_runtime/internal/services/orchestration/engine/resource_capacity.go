@@ -167,6 +167,7 @@ func (e *FactoryEngine) reserveResourceCapacityLease(
 	e.nextResourceLeaseID++
 	leaseID = fmt.Sprintf("resource-lease-%d", e.nextResourceLeaseID)
 	e.resourceLeases[leaseID] = resourceCapacityLease{resourceID: resourceID, token: token}
+	e.publishRuntimeSnapshotLocked()
 	return leaseID, e.factoryRevision, nil, nil
 }
 
@@ -196,6 +197,7 @@ func (e *FactoryEngine) releaseResourceCapacityLease(leaseID string) {
 	token := lease.token
 	token.PlaceID = resourceAvailablePlaceID(lease.resourceID)
 	e.runtimeState.Marking.AddToken(&token)
+	e.publishRuntimeSnapshotLocked()
 	e.signalResourceCapacityChangedLocked()
 }
 
@@ -296,6 +298,7 @@ func (e *FactoryEngine) SetResourceCapacityAdmitted(_ context.Context, request f
 	result.AvailableCount = len(e.runtimeState.Marking.TokensInPlace(placeID))
 	result.InUseCount = e.resourceInUseCountLocked(result.ResourceID)
 	result.MinimumCapacity = result.InUseCount
+	e.publishRuntimeSnapshotLocked()
 	e.signalResourceCapacityChangedLocked()
 	return result, nil
 }

@@ -686,17 +686,30 @@ func (r *registry) ListWorkerSessionObservations(
 	ctx context.Context,
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
+	listStartedAt := r.clock.Now()
 	query, err := r.parseObservationListQuery(ctx, req)
 	if err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
+	idCollectionStartedAt := r.clock.Now()
 	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	idCollectionDuration := r.clock.Now().Sub(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
+	projectionStartedAt := r.clock.Now()
 	observations, err := r.projectObservationList(ctx, pageIDs)
 	if err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	nextToken := observationListNextToken(ids, pageIDs)
+	r.logger.Debug(
+		"worker session top-level observation list phases",
+		"scope", string(query.scope),
+		"candidate_count", len(ids),
+		"result_count", len(observations),
+		"id_collection_duration_ms", idCollectionDuration.Milliseconds(),
+		"projection_duration_ms", r.clock.Now().Sub(projectionStartedAt).Milliseconds(),
+		"total_duration_ms", r.clock.Now().Sub(listStartedAt).Milliseconds(),
+	)
 	r.logger.Info("worker session top-level observation list", "scope", string(query.scope), "state_count", len(req.States), "result_count", len(observations), "has_next", nextToken != "")
 	return workersessions.ListWorkerSessionObservationsResult{
 		Observations: observations,

@@ -14,6 +14,8 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type engineStateSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+
 // RuntimeState is the unified mutable state container for the engine loop.
 // All per-tick state lives here so it can be snapshotted atomically.
 type RuntimeState struct {
@@ -194,9 +196,129 @@ func (e *FactoryEngine) GetMarking() petri.MarkingSnapshot {
 
 // GetRuntimeStateSnapshot returns a full snapshot of the engine's runtime state.
 func (e *FactoryEngine) GetRuntimeStateSnapshot() interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	if e == nil || e.runtimeState == nil {
+		return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}
+	}
+	// Published snapshots are canonical runtime boundaries, not a TTL cache:
+	// while the next tick is busy, they define the consistent boundary readers
+	// can observe without waiting for that tick to finish.
+	// Preserve the current state when the engine is idle, including explicit
+	// owner-local mutations made by synchronous controls. TryLock is deliberate:
+	// a busy tick must fall through to the last complete published boundary.
+	if e.mu.TryLock() {
+		snapshot := e.runtimeState.Snapshot()
+		e.storePublishedSnapshot(snapshot)
+		e.mu.Unlock()
+		return cloneEngineStateSnapshot(snapshot)
+	}
+	if published := e.publishedSnapshot.Load(); published != nil {
+		return cloneEngineStateSnapshot(*published)
+	}
+	// NewFactoryEngine always publishes an initial snapshot. Keep a safe
+	// fallback for package-local zero-value fixtures that bypass the constructor.
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.runtimeState.Snapshot()
+	snapshot := e.runtimeState.Snapshot()
+	e.storePublishedSnapshot(snapshot)
+	e.mu.Unlock()
+	return cloneEngineStateSnapshot(snapshot)
+}
+
+// publishRuntimeSnapshotLocked records one detached, internally consistent
+// boundary. The caller must hold e.mu; the published value is never returned
+// directly because callers receive a detached clone.
+func (e *FactoryEngine) publishRuntimeSnapshotLocked() {
+	if e == nil || e.runtimeState == nil {
+		return
+	}
+	e.storePublishedSnapshot(e.runtimeState.Snapshot())
+}
+
+func (e *FactoryEngine) storePublishedSnapshot(snapshot engineStateSnapshot) {
+	e.publishedSnapshot.Store(&snapshot)
+}
+
+func cloneEngineStateSnapshot(snapshot engineStateSnapshot) engineStateSnapshot {
+	clone := snapshot
+	clone.Marking = cloneMarkingSnapshot(snapshot.Marking)
+	clone.Dispatches = cloneDispatchEntries(snapshot.Dispatches)
+	if snapshot.Results != nil {
+		clone.Results = make([]workerexecution.WorkResult, len(snapshot.Results))
+		for index := range snapshot.Results {
+			clone.Results[index] = deepCopyWorkResult(snapshot.Results[index])
+		}
+	}
+	if snapshot.DispatchHistory != nil {
+		clone.DispatchHistory = make([]interfaces.CompletedDispatch, len(snapshot.DispatchHistory))
+		for index := range snapshot.DispatchHistory {
+			clone.DispatchHistory[index] = deepCopyCompletedDispatch(snapshot.DispatchHistory[index])
+		}
+	}
+	if snapshot.ActiveThrottlePauses != nil {
+		clone.ActiveThrottlePauses = append([]interfaces.ActiveThrottlePause(nil), snapshot.ActiveThrottlePauses...)
+	}
+	if snapshot.EnabledTransitions != nil {
+		clone.EnabledTransitions = append([]interfaces.EnabledTransition(nil), snapshot.EnabledTransitions...)
+	}
+	return clone
+}
+
+func cloneMarkingSnapshot(snapshot petri.MarkingSnapshot) petri.MarkingSnapshot {
+	clone := snapshot
+	if snapshot.Tokens != nil {
+		clone.Tokens = make(map[string]*factorytoken.Token, len(snapshot.Tokens))
+		for id, token := range snapshot.Tokens {
+			if token == nil {
+				clone.Tokens[id] = nil
+				continue
+			}
+			value := factorytoken.Clone(*token)
+			clone.Tokens[id] = &value
+		}
+	}
+	if snapshot.PlaceTokens != nil {
+		clone.PlaceTokens = make(map[string][]string, len(snapshot.PlaceTokens))
+		for placeID, tokenIDs := range snapshot.PlaceTokens {
+			clone.PlaceTokens[placeID] = append([]string(nil), tokenIDs...)
+		}
+	}
+	if snapshot.ParentChildRegistrations != nil {
+		clone.ParentChildRegistrations = make(petri.ParentChildRegistrationProjection, len(snapshot.ParentChildRegistrations))
+		for parentID, registration := range snapshot.ParentChildRegistrations {
+			children := factorytoken.CloneSlice(registration.Children)
+			clone.ParentChildRegistrations[parentID] = petri.ParentChildRegistrationSet{
+				Children: children,
+				Complete: registration.Complete,
+			}
+		}
+	}
+	if snapshot.TraceContext != nil {
+		clone.TraceContext = make(map[string]string, len(snapshot.TraceContext))
+		for key, value := range snapshot.TraceContext {
+			clone.TraceContext[key] = value
+		}
+	}
+	return clone
+}
+
+func cloneDispatchEntries(entries map[string]*interfaces.DispatchEntry) map[string]*interfaces.DispatchEntry {
+	if entries == nil {
+		return nil
+	}
+	clone := make(map[string]*interfaces.DispatchEntry, len(entries))
+	for id, entry := range entries {
+		if entry == nil {
+			clone[id] = nil
+			continue
+		}
+		copyEntry := *entry
+		copyEntry.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(entry.ExpectedArtifactContext)
+		copyEntry.ConsumedTokens = factorytoken.CloneSlice(entry.ConsumedTokens)
+		if entry.HeldMutations != nil {
+			copyEntry.HeldMutations = append([]interfaces.MarkingMutation(nil), entry.HeldMutations...)
+		}
+		clone[id] = &copyEntry
+	}
+	return clone
 }
 
 // GetResultBuffer returns the runtime-owned work result buffer used to hand

@@ -506,6 +506,7 @@ func (r *registry) finishObservationLocked(id string, endedAt time.Time) {
 }
 
 func (r *registry) ListObservations(ctx context.Context, req workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	listStartedAt := r.clock.Now()
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session observation list rejected", "outcome", "invalid")
 		return workersessions.ListObservationsResult{}, err
@@ -526,12 +527,14 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		}
 	}
 	r.mu.RUnlock()
+	idCollectionDuration := r.clock.Now().Sub(listStartedAt)
 	if len(ids) == 0 {
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
 	}
 	sortObservationOrder(ids)
 
+	projectionStartedAt := r.clock.Now()
 	observations := make([]workersessions.Observation, 0, len(ids))
 	for _, item := range ids {
 		projected, err := r.projectObservation(ctx, item.id)
@@ -541,6 +544,14 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		observations = append(observations, projected)
 	}
 	sortObservationAttempts(observations)
+	r.logger.Debug(
+		"worker session observation list phases",
+		"candidate_count", len(ids),
+		"result_count", len(observations),
+		"id_collection_duration_ms", idCollectionDuration.Milliseconds(),
+		"projection_duration_ms", r.clock.Now().Sub(projectionStartedAt).Milliseconds(),
+		"total_duration_ms", r.clock.Now().Sub(listStartedAt).Milliseconds(),
+	)
 	r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "success", "result_count", len(observations))
 	return workersessions.ListObservationsResult{Observations: observations}, nil
 }
