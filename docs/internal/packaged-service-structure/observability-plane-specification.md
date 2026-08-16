@@ -1,8 +1,8 @@
 # Observability Plane Packet Specification
 
-Status: Story 003 post-BTRC-P6 strangler packet register authored; the current
-tree inventory and target-contract baseline are complete. Story 004 owns the
-final deletion, enforcement, verification, and delivery closure.
+Status: Story 004 deletion, enforcement, verification, and delivery closure
+authored; the current-tree inventory, target-contract baseline, and post-P6
+packet register are complete.
 
 This document is the authoritative starting point for a backend logs, metrics,
 and traces plane. This iteration is documentation-only. It does not add
@@ -1109,12 +1109,27 @@ legacy allowlist entries and fixtures are removed.
 
 #### Strangler and deletion register
 
-| Removal | Owning packet | Zero-consumer/checker condition | Preserved observable behavior |
-| --- | --- | --- | --- |
-| Legacy logger interface, variadic call path, and direct constructor | `OBS-07L` logging deletion slice | Exact import and symbol audit is zero outside the new adapter; `cmd/loggingboundarycheck` passes with no legacy logger allowance. | Severity, safe fields, terminal/runtime destinations, and correlation remain observable through the typed logger. |
-| Untyped runtime metrics sink/opener and metrics-specific JSONL compatibility | `OBS-07M` metrics deletion slice | Exact import/symbol audit is zero; typed descriptor, aggregation, diagnostic-reference, rotation, and close tests pass. | Counter/gauge/histogram meanings, local diagnostics, bounded retention, and exporter isolation remain observable. |
-| Wire runtime log/metric adapters and stale compatibility fixtures | `OBS-07L` / `OBS-07M` | No root construction or test fixture references; root lifecycle and process behavior pass. | Inert construction, activation/unwind, cleanup, and runtime artifact diagnostics remain stable. |
-| Factory Runtime compatibility metric projection | `OBS-07M` | Last mapper/test caller is migrated and a typed descriptor preserves every retained measurement. | Queue, dispatch, provider, lifecycle, state, and in-flight observations remain joinable. |
+The following ledger is exhaustive for scheduled removals in this
+specification. A row may be closed only after its replacement has already
+landed on `main`; a planned replacement, a matching source count, or a green
+compile without the observable guard is insufficient. The exact import and
+symbol audits are deletion evidence, not product behavior tests.
+
+| ID / exact old surface | Previously landed replacement | Owning deletion packet | Zero-consumer and checker condition | Preserved observable behavior |
+| --- | --- | --- | --- | --- |
+| `OBS-D01`: `pkg/platform/logging.Logger` and its `Debug`, `Info`, `Warn`, `Error`, and `Verbose` variadic methods; `NoopLogger`, `EnsureLogger`, `NewZapLogger`, `NewDefaultLogger`, `BuildLogger`, `BuildTerminalMutedLogger`, `BuildTerminalLogger`, `RuntimeLogConfig`, `RuntimeLogSink`, `RuntimeLogOpener`, `RuntimeLogOpeningRequest`, `RuntimeLogArtifact`, `RuntimeLogsRoot`, `legacyRuntimeLogDir`, and the private `runtimeLogWriter` acquisition/output path. | `OBS-01` typed context logger plus the `OBS-02` provider/local adapter; `OBS-03`–`OBS-06` migrate and exercise callers. The successor may retain only the policy-free `rollingfile.Writer` and `runtimeartifact.Reserver` effects. | `OBS-07L` | `rg` finds no direct legacy import or symbol reference in production or test Go files outside the replacement adapter; `cmd/loggingboundarycheck` passes with no `OBS-D01` allowlist entry; logger-construction, local-artifact, and redaction guards are green. | Severity, safe fields, terminal/runtime destinations, rotation/permissions, cancellation/error classification, and Work/Factory Session/Worker Session correlation remain observable. |
+| `OBS-D02`: `pkg/platform/metrics.RuntimeMetricsConfig`, `RuntimeMetricsOpeningRequest`, `RuntimeMetricsOpener`, `RuntimeMetricsSink`, `WriteMetric(context.Context, any)`, and their untyped JSONL record path. | `OBS-01` typed metric descriptors/diagnostic references plus the `OBS-02` provider-owned lifecycle and local adapter; `OBS-03`–`OBS-06` migrate callers. | `OBS-07M` | Exact direct imports and exported/internal symbol references are zero outside the replacement adapter; typed aggregation, bounded diagnostic-reference, atomic write, failure, and close tests pass. | Counter/gauge/histogram meaning, units, bounded retention, local diagnostics, exporter isolation, and close behavior remain observable. |
+| `OBS-D03`: `pkg/wire` construction adapters `runtimeLogSinkAdapter`, `runtimeMetricRecordWriterAdapter`, and any legacy runtime-log/metrics owner closures that adapt the old platform surfaces. | `OBS-02` provider-owned ports and lifecycle constructed through the post-P6 public roots. | `OBS-07L` / `OBS-07M` | `rg` finds no adapter type, constructor, or root wiring reference; root activation, failure unwind, close-once, and process behavior tests pass. | Construction, activation/unwind, cleanup, runtime artifact ownership, and primary-error preservation remain observable. |
+| `OBS-D04`: Factory Runtime compatibility vocabulary `RuntimeMetricRecord`, `RuntimeMetricRecordWriter`, the legacy `Fields.TraceID` projection, and mapper/test fixtures whose only purpose is to feed `WriteMetric`. | `OBS-01` typed metric point with bounded diagnostic reference and the provider contract from `OBS-02`; the owning Runtime root retains product measurements, not the platform serializer shape. | `OBS-07M` | The last mapper and test fixture caller is migrated; no legacy projection type or writer reference remains; a typed descriptor preserves every retained measurement and its bounded join reference. | Queue, dispatch, provider, lifecycle, state, in-flight, Work, and session observations remain joinable without turning unique IDs into metric aggregation labels. |
+| `OBS-D05`: metrics-specific JSONL opener/path policy and private serializer (`RuntimeMetricsRoot`, `runtimeMetricsWriter`, and metrics-owned rolling-file setup) that exists only to support the old untyped sink. | `OBS-02` local diagnostic adapter using the retained policy-free `rollingfile.Writer` and `runtimeartifact.Reserver` effects. | `OBS-07M` | Successor tests observe local output, rotation, permissions, close, post-close behavior, and exporter-failure isolation; the old opener/path symbols have no callers before removal. | Local diagnostic output, bounded rotation/retention, artifact ownership, and failure isolation remain observable. |
+| `OBS-D06`: temporary `cmd/loggingboundarycheck` compatibility allowlist entries and fixtures that permit the old logger/metrics imports, constructors, or calls during migration. | The retained checker rules from `OBS-06`–`OBS-07`, with the typed boundary and dependency-direction rules enabled by default. | `OBS-07L` / `OBS-07M` | Every allowlist entry has a named owner and deletion packet while migration is active; after the corresponding rows close, the entry and fixture are removed and the checker reports zero legacy allowances. | New legacy callers remain rejected, migrated boundaries remain context-aware, and the enforcement signal itself remains available for future regressions. |
+
+No other surface is scheduled for deletion by `OBS-07`. In particular,
+`pkg/platform/rollingfile.Writer`, `pkg/platform/runtimeartifact.Reserver`,
+and the retained `cmd/loggingboundarycheck` command are policy-free effects or
+enforcement infrastructure and remain available to their named successors.
+They are explicitly retained, not silently counted as deleted. A future plan
+must add a new ledger row before scheduling their removal.
 
 #### Behavioral guards and static gates
 
@@ -1146,3 +1161,117 @@ executor-slot pressure, timeout/terminal evidence, and cross-signal
 correlation before broad caller migration. It does not add production code or
 dependencies in this authoring lane, and it contains no resumption design or
 reserved resumption packet.
+
+## Story 004 closure: enforcement, verification, and delivery
+
+Story 004 closes the specification, not the future implementation. It makes
+the deletion preconditions, static ratchet, behavior evidence, and handoff
+rules reviewable before any production packet is started.
+
+### Phased enforcement ratchet
+
+`cmd/loggingboundarycheck` remains the preferred observability-specific
+enforcement point. Its existing Go AST/import scan is extended in place; no
+new filesystem-scanning checker, source-inventory test, route/command
+inventory, or second enforcement command is introduced. The checker may
+report a violation of the boundary shape, but behavioral tests remain the
+proof that signals contain the right values.
+
+| Phase | Owner | Gate and allowed compatibility | Failure condition and exit evidence |
+| --- | --- | --- | --- |
+| `E0` — characterize | `OBS-01`/`OBS-02` owners with `cmd/loggingboundarycheck` | Run the existing checker tests and record the exact legacy imports, constructors, and allowlist entries that OBS-01–OBS-02 must coexist with. Existing owner files are the only temporary exceptions. | The baseline does not measure, or a new legacy acquisition path is accepted without a named owner. The packet stops and adds a characterization case before migration. |
+| `E1` — introduce the replacement | Platform signal owner and checker maintainer | Extend `cmd/loggingboundarycheck` to reject new direct legacy logger/metrics imports, constructors, dot-imports, and global logger acquisition outside the named owner/adapter allowlist. Require every new typed signal method and exported caller boundary to accept and forward `context.Context`; reject an OTel SDK import outside the platform owner once that dependency exists. | A changed caller adds a legacy path, drops `context.Context`, or imports an exporter/SDK outside the platform boundary. The allowlist entry must name its owner, expiry packet, and deletion row; an unowned exception fails the packet. |
+| `E2` — migrate in batches | Owning service/root caller teams with checker maintainer | Keep the checker green after each caller-family batch. The checker verifies the static correlation shape: the typed emit call receives the operation context and no package stores correlation in a process-global mutable variable. Runtime tests verify the values and absent/unknown semantics that static analysis cannot prove. | A new caller uses the old API, a migrated boundary cannot be traced to its context, or a service reaches an internal provider/exporter type. The batch is reverted or split; compatibility is not widened to hide the violation. |
+| `E3` — close the caller surface | `OBS-06`/`OBS-07` owners, checker maintainer, and package-gate owners | Remove family-specific allowlist entries as their deletion rows close. Run `cmd/loggingboundarycheck`, `make pkg-boundary`, and `make pkg-structure`; the existing package gates enforce general dependency direction while the logging checker owns the signal-boundary rules. | Any service imports a peer internal package, any platform package takes product policy, any legacy import remains outside an explicitly retained effect, or the checker cannot report property-specific output. `OBS-07` remains open. |
+| `E4` — prevent regression | `cmd/loggingboundarycheck` maintainer and owning platform team | Retain the checker and its focused fixtures after OBS-07, but with zero legacy compatibility allowances. Add only behavior-shaped fixtures for a new violation (legacy acquisition, missing context, forbidden SDK/import direction); do not turn the checker into a repository inventory test. | A future change reintroduces a retired import/call, hidden global correlation, or forbidden dependency direction. The owning PR fails before review; no deletion row is reopened unless the behavior replacement itself regresses. |
+
+The checker is deliberately narrow: it protects the path and dependency
+direction, not metric cardinality, identifier correctness, exporter health, or
+the presence of a particular registration. Those properties belong to the
+behavioral matrix below. A passing `rg` count or checker result never closes a
+deletion row by itself.
+
+### Behavioral verification matrix
+
+Verification is layered around observable outputs and failure behavior. The
+future packet author should use injected clocks, capture providers, controlled
+exporter failures, and deterministic cancellation; sleeps and timeout padding
+are not synchronization. The named guards below are behavior tests, not
+source, route, registration, documentation-link, command, or asset-inventory
+meta-tests.
+
+| Behavior to prove | Required direct evidence | Execution tier and failure meaning |
+| --- | --- | --- |
+| Typed logs, metric points, and spans carry safe fields and preserve absent/unknown semantics. | Focused `pkg/platform` tests assert field typing, redaction, severity/status/error mapping, units, bounded attributes, and no unique Work/Factory Session/Worker Session ID in metric aggregation dimensions. | Local platform unit tests; exporter/provider contract tests in the PR backend tier. A dropped or unsafe field is a contract failure, not a reason to weaken the assertion. |
+| Exporter and local-diagnostic failure is isolated from product work. | Platform/provider tests inject startup, enqueue, flush, write, close, and timeout failures; the caller still gets the documented product outcome, cleanup runs once, and the failure is observable in the bounded diagnostic path. | Focused platform/provider tests plus `go test -race`. A provider failure may degrade telemetry, never the Work/Factory Session terminal result or lifecycle unwind. |
+| Context and correlation survive service/root and asynchronous handoffs. | Service and root tests start one scope, derive a child scope for stage/transition and attempt, hand it through goroutine/queue callbacks, preserve cancellation, and assert Work ID, Factory Session ID, Worker Session ID, stage/transition, and attempt on every joinable log/span. Missing values are explicit absent/unknown values. | Focused service/root tests and race execution. A value silently read from global state or lost at a handoff fails the packet. |
+| Stale Worker Session diagnosis is direct. | A controlled-clock functional scenario creates an aged RUNNING Worker Session, associates its Work, executor slot, timeout, daemon boundary, and terminal attempt, then observes the same scope in public state plus log, metric diagnostic reference, and span output. It asserts the leaked identifier is present in daemon evidence. | Runtime/Workers functional tier and `go test -race`; the supplied four-instrument incident is the regression scenario, not a retention or deletion rule. |
+| Terminal signals are exactly once under duplicate completion, cancellation, timeout, and exporter failure. | Runtime/Worker Session integration tests race duplicate callbacks and cancellation, then assert one terminal state and one terminal signal per attempt while non-terminal updates remain ordered. | Focused integration and race tier. Duplicate or missing terminal evidence is a product regression even if the exporter is unavailable. |
+| Cross-signal joins are bounded and useful. | A public operation captures one Work/Factory Session/Worker Session/stage/attempt scope, reads log and span attributes, and follows only a bounded metric diagnostic reference/exemplar to the corresponding metric record; no high-cardinality ID is an aggregation label. | Functional cross-signal test with a capture exporter and local artifact; PR functional tier. The test asserts emitted values and join results, never implementation registration or source topology. |
+| Existing local artifacts and public outcomes survive the strangler. | Runtime log/diagnostic tests observe path ownership, rotation, permissions, close/post-close behavior, CLI/API terminal shape, and replay/session isolation through the successor after each legacy slice is removed. | Focused platform/runtime and API/CLI functional tiers. A retained policy-free effect is tested as an effect; it is not mislabeled as a deleted compatibility surface. |
+
+The deletion audits and checker output are necessary static preconditions for
+OBS-D01–OBS-D06, but they are not product proof. In particular, do not add a
+test that scans source files, counts routes or commands, enumerates
+registrations/packages, checks documentation links, or inspects asset bundles
+to claim observability behavior. If a static gate cannot emit the property it
+claims to measure, it cannot be cited as passing evidence.
+
+### Final authoring reconciliation
+
+At the final implementation head, the author records the result of
+`git diff --name-only origin/main...HEAD` and `git diff --check`. The expected
+tracked diff for this lane is exactly:
+
+```text
+docs/internal/packaged-service-structure/observability-plane-specification.md
+```
+
+`prd.json` and `progress.txt` are local work-item scaffolding and remain
+untracked/ignored; they are never staged or included in the PR. No index or
+catalog update is required: neighboring packet specifications are standalone,
+and no repository convention demonstrably requires adding this document to an
+index. The authoring diff must contain no `.go` file, `go.mod`, `go.sum`,
+`api/`, `ui/`, `Makefile`, baseline, generated artifact, existing document,
+production instrumentation, exporter/dependency wiring, BTRC composition
+surface, or resumption-plane design/change. A generated or baseline change is
+not an acceptable way to make a documentation gate green.
+
+The final content review checks architecture fit against the public platform
+and service roots, confirms every package/interface/dependency packet remains
+after BTRC P6, confirms all OBS-D rows name a landed replacement and
+observable condition, and confirms retained rolling-file/runtime-artifact
+effects are not reported as deleted. It also checks that the incident dates
+remain historical context rather than deletion or retention conditions.
+
+### Delivery Loop
+
+The implementation and review stages have separate finish lines:
+
+1. The implementation stage marks the delivery criterion satisfied only after
+   the final documentation head is committed and pushed, the PR is open, CI
+   has started on that exact head, and all blocking review conversation on the
+   current head is addressed.
+2. CI-run URLs, failing-test explanations, and baseline-flake notes belong in
+   a PR comment. They must never be committed as an audit, verification, or
+   CI-results file because that would create a new head and invalidate the run.
+3. After that finish line, the implementation stage stops. It does not poll or
+   re-check CI to await a terminal result.
+4. The review stage owns driving required CI to terminal-and-passing,
+   resolving merge conflicts, and merging the PR. Merge is the lane-wide
+   completion boundary; an acceptance criterion mentioning “merged” does not
+   extend the implementation stage.
+
+This delivery loop does not introduce a resumption packet, resumption state,
+resumption API, or resumption migration seam.
+
+### Story 004 acceptance closure
+
+Story 004 is complete when the OBS-D01–OBS-D06 ledger is exhaustive and
+distinguishes retained effects, the E0–E4 ratchet has a named owner and
+property-specific gate at each phase, the behavioral matrix proves signal
+failure isolation/correlation/stale-session diagnosis/exactly-once terminal
+behavior at the appropriate layers, and the final reconciliation plus
+Delivery Loop makes the documentation-only handoff explicit. No production
+code, dependency, generated contract, baseline, composition surface, or
+resumption design is part of this authoring story.
