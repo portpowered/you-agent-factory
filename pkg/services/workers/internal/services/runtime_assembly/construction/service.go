@@ -69,7 +69,6 @@ type Result struct {
 // Service is a stateless worker executor constructor.
 type Service struct {
 	providers          providers.Service
-	scriptFactory      *workerexecutor.ScriptFactory
 	runnerRegistry     runners.Service
 	interpolation      interfaces.InvocationInterpolationService
 	executionPolicy    interfaces.WorkstationExecutionPolicyService
@@ -88,7 +87,6 @@ type Service struct {
 // New constructs a worker executor service from process-owned factories.
 func New(
 	providerFactory providers.Service,
-	scriptFactory *workerexecutor.ScriptFactory,
 	interpolation interfaces.InvocationInterpolationService,
 	executionPolicy interfaces.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
@@ -104,7 +102,6 @@ func New(
 	}
 	return &Service{
 		providers:         providerFactory,
-		scriptFactory:     scriptFactory,
 		interpolation:     interpolation,
 		executionPolicy:   executionPolicy,
 		factoryDocs:       factoryDocs,
@@ -161,9 +158,7 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 }
 
 // WithRunnerRegistry returns a service copy that routes Agent and Inference
-// construction through the shared immutable Workers registry. Script
-// construction remains on its retained compatibility factory until the
-// runtime-assembly migration removes that caller.
+// construction through the shared immutable Workers registry.
 func (s *Service) WithRunnerRegistry(registry runners.Service) *Service {
 	if s == nil {
 		return nil
@@ -173,12 +168,11 @@ func (s *Service) WithRunnerRegistry(registry runners.Service) *Service {
 	return &clone
 }
 
-// WithExecutionFactories returns a service copy that uses replacement provider
-// and script factories while preserving the narrow resolver callbacks used by
+// WithExecutionFactories returns a service copy that uses a replacement
+// provider service while preserving the narrow resolver callbacks used by
 // legacy construction tests.
 func (s *Service) WithExecutionFactories(
 	providerFactory providers.Service,
-	scriptFactory *workerexecutor.ScriptFactory,
 ) *Service {
 	if s == nil {
 		return nil
@@ -186,9 +180,6 @@ func (s *Service) WithExecutionFactories(
 	clone := *s
 	if providerFactory != nil {
 		clone.providers = providerFactory
-	}
-	if scriptFactory != nil {
-		clone.scriptFactory = scriptFactory
 	}
 	return &clone
 }
@@ -235,7 +226,7 @@ func (s *Service) Build(
 	return s.buildConfiguredWorker(
 		runtimeConfig, def, factoryRunnerID, workflowContext, logger,
 		invocationSkipPermissionsOverride, providerOverride, providersService,
-		inferenceProgressPublisher, scriptRecorder, inferenceRecorder, agentRunRecorder,
+		inferenceProgressPublisher, inferenceRecorder, agentRunRecorder,
 		clock, processEnvironment, currentWorkingDirectory, runnerDecorators,
 	)
 }
@@ -250,7 +241,6 @@ func (s *Service) buildConfiguredWorker(
 	providerOverride providers.Service,
 	providersService providers.Service,
 	inferenceProgressPublisher workers.ProgressPublisher,
-	scriptRecorder workerexecutor.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	clock func() time.Time,
@@ -270,12 +260,6 @@ func (s *Service) buildConfiguredWorker(
 		return s.buildLogicalWorker(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, providersService,
 			clock, processEnvironment, currentWorkingDirectory,
-		)
-	case interfaces.WorkerTypeScript:
-		return s.buildScriptWorker(
-			runtimeConfig, def, factoryRunnerID, workflowContext, logger, providersService,
-			inferenceProgressPublisher, scriptRecorder, clock, processEnvironment,
-			currentWorkingDirectory,
 		)
 	default:
 		return Result{}, nil
@@ -331,34 +315,6 @@ func (s *Service) buildLogicalWorker(
 ) (Result, error) {
 	return workstationResult(
 		runtimeConfig, factoryRunnerID, workflowContext, logger, nil, s.interpolation,
-		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
-		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
-		providersService, s.resolveRunner, s.resolveProvider,
-	), nil
-}
-
-func (s *Service) buildScriptWorker(
-	runtimeConfig interfaces.RuntimeConfigLookup,
-	def *interfaces.FactoryWorkerConfig,
-	factoryRunnerID string,
-	workflowContext *workerexecution.Context,
-	logger logging.Logger,
-	providersService providers.Service,
-	inferenceProgressPublisher workers.ProgressPublisher,
-	scriptRecorder workerexecutor.ScriptEventRecorder,
-	clock func() time.Time,
-	processEnvironment func() []string,
-	currentWorkingDirectory func() (string, error),
-) (Result, error) {
-	if s == nil || s.scriptFactory == nil {
-		return Result{}, fmt.Errorf("script worker factory is required")
-	}
-	direct, err := s.scriptFactory.New(def, logger, runtimeConfig.FactoryDir(), inferenceProgressPublisher, scriptRecorder, clock)
-	if err != nil {
-		return Result{}, err
-	}
-	return workstationResult(
-		runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
 		s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs,
 		s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
 		providersService, s.resolveRunner, s.resolveProvider,

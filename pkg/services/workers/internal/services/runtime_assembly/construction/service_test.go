@@ -15,9 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
@@ -26,7 +23,7 @@ func TestServiceBuildProviderBackedExposesDispatchAndDirectBoundaries(t *testing
 		"model": {Name: "model", Type: interfaces.WorkerTypeModel},
 	}}
 	decorated := false
-	result, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "model", "", nil, logging.NoopLogger{}, nil,
 		providerStub{}, nil, nil, nil, nil, testClock, os.Environ, os.Getwd,
 		[]RunnerDecorator{func(runner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
@@ -67,7 +64,7 @@ func TestServiceBuildLogicalWorkerHasDispatchOnly(t *testing.T) {
 	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
 		"logical": {Name: "logical", Type: interfaces.WorkstationTypeLogical},
 	}}
-	result, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimeConfig, "logical", "", nil, logging.NoopLogger{}, nil,
 		nil, nil, nil, nil, nil, testClock, os.Environ, os.Getwd, nil,
 	)
@@ -79,31 +76,8 @@ func TestServiceBuildLogicalWorkerHasDispatchOnly(t *testing.T) {
 	}
 }
 
-func TestServiceBuildScriptExposesDispatchAndDirectBoundaries(t *testing.T) {
-	if _, err := workerexecutor.NewScriptFactory(&mockworker.MockWorkerCommandRunner{}, nil, testFactoryDocs); err == nil {
-		t.Fatal("NewScriptFactory() succeeded without command clock")
-	}
-	scriptFactory, err := workerexecutor.NewScriptFactory(&mockworker.MockWorkerCommandRunner{}, workerprocess.ClockFunc(testClock), testFactoryDocs)
-	if err != nil {
-		t.Fatalf("NewScriptFactory() error = %v", err)
-	}
-	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
-		"script": {Name: "script", Type: interfaces.WorkerTypeScript, Command: "script-tool"},
-	}}
-	result, err := New(nil, scriptFactory, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
-		runtimeConfig, "script", "", nil, logging.NoopLogger{}, nil,
-		nil, nil, nil, nil, nil, testClock, os.Environ, os.Getwd, nil,
-	)
-	if err != nil {
-		t.Fatalf("Build() error = %v", err)
-	}
-	if result.Dispatch == nil || result.Direct == nil {
-		t.Fatalf("Build() = %#v, want dispatch and direct executors", result)
-	}
-}
-
 func TestServiceBuildUnknownWorkerReturnsEmptyResult(t *testing.T) {
-	result, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	result, err := New(nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		runtimefixtures.RuntimeConfigLookupFixture{}, "missing", "", nil,
 		logging.NoopLogger{}, nil, nil, nil, nil, nil, nil, testClock, os.Environ, os.Getwd, nil,
 	)
@@ -116,7 +90,7 @@ func TestServiceBuildUnknownWorkerReturnsEmptyResult(t *testing.T) {
 }
 
 func TestServiceBuildRequiresRuntimeConfig(t *testing.T) {
-	if _, err := New(nil, nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
+	if _, err := New(nil, nil, nil, testFactoryDocs, nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}), testRetryRandom, platformfilesystem.Local{}).Build(
 		nil, "", "", nil, logging.NoopLogger{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	); err == nil {
@@ -132,7 +106,7 @@ func TestServiceWithRunnerSelectionReturnsConfiguredCopy(t *testing.T) {
 	}
 
 	service := New(
-		nil, nil, nil, nil, testFactoryDocs, nil,
+		nil, nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -162,12 +136,12 @@ func TestServiceWithRunnerSelectionReturnsConfiguredCopy(t *testing.T) {
 func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testing.T) {
 	t.Parallel()
 
-	if configured := (*Service)(nil).WithExecutionFactories(nil, nil); configured != nil {
+	if configured := (*Service)(nil).WithExecutionFactories(nil); configured != nil {
 		t.Fatalf("nil Service.WithExecutionFactories() = %#v, want nil", configured)
 	}
 
 	service := New(
-		nil, nil, nil, nil, testFactoryDocs, nil,
+		nil, nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -184,7 +158,7 @@ func TestServiceWithExecutionFactoriesPreservesRunnerAndProviderWiring(t *testin
 	configured := service.
 		WithRunnerSelection(resolveRunner).
 		WithProviderIdentityResolution(resolveProvider)
-	rebuilt := configured.WithExecutionFactories(nil, nil)
+	rebuilt := configured.WithExecutionFactories(nil)
 	if rebuilt == configured {
 		t.Fatal("WithExecutionFactories() mutated the configured service")
 	}

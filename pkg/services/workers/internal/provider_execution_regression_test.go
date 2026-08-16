@@ -114,7 +114,6 @@ func providerInvocationRuntimeService(
 		providersService,
 		nil,
 		nil,
-		nil,
 		testFactoryDocsLoader,
 		testFactoryWorktreePreparer{},
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),

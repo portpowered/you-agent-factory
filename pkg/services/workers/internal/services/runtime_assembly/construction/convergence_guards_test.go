@@ -10,8 +10,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
@@ -28,17 +26,8 @@ func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
 		t.Fatalf("nil Service.WithRunnerRegistry() = %#v, want nil", got)
 	}
 
-	scriptFactory, err := workerexecutor.NewScriptFactory(
-		&mockworker.MockWorkerCommandRunner{},
-		workers.ClockFunc(testClock),
-		testFactoryDocs,
-	)
-	if err != nil {
-		t.Fatalf("NewScriptFactory() error = %v", err)
-	}
 	service := New(
 		nil,
-		scriptFactory,
 		nil,
 		nil,
 		testFactoryDocs,
@@ -61,28 +50,15 @@ func TestServiceCopiesRetainConvergedRunnerDependencies(t *testing.T) {
 	if configured.runnerRegistry != registry {
 		t.Fatal("WithRunnerRegistry() did not retain the injected registry")
 	}
-	if configured.scriptFactory != service.scriptFactory {
-		t.Fatal("WithRunnerRegistry() unexpectedly replaced the retained ScriptFactory")
-	}
-
-	replacement, err := workerexecutor.NewScriptFactory(
-		&mockworker.MockWorkerCommandRunner{},
-		workers.ClockFunc(testClock),
-		testFactoryDocs,
-	)
-	if err != nil {
-		t.Fatalf("replacement NewScriptFactory() error = %v", err)
-	}
-	rebuilt := configured.WithExecutionFactories(nil, replacement)
-	if rebuilt.runnerRegistry != registry || rebuilt.scriptFactory != replacement {
-		t.Fatal("WithExecutionFactories() dropped the retained registry or replacement factory")
+	rebuilt := configured.WithExecutionFactories(nil)
+	if rebuilt.runnerRegistry != registry {
+		t.Fatal("WithExecutionFactories() dropped the retained registry")
 	}
 }
 
 func TestAgentRunnerUsesRetainedRegistryForInferenceSelection(t *testing.T) {
 	registry := &captureRunnerRegistry{}
 	service := New(
-		nil,
 		nil,
 		nil,
 		nil,
@@ -121,7 +97,6 @@ func TestAgentRunnerUsesRetainedRegistryForInferenceSelection(t *testing.T) {
 
 func TestServiceBuildLogicalUsesConfiguredConstructionDependencies(t *testing.T) {
 	service := New(
-		nil,
 		nil,
 		nil,
 		nil,

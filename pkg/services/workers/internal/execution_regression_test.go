@@ -32,7 +32,6 @@ func agentInvocationRuntimeService(providersService providers.Service, publisher
 		providersService,
 		nil,
 		nil,
-		nil,
 		testFactoryDocsLoader,
 		testFactoryWorktreePreparer{},
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),

@@ -39,7 +39,7 @@ func applyReboundProvidersService(service *Service, providerService providers.Se
 	}
 	service.Root = service.Root.ReplaceRuntimeAssembly(assembly)
 	if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
-		service.executorBuilder = builder.WithExecutionFactories(providerService, nil)
+		service.executorBuilder = builder.WithExecutionFactories(providerService)
 	}
 	return nil
 }

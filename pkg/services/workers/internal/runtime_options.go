@@ -131,6 +131,13 @@ func (s *Service) buildConfiguredRuntimeWorkers(
 		if interfaces.IsPollerWorkerType(definition.Type) {
 			continue
 		}
+		// Script attempts are assembled by the request-scoped Execute service.
+		// Do not materialize a per-worker Workstation executor for them; the
+		// runtime boundary carries the detached command, environment, and
+		// recording inputs on each request.
+		if definition.Type == interfaces.WorkerTypeScript {
+			continue
+		}
 		result, err := s.executorBuilder.Build(
 			runtimeConfig, configured.Name, factoryRunnerID, workflowContext, logger,
 			invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher,

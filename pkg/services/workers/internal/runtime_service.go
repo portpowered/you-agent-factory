@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 	"go.uber.org/zap"
@@ -30,7 +29,6 @@ type Service struct {
 	models                            models.Service
 	modelsScope                       models.RuntimeScopeRef
 	providers                         providers.Service
-	scriptFactory                     *workerexecutor.ScriptFactory
 	executorBuilder                   workerconstruction.Builder
 	providerCommandRunner             workers.CommandRunner
 	scriptCommandRunner               workers.CommandRunner
@@ -209,7 +207,7 @@ func New(
 	if temporaryFiles == nil {
 		return nil, fmt.Errorf("construct Worker execution service: provider temporary filesystem is required")
 	}
-	scriptFactory, providerRunner, scriptRunner, err := buildExecutionFactories(
+	providerRunner, scriptRunner, err := buildExecutionFactories(
 		providerCommandRunner, scriptCommandRunner, workers.ClockFunc(clock), agyPTYAllocator,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		temporaryFiles,
@@ -220,7 +218,6 @@ func New(
 	decisionEnvelopeService := firstDecisionEnvelopeService(decisionEnvelopes)
 	executorBuilder := workerconstruction.New(
 		providersService,
-		scriptFactory,
 		interpolation,
 		executionPolicy,
 		factoryDocs,
@@ -233,7 +230,6 @@ func New(
 	return &Service{
 		models:                            modelService,
 		providers:                         providersService,
-		scriptFactory:                     scriptFactory,
 		executorBuilder:                   executorBuilder,
 		providerCommandRunner:             providerRunner,
 		scriptCommandRunner:               scriptRunner,

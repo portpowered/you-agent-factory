@@ -13,14 +13,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 )
 
 func TestWithRunnerSelectionPreservesRunnerSelectionWiring(t *testing.T) {
 	service := New(
-		nil, nil, nil, nil, testFactoryDocs, nil,
+		nil, nil, nil, testFactoryDocs, nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -35,18 +33,9 @@ func TestWithRunnerSelectionPreservesRunnerSelectionWiring(t *testing.T) {
 
 func TestServiceBuildExposesDispatchAndDirect(t *testing.T) {
 	factory := &cutoverProvidersFake{}
-	scriptFactory, err := workerexecutor.NewScriptFactory(
-		&mockworker.MockWorkerCommandRunner{},
-		workers.ClockFunc(testClock),
-		testFactoryDocs,
-	)
-	if err != nil {
-		t.Fatalf("NewScriptFactory() error = %v", err)
-	}
 
 	service := New(
 		factory,
-		scriptFactory,
 		nil,
 		nil,
 		testFactoryDocs,
@@ -91,7 +80,6 @@ func TestServiceBuildWithNilProgressPublisher(t *testing.T) {
 		factory,
 		nil,
 		nil,
-		nil,
 		testFactoryDocs,
 		nil,
 		workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
@@ -127,7 +115,6 @@ func TestServiceBuildWithNilProgressPublisher(t *testing.T) {
 
 func TestAgentRunnerProviderOverrideBuildsRunner(t *testing.T) {
 	service := New(
-		nil,
 		nil,
 		nil,
 		nil,
