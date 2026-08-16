@@ -208,7 +208,7 @@ func (f testRunnerOpeners) BuildRunner(
 		return runner, err
 	}
 	if f.visualizationSink != nil {
-		snapshots, ok := runner.(factoryruntime.LegacySnapshotProvider)
+		snapshots, ok := runner.(legacySnapshotProvider)
 		if ok {
 			snapshot, snapshotErr := snapshots.GetEngineStateSnapshot(ctx)
 			if snapshotErr == nil {

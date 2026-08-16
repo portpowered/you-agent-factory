@@ -65,7 +65,7 @@ func PublishFactoryChange(
 // ErrRuntimeNotAvailable reports that no hosted runtime bundle is available for an operation.
 var ErrRuntimeNotAvailable = fmt.Errorf("factory service runtime is not available")
 
-func hostedFactory(bundle *Bundle) (factory.Factory, error) {
+func hostedFactory(bundle *Bundle) (Engine, error) {
 	if bundle == nil || bundle.Factory == nil {
 		return nil, ErrRuntimeNotAvailable
 	}

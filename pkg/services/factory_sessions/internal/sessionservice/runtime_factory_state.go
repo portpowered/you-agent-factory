@@ -30,11 +30,11 @@ func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.Wo
 	var result work.WorkRequestSubmitResult
 	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
 		var submitErr error
-		legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(runtime).(factory.APIFactory)
+		submitter, ok := runtimebinding.ServiceForLiveRuntime(runtime).(runtimeWorkSubmitter)
 		if !ok {
-			return fmt.Errorf("legacy Factory Runtime submission is required")
+			return fmt.Errorf("Factory Runtime work submission is required")
 		}
-		result, submitErr = legacyRuntime.SubmitWorkRequest(ctx, request)
+		result, submitErr = submitter.SubmitWorkRequest(ctx, request)
 		return submitErr
 	})
 	return result, err
@@ -50,11 +50,11 @@ func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect 
 	if runtime == nil {
 		return nil, fmt.Errorf("factory runtime is not available")
 	}
-	legacyRuntime, ok := runtime.(factory.APIFactory)
+	events, ok := runtime.(runtimeEventSubscriber)
 	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
-	return legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
+	return events.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
@@ -193,11 +193,11 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	if target == nil {
 		return fmt.Errorf("factory runtime is not available")
 	}
-	legacyRuntime, ok := target.(factory.APIFactory)
+	submitter, ok := target.(runtimeWorkSubmitter)
 	if !ok {
-		return fmt.Errorf("legacy Factory Runtime submission is required")
+		return fmt.Errorf("Factory Runtime work submission is required")
 	}
-	if _, err := legacyRuntime.SubmitWorkRequest(ctx, request); err != nil {
+	if _, err := submitter.SubmitWorkRequest(ctx, request); err != nil {
 		return fmt.Errorf("submit initial work: %w", err)
 	}
 	fs.logger.Info("submitted initial work", zap.String("file", workFile))

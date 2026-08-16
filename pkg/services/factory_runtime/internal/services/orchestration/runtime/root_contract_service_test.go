@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -637,7 +638,7 @@ func canceledWorkersResult(
 
 func assertCanonicalResultProgression(
 	t *testing.T,
-	runtime factory.Factory,
+	runtime factoryhost.Engine,
 	ledger interface {
 		CallCount(string) int
 		CallsSnapshot() []string

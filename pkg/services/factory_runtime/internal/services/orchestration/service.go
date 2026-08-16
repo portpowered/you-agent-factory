@@ -81,9 +81,9 @@ type Binding interface {
 // CompileRequest carries the activated Factory definition inputs needed for
 // inert kind selection and compilation.
 type CompileRequest struct {
-	Config         *factorydefinitions.FactoryConfig
-	FactoryDir     string
-	SourceReader   factoryruntime.WorkflowSourceReader
+	Config       *factorydefinitions.FactoryConfig
+	FactoryDir   string
+	SourceReader factoryruntime.WorkflowSourceReader
 }
 
 // CompileResult is the inert compile success shape. It does not start a runtime

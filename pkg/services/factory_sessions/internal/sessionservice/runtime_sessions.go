@@ -55,9 +55,9 @@ func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessi
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.APIFactory)
+	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(runtimeWorkSubmitter)
 	if !ok {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
 	return legacyRuntime.SubmitWorkRequest(ctx, request)
 }
@@ -70,11 +70,21 @@ func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, wor
 	if err != nil {
 		return work.OperatorMoveResult{}, err
 	}
-	mover, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.WorkMover)
-	if !ok {
-		return work.OperatorMoveResult{}, fmt.Errorf("legacy Factory Runtime work move is required")
+	runtime := runtimebinding.ServiceForLiveRuntime(session.Runtime)
+	if runtime == nil {
+		return work.OperatorMoveResult{}, fmt.Errorf("Factory Runtime work move is required")
 	}
-	return mover.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
+	result, err := runtime.ControlMoveWork(ctx, factory.MoveWorkRequest{
+		WorkID: workID, StateName: stateName,
+		Source: factory.WorkMoveSource(work.WorkStateChangeSourceAPI), RequestID: requestID,
+	})
+	if err != nil {
+		return work.OperatorMoveResult{}, err
+	}
+	return work.OperatorMoveResult{
+		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
+		FromState: result.FromState, ToState: result.ToState,
+	}, nil
 }
 
 func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
@@ -85,9 +95,9 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.APIFactory)
+	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(runtimeEventSubscriber)
 	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
 	stream, err := legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
 	if err != nil || stream == nil {

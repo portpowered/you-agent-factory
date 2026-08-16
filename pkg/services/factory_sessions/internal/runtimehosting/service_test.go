@@ -26,7 +26,7 @@ type lifecycleRuntime struct {
 	failErr       error
 	completeErr   error
 	failedBecause error
-	hosted        factoryruntime.HostedInstance
+	hosted        factoryruntime.RuntimeRecord
 }
 
 func (*lifecycleRuntime) StartLifecycle(context.Context, context.Context) error {

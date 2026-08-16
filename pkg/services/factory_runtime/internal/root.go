@@ -18,6 +18,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+type runtimeWorkSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
+type runtimeEventSubscriber interface {
+	SubscribeFactoryEvents(
+		context.Context,
+		*interfaces.FactoryEventReconnectCursor,
+		interfaces.FactoryEventReconnectScope,
+	) (*interfaces.FactoryEventStream, error)
+}
+
 // Root retains process-scoped Factory Runtime dependencies. It is inert until
 // an injected activation operation has initialized and published a complete
 // Runtime delegate.
@@ -467,7 +479,7 @@ func (r *Root) SubmitWorkRequest(
 	ctx context.Context,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	service, ok := r.delegate().(factoryruntime.APIFactory)
+	service, ok := r.delegate().(runtimeWorkSubmitter)
 	if !ok {
 		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
 	}
@@ -481,7 +493,7 @@ func (r *Root) SubscribeFactoryEvents(
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
 ) (*interfaces.FactoryEventStream, error) {
-	service, ok := r.delegate().(factoryruntime.APIFactory)
+	service, ok := r.delegate().(runtimeEventSubscriber)
 	if !ok {
 		return nil, factoryruntime.ErrNotRunning
 	}
@@ -625,7 +637,7 @@ func (service *boundRuntimeService) InvokeWorker(ctx context.Context, req factor
 }
 
 func (service *boundRuntimeService) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	target, ok := service.target().(factoryruntime.APIFactory)
+	target, ok := service.target().(runtimeWorkSubmitter)
 	if !ok {
 		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
 	}
@@ -637,7 +649,7 @@ func (service *boundRuntimeService) SubscribeFactoryEvents(
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
 ) (*interfaces.FactoryEventStream, error) {
-	target, ok := service.target().(factoryruntime.APIFactory)
+	target, ok := service.target().(runtimeEventSubscriber)
 	if !ok {
 		return nil, factoryruntime.ErrNotRunning
 	}

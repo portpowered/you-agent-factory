@@ -52,7 +52,7 @@ type fakeLifecycle struct {
 	stopCalls        int
 	waitCalls        int
 	stopWorkerCalled bool
-	hosted           factoryruntime.HostedInstance
+	hosted           factoryruntime.RuntimeRecord
 }
 
 func (f *fakeLifecycle) StartLifecycle(context.Context, context.Context) error { return f.startErr }
@@ -86,7 +86,7 @@ func (f *fakeLifecycle) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
 }
 
 type fakeHostedInstance struct {
-	factoryruntime.HostedInstance
+	factoryruntime.RuntimeRecord
 	runtime factoryruntime.Service
 }
 

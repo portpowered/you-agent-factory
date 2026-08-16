@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -68,7 +69,7 @@ type testFactoryConfig struct {
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner
 }
 
-func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
+func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	cfg := &testFactoryConfig{runtimeMode: interfaces.RuntimeModeBatch, clock: platformclock.Real{}}
 	for _, opt := range opts {
 		opt(cfg)
@@ -325,7 +326,7 @@ func workTokens(inputs []workers.WorkInput) []workers.Token {
 
 func newTestFactoryWithScriptedLedger(
 	opts ...testFactoryOption,
-) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger, error) {
+) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger, error) {
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 	opts = append(opts, withFactoryEventHistory(ledger))
 	runtime, err := newTestFactory(opts...)
@@ -851,7 +852,7 @@ func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch work.W
 	return result, true, nil
 }
 
-func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+func submitWorkRequests(ctx context.Context, f factoryhost.Engine, reqs []work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 	return f.SubmitWorkRequest(ctx, work.WorkRequestFromSubmitRequests(reqs))
 }
 
@@ -950,7 +951,7 @@ func buildSimpleNetWithFailureArc() *state.Net {
 	return n
 }
 
-func newPassingInlineRuntime(t *testing.T) factory.Factory {
+func newPassingInlineRuntime(t *testing.T) factoryhost.Engine {
 	t.Helper()
 	f, err := newTestFactory(
 		withNet(buildSimpleNet()),
@@ -966,7 +967,7 @@ func newPassingInlineRuntime(t *testing.T) factory.Factory {
 
 func newPassingInlineRuntimeWithLedger(
 	t *testing.T,
-) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger) {
+) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger) {
 	t.Helper()
 	f, ledger, err := newTestFactoryWithScriptedLedger(
 		withNet(buildSimpleNet()),
@@ -980,7 +981,7 @@ func newPassingInlineRuntimeWithLedger(
 	return f, ledger
 }
 
-func tickableFactory(t *testing.T, f factory.Factory) TickableFactory {
+func tickableFactory(t *testing.T, f factoryhost.Engine) TickableFactory {
 	t.Helper()
 	tickable, ok := f.(TickableFactory)
 	if !ok {
@@ -989,7 +990,7 @@ func tickableFactory(t *testing.T, f factory.Factory) TickableFactory {
 	return tickable
 }
 
-func runtimeGeneratedEvents(t *testing.T, f factory.Factory) []factoryapi.FactoryEvent {
+func runtimeGeneratedEvents(t *testing.T, f factoryhost.Engine) []factoryapi.FactoryEvent {
 	t.Helper()
 	events, err := f.GetFactoryEvents(context.Background())
 	if err != nil {
@@ -1080,7 +1081,7 @@ func markingContainsWorkAtPlace(marking *petri.MarkingSnapshot, workID string, p
 
 func waitForAggregateSnapshot(
 	t *testing.T,
-	f factory.Factory,
+	f factoryhost.Engine,
 	match func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool,
 ) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
@@ -1440,7 +1441,7 @@ func sliceValueForRuntimeTest[T any](values *[]T) []T {
 
 type serviceModeRunHarness struct {
 	t       *testing.T
-	Factory factory.Factory
+	Factory factoryhost.Engine
 	cancel  context.CancelFunc
 	errCh   chan error
 }
@@ -1492,7 +1493,7 @@ func (h *serviceModeRunHarness) stop() {
 	}
 }
 
-func submitPausedBufferTask(t *testing.T, f factory.Factory, requestID, traceID string) {
+func submitPausedBufferTask(t *testing.T, f factoryhost.Engine, requestID, traceID string) {
 	t.Helper()
 	result, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		RequestID:  requestID,
@@ -1520,7 +1521,7 @@ func waitForBlockingWorkerStart(t *testing.T, executor *blockingExecutor, errCh 
 
 func pollPausedSnapshot(
 	t *testing.T,
-	f factory.Factory,
+	f factoryhost.Engine,
 	duration time.Duration,
 	assertFn func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]),
 ) {
@@ -1536,7 +1537,7 @@ func pollPausedSnapshot(
 	}
 }
 
-func assertPausedSubmissionNotApplied(t *testing.T, f factory.Factory) {
+func assertPausedSubmissionNotApplied(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	pollPausedSnapshot(t, f, 300*time.Millisecond, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
 		if snap.FactoryState != string(interfaces.FactoryStatePaused) {
@@ -1551,7 +1552,7 @@ func assertPausedSubmissionNotApplied(t *testing.T, f factory.Factory) {
 	})
 }
 
-func observeNextBufferedResult(t *testing.T, f factory.Factory) <-chan struct{} {
+func observeNextBufferedResult(t *testing.T, f factoryhost.Engine) <-chan struct{} {
 	t.Helper()
 	impl, ok := f.(*factoryImpl)
 	if !ok || impl.dispatchFlow == nil {
@@ -1573,7 +1574,7 @@ func waitForBufferedResult(t *testing.T, written <-chan struct{}) {
 	}
 }
 
-func assertPausedWorkerResultBuffered(t *testing.T, f factory.Factory) {
+func assertPausedWorkerResultBuffered(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	snap, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1590,7 +1591,7 @@ func assertPausedWorkerResultBuffered(t *testing.T, f factory.Factory) {
 	}
 }
 
-func assertPausedSubmissionNotDone(t *testing.T, f factory.Factory) {
+func assertPausedSubmissionNotDone(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	snap, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1601,12 +1602,12 @@ func assertPausedSubmissionNotDone(t *testing.T, f factory.Factory) {
 	}
 }
 
-func assertPausedWorkerResultNotDone(t *testing.T, f factory.Factory) {
+func assertPausedWorkerResultNotDone(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	assertPausedWorkerResultBuffered(t, f)
 }
 
-func assertTaskDoneOnce(t *testing.T, f factory.Factory) {
+func assertTaskDoneOnce(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	snap, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1617,7 +1618,7 @@ func assertTaskDoneOnce(t *testing.T, f factory.Factory) {
 	}
 }
 
-func assertNoInFlightDispatches(t *testing.T, f factory.Factory) {
+func assertNoInFlightDispatches(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	snap, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1628,7 +1629,7 @@ func assertNoInFlightDispatches(t *testing.T, f factory.Factory) {
 	}
 }
 
-func waitForFactoryState(t *testing.T, f factory.Factory, want interfaces.FactoryState, timeout time.Duration) {
+func waitForFactoryState(t *testing.T, f factoryhost.Engine, want interfaces.FactoryState, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -1648,7 +1649,7 @@ func waitForFactoryState(t *testing.T, f factory.Factory, want interfaces.Factor
 	t.Fatalf("factory state = %q, want %q before timeout", snap.FactoryState, want)
 }
 
-func waitForWorkAtPlace(t *testing.T, f factory.Factory, placeID string, timeout time.Duration) {
+func waitForWorkAtPlace(t *testing.T, f factoryhost.Engine, placeID string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -1683,7 +1684,7 @@ func countTokensAtPlace(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapsh
 	return count
 }
 
-func submitTaskWithWorkID(t *testing.T, f factory.Factory, workID, traceID string) {
+func submitTaskWithWorkID(t *testing.T, f factoryhost.Engine, workID, traceID string) {
 	t.Helper()
 	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     workID,
@@ -1694,7 +1695,7 @@ func submitTaskWithWorkID(t *testing.T, f factory.Factory, workID, traceID strin
 	}
 }
 
-func assertWorkNotAtDonePlace(t *testing.T, f factory.Factory, workID string) {
+func assertWorkNotAtDonePlace(t *testing.T, f factoryhost.Engine, workID string) {
 	t.Helper()
 	snap, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1705,21 +1706,21 @@ func assertWorkNotAtDonePlace(t *testing.T, f factory.Factory, workID string) {
 	}
 }
 
-func assertWorksNotAtDonePlace(t *testing.T, f factory.Factory, workIDs []string) {
+func assertWorksNotAtDonePlace(t *testing.T, f factoryhost.Engine, workIDs []string) {
 	t.Helper()
 	for _, workID := range workIDs {
 		assertWorkNotAtDonePlace(t, f, workID)
 	}
 }
 
-func waitForWorkDoneAfterResume(t *testing.T, f factory.Factory, workID string) {
+func waitForWorkDoneAfterResume(t *testing.T, f factoryhost.Engine, workID string) {
 	t.Helper()
 	waitForAggregateSnapshotWithTimeout(t, f, 2*time.Second, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 		return markingContainsWorkAtPlace(&snap.Marking, workID, "task:done")
 	})
 }
 
-func waitForQuiescentWorksAtDone(t *testing.T, f factory.Factory, workIDs []string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+func waitForQuiescentWorksAtDone(t *testing.T, f factoryhost.Engine, workIDs []string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 	return waitForAggregateSnapshotWithTimeout(t, f, 5*time.Second, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 		return allWorksAtDonePlace(&snap.Marking, workIDs) && snap.InFlightCount == 0
@@ -1728,7 +1729,7 @@ func waitForQuiescentWorksAtDone(t *testing.T, f factory.Factory, workIDs []stri
 
 func waitForAggregateSnapshotWithTimeout(
 	t *testing.T,
-	f factory.Factory,
+	f factoryhost.Engine,
 	timeout time.Duration,
 	match func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool,
 ) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
@@ -1769,7 +1770,7 @@ func assertDispatchOrder(t *testing.T, history []interfaces.CompletedDispatch, w
 	}
 }
 
-func resumeFactory(t *testing.T, f factory.Factory) {
+func resumeFactory(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	if err := f.Resume(context.Background()); err != nil {
 		t.Fatalf("Resume: %v", err)

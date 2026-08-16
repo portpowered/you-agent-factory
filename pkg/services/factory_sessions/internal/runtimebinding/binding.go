@@ -14,6 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
@@ -740,8 +741,8 @@ func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.
 
 // LegacyObservationForService isolates migration-era Petri snapshot access
 // from the singular Factory Runtime Service contract.
-func LegacyObservationForService(runtime factory.Service) (factory.LegacySnapshotProvider, error) {
-	observation, ok := runtime.(factory.LegacySnapshotProvider)
+func LegacyObservationForService(runtime factory.Service) (legacysnapshot.Provider, error) {
+	observation, ok := runtime.(legacysnapshot.Provider)
 	if !ok || observation == nil {
 		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
 	}
@@ -767,7 +768,7 @@ func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, er
 
 // LegacyInvocationSourcesForService resolves the paired compatibility
 // capabilities still needed by invocation observation in one boundary check.
-func LegacyInvocationSourcesForService(runtime factory.Service) (factory.LegacySnapshotProvider, LegacyEventSource, error) {
+func LegacyInvocationSourcesForService(runtime factory.Service) (legacysnapshot.Provider, LegacyEventSource, error) {
 	observation, err := LegacyObservationForService(runtime)
 	if err != nil {
 		return nil, nil, err

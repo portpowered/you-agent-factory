@@ -10,7 +10,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -322,7 +322,7 @@ func TestTickWhilePaused_SkipsCascadeButOperatorMoveUpdatesMarking(t *testing.T)
 
 func setupPausedParentFailedChildInit(
 	t *testing.T,
-) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger, context.Context) {
+) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger, context.Context) {
 	t.Helper()
 	f, history, err := newTestFactoryWithScriptedLedger(
 		withNet(buildMoveControlNet()),
@@ -362,7 +362,7 @@ func setupPausedParentFailedChildInit(
 	return f, history, ctx
 }
 
-func assertChildRemainsInInitAfterPausedTick(t *testing.T, f factory.Factory, ctx context.Context) {
+func assertChildRemainsInInitAfterPausedTick(t *testing.T, f factoryhost.Engine, ctx context.Context) {
 	t.Helper()
 	before, err := f.GetEngineStateSnapshot(ctx)
 	if err != nil {

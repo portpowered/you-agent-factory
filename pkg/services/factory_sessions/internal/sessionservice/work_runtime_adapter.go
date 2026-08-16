@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -22,10 +23,25 @@ type workRuntimeAdapter struct {
 	runtime   factoryruntime.Service
 }
 
+type runtimeWorkSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
+// runtimeEventSubscriber is retained only for the P5B event-backbone seam.
+// Recordings will become the sole event-read owner before this capability is
+// removed from Factory Runtime.
+type runtimeEventSubscriber interface {
+	SubscribeFactoryEvents(
+		context.Context,
+		*interfaces.FactoryEventReconnectCursor,
+		interfaces.FactoryEventReconnectScope,
+	) (*interfaces.FactoryEventStream, error)
+}
+
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	submitter, ok := a.runtime.(factoryruntime.APIFactory)
+	submitter, ok := a.runtime.(runtimeWorkSubmitter)
 	if !ok {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
 	return submitter.SubmitWorkRequest(ctx, request)
 }

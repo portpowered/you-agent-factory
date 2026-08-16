@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 type legacyMoveFactory struct {
+	factory.Service
 	submitted work.WorkRequest
 }
 
@@ -26,27 +28,16 @@ func (legacyMoveFactory) SubscribeFactoryEvents(
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (f *legacyMoveFactory) MoveWork(
-	_ context.Context,
-	workID string,
-	_ string,
-	_ work.WorkStateChangeSource,
-	_ string,
-) (work.OperatorMoveResult, error) {
-	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  "story",
-		FromState:   "draft",
-		ToState:     "review",
-		FromPlaceID: "story.draft",
-		ToPlaceID:   "story.review",
-		TokenID:     "token-1",
+func (legacyMoveFactory) ControlMoveWork(_ context.Context, request factory.MoveWorkRequest) (factory.MoveWorkResult, error) {
+	return factory.MoveWorkResult{
+		WorkID: request.WorkID, WorkTypeID: "story",
+		FromState: "draft", ToState: request.StateName,
 	}, nil
 }
 
 func TestLiveSessionRuntimeAdapterFulfillsWorkRuntimePort(t *testing.T) {
 	factory := &legacyMoveFactory{}
-	adapter := liveSessionRuntimeAdapter{factory: factory}
+	adapter := liveSessionRuntimeAdapter{runtime: factory}
 	ctx := context.Background()
 
 	request := work.WorkRequest{RequestID: "request-legacy-adapter"}
@@ -61,7 +52,7 @@ func TestLiveSessionRuntimeAdapterFulfillsWorkRuntimePort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MoveWork: %v", err)
 	}
-	if result.FromPlaceID == "" || result.ToPlaceID == "" || result.TokenID == "" {
-		t.Fatalf("adapter move = %#v, want Petri fields from legacy runtime", result)
+	if result.FromState != "draft" || result.ToState != "review" {
+		t.Fatalf("adapter move = %#v, want detached state facts from Runtime", result)
 	}
 }

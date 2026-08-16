@@ -74,7 +74,7 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("instancehostwire.New() error = %v", err)
 	}
-	var _ factoryruntime.Lifecycle = lifecycle
+	var _ factoryruntime.RuntimeLifecycle = lifecycle
 	if _, ok := lifecycle.(instancehost.Service); !ok {
 		t.Fatalf("composed lifecycle type = %T, want instance_host.Service", lifecycle)
 	}

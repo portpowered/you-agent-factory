@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestRuntimeSessionAdaptersKeepHostedLifecycleBehindNeutralContracts(t *testing.T) {
+func TestRuntimeSessionAdaptersPreserveNeutralLifecycleContracts(t *testing.T) {
 	current := &adapterRuntimeRecord{directory: "current"}
 	replacement := &adapterRuntimeRecord{directory: "replacement"}
 	legacyRun := &adapterHostedRun{instance: current, done: make(chan struct{})}
@@ -88,12 +88,12 @@ func (*adapterRuntimeRecord) RecordingLedger() recordings.Ledger { return nil }
 func (*adapterRuntimeRecord) CloseArtifacts() error              { return nil }
 
 type adapterHostedRun struct {
-	instance factoryruntime.HostedInstance
+	instance factoryruntime.RuntimeRecord
 	done     chan struct{}
 	result   error
 }
 
-func (run *adapterHostedRun) RuntimeInstance() factoryruntime.HostedInstance { return run.instance }
+func (run *adapterHostedRun) RuntimeInstance() factoryruntime.RuntimeRecord { return run.instance }
 func (run *adapterHostedRun) Completed() bool {
 	select {
 	case <-run.done:
@@ -122,22 +122,22 @@ type adapterLegacyLifecycle struct {
 	stopCalls        int
 }
 
-func (lifecycle *adapterLegacyLifecycle) Start(context.Context, factoryruntime.HostedInstance) (factoryruntime.HostedHandle, error) {
+func (lifecycle *adapterLegacyLifecycle) Start(context.Context, factoryruntime.RuntimeRecord) (factoryruntime.RuntimeRun, error) {
 	return lifecycle.run, nil
 }
-func (lifecycle *adapterLegacyLifecycle) WaitForStart(context.Context, factoryruntime.HostedHandle) error {
+func (lifecycle *adapterLegacyLifecycle) WaitForStart(context.Context, factoryruntime.RuntimeRun) error {
 	lifecycle.waitCalls++
 	return nil
 }
-func (lifecycle *adapterLegacyLifecycle) Stop(factoryruntime.HostedHandle) error {
+func (lifecycle *adapterLegacyLifecycle) Stop(factoryruntime.RuntimeRun) error {
 	lifecycle.stopCalls++
 	lifecycle.run.CancelRun()
 	return nil
 }
-func (lifecycle *adapterLegacyLifecycle) StopSidecars(factoryruntime.HostedHandle) {
+func (lifecycle *adapterLegacyLifecycle) StopSidecars(factoryruntime.RuntimeRun) {
 	lifecycle.stopSidecarCalls++
 }
-func (lifecycle *adapterLegacyLifecycle) PublishReplacement(context.Context, factoryruntime.HostedHandle, factoryruntime.HostedInstance) error {
+func (lifecycle *adapterLegacyLifecycle) PublishReplacement(context.Context, factoryruntime.RuntimeRun, factoryruntime.RuntimeRecord) error {
 	lifecycle.publishCalls++
 	return nil
 }
@@ -148,15 +148,15 @@ type adapterLegacySidecars struct {
 	stopCalls    int
 }
 
-func (sidecars *adapterLegacySidecars) Preseed(context.Context, factoryruntime.HostedInstance) error {
+func (sidecars *adapterLegacySidecars) Preseed(context.Context, factoryruntime.RuntimeRecord) error {
 	sidecars.preseedCalls++
 	return nil
 }
-func (sidecars *adapterLegacySidecars) Start(context.Context, factoryruntime.HostedHandle) error {
+func (sidecars *adapterLegacySidecars) Start(context.Context, factoryruntime.RuntimeRun) error {
 	sidecars.startCalls++
 	return nil
 }
-func (sidecars *adapterLegacySidecars) Stop(factoryruntime.HostedHandle) {
+func (sidecars *adapterLegacySidecars) Stop(factoryruntime.RuntimeRun) {
 	sidecars.stopCalls++
 }
 
@@ -164,6 +164,6 @@ type adapterLegacyBuilder struct {
 	record *adapterRuntimeRecord
 }
 
-func (builder adapterLegacyBuilder) BuildReplacement(context.Context, string, string, string, string) (factoryruntime.HostedInstance, error) {
+func (builder adapterLegacyBuilder) BuildReplacement(context.Context, string, string, string, string) (factoryruntime.RuntimeRecord, error) {
 	return builder.record, nil
 }

@@ -86,10 +86,14 @@ func TestRequireIdleRuntimeFromObservation(t *testing.T) {
 }
 
 // peerShapedRuntimeService is a minimal Service fake that exercises observation
-// without implementing LegacySnapshotProvider or APIFactory snapshot methods.
+// without implementing the migration-only Petri snapshot capability.
 type peerShapedRuntimeService struct {
 	factoryruntime.Service
 	observation factoryruntime.Observation
+}
+
+type legacySnapshotProvider interface {
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
 }
 
 func (f *peerShapedRuntimeService) Observe(
@@ -112,8 +116,8 @@ func TestPeerShapedServiceFakeObservesWithoutLegacySnapshot(t *testing.T) {
 	runtime := &peerShapedRuntimeService{observation: want}
 
 	var _ factoryruntime.Service = runtime
-	if _, ok := any(runtime).(factoryruntime.LegacySnapshotProvider); ok {
-		t.Fatal("peer-shaped Service fake must not implement LegacySnapshotProvider")
+	if _, ok := any(runtime).(legacySnapshotProvider); ok {
+		t.Fatal("peer-shaped Service fake must not implement the Petri snapshot capability")
 	}
 
 	result, err := runtime.Observe(context.Background(), factoryruntime.ObserveRequest{

@@ -132,9 +132,9 @@ func (f *lifecycleControlFactory) AcceptDispatchResult(
 func startReadyHostedHandle(
 	t *testing.T,
 	host *Host,
-	factoryStub factory.Factory,
+	factoryStub factoryhost.Engine,
 	instanceID string,
-) factory.HostedHandle {
+) factory.RuntimeRun {
 	t.Helper()
 	factoryStub.(*lifecycleControlFactory).setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,

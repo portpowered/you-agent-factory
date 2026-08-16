@@ -22,22 +22,26 @@ func (r liveSessionRuntimeResolver) ResolveWorkRuntime(sessionID string) (work.R
 	if runtime == nil || runtime.Factory == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
-	return liveSessionRuntimeAdapter{factory: runtime.Factory}, nil
+	return liveSessionRuntimeAdapter{runtime: runtime.Factory}, nil
 }
 
 type liveSessionRuntimeAdapter struct {
-	factory any
+	runtime factory.Service
+}
+
+type runtimeWorkSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 }
 
 func (a liveSessionRuntimeAdapter) SubmitWorkRequest(
 	ctx context.Context,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	legacyRuntime, ok := a.factory.(factory.APIFactory)
+	submitter, ok := a.runtime.(runtimeWorkSubmitter)
 	if !ok {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
-	return legacyRuntime.SubmitWorkRequest(ctx, request)
+	return submitter.SubmitWorkRequest(ctx, request)
 }
 
 func (a liveSessionRuntimeAdapter) MoveWork(
@@ -47,11 +51,20 @@ func (a liveSessionRuntimeAdapter) MoveWork(
 	source work.WorkStateChangeSource,
 	requestID string,
 ) (work.OperatorMoveResult, error) {
-	mover, ok := a.factory.(factory.WorkMover)
-	if !ok {
-		return work.OperatorMoveResult{}, fmt.Errorf("legacy Factory Runtime work move is required")
+	if a.runtime == nil {
+		return work.OperatorMoveResult{}, fmt.Errorf("Factory Runtime work move is required")
 	}
-	return mover.MoveWork(ctx, workID, stateName, source, requestID)
+	result, err := a.runtime.ControlMoveWork(ctx, factory.MoveWorkRequest{
+		WorkID: workID, StateName: stateName,
+		Source: factory.WorkMoveSource(source), RequestID: requestID,
+	})
+	if err != nil {
+		return work.OperatorMoveResult{}, err
+	}
+	return work.OperatorMoveResult{
+		WorkID: result.WorkID, WorkTypeID: result.WorkTypeID,
+		FromState: result.FromState, ToState: result.ToState,
+	}, nil
 }
 
 func (a liveSessionRuntimeAdapter) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {

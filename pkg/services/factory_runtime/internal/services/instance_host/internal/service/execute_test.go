@@ -92,7 +92,7 @@ func (f *executeObserverFactory) setEngineState(state *interfaces.EngineStateSna
 	f.engineState = state
 }
 
-func testBundle(factoryStub factory.Factory, instanceID string) *factoryhost.Bundle {
+func testBundle(factoryStub factoryhost.Engine, instanceID string) *factoryhost.Bundle {
 	return &factoryhost.Bundle{
 		RuntimeInstanceID: instanceID,
 		Factory:           factoryStub,

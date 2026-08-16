@@ -214,11 +214,11 @@ func TestStopUnknownOrUnregisteredHandleReturnsErrNotRunning(t *testing.T) {
 
 type invalidHostedHandle struct{}
 
-func (invalidHostedHandle) RuntimeInstance() factory.HostedInstance { return nil }
-func (invalidHostedHandle) Completed() bool                         { return false }
-func (invalidHostedHandle) Result() error                           { return nil }
-func (invalidHostedHandle) Wait() error                             { return nil }
-func (invalidHostedHandle) CancelRun()                              {}
+func (invalidHostedHandle) RuntimeInstance() factory.RuntimeRecord { return nil }
+func (invalidHostedHandle) Completed() bool                        { return false }
+func (invalidHostedHandle) Result() error                          { return nil }
+func (invalidHostedHandle) Wait() error                            { return nil }
+func (invalidHostedHandle) CancelRun()                             {}
 func (invalidHostedHandle) RunDoneCh() <-chan struct{} {
 	ch := make(chan struct{})
 	close(ch)
@@ -352,7 +352,7 @@ func TestReplacementSidecarShutdownDoesNotEmitFalseTerminalStop(t *testing.T) {
 		Current:                     current,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			return nil
 		},
 	})

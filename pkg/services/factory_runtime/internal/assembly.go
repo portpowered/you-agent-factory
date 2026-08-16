@@ -218,7 +218,7 @@ func (a *Assembly) Assemble(
 	return adaptRuntimeReplacementBuilder(builder),
 		instance,
 		spec,
-		adaptRuntimeLifecycle(lifecycle),
+		lifecycle,
 		adaptRuntimeSidecars(NewRuntimeSidecars(automationService, serviceMode)),
 		nil
 }

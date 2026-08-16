@@ -57,6 +57,10 @@ type legacyInvocationRuntime struct {
 	peerShapedInvocationRuntime
 }
 
+type legacySnapshotProvider interface {
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error)
+}
+
 func (runtime legacyInvocationRuntime) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
 	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
 		FactoryState: string(interfaces.FactoryStateIdle),
@@ -121,8 +125,8 @@ func TestObserveRuntimeUsesServiceObservationWithoutLegacySnapshot(t *testing.T)
 			},
 		},
 	}
-	if _, ok := any(activeFactory).(factory.LegacySnapshotProvider); ok {
-		t.Fatal("peer-shaped invocation runtime must not implement LegacySnapshotProvider")
+	if _, ok := any(activeFactory).(legacySnapshotProvider); ok {
+		t.Fatal("peer-shaped invocation runtime must not implement the Petri snapshot capability")
 	}
 	instance := invocationHostedInstance{service: activeFactory}
 	sessions.Register(sessionruntime.Registration{

@@ -10,7 +10,7 @@ import (
 )
 
 func NewRuntimeAPI(
-	runtime factoryruntime.APIFactory,
+	runtime factoryruntime.Service,
 	definitions factorydefinitions.Service,
 ) apisurface.RuntimeAPI {
 	return apisurface.NewRuntimeAPI(

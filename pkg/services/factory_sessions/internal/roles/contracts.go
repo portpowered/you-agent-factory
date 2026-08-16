@@ -278,7 +278,6 @@ type FactoryInvocationOutcome = factorysessions.FactoryInvocationOutcome
 
 type ApplicationRuntime interface {
 	LifecycleRuntime
-	factoryruntime.APIFactory
 }
 
 type RuntimeAssembly interface {

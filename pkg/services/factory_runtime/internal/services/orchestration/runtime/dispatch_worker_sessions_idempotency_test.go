@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -561,7 +562,7 @@ func assertTerminalAcceptanceRace(t *testing.T, calls []terminalAcceptanceCall) 
 
 func assertTerminalRaceLiveState(
 	t *testing.T,
-	runtime factory.Factory,
+	runtime factoryhost.Engine,
 	ledger interface {
 		CanonicalEvents() []interfaces.FactoryEvent
 	},

@@ -29,7 +29,7 @@ type Handle struct {
 	lifecycleMetricsOnce sync.Once
 }
 
-func (h *Handle) RuntimeInstance() factory.HostedInstance {
+func (h *Handle) RuntimeInstance() factory.RuntimeRecord {
 	if h == nil {
 		return nil
 	}
