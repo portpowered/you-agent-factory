@@ -26,7 +26,6 @@ type activatedRuntimeService struct {
 	factoryruntime.Service
 	runtimeWorkSubmitter
 	runtimeEventSubscriber
-	api      factoryruntime.APIFactory
 	products runtimeProducts
 }
 
@@ -39,16 +38,6 @@ func (s *activatedRuntimeService) RuntimeDelegate() factoryruntime.Service {
 		return nil
 	}
 	return s.Service
-}
-
-// RuntimeAPIFactory exposes the concrete widened Runtime operations selected
-// during activation. The Factory Runtime root stores this handoff separately
-// from its narrow Service view so a binding cannot route back through itself.
-func (s *activatedRuntimeService) RuntimeAPIFactory() factoryruntime.APIFactory {
-	if s == nil {
-		return nil
-	}
-	return s.api
 }
 
 type runtimeWorkSubmitter interface {
@@ -94,16 +83,11 @@ func (f *Factory) activateRuntime(
 	if !ok {
 		return nil, fmt.Errorf("activate Factory Runtime: opened runtime event subscription is required until Recordings migration")
 	}
-	legacyAPI, ok := service.(factoryruntime.APIFactory)
-	if !ok {
-		return nil, fmt.Errorf("activate Factory Runtime: opened Runtime API is required until Recordings migration")
-	}
 	return &factoryruntime.RuntimeActivation{
 		Service: &activatedRuntimeService{
 			Service:                service,
 			runtimeWorkSubmitter:   legacySubmission,
 			runtimeEventSubscriber: legacyEvents,
-			api:                    legacyAPI,
 			products:               products,
 		},
 		Close: func(closeCtx context.Context) error {
