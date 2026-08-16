@@ -9,13 +9,6 @@ import (
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
-func (o *operation) ModelsPresentationRoot() models.Service {
-	if o == nil || o.openRuntime == nil {
-		return nil
-	}
-	return o.modelsRoot
-}
-
 func (o *operation) OpenModelsCatalogScope(
 	ctx context.Context,
 ) (models.PresentationScope, error) {
@@ -108,8 +101,7 @@ func resolvedOperatorDefaultsFromPresentation(
 	}
 }
 
-var _ interface {
-	ModelsPresentationRoot() models.Service
-	OpenModelsCatalogScope(context.Context) (models.PresentationScope, error)
-	OpenModelsPresentationScope(context.Context, models.PresentationScopeRequest) (models.PresentationScope, error)
-} = (*operation)(nil)
+// The two scope methods are consumed only by the application Wire adapter.
+// They are deliberately absent from roles.InvocationOperation and from the
+// Factory Sessions service root; Models transport composition receives them as
+// an explicit Wire-owned port.

@@ -139,6 +139,7 @@ var servicesSet = wire.NewSet(
 	provideModelInvocationArtifactExporter,
 	provideModelInvocationTimeout,
 	provideModelInvocationOperation,
+	provideModelsCLIComposition,
 	provideWorkService,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,

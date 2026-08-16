@@ -52,7 +52,6 @@ func historicalReplayRuntimeProducts(
 
 func assembleRuntimeProducts(
 	factoryDefinitions factorydefinitions.Service,
-	factorySessionRoot factorysessions.Service,
 	factorySessionGateway factorysessions.Service,
 	sessionInvocation roles.SessionInvoker,
 	factoryRuntime factoryruntime.Service,
@@ -112,7 +111,7 @@ func assembleRuntimeProducts(
 			Process:        process,
 			FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
 			WorkflowPreview: workflowPreview,
-			FactorySessions: factorySessionRoot, LiveControl: factorySessionRoot,
+			FactorySessions: factorySessionGateway, LiveControl: factorySessionGateway,
 			Work: workService, Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
 			ModelInvoker: modelInvoker, Workers: workerService,
 			ProviderSessions: providerSessions, WorkerSessions: workerSessions,

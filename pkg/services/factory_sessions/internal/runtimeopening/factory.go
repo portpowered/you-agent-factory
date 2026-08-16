@@ -569,7 +569,6 @@ func (f *Factory) openRuntimeWithOptions(
 		f.workerService,
 		f.modelService,
 		f.automationService,
-		f.factorySessionsService,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsRoot,
@@ -647,15 +646,6 @@ func (f *Factory) openForRequest(
 		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
 	}
 	return f.openActivatedRuntime(ctx, request)
-}
-
-// ModelsRoot returns the process-scoped accepted Models root used by runtime
-// opening and Models CLI presentation collaborators.
-func (f *Factory) ModelsRoot() models.Service {
-	if f == nil {
-		return nil
-	}
-	return f.modelService
 }
 
 // OpenInvocationRuntime opens one Factory Session and returns only the roles

@@ -247,7 +247,6 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		nil,
 		nil,
 		nil,
-		nil,
 		modelsRuntimeBind{Root: root, Scope: scope},
 		nil,
 		inertHostedInstance{},
@@ -269,14 +268,16 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	}
 }
 
-func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(t *testing.T) {
+func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicationRoles(t *testing.T) {
 	t.Parallel()
 
-	root := &runtimeProductsSessionsRole{}
-	gateway := &runtimeProductsSessionsRole{}
+	gateway := &runtimeProductsSessionsRole{readSession: func(string) factorysessions.SessionReadResult {
+		return factorysessions.SessionReadResult{SessionID: "host-bound-gateway"}
+	}, readLiveSession: func(string) factorysessions.LiveControlSnapshot {
+		return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactorySessionID: "host-bound-gateway"}}
+	}}
 	opened := assembleRuntimeProducts(
 		nil,
-		root,
 		gateway,
 		nil,
 		nil,
@@ -297,11 +298,19 @@ func TestAssembleRuntimeProductsExposesSameFactorySessionsInstanceAsLiveControl(
 		func() error { return nil },
 	)
 
-	if got := opened.application.FactorySessions; got != root {
-		t.Fatalf("FactorySessions = %T, want process Sessions root %T", got, root)
+	got, err := opened.application.FactorySessions.GetSession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("FactorySessions.GetSession() error = %v, want host-bound gateway read", err)
 	}
-	if got := opened.application.LiveControl; got == nil || any(got) != any(root) {
-		t.Fatalf("LiveControl = %T, want the same process Sessions root %T", got, root)
+	if got.SessionID != "host-bound-gateway" {
+		t.Fatalf("FactorySessions.GetSession() = %q, want host-bound gateway result", got.SessionID)
+	}
+	liveRead, err := opened.application.LiveControl.GetFactorySession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("LiveControl.GetSession() error = %v, want host-bound gateway read", err)
+	}
+	if liveRead.Context.FactorySessionID != "host-bound-gateway" {
+		t.Fatalf("LiveControl.GetFactorySession() = %q, want host-bound gateway result", liveRead.Context.FactorySessionID)
 	}
 }
 
@@ -320,7 +329,6 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 	})
 
 	opened := assembleRuntimeProducts(
-		nil,
 		nil,
 		nil,
 		nil,
@@ -509,6 +517,16 @@ type openingCoordinatorSessionsRoot struct {
 
 type runtimeProductsSessionsRole struct {
 	factorysessions.Service
+	readSession     func(string) factorysessions.SessionReadResult
+	readLiveSession func(string) factorysessions.LiveControlSnapshot
+}
+
+func (role *runtimeProductsSessionsRole) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	return role.readSession(sessionID), nil
+}
+
+func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
+	return role.readLiveSession(sessionID), nil
 }
 
 func (openingCoordinatorSessionsRoot) ForRuntime(

@@ -337,7 +337,7 @@ func TestConfigFromCompositionMapsRepresentativeCommandInputs(t *testing.T) {
 
 type factorySessionPresentationInvocation struct {
 	root      modelinference.Service
-	openScope func(context.Context, modelscli.PresentationScopeRequest) (modelscli.PresentationScope, error)
+	openScope func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error)
 }
 
 func (inv factorySessionPresentationInvocation) InvokeModel(
@@ -357,31 +357,31 @@ func (inv factorySessionPresentationInvocation) ExportModelInvocationArtifact(st
 	return nil
 }
 
-func (inv factorySessionPresentationInvocation) ModelsPresentationRoot() modelinference.Service {
+func (inv factorySessionPresentationInvocation) CompositionModelsRoot() modelinference.Service {
 	return inv.root
 }
 
-func (inv factorySessionPresentationInvocation) OpenModelsCatalogScope(
+func (inv factorySessionPresentationInvocation) CompositionOpenCatalogScope(
 	ctx context.Context,
-) (modelscli.PresentationScope, error) {
+) (modelscli.InvokeRuntimeScope, error) {
 	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition-test:catalog-scope")
 	if err != nil {
-		return modelscli.PresentationScope{}, err
+		return modelscli.InvokeRuntimeScope{}, err
 	}
-	return modelscli.PresentationScope{Scope: scope}, nil
+	return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 }
 
-func (inv factorySessionPresentationInvocation) OpenModelsPresentationScope(
+func (inv factorySessionPresentationInvocation) CompositionOpenInvokeScope(
 	ctx context.Context,
-	request modelscli.PresentationScopeRequest,
-) (modelscli.PresentationScope, error) {
+	cfg modelscli.InvokeConfig,
+) (modelscli.InvokeRuntimeScope, error) {
 	if inv.openScope != nil {
-		return inv.openScope(ctx, request)
+		return inv.openScope(ctx, cfg)
 	}
-	return modelscli.PresentationScope{}, nil
+	return modelscli.InvokeRuntimeScope{}, nil
 }
 
-func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
+func TestNewActivatesOwnedPathThroughCompositionProvider(t *testing.T) {
 	t.Parallel()
 
 	var listed bool
@@ -394,9 +394,6 @@ func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
 		},
 	}
 	invocation := factorySessionPresentationInvocation{root: root}
-	if _, ok := modelscli.AdaptCompositionInvocationForTest(invocation).(modelscli.CompositionModelsRoot); !ok {
-		t.Fatal("adapted presentation collaborator must expose CompositionModelsRoot")
-	}
 	service := modelscli.New(compositionHTTPProtocol(t), invocation)
 	if service == nil {
 		t.Fatal("New() = nil, want composition facade")
@@ -416,7 +413,7 @@ func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
 	}
 }
 
-func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborator(t *testing.T) {
+func TestConfigFromCompositionBuildsOwnedServiceFromExplicitProvider(t *testing.T) {
 	t.Parallel()
 
 	invocation := factorySessionPresentationInvocation{
@@ -428,7 +425,8 @@ func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborato
 	}
 	service := modelscli.NewService(modelscli.ConfigFromComposition(
 		compositionHTTPProtocol(t),
-		modelscli.AdaptCompositionInvocationForTest(invocation),
+		invocation,
+		invocation,
 	))
 	if service == nil {
 		t.Fatal("NewService(ConfigFromComposition()) = nil, want owned service")
@@ -444,7 +442,7 @@ func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborato
 	}
 }
 
-func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *testing.T) {
+func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T) {
 	t.Parallel()
 
 	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition:test:scope")
@@ -454,14 +452,14 @@ func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *te
 	var opened bool
 	invocation := factorySessionPresentationInvocation{
 		root: compositionModelsRoot{},
-		openScope: func(context.Context, modelscli.PresentationScopeRequest) (modelscli.PresentationScope, error) {
+		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			opened = true
-			return modelscli.PresentationScope{Scope: scope}, nil
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	}
 	cfg := modelscli.ConfigFromComposition(
 		compositionHTTPProtocol(t),
-		modelscli.AdaptCompositionInvocationForTest(invocation),
+		invocation,
 	)
 	if cfg.Models == nil {
 		t.Fatal("ConfigFromComposition() Models = nil, want presentation root")
@@ -476,14 +474,14 @@ func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *te
 		t.Fatalf("OpenInvokeScope() error = %v", err)
 	}
 	if !opened {
-		t.Fatal("OpenInvokeScope() did not delegate through presentation collaborator")
+		t.Fatal("OpenInvokeScope() did not delegate through the composition provider")
 	}
 	if openedScope.Scope != scope {
 		t.Fatalf("opened scope = %q, want %q", openedScope.Scope, scope)
 	}
 }
 
-func TestNewInvokesThroughPresentationCollaboratorOwnedPath(t *testing.T) {
+func TestNewInvokesThroughCompositionProviderOwnedPath(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
@@ -520,9 +518,9 @@ func TestNewInvokesThroughPresentationCollaboratorOwnedPath(t *testing.T) {
 				}, nil
 			},
 		},
-		openScope: func(context.Context, modelscli.PresentationScopeRequest) (modelscli.PresentationScope, error) {
+		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			openedScope = true
-			return modelscli.PresentationScope{Scope: scope}, nil
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	}
 	service := modelscli.New(compositionHTTPProtocol(t), invocation)

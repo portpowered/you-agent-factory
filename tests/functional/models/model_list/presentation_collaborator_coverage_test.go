@@ -10,10 +10,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer proves
-// local models list reaches the owned adapter through Factory Sessions
-// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
-func TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// TestProcessModelsList_RoutesThroughCompositionProviderWithoutServer proves
+// local models list reaches the owned adapter through the explicit process
+// composition port rather than the remote HTTP bootstrap path.
+func TestProcessModelsList_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -33,7 +33,7 @@ func TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer(t 
 
 // TestProcessModelsList_ReusesCatalogScopeAcrossCommands proves repeated local
 // models list/inspect/pull commands reuse the process-scoped catalog scope
-// opened by the presentation collaborator.
+// opened by the process composition port.
 func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
 	t.Parallel()
 
@@ -71,10 +71,10 @@ func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
 	}
 }
 
-// TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer proves
-// local models pull reaches the owned adapter through Factory Sessions
-// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
-func TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// TestProcessModelsPull_RoutesThroughCompositionProviderWithoutServer proves
+// local models pull reaches the owned adapter through the explicit process
+// composition port rather than the remote HTTP bootstrap path.
+func TestProcessModelsPull_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -87,10 +87,10 @@ func TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer(t 
 	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 }
 
-// TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer proves
-// local models invoke --json reaches the owned adapter through Factory Sessions
-// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
-func TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// TestProcessModelsInvokeJSON_RoutesThroughCompositionProviderWithoutServer proves
+// local models invoke --json reaches the owned adapter through the explicit
+// process composition port rather than the remote HTTP bootstrap path.
+func TestProcessModelsInvokeJSON_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -108,8 +108,8 @@ func TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutSer
 	}
 }
 
-// local models inspect uses the presentation collaborator-owned adapter path.
-func TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// local models inspect uses the process-composed owned adapter path.
+func TestProcessModelsInspect_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})

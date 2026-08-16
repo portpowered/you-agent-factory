@@ -454,7 +454,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	invocationOperation := provideModelsCLIInvocationOperation(v72)
-	cliService := provideModelsCLIService(wireStandardCLIHTTPProtocol, invocationOperation)
+	compositionScopeProvider, err := provideModelsCLIComposition(modelsService, v72)
+	if err != nil {
+		return nil, err
+	}
+	cliService := provideModelsCLIService(wireStandardCLIHTTPProtocol, invocationOperation, compositionScopeProvider)
 	service2 := provideProvidersCLIService(service)
 	v73 := wire.NewRequestPreparation()
 	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v73)
@@ -882,6 +886,7 @@ var servicesSet = wire5.NewSet(
 	provideModelInvocationArtifactExporter,
 	provideModelInvocationTimeout,
 	provideModelInvocationOperation,
+	provideModelsCLIComposition,
 	provideWorkService,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,

@@ -44,7 +44,6 @@ func openRuntime(
 	workerService workers.Service,
 	modelService models.Service,
 	automationService automations.Service,
-	factorySessionRoot factorysessions.Service,
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsRoot recordings.Root,
@@ -84,9 +83,6 @@ func openRuntime(
 	}
 	if recordingsRoot == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings root is required")
-	}
-	if factorySessionRoot == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service is required")
 	}
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
@@ -400,7 +396,6 @@ func openRuntime(
 	setWorkerInvoker(durableExecution.Service, rootRuntime)
 	opened := assembleRuntimeProducts(
 		factoryDefinitions,
-		factorySessionRoot,
 		service4,
 		invocationDomain,
 		rootRuntime,

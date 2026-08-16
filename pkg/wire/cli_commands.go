@@ -23,6 +23,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
@@ -433,8 +434,73 @@ func provideLocalSessionsCLIService(
 func provideModelsCLIService(
 	transport standardCLIHTTPProtocol,
 	invocation modelscli.InvocationOperation,
+	composition modelscli.CompositionScopeProvider,
 ) modelscli.Service {
-	return modelscli.New(transport.Protocol, invocation)
+	return modelscli.New(transport.Protocol, invocation, composition)
+}
+
+// modelsCLIScopeSource is the narrow application-composition capability used
+// to preserve the existing local Factory-derived Models scope behavior. It is
+// intentionally private to Wire; Models transport receives the explicit
+// CompositionScopeProvider below rather than discovering a Sessions
+// collaborator from an invocation value.
+type modelsCLIScopeSource interface {
+	OpenModelsCatalogScope(context.Context) (modelservice.PresentationScope, error)
+	OpenModelsPresentationScope(context.Context, modelservice.PresentationScopeRequest) (modelservice.PresentationScope, error)
+}
+
+type modelsCLIComposition struct {
+	root   modelservice.Service
+	source modelsCLIScopeSource
+}
+
+func provideModelsCLIComposition(
+	root modelservice.Service,
+	invocation factorysessionwire.InvocationOperation,
+) (modelscli.CompositionScopeProvider, error) {
+	if root == nil {
+		return nil, errors.New("Models CLI composition requires the Models root")
+	}
+	source, ok := invocation.(modelsCLIScopeSource)
+	if !ok || source == nil {
+		return nil, errors.New("Models CLI composition requires a Models scope source")
+	}
+	return modelsCLIComposition{root: root, source: source}, nil
+}
+
+func (composition modelsCLIComposition) CompositionModelsRoot() modelservice.Service {
+	return composition.root
+}
+
+func (composition modelsCLIComposition) CompositionOpenCatalogScope(
+	ctx context.Context,
+) (modelscli.InvokeRuntimeScope, error) {
+	opened, err := composition.source.OpenModelsCatalogScope(ctx)
+	if err != nil {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+}
+
+func (composition modelsCLIComposition) CompositionOpenInvokeScope(
+	ctx context.Context,
+	cfg modelscli.InvokeConfig,
+) (modelscli.InvokeRuntimeScope, error) {
+	opened, err := composition.source.OpenModelsPresentationScope(ctx, modelservice.PresentationScopeRequest{
+		FactoryDir: cfg.FactoryDir,
+		HomeDir:    cfg.HomeDir,
+		OperatorDefaults: modelservice.PresentationOperatorDefaults{
+			WorkerModelProvider: cfg.OperatorDefaults.WorkerModelProvider,
+			WorkerModel:         cfg.OperatorDefaults.WorkerModel,
+		},
+		Logger:        cfg.Logger,
+		Verbose:       cfg.Verbose,
+		ModelCacheDir: "",
+	})
+	if err != nil {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
 }
 
 func provideProvidersCLIService(service providers.Service) providerscli.Service {

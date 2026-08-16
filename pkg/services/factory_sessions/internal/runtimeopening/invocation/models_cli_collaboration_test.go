@@ -60,24 +60,6 @@ func TestOpenModelsCatalogScope_RequiresModelsRoot(t *testing.T) {
 	}
 }
 
-func TestModelsPresentationRoot_ReturnsNilForUnsetOperation(t *testing.T) {
-	t.Parallel()
-
-	var op *operation
-	if got := op.ModelsPresentationRoot(); got != nil {
-		t.Fatalf("ModelsPresentationRoot() = %v, want nil", got)
-	}
-}
-
-func TestModelsPresentationRoot_DelegatesToRuntimeOpening(t *testing.T) {
-	t.Parallel()
-
-	op := &operation{openRuntime: &runtimeopening.Factory{}}
-	if got := op.ModelsPresentationRoot(); got != nil {
-		t.Fatalf("ModelsPresentationRoot() = %v, want nil when model service unset", got)
-	}
-}
-
 func TestOpenModelsPresentationScope_RequiresOperation(t *testing.T) {
 	t.Parallel()
 
@@ -121,15 +103,13 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewOperation() error = %v", err)
 	}
-	collaborator, ok := op.(interface {
-		ModelsPresentationRoot() models.Service
-		OpenModelsCatalogScope(context.Context) (models.PresentationScope, error)
+	scopeOpener, ok := op.(interface {
 		OpenModelsPresentationScope(context.Context, models.PresentationScopeRequest) (models.PresentationScope, error)
 	})
 	if !ok {
-		t.Fatal("NewOperation() must implement the Models CLI presentation port")
+		t.Fatal("NewOperation() must retain the internal Models scope opener")
 	}
-	_, err = collaborator.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{
+	_, err = scopeOpener.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{
 		FactoryDir: factoryDir,
 	})
 	if err == nil {

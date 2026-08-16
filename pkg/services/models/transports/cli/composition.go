@@ -25,6 +25,15 @@ type CompositionInvokeScopeOpener interface {
 	CompositionOpenInvokeScope(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 }
 
+// CompositionScopeProvider is the Models transport's explicit composition
+// port. Wire supplies the Models root and scope operations; the transport does
+// not discover a collaborator through a Sessions operation value.
+type CompositionScopeProvider interface {
+	CompositionModelsRoot
+	CompositionOpenCatalogScope
+	CompositionInvokeScopeOpener
+}
+
 // BindService returns the composition-facing Models CLI adapter Service
 // constructed from the accepted Models root. Wire and other composition roots
 // inject the returned Service without constructing adapter behavior at the
@@ -36,12 +45,34 @@ func BindService(cfg Config) Service {
 // ConfigFromComposition maps composition-stable collaborator shapes onto the
 // owned adapter Config without requiring composition roots to construct the
 // Service directly.
-func ConfigFromComposition(httpProtocol clihttp.Protocol, invocation InvocationOperation) Config {
+func ConfigFromComposition(
+	httpProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	providers ...CompositionScopeProvider,
+) Config {
 	cfg := Config{HTTP: httpProtocol}
 	if invocation == nil {
 		return cfg
 	}
 	cfg.Artifacts = compositionArtifactExporter{invocation: invocation}
+	var provider CompositionScopeProvider
+	if len(providers) > 0 {
+		provider = providers[0]
+	} else if candidate, ok := invocation.(CompositionScopeProvider); ok {
+		// Keep direct transport composition usable for small embedded callers
+		// that already provide the Models transport port. The canonical process
+		// graph passes this port explicitly from Wire.
+		provider = candidate
+	}
+	if provider != nil {
+		cfg.Models = provider.CompositionModelsRoot()
+		cfg.OpenCatalogScope = provider.CompositionOpenCatalogScope
+		cfg.OpenInvokeScope = provider.CompositionOpenInvokeScope
+		return cfg
+	}
+	// Preserve the independently injectable composition shapes used by
+	// embedded callers. The process graph above supplies the aggregate port;
+	// these fallbacks do not inspect or depend on Factory Sessions contracts.
 	if root, ok := invocation.(CompositionModelsRoot); ok {
 		cfg.Models = root.CompositionModelsRoot()
 	}
