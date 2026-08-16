@@ -92,9 +92,7 @@ function NodeHandleRail({
         <div
           className={cn(
             "absolute top-0 flex -translate-y-1/2",
-            side === "left"
-              ? "left-0 -translate-x-1/2"
-              : "right-0 translate-x-1/2",
+            side === "left" ? "left-0" : "right-0",
           )}
           key={handle.id}
           style={{ top: handlePosition(index, handles.length) }}

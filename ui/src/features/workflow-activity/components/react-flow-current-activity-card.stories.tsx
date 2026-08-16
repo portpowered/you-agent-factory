@@ -120,6 +120,19 @@ function snapshotWithActiveWorkItemCount(count: number): DashboardSnapshot {
   return snapshot;
 }
 
+function snapshotWithDefaultSchedulerLoopBreaker(): DashboardSnapshot {
+  const snapshot = structuredClone(mixedFactorySemanticsDashboardSnapshot);
+  const poller = snapshot.factory?.workstations?.find(
+    (workstation) => workstation.id === "poller",
+  );
+
+  if (poller) {
+    poller.behavior = undefined;
+  }
+
+  return snapshot;
+}
+
 function snapshotWithLongWorkstationName(): DashboardSnapshot {
   const snapshot = snapshotWithActiveWorkItemCount(0);
   const longWorkstationName =
@@ -295,21 +308,12 @@ function expectFittedWorkstationDimensions(node: HTMLElement): void {
 
 function expectWorkstationContentContained(node: HTMLElement): void {
   const nodeBounds = node.getBoundingClientRect();
-  const contentElements = node.querySelectorAll<HTMLElement>(
-    [
-      "[data-workstation-title]",
-      "[data-workstation-runtime-label]",
-      "[data-workstation-scheduling-label]",
-      "[data-workstation-guard-card]",
-      "[data-workstation-work-progress]",
-      "[data-active-work-label]",
-      "[data-active-work-duration]",
-      "[data-graph-interaction-overlay]",
-    ].join(", "),
-  );
+  const renderedDescendants = Array.from(node.querySelectorAll("*"));
 
-  for (const element of contentElements) {
+  for (const element of renderedDescendants) {
     const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) continue;
+
     expect(bounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
     expect(bounds.right).toBeLessThanOrEqual(nodeBounds.right);
     expect(bounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
@@ -921,7 +925,9 @@ export const WorkstationKindParity = {
 
 export const MixedWorkstationSemantics = {
   render: () => (
-    <CurrentActivityStory snapshot={mixedFactorySemanticsDashboardSnapshot} />
+    <CurrentActivityStory
+      snapshot={snapshotWithDefaultSchedulerLoopBreaker()}
+    />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -935,7 +941,7 @@ export const MixedWorkstationSemantics = {
       ["Agent worker", "Agent"],
       ["execute-goal", "Repeater"],
       ["Script cron", "Cron"],
-      ["Poller source", "Poller"],
+      ["Poller source", "Default scheduler"],
     ] as const;
 
     for (const [name, semanticLabel] of expectedNodes) {
@@ -968,12 +974,23 @@ export const MixedWorkstationSemantics = {
       "[data-workstation-guard-row]",
     );
     expect(guardRows).toHaveLength(2);
-    const guardBounds = (guardCard as HTMLElement).getBoundingClientRect();
-    const nodeBounds = (loopNode as HTMLElement).getBoundingClientRect();
-    expect(guardBounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
-    expect(guardBounds.right).toBeLessThanOrEqual(nodeBounds.right);
-    expect(guardBounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
-    expect(guardBounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
+    expectWorkstationContentContained(loopNode as HTMLElement);
+
+    for (const value of loopNode?.querySelectorAll<HTMLElement>(
+      "[data-workstation-guard-target], [data-workstation-guard-limit]",
+    ) ?? []) {
+      const style = getComputedStyle(value);
+      expect(style.overflow).toBe("hidden");
+      expect(style.textOverflow).toBe("ellipsis");
+      expect(style.whiteSpace).toBe("nowrap");
+    }
+
+    const defaultScheduler = await canvas.findByText("Default scheduler", {
+      exact: true,
+    });
+    const defaultSchedulerNode = defaultScheduler.closest(".react-flow__node");
+    expect(defaultSchedulerNode).toBeTruthy();
+    expectWorkstationContentContained(defaultSchedulerNode as HTMLElement);
   },
 };
 
@@ -1334,7 +1351,9 @@ export const NarrowViewport = {
 export const TouchPanePanning = {
   render: () => (
     <div style={{ maxWidth: "100%", width: "360px" }}>
-      <CurrentActivityStory snapshot={mixedFactorySemanticsDashboardSnapshot} />
+      <CurrentActivityStory
+        snapshot={snapshotWithDefaultSchedulerLoopBreaker()}
+      />
     </div>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {

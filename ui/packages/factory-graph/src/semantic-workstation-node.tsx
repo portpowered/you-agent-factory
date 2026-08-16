@@ -13,7 +13,6 @@ import {
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
-import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
   factoryGraphActiveItemsLabel as activeItemsLabel,
   factoryGraphClassNames as classNames,
@@ -33,6 +32,7 @@ import {
   factoryGraphWorkstationTitleClassName as workstationTitleClassName,
 } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import type { FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
 
 export type {
@@ -171,6 +171,8 @@ function Summary({
   title: string;
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
+  const header = <Header presentation={presentation} title={title} />;
+
   return (
     <div
       className="grid min-w-0 gap-0.5"
@@ -179,30 +181,25 @@ function Summary({
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
     >
-      <GraphNodeButton
-        aria-label={
-          data.onSelectWorkstation
-            ? selectWorkstationLabel(title, data.locale)
-            : undefined
-        }
-        aria-pressed={
-          data.onSelectWorkstation ? visualState.selection : undefined
-        }
-        className={WORKSTATION_HEADER_CLASS_NAME}
-        data-selected-workstation={visualState.selection ? "true" : undefined}
-        disabled={data.onSelectWorkstation === undefined}
-        onClick={
-          data.onSelectWorkstation
-            ? (event) => {
-                event.stopPropagation();
-                data.onSelectWorkstation?.(data.workstation.node_id);
-              }
-            : undefined
-        }
-        title={title}
-      >
-        <Header presentation={presentation} title={title} />
-      </GraphNodeButton>
+      {data.onSelectWorkstation ? (
+        <GraphNodeButton
+          aria-label={selectWorkstationLabel(title, data.locale)}
+          aria-pressed={visualState.selection}
+          className={WORKSTATION_HEADER_CLASS_NAME}
+          data-selected-workstation={visualState.selection ? "true" : undefined}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onSelectWorkstation?.(data.workstation.node_id);
+          }}
+          title={title}
+        >
+          {header}
+        </GraphNodeButton>
+      ) : (
+        <div className={WORKSTATION_HEADER_CLASS_NAME} title={title}>
+          {header}
+        </div>
+      )}
       <FactoryGraphWorkstationGuardedControlCard
         locale={data.locale}
         presentation={presentation}

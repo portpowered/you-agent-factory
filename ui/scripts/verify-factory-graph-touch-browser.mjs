@@ -1,5 +1,7 @@
 import { chromium } from "playwright";
 
+import { assertWorkstationDescendantsContained } from "./factory-graph-browser-geometry.mjs";
+
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
 const touchStoryID =
@@ -61,44 +63,7 @@ async function viewportTransform(page) {
     .evaluate((viewport) => viewport.style.transform);
 }
 
-async function verifyMixedWorkstationSemantics(page) {
-  const viewportTransformValue = await viewportTransform(page);
-  if (!/scale\([^)]*\)/.test(viewportTransformValue)) {
-    throw new Error(
-      `Factory graph did not settle at fit-to-view zoom: ${viewportTransformValue}`,
-    );
-  }
-
-  const expectedWorkstations = [
-    ["Classifier route", "Classifier"],
-    ["Logical route", "Logical move"],
-    [
-      "Inference workstation with a deliberately long authored title",
-      "Inference",
-    ],
-    ["Agent worker", "Agent"],
-    ["execute-goal", "Repeater"],
-    ["Script cron", "Cron"],
-    ["Poller source", "Poller"],
-  ];
-
-  for (const [name, semanticLabel] of expectedWorkstations) {
-    const button = page.getByRole("button", {
-      name: `Select ${name} workstation`,
-    });
-    await button.waitFor({ state: "visible" });
-    await button
-      .locator(
-        "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
-        { hasText: semanticLabel },
-      )
-      .first()
-      .waitFor({
-        state: "visible",
-      });
-  }
-
-  const guardCard = page.locator("[data-workstation-guard-card]");
+async function verifyLoopBreakerCard(guardCard) {
   await guardCard.waitFor({ state: "visible" });
   const guardText = await guardCard.textContent();
   if (
@@ -121,6 +86,12 @@ async function verifyMixedWorkstationSemantics(page) {
   const guardNode = guardCard.locator(
     "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
   );
+  const selectionControl = guardNode.getByRole("button", {
+    name: "Select goal-loop-breaker workstation",
+  });
+  await selectionControl.waitFor({ state: "visible" });
+  await selectionControl.hover();
+
   const guardNodeBounds = await guardNode.boundingBox();
   const guardCardBounds = await guardCard.boundingBox();
   if (!guardNodeBounds || !guardCardBounds) {
@@ -170,6 +141,63 @@ async function verifyMixedWorkstationSemantics(page) {
       `Expected the default loop-breaker workstation height to be 156px: ${loopNodeStyle ?? "<missing>"}`,
     );
   }
+
+  return guardNode;
+}
+
+async function verifyMixedWorkstationSemantics(page) {
+  const viewportTransformValue = await viewportTransform(page);
+  if (!/scale\([^)]*\)/.test(viewportTransformValue)) {
+    throw new Error(
+      `Factory graph did not settle at fit-to-view zoom: ${viewportTransformValue}`,
+    );
+  }
+
+  const expectedWorkstations = [
+    ["Classifier route", "Classifier"],
+    ["Logical route", "Logical move"],
+    [
+      "Inference workstation with a deliberately long authored title",
+      "Inference",
+    ],
+    ["Agent worker", "Agent"],
+    ["execute-goal", "Repeater"],
+    ["Script cron", "Cron"],
+    ["Poller source", "Default scheduler"],
+  ];
+
+  for (const [name, semanticLabel] of expectedWorkstations) {
+    const button = page.getByRole("button", {
+      name: `Select ${name} workstation`,
+    });
+    await button.waitFor({ state: "visible" });
+    await button
+      .locator(
+        "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+        { hasText: semanticLabel },
+      )
+      .first()
+      .waitFor({
+        state: "visible",
+      });
+  }
+
+  const guardCard = page.locator("[data-workstation-guard-card]");
+  const guardNode = await verifyLoopBreakerCard(guardCard);
+
+  await assertWorkstationDescendantsContained(guardNode, "Loop-breaker");
+
+  const defaultScheduler = page.locator("[data-workstation-scheduling-label]", {
+    hasText: "Default scheduler",
+  });
+  await defaultScheduler.waitFor({ state: "visible" });
+  const defaultSchedulerNode = defaultScheduler.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  await assertWorkstationDescendantsContained(
+    defaultSchedulerNode,
+    "Default scheduler",
+  );
 }
 
 async function verifyDenseActiveWork(page) {
@@ -189,25 +217,18 @@ async function verifyDenseActiveWork(page) {
     const marker = node.querySelector(
       '[data-workstation-work-progress="numeric"]',
     );
-    const content = Array.from(
-      node.querySelectorAll(
-        [
-          "[data-workstation-title]",
-          "[data-workstation-runtime-label]",
-          "[data-workstation-scheduling-label]",
-          "[data-workstation-work-progress]",
-          "[data-graph-interaction-overlay]",
-        ].join(", "),
-      ),
-    );
+    const content = Array.from(node.querySelectorAll("*")).filter((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0;
+    });
     const escaped = content
       .map((element) => {
         const bounds = element.getBoundingClientRect();
         return {
           selector:
-            element.getAttribute("data-workstation-work-progress") ??
-            element.getAttribute("data-workstation-title") ??
-            element.tagName,
+            element
+              .getAttributeNames()
+              .find((name) => name.startsWith("data-")) ?? element.tagName,
           left: bounds.left < nodeBounds.left,
           right: bounds.right > nodeBounds.right,
           top: bounds.top < nodeBounds.top,

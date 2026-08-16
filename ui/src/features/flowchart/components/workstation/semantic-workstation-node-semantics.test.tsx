@@ -239,6 +239,17 @@ describe("Factory workstation density", () => {
     expect(scheduler?.className).toContain("whitespace-nowrap");
   });
 
+  it("does not put a disabled summary button over read-only graph nodes", () => {
+    const readOnlySummary = renderWorkstationNode({ summaryOnly: true });
+
+    expect(readOnlySummary.container.querySelector("button")).toBeNull();
+    expect(
+      readOnlySummary.container.querySelector(
+        "[data-workstation-scheduling-label]",
+      )?.textContent,
+    ).toContain("Default scheduler");
+  });
+
   it("keeps the interaction overlay and workstation selection control usable", () => {
     const onSelectWorkstation = vi.fn();
     const workstationNode = renderWorkstationNode({

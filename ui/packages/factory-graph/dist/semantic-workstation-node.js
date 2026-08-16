@@ -3,9 +3,9 @@ import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
-import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphWorkstationControlRoleLabel, factoryGraphWorkstationGuardLimitLabel, factoryGraphWorkstationGuardLimitValue, factoryGraphWorkstationGuardTargetLabel, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 const WORKSTATION_WORK_ITEM_MODE_MAXIMUM = 2;
 const WORKSTATION_HEADER_CLASS_NAME = "flex min-w-0 w-full flex-wrap items-start justify-between gap-1 overflow-hidden";
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
@@ -41,14 +41,11 @@ export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelec
         }, zAxisIncompleteHints: data.zAxisIncompleteHints, children: data.summaryOnly ? (_jsx(Summary, { data: data, presentation: presentation, title: title, visualState: visualState })) : (_jsx(ActiveContent, { data: data, entries: entries, presentation: presentation, title: title, visualState: visualState })) }));
 }
 function Summary({ data, presentation, title, visualState, }) {
-    return (_jsxs("div", { className: "grid min-w-0 gap-0.5", "data-workstation-control-role": presentation.controlRole, "data-workstation-density": "compact", "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [_jsx(GraphNodeButton, { "aria-label": data.onSelectWorkstation
-                    ? selectWorkstationLabel(title, data.locale)
-                    : undefined, "aria-pressed": data.onSelectWorkstation ? visualState.selection : undefined, className: WORKSTATION_HEADER_CLASS_NAME, "data-selected-workstation": visualState.selection ? "true" : undefined, disabled: data.onSelectWorkstation === undefined, onClick: data.onSelectWorkstation
-                    ? (event) => {
-                        event.stopPropagation();
-                        data.onSelectWorkstation?.(data.workstation.node_id);
-                    }
-                    : undefined, title: title, children: _jsx(Header, { presentation: presentation, title: title }) }), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
+    const header = _jsx(Header, { presentation: presentation, title: title });
+    return (_jsxs("div", { className: "grid min-w-0 gap-0.5", "data-workstation-control-role": presentation.controlRole, "data-workstation-density": "compact", "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: WORKSTATION_HEADER_CLASS_NAME, "data-selected-workstation": visualState.selection ? "true" : undefined, onClick: (event) => {
+                    event.stopPropagation();
+                    data.onSelectWorkstation?.(data.workstation.node_id);
+                }, title: title, children: header })) : (_jsx("div", { className: WORKSTATION_HEADER_CLASS_NAME, title: title, children: header })), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
 }
 function ActiveContent({ data, entries, presentation, title, visualState, }) {
     const progressMode = factoryGraphWorkProgressMode(entries.length, WORKSTATION_WORK_ITEM_MODE_MAXIMUM);
