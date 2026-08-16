@@ -165,6 +165,12 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/services/worker_sessions/internal/service/invoke_session.go",
+      "owner": "worker-maintainers",
+      "removalReason": "deadline supervision shares the invocation lifecycle file until the exact package file-count ratchet permits a focused split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/services/worker_sessions/internal/service/start_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -2514,6 +2520,12 @@
       "target": "pkg/services/worker_sessions/internal/service/internal_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/services/worker_sessions/internal/service/invoke_session.go",
+      "owner": "worker-maintainers",
+      "removalReason": "deadline supervision shares the invocation lifecycle file until the exact package file-count ratchet permits a focused split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",

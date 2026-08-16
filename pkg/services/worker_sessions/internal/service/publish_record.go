@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -909,6 +910,56 @@ func (r *registry) replayObservationStream(
 	}
 	wrapped := &observationSubscription{replay: replay, workerSessionID: observationWorkerSessionIDFromTopic(topic)}
 	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
+}
+
+func (r *registry) closeWorkerRecording(
+	ctx context.Context,
+	recording recordings.WorkerSessionRecording,
+	state workersessions.State,
+	position events.AggregateSequence,
+) error {
+	finalizer, ok := recording.(recordings.WorkerSessionRecordingFinalizer)
+	if !ok {
+		return recording.Close(ctx)
+	}
+	phase, err := terminalPhase(state)
+	if err != nil {
+		return errors.Join(err, recording.Close(ctx))
+	}
+	return finalizer.CloseWithTerminal(ctx, recordings.WorkerRecordingTerminal{
+		Position: position,
+		Phase:    phase,
+		Status:   string(state),
+	})
+}
+
+func (r *registry) logTerminal(id, attemptID string, session workersessions.Session) {
+	cause := ""
+	if session.Result != nil {
+		cause = causeKindString(session.Result.Cause)
+	}
+	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
+}
+
+func (r *registry) sessionState(id string) workersessions.State {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if session, ok := r.sessions[id]; ok {
+		return session.State
+	}
+	return ""
+}
+
+func (r *registry) logReconciliationIfNeeded(
+	id, attemptID string,
+	result workers.WorkstationDispatchResult,
+	priorState, resultingState workersessions.State,
+	startedAt, deadlineAt time.Time,
+) {
+	if result.ReconciliationReason == "" {
+		return
+	}
+	r.logReconciliation(id, attemptID, result, priorState, resultingState, startedAt, deadlineAt)
 }
 
 func (r *registry) liveObservationStream(

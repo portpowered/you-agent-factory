@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -22,6 +23,46 @@ type CommandRunner interface {
 type Clock interface {
 	Now() time.Time
 	After(time.Duration) <-chan time.Time
+}
+
+// ProcessLifecycleObserver receives policy-free facts about the parent
+// process started for one command. It is intentionally narrower than a
+// command result: an observer may learn that the process is gone while the
+// command runner is still waiting for inherited pipes or other cleanup.
+// Implementations must return promptly.
+type ProcessLifecycleObserver interface {
+	ProcessStarted(ProcessInfo)
+	ProcessExited(ProcessInfo)
+}
+
+// ProcessInfo identifies the exact host process observed by the platform
+// effect. PID is useful for diagnostics only; callers must not use it as a
+// durable identity after the observation ends.
+type ProcessInfo struct {
+	PID int
+}
+
+type processLifecycleObserverContextKey struct{}
+
+// WithProcessLifecycleObserver attaches one process observer to a command
+// context. The value is an optional effect supplied by the caller; process
+// execution remains policy-free and does not decide what an exit means.
+func WithProcessLifecycleObserver(ctx context.Context, observer ProcessLifecycleObserver) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if observer == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, processLifecycleObserverContextKey{}, observer)
+}
+
+func processLifecycleObserverFromContext(ctx context.Context) ProcessLifecycleObserver {
+	if ctx == nil {
+		return nil
+	}
+	observer, _ := ctx.Value(processLifecycleObserverContextKey{}).(ProcessLifecycleObserver)
+	return observer
 }
 
 // CommandFactory creates one inert host command. Production command creation
@@ -243,3 +284,87 @@ func waitForCommandCancellation(
 }
 
 var _ CommandRunner = ExecCommandRunner{}
+
+const (
+	processLifecyclePollInterval = 10 * time.Millisecond
+	processExitObservationGrace  = 50 * time.Millisecond
+)
+
+// processLifecycleMonitor watches the parent process independently from
+// exec.Cmd.Wait. That distinction is the important failure boundary: Wait
+// can remain blocked by inherited pipes after the parent process has exited.
+type processLifecycleMonitor struct {
+	observer ProcessLifecycleObserver
+	info     ProcessInfo
+	stop     chan struct{}
+	done     chan struct{}
+	exited   sync.Once
+}
+
+func startProcessLifecycleMonitor(
+	cmd *exec.Cmd,
+	waitDone <-chan struct{},
+	observer ProcessLifecycleObserver,
+) *processLifecycleMonitor {
+	if cmd == nil || cmd.Process == nil || observer == nil {
+		return nil
+	}
+	monitor := &processLifecycleMonitor{
+		observer: observer,
+		info:     ProcessInfo{PID: cmd.Process.Pid},
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
+	}
+	observer.ProcessStarted(monitor.info)
+	go monitor.watch(cmd, waitDone)
+	return monitor
+}
+
+func (m *processLifecycleMonitor) watch(cmd *exec.Cmd, waitDone <-chan struct{}) {
+	defer close(m.done)
+	ticker := time.NewTicker(processLifecyclePollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-m.stop:
+			return
+		case <-ticker.C:
+			if commandProcessLeaderRunning(cmd) {
+				continue
+			}
+			grace := time.NewTimer(processExitObservationGrace)
+			select {
+			case <-m.stop:
+				if !grace.Stop() {
+					<-grace.C
+				}
+				return
+			case <-waitDone:
+				if !grace.Stop() {
+					<-grace.C
+				}
+				return
+			case <-grace.C:
+				m.notifyExit()
+				return
+			}
+		}
+	}
+}
+
+func (m *processLifecycleMonitor) notifyExit() {
+	if m == nil || m.observer == nil {
+		return
+	}
+	m.exited.Do(func() {
+		m.observer.ProcessExited(m.info)
+	})
+}
+
+func (m *processLifecycleMonitor) stopAndWait() {
+	if m == nil {
+		return
+	}
+	close(m.stop)
+	<-m.done
+}

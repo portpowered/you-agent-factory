@@ -79,13 +79,17 @@ const (
 	// FailureCauseProcessGone reports that Workers observed the executor's
 	// parent process exit before it produced a terminal dispatch result.
 	FailureCauseProcessGone FailureCauseKind = "PROCESS_GONE"
+	// FailureCauseTimeout reports that the resolved hard execution deadline
+	// elapsed before Workers observed a terminal dispatch result.
+	FailureCauseTimeout FailureCauseKind = "TIMEOUT"
 )
 
-// Valid reports whether k is one of the eight bounded W2+W3 failure kinds.
+// Valid reports whether k is one of the nine bounded W2+W3 failure kinds.
 func (k FailureCauseKind) Valid() bool {
 	switch k {
 	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseRejected, FailureCauseAdapterFailure,
-		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure, FailureCauseProcessGone:
+		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure, FailureCauseProcessGone,
+		FailureCauseTimeout:
 		return true
 	default:
 		return false

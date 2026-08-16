@@ -387,7 +387,7 @@ func (p *Pool) Cancel(
 	if !ok {
 		return workers.WorkstationDispatchCancelResult{}, workers.ErrUnknownWorkstationDispatch
 	}
-	return record.cancelOutcome()
+	return record.cancelOutcome(request.Reason)
 }
 
 func (p *Pool) accept(
@@ -483,6 +483,13 @@ func (route *routePool) releaseLocked(entry *admission) {
 	}
 	entry.released = true
 	if !entry.running {
+		for index, queued := range route.waiting {
+			if queued != entry {
+				continue
+			}
+			route.waiting = append(route.waiting[:index], route.waiting[index+1:]...)
+			break
+		}
 		return
 	}
 	route.running--
@@ -548,28 +555,78 @@ func (record *dispatchRecord) processExitedSignal() {
 		record.mu.Unlock()
 		return
 	}
+	record.reconcileLocked(
+		workers.WorkstationDispatchReconciliationReasonProcessGone,
+		workers.ErrWorkstationDispatchProcessGone,
+		workers.WorkFailureTypeUnknown,
+		"process_gone",
+		"process",
+	)
+	record.mu.Unlock()
+	record.releaseAdmission()
+	record.cancel()
+}
+
+func (record *dispatchRecord) reconcileTimeout() (workers.WorkstationDispatchCancelOutcome, error) {
+	record.mu.Lock()
+	if record.terminal {
+		outcome := workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		var err error = workers.ErrWorkstationDispatchAlreadyTerminal
+		if record.result.ReconciliationReason == workers.WorkstationDispatchReconciliationReasonTimeout {
+			outcome = workers.WorkstationDispatchCancelOutcomeAlreadyReconciled
+			err = nil
+		}
+		record.mu.Unlock()
+		record.logCancelOutcome(outcome, workers.WorkstationDispatchCancelReasonTimeout)
+		return outcome, err
+	}
+	record.reconcileLocked(
+		workers.WorkstationDispatchReconciliationReasonTimeout,
+		workers.ErrWorkstationDispatchTimeout,
+		workers.WorkFailureTypeTimeout,
+		"execution_timeout",
+		"execution",
+	)
+	record.mu.Unlock()
+	record.releaseAdmission()
+	record.cancel()
+	record.logCancelOutcome(
+		workers.WorkstationDispatchCancelOutcomeReconciled,
+		workers.WorkstationDispatchCancelReasonTimeout,
+	)
+	return workers.WorkstationDispatchCancelOutcomeReconciled, nil
+}
+
+// reconcileLocked commits the one absorbing terminal result for an execution
+// lifecycle fact. The caller holds record.mu and releases route capacity only
+// after publishing the result and closing the dispatch wait.
+func (record *dispatchRecord) reconcileLocked(
+	reason workers.WorkstationDispatchReconciliationReason,
+	reconcileErr error,
+	failureType workers.WorkFailureType,
+	classification string,
+	stage string,
+) {
 	record.terminal = true
 	record.result = record.baseResult()
 	record.result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeFailed
-	record.result.ReconciliationReason = workers.WorkstationDispatchReconciliationReasonProcessGone
+	record.result.ReconciliationReason = reason
 	record.result.Result.Outcome = workers.OutcomeFailed
-	record.result.Result.Error = workers.ErrWorkstationDispatchProcessGone.Error()
+	record.result.Result.Error = reconcileErr.Error()
 	record.result.Result.FailureMetadata = &workers.WorkFailureMetadata{
 		Family: workers.WorkFailureFamilyRetryable,
+		Type:   failureType,
 	}
 	record.result.Result.Diagnostics = &workers.WorkDiagnostics{
 		Metadata: map[string]string{
 			workers.ProviderResponseMetadataFailureOperation:      "worker_session_reconciliation",
-			workers.ProviderResponseMetadataFailureClassification: "process_gone",
-			workers.ProviderResponseMetadataFailureStage:          "process",
+			workers.ProviderResponseMetadataFailureClassification: classification,
+			workers.ProviderResponseMetadataFailureStage:          stage,
 		},
 	}
-	record.err = workers.ErrWorkstationDispatchProcessGone
+	record.err = reconcileErr
 	record.logTerminal()
 	close(record.reconciliationDone)
-	record.mu.Unlock()
-	record.releaseAdmission()
-	record.cancel()
 }
 
 func (record *dispatchRecord) terminalResult() (workers.WorkstationDispatchResult, error) {
@@ -645,10 +702,17 @@ func (record *dispatchRecord) commitCancellationLocked(
 	return record.result, record.err, record.cancel
 }
 
-func (record *dispatchRecord) cancelOutcome() (
+func (record *dispatchRecord) cancelOutcome(reason workers.WorkstationDispatchCancelReason) (
 	workers.WorkstationDispatchCancelResult,
 	error,
 ) {
+	if reason == workers.WorkstationDispatchCancelReasonTimeout {
+		outcome, err := record.reconcileTimeout()
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: record.dispatchID,
+			Outcome:    outcome,
+		}, err
+	}
 	record.mu.Lock()
 	if record.terminal {
 		outcome := workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
@@ -658,7 +722,7 @@ func (record *dispatchRecord) cancelOutcome() (
 			err = nil
 		}
 		record.mu.Unlock()
-		record.logCancelOutcome(outcome)
+		record.logCancelOutcome(outcome, reason)
 		return workers.WorkstationDispatchCancelResult{
 			DispatchID: record.dispatchID,
 			Outcome:    outcome,
@@ -667,7 +731,7 @@ func (record *dispatchRecord) cancelOutcome() (
 	_, _, cancel := record.commitCancellationLocked(context.Canceled)
 	record.mu.Unlock()
 	cancel()
-	record.logCancelOutcome(workers.WorkstationDispatchCancelOutcomeCanceled)
+	record.logCancelOutcome(workers.WorkstationDispatchCancelOutcomeCanceled, reason)
 	return workers.WorkstationDispatchCancelResult{
 		DispatchID: record.dispatchID,
 		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
@@ -677,16 +741,22 @@ func (record *dispatchRecord) cancelOutcome() (
 // logCancelOutcome emits one structured record per explicit Cancel call,
 // including idempotent no-op outcomes. dispatchID and workstationName are
 // immutable after construction so this is safe without holding record.mu.
-func (record *dispatchRecord) logCancelOutcome(outcome workers.WorkstationDispatchCancelOutcome) {
+func (record *dispatchRecord) logCancelOutcome(
+	outcome workers.WorkstationDispatchCancelOutcome,
+	reason workers.WorkstationDispatchCancelReason,
+) {
 	if record == nil || record.logger == nil {
 		return
 	}
-	record.logger.Info(
-		"workers workstation dispatch cancellation",
+	fields := []any{
 		"workstation_name", record.workstationName,
 		"dispatch_id", record.dispatchID,
 		"outcome", string(outcome),
-	)
+	}
+	if reason != "" {
+		fields = append(fields, "reason", string(reason))
+	}
+	record.logger.Info("workers workstation dispatch cancellation", fields...)
 }
 
 func (record *dispatchRecord) baseResult() workers.WorkstationDispatchResult {

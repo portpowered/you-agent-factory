@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3208,3 +3209,283 @@ var _ workers.WorkstationPoolBoundary = executionBoundary{}
 var _ platformclock.Source = platformclock.Real{}
 
 var _ logging.Logger = logging.NoopLogger{}
+
+func TestInvokeSession_ProcessGoneTerminalizesExactlyOnceWithSafeClassification(t *testing.T) {
+	logger := &recordingLogger{}
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return processGoneResult(request), workers.ErrWorkstationDispatchProcessGone
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-gone", "dispatch-gone"))
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v", err)
+	}
+	if result.Session.State != workersessions.StateFailed || result.Session.Result == nil {
+		t.Fatalf("ProcessGone session = %#v, want one FAILED terminal result", result.Session)
+	}
+	if result.Session.Result.Cause == nil || result.Session.Result.Cause.Kind != workersessions.FailureCauseProcessGone {
+		t.Fatalf("ProcessGone cause = %#v, want PROCESS_GONE", result.Session.Result.Cause)
+	}
+	if result.Session.Result.Cause.Detail != "the worker process exited before dispatch completion" {
+		t.Fatalf("ProcessGone cause detail = %q, want fixed safe detail", result.Session.Result.Cause.Detail)
+	}
+	if result.Attempts != 1 || execution.callCount() != 1 {
+		t.Fatalf("ProcessGone attempts = %d, dispatch calls = %d, want one each", result.Attempts, execution.callCount())
+	}
+
+	assertReconciliationLog(t, logger, "worker-gone", "dispatch-gone", "PROCESS_GONE", "not_applicable", 0)
+}
+
+func TestInvokeSession_ProcessGoneRemainsRetryEligible(t *testing.T) {
+	var attempts atomic.Int32
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			if attempts.Add(1) == 1 {
+				return processGoneResult(request), workers.ErrWorkstationDispatchProcessGone
+			}
+			return acceptedResult(request), nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	request := validStartRequest("worker-retry-gone", "dispatch-gone")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v", err)
+	}
+	if result.Session.State != workersessions.StateCompleted || result.Attempts != 2 {
+		t.Fatalf("retry after ProcessGone = %#v, want COMPLETED after two attempts", result)
+	}
+	if execution.callCount() != 2 {
+		t.Fatalf("dispatch calls after ProcessGone = %d, want 2", execution.callCount())
+	}
+	requests := execution.requests()
+	if len(requests) != 2 || requests[1].Execution.Dispatch.DispatchID != "dispatch-gone/attempt/2" {
+		t.Fatalf("retry requests = %#v, want stable identity with /attempt/2 dispatch", requests)
+	}
+}
+
+func TestInvokeSession_DeadlineReconcilesTerminallyWithBoundedDiagnostics(t *testing.T) {
+	base := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
+	clock := platformclock.NewDeterministic(base, time.Second)
+	logger := &recordingLogger{}
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	request := validStartRequest("worker-timeout", "dispatch-timeout")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	boundary.setCancel(func(_ context.Context, cancel workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		if cancel.Reason != workers.WorkstationDispatchCancelReasonTimeout {
+			return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationDispatchAlreadyTerminal
+		}
+		boundary.complete(timeoutResult(cancel.DispatchID), workers.ErrWorkstationDispatchTimeout)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: cancel.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeReconciled,
+		}, nil
+	})
+	registry, err := newServiceWithClock(boundary, eventsSvc, logger, clock)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+
+	outcomes := make(chan struct {
+		result workersessions.InvokeSessionResult
+		err    error
+	}, 1)
+	go func() {
+		result, invokeErr := registry.InvokeSession(context.Background(), request)
+		outcomes <- struct {
+			result workersessions.InvokeSessionResult
+			err    error
+		}{result: result, err: invokeErr}
+	}()
+	select {
+	case <-boundary.admitted:
+	case <-time.After(time.Second):
+		t.Fatal("Worker Session did not reach the admitted deadline-watch state")
+	}
+	clock.SetTick(5)
+
+	select {
+	case outcome := <-outcomes:
+		if outcome.err != nil {
+			t.Fatalf("InvokeSession() error = %v", outcome.err)
+		}
+		assertTimeoutInvokeResult(t, outcome.result)
+	case <-time.After(time.Second):
+		t.Fatal("deadline reconciliation did not terminalize the Worker Session")
+	}
+
+	assertSessionRecords(t, eventsSvc, "worker-timeout")
+	assertReconciliationLog(t, logger, "worker-timeout", "dispatch-timeout", "EXECUTION_TIMEOUT", base.Add(5*time.Second).Format(time.RFC3339Nano), 5000)
+}
+
+func TestInvokeSession_DeadlineFailureRemainsEligibleForExistingRetryPolicy(t *testing.T) {
+	base := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
+	clock := platformclock.NewDeterministic(base, time.Second)
+	releaseFirst := make(chan struct{})
+	var releaseFirstOnce sync.Once
+	dispatchStarted := make(chan struct{})
+	var attempts atomic.Int32
+	execution := &fakeExecution{
+		admissionStarted: make(chan struct{}),
+		releaseAdmission: make(chan struct{}),
+		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			if attempts.Add(1) == 1 {
+				close(dispatchStarted)
+				<-releaseFirst
+				return timeoutResult(request.Execution.Dispatch.DispatchID), workers.ErrWorkstationDispatchTimeout
+			}
+			return acceptedResult(request), nil
+		},
+	}
+	execution.cancel = func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		if request.Reason != workers.WorkstationDispatchCancelReasonTimeout {
+			return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationDispatchAlreadyTerminal
+		}
+		releaseFirstOnce.Do(func() { close(releaseFirst) })
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeReconciled,
+		}, nil
+	}
+	registry, err := newServiceWithClock(executionBoundary{execution: execution}, newEventsAppender(), nil, clock)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	request := validStartRequest("worker-timeout-retry", "dispatch-timeout-retry")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+
+	outcomes := make(chan workersessions.InvokeSessionResult, 1)
+	go func() {
+		result, invokeErr := registry.InvokeSession(context.Background(), request)
+		if invokeErr != nil {
+			t.Errorf("InvokeSession() error = %v", invokeErr)
+		}
+		outcomes <- result
+	}()
+	select {
+	case <-execution.admissionStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first attempt did not reach Workers admission")
+	}
+	close(execution.releaseAdmission)
+	select {
+	case <-dispatchStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first attempt did not start execution")
+	}
+	clock.SetTick(5)
+
+	var result workersessions.InvokeSessionResult
+	select {
+	case result = <-outcomes:
+	case <-time.After(time.Second):
+		t.Fatal("timeout retry did not complete")
+	}
+	assertTimeoutRetry(t, result, execution, attempts.Load())
+}
+
+func assertTimeoutInvokeResult(t *testing.T, result workersessions.InvokeSessionResult) {
+	t.Helper()
+	if result.Session.State != workersessions.StateFailed || result.Session.Result == nil {
+		t.Fatalf("timeout session = %#v, want one FAILED terminal", result.Session)
+	}
+	cause := result.Session.Result.Cause
+	if cause == nil || cause.Kind != workersessions.FailureCauseTimeout || cause.Detail != "the worker execution exceeded its hard deadline" {
+		t.Fatalf("timeout cause = %#v, want bounded TIMEOUT classification", cause)
+	}
+	if result.Dispatch.ReconciliationReason != workers.WorkstationDispatchReconciliationReasonTimeout {
+		t.Fatalf("timeout dispatch reason = %q, want EXECUTION_TIMEOUT", result.Dispatch.ReconciliationReason)
+	}
+	metadata := result.Dispatch.Result.FailureMetadata
+	if metadata == nil || metadata.Type != workers.WorkFailureTypeTimeout {
+		t.Fatalf("timeout failure metadata = %#v, want timeout type", metadata)
+	}
+	if result.Attempts != 1 {
+		t.Fatalf("timeout attempts = %d, want one", result.Attempts)
+	}
+}
+
+func assertTimeoutRetry(t *testing.T, result workersessions.InvokeSessionResult, execution *fakeExecution, calls int32) {
+	t.Helper()
+	if result.Session.State != workersessions.StateCompleted || result.Attempts != 2 {
+		t.Fatalf("timeout retry result = %#v, want COMPLETED after two attempts", result)
+	}
+	if calls != 2 {
+		t.Fatalf("timeout retry execution calls = %d, want 2", calls)
+	}
+	requests := execution.requests()
+	if len(requests) != 2 || requests[1].Execution.Dispatch.DispatchID != "dispatch-timeout-retry/attempt/2" {
+		t.Fatalf("timeout retry requests = %#v, want /attempt/2 dispatch identity", requests)
+	}
+	cancellations := execution.cancellationRequests()
+	if len(cancellations) != 1 || cancellations[0].Reason != workers.WorkstationDispatchCancelReasonTimeout {
+		t.Fatalf("timeout reconciliation cancellations = %#v, want one timeout request", cancellations)
+	}
+}
+
+func assertReconciliationLog(t *testing.T, logger *recordingLogger, sessionID, attemptID, reason, deadline string, timeoutMS int64) {
+	t.Helper()
+	reconciliation := logger.entriesFor("worker session reconciliation")
+	if len(reconciliation) != 1 {
+		t.Fatalf("reconciliation log entries = %d, want exactly one", len(reconciliation))
+	}
+	fields := reconciliation[0].fields
+	if fields["sessionID"] != sessionID || fields["attemptID"] != attemptID || fields["dispatchID"] != attemptID ||
+		fields["reason"] != reason || fields["prior_state"] != string(workersessions.StateRunning) ||
+		fields["resulting_state"] != string(workersessions.StateFailed) ||
+		fields["result"] != string(workers.WorkstationDispatchTerminalOutcomeFailed) {
+		t.Fatalf("reconciliation log fields = %#v, want bounded identity and state facts", fields)
+	}
+	if elapsed, ok := fields["elapsed_ms"].(int64); !ok || elapsed < 0 {
+		t.Fatalf("reconciliation elapsed_ms = %#v, want non-negative int64", fields["elapsed_ms"])
+	}
+	if fields["deadline"] != deadline {
+		t.Fatalf("reconciliation deadline = %#v, want %q", fields["deadline"], deadline)
+	}
+	if timeoutMS > 0 && fields["configured_timeout_ms"] != timeoutMS {
+		t.Fatalf("configured timeout = %#v, want %d", fields["configured_timeout_ms"], timeoutMS)
+	}
+}
+
+func processGoneResult(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	dispatchID := request.Execution.Dispatch.DispatchID
+	return workers.WorkstationDispatchResult{
+		DispatchID:           dispatchID,
+		WorkstationName:      request.WorkstationName,
+		TerminalOutcome:      workers.WorkstationDispatchTerminalOutcomeFailed,
+		ReconciliationReason: workers.WorkstationDispatchReconciliationReasonProcessGone,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyRetryable,
+			},
+		},
+	}
+}
+
+func timeoutResult(dispatchID string) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:           dispatchID,
+		TerminalOutcome:      workers.WorkstationDispatchTerminalOutcomeFailed,
+		ReconciliationReason: workers.WorkstationDispatchReconciliationReasonTimeout,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyRetryable,
+				Type:   workers.WorkFailureTypeTimeout,
+			},
+		},
+	}
+}

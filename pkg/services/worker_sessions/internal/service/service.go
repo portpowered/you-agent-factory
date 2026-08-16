@@ -193,6 +193,20 @@ func (r *registry) LoadWorkerRecording(
 	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
+func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
+	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled || errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		if action == workersessions.ControlActionTerminate {
+			return workersessions.StateTerminated, workersessions.TerminalResult{}
+		}
+		return workersessions.StateCanceled, workersessions.TerminalResult{}
+	}
+	terminal := classifyTerminal(dispatchErr, result)
+	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
+		return workersessions.StateCompleted, terminal
+	}
+	return workersessions.StateFailed, terminal
+}
+
 func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.InvokeSessionRequest) (recordings.WorkerSessionRecording, error) {
 	recordingID := strings.TrimSpace(req.Execution.Execution.RecordingID)
 	if r.recording == nil || recordingID == "" {
