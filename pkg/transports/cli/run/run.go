@@ -236,19 +236,6 @@ func remoteResponseStreamFailureResult(requestID, sessionID string, err error) a
 // RuntimeRunner is the local in-process runtime seam used by CLI startup.
 type RuntimeRunner = factoryServiceRunner
 
-type cleanInvocationSuccess struct {
-	Output       string `json:"output"`
-	WorkID       string `json:"workId"`
-	WorkTypeName string `json:"workTypeName"`
-	TraceID      string `json:"traceId,omitempty"`
-	SessionID    string `json:"sessionId,omitempty"`
-}
-
-type cleanInvocationWorkTarget struct {
-	WorkID       string
-	WorkTypeName string
-}
-
 // RuntimeRunnerBuilder is the CLI edge adapter for one owner-bounded Factory
 // Sessions request. Presentation state is registered with the process-scoped
 // opening owner before this value-only request is built.
@@ -322,7 +309,6 @@ type Operation struct {
 	invocationTarget     factorysessions.InvocationTarget
 	invocation           InvocationOperation
 	presentation         factoryvisualization.ResponsePresentation
-	prepareWorkTarget    work.SingleWorkTargetPreparation
 	invocationMode       bool
 	recordPath           resolvedRunRecordPath
 	hostedInvocation     HostedInvocationOperation
@@ -394,7 +380,7 @@ func open(
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg)
+	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg, prepareWorkTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +460,6 @@ func (operation *Operation) Run(ctx context.Context) error {
 		ctx,
 		operation.cfg,
 		operation.runner,
-		operation.prepareWorkTarget,
 		operation.recordPath,
 	)
 }
@@ -559,15 +544,39 @@ func (operation *Operation) runInvocation(ctx context.Context) error {
 			logger: operation.logger, presentations: operation.openingPresentations,
 		}
 	}
-	return runFactoryInvocation(
+	var startedAt time.Time
+	if operation.cfg.CleanInvocation {
+		if operation.cfg.Clock == nil {
+			return fmt.Errorf("run clock is required")
+		}
+		startedAt = operation.cfg.Clock.Now().UTC()
+		recordCleanInvocationAttempt()
+	}
+	result, err := runFactoryInvocationWithResult(
 		ctx, operation.cfg, target, *operation.invocationRequest,
 		invocation, operation.presentation, operation.openingPresentations,
 	)
+	if operation.cfg.CleanInvocation {
+		duration := operation.cfg.Clock.Now().Sub(startedAt)
+		var resultPtr *apisurface.FactoryInvocationResult
+		if result.Status != "" {
+			resultPtr = &result
+		}
+		recordCleanInvocationCompletion(cleanInvocationLogger(operation.logger), operation.cfg, cleanInvocationCompletionLogInput{
+			Duration: duration,
+			Result:   resultPtr,
+			Err:      err,
+		})
+	}
+	return err
 }
 
 func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
 	if !cfg.CleanInvocation {
 		return cfg
+	}
+	if cfg.JSON {
+		cfg.JSONOutput = true
 	}
 	cfg.SuppressDashboardRendering = true
 	cfg.StartupOutput = nil
@@ -577,7 +586,10 @@ func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
 	return cfg
 }
 
-func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, bool, resolvedRunRecordPath, error) {
+func prepareRunConfig(
+	cfg RunConfig,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+) (RunConfig, *factoryapi.InvocationRequest, bool, resolvedRunRecordPath, error) {
 	if cfg.Bootstrap {
 		if err := bootstrapFactoryWithInitializer(cfg.Dir, cfg.FactoryScaffoldInitializer, cfg.ResolveCurrentFactoryDir, cfg.DirectoryCreator); err != nil {
 			return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
@@ -590,7 +602,7 @@ func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, 
 	}
 	cfg.RecordPath = recordPath.servicePath
 
-	invocationRequest, invocationMode, err := resolveFactoryInvocationRequest(cfg)
+	invocationRequest, invocationMode, err := resolveFactoryInvocationRequestForRun(cfg, prepareWorkTarget)
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
@@ -646,24 +658,12 @@ func runFactoryServiceAndEmitResult(
 	ctx context.Context,
 	cfg RunConfig,
 	factorySvc factoryServiceRunner,
-	prepareWorkTarget work.SingleWorkTargetPreparation,
 	recordPath resolvedRunRecordPath,
 ) error {
-	var startedAt time.Time
-	if cfg.CleanInvocation {
-		if cfg.Clock == nil {
-			return fmt.Errorf("run clock is required")
-		}
-		startedAt = cfg.Clock.Now().UTC()
-		recordCleanInvocationAttempt()
-	}
 	err := factorySvc.Run(ctx)
 	logRunServiceOutcome(ctx, cfg, err)
 	if err == nil {
 		reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath, cfg.RecordingsCLI)
-	}
-	if cfg.CleanInvocation {
-		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, prepareWorkTarget, err, cfg.Clock.Now().Sub(startedAt))
 	}
 	if err != nil {
 		return err

@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -514,8 +515,7 @@ type CleanInvocationMetricsSnapshot struct {
 
 type cleanInvocationCompletionLogInput struct {
 	Duration time.Duration
-	Target   *cleanInvocationWorkTarget
-	Success  *cleanInvocationSuccess
+	Result   *apisurface.FactoryInvocationResult
 	Err      error
 }
 
@@ -548,28 +548,29 @@ func recordCleanInvocationCompletion(logger *zap.Logger, cfg RunConfig, input cl
 		zap.Int64("durationMs", input.Duration.Milliseconds()),
 	}
 
-	if input.Success != nil {
+	if input.Result != nil && input.Result.Status == interfaces.InvocationTerminalStatusCompleted && input.Err == nil {
 		cleanInvocationMetrics.successes.Add(1)
 		fields = append(fields,
 			zap.String("outcome", cleanInvocationOutcomeSuccess),
-			zap.String("workId", input.Success.WorkID),
-			zap.String("workTypeName", input.Success.WorkTypeName),
+			zap.String("workId", input.Result.WorkID),
+			zap.String("workTypeName", input.Result.WorkName),
 		)
-		if strings.TrimSpace(input.Success.TraceID) != "" {
-			fields = append(fields, zap.String("traceId", input.Success.TraceID))
+		if strings.TrimSpace(input.Result.TraceID) != "" {
+			fields = append(fields, zap.String("traceId", input.Result.TraceID))
 		}
-		if strings.TrimSpace(input.Success.SessionID) != "" {
-			fields = append(fields, zap.String("sessionId", input.Success.SessionID))
+		if strings.TrimSpace(input.Result.SessionID) != "" {
+			fields = append(fields, zap.String("sessionId", input.Result.SessionID))
 		}
 		logger.Info(cleanInvocationLogMessageCompleted, fields...)
 		return
 	}
-
-	if input.Target != nil {
-		fields = append(fields,
-			zap.String("workId", input.Target.WorkID),
-			zap.String("workTypeName", input.Target.WorkTypeName),
-		)
+	if input.Result != nil {
+		if strings.TrimSpace(input.Result.WorkID) != "" {
+			fields = append(fields, zap.String("workId", input.Result.WorkID))
+		}
+		if strings.TrimSpace(input.Result.WorkName) != "" {
+			fields = append(fields, zap.String("workTypeName", input.Result.WorkName))
+		}
 	}
 
 	outcome, code, summary := cleanInvocationFailureLogFields(input.Err)
@@ -592,20 +593,28 @@ func recordCleanInvocationCompletion(logger *zap.Logger, cfg RunConfig, input cl
 func cleanInvocationFailureLogFields(err error) (string, string, string) {
 	var invocationErr *InvocationError
 	if errors.As(err, &invocationErr) {
-		switch invocationErr.Code {
-		case InvocationErrorCodeCancelled:
-			return cleanInvocationOutcomeCancelled, invocationErr.Code, boundedInvocationErrorSummary(invocationErr.Message)
-		case InvocationErrorCodeTimeout:
-			return cleanInvocationOutcomeTimeout, invocationErr.Code, boundedInvocationErrorSummary(invocationErr.Message)
-		default:
-			return cleanInvocationOutcomeFailure, invocationErr.Code, boundedInvocationErrorSummary(invocationErr.Message)
-		}
+		return cleanInvocationFailureLogFieldsForCode(invocationErr.Code, invocationErr.Message)
+	}
+	var cliErr factoryruntimecli.InvocationCLIError
+	if errors.As(err, &cliErr) {
+		return cleanInvocationFailureLogFieldsForCode(cliErr.InvocationErrorCode(), cliErr.InvocationErrorMessage())
 	}
 	summary := boundedInvocationErrorSummary(errString(err))
 	if summary == "" {
 		return cleanInvocationOutcomeFailure, InvocationErrorCodeFailed, ""
 	}
 	return cleanInvocationOutcomeFailure, InvocationErrorCodeFailed, summary
+}
+
+func cleanInvocationFailureLogFieldsForCode(code, message string) (string, string, string) {
+	switch code {
+	case InvocationErrorCodeCancelled:
+		return cleanInvocationOutcomeCancelled, code, boundedInvocationErrorSummary(message)
+	case InvocationErrorCodeTimeout:
+		return cleanInvocationOutcomeTimeout, code, boundedInvocationErrorSummary(message)
+	default:
+		return cleanInvocationOutcomeFailure, code, boundedInvocationErrorSummary(message)
+	}
 }
 
 func cleanInvocationLogger(logger *zap.Logger) *zap.Logger {

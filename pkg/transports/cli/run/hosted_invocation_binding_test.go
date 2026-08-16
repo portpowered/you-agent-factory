@@ -53,6 +53,47 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	}
 }
 
+func TestPrepareHostedInvocationClearsFiniteWorkFile(t *testing.T) {
+	cleanOperation, cleanConfig, err := prepareHostedInvocation(
+		t.Context(),
+		RunConfig{CleanInvocation: true, WorkFile: "work.json"},
+		zap.NewNop(),
+		invocationRequestFromText("one-shot input"),
+		resolvedRunRecordPath{},
+		testInvocationOperation{},
+		nil,
+		nil,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("clean prepareHostedInvocation() error = %v", err)
+	}
+	if cleanOperation == nil {
+		t.Fatal("clean operation = nil")
+	}
+	if cleanConfig.WorkFile != "" {
+		t.Fatalf("clean runtime WorkFile = %q, want empty after owner projection", cleanConfig.WorkFile)
+	}
+
+	_, ordinaryConfig, err := prepareHostedInvocation(
+		t.Context(),
+		RunConfig{WorkFile: "work.json"},
+		zap.NewNop(),
+		nil,
+		resolvedRunRecordPath{},
+		testInvocationOperation{},
+		nil,
+		nil,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("ordinary prepareHostedInvocation() error = %v", err)
+	}
+	if ordinaryConfig.WorkFile != "work.json" {
+		t.Fatalf("ordinary runtime WorkFile = %q, want original batch input", ordinaryConfig.WorkFile)
+	}
+}
+
 type hostedInvocationCompletionRunner struct{}
 
 func (hostedInvocationCompletionRunner) Run(context.Context) error { return nil }

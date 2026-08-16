@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -433,6 +434,9 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	loadMockWorkers workers.MockWorkersConfigLoader,
 ) error {
 	cfg = ensureTestRecordingsCLI(cfg)
+	if cfg.WorkRequestFileLoader == nil && cfg.WorkFile != "" {
+		cfg.WorkRequestFileLoader = work.NewRequestFileLoader(platformfilesystem.Local{})
+	}
 	if cfg.Clock == nil {
 		cfg.Clock = platformclock.Real{}
 	}
