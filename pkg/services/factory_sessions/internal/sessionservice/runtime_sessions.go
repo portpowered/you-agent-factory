@@ -131,7 +131,7 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	return legacyObservation.GetEngineStateSnapshot(ctx)
 }
 
-func (fs *SessionRuntime) ObserveForSession(
+func (fs *SessionRuntime) observeRuntimeForSession(
 	ctx context.Context,
 	sessionID string,
 	req factory.ObserveRequest,
@@ -270,7 +270,7 @@ func (fs *SessionRuntime) requireIdleRuntimeForSession(
 	ctx context.Context,
 	sessionID string,
 ) error {
-	observationResult, err := fs.ObserveForSession(ctx, sessionID, factory.ObserveRequest{
+	observationResult, err := fs.observeRuntimeForSession(ctx, sessionID, factory.ObserveRequest{
 		Scope: factory.ObservationScopeFull,
 	})
 	if err != nil {

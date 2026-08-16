@@ -279,10 +279,3 @@ func TestMoveWorkBySessionId_RejectsInvalidJSONBody(t *testing.T) {
 	)
 	assertErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")
 }
-
-func TestBindSessionObserver_NoOpsOnNilAdapter(t *testing.T) {
-	t.Parallel()
-
-	var adapter *Adapter
-	adapter.BindSessionObserver(&sessionObserverFake{})
-}

@@ -4,36 +4,31 @@ import (
 	"context"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-type factoryStatusSessionReader interface {
-	ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
-}
-
 type factoryStatusAPI struct {
-	sessions factoryStatusSessionReader
+	runtime   factoryruntime.Service
+	projector factoryruntime.FactoryStatusProjector
 }
 
-// newFactoryStatusAPI takes only the session reader: Bind rejects a nil
-// factorysessions.Service before constructing this API, so every Factory status
-// projection -- current Factory included -- resolves through Factory Sessions.
-// There is no legacy Factory Runtime observation fallback left to reach.
-func newFactoryStatusAPI(sessions factoryStatusSessionReader) apisurface.FactoryStatusAPI {
-	return &factoryStatusAPI{sessions: sessions}
+// newFactoryStatusAPI binds status projection to the already-opened Runtime
+// capability. Factory Sessions owns session identity and controls; Runtime
+// owns the live observation itself.
+func newFactoryStatusAPI(runtime factoryruntime.Service, projector factoryruntime.FactoryStatusProjector) apisurface.FactoryStatusAPI {
+	return &factoryStatusAPI{runtime: runtime, projector: projector}
 }
 
 func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
-	if sessionID == "" {
-		sessionID = factorysessions.DefaultSessionID
+	_ = sessionID
+	if api == nil || api.runtime == nil || api.projector == nil {
+		return factoryruntime.FactoryStatus{}, factoryruntime.ErrNotRunning
 	}
-
-	result, err := api.sessions.ObserveForSession(ctx, sessionID, factoryruntime.ObserveRequest{
+	result, err := api.runtime.Observe(ctx, factoryruntime.ObserveRequest{
 		Scope: factoryruntime.ObservationScopeFull,
 	})
 	if err != nil {
 		return factoryruntime.FactoryStatus{}, err
 	}
-	return factoryruntime.FactoryStatusFromObservation(result.Observation), nil
+	return api.projector.ProjectFactoryStatusFromObservation(result.Observation), nil
 }

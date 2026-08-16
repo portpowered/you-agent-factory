@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,14 +54,12 @@ func TestGetStatus_MapsRootObservationToStatusResponse(t *testing.T) {
 	}
 }
 
-func TestGetStatusBySessionId_ForwardsSessionScopedObservation(t *testing.T) {
+func TestGetStatusBySessionId_UsesBoundRuntimeObservation(t *testing.T) {
 	t.Parallel()
 
-	var gotSessionID string
 	var gotScope factoryruntime.ObservationScope
-	sessions := &sessionObserverFake{
-		observe: func(_ context.Context, sessionID string, req factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-			gotSessionID = sessionID
+	runtime := &runtimeRootFake{
+		observe: func(_ context.Context, req factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 			gotScope = req.Scope
 			return factoryruntime.ObserveResult{Observation: factoryruntime.Observation{
 				Status:   factoryruntime.ObservationStatusActive,
@@ -71,17 +68,13 @@ func TestGetStatusBySessionId_ForwardsSessionScopedObservation(t *testing.T) {
 			}}, nil
 		},
 	}
-	adapter := NewAdapter(&runtimeRootFake{})
-	adapter.BindSessionObserver(sessions)
+	adapter := NewAdapter(runtime)
 
 	rec := httptest.NewRecorder()
 	adapter.GetStatusBySessionId(rec, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/status", nil), "session-beta")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	if gotSessionID != "session-beta" {
-		t.Fatalf("sessionID = %q, want session-beta", gotSessionID)
 	}
 	if gotScope != factoryruntime.ObservationScopeFull {
 		t.Fatalf("Observe scope = %q, want FULL", gotScope)
@@ -93,16 +86,6 @@ func TestGetStatusBySessionId_ForwardsSessionScopedObservation(t *testing.T) {
 	if response.FactoryState != "SCOPED" || response.TotalTokens != 2 {
 		t.Fatalf("response = %#v, want scoped observation projection", response)
 	}
-}
-
-func TestGetStatusBySessionId_RequiresSessionObserver(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewAdapter(&runtimeRootFake{})
-	rec := httptest.NewRecorder()
-	adapter.GetStatusBySessionId(rec, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/status", nil), "session-beta")
-
-	assertErrorResponse(t, rec, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "factory status is unavailable")
 }
 
 func TestGetStatus_MapsTypedObservationFailures(t *testing.T) {
@@ -158,13 +141,12 @@ func TestGetStatus_MapsTypedObservationFailures(t *testing.T) {
 func TestGetStatusBySessionId_MapsSessionNotFound(t *testing.T) {
 	t.Parallel()
 
-	sessions := &sessionObserverFake{
-		observe: func(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	runtime := &runtimeRootFake{
+		observe: func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 			return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 		},
 	}
-	adapter := NewAdapter(&runtimeRootFake{})
-	adapter.BindSessionObserver(sessions)
+	adapter := NewAdapter(runtime)
 
 	rec := httptest.NewRecorder()
 	adapter.GetStatusBySessionId(rec, httptest.NewRequest(http.MethodGet, "/factory-sessions/missing/status", nil), "missing")
@@ -186,19 +168,4 @@ func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, wantStatu
 	if response.Message != wantMsg {
 		t.Fatalf("message = %q, want %q", response.Message, wantMsg)
 	}
-}
-
-type sessionObserverFake struct {
-	observe func(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
-}
-
-func (fake *sessionObserverFake) ObserveForSession(
-	ctx context.Context,
-	sessionID string,
-	req factoryruntime.ObserveRequest,
-) (factoryruntime.ObserveResult, error) {
-	if fake.observe != nil {
-		return fake.observe(ctx, sessionID, req)
-	}
-	return factoryruntime.ObserveResult{}, errors.New("unexpected ObserveForSession call")
 }

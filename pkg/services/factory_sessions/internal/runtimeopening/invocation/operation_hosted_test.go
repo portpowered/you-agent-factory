@@ -97,10 +97,6 @@ func (fake *hostedLiveSessionsFake) ProbeDurableFactorySessionEvents(context.Con
 	return factorysessions.ErrDurableSessionNotFound
 }
 
-func (fake *hostedLiveSessionsFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
-}
-
 func (fake *hostedLiveSessionsFake) PauseLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
 }

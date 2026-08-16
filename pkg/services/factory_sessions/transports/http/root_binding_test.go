@@ -243,10 +243,6 @@ func (fake *httpSessionsRootFake) ProbeDurableFactorySessionEvents(context.Conte
 	return factorysessions.ErrDurableSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
-}
-
 func (fake *httpSessionsRootFake) PauseLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
 	if fake.onPauseLive != nil {
 		return fake.onPauseLive(ctx, sessionID, control)

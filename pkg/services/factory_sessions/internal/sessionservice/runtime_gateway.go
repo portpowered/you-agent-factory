@@ -98,18 +98,6 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	return err
 }
 
-// ObserveForSession returns one live session's orchestration-neutral observation.
-func (s *Service) ObserveForSession(
-	ctx context.Context,
-	sessionID string,
-	req factoryruntime.ObserveRequest,
-) (factoryruntime.ObserveResult, error) {
-	if s == nil || s.host == nil {
-		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions gateway is required")
-	}
-	return s.liveRuntime.Observe(ctx, sessionID, req)
-}
-
 func (fs *SessionRuntime) inferenceProgressPublisher(
 	sessionID string,
 	logger *zap.Logger,

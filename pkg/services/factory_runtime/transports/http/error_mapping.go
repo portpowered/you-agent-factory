@@ -8,11 +8,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// The aliases below preserve the old package-local error-mapping vocabulary
-// for callers and tests while policy is owned by the focused transport error
-// package.
-var errSessionObserverRequired = transporterrors.ErrSessionObserverRequired
-
 type runtimeHTTPOperation = transporterrors.Operation
 
 const (

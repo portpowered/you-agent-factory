@@ -11,17 +11,10 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// SessionObserver routes session-scoped Runtime observation through the
-// Factory Sessions peer surface without importing Sessions internals.
-type SessionObserver interface {
-	ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
-}
-
 // Handler adapts Runtime observation operations while keeping their protocol
 // mechanics separate from lifecycle, dispatch, and checkpoint handlers.
 type Handler struct {
-	root     factoryruntime.Service
-	sessions SessionObserver
+	root factoryruntime.Service
 }
 
 // NewHandler binds observation to the already-constructed Runtime root.
@@ -30,13 +23,6 @@ func NewHandler(root factoryruntime.Service) *Handler {
 		return nil
 	}
 	return &Handler{root: root}
-}
-
-// BindSessionObserver attaches the peer used for session-scoped status reads.
-func (h *Handler) BindSessionObserver(sessions SessionObserver) {
-	if h != nil {
-		h.sessions = sessions
-	}
 }
 
 // GetStatus handles GET /status through the Runtime observation root.
@@ -73,6 +59,7 @@ func (h *Handler) getStatus(w http.ResponseWriter, r *http.Request, sessionID st
 }
 
 func (h *Handler) observeStatus(ctx context.Context, sessionID string) (factoryruntime.ObserveResult, error) {
+	_ = sessionID
 	var configuredRoot factoryruntime.Service
 	if h != nil {
 		configuredRoot = h.root
@@ -82,11 +69,5 @@ func (h *Handler) observeStatus(ctx context.Context, sessionID string) (factoryr
 		return factoryruntime.ObserveResult{}, err
 	}
 	request := factoryruntime.ObserveRequest{Scope: statusObserveScope}
-	if sessionID == "" {
-		return root.Observe(ctx, request)
-	}
-	if h == nil || h.sessions == nil {
-		return factoryruntime.ObserveResult{}, transporterrors.ErrSessionObserverRequired
-	}
-	return h.sessions.ObserveForSession(ctx, sessionID, request)
+	return root.Observe(ctx, request)
 }

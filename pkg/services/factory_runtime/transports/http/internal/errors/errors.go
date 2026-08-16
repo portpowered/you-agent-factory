@@ -13,10 +13,6 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-// ErrSessionObserverRequired identifies an unavailable session-scoped Runtime
-// observation peer without leaking a Sessions implementation into the handler.
-var ErrSessionObserverRequired = stderrors.New("factory session observation is required for session-scoped status reads")
-
 // Operation identifies the Runtime operation whose typed failures are being
 // mapped. Keeping this value in the transport error package prevents operation
 // handlers from sharing a parent-package error policy implementation.
@@ -39,9 +35,6 @@ func RootErrorResponse(err error, operation Operation) (int, factoryapi.ErrorRes
 
 	switch operation {
 	case OperationObserve:
-		if stderrors.Is(err, ErrSessionObserverRequired) {
-			return serviceUnavailableErrorResponse("factory status is unavailable")
-		}
 		if stderrors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			return notFoundErrorResponse("factory session not found")
 		}
