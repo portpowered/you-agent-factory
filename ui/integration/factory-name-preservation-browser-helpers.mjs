@@ -52,11 +52,23 @@ export async function waitForDashboardReady(page, previewURL, server) {
 }
 
 export async function exportFactoryPngFromDashboard(page, exportName) {
-  await page.getByRole("button", { name: "Export PNG" }).waitFor({
+  const exportButton = page.getByRole("button", { name: "Export PNG" });
+  await exportButton.waitFor({
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
-  await page.getByRole("button", { name: "Export PNG" }).click();
+  const exportButtonIsTopmost = await exportButton.evaluate((button) => {
+    const bounds = button.getBoundingClientRect();
+    const topmost = document.elementFromPoint(
+      bounds.left + bounds.width / 2,
+      bounds.top + bounds.height / 2,
+    );
+    return topmost === button || button.contains(topmost);
+  });
+  if (!exportButtonIsTopmost) {
+    throw new Error("Export PNG control is occluded by another element");
+  }
+  await exportButton.click();
 
   const exportDialog = page.getByRole("dialog", {
     name: "Export factory",

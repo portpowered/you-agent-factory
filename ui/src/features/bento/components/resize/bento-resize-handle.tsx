@@ -20,7 +20,7 @@ export function renderBentoResizeHandle(
   return (
     <span
       aria-hidden="true"
-      className={`react-resizable-handle react-resizable-handle-${axis} h-11 w-11 touch-none`}
+      className={`react-resizable-handle react-resizable-handle-${axis} z-10 h-11 w-11 touch-none`}
       data-bento-touch-resize-handle={axis}
       ref={ref}
       style={{

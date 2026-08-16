@@ -199,14 +199,16 @@ export function DashboardLayoutKeyboardControls({
       <span className="sr-only" id={resizeInstructionsID}>
         {keyboardContext.messages.resizeInstructions}
       </span>
-      <span
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-        role="status"
-      >
-        {announcement}
-      </span>
+      {announcement ? (
+        <span
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+          role="status"
+        >
+          {announcement}
+        </span>
+      ) : null}
       {renderModeButton(
         "move",
         <Move aria-hidden="true" focusable="false" size={16} />,

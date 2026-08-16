@@ -1,49 +1,8 @@
 import { ActionRow } from "@you-agent-factory/components/layout";
 import { expect, within } from "storybook/test";
 import { DashboardActionButton } from "./dashboard-action-button";
+import { assertDashboardActionTargets } from "./dashboard-action-target-measurement";
 import { DashboardStatusPill } from "./dashboard-status-pill";
-
-const DASHBOARD_ACTION_TARGET_MINIMUM = 44;
-
-interface DashboardActionTargetMeasurement {
-  height: number;
-  label: string;
-  width: number;
-}
-
-function measureDashboardActionTargets(
-  root: HTMLElement,
-): DashboardActionTargetMeasurement[] {
-  return Array.from(root.querySelectorAll<HTMLButtonElement>("button")).map(
-    (button) => {
-      const bounds = button.getBoundingClientRect();
-
-      return {
-        height: bounds.height,
-        label:
-          button.getAttribute("aria-label") ??
-          button.textContent?.trim() ??
-          "(unnamed)",
-        width: bounds.width,
-      };
-    },
-  );
-}
-
-function assertDashboardActionTargets(root: HTMLElement): void {
-  const measurements = measureDashboardActionTargets(root);
-  const belowMinimum = measurements.filter(
-    ({ height, width }) =>
-      width < DASHBOARD_ACTION_TARGET_MINIMUM ||
-      height < DASHBOARD_ACTION_TARGET_MINIMUM,
-  );
-
-  if (belowMinimum.length > 0) {
-    throw new Error(
-      `Dashboard action targets below ${DASHBOARD_ACTION_TARGET_MINIMUM}px: ${belowMinimum.length}/${measurements.length} ${JSON.stringify(belowMinimum)}`,
-    );
-  }
-}
 
 function DashboardActionControlsShowcase() {
   return (
@@ -177,6 +136,101 @@ function DashboardActionControlsShowcase() {
             </DashboardStatusPill>
           }
         />
+      </section>
+
+      <section
+        aria-labelledby="dashboard-action-header-context"
+        className="grid gap-3"
+        data-dashboard-action-context="dashboard-header"
+      >
+        <h2
+          className="text-sm font-semibold text-af-text"
+          id="dashboard-action-header-context"
+        >
+          Dashboard header action context
+        </h2>
+        <header className="flex min-w-0 items-center justify-end gap-2 rounded-lg border border-outline bg-surface-container-high p-3">
+          <DashboardActionButton
+            aria-label="Header export"
+            iconOnly
+            type="button"
+          >
+            <span aria-hidden="true">↗</span>
+          </DashboardActionButton>
+          <DashboardActionButton disabled type="button">
+            Header unavailable
+          </DashboardActionButton>
+        </header>
+      </section>
+
+      <section
+        aria-labelledby="dashboard-action-toolbar-context"
+        className="grid gap-3"
+        data-dashboard-action-context="dashboard-toolbar"
+      >
+        <h2
+          className="text-sm font-semibold text-af-text"
+          id="dashboard-action-toolbar-context"
+        >
+          Dashboard toolbar action context
+        </h2>
+        <ActionRow
+          actions={
+            <>
+              <DashboardActionButton
+                aria-label="Toolbar filter"
+                iconOnly
+                type="button"
+              >
+                <span aria-hidden="true">≡</span>
+              </DashboardActionButton>
+              <DashboardActionButton executing type="button">
+                Updating toolbar
+              </DashboardActionButton>
+            </>
+          }
+          aria-label="Dashboard toolbar action context example"
+          statuses={
+            <DashboardStatusPill role="status" tone="info">
+              Toolbar ready
+            </DashboardStatusPill>
+          }
+        />
+      </section>
+
+      <section
+        aria-labelledby="dashboard-action-compact-context"
+        className="grid gap-3"
+        data-dashboard-action-context="compact-dashboard"
+      >
+        <h2
+          className="text-sm font-semibold text-af-text"
+          id="dashboard-action-compact-context"
+        >
+          Compact dashboard card action context
+        </h2>
+        <article className="grid min-w-0 gap-3 rounded-lg border border-outline bg-surface-container-high p-3">
+          <header className="flex min-w-0 items-center justify-between gap-2 border-b border-outline pb-3">
+            <h3 className="m-0 min-w-0 text-sm font-semibold text-on-surface">
+              Compact card
+            </h3>
+            <DashboardActionButton
+              aria-label="Compact card action"
+              iconOnly
+              type="button"
+            >
+              <span aria-hidden="true">⋯</span>
+            </DashboardActionButton>
+          </header>
+          <div className="flex min-w-0 justify-end gap-2">
+            <DashboardActionButton type="button">
+              Open card
+            </DashboardActionButton>
+            <DashboardActionButton disabled type="button">
+              Save card
+            </DashboardActionButton>
+          </div>
+        </article>
       </section>
     </div>
   );

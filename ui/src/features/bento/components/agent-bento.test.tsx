@@ -1,5 +1,6 @@
 import {
   act,
+  createEvent,
   fireEvent,
   render,
   screen,
@@ -580,6 +581,65 @@ describe("AgentBentoLayout", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves card-body touch scrolling to the scroll viewport", () => {
+    const onLayoutChange = vi.fn();
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard
+                bodyProps={{ "data-testid": "activity-body" }}
+                title="Current activity"
+              >
+                <div>
+                  {Array.from(
+                    { length: 12 },
+                    (_, index) => `Scrollable activity row ${index + 1}`,
+                  ).map((row) => (
+                    <p key={row}>{row}</p>
+                  ))}
+                </div>
+              </AgentBentoCard>
+            ),
+          },
+        ]}
+        initialWidth={960}
+        layout={[
+          { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
+        ]}
+        onLayoutChange={onLayoutChange}
+      />,
+    );
+
+    const body = screen.getByTestId("activity-body");
+    const start = createTouch(6, 120, 120);
+    const end = createTouch(6, 120, 220);
+    const touchStart = createEvent.touchStart(body, {
+      changedTouches: [start],
+      touches: [start],
+    });
+    const touchMove = createEvent.touchMove(document, {
+      changedTouches: [end],
+      touches: [end],
+    });
+    const touchEnd = createEvent.touchEnd(document, {
+      changedTouches: [end],
+      touches: [],
+    });
+
+    fireEvent(body, touchStart);
+    fireEvent(document, touchMove);
+    fireEvent(document, touchEnd);
+
+    expect(touchStart.defaultPrevented).toBe(false);
+    expect(touchMove.defaultPrevented).toBe(false);
+    expect(touchEnd.defaultPrevented).toBe(false);
+    expect(onLayoutChange).not.toHaveBeenCalled();
+  });
+
   it("cancels touch-pointer gestures without persisting a preview", async () => {
     const onLayoutChange = vi.fn();
     renderBentoBoard(onLayoutChange);
@@ -797,6 +857,8 @@ describe("AgentBentoLayout", () => {
             expect(item.classList.contains("react-draggable")).toBe(false);
             expect(item.classList.contains("react-resizable-hide")).toBe(true);
           }
+
+          expect(board.scrollWidth).toBeLessThanOrEqual(board.clientWidth);
         });
 
         expect(

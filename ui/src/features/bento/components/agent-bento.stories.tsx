@@ -1,5 +1,7 @@
-import { expect, userEvent, within } from "storybook/test";
+import { useState } from "react";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { NoSelectionDetailCard } from "../../current-selection/base/components/detail/no-selection-detail-card";
 import { WorkTotalsCard } from "../../work-totals/components/work-totals-card";
 import "../../../styles.css";
@@ -209,5 +211,164 @@ export const ConstrainedWidth = {
     await expect(
       await canvas.findByText("Cards keep their content on the board."),
     ).toBeVisible();
+  },
+};
+
+const COMPACT_OVERFLOW_WIDTHS = [320, 390, 640, 768] as const;
+
+function CompactOverflowRegressionBoard({ width }: { width: number }) {
+  const cardID = `compact-overflow-${width}`;
+
+  return (
+    <div
+      data-testid={`compact-overflow-frame-${width}`}
+      style={{ boxSizing: "border-box", width: `${width}px` }}
+    >
+      <AgentBentoLayout
+        cards={[
+          {
+            children: (
+              <AgentBentoCard
+                headerAction={
+                  <DashboardActionButton
+                    aria-label={`Open compact card ${width}`}
+                    iconOnly
+                    type="button"
+                  >
+                    <span aria-hidden="true">↗</span>
+                  </DashboardActionButton>
+                }
+                title={`Compact card ${width}`}
+              >
+                <p>Compact card content remains readable.</p>
+              </AgentBentoCard>
+            ),
+            id: cardID,
+            widgetType: "compact-card",
+          },
+        ]}
+        initialWidth={width}
+        layout={[
+          { h: 2, id: cardID, widgetType: "compact-card", w: 6, x: 0, y: 0 },
+        ]}
+      />
+    </div>
+  );
+}
+
+export const CompactOverflowRegression = {
+  tags: ["test"],
+  render: () => (
+    <div className="grid gap-4">
+      {COMPACT_OVERFLOW_WIDTHS.map((width) => (
+        <CompactOverflowRegressionBoard key={width} width={width} />
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    for (const width of COMPACT_OVERFLOW_WIDTHS) {
+      const frame = canvas.getByTestId(`compact-overflow-frame-${width}`);
+      const board = within(frame).getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+
+      await expect(board).toBeVisible();
+      await waitFor(() => {
+        expect(board.clientWidth).toBeGreaterThan(0);
+        expect(board.scrollWidth).toBeLessThanOrEqual(board.clientWidth);
+      });
+
+      const item = board.querySelector<HTMLElement>(".react-grid-item");
+      if (!item) {
+        throw new Error(`expected compact ${width}px grid item`);
+      }
+
+      const boardWidth = board.getBoundingClientRect().width;
+      const itemWidth = item.getBoundingClientRect().width;
+      expect(itemWidth).toBeGreaterThanOrEqual(boardWidth - 1);
+      expect(itemWidth).toBeLessThanOrEqual(boardWidth + 1);
+    }
+  },
+};
+
+function ResizeHandleControlIsolationCard() {
+  const [exported, setExported] = useState(false);
+
+  return (
+    <AgentBentoCard bodyScroll={false} title="Resize handle control isolation">
+      <div className="flex h-full min-h-0 items-end justify-end">
+        <DashboardActionButton
+          aria-label="Export PNG"
+          iconOnly
+          onClick={() => setExported(true)}
+          type="button"
+        >
+          <span aria-hidden="true">↗</span>
+        </DashboardActionButton>
+        {exported ? <span className="sr-only">Export complete</span> : null}
+      </div>
+    </AgentBentoCard>
+  );
+}
+
+export const ResizeHandleControlIsolation = {
+  tags: ["test"],
+  render: () => (
+    <div style={{ maxWidth: "720px", padding: "1rem", width: "100%" }}>
+      <AgentBentoLayout
+        cards={[
+          {
+            children: <ResizeHandleControlIsolationCard />,
+            id: "resize-handle-control-isolation",
+            widgetType: "resize-handle-control-isolation",
+          },
+        ]}
+        initialWidth={720}
+        layout={[
+          {
+            h: 2,
+            id: "resize-handle-control-isolation",
+            widgetType: "resize-handle-control-isolation",
+            w: 12,
+            x: 0,
+            y: 0,
+          },
+        ]}
+        responsiveMode="interactive"
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const exportButton = await canvas.findByRole("button", {
+      name: "Export PNG",
+    });
+    const resizeHandle = canvasElement.querySelector<HTMLElement>(
+      ".react-resizable-handle-se",
+    );
+
+    if (!resizeHandle) {
+      throw new Error("expected southeast bento resize handle");
+    }
+
+    const exportBounds = exportButton.getBoundingClientRect();
+    const topmost = document.elementFromPoint(
+      exportBounds.left + exportBounds.width / 2,
+      exportBounds.top + exportBounds.height / 2,
+    );
+    expect(topmost === exportButton || exportButton.contains(topmost)).toBe(
+      true,
+    );
+    expect(resizeHandle.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+      44,
+    );
+    expect(resizeHandle.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      44,
+    );
+
+    await userEvent.click(exportButton);
+    await expect(await canvas.findByText("Export complete")).toBeVisible();
   },
 };

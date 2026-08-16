@@ -387,16 +387,29 @@ describe.concurrent("factory graph editor browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           });
         await server.replayCompleted;
-        await browserPage.page
-          .getByRole("button", { name: "Export PNG" })
-          .waitFor({
-            state: "visible",
-            timeout: uiInteractionTimeoutMs,
-          });
+        const exportButton = browserPage.page.getByRole("button", {
+          name: "Export PNG",
+        });
+        await exportButton.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await expect
+          .poll(
+            async () =>
+              await exportButton.evaluate((button) => {
+                const bounds = button.getBoundingClientRect();
+                const topmost = document.elementFromPoint(
+                  bounds.left + bounds.width / 2,
+                  bounds.top + bounds.height / 2,
+                );
+                return topmost === button || button.contains(topmost);
+              }),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
 
-        await browserPage.page
-          .getByRole("button", { name: "Export PNG" })
-          .click();
+        await exportButton.click();
         await browserPage.page
           .getByRole("heading", { name: "Export factory" })
           .waitFor({
