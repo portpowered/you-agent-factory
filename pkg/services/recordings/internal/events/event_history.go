@@ -37,18 +37,23 @@ const (
 	failureReasonUnknown                    = "workstation_failed"
 	failureMessageUnavailable               = "Workstation failed without a reported error message."
 	eventHistoryStreamBufferSize            = 64
+	eventHistoryCloseDrainTimeout           = time.Second
 )
 
 type eventHistorySubscription struct {
-	events       chan interfaces.FactoryEvent
-	inbox        chan interfaces.FactoryEvent
-	done         <-chan struct{}
-	overflow     chan struct{}
-	overflowOnce sync.Once
-	dispatchID   string
-	limit        int
-	pendingMu    sync.Mutex
-	pending      int
+	events         chan interfaces.FactoryEvent
+	inbox          chan interfaces.FactoryEvent
+	done           <-chan struct{}
+	overflow       chan struct{}
+	overflowOnce   sync.Once
+	terminal       chan struct{}
+	terminalOnce   sync.Once
+	drained        chan struct{}
+	dispatchID     string
+	limit          int
+	pendingMu      sync.Mutex
+	pending        int
+	terminalClosed bool
 }
 
 func (subscription *eventHistorySubscription) signalOverflow() {
@@ -57,21 +62,48 @@ func (subscription *eventHistorySubscription) signalOverflow() {
 	})
 }
 
+func (subscription *eventHistorySubscription) signalTerminal() {
+	subscription.pendingMu.Lock()
+	subscription.terminalClosed = true
+	subscription.pendingMu.Unlock()
+	subscription.terminalOnce.Do(func() {
+		close(subscription.terminal)
+	})
+}
+
 // CloseLiveSubscriptions ends active live subscriptions without appending new
 // canonical events. Callers invoke this after terminal lifecycle events are
 // recorded so SSE clients observe the final timeline and then a closed stream.
+// It waits until each subscription has handed off all events accepted before
+// the terminal signal, while canceled subscribers are allowed to exit early.
+// A non-cooperative subscriber is released through overflow after one shared
+// bounded drain deadline so teardown cannot block forever.
 func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
+	h.liveClosed = true
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, subscription := range h.streams {
 		streams = append(streams, subscription)
+		subscription.signalTerminal()
 	}
 	h.mu.Unlock()
-	for _, subscription := range streams {
-		subscription.signalOverflow()
+	if len(streams) == 0 {
+		return
+	}
+	drainDeadline := time.NewTimer(eventHistoryCloseDrainTimeout)
+	defer drainDeadline.Stop()
+	for index, subscription := range streams {
+		select {
+		case <-subscription.drained:
+		case <-drainDeadline.C:
+			for _, pending := range streams[index:] {
+				pending.signalOverflow()
+			}
+			return
+		}
 	}
 }
 
@@ -96,6 +128,7 @@ type FactoryEventHistory struct {
 	sessionStartedAt    time.Time
 	hasSessionStarted   bool
 	hasSessionCompleted bool
+	liveClosed          bool
 	sessionID           string
 	nextSessionSequence int
 }
@@ -189,6 +222,16 @@ func (h *FactoryEventHistory) Subscribe(
 		}
 		events = cloneFactoryEventsForStream(replayed, scope)
 	}
+	if h.liveClosed {
+		closed := make(chan interfaces.FactoryEvent)
+		close(closed)
+		h.mu.Unlock()
+		return interfaces.FactoryEventStream{
+			StreamGenerationID: streamGenerationID,
+			History:            events,
+			Events:             closed,
+		}, nil
+	}
 	bufferSize := scope.Limit
 	if bufferSize <= 0 {
 		bufferSize = eventHistoryStreamBufferSize
@@ -200,39 +243,15 @@ func (h *FactoryEventHistory) Subscribe(
 		inbox:      make(chan interfaces.FactoryEvent, bufferSize),
 		done:       ctx.Done(),
 		overflow:   make(chan struct{}),
+		terminal:   make(chan struct{}),
+		drained:    make(chan struct{}),
 		dispatchID: strings.TrimSpace(scope.DispatchID),
 		limit:      bufferSize,
 	}
 	h.streams[id] = subscription
 	h.mu.Unlock()
 
-	go func() {
-		defer close(subscription.events)
-		defer func() {
-			h.mu.Lock()
-			delete(h.streams, id)
-			h.mu.Unlock()
-		}()
-		for {
-			select {
-			case <-subscription.done:
-				return
-			case <-subscription.overflow:
-				return
-			case event := <-subscription.inbox:
-				select {
-				case <-subscription.done:
-					subscription.releasePending()
-					return
-				case <-subscription.overflow:
-					subscription.releasePending()
-					return
-				case subscription.events <- event.Clone():
-					subscription.releasePending()
-				}
-			}
-		}
-	}()
+	go h.relayLiveSubscription(id, subscription)
 
 	return interfaces.FactoryEventStream{
 		StreamGenerationID: streamGenerationID,
@@ -609,114 +628,6 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 			},
 		},
 	))
-}
-
-// RecordWorkStateChange records a canonical marking relocation for operator or
-// cascade recovery paths.
-func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkStateChangeRecord, eventTime time.Time) {
-	if h == nil || record.WorkID == "" || record.Source == "" {
-		return
-	}
-	eventTime = interfaces.CanonicalEventTime(eventTime)
-	workTypeName := strings.TrimSpace(record.WorkTypeName)
-	if workTypeName == "" {
-		workTypeName = record.WorkTypeID
-	}
-	context := interfaces.FactoryEventContext{
-		Tick:      tick,
-		EventTime: eventTime,
-		SessionID: stringPtrIfNotEmpty(record.SessionID),
-		RequestID: stringPtrIfNotEmpty(record.RequestID),
-		WorkIDs:   stringSlicePtr([]string{record.WorkID}),
-	}
-	if context.SessionID != nil {
-		sessionSequence := h.allocateSessionLifecycleSequence()
-		context.SessionSequence = &sessionSequence
-	}
-	h.appendEvent(domainFactoryEvent(
-		interfaces.FactoryEventTypeWorkStateChange,
-		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
-		context,
-		interfaces.WorkStateChangeEventPayload{
-			WorkID:        record.WorkID,
-			WorkTypeName:  workTypeName,
-			FromState:     record.FromState,
-			ToState:       record.ToState,
-			FromPlaceID:   record.FromPlaceID,
-			ToPlaceID:     record.ToPlaceID,
-			Source:        record.Source,
-			TriggerWorkID: stringPtrIfNotEmpty(record.TriggerWorkID),
-			Reason:        stringPtrIfNotEmpty(record.Reason),
-		},
-	))
-}
-
-// RecordFactoryStateChange records a runtime lifecycle transition.
-func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interfaces.FactoryState, next interfaces.FactoryState, reason string, eventTime time.Time) {
-	if h == nil || previous == next {
-		return
-	}
-	eventTime = interfaces.CanonicalEventTime(eventTime)
-	nextState := next
-	h.appendEvent(domainFactoryEvent(
-		interfaces.FactoryEventTypeFactoryStateResponse,
-		fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next),
-		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
-		interfaces.FactoryStateResponseEventPayload{
-			PreviousState: &previous,
-			State:         nextState,
-			Reason:        stringPtrIfNotEmpty(reason),
-		},
-	))
-}
-
-func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) interfaces.FactoryEvent {
-	appended, _ := h.appendEventWithValidation(event, nil)
-	return appended
-}
-
-func (h *FactoryEventHistory) appendEventWithValidation(
-	event interfaces.FactoryEvent,
-	validate func(interfaces.FactoryEvent) error,
-) (interfaces.FactoryEvent, error) {
-	if h == nil {
-		return interfaces.FactoryEvent{}, fmt.Errorf("factory event history is unavailable")
-	}
-	h.mu.Lock()
-	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
-	event.Context.Sequence = len(h.events)
-	h.assignLiveChangeSessionSequenceLocked(&event)
-	event = enrichFactoryChangeSequence(event)
-	if validate != nil {
-		if err := validate(event.Clone()); err != nil {
-			h.mu.Unlock()
-			return interfaces.FactoryEvent{}, err
-		}
-	}
-	h.events = append(h.events, event)
-	streams := make([]*eventHistorySubscription, 0, len(h.streams))
-	for _, stream := range h.streams {
-		streams = append(streams, stream)
-	}
-	recorders := append([]func(interfaces.FactoryEvent){}, h.recorders...)
-	eventTypeRecorders := append([]func(interfaces.FactoryEventType){}, h.eventTypeRecorders...)
-	h.mu.Unlock()
-
-	for _, recorder := range recorders {
-		recorder(event.Clone())
-	}
-	for _, recorder := range eventTypeRecorders {
-		recorder(event.Type)
-	}
-	for _, stream := range streams {
-		if stream.dispatchID != "" && !factoryEventBelongsToDispatch(event, stream.dispatchID) {
-			continue
-		}
-		if !stream.offer(event.Clone()) {
-			stream.signalOverflow()
-		}
-	}
-	return event.Clone(), nil
 }
 
 func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, context interfaces.FactoryEventContext, payload any) interfaces.FactoryEvent {

@@ -190,6 +190,143 @@ func TestServeReturnsTerminalListenerFailure(t *testing.T) {
 	}
 }
 
+func TestServeCancellationWaitsForFlushedSSETerminalEvent(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	listenerClosed := make(chan struct{})
+	listener = &closeNotifyingListener{Listener: listener, closed: listenerClosed}
+
+	writeStarted := make(chan struct{})
+	releaseWrite := make(chan struct{})
+	clientResult := make(chan struct {
+		status int
+		body   []byte
+		err    error
+	}, 1)
+	handler := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		writer := &blockingSSEWriter{
+			ResponseWriter: response,
+			Context:        request.Context(),
+			Started:        writeStarted,
+			Release:        releaseWrite,
+		}
+		writer.Header().Set("Content-Type", "text/event-stream")
+		if _, err := io.WriteString(writer, "data: {\"type\":\"RUN_RESPONSE\"}\n\n"); err != nil {
+			return
+		}
+		writer.Flush()
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serveResult := make(chan error, 1)
+	go func() {
+		serveResult <- Serve(ctx, handler, listener, zap.NewNop())
+	}()
+
+	go func() {
+		response, err := http.Get("http://" + listener.Addr().String())
+		if err != nil {
+			clientResult <- struct {
+				status int
+				body   []byte
+				err    error
+			}{err: err}
+			return
+		}
+		body, readErr := io.ReadAll(response.Body)
+		closeErr := response.Body.Close()
+		if readErr == nil {
+			readErr = closeErr
+		}
+		clientResult <- struct {
+			status int
+			body   []byte
+			err    error
+		}{status: response.StatusCode, body: body, err: readErr}
+	}()
+
+	// The handler has received the terminal SSE event but cannot write it to
+	// the connection until the test releases the write. Cancellation occurs
+	// while that handoff is blocked, which is the production shutdown race.
+	receiveBefore(t, writeStarted)
+	cancel()
+	receiveBefore(t, listenerClosed)
+	close(releaseWrite)
+
+	client := receiveBefore(t, clientResult)
+	if client.err != nil {
+		t.Fatalf("SSE client read: %v", client.err)
+	}
+	if client.status != http.StatusOK {
+		t.Fatalf("SSE status = %d, want %d", client.status, http.StatusOK)
+	}
+	if got := string(client.body); got != "data: {\"type\":\"RUN_RESPONSE\"}\n\n" {
+		t.Fatalf("SSE body = %q, want terminal RUN_RESPONSE frame followed by EOF", got)
+	}
+	if err := receiveBefore(t, serveResult); err != nil {
+		t.Fatalf("Serve cancellation: %v", err)
+	}
+}
+
+func TestServeCancellationForceClosesNonReturningHandlerAfterGracePeriod(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	listenerClosed := make(chan struct{})
+	listener = &closeNotifyingListener{Listener: listener, closed: listenerClosed}
+
+	requestStarted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseHandler) }) }
+	t.Cleanup(release)
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		close(requestStarted)
+		<-releaseHandler
+	})
+
+	const testGracePeriod = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serveResult := make(chan error, 1)
+	go func() {
+		serveResult <- serve(ctx, handler, listener, zap.NewNop(), testGracePeriod)
+	}()
+	clientResult := make(chan error, 1)
+	go func() {
+		response, requestErr := http.Get("http://" + listener.Addr().String())
+		if requestErr != nil {
+			clientResult <- requestErr
+			return
+		}
+		_, readErr := io.Copy(io.Discard, response.Body)
+		closeErr := response.Body.Close()
+		clientResult <- errors.Join(readErr, closeErr)
+	}()
+
+	receiveBefore(t, requestStarted)
+	cancel()
+	receiveBefore(t, listenerClosed)
+	select {
+	case err := <-serveResult:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Serve cancellation error = %v, want bounded graceful-shutdown deadline", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve cancellation remained blocked after the graceful-shutdown deadline")
+	}
+
+	// The handler deliberately ignores request cancellation. Releasing it only
+	// after Serve returns proves forced connection close does not wait forever
+	// for a non-cooperative handler.
+	release()
+	_ = receiveBefore(t, clientResult)
+}
+
 func TestServeValidatesRequiredInputs(t *testing.T) {
 	listener := failingListener{err: errors.New("unused")}
 	tests := []struct {
@@ -287,6 +424,39 @@ type failingListener struct {
 func (listener failingListener) Accept() (net.Conn, error) { return nil, listener.err }
 func (failingListener) Close() error                       { return nil }
 func (failingListener) Addr() net.Addr                     { return testAddr("test") }
+
+type closeNotifyingListener struct {
+	net.Listener
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (listener *closeNotifyingListener) Close() error {
+	listener.once.Do(func() { close(listener.closed) })
+	return listener.Listener.Close()
+}
+
+type blockingSSEWriter struct {
+	http.ResponseWriter
+	Context context.Context
+	Started chan struct{}
+	Release <-chan struct{}
+	once    sync.Once
+}
+
+func (writer *blockingSSEWriter) Write(payload []byte) (int, error) {
+	writer.once.Do(func() { close(writer.Started) })
+	select {
+	case <-writer.Release:
+	case <-writer.Context.Done():
+		return 0, writer.Context.Err()
+	}
+	return writer.ResponseWriter.Write(payload)
+}
+
+func (writer *blockingSSEWriter) Flush() {
+	writer.ResponseWriter.(http.Flusher).Flush()
+}
 
 type testAddr string
 

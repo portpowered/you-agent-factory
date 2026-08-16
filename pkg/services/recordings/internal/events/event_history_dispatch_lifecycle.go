@@ -28,7 +28,14 @@ func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEven
 	case <-subscription.overflow:
 		subscription.pendingMu.Unlock()
 		return true
+	case <-subscription.terminal:
+		subscription.pendingMu.Unlock()
+		return true
 	default:
+	}
+	if subscription.terminalClosed {
+		subscription.pendingMu.Unlock()
+		return true
 	}
 	if subscription.pending >= subscription.limit {
 		subscription.pendingMu.Unlock()
@@ -41,6 +48,8 @@ func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEven
 	case <-subscription.done:
 		subscription.releasePending()
 	case <-subscription.overflow:
+		subscription.releasePending()
+	case <-subscription.terminal:
 		subscription.releasePending()
 	case subscription.inbox <- event:
 	default:
@@ -56,6 +65,62 @@ func (subscription *eventHistorySubscription) releasePending() {
 		subscription.pending--
 	}
 	subscription.pendingMu.Unlock()
+}
+
+func (subscription *eventHistorySubscription) drainTerminalEvents() bool {
+	for {
+		select {
+		case <-subscription.done:
+			return false
+		case event := <-subscription.inbox:
+			select {
+			case <-subscription.done:
+				subscription.releasePending()
+				return false
+			case <-subscription.overflow:
+				subscription.releasePending()
+				return false
+			case subscription.events <- event.Clone():
+				subscription.releasePending()
+			}
+		default:
+			return true
+		}
+	}
+}
+
+func (h *FactoryEventHistory) relayLiveSubscription(id int, subscription *eventHistorySubscription) {
+	defer close(subscription.drained)
+	defer func() {
+		h.mu.Lock()
+		delete(h.streams, id)
+		h.mu.Unlock()
+	}()
+	defer close(subscription.events)
+	for {
+		select {
+		case <-subscription.done:
+			return
+		case <-subscription.overflow:
+			return
+		case <-subscription.terminal:
+			if !subscription.drainTerminalEvents() {
+				return
+			}
+			return
+		case event := <-subscription.inbox:
+			select {
+			case <-subscription.done:
+				subscription.releasePending()
+				return
+			case <-subscription.overflow:
+				subscription.releasePending()
+				return
+			case subscription.events <- event.Clone():
+				subscription.releasePending()
+			}
+		}
+	}
 }
 
 func cloneFactoryEventsForStream(

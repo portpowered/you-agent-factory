@@ -19,13 +19,12 @@ later updates to this file.
   ```
 
 The raw structured reconciliation is 44 `fail` events: 36 named test events
-and 8 package-summary events. The named events initially produced 36 distinct
-package/test pairs across 8 packages. The alignment selector, the
-service-command-runner selector, and this lane's packaged Factory portability
-selector have since passed; their parent and nested rows were removed from the
-active inventory, leaving 27 distinct package/test pairs. Nested subtests
-remain separate rows; their slash-delimited identities are preserved exactly
-as emitted. The quarantine schema currently accepts only top-level test
+and 8 package-summary events. The alignment, service-command-runner, packaged
+Factory portability, and repaired event-stream selectors have since passed;
+their parent and nested rows were removed from the active inventory, leaving
+26 distinct package/test pairs across 8 packages. Nested subtests remain
+separate rows; their slash-delimited identities are preserved exactly as
+emitted. The quarantine schema currently accepts only top-level test
 selectors, so later quarantine entries must use the corresponding top-level
 name while retaining these nested identities as evidence.
 
@@ -57,11 +56,10 @@ name while retaining these nested identities as evidence.
 | `github.com/portpowered/infinite-you/tests/functional/observability/verification` | `TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics` |
 | `github.com/portpowered/infinite-you/tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` |
 | `github.com/portpowered/infinite-you/tests/functional/providers/acp` | `TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio` |
-| `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` |
 | `github.com/portpowered/infinite-you/tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` |
 
-**Active inventory count: 27 distinct package/test pairs.**
+**Active inventory count: 26 distinct package/test pairs.**
 
 ## Parent-versus-tip comparison
 
@@ -80,19 +78,19 @@ environment, and command shape. The full push-tier behavior was selected with
 The comparison table's package column is module-relative; its full import path
 is `github.com/portpowered/infinite-you/` followed by the displayed value.
 
-The two historical passes had identical classifications: 21 failures at both
+The two historical passes had identical classifications: 15 failures at both
 commits, 14 passes at both commits, and one setup-incomparable skip at both
 commits. There was no test that failed at `ed502b781` and passed at
-`db7379d47`; no genuine tip-only regression was found. The alignment selector
-and service-command-runner selector repaired in earlier lanes accounted for
-eight historical rows. This lane repaired one packaged Factory portability row
-that had also failed in that historical comparison, leaving 12 same-machine
-failures as confirmed pre-existing candidates for the next quarantine story.
-The 14 CI failures that passed when isolated on both commits remain
-ambiguous/non-reproduced and must not be quarantined. The
-observability row is setup-incomparable because its Linux-only test files are
-not runnable on this Windows machine and must not be quarantined from this
-comparison.
+`db7379d47`; no genuine tip-only regression was found. This lane repaired five
+alignment rows, the service-command-runner parent and two nested rows, and the
+event-stream row that had failed in the historical comparison. The packaged
+Factory portability row was also repaired on main; with both repaired rows
+removed from the active inventory, 11 same-machine failures remain as
+confirmed pre-existing candidates for the next quarantine story. The 14 CI
+failures that passed when isolated on both commits remain ambiguous/non-
+reproduced and must not be quarantined. The observability row is setup-
+incomparable because its Linux-only test files are not runnable on this
+Windows machine and must not be quarantined from this comparison.
 
 | # | Package | Test identity | `ed502b781` | `db7379d47` | Verdict | Failure or comparison evidence |
 | ---: | --- | --- | --- | --- | --- | --- |
@@ -120,9 +118,8 @@ comparison.
 | 22 | `tests/functional/observability/verification` | `TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics` | SETUP-SKIP (0.57s) | SETUP-SKIP (0.49s) | SETUP-INCOMPARABLE | The Linux test files are absent under Windows build constraints (`[no test files]`); the authoritative Linux assertion was not comparable. |
 | 23 | `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | FAIL (6.97s) | FAIL (4.31s) | CONFIRMED PRE-EXISTING | Same-machine rejection/process failure reproduced at both commits; authoritative CI also failed the worker-session start path. |
 | 24 | `tests/functional/providers/acp` | `TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio` | PASS (10.71s) | PASS (5.47s) | AMBIGUOUS | Authoritative CI emitted a failure with only progress-publication warnings; isolated replays passed at both commits. |
-| 25 | `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | FAIL (22.50s) | FAIL (4.33s) | CONFIRMED PRE-EXISTING | `/events` replay failed with `unexpected EOF` at both commits. |
-| 26 | `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | FAIL (7.01s) | FAIL (3.99s) | CONFIRMED PRE-EXISTING | Provider sessions were absent from events; `sess-world-view-success` was missing at both commits. |
-| 27 | `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | FAIL (5.34s) | FAIL (4.61s) | CONFIRMED PRE-EXISTING | Event order stopped before the expected dispatch-created/inference-request/inference-response/dispatch-completed sequence at both commits. |
+| 25 | `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | FAIL (7.01s) | FAIL (3.99s) | CONFIRMED PRE-EXISTING | Provider sessions were absent from events; `sess-world-view-success` was missing at both commits. |
+| 26 | `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | FAIL (5.34s) | FAIL (4.61s) | CONFIRMED PRE-EXISTING | Event order stopped before the expected dispatch-created/inference-request/inference-response/dispatch-completed sequence at both commits. |
 
 The exact command for each row is the per-row command pattern above with the
 row's full test identity and package substituted verbatim. The authoritative
@@ -131,7 +128,7 @@ parent-versus-tip behavior and do not replace that source failure set.
 
 ## Quarantine mapping
 
-The remaining 12 confirmed pre-existing failure rows map to 9 top-level selectors
+The remaining 11 confirmed pre-existing failure rows map to 8 top-level selectors
 because the quarantine schema intentionally matches top-level Go tests. A
 parent selector covers its independently recorded nested subtests; no broader
 package selector is used. Every entry below is `GENUINELY FAILING`, names the
@@ -146,9 +143,8 @@ observed failure, and records reproduction at both `ed502b781` and
 | `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput` | 18 | `RUN_INVOCATION_FAILED`: provider `${executorProvider}` is unknown | CLI named invocation / provider selection |
 | `tests/functional/cli/named_invocation` | `TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs` | 19–20 | `INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT`: `mode` is unknown for `@you/goal` | CLI named invocation / compatibility inputs |
 | `tests/functional/providers` | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` | 23 | Same-machine rejection/process failure and worker-session start failure | Providers / mock-worker startup |
-| `tests/functional/runtime_api` | `TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline` | 25 | `/events` replay failed with `unexpected EOF` | Runtime API / event replay framing |
-| `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | 26 | Provider sessions were absent from events; `sess-world-view-success` was missing | Runtime API / provider-session projection |
-| `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | 27 | Canonical event order stopped before the expected dispatch/inference sequence | Runtime API / inference event emission |
+| `tests/functional/runtime_api` | `TestDashboard_EngineStateSnapshot_EndToEnd` | 25 | Provider sessions were absent from events; `sess-world-view-success` was missing | Runtime API / provider-session projection |
+| `tests/functional/runtime_api` | `TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact` | 26 | Canonical event order stopped before the expected dispatch/inference sequence | Runtime API / inference event emission |
 
 The 14 ambiguous/non-reproduced rows (1–3, 5–13, 21, and 24) and the one
 setup-incomparable Windows row (22) remain unquarantined. No failure that
@@ -161,7 +157,10 @@ were removed after the exact selector passed. The service-command-runner
 selector also changed from observed-fail to observed-pass; its quarantine entry
 and three corresponding inventory rows were removed after the exact selector
 passed.
-
 The packaged Factory portability selector changed from observed-fail to
 observed-pass. Its quarantine entry and corresponding inventory rows were
 removed after the exact selector passed.
+
+The event-stream selector also changed from observed-fail to observed-pass; its
+quarantine entry and corresponding inventory row were removed after the exact
+selector passed.

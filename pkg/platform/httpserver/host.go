@@ -7,11 +7,15 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
 
-const defaultLoopbackHost = "localhost"
+const (
+	defaultLoopbackHost        = "localhost"
+	defaultShutdownGracePeriod = 5 * time.Second
+)
 
 // BindError reports that no requested loopback endpoint could be bound.
 type BindError struct {
@@ -105,8 +109,9 @@ func isLoopbackHost(host string) bool {
 }
 
 // Serve owns one already-bound listener and the concrete net/http server until
-// cancellation or a terminal serve failure. Cancellation closes the server
-// and joins its serve loop before returning.
+// cancellation or a terminal serve failure. Cancellation gives active
+// handlers a bounded grace period to finish writing terminal responses, then
+// force-closes remaining connections before joining the serve loop.
 func Serve(
 	ctx context.Context,
 	handler http.Handler,
@@ -125,7 +130,16 @@ func Serve(
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	return serve(ctx, handler, listener, logger, defaultShutdownGracePeriod)
+}
 
+func serve(
+	ctx context.Context,
+	handler http.Handler,
+	listener net.Listener,
+	logger *zap.Logger,
+	shutdownGracePeriod time.Duration,
+) error {
 	server := &http.Server{Handler: handler}
 	exit := make(chan error, 1)
 	go func() {
@@ -141,8 +155,18 @@ func Serve(
 	case err := <-exit:
 		return err
 	case <-ctx.Done():
-		closeErr := server.Close()
+		closeErr := shutdownServer(server, shutdownGracePeriod)
 		serveErr := <-exit
 		return errors.Join(closeErr, serveErr)
 	}
+}
+
+func shutdownServer(server *http.Server, gracePeriod time.Duration) error {
+	graceCtx, cancel := context.WithTimeout(context.Background(), gracePeriod)
+	defer cancel()
+
+	if err := server.Shutdown(graceCtx); err != nil {
+		return errors.Join(err, server.Close())
+	}
+	return nil
 }

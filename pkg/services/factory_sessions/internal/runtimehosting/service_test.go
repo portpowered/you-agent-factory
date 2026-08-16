@@ -368,3 +368,127 @@ func (runtime hostedRuntime) RuntimeDiagnostics() factoryruntime.RuntimeLogDiagn
 }
 func (hostedRuntime) RecordingLedger() recordings.Ledger { return nil }
 func (hostedRuntime) CloseArtifacts() error              { return nil }
+
+type cancellationLifecycleRuntime struct {
+	waiting     chan struct{}
+	stopStarted chan struct{}
+	releaseStop chan struct{}
+	stopErr     error
+}
+
+func (*cancellationLifecycleRuntime) StartLifecycle(context.Context, context.Context) error {
+	panic("unexpected StartLifecycle")
+}
+
+func (*cancellationLifecycleRuntime) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
+	panic("unexpected StartWorkerLifecycle")
+}
+
+func (*cancellationLifecycleRuntime) CompleteStartup(context.Context) error { return nil }
+
+func (runtime *cancellationLifecycleRuntime) WaitForRuntime(ctx context.Context) error {
+	close(runtime.waiting)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (runtime *cancellationLifecycleRuntime) StopLifecycle(context.Context) error {
+	close(runtime.stopStarted)
+	<-runtime.releaseStop
+	return runtime.stopErr
+}
+
+func (*cancellationLifecycleRuntime) FailStartup(err error) error { return err }
+
+func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+
+func TestServiceRunCancellationStopsRuntimeBeforeTransport(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	transportDone := make(chan struct{})
+	runtime := &cancellationLifecycleRuntime{
+		waiting:     make(chan struct{}),
+		stopStarted: make(chan struct{}),
+		releaseStop: make(chan struct{}),
+	}
+	host := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		close(started)
+		request.OnBound(platformhttpserver.Binding{Host: "127.0.0.1", Port: request.Port})
+		<-ctx.Done()
+		close(transportDone)
+		return ctx.Err()
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func() {
+		select {
+		case <-runtime.releaseStop:
+		default:
+			close(runtime.releaseStop)
+		}
+	}()
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- host.Run(
+			ctx,
+			http.NewServeMux(),
+			runtime,
+			zap.NewNop(),
+			factorysessions.RuntimeHostRequest{Host: "127.0.0.1", Port: 8123},
+			nil,
+		)
+	}()
+	<-started
+	<-runtime.waiting
+	cancel()
+
+	select {
+	case <-runtime.stopStarted:
+	case <-transportDone:
+		t.Fatal("transport closed before runtime stop began")
+	case <-time.After(time.Second):
+		t.Fatal("runtime stop did not begin after cancellation")
+	}
+	select {
+	case <-transportDone:
+		t.Fatal("transport closed before runtime stop completed")
+	default:
+	}
+	close(runtime.releaseStop)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+}
+
+func TestServiceRunCancellationReportsRuntimeStopError(t *testing.T) {
+	t.Parallel()
+
+	stopErr := errors.New("runtime stop failed")
+	runtime := &cancellationLifecycleRuntime{
+		waiting:     make(chan struct{}),
+		stopStarted: make(chan struct{}),
+		releaseStop: make(chan struct{}),
+		stopErr:     stopErr,
+	}
+	host := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		request.OnBound(platformhttpserver.Binding{Host: "127.0.0.1", Port: request.Port})
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- host.Run(ctx, http.NewServeMux(), runtime, zap.NewNop(), factorysessions.RuntimeHostRequest{
+			Host: "127.0.0.1", Port: 8123,
+		}, nil)
+	}()
+	<-runtime.waiting
+	cancel()
+	<-runtime.stopStarted
+	close(runtime.releaseStop)
+	if err := <-runDone; !errors.Is(err, stopErr) {
+		t.Fatalf("Run() error = %v, want %v", err, stopErr)
+	}
+}
