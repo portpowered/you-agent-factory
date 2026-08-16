@@ -229,12 +229,19 @@ func (r *Root) finishActivation(
 		}
 	}
 	bindingService := &boundRuntimeService{root: r, runtimeID: request.RuntimeID}
+	binding := factoryruntime.NewRuntimeBinding(
+		request.RuntimeID,
+		bindingService,
+		func(closeCtx context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
+			return r.deactivateRuntime(closeCtx, request.RuntimeID)
+		},
+	)
 	r.mu.Lock()
 	r.activating[request.RuntimeID] = false
 	view := factoryruntime.RuntimeActivationView{
 		RuntimeID:        request.RuntimeID,
 		FactorySessionID: request.FactorySessionID,
-		Binding:          factoryruntime.NewRuntimeBinding(request.RuntimeID, bindingService),
+		Binding:          binding,
 		Service:          activation.Service,
 		HostedInstance:   activation.HostedInstance,
 		Replacement:      activation.Replacement,
@@ -281,7 +288,16 @@ func (r *Root) Deactivate(
 	ctx context.Context,
 	request factoryruntime.RuntimeDeactivationRequest,
 ) (factoryruntime.RuntimeDeactivationResult, error) {
-	runtimeID := strings.TrimSpace(request.RuntimeID)
+	if !request.Binding.IsZero() {
+		return request.Binding.Deactivate(ctx)
+	}
+	return r.deactivateRuntime(ctx, strings.TrimSpace(request.RuntimeID))
+}
+
+func (r *Root) deactivateRuntime(
+	ctx context.Context,
+	runtimeID string,
+) (factoryruntime.RuntimeDeactivationResult, error) {
 	if runtimeID == "" {
 		return factoryruntime.RuntimeDeactivationResult{}, &factoryruntime.RuntimeActivationError{
 			Kind:    factoryruntime.RuntimeActivationErrorMissingParameters,

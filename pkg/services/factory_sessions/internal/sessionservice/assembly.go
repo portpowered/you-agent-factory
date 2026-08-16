@@ -130,10 +130,10 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 	session := a.Resolve(sessionID)
-	if session == nil || session.Runtime == nil || session.Runtime.Factory == nil {
+	if session == nil || runtimebinding.ServiceForSession(session) == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
-	return workRuntimeAdapter{sessionID: sessionID, runtime: session.Runtime.Factory}, nil
+	return workRuntimeAdapter{sessionID: sessionID, runtime: runtimebinding.ServiceForSession(session)}, nil
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {

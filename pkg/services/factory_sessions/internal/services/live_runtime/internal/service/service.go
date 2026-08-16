@@ -185,8 +185,8 @@ func (s *service) Close(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if session != nil && session.Runtime != nil && session.Runtime.Factory != nil {
-		_, terminateErr := session.Runtime.Factory.ControlTerminate(ctx, factoryruntime.TerminateRequest{
+	if runtime := runtimebinding.ServiceForSession(session); runtime != nil {
+		_, terminateErr := runtime.ControlTerminate(ctx, factoryruntime.TerminateRequest{
 			Reason: "factory session closed",
 		})
 		if terminateErr != nil &&

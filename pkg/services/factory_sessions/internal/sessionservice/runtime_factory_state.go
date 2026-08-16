@@ -30,7 +30,7 @@ func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.Wo
 	var result work.WorkRequestSubmitResult
 	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
 		var submitErr error
-		legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
+		legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(runtime).(factory.APIFactory)
 		if !ok {
 			return fmt.Errorf("legacy Factory Runtime submission is required")
 		}
@@ -205,6 +205,11 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 }
 
 func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource {
+	if fs != nil && fs.sessionState != nil {
+		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil && runtime.RuntimeConfig != nil {
+			return runtime.RuntimeConfig
+		}
+	}
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
 		loaded, _ := bundle.LoadedRuntimeConfig().(interfaces.LoadedFactorySource)
 		return loaded
@@ -227,6 +232,13 @@ func (fs *SessionRuntime) CurrentRuntimeConfig() interfaces.LoadedFactorySource 
 }
 
 func (fs *SessionRuntime) currentRuntimeService() factory.Service {
+	if fs != nil && fs.sessionState != nil {
+		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil {
+			if service := runtimebinding.ServiceForLiveRuntime(runtime); service != nil {
+				return service
+			}
+		}
+	}
 	if instance := fs.currentRuntimeBundle(); instance != nil {
 		return instance.RuntimeService()
 	}

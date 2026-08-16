@@ -37,7 +37,11 @@ type ResponseEventIDGenerator func() string
 // Factory Session. Process hosts retain their private lifecycle handles, while
 // application services operate through this bounded domain view.
 type LiveRuntime struct {
-	Factory               factory.Service
+	Factory factory.Service
+	// Binding is the opaque activation capability published by Factory
+	// Runtime. Factory remains populated as a compatibility fallback while
+	// callers migrate off hosted runtime products.
+	Binding               factory.RuntimeBinding
 	Clock                 factory.Clock
 	BackendScopeID        string
 	RuntimeConfig         interfaces.LoadedFactorySource

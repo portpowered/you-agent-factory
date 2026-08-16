@@ -223,6 +223,42 @@ func TestRuntimeRootActivatesDistinctBindingsInIsolation(t *testing.T) {
 	}
 }
 
+func TestRuntimeBindingOwnsRootDeactivation(t *testing.T) {
+	t.Parallel()
+
+	cleanupCalls := 0
+	root := newRuntimeRoot(t, func(_ context.Context, _ factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		return &factoryruntime.RuntimeActivation{
+			Service: newFoldHostedRuntimeStub(interfaces.FactoryState("bound")),
+			Close: func(context.Context) error {
+				cleanupCalls++
+				return nil
+			},
+		}, nil
+	})
+	request := foldRuntimeActivationRequest()
+	activated, err := root.Activate(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	deactivated, err := root.Deactivate(context.Background(), factoryruntime.RuntimeDeactivationRequest{Binding: activated.Binding})
+	if err != nil {
+		t.Fatalf("Deactivate(binding) error = %v", err)
+	}
+	if deactivated.RuntimeID != request.RuntimeID || deactivated.State != factoryruntime.RuntimeLifecycleStateStopped {
+		t.Fatalf("Deactivate(binding) = %#v, want stopped %q", deactivated, request.RuntimeID)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("owned cleanup calls = %d, want one", cleanupCalls)
+	}
+	if _, err := activated.Binding.Service().Observe(context.Background(), factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus}); !errors.Is(err, factoryruntime.ErrNotRunning) {
+		t.Fatalf("bound service after binding deactivation error = %v, want ErrNotRunning", err)
+	}
+	if _, err := activated.Binding.Deactivate(context.Background()); !errors.Is(err, factoryruntime.ErrRuntimeNotActive) {
+		t.Fatalf("repeated binding Deactivate() error = %v, want ErrRuntimeNotActive", err)
+	}
+}
+
 func TestRuntimeRootActivationUnwindsFailedStartAndCanRetry(t *testing.T) {
 	t.Parallel()
 

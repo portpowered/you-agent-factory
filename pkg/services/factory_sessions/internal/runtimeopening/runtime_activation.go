@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -229,20 +230,37 @@ func (f *Factory) openActivatedRuntimeWithReplayInput(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	binding := result.Binding
+	if binding.IsZero() {
+		binding = result.Runtime.Binding
+	}
 	handoff, ok := result.Runtime.Service.(*activatedRuntimeService)
 	if !ok || handoff == nil {
+		if cleanupErr := f.activationCloser(binding, result.RuntimeID)(); cleanupErr != nil {
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable; cleanup: %w", cleanupErr)
+		}
 		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable")
 	}
 	products := handoff.runtimeProducts()
-	closeRuntime := f.activationCloser(result.RuntimeID)
-	products.application.HTTP.FactoryRuntime = f.runtimeRoot
+	closeRuntime := f.activationCloser(binding, result.RuntimeID)
+	if !binding.IsZero() && products.bindRuntime != nil {
+		if err := products.bindRuntime(binding); err != nil {
+			_ = closeRuntime()
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: publish Runtime binding to Factory Session: %w", err)
+		}
+	}
+	if binding.Service() != nil {
+		products.application.HTTP.FactoryRuntime = binding.Service()
+	} else {
+		products.application.HTTP.FactoryRuntime = f.runtimeRoot
+	}
 	products.application.Resources.Close = closeRuntime
 	products.invocation.CloseArtifacts = closeRuntime
 	products.execution.Resources.Close = closeRuntime
 	return products, nil
 }
 
-func (f *Factory) activationCloser(runtimeID string) func() error {
+func (f *Factory) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
 	var mu sync.Mutex
 	closed := false
 	return func() error {
@@ -252,10 +270,18 @@ func (f *Factory) activationCloser(runtimeID string) func() error {
 			return nil
 		}
 		mu.Unlock()
-		_, err := f.runtimeRoot.Deactivate(
-			context.Background(),
-			factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
-		)
+		var err error
+		if !binding.IsZero() {
+			_, err = binding.Deactivate(context.Background())
+		} else {
+			_, err = f.runtimeRoot.Deactivate(
+				context.Background(),
+				factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
+			)
+		}
+		if errors.Is(err, factoryruntime.ErrRuntimeNotActive) {
+			err = nil
+		}
 		mu.Lock()
 		if err == nil {
 			closed = true

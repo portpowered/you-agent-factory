@@ -29,6 +29,7 @@ type Registration struct {
 	SessionID      string
 	FactoryRootDir string
 	Handle         factory.HostedHandle
+	Binding        factory.RuntimeBinding
 	Target         factorysessions.Target
 	Select         bool
 }
@@ -214,6 +215,9 @@ func Replace(
 			report(fmt.Errorf("stop prior session runtime: %w", err))
 		}
 	}
+	if err := deactivateRuntimeBinding(BindingForSession(session)); err != nil && report != nil {
+		report(fmt.Errorf("deactivate prior Factory Runtime binding: %w", err))
+	}
 	return updated, nil
 }
 
@@ -279,11 +283,25 @@ func stopStartedHandle(stop func(factory.HostedHandle) error, handle factory.Hos
 	}
 }
 
+func deactivateRuntimeBinding(binding factory.RuntimeBinding) error {
+	if binding.IsZero() {
+		return nil
+	}
+	if _, err := binding.Deactivate(context.Background()); err != nil && !errors.Is(err, factory.ErrRuntimeNotActive) {
+		return err
+	}
+	return nil
+}
+
 func Register(state *sessionruntime.Service, input Registration) string {
 	if state == nil || strings.TrimSpace(input.SessionID) == "" || input.Handle == nil || input.Handle.RuntimeInstance() == nil {
 		return ""
 	}
 	bundle := input.Handle.RuntimeInstance()
+	runtimeService := bundle.RuntimeService()
+	if boundService := input.Binding.Service(); boundService != nil {
+		runtimeService = boundService
+	}
 	runtimeBaseDir := ""
 	if runtimeConfig := bundle.LoadedRuntimeConfig(); runtimeConfig != nil {
 		runtimeBaseDir = runtimeConfig.RuntimeBaseDir()
@@ -298,17 +316,46 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
 		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
 		Runtime: &factorysessions.LiveRuntime{
-			Factory: bundle.RuntimeService(), BackendScopeID: bundle.BackendScope(),
+			Factory: runtimeService, Binding: input.Binding, BackendScopeID: bundle.BackendScope(),
 			Clock:                 state.Clock(),
 			RuntimeConfig:         loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig()),
 			LiveChangeEvents:      NewLiveChangeEventLog(bundle.RecordingLedger()),
-			LiveChangeApplication: NewLiveChangeApplication(bundle.RuntimeService()),
-			LiveChangeAdmission:   NewLiveChangeAdmission(bundle.RuntimeService()),
+			LiveChangeApplication: NewLiveChangeApplication(runtimeService),
+			LiveChangeAdmission:   NewLiveChangeAdmission(runtimeService),
 			LiveChangeLogger:      bundle.RuntimeLogger(),
 		},
 		Default: logicaltarget.IsLiveSessionDefaultSelector(input.SessionID), Project: metadata.Project,
 		Select: input.Select, AllocateDefaultID: true, AddEventTypeRecorder: bundle.AddEventTypeRecorder,
 	})
+}
+
+// ServiceForLiveRuntime returns the current opaque Runtime capability and
+// falls back to the hosted-era field while older openings are still in flight.
+func ServiceForLiveRuntime(runtime *factorysessions.LiveRuntime) factory.Service {
+	if runtime == nil {
+		return nil
+	}
+	if service := runtime.Binding.Service(); service != nil {
+		return service
+	}
+	return runtime.Factory
+}
+
+// ServiceForSession returns the session's bound Runtime capability without
+// requiring callers to know how the session was hosted.
+func ServiceForSession(session *livesession.LiveSession) factory.Service {
+	if session == nil {
+		return nil
+	}
+	return ServiceForLiveRuntime(session.Runtime)
+}
+
+// BindingForSession returns the opaque binding published for a live session.
+func BindingForSession(session *livesession.LiveSession) factory.RuntimeBinding {
+	if session == nil || session.Runtime == nil {
+		return factory.RuntimeBinding{}
+	}
+	return session.Runtime.Binding
 }
 
 func SessionStateFrom(session *livesession.LiveSession) *SessionState {
@@ -375,6 +422,11 @@ func BackendScopeID(configured string, session *livesession.LiveSession) string 
 	if configured = strings.TrimSpace(configured); configured != "" {
 		return configured
 	}
+	if session != nil && session.Runtime != nil {
+		if scope := strings.TrimSpace(session.Runtime.BackendScopeID); scope != "" {
+			return scope
+		}
+	}
 	if bundle := BundleFromSession(session); bundle != nil {
 		return strings.TrimSpace(bundle.BackendScope())
 	}
@@ -384,6 +436,18 @@ func BackendScopeID(configured string, session *livesession.LiveSession) string 
 // StreamGenerationID resolves the canonical ledger generation, runtime
 // snapshot generation, then runtime start timestamp.
 func StreamGenerationID(session *livesession.LiveSession) string {
+	if binding := BindingForSession(session); !binding.IsZero() {
+		if runtime := binding.Service(); runtime != nil {
+			observeResult, observeErr := runtime.Observe(context.Background(), factory.ObserveRequest{
+				Scope: factory.ObservationScopeHealth,
+			})
+			if observeErr == nil {
+				if generation := strings.TrimSpace(observeResult.Observation.Health.StreamGenerationID); generation != "" {
+					return generation
+				}
+			}
+		}
+	}
 	instance := BundleFromSession(session)
 	if instance != nil {
 		if generation := strings.TrimSpace(instance.StreamGeneration()); generation != "" {
@@ -516,6 +580,7 @@ func StopSession(
 		return fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
 	sessionID = session.ID
+	binding := BindingForSession(session)
 	if active := runtimeState.Active(); active != nil && active.SessionID == sessionID {
 		if successor := NextLiveSession(state, sessionID); successor != nil {
 			runtimeState.SetActive(active.Context, successor.ID, HandleFromSession(successor))
@@ -523,13 +588,19 @@ func StopSession(
 			runtimeState.ClearActive()
 		}
 	}
-	state.Unregister(sessionID)
-	if stop == nil {
-		return nil
+	var cleanupErrs []error
+	if stop != nil {
+		if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
+			cleanupErrs = append(cleanupErrs, err)
+		}
 	}
-	if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
+	if err := deactivateRuntimeBinding(binding); err != nil {
+		cleanupErrs = append(cleanupErrs, fmt.Errorf("deactivate Factory Runtime binding: %w", err))
+	}
+	if err := errors.Join(cleanupErrs...); err != nil {
 		return err
 	}
+	state.Unregister(sessionID)
 	return nil
 }
 
@@ -630,10 +701,14 @@ func ShutdownOtherLiveSessions(
 		if handle == except {
 			continue
 		}
+		binding := BindingForSession(session)
 		if handle != nil && stop != nil {
 			if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
 				errs = append(errs, err)
 			}
+		}
+		if err := deactivateRuntimeBinding(binding); err != nil {
+			errs = append(errs, err)
 		}
 		state.Unregister(sessionID)
 	}
@@ -649,6 +724,13 @@ func BundleForSession(resolver LiveSessionResolver, sessionID string) (factory.H
 }
 
 func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.Service, error) {
+	if resolver != nil {
+		if session := resolver.Resolve(sessionID); session != nil {
+			if runtime := ServiceForSession(session); runtime != nil {
+				return runtime, nil
+			}
+		}
+	}
 	bundle, err := BundleForSession(resolver, sessionID)
 	if err != nil {
 		return nil, err
@@ -695,6 +777,11 @@ func LegacyInvocationSourcesForService(runtime factory.Service) (factory.LegacyS
 }
 
 func RuntimeConfigForSession(resolver LiveSessionResolver, sessionID string) (interfaces.LoadedFactorySource, error) {
+	if resolver != nil {
+		if session := resolver.Resolve(sessionID); session != nil && session.Runtime != nil && session.Runtime.RuntimeConfig != nil {
+			return session.Runtime.RuntimeConfig, nil
+		}
+	}
 	bundle, err := BundleForSession(resolver, sessionID)
 	if err != nil {
 		return nil, err

@@ -31,6 +31,22 @@ type (
 	liveFactorySession       = livesession.LiveSession
 )
 
+// BindRuntime publishes the opaque activation capability for one live
+// Factory Session. The session keeps the hosted service only as a migration
+// fallback; all subsequent domain operations resolve the binding first.
+func (fs *SessionRuntime) BindRuntime(sessionID string, binding factory.RuntimeBinding) error {
+	if fs == nil || fs.sessionState == nil || binding.IsZero() || binding.Service() == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	return fs.sessionState.UpdateRuntime(sessionID, func(runtime *factorysessions.LiveRuntime) error {
+		runtime.Binding = binding
+		runtime.Factory = binding.Service()
+		runtime.LiveChangeApplication = runtimebinding.NewLiveChangeApplication(runtime.Factory)
+		runtime.LiveChangeAdmission = runtimebinding.NewLiveChangeAdmission(runtime.Factory)
+		return nil
+	})
+}
+
 func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	if fs == nil {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("factory session service is required")
@@ -39,7 +55,7 @@ func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessi
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	legacyRuntime, ok := session.Runtime.Factory.(factory.APIFactory)
+	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.APIFactory)
 	if !ok {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("legacy Factory Runtime submission is required")
 	}
@@ -54,7 +70,7 @@ func (fs *SessionRuntime) MoveWorkForSession(ctx context.Context, sessionID, wor
 	if err != nil {
 		return work.OperatorMoveResult{}, err
 	}
-	mover, ok := session.Runtime.Factory.(factory.WorkMover)
+	mover, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.WorkMover)
 	if !ok {
 		return work.OperatorMoveResult{}, fmt.Errorf("legacy Factory Runtime work move is required")
 	}
@@ -69,7 +85,7 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	legacyRuntime, ok := session.Runtime.Factory.(factory.APIFactory)
+	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.APIFactory)
 	if !ok {
 		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
 	}
@@ -98,7 +114,7 @@ func (fs *SessionRuntime) GetEngineStateSnapshotForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	legacyObservation, err := runtimebinding.LegacyObservationForService(session.Runtime.Factory)
+	legacyObservation, err := runtimebinding.LegacyObservationForService(runtimebinding.ServiceForLiveRuntime(session.Runtime))
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +133,7 @@ func (fs *SessionRuntime) ObserveForSession(
 	if err != nil {
 		return factory.ObserveResult{}, err
 	}
-	runtime, ok := session.Runtime.Factory.(factory.Service)
+	runtime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(factory.Service)
 	if !ok {
 		return factory.ObserveResult{}, fmt.Errorf("Factory Runtime observation is required")
 	}
