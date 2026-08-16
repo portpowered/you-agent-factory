@@ -41,7 +41,7 @@ func (*runtimeRole) SubscribeFactoryEvents(
 
 type definitionRole struct{ factorydefinitions.Service }
 type sessionRole struct{ factorysessions.Service }
-type sessionRootRole struct{ factorysessions.Service }
+type sessionRootRole struct{ sessionRole }
 
 func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
 	return factorysessions.SessionProjection{
@@ -52,6 +52,42 @@ func (*sessionRole) GetFactorySession(context.Context, string) (factorysessions.
 			},
 		},
 	}, nil
+}
+
+func (*sessionRole) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return &factorysessions.LiveControlOpenResult{}, nil
+}
+
+func (*sessionRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, nil
+}
+
+func (*sessionRole) PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, nil
+}
+
+func (*sessionRole) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, nil
+}
+
+func (*sessionRole) CloseFactorySession(context.Context, string) error {
+	return nil
+}
+
+func (*sessionRole) GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error) {
+	return factoryruntime.LiveSessionResult{}, nil
+}
+
+func (*sessionRole) GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error) {
+	return factoryruntime.PartialSessionResult{}, nil
+}
+
+func (*sessionRole) SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	return nil, nil
+}
+
+func (*sessionRole) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error) {
+	return factorysessions.SyncPreflightResult{}, nil
 }
 
 type workRole struct{ work.Service }
