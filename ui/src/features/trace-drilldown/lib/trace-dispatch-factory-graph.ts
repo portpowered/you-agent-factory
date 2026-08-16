@@ -7,10 +7,20 @@ import {
   buildEdge,
   buildNode,
   type FactoryGraphEdge,
+  type FactoryGraphNode,
   type FactoryGraphNodeReference,
   type FactoryGraphTopology,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import type {
+  TraceRelationPathEndpoint,
+  TraceRelationPathEntry,
+} from "./trace-relation-path";
+import {
+  type TraceSelectionIdentity,
+  traceSelectionAttempt,
+  traceSelectionIdentitiesForDispatch,
+} from "./trace-selection";
 
 export interface TraceDispatchNodeOverlay {
   dispatchId: string;
@@ -22,20 +32,90 @@ export interface TraceDispatchNodeOverlay {
 
 export interface TraceDispatchFactoryGraphProjection {
   dispatchIdByNodeId: ReadonlyMap<string, string>;
+  lineageStatus: "resolved" | "unresolved";
   nodeIdByDispatchId: ReadonlyMap<string, string>;
   overlaysByNodeId: ReadonlyMap<string, TraceDispatchNodeOverlay>;
+  relations: readonly TraceRelationPathEntry[];
+  selectionIdentitiesByNodeId: ReadonlyMap<
+    string,
+    readonly TraceSelectionIdentity[]
+  >;
+  traceNodeIdByFactoryNodeId: ReadonlyMap<string, string>;
   topology: FactoryGraphTopology;
+}
+
+interface TraceDispatchProjectionNode {
+  dispatch: DashboardTraceDispatch;
+  node: FactoryGraphNode;
+  overlay: TraceDispatchNodeOverlay;
+  selectionIdentities: readonly TraceSelectionIdentity[];
+  traceNodeId: string;
 }
 
 export function projectTraceDispatchesToFactoryGraph(
   dispatches: DashboardTraceDispatch[],
   locale?: string,
 ): TraceDispatchFactoryGraphProjection {
+  const nodes = buildTraceDispatchProjectionNodes(dispatches, locale);
+  const nodeIdByDispatchId = new Map(
+    nodes.map(({ dispatch, node }) => [dispatch.dispatch_id, node.id]),
+  );
+  const dispatchIdByNodeId = new Map(
+    nodes.map(({ dispatch, node }) => [node.id, dispatch.dispatch_id]),
+  );
+  const overlaysByNodeId = new Map(
+    nodes.map(({ node, overlay }) => [node.id, overlay]),
+  );
+  const selectionIdentitiesByNodeId = new Map(
+    nodes.map(({ node, selectionIdentities }) => [
+      node.id,
+      selectionIdentities,
+    ]),
+  );
+  const traceNodeIdByFactoryNodeId = new Map(
+    nodes.map(({ node, traceNodeId }) => [node.id, traceNodeId]),
+  );
+  const { edges, lineageStatus, relations } = buildTraceLineageEdges(
+    dispatches,
+    nodes,
+    dispatchIdByNodeId,
+  );
+
+  return {
+    dispatchIdByNodeId,
+    lineageStatus,
+    nodeIdByDispatchId,
+    overlaysByNodeId,
+    relations,
+    selectionIdentitiesByNodeId,
+    traceNodeIdByFactoryNodeId,
+    topology: {
+      edges,
+      nodes: nodes.map(({ node }) => node),
+    },
+  };
+}
+
+function buildTraceDispatchProjectionNodes(
+  dispatches: DashboardTraceDispatch[],
+  locale?: string,
+): TraceDispatchProjectionNode[] {
   const messages = getTraceDrilldownMessages(locale);
   const reservedWorkstationNames = new Set<string>();
-  const nodes = dispatches.map((dispatch) => {
+  const usedTraceNodeIDs = new Set<string>();
+  const dispatchCountsByID = new Map<string, number>();
+  for (const dispatch of dispatches) {
+    dispatchCountsByID.set(
+      dispatch.dispatch_id,
+      (dispatchCountsByID.get(dispatch.dispatch_id) ?? 0) + 1,
+    );
+  }
+
+  return dispatches.map((dispatch) => {
+    const selectionIdentities = traceSelectionIdentitiesForDispatch(dispatch);
     const workstationName = resolveTraceWorkstationNodeName(
       dispatch,
+      selectionIdentities[0],
       reservedWorkstationNames,
     );
     const workstationKey: FactoryGraphNodeReference = {
@@ -57,19 +137,32 @@ export function projectTraceDispatchesToFactoryGraph(
         outcome: dispatch.outcome,
         outputSummary: summarizeWorkItems(dispatch.output_items, locale),
       } satisfies TraceDispatchNodeOverlay,
+      selectionIdentities,
+      traceNodeId: resolveTraceNodeID(
+        dispatch,
+        selectionIdentities[0],
+        dispatchCountsByID,
+        usedTraceNodeIDs,
+      ),
     };
   });
-  const nodeIdByDispatchId = new Map(
-    nodes.map(({ dispatch, node }) => [dispatch.dispatch_id, node.id]),
-  );
-  const dispatchIdByNodeId = new Map(
-    nodes.map(({ dispatch, node }) => [node.id, dispatch.dispatch_id]),
-  );
-  const overlaysByNodeId = new Map(
-    nodes.map(({ node, overlay }) => [node.id, overlay]),
-  );
+}
+
+function buildTraceLineageEdges(
+  dispatches: DashboardTraceDispatch[],
+  nodes: TraceDispatchProjectionNode[],
+  dispatchIdByNodeId: ReadonlyMap<string, string>,
+): {
+  edges: FactoryGraphEdge[];
+  lineageStatus: "resolved" | "unresolved";
+  relations: TraceRelationPathEntry[];
+} {
   const edgeKeys = new Set<string>();
-  const latestDispatchIDByChainingTraceID = new Map<string, string>();
+  const latestNodeIDByChainingTraceID = new Map<string, string>();
+  const nodeIDsByIndex = nodes.map(({ node }) => node.id);
+  const nodesByID = new Map(nodes.map(({ node, ...rest }) => [node.id, rest]));
+  const relations: TraceRelationPathEntry[] = [];
+  let hasUnresolvedLineage = false;
 
   for (
     let currentIndex = 0;
@@ -77,40 +170,51 @@ export function projectTraceDispatchesToFactoryGraph(
     currentIndex += 1
   ) {
     const currentDispatch = dispatches[currentIndex];
-    const currentNodeId = nodeIdByDispatchId.get(currentDispatch.dispatch_id);
+    const currentNodeId = nodeIDsByIndex[currentIndex];
     if (!currentNodeId) {
       continue;
     }
 
-    const predecessorDispatchIDs =
-      resolveExplicitPredecessorDispatchIDs(
+    const predecessorNodeIDs =
+      resolveExplicitPredecessorNodeIDs(
         currentDispatch,
-        latestDispatchIDByChainingTraceID,
+        latestNodeIDByChainingTraceID,
       ) ??
-      resolveWorkItemProducerDispatchIDs(dispatches, currentIndex) ??
-      resolveSequentialPredecessorDispatchIDs(dispatches, currentIndex) ??
+      resolveWorkItemProducerNodeIDs(
+        dispatches,
+        currentIndex,
+        nodeIDsByIndex,
+      ) ??
       [];
 
-    for (const producerDispatchID of predecessorDispatchIDs) {
-      if (producerDispatchID === currentDispatch.dispatch_id) {
-        continue;
-      }
+    if (currentIndex > 0 && predecessorNodeIDs.length === 0) {
+      hasUnresolvedLineage = true;
+    }
 
-      const sourceNodeId = nodeIdByDispatchId.get(producerDispatchID);
-      if (!sourceNodeId) {
-        continue;
+    for (const producerNodeID of predecessorNodeIDs) {
+      if (
+        producerNodeID !== currentNodeId &&
+        dispatchIdByNodeId.has(producerNodeID)
+      ) {
+        edgeKeys.add(`${producerNodeID}->${currentNodeId}`);
+        const sourceNode = nodesByID.get(producerNodeID);
+        const targetNode = nodesByID.get(currentNodeId);
+        if (sourceNode && targetNode) {
+          relations.push({
+            id: `predecessor|${sourceNode.traceNodeId}|${targetNode.traceNodeId}`,
+            kind: "predecessor",
+            relationType: "PREDECESSOR",
+            source: traceDispatchPathEndpoint(sourceNode),
+            target: traceDispatchPathEndpoint(targetNode),
+          });
+        }
       }
-
-      edgeKeys.add(`${sourceNodeId}->${currentNodeId}`);
     }
 
     for (const chainingTraceID of collectCurrentChainingTraceIDs(
       currentDispatch,
     )) {
-      latestDispatchIDByChainingTraceID.set(
-        chainingTraceID,
-        currentDispatch.dispatch_id,
-      );
+      latestNodeIDByChainingTraceID.set(chainingTraceID, currentNodeId);
     }
   }
 
@@ -120,11 +224,9 @@ export function projectTraceDispatchesToFactoryGraph(
       const [sourceNodeId, targetNodeId] = edgeKey.split("->");
       const sourceNode = nodeById.get(sourceNodeId);
       const targetNode = nodeById.get(targetNodeId);
-      if (!sourceNode || !targetNode) {
-        return null;
-      }
-
       if (
+        !sourceNode ||
+        !targetNode ||
         sourceNode.key.kind !== "workstation" ||
         targetNode.key.kind !== "workstation"
       ) {
@@ -141,18 +243,31 @@ export function projectTraceDispatchesToFactoryGraph(
     .sort((left, right) => left.id.localeCompare(right.id));
 
   return {
-    dispatchIdByNodeId,
-    nodeIdByDispatchId,
-    overlaysByNodeId,
-    topology: {
-      edges,
-      nodes: nodes.map(({ node }) => node),
-    },
+    edges,
+    lineageStatus: hasUnresolvedLineage ? "unresolved" : "resolved",
+    relations: relations.sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
+function traceDispatchPathEndpoint({
+  dispatch,
+  overlay,
+  selectionIdentities,
+}: Omit<
+  TraceDispatchProjectionNode,
+  "node" | "traceNodeId"
+>): TraceRelationPathEndpoint {
+  return {
+    dispatchID: dispatch.dispatch_id,
+    label: overlay.displayLabel,
+    selectionIdentities,
+    workID: selectionIdentities[0]?.work_id || undefined,
   };
 }
 
 function resolveTraceWorkstationNodeName(
   dispatch: DashboardTraceDispatch,
+  selection: TraceSelectionIdentity | undefined,
   reservedWorkstationNames: Set<string>,
 ): string {
   const candidates = [
@@ -168,30 +283,62 @@ function resolveTraceWorkstationNodeName(
     }
   }
 
-  const fallback = dispatch.dispatch_id.trim();
+  const fallbackBase = `${dispatch.dispatch_id.trim()}#attempt-${selection?.attempt ?? traceSelectionAttempt(dispatch)}`;
+  let fallback = fallbackBase;
+  let suffix = 2;
+  while (reservedWorkstationNames.has(fallback)) {
+    fallback = `${fallbackBase}-${suffix}`;
+    suffix += 1;
+  }
   reservedWorkstationNames.add(fallback);
   return fallback;
 }
 
-function resolveExplicitPredecessorDispatchIDs(
+function resolveTraceNodeID(
   dispatch: DashboardTraceDispatch,
-  latestDispatchIDByChainingTraceID: Map<string, string>,
-): string[] | null {
-  const predecessorDispatchIDs = collectPreviousChainingTraceIDs(dispatch)
-    .map((traceID) => latestDispatchIDByChainingTraceID.get(traceID))
-    .filter((dispatchID): dispatchID is string => Boolean(dispatchID));
+  selection: TraceSelectionIdentity | undefined,
+  dispatchCountsByID: ReadonlyMap<string, number>,
+  usedTraceNodeIDs: Set<string>,
+): string {
+  const dispatchID = dispatch.dispatch_id.trim();
+  if ((dispatchCountsByID.get(dispatch.dispatch_id) ?? 0) === 1) {
+    usedTraceNodeIDs.add(dispatchID);
+    return dispatchID;
+  }
 
-  return predecessorDispatchIDs.length > 0
-    ? uniqueNonEmptyStrings(predecessorDispatchIDs)
+  const identityKey = selection
+    ? `${selection.dispatch_id}#${selection.work_id || "none"}#attempt-${selection.attempt}`
+    : `${dispatchID}#attempt-${traceSelectionAttempt(dispatch)}`;
+  let traceNodeID = identityKey;
+  let suffix = 2;
+  while (usedTraceNodeIDs.has(traceNodeID)) {
+    traceNodeID = `${identityKey}-${suffix}`;
+    suffix += 1;
+  }
+  usedTraceNodeIDs.add(traceNodeID);
+  return traceNodeID;
+}
+
+function resolveExplicitPredecessorNodeIDs(
+  dispatch: DashboardTraceDispatch,
+  latestNodeIDByChainingTraceID: Map<string, string>,
+): string[] | null {
+  const predecessorNodeIDs = collectPreviousChainingTraceIDs(dispatch)
+    .map((traceID) => latestNodeIDByChainingTraceID.get(traceID))
+    .filter((nodeID): nodeID is string => Boolean(nodeID));
+
+  return predecessorNodeIDs.length > 0
+    ? uniqueNonEmptyStrings(predecessorNodeIDs)
     : null;
 }
 
-function resolveWorkItemProducerDispatchIDs(
+function resolveWorkItemProducerNodeIDs(
   dispatches: DashboardTraceDispatch[],
   currentIndex: number,
+  nodeIDsByIndex: string[],
 ): string[] | null {
   const currentDispatch = dispatches[currentIndex];
-  const producerDispatchIDs = new Set<string>();
+  const producerNodeIDs = new Set<string>();
 
   for (const inputItem of currentDispatch.input_items ?? []) {
     for (
@@ -208,18 +355,14 @@ function resolveWorkItemProducerDispatchIDs(
         continue;
       }
 
-      producerDispatchIDs.add(producerDispatch.dispatch_id);
+      const producerNodeID = nodeIDsByIndex[producerIndex];
+      if (producerNodeID) {
+        producerNodeIDs.add(producerNodeID);
+      }
     }
   }
 
-  return producerDispatchIDs.size > 0 ? [...producerDispatchIDs] : null;
-}
-
-function resolveSequentialPredecessorDispatchIDs(
-  dispatches: DashboardTraceDispatch[],
-  currentIndex: number,
-): string[] | null {
-  return currentIndex > 0 ? [dispatches[currentIndex - 1].dispatch_id] : null;
+  return producerNodeIDs.size > 0 ? [...producerNodeIDs] : null;
 }
 
 function collectCurrentChainingTraceIDs(

@@ -1,4 +1,5 @@
 import {
+  DescriptionList,
   Table,
   TableBody,
   TableCaption,
@@ -7,25 +8,24 @@ import {
   TableHeader,
   TableRow,
 } from "@you-agent-factory/components/data-display";
-import { Button } from "@you-agent-factory/components/primitives";
+import { Button, Code, Label } from "@you-agent-factory/components/primitives";
 import {
   WidgetEmptyState,
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
 } from "@you-agent-factory/components/recipes";
 import type { HTMLAttributes, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DashboardTrace,
+  DashboardTraceDispatch,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { DescriptionList } from "@you-agent-factory/components/data-display";
-import { Code, Label } from "@you-agent-factory/components/primitives";
-import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import {
   Collapsible,
   CollapsibleContent,
 } from "../../../components/ui/collapsible";
+import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import {
   formatDurationMillis,
   formatTraceOutcome,
@@ -33,6 +33,14 @@ import {
 } from "../../../components/ui/formatters";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
+import {
+  type TraceSelectionIdentity,
+  traceSelectionForDispatch,
+  traceSelectionIdentitiesByWorkID,
+  traceSelectionIdentitiesForDispatch,
+  traceSelectionKey,
+  traceSelectionMatches,
+} from "../lib/trace-selection";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
@@ -49,6 +57,8 @@ export interface TraceGridBentoCardProps {
   headerAction?: ReactNode;
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  selectedTraceSelection?: TraceSelectionIdentity | null;
   state: TraceGridState;
   title?: string;
   widgetId?: string;
@@ -59,6 +69,8 @@ export function TraceGridBentoCard({
   headerAction,
   locale,
   onSelectWorkID,
+  onSelectTraceSelection,
+  selectedTraceSelection,
   state,
   title,
   widgetId = "trace-drilldown",
@@ -77,7 +89,13 @@ export function TraceGridBentoCard({
       wide
       widgetId={widgetId}
     >
-      {renderTraceState(state, locale, onSelectWorkID)}
+      {renderTraceState(
+        state,
+        locale,
+        onSelectWorkID,
+        onSelectTraceSelection,
+        selectedTraceSelection,
+      )}
     </DashboardWidgetFrame>
   );
 }
@@ -86,6 +104,8 @@ function renderTraceState(
   state: TraceGridState,
   locale?: string,
   onSelectWorkID?: (workID: string) => void,
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void,
+  selectedTraceSelection?: TraceSelectionIdentity | null,
 ) {
   const messages = getTraceDrilldownMessages(locale);
 
@@ -131,6 +151,8 @@ function renderTraceState(
         <TraceGrid
           locale={locale}
           onSelectWorkID={onSelectWorkID}
+          onSelectTraceSelection={onSelectTraceSelection}
+          selectedTraceSelection={selectedTraceSelection}
           trace={state.trace}
         />
       );
@@ -140,21 +162,99 @@ function renderTraceState(
 interface TraceGridProps {
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  selectedTraceSelection?: TraceSelectionIdentity | null;
   trace: DashboardTrace;
 }
 
-function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
+type TraceSelectionSource = "graph" | "table" | "text";
+
+interface PendingTraceFocus {
+  selection: TraceSelectionIdentity;
+  source: TraceSelectionSource;
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: trace card keeps the canonical metadata, relation, table, and graph surfaces in one selection-aware render path.
+function TraceGrid({
+  locale,
+  onSelectWorkID,
+  onSelectTraceSelection,
+  selectedTraceSelection: controlledSelection,
+  trace,
+}: TraceGridProps) {
   const messages = getTraceDrilldownMessages(locale);
   const workItems = useMemo(() => resolveTraceWorkItems(trace), [trace]);
+  const workItemsByWorkId = useMemo(
+    () => new Map(workItems.map((workItem) => [workItem.work_id, workItem])),
+    [workItems],
+  );
+  const selectionIdentitiesByWorkID = useMemo(
+    () => traceSelectionIdentitiesByWorkID(trace.dispatches),
+    [trace.dispatches],
+  );
   const [workItemsExpanded, setWorkItemsExpanded] = useState(false);
+  const [localSelection, setLocalSelection] =
+    useState<TraceSelectionIdentity | null>(null);
+  const [pendingFocus, setPendingFocus] = useState<PendingTraceFocus | null>(
+    null,
+  );
+  const gridRef = useRef<HTMLDivElement>(null);
+  const selectedTraceSelection =
+    controlledSelection === undefined ? localSelection : controlledSelection;
   const workItemsID = `trace-work-items-${trace.trace_id || "selected"}`;
 
   useEffect(() => {
     setWorkItemsExpanded(false);
   }, []);
 
+  const selectTraceSelection = useCallback(
+    (selection: TraceSelectionIdentity, source: TraceSelectionSource) => {
+      setLocalSelection(selection);
+      setPendingFocus({ selection, source });
+      onSelectTraceSelection?.(selection);
+      if (selection.work_id) {
+        onSelectWorkID?.(selection.work_id);
+      }
+    },
+    [onSelectTraceSelection, onSelectWorkID],
+  );
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!pendingFocus || !grid) {
+      return;
+    }
+
+    const targetKey = traceSelectionKey(pendingFocus.selection);
+    const targetSurfaces =
+      pendingFocus.source === "table"
+        ? ["graph", "text"]
+        : pendingFocus.source === "graph"
+          ? ["table", "text"]
+          : ["graph", "table"];
+    const target = targetSurfaces
+      .flatMap((surface) => [
+        ...grid.querySelectorAll<HTMLElement>(
+          `[data-trace-selection-surface="${surface}"]`,
+        ),
+      ])
+      .find((element) =>
+        traceSelectionKeysFromElement(element).includes(targetKey),
+      );
+    const focusTarget = target?.matches("button")
+      ? target
+      : target?.querySelector<HTMLElement>("button");
+
+    if (focusTarget) {
+      focusTarget.focus();
+      focusTarget.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    }
+
+    setPendingFocus(null);
+  }, [pendingFocus]);
+
   return (
-    <div className="grid min-w-0 w-full gap-3">
+    <div className="grid min-w-0 w-full gap-3" ref={gridRef}>
       <DescriptionList className="gap-3 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-outline [&_div]:pt-3 [&_dt]:mb-1">
         <div>
           <Label as="dt">{messages.traceIdLabel}</Label>
@@ -168,6 +268,10 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             <TraceWorkstationPath
               dispatches={trace.dispatches}
               locale={locale}
+              onSelectTraceSelection={(selection) =>
+                selectTraceSelection(selection, "graph")
+              }
+              selectedTraceSelection={selectedTraceSelection}
             />
           </dd>
         </div>
@@ -233,7 +337,14 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
               <TraceRelationFlow
                 locale={locale}
                 onSelectWorkID={onSelectWorkID}
+                onSelectTraceSelection={(selection) =>
+                  selectTraceSelection(selection, "text")
+                }
                 relations={trace.relations}
+                selectedTraceSelection={selectedTraceSelection}
+                selectedWorkID={selectedTraceSelection?.work_id}
+                selectionIdentitiesByWorkID={selectionIdentitiesByWorkID}
+                workItemsByWorkId={workItemsByWorkId}
               />
             ) : (
               messages.noBatchRelations
@@ -243,71 +354,15 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
       </DescriptionList>
 
       {trace.dispatches.length > 0 ? (
-        <Table
-          className="min-w-2xl"
-          containerClassName="min-w-0 overscroll-x-contain"
-          containerProps={
-            {
-              "data-trace-dispatch-table": "",
-            } as HTMLAttributes<HTMLDivElement>
+        <TraceDispatchTable
+          dispatches={trace.dispatches}
+          locale={locale}
+          onSelectTraceSelection={(selection) =>
+            selectTraceSelection(selection, "table")
           }
-        >
-          <TableCaption className="mb-2 text-left">
-            {messages.tableCaption}
-          </TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead scope="col">{messages.dispatchColumnLabel}</TableHead>
-              <TableHead scope="col">
-                {messages.workstationColumnLabel}
-              </TableHead>
-              <TableHead scope="col">{messages.outcomeColumnLabel}</TableHead>
-              <TableHead scope="col">
-                {messages.inputItemsColumnLabel}
-              </TableHead>
-              <TableHead scope="col">
-                {messages.outputItemsColumnLabel}
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {trace.dispatches.map((dispatch) => (
-              <TableRow key={dispatch.dispatch_id}>
-                <TableCell className="align-top" scope="row">
-                  {dispatch.dispatch_id}
-                </TableCell>
-                <TableCell className="align-top">
-                  {dispatch.workstation_name || dispatch.transition_id}
-                </TableCell>
-                <TableCell className="align-top">
-                  {formatTraceOutcome(dispatch.outcome)} ·{" "}
-                  {formatDurationMillis(dispatch.duration_millis)}
-                </TableCell>
-                <TableCell className="align-top">
-                  {dispatch.input_items && dispatch.input_items.length > 0 ? (
-                    <SelectableWorkList
-                      onSelectWorkID={onSelectWorkID}
-                      workItems={dispatch.input_items}
-                    />
-                  ) : (
-                    <span>{messages.noInputItems}</span>
-                  )}
-                </TableCell>
-                <TableCell className="align-top">
-                  {dispatch.output_items && dispatch.output_items.length > 0 ? (
-                    <SelectableWorkList
-                      onSelectWorkID={onSelectWorkID}
-                      workItems={dispatch.output_items}
-                    />
-                  ) : (
-                    <span>{messages.noOutputItems}</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : (
+          selectedTraceSelection={selectedTraceSelection}
+        />
+      ) : trace.relations && trace.relations.length > 0 ? null : (
         <WidgetEmptyState compact>
           <WidgetEmptyStateTitle>
             {messages.noTraceHistoryTitle}
@@ -321,34 +376,194 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
   );
 }
 
+function TraceDispatchTable({
+  dispatches,
+  locale,
+  onSelectTraceSelection,
+  selectedTraceSelection,
+}: {
+  dispatches: DashboardTraceDispatch[];
+  locale?: string;
+  onSelectTraceSelection: (selection: TraceSelectionIdentity) => void;
+  selectedTraceSelection: TraceSelectionIdentity | null;
+}) {
+  const messages = getTraceDrilldownMessages(locale);
+
+  return (
+    <Table
+      className="min-w-2xl"
+      containerClassName="min-w-0 overscroll-x-contain"
+      containerProps={
+        {
+          "data-trace-dispatch-table": "",
+        } as HTMLAttributes<HTMLDivElement>
+      }
+    >
+      <TableCaption className="mb-2 text-left">
+        {messages.tableCaption}
+      </TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead scope="col">{messages.dispatchColumnLabel}</TableHead>
+          <TableHead scope="col">{messages.workstationColumnLabel}</TableHead>
+          <TableHead scope="col">{messages.outcomeColumnLabel}</TableHead>
+          <TableHead scope="col">{messages.inputItemsColumnLabel}</TableHead>
+          <TableHead scope="col">{messages.outputItemsColumnLabel}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {dispatches.map((dispatch) => {
+          const dispatchSelections =
+            traceSelectionIdentitiesForDispatch(dispatch);
+          const isSelected = dispatchSelections.some((selection) =>
+            traceSelectionMatches(selection, selectedTraceSelection),
+          );
+          const primarySelection = traceSelectionForDispatch(dispatch);
+          const primarySelectionKey = traceSelectionKey(primarySelection);
+          const selectLabel = messages.selectDispatchLabel(
+            dispatch.dispatch_id,
+            primarySelection.work_id,
+            primarySelection.attempt,
+          );
+
+          return (
+            <TableRow
+              aria-selected={isSelected}
+              data-trace-dispatch-row
+              data-trace-selection-key={primarySelectionKey}
+              key={primarySelectionKey}
+            >
+              <TableCell className="align-top" scope="row">
+                <Button
+                  aria-label={selectLabel}
+                  aria-pressed={isSelected}
+                  className="h-auto min-h-0 justify-start px-2.5 py-1.5 text-left"
+                  data-trace-selection-key={primarySelectionKey}
+                  data-trace-selection-surface="table"
+                  onClick={() => onSelectTraceSelection(primarySelection)}
+                  size="sm"
+                  title={selectLabel}
+                  tone="outline"
+                >
+                  {dispatch.dispatch_id}
+                </Button>
+              </TableCell>
+              <TableCell className="align-top">
+                {dispatch.workstation_name || dispatch.transition_id}
+              </TableCell>
+              <TableCell className="align-top">
+                {formatTraceOutcome(dispatch.outcome)} ·{" "}
+                {formatDurationMillis(dispatch.duration_millis)}
+              </TableCell>
+              <TableCell className="align-top">
+                {dispatch.input_items && dispatch.input_items.length > 0 ? (
+                  <SelectableWorkList
+                    dispatch={dispatch}
+                    onSelectTraceSelection={onSelectTraceSelection}
+                    selectedTraceSelection={selectedTraceSelection}
+                    workItems={dispatch.input_items}
+                  />
+                ) : (
+                  <span>{messages.noInputItems}</span>
+                )}
+              </TableCell>
+              <TableCell className="align-top">
+                {dispatch.output_items && dispatch.output_items.length > 0 ? (
+                  <SelectableWorkList
+                    dispatch={dispatch}
+                    onSelectTraceSelection={onSelectTraceSelection}
+                    selectedTraceSelection={selectedTraceSelection}
+                    workItems={dispatch.output_items}
+                  />
+                ) : (
+                  <span>{messages.noOutputItems}</span>
+                )}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
 function SelectableWorkList({
+  dispatch,
   onSelectWorkID,
+  onSelectTraceSelection,
+  selectedTraceSelection,
   workItems,
 }: {
+  dispatch?: DashboardTraceDispatch;
   onSelectWorkID?: (workID: string) => void;
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  selectedTraceSelection?: TraceSelectionIdentity | null;
   workItems: DashboardWorkItemRef[];
 }) {
   return (
     <ul className="m-0 grid gap-1.5 p-0">
-      {workItems.map((workItem) => (
-        <li className="list-none" key={workItem.work_id}>
-          {onSelectWorkID ? (
-            <Button
-              className="h-auto min-h-0 justify-start px-2.5 py-1.5 text-left"
-              onClick={() => onSelectWorkID(workItem.work_id)}
-              size="sm"
-              title={workItem.work_id}
-              tone="outline"
-            >
-              {formatTypedWorkItemLabel(workItem)}
-            </Button>
-          ) : (
-            <Code size="supporting">{formatTypedWorkItemLabel(workItem)}</Code>
-          )}
-        </li>
-      ))}
+      {workItems.map((workItem) => {
+        const selection = dispatch
+          ? traceSelectionForDispatch(dispatch, workItem.work_id)
+          : undefined;
+        const isSelected = traceSelectionMatches(
+          selection,
+          selectedTraceSelection,
+        );
+
+        return (
+          <li
+            className="list-none"
+            key={selection ? traceSelectionKey(selection) : workItem.work_id}
+          >
+            {onSelectWorkID || onSelectTraceSelection ? (
+              <Button
+                aria-pressed={selection ? isSelected : undefined}
+                className="h-auto min-h-0 justify-start px-2.5 py-1.5 text-left"
+                data-trace-selection-key={
+                  selection ? traceSelectionKey(selection) : undefined
+                }
+                data-trace-selection-surface={selection ? "table" : undefined}
+                onClick={() => {
+                  if (selection && onSelectTraceSelection) {
+                    onSelectTraceSelection(selection);
+                    return;
+                  }
+                  onSelectWorkID?.(workItem.work_id);
+                }}
+                size="sm"
+                title={workItem.work_id}
+                tone="outline"
+              >
+                {formatTypedWorkItemLabel(workItem)}
+              </Button>
+            ) : (
+              <Code size="supporting">
+                {formatTypedWorkItemLabel(workItem)}
+              </Code>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
+}
+
+function traceSelectionKeysFromElement(element: HTMLElement): string[] {
+  const serializedKeys = element.getAttribute("data-trace-selection-keys");
+  if (serializedKeys) {
+    try {
+      const keys = JSON.parse(serializedKeys) as unknown;
+      if (Array.isArray(keys)) {
+        return keys.filter((key): key is string => typeof key === "string");
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  const key = element.getAttribute("data-trace-selection-key");
+  return key ? [key] : [];
 }
 
 function resolveTraceWorkItems(trace: DashboardTrace): DashboardWorkItemRef[] {

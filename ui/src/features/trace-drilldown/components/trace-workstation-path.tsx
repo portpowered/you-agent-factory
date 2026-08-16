@@ -18,8 +18,10 @@ import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-
 import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import { applyTraceFactoryGraphLayoutToNode } from "../lib/trace-factory-graph-layout";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
+import type { TraceSelectionIdentity } from "../lib/trace-selection";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import { TraceRelationPath } from "./trace-relation-path";
 
 const GRAPH_SHELL_STYLE = { height: 320, minHeight: 256 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
@@ -31,16 +33,27 @@ const TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS = {
 export interface TraceWorkstationPathProps {
   dispatches: DashboardTraceDispatch[];
   locale?: string;
+  onSelectTraceSelection?: (selection: TraceSelectionIdentity) => void;
+  renderGraph?: boolean;
+  selectedTraceSelection?: TraceSelectionIdentity | null;
 }
 
 export function TraceWorkstationPath({
   dispatches,
   locale,
+  onSelectTraceSelection,
+  renderGraph = true,
+  selectedTraceSelection,
 }: TraceWorkstationPathProps) {
   const messages = getTraceDrilldownMessages(locale);
   const graph = useMemo(
-    () => buildTraceDispatchFactoryGraphFlow(dispatches, locale),
-    [dispatches, locale],
+    () =>
+      buildTraceDispatchFactoryGraphFlow(dispatches, {
+        locale,
+        onSelectTraceSelection,
+        selectedTraceSelection,
+      }),
+    [dispatches, locale, onSelectTraceSelection, selectedTraceSelection],
   );
   const topologyKey = useMemo(
     () => traceDispatchTopologyLayoutKey(graph.topology),
@@ -103,35 +116,53 @@ export function TraceWorkstationPath({
   const { graphViewportReady, graphViewportRef } =
     useMeasuredTraceGraphViewport();
 
-  if (graph.nodes.length === 0) {
-    return <span>{messages.dispatchPathEmpty}</span>;
-  }
-
   return (
-    <div
-      className="relative max-w-full min-w-80 resize overflow-hidden"
-      style={GRAPH_SHELL_STYLE}
-    >
-      <GraphViewportSurface
-        aria-label={messages.dispatchPathGraphLabel}
-        className="h-full border-transparent"
-        data-trace-workstation-path
-      >
-        <div
-          className="h-full min-w-0 w-full"
-          data-trace-graph-viewport
-          ref={graphViewportRef}
-          style={GRAPH_VIEWPORT_STYLE}
+    <div className="grid max-w-full min-w-80 gap-2">
+      <TraceRelationPath
+        entries={graph.relations}
+        locale={locale}
+        onSelectTraceSelection={onSelectTraceSelection}
+        selectedTraceSelection={selectedTraceSelection}
+      />
+      {graph.lineageStatus === "unresolved" ? (
+        <p
+          aria-live="polite"
+          className="m-0 rounded-md border border-af-warning-border bg-warning-container px-3 py-2 text-sm text-on-warning-container"
+          data-trace-lineage-status="unresolved"
+          role="status"
         >
-          {graphViewportReady ? (
-            <TraceWorkstationReactFlow
-              edges={graph.edges}
-              nodes={nodes}
-              onNodesChange={handleNodesChange}
-            />
-          ) : null}
+          {messages.unresolvedLineageMessage}
+        </p>
+      ) : null}
+      {renderGraph && graph.nodes.length > 0 ? (
+        <div
+          className="relative max-w-full resize overflow-hidden"
+          style={GRAPH_SHELL_STYLE}
+        >
+          <GraphViewportSurface
+            aria-label={messages.dispatchPathGraphLabel}
+            className="h-full border-transparent"
+            data-trace-workstation-path
+          >
+            <div
+              className="h-full min-w-0 w-full"
+              data-trace-graph-viewport
+              ref={graphViewportRef}
+              style={GRAPH_VIEWPORT_STYLE}
+            >
+              {graphViewportReady ? (
+                <TraceWorkstationReactFlow
+                  edges={graph.edges}
+                  nodes={nodes}
+                  onNodesChange={handleNodesChange}
+                />
+              ) : null}
+            </div>
+          </GraphViewportSurface>
         </div>
-      </GraphViewportSurface>
+      ) : graph.nodes.length === 0 ? (
+        <span>{messages.dispatchPathEmpty}</span>
+      ) : null}
     </div>
   );
 }
@@ -155,7 +186,7 @@ function TraceWorkstationReactFlow({
       minZoom={0.35}
       nodes={nodes}
       nodesDraggable={true}
-      nodeTypes={FACTORY_GRAPH_NODE_TYPES}
+      nodeTypes={TRACE_DISPATCH_NODE_TYPES}
       onNodesChange={onNodesChange}
       onError={failOnTraceReactFlowError}
       panOnDrag
@@ -167,5 +198,27 @@ function TraceWorkstationReactFlow({
         fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
       />
     </ReactFlow>
+  );
+}
+
+type FactoryWorkstationNodeProps = Parameters<
+  (typeof FACTORY_GRAPH_NODE_TYPES)["workstation"]
+>[0];
+
+const TRACE_DISPATCH_NODE_TYPES = {
+  ...FACTORY_GRAPH_NODE_TYPES,
+  workstation: TraceDispatchWorkstationNode,
+};
+
+function TraceDispatchWorkstationNode(props: FactoryWorkstationNodeProps) {
+  const data = props.data as TraceDispatchFlowNode["data"];
+
+  return (
+    <div
+      data-trace-selection-keys={JSON.stringify(data.traceSelectionKeys ?? [])}
+      data-trace-selection-surface="graph"
+    >
+      <FACTORY_GRAPH_NODE_TYPES.workstation {...props} />
+    </div>
   );
 }

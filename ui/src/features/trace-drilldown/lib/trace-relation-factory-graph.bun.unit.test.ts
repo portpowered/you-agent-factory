@@ -159,6 +159,21 @@ describe("projectTraceRelationsToFactoryGraph edges and overlays", () => {
     ).toBe(
       "Retry relation from Implement story to Repair story, requiring Failed",
     );
+    expect(projection.relations.map((relation) => relation.id)).toEqual(
+      projection.topology.edges.map((edge) => edge.id),
+    );
+    expect(projection.relations[0]).toMatchObject({
+      kind: "relation",
+      relationType: "PARENT_CHILD",
+      source: {
+        label: "Plan story",
+        workID: "work-plan",
+      },
+      target: {
+        label: "Implement story",
+        workID: "work-implement",
+      },
+    });
   });
 
   it("aggregates relation metadata onto one node per endpoint", () => {

@@ -452,6 +452,7 @@ export interface DashboardTraceMutation {
 }
 
 export interface DashboardTraceDispatch {
+  attempt?: number;
   current_chaining_trace_id?: string;
   dispatch_id: string;
   transition_id: string;

@@ -11,6 +11,8 @@ import {
   nodeKeyId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
+import type { TraceRelationPathEntry } from "./trace-relation-path";
+import type { TraceSelectionIdentity } from "./trace-selection";
 
 export interface TraceRelationNodeOverlay {
   displayLabel: string;
@@ -32,11 +34,16 @@ export interface TraceRelationFactoryGraphProjection {
   endpointKeyByNodeId: ReadonlyMap<string, string>;
   nodeIdByEndpointKey: ReadonlyMap<string, string>;
   overlaysByNodeId: ReadonlyMap<string, TraceRelationNodeOverlay>;
+  relations: readonly TraceRelationPathEntry[];
   topology: FactoryGraphTopology;
 }
 
 export interface ProjectTraceRelationsToFactoryGraphOptions {
   locale?: string;
+  selectionIdentitiesByWorkID?: ReadonlyMap<
+    string,
+    readonly TraceSelectionIdentity[]
+  >;
   workItemsByWorkId?: ReadonlyMap<string, DashboardWorkItemRef>;
 }
 
@@ -54,7 +61,7 @@ export function projectTraceRelationsToFactoryGraph(
   relations: DashboardWorkRelation[],
   options: ProjectTraceRelationsToFactoryGraphOptions = {},
 ): TraceRelationFactoryGraphProjection {
-  const { locale, workItemsByWorkId } = options;
+  const { locale, selectionIdentitiesByWorkID, workItemsByWorkId } = options;
   const messages = getTraceDrilldownMessages(locale);
   const endpointRecords = new Map<string, RelationEndpointRecord>();
 
@@ -106,6 +113,7 @@ export function projectTraceRelationsToFactoryGraph(
   }
 
   const edgeOverlaysByEdgeId = new Map<string, TraceRelationEdgeOverlay>();
+  const relationPathEntries: TraceRelationPathEntry[] = [];
   const edges: FactoryGraphEdge[] = [];
 
   relations.forEach((relation, index) => {
@@ -129,8 +137,9 @@ export function projectTraceRelationsToFactoryGraph(
     };
     const sourceOverlay = overlaysByNodeId.get(sourceNodeId);
     const targetOverlay = overlaysByNodeId.get(targetNodeId);
+    const relationID = relationEdgeId(relation, index);
 
-    edgeOverlaysByEdgeId.set(edge.id, {
+    edgeOverlaysByEdgeId.set(relationID, {
       ariaLabel: messages.relationEdgeLabel({
         relationState: relation.required_state,
         relationType: relation.type,
@@ -141,6 +150,25 @@ export function projectTraceRelationsToFactoryGraph(
       requiredState: relation.required_state,
       requestId: relation.request_id,
     });
+    relationPathEntries.push({
+      id: relationID,
+      kind: "relation",
+      relationType: relation.type,
+      requestID: relation.request_id,
+      requiredState: relation.required_state,
+      source: {
+        label: sourceOverlay?.displayLabel ?? source.displayLabel,
+        selectionIdentities:
+          selectionIdentitiesByWorkID?.get(source.workID ?? "") ?? [],
+        workID: source.workID,
+      },
+      target: {
+        label: targetOverlay?.displayLabel ?? target.displayLabel,
+        selectionIdentities:
+          selectionIdentitiesByWorkID?.get(target.workID ?? "") ?? [],
+        workID: target.workID,
+      },
+    });
     edges.push(edge);
   });
 
@@ -149,6 +177,7 @@ export function projectTraceRelationsToFactoryGraph(
     endpointKeyByNodeId,
     nodeIdByEndpointKey,
     overlaysByNodeId,
+    relations: relationPathEntries,
     topology: {
       edges: edges.sort((left, right) => left.id.localeCompare(right.id)),
       nodes,

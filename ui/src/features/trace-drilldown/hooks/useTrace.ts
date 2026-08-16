@@ -5,9 +5,38 @@ import type {
   DashboardTraceDispatch,
   DashboardWorkRelation,
 } from "../../../api/dashboard/types";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import {
+  factoryTimelineEntryKey,
+  useFactoryTimelineStore,
+} from "../../timeline/public/store";
+import {
+  normalizeStreamDerivedCacheIdentity,
+  type StreamDerivedCacheIdentity,
+  streamDerivedCacheKeyPrefix,
+} from "../../timeline/public/stream-identity";
 
 const DASHBOARD_WORK_TRACE_QUERY_KEY = ["agent-factory-work-trace"] as const;
+const EMPTY_TRACES_BY_WORK_ID: Record<string, DashboardTrace> = {};
+
+export function dashboardTraceQueryKey(
+  workID: string | null,
+  traceID: string | null | undefined,
+  selectedTick: number,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+) {
+  const normalizedStreamIdentity =
+    normalizeStreamDerivedCacheIdentity(streamIdentity);
+
+  return [
+    ...DASHBOARD_WORK_TRACE_QUERY_KEY,
+    ...(normalizedStreamIdentity
+      ? streamDerivedCacheKeyPrefix(normalizedStreamIdentity)
+      : []),
+    workID,
+    traceID ?? "",
+    selectedTick,
+  ] as const;
+}
 
 export function expandTraceWithCausalPredecessors(
   trace: DashboardTrace | undefined,
@@ -94,24 +123,49 @@ export function expandTraceWithCausalPredecessors(
 export function useDashboardTrace(
   workID: string | null,
   traceID?: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ) {
-  const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const tracesByWorkID = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {},
+  const normalizedStreamIdentity = useMemo(
+    () => normalizeStreamDerivedCacheIdentity(streamIdentity),
+    [streamIdentity],
   );
-  const eventTrace = useFactoryTimelineStore(
-    (state) =>
-      state.worldViewCache[state.selectedTick]?.tracesByWorkID[workID ?? ""],
+  const scopedTimelineEntryKey = useMemo(
+    () =>
+      normalizedStreamIdentity
+        ? factoryTimelineEntryKey(normalizedStreamIdentity)
+        : null,
+    [normalizedStreamIdentity],
   );
-  const directTrace = useFactoryTimelineStore((state) => {
-    if (!traceID) {
-      return undefined;
+  const selectedTick = useFactoryTimelineStore((state) => {
+    if (scopedTimelineEntryKey === null) {
+      return state.selectedTick;
+    }
+    return state.entriesByKey[scopedTimelineEntryKey]?.selectedTick ?? 0;
+  });
+  const tracesByWorkID = useFactoryTimelineStore((state) => {
+    if (scopedTimelineEntryKey === null) {
+      return (
+        state.worldViewCache[state.selectedTick]?.tracesByWorkID ??
+        EMPTY_TRACES_BY_WORK_ID
+      );
     }
 
-    return Object.values(
-      state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {},
-    ).find((trace) => trace.trace_id === traceID);
-  });
+    const entry = state.entriesByKey[scopedTimelineEntryKey];
+    return (
+      entry?.worldViewCache[entry.selectedTick]?.tracesByWorkID ??
+      EMPTY_TRACES_BY_WORK_ID
+    );
+  }, Object.is);
+  const eventTrace = tracesByWorkID[workID ?? ""];
+  const directTrace = useMemo(
+    () =>
+      traceID
+        ? Object.values(tracesByWorkID).find(
+            (trace) => trace.trace_id === traceID,
+          )
+        : undefined,
+    [traceID, tracesByWorkID],
+  );
   const trace = useMemo(
     () =>
       expandTraceWithCausalPredecessors(
@@ -122,12 +176,12 @@ export function useDashboardTrace(
   );
 
   return useQuery({
-    queryKey: [
-      ...DASHBOARD_WORK_TRACE_QUERY_KEY,
+    queryKey: dashboardTraceQueryKey(
       workID,
-      traceID ?? "",
+      traceID,
       selectedTick,
-    ],
+      normalizedStreamIdentity,
+    ),
     queryFn: () => trace,
     enabled: trace !== undefined,
     initialData: trace,

@@ -169,6 +169,7 @@ export function responseCompletion(
   ]);
 
   return {
+    attempt: latestAttempt?.attempt,
     consumedTokens: active?.consumedTokens ?? [],
     currentChainingTraceID:
       event.context.currentChainingTraceId ??
@@ -280,6 +281,7 @@ export function completionToTraceDispatch(
   completion: WorldCompletion,
 ): DashboardTraceDispatch {
   return {
+    attempt: completion.attempt,
     consumed_tokens: completion.consumedTokens,
     current_chaining_trace_id: completion.currentChainingTraceID,
     diagnostics: completion.diagnostics,

@@ -94,6 +94,11 @@ export function syncCompletedDispatchAttempt(
     }
 
     completion.diagnostics = attempt.diagnostics ?? completion.diagnostics;
+    // Inference attempts are authoritative for retry identity. Keep the
+    // highest recorded attempt when responses arrive out of order; a legacy
+    // completion with no inference event remains undefined and uses the
+    // documented UI fallback for old recordings.
+    completion.attempt = Math.max(completion.attempt ?? 0, attempt.attempt);
     completion.providerSession =
       attempt.provider_session ?? completion.providerSession;
 
