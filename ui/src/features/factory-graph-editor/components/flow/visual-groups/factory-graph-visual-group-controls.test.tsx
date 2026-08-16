@@ -40,7 +40,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={onToggleNodeMembership}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={["workstation:missing"]}
       />,
     );
@@ -55,6 +55,9 @@ describe("FactoryGraphVisualGroupControls", () => {
         name: "Include Writer in this group",
       }),
     ).not.toBeChecked();
+    expect(
+      screen.getByRole("region", { name: "Visual group Review" }),
+    ).not.toHaveTextContent("Selected visual group");
     expect(
       screen.getByText(
         "Saved member workstation:missing is no longer on the canvas.",
@@ -101,7 +104,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={vi.fn()}
         onSetGroupColor={onSetGroupColor}
         onToggleNodeMembership={vi.fn()}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );
@@ -152,7 +155,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );
@@ -190,7 +193,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );
@@ -230,7 +233,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={onRenameGroup}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );
@@ -263,7 +266,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={onRenameGroup}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );
@@ -305,7 +308,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={onToggleNodeMembership}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );
@@ -357,7 +360,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}
-        selectedGroupLabel="Selected visual group"
+        groupAriaLabel="Visual group Review"
         staleMemberNodeIds={[]}
       />,
     );

@@ -267,7 +267,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             onRenameGroup: handleRenameSelectedGroup,
             onSetGroupColor: handleSetSelectedGroupColor,
             onToggleNodeMembership: handleToggleSelectedGroupNodeMembership,
-            selectedGroupLabel: messages.visualGroupSelectedLabel,
+            groupAriaLabel: messages.visualGroupAriaLabel(selectedGroup),
             staleMemberNodeIds,
           }
         : null,

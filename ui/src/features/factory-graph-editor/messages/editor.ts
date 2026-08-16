@@ -109,7 +109,6 @@ export interface FactoryGraphEditorMessages {
   visualGroupMembershipLabel: string;
   visualGroupMembershipNodeLabel: (label: string) => string;
   visualGroupMembershipStaleNodeLabel: (nodeId: string) => string;
-  visualGroupSelectedLabel: string;
   visualGroupDeleteLabel: string;
   visualGroupFitLabel: string;
   visualGroupResizeHandleLabel: (corner: "ne" | "nw" | "se" | "sw") => string;
@@ -741,7 +740,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `Include ${label} in this group`,
       visualGroupMembershipStaleNodeLabel: (nodeId) =>
         `Saved member ${nodeId} is no longer on the canvas.`,
-      visualGroupSelectedLabel: "Selected visual group",
       visualGroupDeleteLabel: "Delete group",
       visualGroupFitLabel: "Fit to members",
       visualGroupResizeHandleLabel: (corner) =>
@@ -1195,7 +1193,6 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupMembershipNodeLabel: (label) => `将 ${label} 加入此分组`,
       visualGroupMembershipStaleNodeLabel: (nodeId) =>
         `已保存的成员 ${nodeId} 已不在画布上。`,
-      visualGroupSelectedLabel: "已选视觉分组",
       visualGroupDeleteLabel: "删除分组",
       visualGroupFitLabel: "适配成员",
       visualGroupResizeHandleLabel: (corner) => `从 ${corner} 角调整分组大小`,

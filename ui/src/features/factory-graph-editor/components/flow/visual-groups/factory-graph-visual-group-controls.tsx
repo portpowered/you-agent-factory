@@ -31,7 +31,7 @@ export function FactoryGraphVisualGroupControls({
   onRenameGroup,
   onSetGroupColor,
   onToggleNodeMembership,
-  selectedGroupLabel,
+  groupAriaLabel,
   staleMemberNodeIds,
 }: {
   canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
@@ -53,7 +53,7 @@ export function FactoryGraphVisualGroupControls({
   onRenameGroup: (label: string) => void;
   onSetGroupColor: (color: FactoryLayoutGroupColorToken) => void;
   onToggleNodeMembership: (nodeId: string, selected: boolean) => void;
-  selectedGroupLabel: string;
+  groupAriaLabel: string;
   staleMemberNodeIds: readonly string[];
 }) {
   const labelFieldId = useId();
@@ -65,14 +65,11 @@ export function FactoryGraphVisualGroupControls({
 
   return (
     <section
-      aria-label={selectedGroupLabel}
+      aria-label={groupAriaLabel}
       className="absolute bottom-4 right-4 z-20 max-w-sm rounded-xl border border-outline bg-surface-container-high p-3 shadow-sm"
       data-factory-visual-group-controls=""
     >
-      <p className="m-0 text-xs font-semibold text-on-surface-subtle">
-        {selectedGroupLabel}
-      </p>
-      <div className="mt-3 grid gap-2">
+      <div className="grid gap-2">
         <label
           className="grid gap-1 text-sm text-on-surface"
           htmlFor={labelFieldId}
