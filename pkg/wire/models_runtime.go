@@ -167,7 +167,8 @@ func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformproc
 	if newCommand == nil {
 		newCommand = exec.Command
 	}
-	runner, err := platformprocess.NewExecCommandRunner(newCommand, clock, nil)
+	processStateReader := platformprocess.NewProcfsProcessStateReader(os.ReadFile)
+	runner, err := platformprocess.NewExecCommandRunner(newCommand, clock, nil, processStateReader)
 	if err != nil {
 		return nil, err
 	}

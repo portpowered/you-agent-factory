@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -192,31 +193,32 @@ type WorkstationExecutionRequest struct {
 	GenerationID          string                `json:"generation_id,omitempty"`
 	// WorkflowContext carries the detached environment selected for this
 	// attempt when a compatibility workstation boundary forwards the request.
-	WorkflowContext             *Context                        `json:"-"`
-	Capabilities                *Capabilities                   `json:"capabilities,omitempty"`
-	InputTokens                 []any                           `json:"input_tokens,omitempty"`
-	ModelOperation              string                          `json:"model_operation,omitempty"`
-	ModelBindings               []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
-	Model                       string                          `json:"model,omitempty"`
-	ModelProvider               string                          `json:"model_provider,omitempty"`
-	ReasoningEffort             string                          `json:"reasoning_effort,omitempty"`
-	Command                     string                          `json:"command,omitempty"`
-	Args                        []string                        `json:"args,omitempty"`
-	FactoryDirectory            string                          `json:"factory_directory,omitempty"`
-	OutputFormat                string                          `json:"output_format,omitempty"`
-	StopToken                   string                          `json:"stop_token,omitempty"`
-	DecisionEnvelope            bool                            `json:"decision_envelope,omitempty"`
-	GoalRoutingDecisionEnvelope bool                            `json:"goal_routing_decision_envelope,omitempty"`
-	SystemPrompt                string                          `json:"system_prompt,omitempty"`
-	UserMessage                 string                          `json:"user_message,omitempty"`
-	OutputSchema                string                          `json:"output_schema,omitempty"`
-	OutputContract              string                          `json:"output_contract,omitempty"`
-	Timeout                     time.Duration                   `json:"timeout,omitempty"`
-	EnvVars                     map[string]string               `json:"env_vars,omitempty"`
-	ProcessEnvironment          []string                        `json:"-"`
-	Worktree                    string                          `json:"worktree,omitempty"`
-	WorkingDirectory            string                          `json:"working_directory,omitempty"`
-	WorkingDirectoryAuthored    bool                            `json:"working_directory_authored,omitempty"`
+	WorkflowContext             *Context                                 `json:"-"`
+	Capabilities                *Capabilities                            `json:"capabilities,omitempty"`
+	InputTokens                 []any                                    `json:"input_tokens,omitempty"`
+	ModelOperation              string                                   `json:"model_operation,omitempty"`
+	ModelBindings               []ResolvedModelOperationBinding          `json:"model_bindings,omitempty"`
+	Model                       string                                   `json:"model,omitempty"`
+	ModelProvider               string                                   `json:"model_provider,omitempty"`
+	ReasoningEffort             string                                   `json:"reasoning_effort,omitempty"`
+	Command                     string                                   `json:"command,omitempty"`
+	Args                        []string                                 `json:"args,omitempty"`
+	FactoryDirectory            string                                   `json:"factory_directory,omitempty"`
+	OutputFormat                string                                   `json:"output_format,omitempty"`
+	StopToken                   string                                   `json:"stop_token,omitempty"`
+	DecisionEnvelope            bool                                     `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope bool                                     `json:"goal_routing_decision_envelope,omitempty"`
+	SystemPrompt                string                                   `json:"system_prompt,omitempty"`
+	UserMessage                 string                                   `json:"user_message,omitempty"`
+	OutputSchema                string                                   `json:"output_schema,omitempty"`
+	OutputContract              string                                   `json:"output_contract,omitempty"`
+	Timeout                     time.Duration                            `json:"timeout,omitempty"`
+	EnvVars                     map[string]string                        `json:"env_vars,omitempty"`
+	ProcessEnvironment          []string                                 `json:"-"`
+	ProcessLifecycleObserver    platformprocess.ProcessLifecycleObserver `json:"-"`
+	Worktree                    string                                   `json:"worktree,omitempty"`
+	WorkingDirectory            string                                   `json:"working_directory,omitempty"`
+	WorkingDirectoryAuthored    bool                                     `json:"working_directory_authored,omitempty"`
 	// Continuation is the opaque Providers-owned continuation. Workers carries
 	// it across execution boundaries without reconstructing provider-session
 	// state or retaining a typed session object.
@@ -229,39 +231,40 @@ type WorkstationExecutionRequest struct {
 }
 
 type ProviderInferenceRequest struct {
-	Dispatch                     work.WorkDispatch               `json:"dispatch"`
-	Correlation                  ExecutionCorrelation            `json:"-"`
-	WorkerName                   string                          `json:"worker_name,omitempty"`
-	WorkerType                   string                          `json:"worker_type,omitempty"`
-	WorkstationType              string                          `json:"workstation_type,omitempty"`
-	RunnerID                     string                          `json:"runner_id,omitempty"`
-	ExecutorProvider             string                          `json:"executor_provider,omitempty"`
-	ProjectID                    string                          `json:"project_id,omitempty"`
-	InputTokens                  []any                           `json:"input_tokens,omitempty"`
-	ModelOperation               string                          `json:"model_operation,omitempty"`
-	ModelBindings                []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
-	SystemPrompt                 string                          `json:"system_prompt,omitempty"`
-	UserMessage                  string                          `json:"user_message,omitempty"`
-	OutputSchema                 string                          `json:"output_schema,omitempty"`
-	ToolExecutionMode            RunnerToolExecutionMode         `json:"tool_execution_mode,omitempty"`
-	RequiredOptionalCapabilities []RunnerOptionalCapability      `json:"required_optional_capabilities,omitempty"`
-	EnvVars                      map[string]string               `json:"env_vars,omitempty"`
-	ProcessEnvironment           []string                        `json:"-"`
-	Worktree                     string                          `json:"worktree,omitempty"`
-	WorkingDirectory             string                          `json:"working_directory,omitempty"`
-	Model                        string                          `json:"model,omitempty"`
-	ModelProvider                string                          `json:"model_provider,omitempty"`
-	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
-	Command                      string                          `json:"command,omitempty"`
-	Args                         []string                        `json:"args,omitempty"`
-	FactoryDirectory             string                          `json:"factory_directory,omitempty"`
-	OutputContract               string                          `json:"output_contract,omitempty"`
-	OutputFormat                 string                          `json:"output_format,omitempty"`
-	StopToken                    string                          `json:"stop_token,omitempty"`
-	DecisionEnvelope             bool                            `json:"decision_envelope,omitempty"`
-	GoalRoutingDecisionEnvelope  bool                            `json:"goal_routing_decision_envelope,omitempty"`
-	PrintTimeout                 time.Duration                   `json:"-"`
-	ModelLocality                string                          `json:"model_locality,omitempty"`
+	Dispatch                     work.WorkDispatch                        `json:"dispatch"`
+	Correlation                  ExecutionCorrelation                     `json:"-"`
+	WorkerName                   string                                   `json:"worker_name,omitempty"`
+	WorkerType                   string                                   `json:"worker_type,omitempty"`
+	WorkstationType              string                                   `json:"workstation_type,omitempty"`
+	RunnerID                     string                                   `json:"runner_id,omitempty"`
+	ExecutorProvider             string                                   `json:"executor_provider,omitempty"`
+	ProjectID                    string                                   `json:"project_id,omitempty"`
+	InputTokens                  []any                                    `json:"input_tokens,omitempty"`
+	ModelOperation               string                                   `json:"model_operation,omitempty"`
+	ModelBindings                []ResolvedModelOperationBinding          `json:"model_bindings,omitempty"`
+	SystemPrompt                 string                                   `json:"system_prompt,omitempty"`
+	UserMessage                  string                                   `json:"user_message,omitempty"`
+	OutputSchema                 string                                   `json:"output_schema,omitempty"`
+	ToolExecutionMode            RunnerToolExecutionMode                  `json:"tool_execution_mode,omitempty"`
+	RequiredOptionalCapabilities []RunnerOptionalCapability               `json:"required_optional_capabilities,omitempty"`
+	EnvVars                      map[string]string                        `json:"env_vars,omitempty"`
+	ProcessEnvironment           []string                                 `json:"-"`
+	ProcessLifecycleObserver     platformprocess.ProcessLifecycleObserver `json:"-"`
+	Worktree                     string                                   `json:"worktree,omitempty"`
+	WorkingDirectory             string                                   `json:"working_directory,omitempty"`
+	Model                        string                                   `json:"model,omitempty"`
+	ModelProvider                string                                   `json:"model_provider,omitempty"`
+	ReasoningEffort              string                                   `json:"reasoning_effort,omitempty"`
+	Command                      string                                   `json:"command,omitempty"`
+	Args                         []string                                 `json:"args,omitempty"`
+	FactoryDirectory             string                                   `json:"factory_directory,omitempty"`
+	OutputContract               string                                   `json:"output_contract,omitempty"`
+	OutputFormat                 string                                   `json:"output_format,omitempty"`
+	StopToken                    string                                   `json:"stop_token,omitempty"`
+	DecisionEnvelope             bool                                     `json:"decision_envelope,omitempty"`
+	GoalRoutingDecisionEnvelope  bool                                     `json:"goal_routing_decision_envelope,omitempty"`
+	PrintTimeout                 time.Duration                            `json:"-"`
+	ModelLocality                string                                   `json:"model_locality,omitempty"`
 	// ModelRuntime is the explicit request-owned Models projection for a
 	// managed inference attempt. It is intentionally excluded from provider
 	// payloads and is copied through the private runner boundary.
@@ -586,6 +589,10 @@ type ExecutionInput struct {
 	// uses it to record the effective execution target without moving resource
 	// preparation into the runtime boundary.
 	PreparedRequestObserver func(ExecuteRequest) `json:"-"`
+	// ProcessLifecycleObserver carries the dispatch-owned process lifecycle
+	// effect through the Runtime-to-Workers operation boundary. It is never
+	// serialized or retained by the process-scoped Workers service.
+	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver `json:"-"`
 	// ProgressPublisher carries the Runtime-selected observation sink for this
 	// attempt. It is an execution capability, not retained Workers state.
 	// ExecutionLogger carries the Runtime-selected structured log sink for this

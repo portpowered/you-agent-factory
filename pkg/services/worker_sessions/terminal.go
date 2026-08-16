@@ -76,13 +76,20 @@ const (
 	// topic before Workers invocation (W3): the attempt is never handed off,
 	// and the session terminalizes FAILED without ever calling Workers.
 	FailureCauseEventPublicationFailure FailureCauseKind = "EVENT_PUBLICATION_FAILURE"
+	// FailureCauseProcessGone reports that Workers observed the executor's
+	// parent process exit before it produced a terminal dispatch result.
+	FailureCauseProcessGone FailureCauseKind = "PROCESS_GONE"
+	// FailureCauseTimeout reports that the resolved hard execution deadline
+	// elapsed before Workers observed a terminal dispatch result.
+	FailureCauseTimeout FailureCauseKind = "TIMEOUT"
 )
 
-// Valid reports whether k is one of the seven bounded W2+W3 failure kinds.
+// Valid reports whether k is one of the nine bounded W2+W3 failure kinds.
 func (k FailureCauseKind) Valid() bool {
 	switch k {
 	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseRejected, FailureCauseAdapterFailure,
-		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure:
+		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure, FailureCauseProcessGone,
+		FailureCauseTimeout:
 		return true
 	default:
 		return false

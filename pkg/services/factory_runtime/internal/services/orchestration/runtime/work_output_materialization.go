@@ -338,12 +338,14 @@ func workstationDispatchResultFromExecute(
 	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled && strings.TrimSpace(workResult.Error) == "" {
 		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 	}
+	reconciliationReason := processGoneDispatchResult(&workResult, &terminal, executeErr)
 	return workers.WorkstationDispatchResult{
-		DispatchID:      dispatch.DispatchID,
-		WorkstationName: request.WorkstationName,
-		TerminalOutcome: terminal,
-		Result:          workResult,
-		ProposedOutput:  &proposedOutput,
+		DispatchID:           dispatch.DispatchID,
+		WorkstationName:      request.WorkstationName,
+		TerminalOutcome:      terminal,
+		ReconciliationReason: reconciliationReason,
+		Result:               workResult,
+		ProposedOutput:       &proposedOutput,
 	}, executeErr
 }
 

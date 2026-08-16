@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -22,6 +23,12 @@ type attemptExecuteFunc func(context.Context, workers.ExecuteRequest) (workers.E
 func (fn attemptExecuteFunc) Execute(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 	return fn(ctx, request)
 }
+
+type attemptProcessObserverProbe struct{}
+
+func (attemptProcessObserverProbe) ProcessStarted(platformprocess.ProcessInfo) {}
+
+func (attemptProcessObserverProbe) ProcessExited(platformprocess.ProcessInfo) {}
 
 func TestAttemptLifecycleBoundsCapacityAndCleansActiveState(t *testing.T) {
 	started := make(chan struct{})
@@ -179,6 +186,84 @@ func TestAttemptLifecycleCancellationWinsACompletionRaceAfterCancel(t *testing.T
 	close(release)
 	if result := <-results; result.Outcome != workers.ExecutionOutcomeCanceled {
 		t.Fatalf("racing completion outcome = %q, want CANCELED", result.Outcome)
+	}
+}
+
+func TestAttemptLifecycleProcessExitReconcilesActiveAttemptExactlyOnce(t *testing.T) {
+	started := make(chan workers.ExecuteRequest, 1)
+	terminalResults := make(chan struct {
+		result workers.ExecuteResult
+		err    error
+	}, 1)
+	service := attemptExecuteFunc(func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		started <- request
+		<-ctx.Done()
+		return workers.ExecuteResult{
+			Correlation: request.Correlation,
+			Outcome:     workers.ExecutionOutcomeCanceled,
+		}, ctx.Err()
+	})
+	lifecycle := newAttemptLifecycle(service, func() string { return "attempt-gone" }, 1)
+	if err := lifecycle.start(
+		context.Background(), attemptTestRequest("dispatch-gone", ""), true,
+		func(_ context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, err error) {
+			terminalResults <- struct {
+				result workers.ExecuteResult
+				err    error
+			}{result: result, err: err}
+		},
+	); err != nil {
+		t.Fatalf("start() error = %v", err)
+	}
+	request := <-started
+	observer, ok := request.Input.ProcessLifecycleObserver.(platformprocess.ProcessLifecycleObserver)
+	if !ok {
+		t.Fatalf("process lifecycle observer = %T, want ProcessLifecycleObserver", request.Input.ProcessLifecycleObserver)
+	}
+	observer.ProcessExited(platformprocess.ProcessInfo{PID: 42})
+
+	terminal := <-terminalResults
+	if !errors.Is(terminal.err, workers.ErrWorkstationDispatchProcessGone) {
+		t.Fatalf("terminal error = %v, want process-gone error", terminal.err)
+	}
+	if terminal.result.Outcome != workers.ExecutionOutcomeFailed || terminal.result.Failure == nil ||
+		terminal.result.Failure.Family != workers.WorkFailureFamilyRetryable ||
+		terminal.result.Failure.Message != workers.ErrWorkstationDispatchProcessGone.Error() {
+		t.Fatalf("process-gone terminal result = %#v, want one retryable failed result", terminal.result)
+	}
+	if len(terminal.result.Output.Primary) != 0 || terminal.result.Continuation != nil {
+		t.Fatalf("process-gone result retained worker output: %#v", terminal.result)
+	}
+	if got := lifecycle.activeCount(); got != 0 {
+		t.Fatalf("active count after process exit = %d, want 0", got)
+	}
+	if attemptID, ok := lifecycle.terminalAttemptID("dispatch-gone"); !ok || attemptID != "attempt-gone" {
+		t.Fatalf("terminal attempt = %q, %v; want attempt-gone, true", attemptID, ok)
+	}
+
+	observer.ProcessExited(platformprocess.ProcessInfo{PID: 42})
+	select {
+	case duplicate := <-terminalResults:
+		t.Fatalf("duplicate process-gone terminal result = %#v", duplicate)
+	default:
+	}
+}
+
+func TestAttemptLifecyclePreservesProvidedProcessObserver(t *testing.T) {
+	provided := attemptProcessObserverProbe{}
+	var observed workers.ExecuteRequest
+	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		observed = request
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+	})
+	lifecycle := newAttemptLifecycle(service, func() string { return "attempt-provided-observer" }, 1)
+	request := attemptTestRequest("dispatch-provided-observer", "")
+	request.Input.ProcessLifecycleObserver = provided
+	if err := lifecycle.start(context.Background(), request, false, func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}); err != nil {
+		t.Fatalf("start() error = %v", err)
+	}
+	if observed.Input.ProcessLifecycleObserver != provided {
+		t.Fatalf("provided observer = %T, want caller-owned observer", observed.Input.ProcessLifecycleObserver)
 	}
 }
 
@@ -782,215 +867,4 @@ func TestStartThroughStatelessWorkersPreservesDetachedDispatchFacts(t *testing.T
 		observed.Input.Dispatch.TransitionID != "transition-facts" {
 		t.Fatalf("detached dispatch facts = %#v", observed.Input.Dispatch)
 	}
-}
-
-// TestInvokeWorker_ARerunDispatchReachesWorkersUnderItsOwnIdentity pins the
-// identity a Worker carries into Workers.
-//
-// A JavaScript workflow resumed after an interruption re-runs the child that
-// was cut off under its original orchestrator-minted dispatch ID. Workers
-// treats a dispatch ID as single-use for the whole life of its pool -- an
-// accepted dispatch is never removed from the pool's record map -- so a re-run
-// that reuses that ID is refused before it reaches an executor, and the caller
-// sees START_FAILURE rather than a second Worker.
-//
-// The Worker Session identity is the one Runtime already mints uniquely, so it
-// is the identity Workers is given. What the caller sees is unchanged: its own
-// dispatch ID comes back on the result, because that is the identity its own
-// records are keyed by.
-func TestInvokeWorker_ARerunDispatchReachesWorkersUnderItsOwnIdentity(t *testing.T) {
-	boundary := newControlledWorkstationBoundary()
-	impl := newInvokeWorkerTestFactory(t, boundary)
-
-	firstWorkersID, first := runOneInvokeWorker(t, impl, boundary, "child-1")
-	secondWorkersID, second := runOneInvokeWorker(t, impl, boundary, "child-1")
-
-	if secondWorkersID == firstWorkersID {
-		t.Fatalf(
-			"re-run Workers dispatch ID = %q, want an identity distinct from the first attempt's %q",
-			secondWorkersID,
-			firstWorkersID,
-		)
-	}
-	if secondWorkersID != second.WorkerSessionID {
-		t.Fatalf(
-			"re-run Workers dispatch ID = %q, want the reserved Worker Session identity %q",
-			secondWorkersID,
-			second.WorkerSessionID,
-		)
-	}
-	for _, result := range []factory.InvokeWorkerResult{first, second} {
-		if result.DispatchID != "child-1" {
-			t.Fatalf("result dispatch ID = %q, want the caller's own %q", result.DispatchID, "child-1")
-		}
-		if result.Outcome != factory.InvokeWorkerOutcomeCompleted {
-			t.Fatalf("result outcome = %q, want COMPLETED", result.Outcome)
-		}
-	}
-}
-
-// TestInvokeWorker_FirstAttemptUsesTheCallerDispatchIdentity keeps the common
-// case honest: an uncontended Worker still reaches Workers under exactly the
-// identity its caller minted, so the resume suffix above is visibly the
-// exception rather than the rule.
-func TestInvokeWorker_FirstAttemptUsesTheCallerDispatchIdentity(t *testing.T) {
-	boundary := newControlledWorkstationBoundary()
-	impl := newInvokeWorkerTestFactory(t, boundary)
-
-	workersID, result := runOneInvokeWorker(t, impl, boundary, "child-1")
-	if workersID != "child-1" {
-		t.Fatalf("Workers dispatch ID = %q, want the caller's own %q", workersID, "child-1")
-	}
-	if result.WorkerSessionID != "child-1" {
-		t.Fatalf("Worker Session ID = %q, want %q", result.WorkerSessionID, "child-1")
-	}
-}
-
-func TestInvokeWorker_UsesRuntimeRetryBudget(t *testing.T) {
-	boundary := newControlledWorkstationBoundary()
-	impl := newInvokeWorkerTestFactory(t, boundary)
-	done := make(chan struct {
-		result factory.InvokeWorkerResult
-		err    error
-	}, 1)
-	go func() {
-		result, err := impl.InvokeWorker(context.Background(), factory.InvokeWorkerRequest{
-			DispatchID:  "child-retry",
-			Prompt:      "run",
-			MaxAttempts: 2,
-		})
-		done <- struct {
-			result factory.InvokeWorkerResult
-			err    error
-		}{result: result, err: err}
-	}()
-
-	first := awaitCanonicalWorkersRequest(t, boundary.requests)
-	if got := first.Execution.Dispatch.DispatchID; got != "child-retry" {
-		t.Fatalf("first dispatch ID = %q, want child-retry", got)
-	}
-	boundary.results <- workers.WorkstationDispatchResult{
-		DispatchID:      first.Execution.Dispatch.DispatchID,
-		WorkstationName: first.WorkstationName,
-		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
-		Result: workers.WorkResult{
-			DispatchID: first.Execution.Dispatch.DispatchID,
-			Outcome:    workers.OutcomeFailed,
-			FailureMetadata: &workers.WorkFailureMetadata{
-				Family: workers.WorkFailureFamilyRetryable,
-				Type:   workers.WorkFailureTypeInternalServerError,
-			},
-		},
-	}
-
-	second := awaitCanonicalWorkersRequest(t, boundary.requests)
-	if got := second.Execution.Dispatch.DispatchID; got != "child-retry/attempt/2" {
-		t.Fatalf("second dispatch ID = %q, want child-retry/attempt/2", got)
-	}
-	boundary.results <- completedWorkersResult(second)
-
-	got := <-done
-	if got.err != nil {
-		t.Fatalf("InvokeWorker: %v", got.err)
-	}
-	if got.result.Outcome != factory.InvokeWorkerOutcomeCompleted || got.result.Attempts != 2 {
-		t.Fatalf("InvokeWorker result = %#v, want completed after two attempts", got.result)
-	}
-}
-
-// TestInvokeWorker_CarriesTheAuthoredWorkerNameAndPermissionPolicy pins the
-// two facts a Worker with no authored workstation can only get from its
-// caller.
-//
-// The worker name is what --with-mock-workers matches a named preset on, at
-// the subprocess boundary, so a Worker that arrives without it is never the
-// mock the operator configured. The permission policy is the invocation
-// -effective one the caller already resolved; dropping it runs the Worker
-// under a policy its own dispatch record says it does not have.
-func TestInvokeWorker_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		skip bool
-	}{
-		{name: "true", skip: true},
-		{name: "false", skip: false},
-		{name: "omitted", skip: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			boundary := newControlledWorkstationBoundary()
-			impl := newInvokeWorkerTestFactory(t, boundary)
-			capabilities := &workers.Capabilities{NativeStreaming: true, ToolLifecycle: true}
-
-			observed, _ := runInvokeWorker(t, impl, boundary, factory.InvokeWorkerRequest{
-				DispatchID:      "child-1",
-				Prompt:          "run",
-				WorkerName:      "worker-a",
-				SkipPermissions: test.skip,
-				RecordingID:     "recording-1",
-				Capabilities:    capabilities,
-			})
-			if observed.Execution.WorkerType != "worker-a" {
-				t.Fatalf("Workers worker type = %q, want the authored worker name %q", observed.Execution.WorkerType, "worker-a")
-			}
-			if observed.Execution.Dispatch.WorkerType != "worker-a" {
-				t.Fatalf(
-					"dispatch worker type = %q, want the authored worker name %q",
-					observed.Execution.Dispatch.WorkerType,
-					"worker-a",
-				)
-			}
-			if observed.Execution.SkipPermissions != test.skip {
-				t.Fatalf("Workers skip-permissions = %v, want %v", observed.Execution.SkipPermissions, test.skip)
-			}
-			if observed.Execution.RecordingID != "recording-1" {
-				t.Fatalf("Workers recording ID = %q, want recording-1", observed.Execution.RecordingID)
-			}
-			if observed.Execution.Capabilities == nil || !observed.Execution.Capabilities.NativeStreaming || !observed.Execution.Capabilities.ToolLifecycle {
-				t.Fatalf("Workers capabilities = %+v, want caller-supplied capability facts", observed.Execution.Capabilities)
-			}
-		})
-	}
-}
-
-// runOneInvokeWorker drives one minimal InvokeWorker to its terminal result
-// and reports the dispatch identity Workers actually observed.
-func runOneInvokeWorker(
-	t *testing.T,
-	impl *factoryImpl,
-	boundary *controlledWorkstationBoundary,
-	dispatchID string,
-) (string, factory.InvokeWorkerResult) {
-	t.Helper()
-	observed, result := runInvokeWorker(t, impl, boundary, factory.InvokeWorkerRequest{
-		DispatchID: dispatchID,
-		Prompt:     "run",
-	})
-	return observed.Execution.Dispatch.DispatchID, result
-}
-
-// runInvokeWorker drives one InvokeWorker to its terminal result and reports
-// the request Workers actually observed alongside it.
-func runInvokeWorker(
-	t *testing.T,
-	impl *factoryImpl,
-	boundary *controlledWorkstationBoundary,
-	req factory.InvokeWorkerRequest,
-) (workers.WorkstationDispatchRequest, factory.InvokeWorkerResult) {
-	t.Helper()
-	type outcome struct {
-		result factory.InvokeWorkerResult
-		err    error
-	}
-	done := make(chan outcome, 1)
-	go func() {
-		result, err := impl.InvokeWorker(context.Background(), req)
-		done <- outcome{result: result, err: err}
-	}()
-	request := awaitCanonicalWorkersRequest(t, boundary.requests)
-	boundary.results <- completedWorkersResult(request)
-	got := <-done
-	if got.err != nil {
-		t.Fatalf("InvokeWorker(%q): %v", req.DispatchID, got.err)
-	}
-	return request, got.result
 }

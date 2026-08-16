@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -39,6 +40,58 @@ type WorkstationRequestExecutorConfig struct {
 	ProgressPublisher          workers.ProgressPublisher
 	Net                        *state.Net
 	ExpectedArtifactFileSystem any
+}
+
+type attemptProcessObserver struct {
+	lifecycle *attemptLifecycle
+	attempt   *activeAttempt
+}
+
+func (observer attemptProcessObserver) ProcessStarted(_ platformprocess.ProcessInfo) {}
+
+func (observer attemptProcessObserver) ProcessExited(_ platformprocess.ProcessInfo) {
+	observer.lifecycle.reconcileProcessGone(observer.attempt)
+}
+
+func processGoneAttemptResult(
+	request workers.ExecuteRequest,
+	result workers.ExecuteResult,
+) workers.ExecuteResult {
+	result.Correlation = request.Correlation
+	result.Outcome = workers.ExecutionOutcomeFailed
+	result.Output = workers.ProposedOutput{}
+	result.StructuredResult = nil
+	result.StructuredResultPresent = false
+	result.Continuation = nil
+	result.Failure = &workers.ExecutionFailure{
+		Type:    workers.WorkFailureTypeUnknown,
+		Family:  workers.WorkFailureFamilyRetryable,
+		Message: workers.ErrWorkstationDispatchProcessGone.Error(),
+	}
+	return result
+}
+
+func processGoneDispatchResult(
+	result *workers.WorkResult,
+	terminal *workers.WorkstationDispatchTerminalOutcome,
+	executeErr error,
+) workers.WorkstationDispatchReconciliationReason {
+	if result == nil || terminal == nil || !errors.Is(executeErr, workers.ErrWorkstationDispatchProcessGone) {
+		return ""
+	}
+	*terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	result.Outcome = workers.OutcomeFailed
+	result.Error = workers.ErrWorkstationDispatchProcessGone.Error()
+	result.FailureMetadata = &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyRetryable,
+		Type:   workers.WorkFailureTypeUnknown,
+	}
+	result.Diagnostics = &workers.WorkDiagnostics{Metadata: map[string]string{
+		workers.ProviderResponseMetadataFailureOperation:      "worker_session_reconciliation",
+		workers.ProviderResponseMetadataFailureClassification: "process_gone",
+		workers.ProviderResponseMetadataFailureStage:          "process",
+	}}
+	return workers.WorkstationDispatchReconciliationReasonProcessGone
 }
 
 type PromptRenderer = runtimePromptRenderer

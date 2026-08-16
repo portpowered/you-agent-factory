@@ -219,7 +219,7 @@ func (r *largeRolloutCommandRunner) RunStreaming(
 		return platformprocess.CommandResult{}, errors.New("large rollout command runner requires an output observer")
 	}
 	r.calls.Add(1)
-	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
 	if err != nil {
 		return platformprocess.CommandResult{}, err
 	}

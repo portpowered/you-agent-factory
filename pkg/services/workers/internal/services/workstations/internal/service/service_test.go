@@ -355,6 +355,7 @@ func TestPoolDispatchesToImmutableRouteBindingWithDetachedAttribution(t *testing
 	if err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
 	}
+	executor.requests[0].ProcessLifecycleObserver = nil
 	assertExecutionRequests(t, executor.requests, wantExecution)
 	assertDispatchResult(
 		t,

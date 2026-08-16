@@ -15,6 +15,33 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// startTuple is the detached value compared for one asynchronous start replay.
+type startTuple struct {
+	SessionID   string
+	Execution   workers.WorkstationDispatchRequest
+	MaxAttempts int
+}
+
+// startReplay stores one accepted or deterministically rejected start result.
+type startReplay struct {
+	tuple     startTuple
+	sessionID string
+	done      chan struct{}
+	result    workersessions.StartResult
+	err       error
+}
+
+func normalizeStartRequest(req workersessions.StartRequest) workersessions.StartRequest {
+	req.RequestID = strings.TrimSpace(req.RequestID)
+	req.Execution = cloneWorkstationDispatchRequest(req.Execution)
+	req.Retry.MaxAttempts = req.Retry.Attempts()
+	return req
+}
+
+func startTupleFor(req workersessions.StartRequest) startTuple {
+	return startTuple{SessionID: req.ID, Execution: cloneWorkstationDispatchRequest(req.Execution), MaxAttempts: req.Retry.Attempts()}
+}
+
 type runtimeAttempt struct {
 	registry   *registry
 	workerID   string
@@ -111,6 +138,10 @@ func classifyTerminal(
 	dispatchResult workers.WorkstationDispatchResult,
 ) workersessions.TerminalResult {
 	workResult := dispatchResult.Result
+
+	if kind := reconciliationFailureCause[dispatchResult.ReconciliationReason]; kind != "" {
+		return terminalForDispatchResult(kind, genericFailureDetail[kind], workResult, dispatchErr)
+	}
 
 	if workResult.Outcome == "" {
 		// The injected Workers boundary never produced a WorkResult: the
@@ -363,6 +394,8 @@ var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseAdapterFailure:          "the Workers adapter reported a failure",
 	workersessions.FailureCauseExecutorPanic:           "the Workers executor reported a panic",
 	workersessions.FailureCauseEventPublicationFailure: "the Worker Session opening record could not be published",
+	workersessions.FailureCauseProcessGone:             "the worker process exited before dispatch completion",
+	workersessions.FailureCauseTimeout:                 "the worker execution exceeded its hard deadline",
 }
 
 // knownFailureFamilies whitelists the exact WorkFailureFamily constants
@@ -909,27 +942,6 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 	return err
 }
 
-func (r *registry) closeWorkerRecording(
-	ctx context.Context,
-	recording recordings.WorkerSessionRecording,
-	state workersessions.State,
-	position events.AggregateSequence,
-) error {
-	finalizer, ok := recording.(recordings.WorkerSessionRecordingFinalizer)
-	if !ok {
-		return recording.Close(ctx)
-	}
-	phase, err := terminalPhase(state)
-	if err != nil {
-		return errors.Join(err, recording.Close(ctx))
-	}
-	return finalizer.CloseWithTerminal(ctx, recordings.WorkerRecordingTerminal{
-		Position: position,
-		Phase:    phase,
-		Status:   string(state),
-	})
-}
-
 // publishTerminalRecordOrLog calls publishTerminalRecord and, on failure,
 // logs it explicitly rather than propagating it: the caller already holds
 // the real committed terminal Session (commitTerminal's return value) and
@@ -976,24 +988,7 @@ func (r *registry) associateProviderSessionFromResult(
 	}
 }
 
-func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
-	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled || errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) {
-		if action == workersessions.ControlActionTerminate {
-			return workersessions.StateTerminated, workersessions.TerminalResult{}
-		}
-		return workersessions.StateCanceled, workersessions.TerminalResult{}
-	}
-	terminal := classifyTerminal(dispatchErr, result)
-	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
-		return workersessions.StateCompleted, terminal
-	}
-	return workersessions.StateFailed, terminal
-}
-
-func (r *registry) logTerminal(id, attemptID string, session workersessions.Session) {
-	cause := ""
-	if session.Result != nil {
-		cause = causeKindString(session.Result.Cause)
-	}
-	r.logger.Info("worker session start terminal", "sessionID", id, "attemptID", attemptID, "outcome", string(session.State), "state", string(session.State), "cause", cause)
+var reconciliationFailureCause = map[workers.WorkstationDispatchReconciliationReason]workersessions.FailureCauseKind{
+	workers.WorkstationDispatchReconciliationReasonProcessGone: workersessions.FailureCauseProcessGone,
+	workers.WorkstationDispatchReconciliationReasonTimeout:     workersessions.FailureCauseTimeout,
 }

@@ -266,7 +266,7 @@ func TestExecCommandRunnerAddsWorkContextToPlatformCleanupLogs(t *testing.T) {
 	request.Args = []string{"-test.run=TestExecCommandRunnerAddsWorkContextToPlatformCleanupLogs"}
 	request.Env = append(os.Environ(), "GO_WANT_WORKER_COMMAND_HELPER=1")
 	request.WorkDir = t.TempDir()
-	effect, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
+	effect, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}

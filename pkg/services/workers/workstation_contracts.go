@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
@@ -22,6 +23,16 @@ type WorkstationPoolLifecycleOutcome string
 // committed for an accepted workstation dispatch.
 type WorkstationDispatchTerminalOutcome string
 
+// WorkstationDispatchReconciliationReason identifies a policy-free execution
+// observation that caused Workers to synthesize a terminal dispatch result.
+// Worker Sessions owns the session-level classification of this fact.
+type WorkstationDispatchReconciliationReason string
+
+// WorkstationDispatchCancelReason distinguishes an operator cancellation
+// from an internal reconciliation request. The latter is allowed to commit a
+// terminal result immediately because the executor may never return.
+type WorkstationDispatchCancelReason string
+
 // WorkstationDispatchCancelOutcome describes an idempotent explicit
 // cancellation request.
 type WorkstationDispatchCancelOutcome string
@@ -36,9 +47,22 @@ const (
 	WorkstationDispatchTerminalOutcomeFailed    WorkstationDispatchTerminalOutcome = "FAILED"
 	WorkstationDispatchTerminalOutcomeCanceled  WorkstationDispatchTerminalOutcome = "CANCELED"
 
-	WorkstationDispatchCancelOutcomeCanceled        WorkstationDispatchCancelOutcome = "CANCELED"
-	WorkstationDispatchCancelOutcomeAlreadyCanceled WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
-	WorkstationDispatchCancelOutcomeAlreadyTerminal WorkstationDispatchCancelOutcome = "ALREADY_TERMINAL"
+	WorkstationDispatchReconciliationReasonProcessGone WorkstationDispatchReconciliationReason = "PROCESS_GONE"
+	WorkstationDispatchReconciliationReasonTimeout     WorkstationDispatchReconciliationReason = "EXECUTION_TIMEOUT"
+
+	WorkstationDispatchCancelReasonTimeout WorkstationDispatchCancelReason = "EXECUTION_TIMEOUT"
+
+	WorkstationDispatchCancelOutcomeCanceled          WorkstationDispatchCancelOutcome = "CANCELED"
+	WorkstationDispatchCancelOutcomeAlreadyCanceled   WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
+	WorkstationDispatchCancelOutcomeReconciled        WorkstationDispatchCancelOutcome = "RECONCILED"
+	WorkstationDispatchCancelOutcomeAlreadyReconciled WorkstationDispatchCancelOutcome = "ALREADY_RECONCILED"
+	WorkstationDispatchCancelOutcomeAlreadyTerminal   WorkstationDispatchCancelOutcome = "ALREADY_TERMINAL"
+
+	// DefaultWorkstationExecutionTimeout is the hard execution limit used when
+	// an authored worker does not provide an explicit positive timeout.
+	// Supervision and the workstation executor both consume this value so the
+	// deadline is not silently changed at either boundary.
+	DefaultWorkstationExecutionTimeout = 2 * time.Hour
 
 	// DefaultWorkstationCapacity preserves bounded behavior for bindings that
 	// predate explicit workstation admission limits.
@@ -73,6 +97,12 @@ var (
 	// ErrWorkstationDispatchAlreadyTerminal reports late cancellation after a
 	// non-cancelled terminal result was committed.
 	ErrWorkstationDispatchAlreadyTerminal = errors.New("Workers workstation dispatch is already terminal")
+	// ErrWorkstationDispatchProcessGone reports that the executor's parent
+	// process exited before the dispatch produced a terminal result.
+	ErrWorkstationDispatchProcessGone = errors.New("Workers workstation process exited before dispatch completion")
+	// ErrWorkstationDispatchTimeout reports that the dispatch exceeded its
+	// resolved hard execution deadline before producing a terminal result.
+	ErrWorkstationDispatchTimeout = errors.New("Workers workstation dispatch execution deadline exceeded")
 )
 
 // WorkstationPoolStartRequest supplies the detached runtime bindings that are
@@ -117,7 +147,10 @@ type WorkstationDispatchResult struct {
 	DispatchID      string
 	WorkstationName string
 	TerminalOutcome WorkstationDispatchTerminalOutcome
-	Result          WorkResult
+	// ReconciliationReason is set only when Workers owns a terminal result
+	// synthesized from an execution-lifecycle observation.
+	ReconciliationReason WorkstationDispatchReconciliationReason
+	Result               WorkResult
 	// ProposedOutput is a transient detached Worker proposal. Runtime passes it
 	// to Work for validation and canonical identity assignment before applying
 	// the result; it must never cross a durable WorkResult boundary directly.
@@ -127,6 +160,9 @@ type WorkstationDispatchResult struct {
 // WorkstationDispatchCancelRequest identifies one accepted dispatch.
 type WorkstationDispatchCancelRequest struct {
 	DispatchID string
+	// Reason is empty for an explicit operator cancellation. Workers-owned
+	// timeout reconciliation supplies WorkstationDispatchCancelReasonTimeout.
+	Reason WorkstationDispatchCancelReason
 }
 
 // WorkstationDispatchCancelResult reports whether cancellation was newly

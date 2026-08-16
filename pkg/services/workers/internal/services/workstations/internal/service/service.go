@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 )
@@ -47,16 +48,37 @@ type admission struct {
 }
 
 type dispatchRecord struct {
-	mu              sync.Mutex
-	dispatchID      string
-	workstationName string
-	transitionID    string
-	cancel          context.CancelFunc
-	terminal        bool
-	canceled        bool
-	result          workers.WorkstationDispatchResult
-	err             error
-	logger          logging.Logger
+	mu                 sync.Mutex
+	dispatchID         string
+	workstationName    string
+	transitionID       string
+	cancel             context.CancelFunc
+	route              *routePool
+	entry              *admission
+	terminal           bool
+	canceled           bool
+	processStarted     bool
+	result             workers.WorkstationDispatchResult
+	err                error
+	reconciliationDone chan struct{}
+	logger             logging.Logger
+}
+
+type executionCompletion struct {
+	result workers.WorkResult
+	err    error
+}
+
+type dispatchProcessObserver struct {
+	record *dispatchRecord
+}
+
+func (observer dispatchProcessObserver) ProcessStarted(_ platformprocess.ProcessInfo) {
+	observer.record.processStartedSignal()
+}
+
+func (observer dispatchProcessObserver) ProcessExited(_ platformprocess.ProcessInfo) {
+	observer.record.processExitedSignal()
 }
 
 var _ workstations.Service = (*Pool)(nil)
@@ -260,6 +282,7 @@ func (p *Pool) dispatch(
 		cancelExecution()
 		return workers.WorkstationDispatchResult{}, err
 	}
+	record.setAdmission(route, entry)
 	if admitted != nil {
 		admitted()
 	}
@@ -283,19 +306,31 @@ func (p *Pool) dispatch(
 		execution.RunnerID = selection.RunnerID
 		execution.RunnerSelectionSource = selection.Source
 	}
-	result, executeErr := execute(executionCtx, route.binding.Executor, execution)
-	result.DispatchID = execution.Dispatch.DispatchID
-	result.TransitionID = execution.Dispatch.TransitionID
-	dispatchResult := workers.WorkstationDispatchResult{
-		DispatchID:      execution.Dispatch.DispatchID,
-		WorkstationName: name,
-		TerminalOutcome: terminalOutcome(executeErr),
-		Result:          result,
+	execution.ProcessLifecycleObserver = dispatchProcessObserver{record: record}
+	executionDone := make(chan executionCompletion, 1)
+	go func() {
+		result, executeErr := execute(executionCtx, route.binding.Executor, execution)
+		executionDone <- executionCompletion{result: result, err: executeErr}
+	}()
+
+	select {
+	case completion := <-executionDone:
+		result := completion.result
+		result.DispatchID = execution.Dispatch.DispatchID
+		result.TransitionID = execution.Dispatch.TransitionID
+		dispatchResult := workers.WorkstationDispatchResult{
+			DispatchID:      execution.Dispatch.DispatchID,
+			WorkstationName: name,
+			TerminalOutcome: terminalOutcome(completion.err),
+			Result:          result,
+		}
+		if executionCtx.Err() != nil {
+			return record.commitCancellation(executionCtx.Err())
+		}
+		return record.commit(dispatchResult, completion.err)
+	case <-record.reconciliationDone:
+		return record.terminalResult()
 	}
-	if executionCtx.Err() != nil {
-		return record.commitCancellation(executionCtx.Err())
-	}
-	return record.commit(dispatchResult, executeErr)
 }
 
 func (p *Pool) logAccepted(workstationName, dispatchID string) {
@@ -349,7 +384,7 @@ func (p *Pool) Cancel(
 	if !ok {
 		return workers.WorkstationDispatchCancelResult{}, workers.ErrUnknownWorkstationDispatch
 	}
-	return record.cancelOutcome()
+	return record.cancelOutcome(request.Reason)
 }
 
 func (p *Pool) accept(
@@ -445,6 +480,13 @@ func (route *routePool) releaseLocked(entry *admission) {
 	}
 	entry.released = true
 	if !entry.running {
+		for index, queued := range route.waiting {
+			if queued != entry {
+				continue
+			}
+			route.waiting = append(route.waiting[:index], route.waiting[index+1:]...)
+			break
+		}
 		return
 	}
 	route.running--
@@ -465,12 +507,129 @@ func newDispatchRecord(
 	logger logging.Logger,
 ) *dispatchRecord {
 	return &dispatchRecord{
-		dispatchID:      request.Execution.Dispatch.DispatchID,
-		workstationName: workstationName,
-		transitionID:    request.Execution.Dispatch.TransitionID,
-		cancel:          cancel,
-		logger:          logger,
+		dispatchID:         request.Execution.Dispatch.DispatchID,
+		workstationName:    workstationName,
+		transitionID:       request.Execution.Dispatch.TransitionID,
+		cancel:             cancel,
+		reconciliationDone: make(chan struct{}),
+		logger:             logger,
 	}
+}
+
+func (record *dispatchRecord) setAdmission(route *routePool, entry *admission) {
+	record.mu.Lock()
+	if record.terminal {
+		record.mu.Unlock()
+		route.release(entry)
+		return
+	}
+	record.route = route
+	record.entry = entry
+	record.mu.Unlock()
+}
+
+func (record *dispatchRecord) releaseAdmission() {
+	record.mu.Lock()
+	route, entry := record.route, record.entry
+	record.route, record.entry = nil, nil
+	record.mu.Unlock()
+	if route != nil && entry != nil {
+		route.release(entry)
+	}
+}
+
+func (record *dispatchRecord) processStartedSignal() {
+	record.mu.Lock()
+	if !record.terminal {
+		record.processStarted = true
+	}
+	record.mu.Unlock()
+}
+
+func (record *dispatchRecord) processExitedSignal() {
+	record.mu.Lock()
+	if record.terminal || !record.processStarted {
+		record.mu.Unlock()
+		return
+	}
+	record.reconcileLocked(
+		workers.WorkstationDispatchReconciliationReasonProcessGone,
+		workers.ErrWorkstationDispatchProcessGone,
+		workers.WorkFailureTypeUnknown,
+		"process_gone",
+		"process",
+	)
+	record.mu.Unlock()
+	record.releaseAdmission()
+	record.cancel()
+}
+
+func (record *dispatchRecord) reconcileTimeout() (workers.WorkstationDispatchCancelOutcome, error) {
+	record.mu.Lock()
+	if record.terminal {
+		outcome := workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+		var err error = workers.ErrWorkstationDispatchAlreadyTerminal
+		if record.result.ReconciliationReason == workers.WorkstationDispatchReconciliationReasonTimeout {
+			outcome = workers.WorkstationDispatchCancelOutcomeAlreadyReconciled
+			err = nil
+		}
+		record.mu.Unlock()
+		record.logCancelOutcome(outcome, workers.WorkstationDispatchCancelReasonTimeout)
+		return outcome, err
+	}
+	record.reconcileLocked(
+		workers.WorkstationDispatchReconciliationReasonTimeout,
+		workers.ErrWorkstationDispatchTimeout,
+		workers.WorkFailureTypeTimeout,
+		"execution_timeout",
+		"execution",
+	)
+	record.mu.Unlock()
+	record.releaseAdmission()
+	record.cancel()
+	record.logCancelOutcome(
+		workers.WorkstationDispatchCancelOutcomeReconciled,
+		workers.WorkstationDispatchCancelReasonTimeout,
+	)
+	return workers.WorkstationDispatchCancelOutcomeReconciled, nil
+}
+
+// reconcileLocked commits the one absorbing terminal result for an execution
+// lifecycle fact. The caller holds record.mu and releases route capacity only
+// after publishing the result and closing the dispatch wait.
+func (record *dispatchRecord) reconcileLocked(
+	reason workers.WorkstationDispatchReconciliationReason,
+	reconcileErr error,
+	failureType workers.WorkFailureType,
+	classification string,
+	stage string,
+) {
+	record.terminal = true
+	record.result = record.baseResult()
+	record.result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeFailed
+	record.result.ReconciliationReason = reason
+	record.result.Result.Outcome = workers.OutcomeFailed
+	record.result.Result.Error = reconcileErr.Error()
+	record.result.Result.FailureMetadata = &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyRetryable,
+		Type:   failureType,
+	}
+	record.result.Result.Diagnostics = &workers.WorkDiagnostics{
+		Metadata: map[string]string{
+			workers.ProviderResponseMetadataFailureOperation:      "worker_session_reconciliation",
+			workers.ProviderResponseMetadataFailureClassification: classification,
+			workers.ProviderResponseMetadataFailureStage:          stage,
+		},
+	}
+	record.err = reconcileErr
+	record.logTerminal()
+	close(record.reconciliationDone)
+}
+
+func (record *dispatchRecord) terminalResult() (workers.WorkstationDispatchResult, error) {
+	record.mu.Lock()
+	defer record.mu.Unlock()
+	return cloneDispatchResult(record.result), record.err
 }
 
 func (record *dispatchRecord) commit(
@@ -478,15 +637,19 @@ func (record *dispatchRecord) commit(
 	err error,
 ) (workers.WorkstationDispatchResult, error) {
 	record.mu.Lock()
-	defer record.mu.Unlock()
 	if record.terminal {
-		return cloneDispatchResult(record.result), record.err
+		result, err := cloneDispatchResult(record.result), record.err
+		record.mu.Unlock()
+		return result, err
 	}
 	record.terminal = true
 	record.result = cloneDispatchResult(result)
 	record.err = err
 	record.logTerminal()
-	return cloneDispatchResult(record.result), err
+	committed := cloneDispatchResult(record.result)
+	record.mu.Unlock()
+	record.releaseAdmission()
+	return committed, err
 }
 
 // logTerminal emits exactly one structured record for this dispatch's
@@ -496,12 +659,15 @@ func (record *dispatchRecord) logTerminal() {
 	if record == nil || record.logger == nil {
 		return
 	}
-	record.logger.Info(
-		"workers workstation dispatch terminal",
+	fields := []any{
 		"workstation_name", record.workstationName,
 		"dispatch_id", record.dispatchID,
 		"terminal_outcome", string(record.result.TerminalOutcome),
-	)
+	}
+	if record.result.ReconciliationReason != "" {
+		fields = append(fields, "reconciliation_reason", string(record.result.ReconciliationReason))
+	}
+	record.logger.Info("workers workstation dispatch terminal", fields...)
 }
 
 func (record *dispatchRecord) commitCancellation(
@@ -533,10 +699,17 @@ func (record *dispatchRecord) commitCancellationLocked(
 	return record.result, record.err, record.cancel
 }
 
-func (record *dispatchRecord) cancelOutcome() (
+func (record *dispatchRecord) cancelOutcome(reason workers.WorkstationDispatchCancelReason) (
 	workers.WorkstationDispatchCancelResult,
 	error,
 ) {
+	if reason == workers.WorkstationDispatchCancelReasonTimeout {
+		outcome, err := record.reconcileTimeout()
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: record.dispatchID,
+			Outcome:    outcome,
+		}, err
+	}
 	record.mu.Lock()
 	if record.terminal {
 		outcome := workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
@@ -546,7 +719,7 @@ func (record *dispatchRecord) cancelOutcome() (
 			err = nil
 		}
 		record.mu.Unlock()
-		record.logCancelOutcome(outcome)
+		record.logCancelOutcome(outcome, reason)
 		return workers.WorkstationDispatchCancelResult{
 			DispatchID: record.dispatchID,
 			Outcome:    outcome,
@@ -555,7 +728,7 @@ func (record *dispatchRecord) cancelOutcome() (
 	_, _, cancel := record.commitCancellationLocked(context.Canceled)
 	record.mu.Unlock()
 	cancel()
-	record.logCancelOutcome(workers.WorkstationDispatchCancelOutcomeCanceled)
+	record.logCancelOutcome(workers.WorkstationDispatchCancelOutcomeCanceled, reason)
 	return workers.WorkstationDispatchCancelResult{
 		DispatchID: record.dispatchID,
 		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
@@ -565,16 +738,22 @@ func (record *dispatchRecord) cancelOutcome() (
 // logCancelOutcome emits one structured record per explicit Cancel call,
 // including idempotent no-op outcomes. dispatchID and workstationName are
 // immutable after construction so this is safe without holding record.mu.
-func (record *dispatchRecord) logCancelOutcome(outcome workers.WorkstationDispatchCancelOutcome) {
+func (record *dispatchRecord) logCancelOutcome(
+	outcome workers.WorkstationDispatchCancelOutcome,
+	reason workers.WorkstationDispatchCancelReason,
+) {
 	if record == nil || record.logger == nil {
 		return
 	}
-	record.logger.Info(
-		"workers workstation dispatch cancellation",
+	fields := []any{
 		"workstation_name", record.workstationName,
 		"dispatch_id", record.dispatchID,
 		"outcome", string(outcome),
-	)
+	}
+	if reason != "" {
+		fields = append(fields, "reason", string(reason))
+	}
+	record.logger.Info("workers workstation dispatch cancellation", fields...)
 }
 
 func (record *dispatchRecord) baseResult() workers.WorkstationDispatchResult {

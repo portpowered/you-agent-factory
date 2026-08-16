@@ -9,12 +9,18 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type hostSupervisionDeadlineTimer struct{ timer *time.Timer }
+
+func (timer hostSupervisionDeadlineTimer) C() <-chan time.Time { return timer.timer.C }
+func (timer hostSupervisionDeadlineTimer) Stop() bool          { return timer.timer.Stop() }
 
 type interruptTuple struct {
 	sourceID    string

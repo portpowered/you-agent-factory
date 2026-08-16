@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -168,6 +169,7 @@ type ExecuteRequest struct {
 	Worktree                    string
 	EnvVars                     map[string]string
 	ProcessEnvironment          []string
+	ProcessLifecycleObserver    platformprocess.ProcessLifecycleObserver
 	// SessionObserver receives a detached exact Provider Session reference as
 	// soon as the native provider reports it, while the attempt is still live.
 	// It is an invocation-scoped observation hook rather than a selection or

@@ -65,3 +65,39 @@ func TestRecordedDeterministicClonesAndInterpolatesTickTimes(t *testing.T) {
 		t.Fatalf("tick 6 Now() = %s, want interpolated time %s", got, want)
 	}
 }
+
+func TestDeterministicTimerFollowsLogicalTimeAndStops(t *testing.T) {
+	base := time.Date(2026, time.April, 25, 20, 59, 3, 0, time.UTC)
+	clock := platformclock.NewDeterministic(base, time.Second)
+	timer := clock.NewTimer(3 * time.Second)
+
+	clock.SetTick(2)
+	select {
+	case <-timer.C():
+		t.Fatal("timer fired before its logical deadline")
+	default:
+	}
+	clock.SetTick(3)
+	select {
+	case got := <-timer.C():
+		if !got.Equal(base.Add(3 * time.Second)) {
+			t.Fatalf("timer time = %s, want %s", got, base.Add(3*time.Second))
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timer did not fire at its logical deadline")
+	}
+	if timer.Stop() {
+		t.Fatal("Stop() = true after deterministic timer fired, want false")
+	}
+
+	stopped := clock.NewTimer(time.Second)
+	if !stopped.Stop() {
+		t.Fatal("Stop() = false for an active deterministic timer, want true")
+	}
+	clock.SetTick(10)
+	select {
+	case <-stopped.C():
+		t.Fatal("stopped timer fired after logical time advanced")
+	default:
+	}
+}

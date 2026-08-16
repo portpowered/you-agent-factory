@@ -1905,12 +1905,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/worker_sessions/internal/service/publish_idempotency_test.go#TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_ResolvesAsDuplicate",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/worker_sessions/internal/service/start_side_effects_test.go#TestRegistryLogsStartOutcomes",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -1926,6 +1920,12 @@
       "target": "pkg/services/worker_sessions/internal/service/start_side_effects_test.go#TestStart_ZeroExitTaskCompleteArtifactWithIngestionFailureIsNotPhantomSuccess",
       "owner": "backend-maintainers",
       "removalReason": "feature regression keeps contradictory completion and canonical-event assertions observable; extract reusable assertions when this test is next refactored."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/services/worker_sessions/internal/service/start_test.go#TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_ResolvesAsDuplicate",
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",

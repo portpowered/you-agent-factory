@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3208,3 +3210,944 @@ var _ workers.WorkstationPoolBoundary = executionBoundary{}
 var _ platformclock.Source = platformclock.Real{}
 
 var _ logging.Logger = logging.NoopLogger{}
+
+func TestInvokeSession_ProcessGoneTerminalizesExactlyOnceWithSafeClassification(t *testing.T) {
+	logger := &recordingLogger{}
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return processGoneResult(request), workers.ErrWorkstationDispatchProcessGone
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-gone", "dispatch-gone"))
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v", err)
+	}
+	if result.Session.State != workersessions.StateFailed || result.Session.Result == nil {
+		t.Fatalf("ProcessGone session = %#v, want one FAILED terminal result", result.Session)
+	}
+	if result.Session.Result.Cause == nil || result.Session.Result.Cause.Kind != workersessions.FailureCauseProcessGone {
+		t.Fatalf("ProcessGone cause = %#v, want PROCESS_GONE", result.Session.Result.Cause)
+	}
+	if result.Session.Result.Cause.Detail != "the worker process exited before dispatch completion" {
+		t.Fatalf("ProcessGone cause detail = %q, want fixed safe detail", result.Session.Result.Cause.Detail)
+	}
+	if result.Attempts != 1 || execution.callCount() != 1 {
+		t.Fatalf("ProcessGone attempts = %d, dispatch calls = %d, want one each", result.Attempts, execution.callCount())
+	}
+
+	assertReconciliationLog(t, logger, "worker-gone", "dispatch-gone", "PROCESS_GONE", "not_applicable", 0)
+}
+
+func TestInvokeSession_ProcessGoneRemainsRetryEligible(t *testing.T) {
+	var attempts atomic.Int32
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			if attempts.Add(1) == 1 {
+				return processGoneResult(request), workers.ErrWorkstationDispatchProcessGone
+			}
+			return acceptedResult(request), nil
+		},
+	}
+	registry := newRegistryWithExecution(execution)
+	request := validStartRequest("worker-retry-gone", "dispatch-gone")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v", err)
+	}
+	if result.Session.State != workersessions.StateCompleted || result.Attempts != 2 {
+		t.Fatalf("retry after ProcessGone = %#v, want COMPLETED after two attempts", result)
+	}
+	if execution.callCount() != 2 {
+		t.Fatalf("dispatch calls after ProcessGone = %d, want 2", execution.callCount())
+	}
+	requests := execution.requests()
+	if len(requests) != 2 || requests[1].Execution.Dispatch.DispatchID != "dispatch-gone/attempt/2" {
+		t.Fatalf("retry requests = %#v, want stable identity with /attempt/2 dispatch", requests)
+	}
+}
+
+func TestInvokeSession_DeadlineReconcilesTerminallyWithBoundedDiagnostics(t *testing.T) {
+	base := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
+	clock := platformclock.NewDeterministic(base, time.Second)
+	logger := &recordingLogger{}
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	request := validStartRequest("worker-timeout", "dispatch-timeout")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	boundary.setCancel(func(_ context.Context, cancel workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		if cancel.Reason != workers.WorkstationDispatchCancelReasonTimeout {
+			return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationDispatchAlreadyTerminal
+		}
+		boundary.complete(timeoutResult(cancel.DispatchID), workers.ErrWorkstationDispatchTimeout)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: cancel.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeReconciled,
+		}, nil
+	})
+	registry, err := newServiceWithClock(boundary, eventsSvc, logger, clock)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+
+	outcomes := make(chan struct {
+		result workersessions.InvokeSessionResult
+		err    error
+	}, 1)
+	go func() {
+		result, invokeErr := registry.InvokeSession(context.Background(), request)
+		outcomes <- struct {
+			result workersessions.InvokeSessionResult
+			err    error
+		}{result: result, err: invokeErr}
+	}()
+	select {
+	case <-boundary.admitted:
+	case <-time.After(time.Second):
+		t.Fatal("Worker Session did not reach the admitted deadline-watch state")
+	}
+	clock.SetTick(5)
+
+	select {
+	case outcome := <-outcomes:
+		if outcome.err != nil {
+			t.Fatalf("InvokeSession() error = %v", outcome.err)
+		}
+		assertTimeoutInvokeResult(t, outcome.result)
+	case <-time.After(time.Second):
+		t.Fatal("deadline reconciliation did not terminalize the Worker Session")
+	}
+
+	assertSessionRecords(t, eventsSvc, "worker-timeout")
+	assertReconciliationLog(t, logger, "worker-timeout", "dispatch-timeout", "EXECUTION_TIMEOUT", base.Add(5*time.Second).Format(time.RFC3339Nano), 5000)
+}
+
+func TestInvokeSession_DeadlineFailureRemainsEligibleForExistingRetryPolicy(t *testing.T) {
+	base := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
+	clock := platformclock.NewDeterministic(base, time.Second)
+	releaseFirst := make(chan struct{})
+	var releaseFirstOnce sync.Once
+	dispatchStarted := make(chan struct{})
+	var attempts atomic.Int32
+	execution := &fakeExecution{
+		admissionStarted: make(chan struct{}),
+		releaseAdmission: make(chan struct{}),
+		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			if attempts.Add(1) == 1 {
+				close(dispatchStarted)
+				<-releaseFirst
+				return timeoutResult(request.Execution.Dispatch.DispatchID), workers.ErrWorkstationDispatchTimeout
+			}
+			return acceptedResult(request), nil
+		},
+	}
+	execution.cancel = func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		if request.Reason != workers.WorkstationDispatchCancelReasonTimeout {
+			return workers.WorkstationDispatchCancelResult{}, workers.ErrWorkstationDispatchAlreadyTerminal
+		}
+		releaseFirstOnce.Do(func() { close(releaseFirst) })
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeReconciled,
+		}, nil
+	}
+	registry, err := newServiceWithClock(executionBoundary{execution: execution}, newEventsAppender(), nil, clock)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	request := validStartRequest("worker-timeout-retry", "dispatch-timeout-retry")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+
+	outcomes := make(chan workersessions.InvokeSessionResult, 1)
+	go func() {
+		result, invokeErr := registry.InvokeSession(context.Background(), request)
+		if invokeErr != nil {
+			t.Errorf("InvokeSession() error = %v", invokeErr)
+		}
+		outcomes <- result
+	}()
+	select {
+	case <-execution.admissionStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first attempt did not reach Workers admission")
+	}
+	close(execution.releaseAdmission)
+	select {
+	case <-dispatchStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first attempt did not start execution")
+	}
+	clock.SetTick(5)
+
+	var result workersessions.InvokeSessionResult
+	select {
+	case result = <-outcomes:
+	case <-time.After(time.Second):
+		t.Fatal("timeout retry did not complete")
+	}
+	assertTimeoutRetry(t, result, execution, attempts.Load())
+}
+
+func assertTimeoutInvokeResult(t *testing.T, result workersessions.InvokeSessionResult) {
+	t.Helper()
+	if result.Session.State != workersessions.StateFailed || result.Session.Result == nil {
+		t.Fatalf("timeout session = %#v, want one FAILED terminal", result.Session)
+	}
+	cause := result.Session.Result.Cause
+	if cause == nil || cause.Kind != workersessions.FailureCauseTimeout || cause.Detail != "the worker execution exceeded its hard deadline" {
+		t.Fatalf("timeout cause = %#v, want bounded TIMEOUT classification", cause)
+	}
+	if result.Dispatch.ReconciliationReason != workers.WorkstationDispatchReconciliationReasonTimeout {
+		t.Fatalf("timeout dispatch reason = %q, want EXECUTION_TIMEOUT", result.Dispatch.ReconciliationReason)
+	}
+	metadata := result.Dispatch.Result.FailureMetadata
+	if metadata == nil || metadata.Type != workers.WorkFailureTypeTimeout {
+		t.Fatalf("timeout failure metadata = %#v, want timeout type", metadata)
+	}
+	if result.Attempts != 1 {
+		t.Fatalf("timeout attempts = %d, want one", result.Attempts)
+	}
+}
+
+func assertTimeoutRetry(t *testing.T, result workersessions.InvokeSessionResult, execution *fakeExecution, calls int32) {
+	t.Helper()
+	if result.Session.State != workersessions.StateCompleted || result.Attempts != 2 {
+		t.Fatalf("timeout retry result = %#v, want COMPLETED after two attempts", result)
+	}
+	if calls != 2 {
+		t.Fatalf("timeout retry execution calls = %d, want 2", calls)
+	}
+	requests := execution.requests()
+	if len(requests) != 2 || requests[1].Execution.Dispatch.DispatchID != "dispatch-timeout-retry/attempt/2" {
+		t.Fatalf("timeout retry requests = %#v, want /attempt/2 dispatch identity", requests)
+	}
+	cancellations := execution.cancellationRequests()
+	if len(cancellations) != 1 || cancellations[0].Reason != workers.WorkstationDispatchCancelReasonTimeout {
+		t.Fatalf("timeout reconciliation cancellations = %#v, want one timeout request", cancellations)
+	}
+}
+
+func assertReconciliationLog(t *testing.T, logger *recordingLogger, sessionID, attemptID, reason, deadline string, timeoutMS int64) {
+	t.Helper()
+	reconciliation := logger.entriesFor("worker session reconciliation")
+	if len(reconciliation) != 1 {
+		t.Fatalf("reconciliation log entries = %d, want exactly one", len(reconciliation))
+	}
+	fields := reconciliation[0].fields
+	if fields["sessionID"] != sessionID || fields["attemptID"] != attemptID || fields["dispatchID"] != attemptID ||
+		fields["reason"] != reason || fields["prior_state"] != string(workersessions.StateRunning) ||
+		fields["resulting_state"] != string(workersessions.StateFailed) ||
+		fields["result"] != string(workers.WorkstationDispatchTerminalOutcomeFailed) {
+		t.Fatalf("reconciliation log fields = %#v, want bounded identity and state facts", fields)
+	}
+	if elapsed, ok := fields["elapsed_ms"].(int64); !ok || elapsed < 0 {
+		t.Fatalf("reconciliation elapsed_ms = %#v, want non-negative int64", fields["elapsed_ms"])
+	}
+	if fields["deadline"] != deadline {
+		t.Fatalf("reconciliation deadline = %#v, want %q", fields["deadline"], deadline)
+	}
+	if timeoutMS > 0 && fields["configured_timeout_ms"] != timeoutMS {
+		t.Fatalf("configured timeout = %#v, want %d", fields["configured_timeout_ms"], timeoutMS)
+	}
+}
+
+func processGoneResult(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	dispatchID := request.Execution.Dispatch.DispatchID
+	return workers.WorkstationDispatchResult{
+		DispatchID:           dispatchID,
+		WorkstationName:      request.WorkstationName,
+		TerminalOutcome:      workers.WorkstationDispatchTerminalOutcomeFailed,
+		ReconciliationReason: workers.WorkstationDispatchReconciliationReasonProcessGone,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyRetryable,
+			},
+		},
+	}
+}
+
+// TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_ResolvesAsDuplicate
+// proves that once a higher SourceSequence has been accepted for a source, an
+// exact retry of an earlier identity that source already had accepted still
+// resolves to the original record as a duplicate rather than being rejected
+// as out of order: Events retains every accepted identity permanently for
+// dedup, so a retry must stay idempotent regardless of publication order
+// since. It also proves the retry produces neither a new committed position
+// nor a live subscription delivery of its own.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+func TestPublishRecord_RetryOfOlderAcceptedIdentity_AfterNewerSequenceAccepted_ResolvesAsDuplicate(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	topic := workersessions.Topic("worker-1")
+
+	var svc workersessions.Service
+	var first, second, retry workersessions.PublishRecordResult
+
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			var err error
+			if first, err = svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 1, toolDraft("tc-1"))); err != nil {
+				t.Fatalf("PublishRecord() seq=1 error = %v, want nil", err)
+			}
+			if second, err = svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 2, toolDraft("tc-2"))); err != nil {
+				t.Fatalf("PublishRecord() seq=2 error = %v, want nil", err)
+			}
+
+			readResult, err := eventsSvc.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 100})
+			if err != nil {
+				t.Fatalf("Read() error = %v, want nil", err)
+			}
+			if readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) != 3 {
+				t.Fatalf("Read() = %+v, want Progress with 3 records (opening, seq=1, seq=2)", readResult)
+			}
+			sub, err := eventsSvc.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: readResult.Next, Limit: 10})
+			if err != nil {
+				t.Fatalf("Subscribe() error = %v, want nil", err)
+			}
+
+			if retry, err = svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 1, toolDraft("tc-1"))); err != nil {
+				t.Fatalf("retry PublishRecord() seq=1 error = %v, want nil", err)
+			}
+			if _, err := svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 3, toolDraft("tc-3"))); err != nil {
+				t.Fatalf("PublishRecord() seq=3 error = %v, want nil", err)
+			}
+
+			delivery := sub.Next(ctx)
+			if delivery.Kind != events.DeliveryRecord || delivery.Cursor.Position != 4 {
+				t.Fatalf("Subscription.Next() = %+v, want the seq=3 record delivered directly at position 4 -- the seq=1 retry must not have produced a delivery of its own", delivery)
+			}
+
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if second.Outcome != workersessions.PublishOutcomeAccepted {
+		t.Fatalf("PublishRecord() seq=2 outcome = %v, want PublishOutcomeAccepted", second.Outcome)
+	}
+	if retry.Outcome != workersessions.PublishOutcomeDuplicate {
+		t.Fatalf("retry PublishRecord() seq=1 outcome = %v, want PublishOutcomeDuplicate", retry.Outcome)
+	}
+	if retry.AggregateSequence != first.AggregateSequence {
+		t.Fatalf("retry PublishRecord() aggregate sequence = %d, want %d (original seq=1 record, unchanged)", retry.AggregateSequence, first.AggregateSequence)
+	}
+
+	committed := readAllDrafts(t, eventsSvc, topic)
+	if len(committed) != 5 {
+		t.Fatalf("committed record count = %d, want 5 (opening, seq=1, seq=2, seq=3, terminal; the retry of seq=1 must not create a sixth position)", len(committed))
+	}
+}
+
+// TestPublishRecord_ConcurrentPublishesForOneSource_NeverCommitOutOfOrder
+// stress-tests the ordering guarantee under real concurrency: several
+// goroutines race to publish distinct SourceSequence values for the same
+// source, released simultaneously. Whichever calls are accepted must appear
+// in the topic in strictly increasing SourceSequence order -- the ordering
+// enforcement must hold regardless of goroutine scheduling, not just for a
+// hand-sequenced call order.
+func TestPublishRecord_ConcurrentPublishesForOneSource_NeverCommitOutOfOrder(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	const n = 10
+
+	var svc workersessions.Service
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			var wg sync.WaitGroup
+			ready := make(chan struct{})
+			wg.Add(n)
+			for i := 1; i <= n; i++ {
+				go func(seq int) {
+					defer wg.Done()
+					<-ready
+					_, _ = svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", events.SourceSequence(seq), progressDraft(strconv.Itoa(seq))))
+				}(i)
+			}
+			close(ready)
+			wg.Wait()
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+
+	committed := readAllDrafts(t, eventsSvc, workersessions.Topic("worker-1"))
+	if len(committed) < 3 {
+		t.Fatalf("committed record count = %d, want at least 3 (opening, >=1 published, terminal)", len(committed))
+	}
+	lastSeq := 0
+	for _, draft := range committed[1 : len(committed)-1] {
+		var payload workers.ProgressPayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal progress payload error = %v", err)
+		}
+		seq, err := strconv.Atoi(payload.Label)
+		if err != nil {
+			t.Fatalf("parse sequence from label %q error = %v", payload.Label, err)
+		}
+		if seq <= lastSeq {
+			t.Fatalf("committed progress records out of order: sequence %d committed after %d", seq, lastSeq)
+		}
+		lastSeq = seq
+	}
+}
+
+// TestPublishRecord_SourceIdentityTupleMembersRemainDistinct proves that
+// changing any single member of the (SourceType, SourceID, SourceSequence,
+// SourceEventID) tuple, while holding the other three fixed, is treated as a
+// wholly distinct record rather than a duplicate of the base identity.
+func TestPublishRecord_SourceIdentityTupleMembersRemainDistinct(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	base := workersessions.PublishRecordRequest{
+		SessionID:      "worker-1",
+		Draft:          toolDraft("tc-base"),
+		SourceType:     "worker_provider",
+		SourceID:       "src-1",
+		SourceSequence: 1,
+		SourceEventID:  "evt-1",
+		SchemaID:       "workers.draft.v1",
+	}
+	// Published in an order that keeps each distinct (SourceType, SourceID)
+	// key's own SourceSequence non-decreasing: withSourceEventID shares
+	// base's key at the same SourceSequence (allowed; only SourceEventID
+	// differs), and withSourceSequence -- the one variant that advances
+	// SourceSequence on base's key -- is published last so it can never
+	// look like a regression relative to an already-accepted higher
+	// SourceSequence on that same key.
+	variants := []workersessions.PublishRecordRequest{base}
+	withSourceType := base
+	withSourceType.SourceType = "worker_provider_alt"
+	variants = append(variants, withSourceType)
+	withSourceID := base
+	withSourceID.SourceID = "src-2"
+	variants = append(variants, withSourceID)
+	withSourceEventID := base
+	withSourceEventID.SourceEventID = "evt-2"
+	variants = append(variants, withSourceEventID)
+	withSourceSequence := base
+	withSourceSequence.SourceSequence = 2
+	variants = append(variants, withSourceSequence)
+
+	seen := make(map[events.AggregateSequence]bool, len(variants))
+	var svc workersessions.Service
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			for i, r := range variants {
+				result, err := svc.PublishRecord(ctx, r)
+				if err != nil {
+					t.Fatalf("PublishRecord() [%d] error = %v, want nil", i, err)
+				}
+				if result.Outcome != workersessions.PublishOutcomeAccepted {
+					t.Fatalf("PublishRecord() [%d] outcome = %v, want Accepted (a distinct tuple member must never be treated as a duplicate)", i, result.Outcome)
+				}
+				if seen[result.AggregateSequence] {
+					t.Fatalf("PublishRecord() [%d] aggregate sequence %d was already assigned to a different variant", i, result.AggregateSequence)
+				}
+				seen[result.AggregateSequence] = true
+			}
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if len(seen) != len(variants) {
+		t.Fatalf("observed %d distinct aggregate sequences, want %d", len(seen), len(variants))
+	}
+}
+
+// TestPublishRecord_IdenticalTupleAcrossSessionTopics_DoesNotCollapse proves
+// that presenting the identical (SourceType, SourceID, SourceSequence,
+// SourceEventID) tuple against two different Worker Session topics is
+// accepted independently on each: Events' idempotency dedup is scoped per
+// topic, not globally across every Worker Session.
+func TestPublishRecord_IdenticalTupleAcrossSessionTopics_DoesNotCollapse(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	identicalTuple := func(sessionID string) workersessions.PublishRecordRequest {
+		return workersessions.PublishRecordRequest{
+			SessionID:      sessionID,
+			Draft:          toolDraft("tc-1"),
+			SourceType:     "worker_provider",
+			SourceID:       "shared-src",
+			SourceSequence: 1,
+			SourceEventID:  "shared-evt",
+			SchemaID:       "workers.draft.v1",
+		}
+	}
+
+	var svc workersessions.Service
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			result, err := svc.PublishRecord(ctx, identicalTuple(req.Execution.Dispatch.DispatchID))
+			if err != nil {
+				t.Fatalf("PublishRecord() error = %v, want nil", err)
+			}
+			if result.Outcome != workersessions.PublishOutcomeAccepted {
+				t.Fatalf("PublishRecord() outcome = %v, want Accepted (a different Worker Session topic must not collapse an identical tuple into a duplicate)", result.Outcome)
+			}
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	ctx := context.Background()
+
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-1", "worker-1")); err != nil {
+		t.Fatalf("Start(worker-1) error = %v, want nil", err)
+	}
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-2", "worker-2")); err != nil {
+		t.Fatalf("Start(worker-2) error = %v, want nil", err)
+	}
+
+	for _, sessionID := range []string{"worker-1", "worker-2"} {
+		committed := readAllDrafts(t, eventsSvc, workersessions.Topic(sessionID))
+		if len(committed) != 3 {
+			t.Fatalf("session %s committed record count = %d, want 3 (opening, published, terminal)", sessionID, len(committed))
+		}
+	}
+}
+
+// TestPublishRecord_PagedReadDeliversRecordsExactlyOnceInContiguousOrder
+// proves that reading a Worker Session topic in bounded pages smaller than
+// its total record count, and resuming from each returned cursor, delivers
+// the opening record and every published Worker record exactly once, in
+// contiguous commit order, with no gap or duplicate across the page
+// boundary.
+func TestPublishRecord_PagedReadDeliversRecordsExactlyOnceInContiguousOrder(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	const published = 5
+
+	var svc workersessions.Service
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			for i := 1; i <= published; i++ {
+				pubReq := validPublishRecordRequest("worker-1", events.SourceSequence(i), progressDraft("step"))
+				if _, err := svc.PublishRecord(ctx, pubReq); err != nil {
+					t.Fatalf("PublishRecord() [%d] error = %v, want nil", i, err)
+				}
+			}
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	ctx := context.Background()
+
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	const wantTotal = published + 2 // + the opening record and the terminal record
+
+	topic := workersessions.Topic("worker-1")
+	var page events.ReadResult
+	var all []events.Record
+	cursor := events.Cursor{Topic: topic}
+	for pages := 0; ; pages++ {
+		if pages > wantTotal {
+			t.Fatalf("Read() paging did not reach ReadOutcomeAtHead within %d pages", wantTotal)
+		}
+		page, err = eventsSvc.Read(ctx, events.ReadRequest{Topic: topic, From: cursor, Limit: 2})
+		if err != nil {
+			t.Fatalf("Read() error = %v, want nil", err)
+		}
+		if page.Outcome == events.ReadOutcomeAtHead {
+			break
+		}
+		if page.Outcome != events.ReadOutcomeProgress {
+			t.Fatalf("Read() outcome = %v, want Progress or AtHead", page.Outcome)
+		}
+		all = append(all, page.Records...)
+		cursor = page.Next
+	}
+
+	if len(all) != wantTotal {
+		t.Fatalf("paged Read() delivered %d records, want %d", len(all), wantTotal)
+	}
+	for i, rec := range all {
+		wantPosition := events.AggregateSequence(i + 1)
+		if rec.ID.Position != wantPosition {
+			t.Fatalf("record[%d] position = %d, want %d (contiguous, no gap or duplicate)", i, rec.ID.Position, wantPosition)
+		}
+	}
+}
+
+// TestPublishRecord_SubscriptionFromLastReadCursorDeliversOnlyLaterRecords
+// proves read-to-subscribe continuation: a subscription opened from the
+// cursor a prior Read already fully consumed resumes with only records
+// published after that point, never re-delivering what was already read.
+// Every step runs from inside the dispatch callback, on the same goroutine
+// Start blocks on, since publication is only accepted during that window.
+func TestPublishRecord_SubscriptionFromLastReadCursorDeliversOnlyLaterRecords(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	topic := workersessions.Topic("worker-1")
+
+	var svc workersessions.Service
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			if _, err := svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 1, toolDraft("tc-1"))); err != nil {
+				t.Fatalf("PublishRecord() [1] error = %v, want nil", err)
+			}
+
+			readResult, err := eventsSvc.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 100})
+			if err != nil {
+				t.Fatalf("Read() error = %v, want nil", err)
+			}
+			if readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) != 2 {
+				t.Fatalf("Read() = %+v, want Progress with 2 records (opening + published)", readResult)
+			}
+			lastReadCursor := readResult.Next
+
+			sub, err := eventsSvc.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: lastReadCursor, Limit: 10})
+			if err != nil {
+				t.Fatalf("Subscribe() error = %v, want nil", err)
+			}
+
+			if _, err := svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 2, toolDraft("tc-2"))); err != nil {
+				t.Fatalf("PublishRecord() [2] error = %v, want nil", err)
+			}
+			if _, err := svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 3, toolDraft("tc-3"))); err != nil {
+				t.Fatalf("PublishRecord() [3] error = %v, want nil", err)
+			}
+
+			first := sub.Next(ctx)
+			if first.Kind != events.DeliveryRecord || first.Cursor.Position != 3 {
+				t.Fatalf("first Subscription.Next() = %+v, want DeliveryRecord at position 3 (only later records, never re-delivering the already-read positions 1-2)", first)
+			}
+			second := sub.Next(ctx)
+			if second.Kind != events.DeliveryRecord || second.Cursor.Position != 4 {
+				t.Fatalf("second Subscription.Next() = %+v, want DeliveryRecord at position 4", second)
+			}
+
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+}
+
+// TestPublishRecord_ConcurrentDuplicateDeliveryConvergesOnOneRecord proves
+// that many goroutines racing the identical PublishRecord call converge on
+// exactly one accepted record: every other racer resolves to
+// PublishOutcomeDuplicate naming the same AggregateSequence, never a second
+// committed position.
+func TestPublishRecord_ConcurrentDuplicateDeliveryConvergesOnOneRecord(t *testing.T) {
+	const goroutines = 50
+	eventsSvc := newEventsAppender()
+
+	var svc workersessions.Service
+	var accepted int
+	var positions map[events.AggregateSequence]bool
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			pubReq := validPublishRecordRequest("worker-1", 1, toolDraft("tc-1"))
+
+			var wg sync.WaitGroup
+			results := make(chan workersessions.PublishRecordResult, goroutines)
+			for range goroutines {
+				wg.Go(func() {
+					result, err := svc.PublishRecord(ctx, pubReq)
+					if err != nil {
+						t.Errorf("PublishRecord() error = %v, want nil", err)
+						return
+					}
+					results <- result
+				})
+			}
+			wg.Wait()
+			close(results)
+
+			positions = make(map[events.AggregateSequence]bool)
+			for result := range results {
+				if result.Outcome == workersessions.PublishOutcomeAccepted {
+					accepted++
+				}
+				positions[result.AggregateSequence] = true
+			}
+
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+
+	if accepted != 1 {
+		t.Fatalf("accepted count = %d, want exactly 1 across %d concurrent racers", accepted, goroutines)
+	}
+	if len(positions) != 1 {
+		t.Fatalf("observed %d distinct aggregate sequences, want exactly 1: every racer must resolve to the same committed record", len(positions))
+	}
+
+	committed := readAllDrafts(t, eventsSvc, workersessions.Topic("worker-1"))
+	if len(committed) != 3 {
+		t.Fatalf("committed record count = %d, want exactly 3 (opening, one published record, terminal)", len(committed))
+	}
+}
+
+func TestControlHistory_OrdersPauseResumeBracketsBeforeTerminalAndDeduplicatesReplay(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-control-history",
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		Reference:       reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	paused, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "pause-1"})
+	if err != nil || paused.Outcome != workersessions.ControlOutcomeApplied || paused.Session.State != workersessions.StatePaused {
+		t.Fatalf("Pause() = %#v, %v, want applied PAUSED", paused, err)
+	}
+	if repeated, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "pause-1"}); err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("replayed Pause() = %#v, %v, want NOOP without a second history bracket", repeated, err)
+	}
+
+	resumed, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "resume-1"})
+	if err != nil || resumed.Outcome != workersessions.ControlOutcomeApplied || resumed.Session.State != workersessions.StateRunning {
+		t.Fatalf("Resume() = %#v, %v, want applied RUNNING", resumed, err)
+	}
+	resumedResult := completedDispatchResult(resumed.DispatchID)
+	resumedResult.Result.Continuation = continuationFromProviderMetadata(&providers.SessionMetadata{
+		Provider: reference.Provider.String(),
+		Kind:     reference.Kind,
+		ID:       reference.ID,
+	})
+	boundary.complete(resumedResult, nil)
+	if result := <-started; result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("InvokeSession() result = %#v, want COMPLETED", result)
+	}
+	if repeated, err := registry.Resume(context.Background(), workersessions.ControlRequest{ID: "worker-1", RequestID: "resume-1"}); err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop {
+		t.Fatalf("replayed terminal Resume() = %#v, %v, want NOOP without a second history bracket", repeated, err)
+	}
+
+	topic := workersessions.Topic("worker-1")
+	read := readControlHistory(t, eventsSvc, topic, 20)
+	if len(read.Records) != 7 {
+		t.Fatalf("control history record count = %d, want opening + pause bracket + resume attempt + resume bracket + terminal", len(read.Records))
+	}
+	assertPauseResumeControlHistory(t, read, resumed.DispatchID)
+	assertPortableControlHistory(t, "worker-1", topic, read)
+}
+
+func TestControlHistory_NaturalCompletionWinsAfterControlRequestAndBeforeTerminalRecord(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	started := startControlledSession(t, registry, boundary, "worker-natural", "dispatch-natural")
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-natural",
+		DispatchID:      "dispatch-natural",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-natural-race",
+		},
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	cancelEntered := make(chan struct{})
+	releaseCancel := make(chan struct{})
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		close(cancelEntered)
+		<-releaseCancel
+		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID}, nil
+	})
+
+	controlResult := make(chan struct {
+		result workersessions.ControlResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := registry.Pause(context.Background(), workersessions.ControlRequest{ID: "worker-natural", RequestID: "natural-race-control"})
+		controlResult <- struct {
+			result workersessions.ControlResult
+			err    error
+		}{result: result, err: err}
+	}()
+	<-cancelEntered
+
+	boundary.complete(completedDispatchResult("dispatch-natural"), nil)
+	close(releaseCancel)
+	control := <-controlResult
+	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeNoop || control.result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("racing Pause() = %#v, %v, want natural COMPLETED NOOP", control.result, control.err)
+	}
+	if result := <-started; result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("natural completion result = %#v, want COMPLETED", result)
+	}
+
+	topic := workersessions.Topic("worker-natural")
+	assertNaturalControlHistory(t, eventsSvc, topic)
+}
+
+func TestControlHistory_RecordsInterruptBracketBeforeSourceTerminal(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	sourceResult := startControlledSession(t, registry, boundary, "source-interrupt", "dispatch-source-interrupt")
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-interrupt-history",
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "source-interrupt",
+		DispatchID:      "dispatch-source-interrupt",
+		Reference:       reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(canceledDispatchResult(request.DispatchID), workers.ErrWorkstationDispatchCanceled)
+		return workers.WorkstationDispatchCancelResult{
+			DispatchID: request.DispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
+		}, nil
+	})
+
+	interrupted, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
+		RequestID:                "interrupt-history-1",
+		SourceWorkerSessionID:    "source-interrupt",
+		SuccessorWorkerSessionID: "successor-interrupt",
+		ReplacementMessage:       "replacement",
+	})
+	if err != nil || !interrupted.Accepted {
+		t.Fatalf("Interrupt() = %#v, %v, want accepted", interrupted, err)
+	}
+	if result := <-sourceResult; result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("source InvokeSession() = %#v, want CANCELED", result.Session)
+	}
+
+	topic := workersessions.Topic("source-interrupt")
+	assertInterruptControlHistory(t, eventsSvc, topic)
+
+	boundary.complete(completedDispatchResult(interrupted.Successor.ProviderSessionAssociation.DispatchID), nil)
+}
+
+func timeoutResult(dispatchID string) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:           dispatchID,
+		TerminalOutcome:      workers.WorkstationDispatchTerminalOutcomeFailed,
+		ReconciliationReason: workers.WorkstationDispatchReconciliationReasonTimeout,
+		Result: workers.WorkResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.OutcomeFailed,
+			FailureMetadata: &workers.WorkFailureMetadata{
+				Family: workers.WorkFailureFamilyRetryable,
+				Type:   workers.WorkFailureTypeTimeout,
+			},
+		},
+	}
+}

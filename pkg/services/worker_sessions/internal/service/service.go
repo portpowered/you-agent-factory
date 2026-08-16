@@ -193,6 +193,20 @@ func (r *registry) LoadWorkerRecording(
 	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
+func dispatchedTerminal(action workersessions.ControlAction, result workers.WorkstationDispatchResult, dispatchErr error) (workersessions.State, workersessions.TerminalResult) {
+	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled || errors.Is(dispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		if action == workersessions.ControlActionTerminate {
+			return workersessions.StateTerminated, workersessions.TerminalResult{}
+		}
+		return workersessions.StateCanceled, workersessions.TerminalResult{}
+	}
+	terminal := classifyTerminal(dispatchErr, result)
+	if terminal.Outcome == workersessions.TerminalOutcomeCompleted {
+		return workersessions.StateCompleted, terminal
+	}
+	return workersessions.StateFailed, terminal
+}
+
 func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.InvokeSessionRequest) (recordings.WorkerSessionRecording, error) {
 	recordingID := strings.TrimSpace(req.Execution.Execution.RecordingID)
 	if r.recording == nil || recordingID == "" {
@@ -919,57 +933,65 @@ func cloneTranscriptTime(value *time.Time) *time.Time {
 	return &clone
 }
 
-// startTuple is the detached, normalized value compared for one asynchronous
-// caller request ID. Retry zero and one are the same effective policy, and the
-// resolved Workers execution is cloned before it enters this tuple so caller
-// mutation cannot change a replay decision or an admitted execution.
-type startTuple struct {
-	SessionID   string
-	Execution   workers.WorkstationDispatchRequest
-	MaxAttempts int
+func newSupervisionDeadlineTimer(clock platformclock.Source, timeout time.Duration) platformclock.Timer {
+	if timerSource, ok := clock.(platformclock.TimerSource); ok {
+		return timerSource.NewTimer(timeout)
+	}
+	return hostSupervisionDeadlineTimer{timer: time.NewTimer(timeout)}
 }
 
-// startReplay is the one process-local record for an asynchronous caller
-// request ID. The owner closes done after the original acceptance or
-// deterministic pre-admission failure is complete; every replay returns that
-// stored outcome instead of entering the start state machine again.
-type startReplay struct {
-	tuple     startTuple
-	sessionID string
-	done      chan struct{}
-	result    workersessions.StartResult
-	err       error
+func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acceptedAt time.Time) {
+	timeout := resolvedHardExecutionTimeout(supervision.execution.Execution)
+	if timeout <= 0 {
+		return
+	}
+	supervision.mu.Lock()
+	attemptDone := supervision.attemptDone
+	attemptID := supervision.dispatchID
+	if attemptDone == nil || !supervision.accepted {
+		supervision.mu.Unlock()
+		return
+	}
+	deadlineAt := acceptedAt.Add(timeout)
+	supervision.deadlineAt = deadlineAt
+	supervision.mu.Unlock()
+
+	remaining := deadlineAt.Sub(r.clock.Now())
+	if remaining < 0 {
+		remaining = 0
+	}
+	timer := newSupervisionDeadlineTimer(r.clock, remaining)
+	go func() {
+		defer timer.Stop()
+		select {
+		case <-timer.C():
+			r.reconcileOverdueAttempt(id, supervision, attemptID, attemptDone, deadlineAt)
+		case <-attemptDone:
+		}
+	}()
 }
 
-func normalizeStartRequest(req workersessions.StartRequest) workersessions.StartRequest {
-	req.RequestID = strings.TrimSpace(req.RequestID)
-	req.Execution = cloneWorkstationDispatchRequest(req.Execution)
-	req.Retry.MaxAttempts = req.Retry.Attempts()
-	return req
-}
-
-func startTupleFor(req workersessions.StartRequest) startTuple {
-	return startTuple{
-		SessionID:   req.ID,
-		Execution:   cloneWorkstationDispatchRequest(req.Execution),
-		MaxAttempts: req.Retry.Attempts(),
+func (s *supervision) deadlineAttemptActive(attemptID string, attemptDone chan struct{}) bool {
+	s.mu.Lock()
+	active := s.accepted && s.dispatchID == attemptID && s.attemptDone == attemptDone
+	s.mu.Unlock()
+	if !active {
+		return false
+	}
+	select {
+	case <-attemptDone:
+		return false
+	default:
+		return true
 	}
 }
 
-func (r *registry) finishStartReplay(replay *startReplay, result workersessions.StartResult, err error) {
-	replay.result = cloneStartResult(result)
-	replay.err = err
-	close(replay.done)
-}
-
-func cloneStartResult(result workersessions.StartResult) workersessions.StartResult {
-	result.Session = cloneSession(result.Session)
-	return result
-}
-
-func startReplayOutcome(err error) string {
-	if err == nil {
-		return "accepted"
+func resolvedHardExecutionTimeout(execution workers.WorkstationExecutionRequest) time.Duration {
+	if execution.Timeout > 0 {
+		return execution.Timeout
 	}
-	return "rejected"
+	if strings.TrimSpace(execution.WorkerType) != "" {
+		return workers.DefaultWorkstationExecutionTimeout
+	}
+	return 0
 }
