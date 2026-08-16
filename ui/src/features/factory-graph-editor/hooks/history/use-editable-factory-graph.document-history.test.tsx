@@ -1,15 +1,15 @@
 // @component-test-runner vitest: imports workspace graph packages that Bun resolves through declaration files.
 import { act, renderHook, waitFor } from "@testing-library/react";
 
-import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   createEditableFactoryGraphHookWrapper,
   renderEditableFactoryGraphHook,
   setupEditableFactoryGraphSaveTestEnvironment,
-} from "../../../testing/editable-factory-graph-hook-test-helpers";
-import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
-import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
-import { useEditableFactoryGraph } from "./use-editable-factory-graph";
+} from "../../../../testing/editable-factory-graph-hook-test-helpers";
+import { mockFactoryDocumentSave } from "../../../../testing/factory-document-save-mocks";
+import { createEmptyFactoryGraphDraft } from "../../lib/draft/factory-graph-draft-types";
+import { useEditableFactoryGraph } from "../use-editable-factory-graph";
 
 const documentFactory: CurrentFactoryDocument = {
   name: "History Factory",
