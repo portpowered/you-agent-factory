@@ -1,10 +1,7 @@
 import { vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
-import {
-  createDeferred,
-  jsonResponse,
-} from "./factory-session-detail-panel.test-helpers";
+import { jsonResponse } from "./factory-session-detail-panel.test-helpers";
 
 export const BASELINE_SESSION_ID = "session-beta";
 export const BASELINE_DISPATCH_ID = "dispatch-1";
@@ -163,55 +160,4 @@ export function mockPendingSessionFetch() {
         }),
       ),
   };
-}
-
-export function mockJavaScriptSessionBetaFetchWithDeferredDispatch() {
-  const dispatchDetailResponse = createDeferred<Response>();
-
-  vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
-    const url = String(input);
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}`)) {
-      return jsonResponse(createJavaScriptSessionBetaPayload());
-    }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/dispatches`)) {
-      return jsonResponse({
-        dispatches: createJavaScriptSessionBetaDispatches(),
-        sessionId: BASELINE_SESSION_ID,
-      });
-    }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/result`)) {
-      return jsonResponse({
-        resultArtifactRef: {
-          id: "artifact-final",
-          kind: "FINAL_RESULT",
-          visibility: "CUSTOMER",
-        },
-        sessionId: BASELINE_SESSION_ID,
-        status: "IDLE",
-      });
-    }
-    if (
-      url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)
-    ) {
-      return jsonResponse({
-        partialResultArtifactRef: {
-          id: "artifact-partial",
-          kind: "CHILD_RESULT",
-          visibility: "CUSTOMER",
-        },
-        phase: "review",
-        sessionId: BASELINE_SESSION_ID,
-      });
-    }
-    if (
-      url.endsWith(
-        `/factory-sessions/${BASELINE_SESSION_ID}/dispatches/${BASELINE_DISPATCH_ID}`,
-      )
-    ) {
-      return dispatchDetailResponse.promise;
-    }
-    return new Response("not found", { status: 404 });
-  });
-
-  return dispatchDetailResponse;
 }

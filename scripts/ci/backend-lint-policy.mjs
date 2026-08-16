@@ -5,13 +5,6 @@ export const BACKEND_LINT_BASELINE_SOURCE =
 // checker is allowed only while its observed count remains at or below the
 // recorded count; a clean checker and any unlisted failure remain gated.
 export const BACKEND_LINT_ALLOWANCES = Object.freeze({
-	"ui-deadcode": {
-		baselineViolationCount: 4,
-		reason: "The hosted semantic baseline found four pre-existing unused frontend test-support fixtures.",
-		ownerOrLane: "Frontend dead-code cleanup lane",
-		deadline: "2026-09-30",
-		removalCondition: "Remove the unused fixtures, then delete this allowance when hosted ui-deadcode reports zero violations.",
-	},
 	"backend-size": {
 		baselineViolationCount: 2,
 		reason: "Two pre-existing tests exceed the unchanged 100-line function limit.",
