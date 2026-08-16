@@ -298,13 +298,6 @@ func New(
 	return impl, nil
 }
 
-func normalizeRuntimeMode(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
-	if mode == "" {
-		return interfaces.RuntimeModeBatch
-	}
-	return mode
-}
-
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	if cfg.scheduler != nil {
 		scheduler.ApplyRuntimeConfig(cfg.scheduler, cfg.runtimeConfig)

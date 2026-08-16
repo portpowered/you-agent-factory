@@ -215,11 +215,11 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
-	return adaptRuntimeReplacementBuilder(builder),
+	return builder,
 		instance,
 		spec,
 		lifecycle,
-		adaptRuntimeSidecars(NewRuntimeSidecars(automationService, serviceMode)),
+		NewRuntimeSidecars(automationService, serviceMode),
 		nil
 }
 

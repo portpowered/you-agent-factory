@@ -88,7 +88,7 @@ func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
 	})
 
 	runtime := &SessionRuntime{sessionState: state}
-	binding := factory.NewRuntimeBinding("runtime-bound", bound)
+	binding := factory.RuntimeBinding{}.New("runtime-bound", bound)
 	if err := runtime.BindRuntime("session-bound", binding); err != nil {
 		t.Fatalf("BindRuntime: %v", err)
 	}

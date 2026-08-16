@@ -30,6 +30,14 @@ type runtimeEventSubscriber interface {
 	) (*interfaces.FactoryEventStream, error)
 }
 
+// runtimeDelegateProvider is the narrow handoff used when an activation
+// retains a compatibility wrapper around the concrete Runtime service. Bound
+// capabilities must route widened legacy operations to that concrete service,
+// not to the wrapper that may resolve back through Factory Sessions.
+type runtimeDelegateProvider interface {
+	RuntimeDelegate() factoryruntime.Service
+}
+
 // Root retains process-scoped Factory Runtime dependencies. It is inert until
 // an injected activation operation has initialized and published a complete
 // Runtime delegate.
@@ -241,7 +249,7 @@ func (r *Root) finishActivation(
 		}
 	}
 	bindingService := &boundRuntimeService{root: r, runtimeID: request.RuntimeID}
-	binding := factoryruntime.NewRuntimeBinding(
+	binding := factoryruntime.RuntimeBinding{}.New(
 		request.RuntimeID,
 		bindingService,
 		func(closeCtx context.Context) (factoryruntime.RuntimeDeactivationResult, error) {
@@ -526,7 +534,7 @@ func (r *Root) delegate() factoryruntime.Service {
 		return nil
 	}
 	for _, active := range r.active {
-		return active.service
+		return runtimeDelegate(active.service)
 	}
 	return nil
 }
@@ -541,7 +549,16 @@ func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
 	if active == nil {
 		return nil
 	}
-	return active.service
+	return runtimeDelegate(active.service)
+}
+
+func runtimeDelegate(service factoryruntime.Service) factoryruntime.Service {
+	if provider, ok := service.(runtimeDelegateProvider); ok {
+		if delegate := provider.RuntimeDelegate(); delegate != nil {
+			return delegate
+		}
+	}
+	return service
 }
 
 // boundRuntimeService is the detached capability returned in RuntimeBinding.

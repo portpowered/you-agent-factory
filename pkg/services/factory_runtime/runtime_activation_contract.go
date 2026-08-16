@@ -62,11 +62,13 @@ type runtimeBindingOwner struct {
 	deactivate func(context.Context) (RuntimeDeactivationResult, error)
 }
 
-// NewRuntimeBinding creates a detached binding for a Runtime service view.
-// It performs no lifecycle work and returns a zero binding for incomplete
-// inputs. The identity is retained privately so bindings from distinct
-// activations cannot be confused by the owning root.
-func NewRuntimeBinding(
+// New creates a detached binding for a Runtime service view. It performs no
+// lifecycle work and returns a zero binding for incomplete inputs. The
+// identity is retained privately so bindings from distinct activations cannot
+// be confused by the owning root. Runtime root implementations call this
+// method while publishing an activation; ordinary callers only receive the
+// resulting opaque value.
+func (RuntimeBinding) New(
 	identity string,
 	service Service,
 	deactivate ...func(context.Context) (RuntimeDeactivationResult, error),

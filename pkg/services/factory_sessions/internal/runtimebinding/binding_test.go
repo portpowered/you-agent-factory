@@ -205,7 +205,7 @@ func TestOpaqueBindingRoutesSessionServiceAndCleanup(t *testing.T) {
 	instance := &hostedInstanceFake{service: fallback}
 	handle := newHostedHandleFake(instance)
 	deactivationCalls := 0
-	binding := factory.NewRuntimeBinding(
+	binding := factory.RuntimeBinding{}.New(
 		"runtime-bound",
 		bound,
 		func(context.Context) (factory.RuntimeDeactivationResult, error) {
