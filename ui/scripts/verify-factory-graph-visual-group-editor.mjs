@@ -79,6 +79,7 @@ async function createAndEditVisualGroup(page, viewport) {
   await page
     .locator("[data-factory-visual-group-controls]")
     .waitFor({ state: "visible" });
+  await expectVisualGroupControlsWithinViewport(page, viewport);
 
   const labelField = page.getByRole("textbox", { name: "Group label" });
   await labelField.fill(GROUP_LABEL);
@@ -329,6 +330,46 @@ async function readVisualGroupBounds(page) {
   }
 
   return bounds;
+}
+
+async function expectVisualGroupControlsWithinViewport(page, viewport) {
+  const controls = page.locator("[data-factory-visual-group-controls]");
+  const controlsBox = await controls.boundingBox();
+  const viewportBox = await viewport.boundingBox();
+  const scrollMetrics = await controls.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+
+  if (!controlsBox || !viewportBox) {
+    throw new Error(
+      "Could not measure the visual group controls and graph viewport.",
+    );
+  }
+
+  const controlsBottom = controlsBox.y + controlsBox.height;
+  const viewportBottom = viewportBox.y + viewportBox.height;
+  if (
+    controlsBox.y < viewportBox.y ||
+    controlsBottom > viewportBottom ||
+    controlsBox.x < viewportBox.x ||
+    controlsBox.x + controlsBox.width > viewportBox.x + viewportBox.width
+  ) {
+    throw new Error(
+      `Visual group controls exceed the graph viewport: ${JSON.stringify({
+        controlsBox,
+        viewportBox,
+      })}`,
+    );
+  }
+
+  if (scrollMetrics.scrollHeight <= scrollMetrics.clientHeight) {
+    throw new Error(
+      `Expected the visual group controls to expose vertical scrolling for the overflowing membership panel: ${JSON.stringify(
+        scrollMetrics,
+      )}`,
+    );
+  }
 }
 
 function expectBoundsChanged(before, after, operation) {
