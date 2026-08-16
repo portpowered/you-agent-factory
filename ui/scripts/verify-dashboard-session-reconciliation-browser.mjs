@@ -62,6 +62,17 @@ async function waitForFocusedTab(tab, action, viewportLabel) {
   }
 }
 
+async function enterTablistWithKeyboard(page, tab, viewportLabel) {
+  for (let tabPress = 0; tabPress < 4; tabPress += 1) {
+    if (await tab.evaluate((element) => element === document.activeElement)) {
+      return;
+    }
+    await page.keyboard.press("Tab");
+  }
+
+  await waitForFocusedTab(tab, "Tab", viewportLabel);
+}
+
 async function waitForSelectedTab(tab, navigation, action, viewportLabel) {
   try {
     await expect(tab).toBeVisible();
@@ -71,6 +82,40 @@ async function waitForSelectedTab(tab, navigation, action, viewportLabel) {
     const actualSelectedTabNames = await selectedTabNames(navigation);
     throw new Error(
       `${action} key did not select the expected ${expectedTabName} session tab at ${viewportLabel}. Actually selected tab: ${actualSelectedTabNames}. Playwright error: ${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+async function waitForRovingTabState(navigation, action, viewportLabel) {
+  try {
+    const tabs = navigation.getByRole("tab");
+    const tabCount = await tabs.count();
+    const selectedTabs = navigation.getByRole("tab", { selected: true });
+    const nonSelectedTabs = navigation.getByRole("tab", { selected: false });
+
+    await expect(selectedTabs).toHaveCount(1);
+    await expect(nonSelectedTabs).toHaveCount(tabCount - 1);
+    await expect(navigation.locator('[role="tab"][tabindex="0"]')).toHaveCount(
+      1,
+    );
+    await expect(navigation.locator('[role="tab"][tabindex="-1"]')).toHaveCount(
+      tabCount - 1,
+    );
+    await expect(selectedTabs.first()).toHaveAttribute("tabindex", "0");
+
+    for (let index = 0; index < tabCount; index += 1) {
+      const tab = tabs.nth(index);
+      if ((await tab.getAttribute("aria-selected")) === "true") {
+        await expect(tab).toHaveAttribute("tabindex", "0");
+      } else {
+        await expect(tab).toHaveAttribute("aria-selected", "false");
+        await expect(tab).toHaveAttribute("tabindex", "-1");
+      }
+    }
+  } catch (error) {
+    throw new Error(
+      `${action} key found an invalid selected/roving tab state at ${viewportLabel}. Playwright error: ${errorMessage(error)}`,
       { cause: error },
     );
   }
@@ -126,13 +171,17 @@ async function verifyViewport(browser, viewport) {
     const tabs = navigation.getByRole("tab");
     const firstTab = tabs.first();
     const lastTab = tabs.last();
-    await firstTab.focus();
+    await waitForSelectedTab(firstTab, navigation, "Initial", viewport.label);
+    await waitForRovingTabState(navigation, "Initial", viewport.label);
+    await enterTablistWithKeyboard(page, firstTab, viewport.label);
     await waitForFocusedTab(firstTab, "End", viewport.label);
     await page.keyboard.press("End");
     await waitForSelectedTab(lastTab, navigation, "End", viewport.label);
+    await waitForRovingTabState(navigation, "End", viewport.label);
     await waitForFocusedTab(lastTab, "Home", viewport.label);
     await page.keyboard.press("Home");
     await waitForSelectedTab(firstTab, navigation, "Home", viewport.label);
+    await waitForRovingTabState(navigation, "Home", viewport.label);
 
     await page.getByRole("button", { name: "Fail refresh" }).click();
     await page
