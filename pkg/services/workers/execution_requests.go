@@ -74,6 +74,10 @@ const (
 type RunnerSelectionSource string
 
 const (
+	// ExecutorProviderACP is the authored execution-mechanism marker for an
+	// ACP worker. The concrete Providers identity is carried separately in
+	// ModelProvider and is resolved by Providers.
+	ExecutorProviderACP                                       = "ACP"
 	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
 	RunnerSelectionSourceFactory        RunnerSelectionSource = "factory"
 	RunnerSelectionSourceLegacyProvider RunnerSelectionSource = "legacy_provider"

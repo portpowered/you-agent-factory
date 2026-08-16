@@ -5,6 +5,7 @@ package construction
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -408,7 +409,7 @@ func (s *Service) agentRunner(
 	providerOverride providers.Service,
 	inferenceProgressPublisher workers.ProgressPublisher,
 ) (workers.Runner, error) {
-	usesNamedExecutorProvider := def != nil && workers.UsesNamedProvider(def.ExecutorProvider, def.ModelProvider)
+	usesNamedExecutorProvider := def != nil && namedExecutorProvider(def.ExecutorProvider, def.ModelProvider)
 	if providerOverride != nil && !usesNamedExecutorProvider {
 		return workerexecutor.RunnerFromProvider(providerOverride), nil
 	}
@@ -425,6 +426,14 @@ func (s *Service) agentRunner(
 		effectiveSkipPermissions,
 		inferenceProgressPublisher,
 	)
+}
+
+func namedExecutorProvider(executorProvider, modelProvider string) bool {
+	trimmed := strings.TrimSpace(executorProvider)
+	if strings.EqualFold(trimmed, workerexecution.ExecutorProviderACP) {
+		return strings.TrimSpace(modelProvider) != ""
+	}
+	return trimmed != "" && !strings.EqualFold(trimmed, "SCRIPT_WRAP")
 }
 
 type registryRunner struct {

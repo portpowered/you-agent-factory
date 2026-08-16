@@ -90,6 +90,84 @@ func TestWorkstationExecutorUsesProvidersRootForSelection(t *testing.T) {
 	}
 }
 
+func TestWorkstationExecutorTranslatesAuthoredProviderMechanismsForProviders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		workstation       string
+		worker            *interfaces.FactoryWorkerConfig
+		wantInput         string
+		wantModelProvider string
+		wantErr           string
+	}{
+		{
+			name:              "ACP uses concrete model provider",
+			workstation:       "codex",
+			worker:            &interfaces.FactoryWorkerConfig{ExecutorProvider: workerexecution.ExecutorProviderACP, ModelProvider: "cursor-acp"},
+			wantInput:         "cursor-acp",
+			wantModelProvider: "cursor-acp",
+		},
+		{
+			name:              "named executor provider overrides workstation",
+			workstation:       "codex",
+			worker:            &interfaces.FactoryWorkerConfig{ExecutorProvider: "cursor-acp", ModelProvider: "codex"},
+			wantInput:         "cursor-acp",
+			wantModelProvider: "codex",
+		},
+		{
+			name:              "script wrap keeps workstation candidate",
+			workstation:       "antigravity",
+			worker:            &interfaces.FactoryWorkerConfig{ExecutorProvider: "SCRIPT_WRAP", ModelProvider: "codex"},
+			wantInput:         "antigravity",
+			wantModelProvider: "codex",
+		},
+		{
+			name:        "missing ACP provider is rejected",
+			workstation: "codex",
+			worker:      &interfaces.FactoryWorkerConfig{ExecutorProvider: workerexecution.ExecutorProviderACP},
+			wantErr:     "modelProvider",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			selectionInput, err := runnerSelectionInput(test.workstation, test.worker)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("runnerSelectionInput() error = %v, want %q", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("runnerSelectionInput() error = %v", err)
+			}
+			provider := &workstationSelectionProvider{}
+			executor := &WorkstationExecutor{
+				DefaultRunnerID: "factory-provider",
+				Providers:       provider,
+			}
+			selection, err := executor.resolveRunnerSelection(t.Context(), selectionInput, test.wantModelProvider)
+			if err != nil {
+				t.Fatalf("resolveRunnerSelection() error = %v", err)
+			}
+			if selection.RunnerID != "antigravity" || selection.Source != workerexecution.RunnerSelectionSourceWorkstation {
+				t.Fatalf("selection = %#v, want Providers-root selection", selection)
+			}
+			wantRequest := providers.ResolveSelectionRequest{
+				Workstation:   test.wantInput,
+				Factory:       "factory-provider",
+				ModelProvider: test.wantModelProvider,
+			}
+			if provider.request != wantRequest {
+				t.Fatalf("Providers selection request = %#v, want %#v", provider.request, wantRequest)
+			}
+		})
+	}
+}
+
 type workstationSelectionProvider struct {
 	testutil.ProviderServiceAdapter
 	request providers.ResolveSelectionRequest

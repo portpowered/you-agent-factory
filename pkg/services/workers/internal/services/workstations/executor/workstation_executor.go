@@ -491,12 +491,10 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	requestContext *resolvedWorkstationExecutionContext,
 	start time.Time,
 ) *workerexecution.WorkResult {
-	selectionIdentity := workstationDef.Runner
-	if identity, identityErr := workerexecution.RunnerIdentityForWorker(workerDef.ExecutorProvider, workerDef.ModelProvider); identityErr != nil {
+	selectionIdentity, identityErr := runnerSelectionInput(workstationDef.Runner, workerDef)
+	if identityErr != nil {
 		failed := worktree.FailedWorkResultFromPreparation(dispatch.DispatchID, dispatch.TransitionID, we.Now().Sub(start), identityErr)
 		return &failed
-	} else if identity != "" {
-		selectionIdentity = identity
 	}
 	selection, err := we.resolveRunnerSelection(ctx, selectionIdentity, workerDef.ModelProvider)
 	if err != nil {
@@ -678,7 +676,18 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Cont
 		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection, err := we.resolveRunnerSelection(ctx, workstationDef.Runner, workerDef.ModelProvider)
+	selectionInput, err := runnerSelectionInput(workstationDef.Runner, workerDef)
+	if err != nil {
+		failed := workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        "provider selection failed: " + err.Error(),
+			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+		}
+		return workerexecution.WorkstationExecutionRequest{}, &failed
+	}
+	selection, err := we.resolveRunnerSelection(ctx, selectionInput, workerDef.ModelProvider)
 	if err != nil {
 		failed := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -718,6 +727,30 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(ctx context.Cont
 		WorkingDirectory:         requestContext.WorkingDirectory,
 		WorkingDirectoryAuthored: workstationDef.WorkingDirectory != "",
 	}, nil
+}
+
+// runnerSelectionInput translates the authored execution mechanism into the
+// explicit candidate sent to Providers. The candidate is not canonicalized
+// here; Providers remains the only identity and precedence authority.
+func runnerSelectionInput(
+	workstationRunner string,
+	workerDef *interfaces.FactoryWorkerConfig,
+) (string, error) {
+	if workerDef == nil {
+		return workstationRunner, nil
+	}
+	executorProvider := strings.TrimSpace(workerDef.ExecutorProvider)
+	switch {
+	case strings.EqualFold(executorProvider, workerexecution.ExecutorProviderACP):
+		if strings.TrimSpace(workerDef.ModelProvider) == "" {
+			return "", fmt.Errorf("executorProvider ACP requires modelProvider to name an ACP integration")
+		}
+		return strings.TrimSpace(workerDef.ModelProvider), nil
+	case executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP"):
+		return executorProvider, nil
+	default:
+		return workstationRunner, nil
+	}
 }
 
 func (we *WorkstationExecutor) resolveRunnerSelection(

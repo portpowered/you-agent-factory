@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-const ExecutorProviderACP = "ACP"
-
 // RunnerIdentityForWorker maps the authored execution mechanism and provider
 // identity into the Providers catalog identity selected at runtime.
 func RunnerIdentityForWorker(executorProvider, modelProvider string) (string, error) {

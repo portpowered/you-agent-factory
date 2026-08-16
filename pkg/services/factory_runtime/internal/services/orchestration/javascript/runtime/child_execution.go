@@ -86,8 +86,8 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 	req.Model = firstWorkerValue(req.Model, preset.Model, config.DefaultModel)
 	req.ReasoningEffort = firstWorkerValue(req.ReasoningEffort, preset.ReasoningEffort)
 	if strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), workerexecution.ExecutorProviderACP) {
-		if _, err := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider); err != nil {
-			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has invalid ACP provider selection: %w", err)
+		if strings.TrimSpace(req.ModelProvider) == "" {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has invalid ACP provider selection: modelProvider is required")
 		}
 		req.ExecutorProvider = workerexecution.ExecutorProviderACP
 		req.ModelProvider = strings.TrimSpace(req.ModelProvider)

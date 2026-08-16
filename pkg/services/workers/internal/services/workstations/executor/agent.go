@@ -473,9 +473,6 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 	if workerDef != nil {
 		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
 			req.ExecutorProvider = executorProvider
-			if identity, err := workerexecution.RunnerIdentityForWorker(executorProvider, workerDef.ModelProvider); err == nil && identity != "" {
-				req.RunnerID = identity
-			}
 		}
 		req.Model = workerDef.Model
 		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, workerexecution.ResolvedRunnerSelection{
@@ -489,6 +486,11 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		if workerDef.SessionID != "" {
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, workerexecution.RunnerOptionalCapabilitySessionResume)
 		}
+	}
+	if strings.TrimSpace(req.RunnerID) == "" {
+		// Workstation selection is resolved before this request reaches the
+		// runner. Keep a provider-backed fallback for direct package fixtures.
+		req.RunnerID = strings.TrimSpace(req.ModelProvider)
 	}
 	return req
 }

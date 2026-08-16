@@ -128,11 +128,10 @@ func providerInvocationRequest(
 ) workerexecution.ProviderInferenceRequest {
 	runnerID := strings.TrimSpace(request.RunnerID)
 	if runnerID == "" {
-		if identity, err := workerexecution.RunnerIdentityForWorker(
-			request.ExecutorProvider, request.ModelProvider,
-		); err == nil {
-			runnerID = identity
-		}
+		// Provider invocation receives a detached request whose runner/provider
+		// selection was already resolved by the caller. ModelProvider is the
+		// final provider-bound fallback for older request fixtures.
+		runnerID = strings.TrimSpace(request.ModelProvider)
 	}
 	return workerexecution.ProviderInferenceRequest{
 		Dispatch:           work.CloneWorkDispatch(request.Dispatch),

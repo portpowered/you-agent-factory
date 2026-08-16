@@ -291,9 +291,6 @@ func agentRunInferenceRequest(
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 	}
-	if identity, err := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider); err == nil && identity != "" {
-		req.RunnerID = identity
-	}
 	if strings.TrimSpace(req.RunnerID) == "" {
 		req.RunnerID = strings.TrimSpace(req.ModelProvider)
 	}
