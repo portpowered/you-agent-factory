@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { expect } from "playwright/test";
 
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
@@ -9,14 +10,69 @@ const viewports = [
   { height: 900, label: "desktop", width: 1440 },
 ];
 
-async function waitForSelectedTab(tab, failureMessage) {
+function errorMessage(error) {
+  return error instanceof Error && error.message
+    ? error.message
+    : String(error);
+}
+
+async function accessibleTabName(tab) {
   try {
-    await tab
-      .locator("xpath=..")
-      .getByRole("tab", { selected: true })
-      .waitFor({ state: "visible" });
+    return await tab.evaluate((element) => {
+      const ariaLabel = element.getAttribute("aria-label")?.trim();
+      if (ariaLabel) {
+        return ariaLabel;
+      }
+
+      const textContent = element.textContent?.replace(/\s+/g, " ").trim();
+      return textContent || "(unnamed tab)";
+    });
   } catch {
-    throw new Error(failureMessage);
+    return "(tab name unavailable)";
+  }
+}
+
+async function selectedTabNames(navigation) {
+  try {
+    const selectedTabs = navigation.getByRole("tab", { selected: true });
+    const selectedTabCount = await selectedTabs.count();
+    if (selectedTabCount === 0) {
+      return "(none could be identified)";
+    }
+
+    const names = [];
+    for (let index = 0; index < selectedTabCount; index += 1) {
+      names.push(await accessibleTabName(selectedTabs.nth(index)));
+    }
+    return names.join(", ");
+  } catch {
+    return "(none could be identified)";
+  }
+}
+
+async function waitForFocusedTab(tab, action, viewportLabel) {
+  try {
+    await expect(tab).toBeFocused();
+  } catch (error) {
+    const expectedTabName = await accessibleTabName(tab);
+    throw new Error(
+      `${action} key expected the ${expectedTabName} session tab to be focused before the keypress at ${viewportLabel}. Playwright error: ${errorMessage(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+async function waitForSelectedTab(tab, navigation, action, viewportLabel) {
+  try {
+    await expect(tab).toBeVisible();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+  } catch (error) {
+    const expectedTabName = await accessibleTabName(tab);
+    const actualSelectedTabNames = await selectedTabNames(navigation);
+    throw new Error(
+      `${action} key did not select the expected ${expectedTabName} session tab at ${viewportLabel}. Actually selected tab: ${actualSelectedTabNames}. Playwright error: ${errorMessage(error)}`,
+      { cause: error },
+    );
   }
 }
 
@@ -68,17 +124,15 @@ async function verifyViewport(browser, viewport) {
     }
 
     const tabs = navigation.getByRole("tab");
-    await tabs.first().focus();
+    const firstTab = tabs.first();
+    const lastTab = tabs.last();
+    await firstTab.focus();
+    await waitForFocusedTab(firstTab, "End", viewport.label);
     await page.keyboard.press("End");
-    await waitForSelectedTab(
-      tabs.last(),
-      `End key did not select the last session at ${viewport.label}.`,
-    );
+    await waitForSelectedTab(lastTab, navigation, "End", viewport.label);
+    await waitForFocusedTab(lastTab, "Home", viewport.label);
     await page.keyboard.press("Home");
-    await waitForSelectedTab(
-      tabs.first(),
-      `Home key did not restore the first session at ${viewport.label}.`,
-    );
+    await waitForSelectedTab(firstTab, navigation, "Home", viewport.label);
 
     await page.getByRole("button", { name: "Fail refresh" }).click();
     await page
