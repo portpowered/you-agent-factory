@@ -123,9 +123,7 @@ async function createAndEditVisualGroup(page, viewport) {
   const boundsAfterResize = await readVisualGroupBounds(page);
   expectBoundsChanged(boundsBeforeResize, boundsAfterResize, "resize");
 
-  await page
-    .getByRole("button", { name: "Fit to members" })
-    .click({ force: true });
+  await page.getByRole("button", { name: "Fit to members" }).click();
   const boundsAfterFit = await readVisualGroupBounds(page);
   expectFiniteBounds(boundsAfterFit, "fit group");
 

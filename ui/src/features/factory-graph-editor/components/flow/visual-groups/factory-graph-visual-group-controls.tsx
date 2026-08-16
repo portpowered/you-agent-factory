@@ -72,7 +72,8 @@ export function FactoryGraphVisualGroupControls({
   return (
     <section
       aria-label={groupAriaLabel}
-      className="absolute bottom-4 right-4 z-20 max-w-sm rounded-xl border border-outline bg-surface-container-high p-3 shadow-sm"
+      // tailwind-exception: intrinsic-sizing
+      className="absolute bottom-4 right-4 z-20 max-h-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-xl border border-outline bg-surface-container-high p-3 shadow-sm"
       data-factory-visual-group-controls=""
     >
       <div className="grid gap-2">
