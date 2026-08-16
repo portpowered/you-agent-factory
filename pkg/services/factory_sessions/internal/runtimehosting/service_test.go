@@ -400,7 +400,7 @@ func (runtime *cancellationLifecycleRuntime) StopLifecycle(context.Context) erro
 
 func (*cancellationLifecycleRuntime) FailStartup(err error) error { return err }
 
-func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 func TestServiceRunCancellationStopsRuntimeBeforeTransport(t *testing.T) {
 	t.Parallel()
