@@ -95,7 +95,6 @@ func TestMapResidualPackageSkipsOwnerAndEdgesPackages(t *testing.T) {
 
 	for _, path := range []string{
 		"pkg/services/work",
-		"pkg/services/workers/internal/providercompat",
 		"pkg/services/edges",
 	} {
 		if _, ok := mapResidualPackage(path); ok {

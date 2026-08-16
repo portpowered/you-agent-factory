@@ -160,14 +160,6 @@ var workersCommittedOwnerPackageMappingCases = []committedOwnerPackageMappingCas
 			Destination: "workers/internal/services/runners",
 		},
 	},
-	{
-		path: "pkg/services/workers/internal/providercompat_test",
-		want: PackageMapping{
-			PackagePath: "pkg/services/workers/internal/providercompat_test",
-			Disposition: DispositionMove,
-			Destination: "providers/internal/services/execution",
-		},
-	},
 }
 
 func TestMapCommittedOwnerPackageWorkersMoveDestinations(t *testing.T) {

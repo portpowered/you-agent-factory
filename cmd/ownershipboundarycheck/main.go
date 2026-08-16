@@ -60,12 +60,10 @@ var deletionGates = map[string]string{
 // performs the effect. Platform may implement those ports but may not depend on
 // a composed service, service root, or implementation package.
 //
-// Providers Execution owns the durable provider effect contract. The second
-// entry is a current Providers-owned implementation compatibility path, not a
-// Workers ownership exception.
+// Providers Execution owns the durable provider effect contract. Keep this
+// allowlist limited to the canonical Providers-owned leaf.
 var approvedPlatformLeafPorts = map[string]struct{}{
-	modulePath + "/pkg/services/providers/execution/inferencecontract":             {},
-	modulePath + "/pkg/services/workers/internal/providercompat/inferencecontract": {},
+	modulePath + "/pkg/services/providers/execution/inferencecontract": {},
 }
 
 // approvedPlatformAdapterPorts records narrow source-to-owner exceptions for a

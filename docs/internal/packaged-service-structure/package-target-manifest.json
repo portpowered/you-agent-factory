@@ -480,9 +480,6 @@
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
     "pkg/services/workers/internal/interface",
-    "pkg/services/workers/internal/providercompat",
-    "pkg/services/workers/internal/providercompat/agy",
-    "pkg/services/workers/internal/providercompat/inferencecontract",
     "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/inference",
@@ -2779,21 +2776,6 @@
       "packagePath": "pkg/services/workers/internal/interface",
       "disposition": "move",
       "destination": "workers/internal"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/agy",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/providercompat/inferencecontract",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
     },
     {
       "packagePath": "pkg/services/workers/internal/service",

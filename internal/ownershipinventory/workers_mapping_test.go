@@ -149,31 +149,9 @@ var workersMappingCases = []packageMappingCase{
 		},
 	},
 	{
-		path: "pkg/services/workers/internal/providercompat/agy",
-		wantMove: &ownershipinventory.PackageRow{
-			PackagePath:       "pkg/services/workers/internal/providercompat/agy",
-			Disposition:       ownershipinventory.DispositionMove,
-			Destination:       "providers",
-			DestinationKind:   ownershipinventory.DestinationKindOwner,
-			Successor:         "pkg/services/providers",
-			DeletionCondition: "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)",
-		},
-	},
-	{
 		path: "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 		wantMove: &ownershipinventory.PackageRow{
 			PackagePath:       "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-			Disposition:       ownershipinventory.DispositionMove,
-			Destination:       "providers",
-			DestinationKind:   ownershipinventory.DestinationKindOwner,
-			Successor:         "pkg/services/providers",
-			DeletionCondition: "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)",
-		},
-	},
-	{
-		path: "pkg/services/workers/internal/providercompat_test",
-		wantMove: &ownershipinventory.PackageRow{
-			PackagePath:       "pkg/services/workers/internal/providercompat_test",
 			Disposition:       ownershipinventory.DispositionMove,
 			Destination:       "providers",
 			DestinationKind:   ownershipinventory.DestinationKindOwner,

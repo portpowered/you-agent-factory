@@ -94,11 +94,7 @@ func MapPackage(packagePath string) (PackageRow, error) {
 func explicitPackageMapping(packagePath string) (PackageRow, bool) {
 	switch {
 	case
-		packagePath == "pkg/services/workers/internal/providercompat" ||
-			strings.HasPrefix(packagePath, "pkg/services/workers/internal/providercompat/") ||
-			packagePath == "pkg/services/workers/internal/providercompat_test" ||
-			strings.HasPrefix(packagePath, "pkg/services/workers/internal/providercompat_test/") ||
-			packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty" ||
+		packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty" ||
 			strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/"):
 		return moveRow(
 			packagePath,

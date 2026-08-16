@@ -735,33 +735,6 @@ type InferenceProvider interface {
 	}
 }
 
-func TestRunAllowsProvidersExecutionCompatibilityDeclaration(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, providersExecutionCompatibilityPackage+"/contract.go", `package inferencecontract
-
-import "context"
-
-type Provider interface {
-	Infer(context.Context, string) (string, error)
-}
-
-// Deliberate fixture: generalized nested-expression inspection preserves this
-// exact Providers-owned compatibility package.
-type Dependencies struct {
-	ProviderOverride interface {
-		Infer(context.Context, string) (string, error)
-	}
-}
-`)
-
-	stderr := &bytes.Buffer{}
-	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want Providers Execution compatibility declaration allowed; stderr=%q", err, stderr.String())
-	}
-}
-
 func TestRunRejectsCompetingProviderCatalogAbstraction(t *testing.T) {
 	t.Parallel()
 

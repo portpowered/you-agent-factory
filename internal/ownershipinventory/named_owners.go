@@ -93,12 +93,6 @@ func committedNamedOwnerConfirmations() []NamedOwnerConfirmation {
 					Disposition:   DispositionMove,
 					Note:          "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root.",
 				},
-				{
-					PackagePrefix: "pkg/services/workers/internal/providercompat",
-					Destination:   "providers",
-					Disposition:   DispositionMove,
-					Note:          "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners.",
-				},
 			},
 			Note: "Add Providers as the singular catalog+execution owner. Capabilities remain Catalog queries; native adapters remain responsibility clusters—not competing provider catalog/execution top-level abstractions.",
 		},
