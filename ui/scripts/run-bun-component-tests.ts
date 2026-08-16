@@ -28,7 +28,9 @@ function runComponentTests(files: string[]): void {
       "test",
       "--preload",
       PRELOAD_PATH,
-      "--reporter=dots",
+      // Bun's default console reporter includes each failing file, full test
+      // name, and assertion diff. The dots reporter reduces a failing lane to
+      // a bare count, which makes the component job non-actionable.
       "--timeout=10000",
       ...files,
     ],
