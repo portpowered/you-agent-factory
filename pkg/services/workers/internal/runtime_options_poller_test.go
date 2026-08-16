@@ -268,6 +268,102 @@ func TestBuildRuntimeExecutorsLeavesInferenceWorkersToDetachedService(t *testing
 	}
 }
 
+func TestBuildRuntimeExecutorsLeavesAgentWorkersToDetachedService(t *testing.T) {
+	t.Parallel()
+
+	worker := &interfaces.FactoryWorkerConfig{
+		Name: "agent-worker", Type: interfaces.WorkerTypeAgent,
+		Model: "agent-model", ModelProvider: "codex",
+	}
+	factoryConfig := &interfaces.FactoryConfig{
+		Workers: []interfaces.FactoryWorkerConfig{*worker},
+	}
+	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{
+		Factory: factoryConfig,
+		Workers: map[string]*interfaces.FactoryWorkerConfig{worker.Name: worker},
+	}
+	builder := &pollerOmissionBuilder{t: t}
+	service := &Service{
+		executorBuilder:   builder,
+		clock:             time.Now,
+		executableLocator: stubExecutableLocator{},
+	}
+
+	executors, err := service.BuildRuntimeExecutors(
+		runtimeConfig,
+		factoryConfig,
+		"",
+		nil,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeExecutors() error = %v", err)
+	}
+	if builder.calls != 0 {
+		t.Fatalf("executor builder calls = %d, want zero for detached agent execution", builder.calls)
+	}
+	if _, ok := executors[worker.Name]; ok {
+		t.Fatalf("executors[%q] present, want agent execution owned by detached service", worker.Name)
+	}
+}
+
+func TestBuildRuntimeExecutorsLeavesLegacyModelWorkersToDetachedService(t *testing.T) {
+	t.Parallel()
+
+	worker := &interfaces.FactoryWorkerConfig{
+		Name: "legacy-model-worker", Type: interfaces.WorkerTypeModel,
+		Model: "model", ModelProvider: "codex",
+	}
+	factoryConfig := &interfaces.FactoryConfig{
+		Workers: []interfaces.FactoryWorkerConfig{*worker},
+	}
+	runtimeConfig := runtimefixtures.RuntimeConfigLookupFixture{
+		Factory: factoryConfig,
+		Workers: map[string]*interfaces.FactoryWorkerConfig{worker.Name: worker},
+	}
+	builder := &pollerOmissionBuilder{t: t}
+	service := &Service{
+		executorBuilder:   builder,
+		clock:             time.Now,
+		executableLocator: stubExecutableLocator{},
+	}
+
+	executors, err := service.BuildRuntimeExecutors(
+		runtimeConfig,
+		factoryConfig,
+		"",
+		nil,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeExecutors() error = %v", err)
+	}
+	if builder.calls != 0 {
+		t.Fatalf("executor builder calls = %d, want zero for detached model execution", builder.calls)
+	}
+	if _, ok := executors[worker.Name]; ok {
+		t.Fatalf("executors[%q] present, want legacy model execution owned by detached service", worker.Name)
+	}
+}
+
 type pollerOmissionBuilder struct {
 	t     *testing.T
 	calls int

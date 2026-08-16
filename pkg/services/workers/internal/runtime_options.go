@@ -138,10 +138,14 @@ func (s *Service) buildConfiguredRuntimeWorkers(
 		if definition.Type == interfaces.WorkerTypeScript {
 			continue
 		}
-		// Inference attempts are assembled by the request-scoped Execute
-		// service and its private inference runner. Do not retain a per-worker
-		// Workstation executor for them.
-		if definition.Type == interfaces.WorkerTypeInference {
+		// Provider-backed attempts are assembled by the request-scoped Execute
+		// service and its private runner registry. Do not retain a per-worker
+		// Workstation executor for them. MODEL_WORKER is the legacy authored
+		// spelling for inference and AGENT_WORKER is the agent-loop route; both
+		// enter the same detached boundary in production.
+		if definition.Type == interfaces.WorkerTypeModel ||
+			definition.Type == interfaces.WorkerTypeInference ||
+			definition.Type == interfaces.WorkerTypeAgent {
 			continue
 		}
 		result, err := s.executorBuilder.Build(
