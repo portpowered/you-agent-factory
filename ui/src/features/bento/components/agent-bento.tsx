@@ -12,6 +12,7 @@ import { cn } from "../../../lib/cn";
 import type { DashboardCardAsyncState } from "../../dashboard/lib/dashboard-card-state";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 import { DashboardCardStateBanner } from "./card-state/dashboard-card-state-banner";
+import { DashboardCardErrorBoundary } from "./dashboard-card-error-boundary";
 import {
   DashboardLayoutKeyboardContext,
   type DashboardLayoutKeyboardContextValue,
@@ -354,17 +355,21 @@ export function AgentBentoLayout({
                   : null
               }
             >
-              {card.cardState ? (
-                <div className="flex h-full min-w-0 flex-col gap-1">
-                  <DashboardCardStateBanner
-                    locale={locale}
-                    state={card.cardState}
-                  />
-                  <div className="min-h-0 min-w-0 flex-1">{card.children}</div>
-                </div>
-              ) : (
-                card.children
-              )}
+              <DashboardCardErrorBoundary locale={locale}>
+                {card.cardState ? (
+                  <div className="flex h-full min-w-0 flex-col gap-1">
+                    <DashboardCardStateBanner
+                      locale={locale}
+                      state={card.cardState}
+                    />
+                    <div className="min-h-0 min-w-0 flex-1">
+                      {card.children}
+                    </div>
+                  </div>
+                ) : (
+                  card.children
+                )}
+              </DashboardCardErrorBoundary>
             </DashboardLayoutKeyboardContext.Provider>
           </div>
         ))}
