@@ -1,17 +1,10 @@
 export const BACKEND_LINT_BASELINE_SOURCE =
-	"Hosted Backend Lint run 31873961077 on 2026-08-15 (semantic baseline observed on rebased head 3e625b9a10f3edc9550786d26798cce165d7adc6)";
+	"Hosted Backend Lint run 31974329925 on 2026-08-16 (semantic baseline observed on rebased head a4b25a57198454083670ae632d0111502e073244)";
 
 // These are measured current-main failures, not extra capacity. A failing
 // checker is allowed only while its observed count remains at or below the
 // recorded count; a clean checker and any unlisted failure remain gated.
 export const BACKEND_LINT_ALLOWANCES = Object.freeze({
-	"package-target-manifest-check": {
-		baselineViolationCount: 5,
-		reason: "The current package inventory omits five production package entries from the live tree, including the factory_definitions runtime_snapshot migration paths.",
-		ownerOrLane: "Factory Definitions package inventory remediation lane",
-		deadline: "2026-10-15",
-		removalCondition: "Reconcile the package inventory with the production tree, then delete this allowance when hosted package-target-manifest-check passes.",
-	},
 	"packaged-factory-consumption-check": {
 		baselineViolationCount: 1,
 		reason: "The migration-ledger matrix has one direct packaged-factories import instead of using the catalog boundary.",
@@ -20,15 +13,15 @@ export const BACKEND_LINT_ALLOWANCES = Object.freeze({
 		removalCondition: "Route the matrix through the Factory Definitions catalog boundary, then delete this allowance when hosted packaged-factory-consumption-check passes.",
 	},
 	"ownership-inventory-check": {
-		baselineViolationCount: 16,
-		reason: "The 2026-08-08 packaged-service-structure migration debt has 9 missing package entries, 5 missing cross-service edges, and 2 unexpected edges.",
+		baselineViolationCount: 5,
+		reason: "The 2026-08-16 hosted baseline reports 5 existing ownership-inventory violations from packaged-service-structure migration debt.",
 		ownerOrLane: "Packaged-service structure migration / ownership inventory lane",
 		deadline: "2026-10-31",
 		removalCondition: "Reconcile the migrated package and edge inventory, then delete this allowance when hosted ownership-inventory-check passes.",
 	},
 	deadcode: {
-		baselineViolationCount: 580,
-		reason: "The hosted baseline reports 580 existing dead-code findings against the repository baseline.",
+		baselineViolationCount: 562,
+		reason: "The 2026-08-16 hosted baseline reports 562 existing dead-code findings against the repository baseline.",
 		ownerOrLane: "Repository dead-code cleanup lane",
 		deadline: "2026-12-31",
 		removalCondition: "Remove or review the existing findings and update the source baseline intentionally, then delete this allowance when hosted deadcode reports zero drift.",
