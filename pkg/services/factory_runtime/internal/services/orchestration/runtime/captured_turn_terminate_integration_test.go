@@ -451,7 +451,7 @@ func (l *capturedTurnTargetLifecycle) cleanupCallsSnapshot() []workers.Workstati
 }
 
 type capturedTurnTargetHostedInstance struct {
-	factoryruntime.HostedInstance
+	factoryruntime.RuntimeRecord
 	runtime factoryruntime.Service
 }
 

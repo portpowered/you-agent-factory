@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	_ factoryruntime.HostedInstance = (*factoryhost.Bundle)(nil)
-	_ factoryruntime.HostedLedger   = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
+	_ factoryruntime.RuntimeRecord = (*factoryhost.Bundle)(nil)
+	_ recordings.RuntimeLedger     = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
 )
 
 // TestRuntimeRecordingsConsumerBehaviorPreserved proves CUT-RUN-REC story 004:
@@ -57,7 +57,7 @@ func testHostedRuntimeExposesRecordingsRootCapabilities(t *testing.T) {
 		nil,
 	)
 
-	var hosted factoryruntime.HostedInstance = bundle
+	var hosted factoryruntime.RuntimeRecord = bundle
 	if hosted.RecordingLedger() != ledger {
 		t.Fatalf("RecordingLedger = %T, want root ledger fake", hosted.RecordingLedger())
 	}

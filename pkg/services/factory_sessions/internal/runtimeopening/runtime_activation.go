@@ -24,8 +24,21 @@ import (
 // activation result that published the service.
 type activatedRuntimeService struct {
 	factoryruntime.Service
-	factoryruntime.APIFactory
+	runtimeWorkSubmitter
+	runtimeEventSubscriber
 	products runtimeProducts
+}
+
+type runtimeWorkSubmitter interface {
+	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+}
+
+type runtimeEventSubscriber interface {
+	SubscribeFactoryEvents(
+		context.Context,
+		*factorydefinitions.FactoryEventReconnectCursor,
+		factorydefinitions.FactoryEventReconnectScope,
+	) (*factorydefinitions.FactoryEventStream, error)
 }
 
 func (s *activatedRuntimeService) runtimeProducts() runtimeProducts {
@@ -51,12 +64,21 @@ func (f *Factory) activateRuntime(
 	if service == nil {
 		return nil, fmt.Errorf("activate Factory Runtime: opened runtime service is required")
 	}
-	legacyObservation, ok := service.(factoryruntime.APIFactory)
+	legacySubmission, ok := service.(runtimeWorkSubmitter)
 	if !ok {
-		return nil, fmt.Errorf("activate Factory Runtime: opened runtime legacy observation is required")
+		return nil, fmt.Errorf("activate Factory Runtime: opened runtime work submission is required")
+	}
+	legacyEvents, ok := service.(runtimeEventSubscriber)
+	if !ok {
+		return nil, fmt.Errorf("activate Factory Runtime: opened runtime event subscription is required until Recordings migration")
 	}
 	return &factoryruntime.RuntimeActivation{
-		Service: &activatedRuntimeService{Service: service, APIFactory: legacyObservation, products: products},
+		Service: &activatedRuntimeService{
+			Service:                service,
+			runtimeWorkSubmitter:   legacySubmission,
+			runtimeEventSubscriber: legacyEvents,
+			products:               products,
+		},
 		Close: func(closeCtx context.Context) error {
 			if products.application.Resources.Close == nil {
 				return nil

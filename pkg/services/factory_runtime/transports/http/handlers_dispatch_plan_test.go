@@ -20,7 +20,7 @@ func TestPlanDispatch_ForwardsDecodedFieldsToRoot(t *testing.T) {
 			got = req
 			return factoryruntime.PlanDispatchResult{
 				Outcome:       factoryruntime.DispatchPlanOutcomeAccepted,
-				DispatchID:      req.DispatchID,
+				DispatchID:    req.DispatchID,
 				CorrelationID: req.CorrelationID,
 			}, nil
 		},

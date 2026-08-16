@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -256,7 +256,7 @@ func TestFactoryEventHistory_GeneratedBatchPreservesMetadataAndOrdering(t *testi
 	// TestReconstructFactoryWorldState_ResolvesBatchRelationSourcesByWorkName.
 }
 
-func newSafeBoundaryRuntime(t *testing.T) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger) {
+func newSafeBoundaryRuntime(t *testing.T) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger) {
 	t.Helper()
 	f, history, err := newTestFactoryWithScriptedLedger(
 		withNet(buildSimpleNetWithFailureArc()),
@@ -270,7 +270,7 @@ func newSafeBoundaryRuntime(t *testing.T) (factory.Factory, *recordingfixtures.S
 	return f, history
 }
 
-func submitSafeBoundaryRequests(t *testing.T, f factory.Factory) {
+func submitSafeBoundaryRequests(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{
 		{WorkID: "work-safe-success", WorkTypeID: "task", TraceID: "trace-safe-success", Payload: json.RawMessage(`{"story":"safe success"}`)},
@@ -319,7 +319,7 @@ func assertDispatchResponseCount(t *testing.T, events []factoryapi.FactoryEvent,
 	}
 }
 
-func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {
+func submitOrderedEventHistoryRequest(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-1",
@@ -337,7 +337,7 @@ func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {
 	}
 }
 
-func tickAndPauseRuntime(t *testing.T, f factory.Factory) {
+func tickAndPauseRuntime(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	tickable := tickableFactory(t, f)
 	if err := tickable.Tick(context.Background()); err != nil {
@@ -425,7 +425,7 @@ func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) 
 	}
 }
 
-func assertRuntimeEventIDsStable(t *testing.T, f factory.Factory, events []factoryapi.FactoryEvent) {
+func assertRuntimeEventIDsStable(t *testing.T, f factoryhost.Engine, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	again := runtimeGeneratedEvents(t, f)
 	for i := range events {
@@ -444,7 +444,7 @@ func mustUnmarshalRuntimeWorkRequest(t *testing.T, body string) work.WorkRequest
 	return request
 }
 
-func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request work.WorkRequest) {
+func assertIdempotentBatchSubmit(t *testing.T, f factoryhost.Engine, request work.WorkRequest) {
 	t.Helper()
 	result, err := f.SubmitWorkRequest(context.Background(), request)
 	if err != nil {

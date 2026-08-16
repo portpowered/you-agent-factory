@@ -11,8 +11,8 @@ import (
 
 func (h *Host) Start(
 	ctx context.Context,
-	instance factoryruntime.HostedInstance,
-) (factoryruntime.HostedHandle, error) {
+	instance factoryruntime.RuntimeRecord,
+) (factoryruntime.RuntimeRun, error) {
 	bundle, err := bundleFromInstance(instance)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (h *Host) Start(
 	return handle, nil
 }
 
-func (h *Host) WaitForStart(ctx context.Context, handle factoryruntime.HostedHandle) error {
+func (h *Host) WaitForStart(ctx context.Context, handle factoryruntime.RuntimeRun) error {
 	concrete, ok := handle.(*factoryhost.Handle)
 	if !ok || concrete == nil {
 		return fmt.Errorf("factory runtime host requires a runtime handle")
@@ -71,7 +71,7 @@ func (h *Host) WaitForStart(ctx context.Context, handle factoryruntime.HostedHan
 	return nil
 }
 
-func bundleFromInstance(instance factoryruntime.HostedInstance) (*factoryhost.Bundle, error) {
+func bundleFromInstance(instance factoryruntime.RuntimeRecord) (*factoryhost.Bundle, error) {
 	if instance == nil {
 		return nil, fmt.Errorf("factory runtime host requires a built runtime instance")
 	}

@@ -38,9 +38,9 @@ func (s *Service) SubscribeFactoryEventsForSession(
 	if err != nil {
 		return nil, err
 	}
-	legacyRuntime, ok := runtime.(factoryruntime.APIFactory)
+	legacyRuntime, ok := runtime.(runtimeEventSubscriber)
 	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
 	stream, err := legacyRuntime.SubscribeFactoryEvents(
 		ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID},

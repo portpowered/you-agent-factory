@@ -11,9 +11,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
@@ -51,7 +51,7 @@ func TestConcurrentStartAdmitsOneActiveHandle(t *testing.T) {
 
 	const attempts = 32
 	var wg sync.WaitGroup
-	successes := make(chan factory.HostedHandle, attempts)
+	successes := make(chan factory.RuntimeRun, attempts)
 	failures := make(chan error, attempts)
 	for index := 0; index < attempts; index++ {
 		wg.Add(1)
@@ -69,7 +69,7 @@ func TestConcurrentStartAdmitsOneActiveHandle(t *testing.T) {
 	close(successes)
 	close(failures)
 
-	var handles []factory.HostedHandle
+	var handles []factory.RuntimeRun
 	for handle := range successes {
 		handles = append(handles, handle)
 	}
@@ -209,7 +209,7 @@ func TestConcurrentReplaceAndTerminateDoesNotCommitReplacement(t *testing.T) {
 			Current:                     current,
 			Replacement:                 replacementBundle,
 			AttachSidecarsInServiceMode: true,
-			AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+			AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 				concrete, ok := handle.(*factoryhost.Handle)
 				if !ok || concrete == nil || concrete.Bundle == nil {
 					return nil
@@ -274,7 +274,7 @@ func TestExecuteFailureUnwindsInReverseStartupOrder(t *testing.T) {
 		t.Fatalf("WaitForStart() error = %v", err)
 	}
 
-	attach := func(_ context.Context, hosted factory.HostedHandle) error {
+	attach := func(_ context.Context, hosted factory.RuntimeRun) error {
 		concrete, ok := hosted.(*factoryhost.Handle)
 		if !ok || concrete == nil {
 			return errors.New("handle required")

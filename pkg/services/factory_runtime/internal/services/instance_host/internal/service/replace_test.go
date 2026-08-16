@@ -10,9 +10,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
@@ -27,8 +27,8 @@ func (f *blockingReplaceFactory) Run(ctx context.Context) error {
 
 func attachSidecarsToHandle(
 	t *testing.T,
-	handle factory.HostedHandle,
-	attach func(context.Context, factory.HostedHandle) error,
+	handle factory.RuntimeRun,
+	attach func(context.Context, factory.RuntimeRun) error,
 ) {
 	t.Helper()
 	if attach == nil {
@@ -44,8 +44,8 @@ func startReadyHostedHandleWithSidecars(
 	host *Host,
 	factoryStub *lifecycleControlFactory,
 	instanceID string,
-	attach func(context.Context, factory.HostedHandle) error,
-) factory.HostedHandle {
+	attach func(context.Context, factory.RuntimeRun) error,
+) factory.RuntimeRun {
 	t.Helper()
 	handle := startReadyHostedHandle(t, host, factoryStub, instanceID)
 	attachSidecarsToHandle(t, handle, attach)
@@ -59,7 +59,7 @@ func TestReplaceSuccessfulStartsReplacementAttachesSidecarsAndSwapsActiveHandle(
 	host := newTestHost(t)
 	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
 	var currentAttachCalls, currentRestoreCalls, replacementAttachCalls int
-	currentAttach := func(_ context.Context, handle factory.HostedHandle) error {
+	currentAttach := func(_ context.Context, handle factory.RuntimeRun) error {
 		if handle == nil {
 			t.Fatal("current sidecar attach requires handle")
 		}
@@ -81,7 +81,7 @@ func TestReplaceSuccessfulStartsReplacementAttachesSidecarsAndSwapsActiveHandle(
 		Current:                     current,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			if handle == nil {
 				t.Fatal("replacement sidecar attach requires handle")
 			}
@@ -134,7 +134,7 @@ func TestReplaceStopsReplacementWhenReadinessFailsAndKeepsPriorHandle(t *testing
 	var restoreCalls int
 	current := startReadyHostedHandleWithSidecars(
 		t, host, currentFactory, "runtime-replace-readiness-fail",
-		func(context.Context, factory.HostedHandle) error { return nil },
+		func(context.Context, factory.RuntimeRun) error { return nil },
 	)
 
 	replacementFactory := &blockingReplaceFactory{}
@@ -155,7 +155,7 @@ func TestReplaceStopsReplacementWhenReadinessFailsAndKeepsPriorHandle(t *testing
 		Current:                     current,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			restoreCalls++
 			if handle != current {
 				t.Fatalf("restore handle = %p, want current %p", handle, current)
@@ -187,7 +187,7 @@ func TestReplaceStopsReplacementWhenSidecarAttachFails(t *testing.T) {
 	currentFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
 	current := startReadyHostedHandleWithSidecars(
 		t, host, currentFactory, "runtime-replace-sidecar-fail",
-		func(context.Context, factory.HostedHandle) error { return nil },
+		func(context.Context, factory.RuntimeRun) error { return nil },
 	)
 
 	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
@@ -202,7 +202,7 @@ func TestReplaceStopsReplacementWhenSidecarAttachFails(t *testing.T) {
 		Current:                     current,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			concrete, ok := handle.(*factoryhost.Handle)
 			if !ok {
 				return fmt.Errorf("replacement handle type = %T, want *factoryhost.Handle", handle)
@@ -252,7 +252,7 @@ func TestReplaceRestoresPriorSidecarsOnFailure(t *testing.T) {
 		Current:                     current,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			if handle != current {
 				t.Fatalf("restore handle = %p, want current %p", handle, current)
 			}
@@ -287,7 +287,7 @@ func TestReplaceDoesNotRestorePriorSidecarsAfterCommit(t *testing.T) {
 		Current:                     current,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			concrete, ok := handle.(*factoryhost.Handle)
 			if ok && concrete.Bundle != nil && concrete.Bundle.RuntimeInstanceID == "runtime-replace-no-restore-next" {
 				return nil
@@ -364,7 +364,7 @@ func TestReplaceStopsSidecarsBeforeAttemptInServiceMode(t *testing.T) {
 		Current:                     currentConcrete,
 		Replacement:                 replacementBundle,
 		AttachSidecarsInServiceMode: true,
-		AttachSidecars: func(_ context.Context, handle factory.HostedHandle) error {
+		AttachSidecars: func(_ context.Context, handle factory.RuntimeRun) error {
 			if handle == currentConcrete {
 				return nil
 			}

@@ -42,7 +42,6 @@ func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 }
 
 type registeredWorkRuntime struct {
-	factory.Factory
 	factory.Service
 }
 
@@ -116,7 +115,6 @@ func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 }
 
 type submitWorkFactory struct {
-	factory.Factory
 	factory.Service
 	request work.WorkRequest
 	result  work.WorkRequestSubmitResult
@@ -149,7 +147,7 @@ func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *t
 	adapter := workRuntimeAdapter{runtime: serviceOnlyRuntime{}}
 
 	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
-	if err == nil || !strings.Contains(err.Error(), "legacy Factory Runtime submission is required") {
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
 		t.Fatalf("SubmitWorkRequest() error = %v, want safe legacy-submission-required error", err)
 	}
 }

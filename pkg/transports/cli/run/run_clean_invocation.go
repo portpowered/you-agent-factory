@@ -18,6 +18,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 )
 
+type legacySnapshotProvider interface {
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
+}
+
 func emitCleanInvocationOutcome(
 	ctx context.Context,
 	cfg RunConfig,
@@ -27,7 +31,7 @@ func emitCleanInvocationOutcome(
 	duration time.Duration,
 ) error {
 	logger := cleanInvocationLogger(cfg.Logger)
-	provider, ok := runner.(state.LegacySnapshotProvider)
+	provider, ok := runner.(legacySnapshotProvider)
 	if !ok {
 		if runErr == nil {
 			err := &InvocationError{

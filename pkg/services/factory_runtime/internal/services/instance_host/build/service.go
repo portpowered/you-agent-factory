@@ -203,7 +203,7 @@ func (s *Service) BuildReplacement(
 	factoryDir string,
 	sessionID string,
 	executionBaseDir string,
-) (factory.HostedInstance, error) {
+) (factory.RuntimeRecord, error) {
 	spec, err := s.BuildReplacementSpec(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
 	if err != nil {
 		return nil, err

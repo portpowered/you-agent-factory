@@ -23,17 +23,17 @@ type Dependencies struct {
 type ReplaceRequest struct {
 	ReadinessContext            context.Context
 	ServiceContext              context.Context
-	Current                     factoryruntime.HostedHandle
-	Replacement                 factoryruntime.HostedInstance
-	AttachSidecars              func(context.Context, factoryruntime.HostedHandle) error
+	Current                     factoryruntime.RuntimeRun
+	Replacement                 factoryruntime.RuntimeRecord
+	AttachSidecars              func(context.Context, factoryruntime.RuntimeRun) error
 	AttachSidecarsInServiceMode bool
 }
 
 // Service owns hosted Runtime instance lifecycle. Only the Factory Runtime
 // implementation consumes this parent-private contract.
 type Service interface {
-	factoryruntime.Lifecycle
-	Pause(context.Context, factoryruntime.HostedHandle) (factoryruntime.PauseResult, error)
-	Resume(context.Context, factoryruntime.HostedHandle) (factoryruntime.ResumeResult, error)
-	Replace(ReplaceRequest) (factoryruntime.HostedHandle, error)
+	factoryruntime.RuntimeLifecycle
+	Pause(context.Context, factoryruntime.RuntimeRun) (factoryruntime.PauseResult, error)
+	Resume(context.Context, factoryruntime.RuntimeRun) (factoryruntime.ResumeResult, error)
+	Replace(ReplaceRequest) (factoryruntime.RuntimeRun, error)
 }

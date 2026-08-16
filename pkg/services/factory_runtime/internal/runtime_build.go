@@ -389,7 +389,7 @@ func newRuntimeWorkersService(
 }
 
 func setReplayEvents(
-	bundleFactory factory.Factory,
+	bundleFactory factoryhost.Engine,
 	events []factorydefinitions.FactoryEvent,
 ) {
 	setter, ok := bundleFactory.(interface {

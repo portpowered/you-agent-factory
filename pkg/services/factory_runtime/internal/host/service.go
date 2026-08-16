@@ -20,7 +20,7 @@ func NewLifecycleService(clock factory.Clock) (*LifecycleService, error) {
 	return &LifecycleService{clock: clock}, nil
 }
 
-func (*LifecycleService) Start(ctx context.Context, instance factory.HostedInstance) (factory.HostedHandle, error) {
+func (*LifecycleService) Start(ctx context.Context, instance factory.RuntimeRecord) (factory.RuntimeRun, error) {
 	bundle, ok := instance.(*Bundle)
 	if !ok || bundle == nil {
 		return nil, fmt.Errorf("factory runtime host requires a built runtime instance")
@@ -28,7 +28,7 @@ func (*LifecycleService) Start(ctx context.Context, instance factory.HostedInsta
 	return Start(ctx, bundle), nil
 }
 
-func (*LifecycleService) WaitForStart(ctx context.Context, handle factory.HostedHandle) error {
+func (*LifecycleService) WaitForStart(ctx context.Context, handle factory.RuntimeRun) error {
 	concrete, ok := handle.(*Handle)
 	if !ok || concrete == nil {
 		return fmt.Errorf("factory runtime host requires a runtime handle")
@@ -36,7 +36,7 @@ func (*LifecycleService) WaitForStart(ctx context.Context, handle factory.Hosted
 	return WaitForStart(ctx, concrete)
 }
 
-func (s *LifecycleService) Stop(handle factory.HostedHandle) error {
+func (s *LifecycleService) Stop(handle factory.RuntimeRun) error {
 	concrete, ok := handle.(*Handle)
 	if !ok || concrete == nil {
 		if handle == nil {
@@ -47,15 +47,15 @@ func (s *LifecycleService) Stop(handle factory.HostedHandle) error {
 	return Stop(concrete, s.clock)
 }
 
-func (*LifecycleService) StopSidecars(handle factory.HostedHandle) {
+func (*LifecycleService) StopSidecars(handle factory.RuntimeRun) {
 	concrete, _ := handle.(*Handle)
 	StopSidecars(concrete)
 }
 
 func (s *LifecycleService) PublishReplacement(
 	ctx context.Context,
-	current factory.HostedHandle,
-	replacement factory.HostedInstance,
+	current factory.RuntimeRun,
+	replacement factory.RuntimeRecord,
 ) error {
 	currentHandle, _ := current.(*Handle)
 	replacementBundle, ok := replacement.(*Bundle)
@@ -65,4 +65,4 @@ func (s *LifecycleService) PublishReplacement(
 	return PublishFactoryChange(ctx, currentHandle, replacementBundle, s.clock)
 }
 
-var _ factory.Lifecycle = (*LifecycleService)(nil)
+var _ factory.RuntimeLifecycle = (*LifecycleService)(nil)

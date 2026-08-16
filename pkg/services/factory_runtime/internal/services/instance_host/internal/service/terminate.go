@@ -7,7 +7,7 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 )
 
-func (h *Host) Stop(handle factoryruntime.HostedHandle) error {
+func (h *Host) Stop(handle factoryruntime.RuntimeRun) error {
 	concrete, err := h.classifyStopHandle(handle)
 	if err != nil {
 		return err
@@ -21,7 +21,7 @@ func (h *Host) Stop(handle factoryruntime.HostedHandle) error {
 	return h.lifecycle.Stop(concrete)
 }
 
-func (h *Host) classifyStopHandle(handle factoryruntime.HostedHandle) (*factoryhost.Handle, error) {
+func (h *Host) classifyStopHandle(handle factoryruntime.RuntimeRun) (*factoryhost.Handle, error) {
 	if handle == nil {
 		return nil, factoryruntime.ErrNotRunning
 	}

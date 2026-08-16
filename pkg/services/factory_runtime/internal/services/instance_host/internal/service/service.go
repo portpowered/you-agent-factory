@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 )
 
 // Host owns hosted-instance handle capacity and lifecycle delegation for one
@@ -41,14 +41,14 @@ func New(dependencies instancehost.Dependencies) (instancehost.Service, error) {
 	}, nil
 }
 
-func (h *Host) StopSidecars(handle factoryruntime.HostedHandle) {
+func (h *Host) StopSidecars(handle factoryruntime.RuntimeRun) {
 	h.lifecycle.StopSidecars(handle)
 }
 
 func (h *Host) PublishReplacement(
 	ctx context.Context,
-	current factoryruntime.HostedHandle,
-	replacement factoryruntime.HostedInstance,
+	current factoryruntime.RuntimeRun,
+	replacement factoryruntime.RuntimeRecord,
 ) error {
 	return h.lifecycle.PublishReplacement(ctx, current, replacement)
 }

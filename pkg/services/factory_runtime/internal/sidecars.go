@@ -80,7 +80,7 @@ func NewRuntimeSidecars(automation automations.Service, enabled bool) *RuntimeSi
 	return &RuntimeSidecars{automation: automation, enabled: enabled}
 }
 
-func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.HostedInstance) error {
+func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeRecord) error {
 	bundle, _ := instance.(*factoryhost.Bundle)
 	if instance != nil && bundle == nil {
 		return fmt.Errorf("factory runtime service requires a built runtime instance")
@@ -95,7 +95,7 @@ func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.HostedIn
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle) error {
+func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) error {
 	handle, _ := hosted.(*factoryhost.Handle)
 	if handle == nil || handle.Bundle == nil {
 		return fmt.Errorf("runtime handle is required")
@@ -141,7 +141,7 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 			scheduleFactory = existing
 		} else {
 			scheduleFactory = &invocationScheduleFactory{
-				Factory: handle.Bundle.Factory, schedules: schedules,
+				Engine: handle.Bundle.Factory, schedules: schedules,
 				runtimeID:  handle.Bundle.RuntimeInstanceID,
 				factoryDir: runtimeCfg.FactoryDir(), factoryConfig: runtimeCfg.FactoryConfig(),
 				runtimeConfig: runtimeCfg, ctx: sidecarCtx,
@@ -282,7 +282,7 @@ func (s *RuntimeSidecars) failStart(handle *factoryhost.Handle, cancel context.C
 	return err
 }
 
-func (s *RuntimeSidecars) Stop(hosted factory.HostedHandle) {
+func (s *RuntimeSidecars) Stop(hosted factory.RuntimeRun) {
 	handle, _ := hosted.(*factoryhost.Handle)
 	if handle != nil && handle.Bundle != nil {
 		if lifecycle, ok := s.automation.(runtimeAutomationLifecycle); ok {
