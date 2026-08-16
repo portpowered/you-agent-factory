@@ -10,6 +10,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -139,6 +140,80 @@ func TestBuildStatelessWorkersExecutesProviderAttemptThroughRoot(t *testing.T) {
 	}
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider command calls = %d, want one", runner.CallCount())
+	}
+}
+
+func TestBuildStatelessWorkersPreservesDetachedAgentContractThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	provider := testutil.NewNativeMockProvider(
+		providers.ExecuteResult{
+			Content: `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
+			SessionRef: &providers.SessionRef{
+				Provider: providers.IDCodex,
+				Kind:     providers.SessionIDKind,
+				ID:       "direct-root-agent-session",
+			},
+		},
+	)
+	service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
+		ProviderOverride: provider,
+	})
+	if err != nil {
+		t.Fatalf("root.BuildStatelessWorkers() error = %v", err)
+	}
+
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			FactorySessionID: "session-root-agent",
+			RuntimeID:        "runtime-root-agent",
+			GenerationID:     "generation-root-agent",
+			DispatchID:       "dispatch-root-agent",
+			AttemptID:        "attempt-root-agent",
+		},
+		Target: workers.ExecutionTarget{
+			WorkerName:      "agent-worker",
+			WorkstationName: "execute-goal",
+			RunnerID:        "agent",
+			Provider:        workers.ProviderReference{ID: string(providers.IDCodex)},
+			Prompt:          workers.PromptPolicy{UserMessage: "complete this goal"},
+			Tools: workers.ToolPolicy{
+				AgentLoop:       true,
+				AgentToolPolicy: "DISABLED",
+			},
+			Output: workers.OutputPolicy{
+				DecisionEnvelope:            true,
+				GoalRoutingDecisionEnvelope: true,
+			},
+		},
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("detached agent Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, failure = %#v, want ACCEPTED", result.Outcome, result.Failure)
+	}
+	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != "ship" ||
+		result.Output.Feedback != "ready" || result.Output.Classification != "accepted" {
+		t.Fatalf("output = %#v, want normalized goal decision-envelope output", result.Output)
+	}
+	if result.Continuation == nil || result.Continuation.Provider != string(providers.IDCodex) ||
+		result.Continuation.ProviderSessionID != "direct-root-agent-session" {
+		t.Fatalf("continuation = %#v, want exact detached provider identity", result.Continuation)
+	}
+	if result.Diagnostics == nil ||
+		result.Diagnostics.Metadata[workers.AgentRunMetadataExecutionBehavior] != workers.AgentRunExecutionBehavior ||
+		result.Diagnostics.Metadata[workers.AgentRunMetadataToolPolicy] != "DISABLED" {
+		t.Fatalf("diagnostics = %#v, want safe detached agent-run metadata", result.Diagnostics)
+	}
+	if provider.CallCount() != 1 {
+		t.Fatalf("provider calls = %d, want one detached agent attempt", provider.CallCount())
+	}
+	call := provider.Calls()[0]
+	if call.Correlation.DispatchID != request.Correlation.DispatchID ||
+		call.Correlation.AttemptID != request.Correlation.AttemptID {
+		t.Fatalf("provider correlation = %#v, want detached request correlation", call.Correlation)
 	}
 }
 

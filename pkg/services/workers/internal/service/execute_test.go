@@ -108,6 +108,149 @@ func TestExecuteScriptProcessFailureRemainsTerminal(t *testing.T) {
 	}
 }
 
+func TestExecuteFailureAndTimeoutEmitExactlyOneTerminalObservation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		runner       workers.Runner
+		timeout      time.Duration
+		wantFailure  workers.WorkFailureType
+		wantTerminal workers.ExecutionObservationKind
+	}{
+		{
+			name: "runner failure",
+			runner: &stubRunner{execute: func(
+				context.Context,
+				workers.RunnerExecutionRequest,
+			) (workers.RunnerExecutionResult, error) {
+				return workers.RunnerExecutionResult{}, errors.New("provider failed")
+			}},
+			wantFailure:  workers.WorkFailureTypeUnknown,
+			wantTerminal: workers.ExecutionObservationKindFailed,
+		},
+		{
+			name: "deadline",
+			runner: &stubRunner{execute: func(
+				ctx context.Context,
+				_ workers.RunnerExecutionRequest,
+			) (workers.RunnerExecutionResult, error) {
+				<-ctx.Done()
+				return workers.RunnerExecutionResult{}, ctx.Err()
+			}},
+			timeout:      50 * time.Millisecond,
+			wantFailure:  workers.WorkFailureTypeTimeout,
+			wantTerminal: workers.ExecutionObservationKindFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var observations []workers.ExecutionObservation
+			var observationsMu sync.Mutex
+			service := mustExecuteService(t, test.runner, func(
+				_ context.Context,
+				observation workers.ExecutionObservation,
+			) error {
+				observationsMu.Lock()
+				defer observationsMu.Unlock()
+				observations = append(observations, observation.Clone())
+				return nil
+			})
+
+			request := validExecuteRequest("dispatch-"+test.name, "attempt-"+test.name)
+			request.Target.Timeout = test.timeout
+			result, err := service.Execute(context.Background(), request)
+			if err != nil {
+				t.Fatalf("Execute() error = %v, want normalized result", err)
+			}
+			if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+				t.Fatalf("result = %#v, want failed result", result)
+			}
+			if result.Failure.Type != test.wantFailure {
+				t.Fatalf("failure = %#v, want type %q", result.Failure, test.wantFailure)
+			}
+
+			observationsMu.Lock()
+			defer observationsMu.Unlock()
+			if len(observations) != 2 {
+				t.Fatalf("observations = %#v, want one start and one terminal observation", observations)
+			}
+			if observations[0].Kind != workers.ExecutionObservationKindStarted ||
+				observations[1].Kind != test.wantTerminal {
+				t.Fatalf("observation kinds = %#v, want STARTED then %s", observations, test.wantTerminal)
+			}
+			if observations[1].Sequence != 2 ||
+				observations[1].Correlation != request.Correlation {
+				t.Fatalf("terminal observation = %#v, want sequence 2 with request correlation", observations[1])
+			}
+		})
+	}
+}
+
+func TestExecuteTimeoutReleasesRequestWorktreeBeforeTerminalObservation(t *testing.T) {
+	t.Parallel()
+
+	var eventsMu sync.Mutex
+	var events []string
+	appendEvent := func(event string) {
+		eventsMu.Lock()
+		defer eventsMu.Unlock()
+		events = append(events, event)
+	}
+	worktree := &recordingWorktree{
+		preparation: workers.FactoryWorktreePreparation{CheckoutPath: "C:/fixture/worktree"},
+		release: func(context.Context, workers.FactoryWorktreePreparation) error {
+			appendEvent("worktree-release")
+			return nil
+		},
+	}
+	service := mustExecuteServiceWithEdges(
+		t,
+		&stubRunner{execute: func(
+			ctx context.Context,
+			_ workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			<-ctx.Done()
+			return workers.RunnerExecutionResult{}, ctx.Err()
+		}},
+		func(_ context.Context, observation workers.ExecutionObservation) error {
+			appendEvent("observation-" + string(observation.Kind))
+			return nil
+		},
+		worktree,
+		worktree.Release,
+		nil,
+	)
+
+	request := validExecuteRequest("dispatch-timeout-cleanup", "attempt-timeout-cleanup")
+	request.Target.Timeout = 50 * time.Millisecond
+	request.Target.Workspace = workers.WorkspacePolicy{
+		PrepareWorktree:    true,
+		FactoryDirectory:   "C:/fixture",
+		CheckoutIdentifier: "attempt-timeout-cleanup",
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil ||
+		result.Failure.Type != workers.WorkFailureTypeTimeout {
+		t.Fatalf("result = %#v, want typed timeout failure", result)
+	}
+
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+	if got, want := events, []string{
+		"observation-STARTED",
+		"worktree-release",
+		"observation-FAILED",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("events = %#v, want %#v", got, want)
+	}
+}
+
 func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
 	t.Parallel()
 
