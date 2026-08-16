@@ -157,10 +157,6 @@ type httpSessionsRootFake struct {
 
 var _ factorysessions.Service = (*httpSessionsRootFake)(nil)
 
-func (fake *httpSessionsRootFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
-	return fake, nil
-}
-
 func (fake *httpSessionsRootFake) ActivateNamedFactory(context.Context, string) error {
 	return factorysessions.ErrSessionNotFound
 }

@@ -94,9 +94,6 @@ func NewRoot(
 		return nil, fmt.Errorf("construct Factory Sessions: bind detached operations: %w", err)
 	}
 	root.detachedOperations = detachedOperations
-	if err := validateCompatibilityBinding(root, clock); err != nil {
-		return nil, fmt.Errorf("construct Factory Sessions: compatibility binding rejected root: %w", err)
-	}
 	return root, nil
 }
 
@@ -166,30 +163,4 @@ func validateRootRuntimeDependencies(
 		return fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
 	}
 	return nil
-}
-
-// validateCompatibilityBinding keeps the published compatibility contract
-// checked against the exact process root. The binding is inert: it neither
-// constructs a child service nor starts runtime work.
-func validateCompatibilityBinding(root *Root, clock factoryruntime.Clock) error {
-	_, err := root.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	return err
-}
-
-// TODO(btrc-p4-sessions-lifecycle-003): remove ForRuntime after application
-// callers use the direct process-root capability.
-// ForRuntime is retained as a compatibility binding for callers that have not
-// yet moved to the direct runtime-root port. It never constructs or returns a
-// child service; the process root already owns the shared assembly.
-func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessions.Service, error) {
-	if r == nil {
-		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
-	}
-	if binding.Clock == nil {
-		return nil, &factorysessions.OpeningBindingError{
-			Field:   "clock",
-			Message: "clock is required",
-		}
-	}
-	return r, nil
 }

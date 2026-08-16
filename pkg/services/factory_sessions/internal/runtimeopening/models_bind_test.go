@@ -529,12 +529,6 @@ func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, se
 	return role.readLiveSession(sessionID), nil
 }
 
-func (openingCoordinatorSessionsRoot) ForRuntime(
-	factorysessions.OpeningBindingRequest,
-) (factorysessions.Service, error) {
-	panic("runtime opening must use the injected Factory Sessions runtime assembly directly")
-}
-
 type openingCoordinatorBoundSessions struct {
 	factorysessions.Service
 	roles.RuntimeAssembly

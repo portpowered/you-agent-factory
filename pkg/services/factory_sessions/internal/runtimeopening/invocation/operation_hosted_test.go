@@ -30,10 +30,6 @@ func newHostedLiveSessionsFake(projection factorysessions.SessionProjection) *ho
 
 var _ factorysessions.Service = (*hostedLiveSessionsFake)(nil)
 
-func (fake *hostedLiveSessionsFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
-	return fake, nil
-}
-
 func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string) error {
 	return factorysessions.ErrSessionNotFound
 }

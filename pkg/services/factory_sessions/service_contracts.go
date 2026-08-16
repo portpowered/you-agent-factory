@@ -47,13 +47,6 @@ type ResolvedInvocationInput struct {
 	NormalizedArguments *work.NormalizedArguments
 }
 
-// RuntimeBinding contains values selected while opening one Factory Session
-// runtime. Process-scoped construction dependencies remain in the injected
-// Service.
-type RuntimeBinding struct {
-	Clock factoryruntime.Clock
-}
-
 // Service is the singular Factory Sessions root contract and the only
 // cross-service session authority. Identity, live control, durable execution,
 // invocation, response stream, and opening operations already owned by
@@ -88,11 +81,6 @@ type RuntimeBinding struct {
 // ErrResponseStreamSubscriptionClosed on SubscribeFactoryResponseEvents; peers
 // must not import private response-stream store or manager types and must not
 // depend on a nested stream interface for peer import.
-// The published opening/binding slice remains a compatibility boundary for
-// callers that have not yet migrated to the direct Wire-owned runtime role.
-// Peers in the canonical runtime-opening graph receive that role alongside the
-// same process root; they do not downcast the root or ask it to construct a
-// nested service. Binding stays inert during compatibility characterization.
 // Peers must depend on the smallest owner-published capability it uses: LiveControlService for
 // live control, DurableExecutionService for durable execution,
 // InvocationService for one-shot invocation, or TargetExecutionService for the
@@ -120,9 +108,6 @@ type Service interface {
 	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
 	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
 	ActivateNamedFactory(context.Context, string) error
-	// TODO(btrc-p4-sessions-lifecycle-003): remove this compatibility binding
-	// after application callers use the direct process-root capability.
-	ForRuntime(OpeningBindingRequest) (Service, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)

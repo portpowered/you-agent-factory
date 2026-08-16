@@ -110,15 +110,6 @@ func NewAssembly(
 	}
 }
 
-// ForRuntime keeps an already-bound runtime view stable when it is passed
-// through code that only knows the public Factory Sessions contract.
-func (a *Assembly) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.Service, error) {
-	if a == nil {
-		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
-	}
-	return a, nil
-}
-
 func (a *Assembly) CurrentRuntime() *factorysessions.LiveRuntime {
 	if a == nil || a.state == nil {
 		return nil

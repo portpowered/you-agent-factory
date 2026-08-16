@@ -74,36 +74,6 @@ func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
 	}
 }
 
-func TestRootForRuntimeRequiresClockAndBindsRuntime(t *testing.T) {
-	t.Parallel()
-
-	var nilRoot *Root
-	if bound, err := nilRoot.ForRuntime(factorysessions.RuntimeBinding{}); bound != nil || err == nil {
-		t.Fatalf("nil Root.ForRuntime() = (%#v, %v), want nil result and error", bound, err)
-	}
-
-	root, err := newRootForTest(livechange.NewCoordinator())
-	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
-	}
-	bound, err := root.ForRuntime(factorysessions.RuntimeBinding{})
-	if bound != nil || err == nil {
-		t.Fatalf("ForRuntime() without clock = (%#v, %v), want nil result and error", bound, err)
-	}
-
-	var openingErr *factorysessions.OpeningBindingError
-	if !errors.As(err, &openingErr) {
-		t.Fatalf("ForRuntime() error = %v, want OpeningBindingError", err)
-	}
-	bound, err = root.ForRuntime(factorysessions.RuntimeBinding{Clock: rootTestClock{}})
-	if err != nil {
-		t.Fatalf("ForRuntime() error = %v", err)
-	}
-	if bound == nil {
-		t.Fatal("ForRuntime() returned nil bound service")
-	}
-}
-
 func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 

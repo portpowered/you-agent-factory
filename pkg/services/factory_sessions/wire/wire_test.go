@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"errors"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -186,67 +185,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
 		t.Fatalf("goroutine leak after construction: baseline=%d current=%d delta=%d", baseline, runtime.NumGoroutine(), leaked)
-	}
-}
-
-func TestNewServiceServesPublishedForRuntimePeerBehavior(t *testing.T) {
-	t.Parallel()
-
-	clock := &recordingClock{}
-	directories := &recordingDirectoryInspection{}
-	symlinkCalls := 0
-	inputs := validNewServiceInputs()
-	inputs.directoryInspection = directories
-	inputs.resolveSymlinks = func(path string) (string, error) { symlinkCalls++; return path, nil }
-	service, err := inputs.callNewService()
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewService() returned nil service")
-	}
-
-	bound, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{})
-	if bound != nil {
-		t.Fatalf("ForRuntime() without clock = %#v, want nil Service on missing binding input", bound)
-	}
-	var openingErr *factorysessions.OpeningBindingError
-	if !errors.As(bindErr, &openingErr) {
-		t.Fatalf("ForRuntime() error = %v, want *OpeningBindingError", bindErr)
-	}
-	if openingErr.Field != "clock" {
-		t.Fatalf("OpeningBindingError.Field = %q, want clock", openingErr.Field)
-	}
-	if !errors.Is(bindErr, factorysessions.ErrOpeningBindingInvalid) {
-		t.Fatalf("ForRuntime() error = %v, want errors.Is ErrOpeningBindingInvalid", bindErr)
-	}
-
-	bound, err = service.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	if err != nil {
-		t.Fatalf("ForRuntime() error = %v, want nil", err)
-	}
-	if bound == nil {
-		t.Fatal("ForRuntime() returned nil Service view")
-	}
-	if any(bound) != any(service) {
-		t.Fatalf("ForRuntime() returned %T, want the same process root %T", bound, service)
-	}
-	var runtimeView factorysessions.Service = bound
-	if runtimeView == nil {
-		t.Fatal("bound runtime view is nil")
-	}
-	result := factorysessions.OpeningBindingResult{Service: bound}
-	if result.Service == nil {
-		t.Fatal("OpeningBindingResult must carry the usable root Service view")
-	}
-	if clock.calls != 0 {
-		t.Fatalf("runtime binding read clock %d times, want no runtime activity", clock.calls)
-	}
-	if directories.calls != 0 {
-		t.Fatalf("runtime binding inspected filesystem %d times, want no runtime activity", directories.calls)
-	}
-	if symlinkCalls != 0 {
-		t.Fatalf("runtime binding resolved symlinks %d times, want no filesystem activity", symlinkCalls)
 	}
 }
 

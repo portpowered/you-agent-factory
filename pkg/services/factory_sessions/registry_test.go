@@ -672,10 +672,6 @@ func newPeerRootServiceFake() *peerRootServiceFake {
 
 var _ Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) ForRuntime(OpeningBindingRequest) (Service, error) {
-	return fake, nil
-}
-
 func (fake *peerRootServiceFake) OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error) {
 	return &OpenResult{SessionID: DefaultSessionID}, nil
 }
