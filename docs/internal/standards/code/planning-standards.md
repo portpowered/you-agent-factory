@@ -27,9 +27,14 @@ Every contributor or agent who creates or updates a PRD, `prd.json`, or work-sto
 - When coverage of the behavior being restructured is insufficient, characterization tests **MUST** land first as their own step, before the structure changes.
 - Bundle changes only when they must merge together, never because they happen to touch the same file.
 - Call out quality gates directly when the work touches backend, frontend, contracts, or generated artifacts.
-- Every implementation plan **MUST** state that delivery loops through required
-  CI, blocking review feedback, conflict resolution, and actual PR merge before
-  the work is complete.
+- Every implementation plan **MUST** state a two-stage delivery loop:
+  implementation marks its delivery criterion satisfied and stops after its
+  final head is pushed, the PR is open, CI has started, and all blocking review
+  feedback is addressed; review then owns terminal-and-passing CI, conflict
+  resolution, and merge, with merge remaining the lane-wide completion
+  boundary.
+- Implementation **MUST NOT** poll or re-check CI after its finish line, and
+  CI-run evidence **MUST** go in a PR comment, never a commit.
 
 ### Task shaping
 - Every task when creating tasks for submission into sub workers/the You Agent Factory must match the template structure denoted in docs/internal/standards/templates/task-templates.md
@@ -226,21 +231,41 @@ Rules:
 
 ### 13. Make Merge the Delivery Boundary
 
-Implementation plans **MUST** make the end-to-end delivery condition explicit.
+Implementation plans **MUST** make the end-to-end delivery condition explicit
+while writing the project-level delivery criterion from the perspective of the
+stage that evaluates it.
 
 Rules:
 
-- The plan **MUST** require the implementation/review cycle to continue until
-  required CI is terminal and passing, blocking PR conversation feedback is
-  explicitly addressed, merge conflicts are resolved, and the PR is merged.
-- Opening a PR, pushing the latest implementation, obtaining approval, or
-  reaching green CI without merge **MUST NOT** be described as completion.
+- The project-level delivery criterion **MUST** lead with this implementation
+  finish line: the implementation stage marks the criterion satisfied and
+  stops after its final head is pushed, the PR is open, CI has started, and all
+  blocking review feedback is addressed.
+- The criterion **MUST** state that implementation does not poll or re-check CI
+  after that finish line. The review stage owns driving CI to
+  terminal-and-passing, resolving merge conflicts, and merging the PR; merge
+  remains the lane-wide delivery boundary.
+- The implementation/review cycle **MUST** continue through those review-owned
+  outcomes until the PR is merged. The implementation stage's finish line is
+  not lane-wide completion: opening a PR, pushing the latest implementation,
+  obtaining approval, or reaching green CI without merge **MUST NOT** be
+  described as completing the lane.
+- A delivery criterion **MUST NOT** open with “delivery continues until ...
+  merged” or equivalent merge-first wording. The implementation stage
+  evaluates the criterion but cannot merge, so a merge-first condition makes it
+  wait on a review-owned outcome and can trigger repeated redispatch until the
+  executor-loop breaker ends the lane.
+- CI-run evidence **MUST** go in a PR comment and never in a commit.
 - Shared-file or baseline churn **MUST** be reconciled through the same delivery
   loop when the change remains in scope; it is not by itself a reason to hold an
   otherwise dependency-ready plan.
 - The merge condition belongs in project-level acceptance criteria or an
   equivalent delivery section. It **SHOULD NOT** be modeled as a fake product
   behavior story.
+
+Canonical criterion example:
+
+> Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.
 
 ## Delivery Checklist
 
