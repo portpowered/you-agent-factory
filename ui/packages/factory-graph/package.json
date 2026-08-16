@@ -40,10 +40,11 @@
     "check:components-runtime-resolution": "node scripts/check-components-runtime-resolution.mjs",
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "check:visual-state-runtime-resolution": "node scripts/check-visual-state-runtime-resolution.mjs",
     "prepare:dependencies": "bun run --cwd ../client build && bun run --cwd ../components build && bun run --cwd ../factory-replay build",
     "test": "bun run prepare:dependencies && vitest run --config vitest.config.ts",
     "typecheck": "bun run prepare:dependencies && tsc -p tsconfig.json --noEmit --pretty false",
-    "verify": "bun run typecheck && bun run check:components-runtime-resolution && bun run test && bun run build && bun run check:package-boundary && bun run check:pack"
+    "verify": "bun run typecheck && bun run check:components-runtime-resolution && bun run test && bun run build && bun run check:visual-state-runtime-resolution && bun run check:package-boundary && bun run check:pack"
   },
   "peerDependencies": {
     "@you-agent-factory/client": "0.0.0",
