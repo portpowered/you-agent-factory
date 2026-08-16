@@ -56,8 +56,8 @@ test("publishes a complete report by creating or updating the marked bot comment
 		{ headSha: "tested-head", runUrl: "https://example.test/run/1" },
 	);
 	assert.match(body, new RegExp(BACKEND_LINT_COMMENT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-	assert.match(body, /\| ui-lint \| `pass` \| 0 \| 1\.00s \| clean \|/);
-	assert.match(body, /\| broken-check \| `fail` \| 1 \| 1\.50s \| new failure \|/);
+	assert.match(body, /\| ui-lint \| `pass` \| 0 \| 0 \| \+0 \| 1\.00s \| clean \|/);
+	assert.match(body, /\| broken-check \| `fail` \| 0 \| 1 \| \+1 \| 1\.50s \| new failure \|/);
 	assert.match(body, /Total Backend Lint wall time: `2\.50s`/);
 
 	assert.deepEqual(upsertBackendLintComment([], body), { action: "create", body });
