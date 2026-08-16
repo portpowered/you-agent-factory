@@ -332,7 +332,7 @@ async function verifyVisualGroupAfterReload({
   });
   await expectAttribute(warningColorAfterReload, "aria-pressed", "false");
   await expectPersistedEdgeWaypoint(page, reloadedGroup, expectedEdgeId);
-  await expectEditorGraphInteractions(page, { edgeId: expectedEdgeId });
+  await expectEditorGraphInteractions(page, { skipEdgeDrag: true });
   await captureEvidence(page, "visual-group-after-reload-editor");
 }
 

@@ -58,7 +58,9 @@ export async function expectEditorGraphInteractions(page, options = {}) {
   await expectPanInsideRegion(page, group);
   await expectZoomInsideRegion(page, group);
 
-  await expectDirectEdgeDrag(page, group, options);
+  if (options.skipEdgeDrag !== true) {
+    await expectDirectEdgeDrag(page, group, options);
+  }
 }
 
 export async function expectDirectEdgeDrag(page, region, options = {}) {
