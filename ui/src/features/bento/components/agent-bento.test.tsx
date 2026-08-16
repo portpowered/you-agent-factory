@@ -132,8 +132,11 @@ describe("AgentBentoLayout", () => {
     expect(activityHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(activityHeader?.className).toContain("cursor-grab");
     expect(
-      screen.queryByRole("button", { name: "Move Current activity" }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Move Current activity card" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Resize Current activity card" }),
+    ).toBeTruthy();
   });
 
   it("lets the board and grid grow without creating a vertical scroll container", () => {
@@ -291,6 +294,95 @@ describe("AgentBentoLayout", () => {
     expect(
       screen.getByText("Active workstation graph goes here."),
     ).toBeTruthy();
+  });
+
+  it("moves and resizes the focused card with keyboard input through the persistence seam", () => {
+    const onLayoutChange = vi.fn();
+    renderBentoBoard(onLayoutChange);
+
+    const moveButton = screen.getByRole("button", {
+      name: "Move Current activity card",
+    });
+    const instructionsID = moveButton.getAttribute("aria-describedby");
+
+    expect(document.activeElement).not.toBe(moveButton);
+    moveButton.focus();
+    expect(document.activeElement).toBe(moveButton);
+    expect(moveButton.className).toContain("focus-visible:ring-2");
+    expect(instructionsID).toBeTruthy();
+    expect(
+      document.getElementById(instructionsID ?? "")?.textContent,
+    ).toContain("Move mode");
+
+    fireEvent.keyDown(moveButton, { key: "Enter" });
+    fireEvent.keyDown(moveButton, { key: "ArrowRight" });
+
+    expect(onLayoutChange).not.toHaveBeenCalled();
+    expect(
+      within(
+        screen.getByRole("article", { name: "Current activity" }),
+      ).getByRole("status").textContent,
+    ).toContain("column 2");
+
+    fireEvent.keyDown(moveButton, { key: "Enter" });
+    expect(onLayoutChange).toHaveBeenCalledTimes(1);
+    expect(onLayoutChange).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "activity", x: 1 }),
+      ]),
+    );
+
+    const resizeButton = screen.getByRole("button", {
+      name: "Resize Current activity card",
+    });
+    expect(
+      document.getElementById(
+        resizeButton.getAttribute("aria-describedby") ?? "",
+      )?.textContent,
+    ).toContain("Resize mode");
+    resizeButton.focus();
+    fireEvent.keyDown(resizeButton, { key: "Enter" });
+    fireEvent.keyDown(resizeButton, { key: "ArrowRight" });
+
+    expect(onLayoutChange).toHaveBeenCalledTimes(1);
+    expect(
+      within(
+        screen.getByRole("article", { name: "Current activity" }),
+      ).getByRole("status").textContent,
+    ).toContain("columns by");
+
+    fireEvent.keyDown(resizeButton, { key: "Enter" });
+    expect(onLayoutChange).toHaveBeenCalledTimes(2);
+    expect(onLayoutChange).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "activity", w: 7 }),
+      ]),
+    );
+  });
+
+  it("announces a rejected boundary operation and restores an uncommitted preview on Escape", () => {
+    const onLayoutChange = vi.fn();
+    renderBentoBoard(onLayoutChange);
+
+    const moveButton = screen.getByRole("button", {
+      name: "Move Current activity card",
+    });
+    moveButton.focus();
+    fireEvent.keyDown(moveButton, { key: "Enter" });
+    fireEvent.keyDown(moveButton, { key: "ArrowLeft" });
+
+    expect(onLayoutChange).not.toHaveBeenCalled();
+    expect(
+      within(
+        screen.getByRole("article", { name: "Current activity" }),
+      ).getByRole("status").textContent,
+    ).toContain("No move change was possible");
+
+    fireEvent.keyDown(moveButton, { key: "ArrowRight" });
+    fireEvent.keyDown(moveButton, { key: "Escape" });
+
+    expect(onLayoutChange).not.toHaveBeenCalled();
+    expect(moveButton.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("renders right, bottom, and bottom-right resize handles for grid cards", () => {

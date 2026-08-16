@@ -12,6 +12,11 @@ import { cn } from "../../../lib/cn";
 import type { DashboardCardAsyncState } from "../../dashboard/lib/dashboard-card-state";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 import { DashboardCardStateBanner } from "./card-state/dashboard-card-state-banner";
+import {
+  DashboardLayoutKeyboardContext,
+  type DashboardLayoutKeyboardContextValue,
+  DashboardLayoutKeyboardControls,
+} from "./keyboard/dashboard-layout-keyboard-controls";
 
 export interface AgentBentoLayoutItem {
   h: number;
@@ -189,6 +194,7 @@ function toNonInteractiveGridLayout(layout: Layout): Layout {
   }));
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the bento layout keeps grid projection, pointer callbacks, and per-card keyboard context synchronized.
 export function AgentBentoLayout({
   cards,
   className = "",
@@ -228,6 +234,21 @@ export function AgentBentoLayout({
     responsiveMode === "interactive" ||
     (renderedWidth > BENTO_INTERACTION_BREAKPOINT_PX && !usesCompactLayout);
 
+  const previewLayoutChange = (nextLayout: Layout) => {
+    if (allowsInteractiveGrid) {
+      setCurrentLayout(nextLayout);
+    }
+  };
+
+  const commitLayoutChange = (nextLayout: Layout) => {
+    if (!allowsInteractiveGrid) {
+      return;
+    }
+
+    setCurrentLayout(nextLayout);
+    onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
+  };
+
   const handleLayoutChange = (nextLayout: Layout) => {
     if (!allowsInteractiveGrid) {
       return;
@@ -239,8 +260,7 @@ export function AgentBentoLayout({
       return;
     }
 
-    setCurrentLayout(nextLayout);
-    onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
+    commitLayoutChange(nextLayout);
   };
 
   const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
@@ -291,17 +311,33 @@ export function AgentBentoLayout({
             id={card.id}
             key={card.id}
           >
-            {card.cardState ? (
-              <div className="flex h-full min-w-0 flex-col gap-1">
-                <DashboardCardStateBanner
-                  locale={locale}
-                  state={card.cardState}
-                />
-                <div className="min-h-0 min-w-0 flex-1">{card.children}</div>
-              </div>
-            ) : (
-              card.children
-            )}
+            <DashboardLayoutKeyboardContext.Provider
+              value={
+                allowsInteractiveGrid
+                  ? ({
+                      columns: BENTO_COLUMNS,
+                      enabled: true,
+                      itemID: card.id,
+                      layout: renderedLayout,
+                      messages,
+                      onCommitLayout: commitLayoutChange,
+                      onPreviewLayout: previewLayoutChange,
+                    } satisfies DashboardLayoutKeyboardContextValue)
+                  : null
+              }
+            >
+              {card.cardState ? (
+                <div className="flex h-full min-w-0 flex-col gap-1">
+                  <DashboardCardStateBanner
+                    locale={locale}
+                    state={card.cardState}
+                  />
+                  <div className="min-h-0 min-w-0 flex-1">{card.children}</div>
+                </div>
+              ) : (
+                card.children
+              )}
+            </DashboardLayoutKeyboardContext.Provider>
           </div>
         ))}
       </GridLayout>
@@ -399,6 +435,7 @@ export function AgentBentoCardHeader({
           compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
         )}
       >
+        <DashboardLayoutKeyboardControls title={title} />
         {headerAction ?? (
           <span
             aria-hidden="true"
