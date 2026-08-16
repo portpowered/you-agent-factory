@@ -171,175 +171,213 @@ func assertExecutionCatalogDiagnostics(
 
 func functionalExecutionCatalogRequest() factorydefinitions.ResolveExecutionCatalogRequest {
 	return factorydefinitions.ResolveExecutionCatalogRequest{
-		EffectiveDefinition: &factorydefinitions.FactoryConfig{
-			Name:   "functional-detached-factory",
-			Runner: "codex",
-			Version: &factorydefinitions.FactoryVersion{
-				Logical:  7,
-				Physical: time.Date(2026, 8, 12, 10, 11, 12, 0, time.UTC),
-			},
-			Guards: []factorydefinitions.FactoryGuardConfig{{
-				Type:          factorydefinitions.GuardTypeInferenceThrottle,
-				ModelProvider: "provider-a",
-				Model:         "model-a",
-			}},
-			Workers: []factorydefinitions.FactoryWorkerConfig{
-				{
-					ID:                          "worker-id",
-					Name:                        "worker",
-					Type:                        factorydefinitions.WorkerTypeInference,
-					Provider:                    "${provider}",
-					Model:                       "${model}",
-					ModelProvider:               "${provider}",
-					ReasoningEffort:             "${effort}",
-					ModelLocality:               "${locality}",
-					ExecutorProvider:            "${executor}",
-					Command:                     "${command}",
-					Args:                        []string{"--prompt=${prompt}", "${file}"},
-					Timeout:                     "${timeout}",
-					StopToken:                   "${stop}",
-					Body:                        "worker body ${prompt}",
-					PromptSourcePath:            "workers/worker/AGENTS.md",
-					SessionID:                   "session-id",
-					RuntimeDefaultModelProvider: "fallback-provider",
-					RuntimeDefaultModel:         "fallback-model",
-					SkipPermissions:             true,
-					AgentTools:                  &factorydefinitions.AgentToolsConfig{Policy: "READ_ONLY"},
-					Operations: []factorydefinitions.ModelOperation{{
-						Name: "answer",
-						Inputs: []factorydefinitions.ModelOperationSlot{{
-							Name: "prompt", ContentTypes: []string{"TEXT"}, Required: true,
-						}},
-						Outputs: []factorydefinitions.ModelOperationSlot{{
-							Name: "result", ContentTypes: []string{"JSON"},
-						}},
-					}},
-					Resources: []factorydefinitions.ResourceConfig{{
-						ID: "worker-resource", Name: "worker-model", Type: factorydefinitions.ResourceTypeModel,
-						Capacity: 2, Model: "model-a", Backend: "local", LoadPolicy: "shared", Provider: "provider-a",
-					}},
-				},
-			},
-			Workstations: []factorydefinitions.FactoryWorkstationConfig{
-				{
-					ID: "workstation-id", Name: "run", Type: factorydefinitions.WorkstationTypeModel,
-					WorkerTypeName: "worker", Runner: "${runner}", PromptFile: "${promptFile}",
-					OutputSchema: "${schema}", OutputContract: "${contract}",
-					PromptTemplate: "run ${prompt}", Body: "workstation body ${prompt}",
-					WorkingDirectory: "${directory}", Worktree: "${worktree}", Timeout: "${timeout}",
-					OutcomeFormat:   factorydefinitions.DecisionEnvelopeOutcomeFormat,
-					WorkPropagation: &factorydefinitions.WorkPropagationConfig{Mode: factorydefinitions.WorkPropagationModePreserveInput},
-					Limits: factorydefinitions.WorkstationLimits{
-						MaxRetries: 2, MaxExecutionTime: "${timeout}", MaxGeneratedWorkItems: 4,
-						MaxGeneratedWorkItemsArgument: "${maxItems}", MaxGeneratedWorkItemsArgumentOffset: 3,
-					},
-					Env:              map[string]string{"GREETING": "hello ${prompt}"},
-					StopWords:        []string{"${stopWord}"},
-					RuntimeStopWords: []string{"${runtimeStopWord}"},
-					Cron: &factorydefinitions.CronConfig{
-						Schedule: "${schedule}", Every: "${every}", Jitter: "${jitter}", ExpiryWindow: "${expiry}",
-					},
-					OperationBindings: []factorydefinitions.ModelOperationBinding{{
-						Slot: "${slot}",
-						Selector: &factorydefinitions.ModelOperationBindingSelector{
-							Slot: "${slot}", Label: "${label}", Type: "${contentType}", Role: "${role}",
-						},
-						Config: []work.WorkContentPart{{
-							Type: work.WorkContentPartTypeText, Text: "config ${prompt}", URL: "${url}",
-							File: "${contentFile}", Slot: "${slot}", Label: "${label}", Role: "${role}",
-							ContentType: "${contentType}", JSON: json.RawMessage(`{"answer":"${prompt}"}`),
-						}},
-						DefaultContent: []work.WorkContentPart{{
-							Type: work.WorkContentPartTypeJSON, Text: "default ${prompt}", JSON: json.RawMessage(`{"answer":"${prompt}"}`),
-						}},
-					}},
-					Inputs: []factorydefinitions.IOConfig{{
-						WorkTypeName: "${workType}", StateName: "${state}",
-						Guard: &factorydefinitions.InputGuardConfig{
-							Type: factorydefinitions.GuardTypeMatchesFields, MatchInput: "${label}",
-							ParentInput: "${parent}", SpawnedBy: "${spawned}",
-						},
-					}},
-					Outputs:     []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "done"}},
-					OnContinue:  []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "continue"}},
-					OnRejection: []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "rejected"}},
-					OnFailure:   []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "failed"}},
-					ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{{
-						Label: "${label}", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "classified"}},
-					}},
-					ExpectedArtifacts: []factorydefinitions.ExpectedArtifactConfig{{
-						Name: "${artifact}", Pattern: "artifacts/${prompt}.txt", NonEmpty: true,
-					}},
-					Resources: []factorydefinitions.ResourceConfig{{
-						ID: "workstation-resource", Name: "workstation-model", Type: factorydefinitions.ResourceTypeModel,
-						Capacity: 1, Model: "model-a", Provider: "provider-a",
-					}},
-					Guards: []factorydefinitions.GuardConfig{{
-						Type: factorydefinitions.GuardTypeVisitCount, Workstation: "${guardWorkstation}",
-						MaxVisits: 2, MaxVisitsArgument: "${maxVisits}",
-						MatchConfig: &factorydefinitions.GuardMatchConfig{InputKey: "${inputKey}"},
-					}},
-				},
-				{
-					ID: "logical-id", Name: "logical", Type: factorydefinitions.WorkstationTypeLogical,
-					Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "ready"}},
-					Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "done"}},
-				},
-			},
+		EffectiveDefinition: functionalExecutionCatalogDefinition(),
+		Invocation:          functionalExecutionCatalogInvocation(),
+		References:          functionalExecutionCatalogReferences(),
+	}
+}
+
+func functionalExecutionCatalogDefinition() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		Name:   "functional-detached-factory",
+		Runner: "codex",
+		Version: &factorydefinitions.FactoryVersion{
+			Logical:  7,
+			Physical: time.Date(2026, 8, 12, 10, 11, 12, 0, time.UTC),
 		},
-		Invocation: factorydefinitions.InvocationDefinitionContext{
-			Arguments: &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
-				"provider":         {Values: []string{"provider-a"}},
-				"model":            {Values: []string{"model-a"}},
-				"effort":           {Values: []string{"high"}},
-				"locality":         {Values: []string{"LOCAL"}},
-				"executor":         {Values: []string{"SCRIPT_WRAP"}},
-				"command":          {Values: []string{"you-worker"}},
-				"prompt":           {Values: []string{"hello"}},
-				"file":             {Values: []string{"payload.txt"}, ValueMode: work.InvocationParameterValueModeFileContents},
-				"timeout":          {Values: []string{"2s"}},
-				"stop":             {Values: []string{"<STOP>"}},
-				"runner":           {Values: []string{"codex"}},
-				"promptFile":       {Values: []string{"prompt.md"}},
-				"schema":           {Values: []string{"schema.json"}},
-				"contract":         {Values: []string{"contract.json"}},
-				"directory":        {Values: []string{"workspace"}},
-				"worktree":         {Values: []string{"tree"}},
-				"maxItems":         {Values: []string{"max-items"}},
-				"stopWord":         {Values: []string{"STOP"}},
-				"runtimeStopWord":  {Values: []string{"RUNTIME_STOP"}},
-				"schedule":         {Values: []string{"0 * * * *"}},
-				"every":            {Values: []string{"1h"}},
-				"jitter":           {Values: []string{"5m"}},
-				"expiry":           {Values: []string{"10m"}},
-				"slot":             {Values: []string{"prompt"}},
-				"label":            {Values: []string{"accepted"}},
-				"contentType":      {Values: []string{"TEXT"}},
-				"role":             {Values: []string{"user"}},
-				"url":              {Values: []string{"https://example.test/input"}},
-				"contentFile":      {Values: []string{"input.txt"}},
-				"json":             {Values: []string{`{"answer":"ok"}`}},
-				"workType":         {Values: []string{"task"}},
-				"state":            {Values: []string{"ready"}},
-				"parent":           {Values: []string{"parent-input"}},
-				"spawned":          {Values: []string{"source-work"}},
-				"artifact":         {Values: []string{"answer"}},
-				"guardWorkstation": {Values: []string{"run"}},
-				"maxVisits":        {Values: []string{"max-visits"}},
-				"inputKey":         {Values: []string{"input-key"}},
-			}},
-			ReadFile: func(name string) ([]byte, error) {
-				if name != "payload.txt" {
-					return nil, fmt.Errorf("unexpected file %q", name)
-				}
-				return []byte("from-file"), nil
-			},
+		Guards: []factorydefinitions.FactoryGuardConfig{{
+			Type:          factorydefinitions.GuardTypeInferenceThrottle,
+			ModelProvider: "provider-a",
+			Model:         "model-a",
+		}},
+		Workers: []factorydefinitions.FactoryWorkerConfig{functionalExecutionCatalogWorker()},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
+			functionalExecutionCatalogRunWorkstation(),
+			functionalExecutionCatalogLogicalWorkstation(),
 		},
-		References: factorydefinitions.ExecutionCatalogReferenceCatalog{
-			Runners:   map[string]struct{}{"codex": {}},
-			Providers: map[string]struct{}{"provider-a": {}},
-			Models:    map[string]struct{}{"model-a": {}},
+	}
+}
+
+func functionalExecutionCatalogWorker() factorydefinitions.FactoryWorkerConfig {
+	return factorydefinitions.FactoryWorkerConfig{
+		ID:                          "worker-id",
+		Name:                        "worker",
+		Type:                        factorydefinitions.WorkerTypeInference,
+		Provider:                    "${provider}",
+		Model:                       "${model}",
+		ModelProvider:               "${provider}",
+		ReasoningEffort:             "${effort}",
+		ModelLocality:               "${locality}",
+		ExecutorProvider:            "${executor}",
+		Command:                     "${command}",
+		Args:                        []string{"--prompt=${prompt}", "${file}"},
+		Timeout:                     "${timeout}",
+		StopToken:                   "${stop}",
+		Body:                        "worker body ${prompt}",
+		PromptSourcePath:            "workers/worker/AGENTS.md",
+		SessionID:                   "session-id",
+		RuntimeDefaultModelProvider: "fallback-provider",
+		RuntimeDefaultModel:         "fallback-model",
+		SkipPermissions:             true,
+		AgentTools:                  &factorydefinitions.AgentToolsConfig{Policy: "READ_ONLY"},
+		Operations:                  []factorydefinitions.ModelOperation{functionalExecutionCatalogWorkerOperation()},
+		Resources: []factorydefinitions.ResourceConfig{{
+			ID: "worker-resource", Name: "worker-model", Type: factorydefinitions.ResourceTypeModel,
+			Capacity: 2, Model: "model-a", Backend: "local", LoadPolicy: "shared", Provider: "provider-a",
+		}},
+	}
+}
+
+func functionalExecutionCatalogWorkerOperation() factorydefinitions.ModelOperation {
+	return factorydefinitions.ModelOperation{
+		Name: "answer",
+		Inputs: []factorydefinitions.ModelOperationSlot{{
+			Name: "prompt", ContentTypes: []string{"TEXT"}, Required: true,
+		}},
+		Outputs: []factorydefinitions.ModelOperationSlot{{
+			Name: "result", ContentTypes: []string{"JSON"},
+		}},
+	}
+}
+
+func functionalExecutionCatalogRunWorkstation() factorydefinitions.FactoryWorkstationConfig {
+	return factorydefinitions.FactoryWorkstationConfig{
+		ID: "workstation-id", Name: "run", Type: factorydefinitions.WorkstationTypeModel,
+		WorkerTypeName: "worker", Runner: "${runner}", PromptFile: "${promptFile}",
+		OutputSchema: "${schema}", OutputContract: "${contract}",
+		PromptTemplate: "run ${prompt}", Body: "workstation body ${prompt}",
+		WorkingDirectory: "${directory}", Worktree: "${worktree}", Timeout: "${timeout}",
+		OutcomeFormat:   factorydefinitions.DecisionEnvelopeOutcomeFormat,
+		WorkPropagation: &factorydefinitions.WorkPropagationConfig{Mode: factorydefinitions.WorkPropagationModePreserveInput},
+		Limits: factorydefinitions.WorkstationLimits{
+			MaxRetries: 2, MaxExecutionTime: "${timeout}", MaxGeneratedWorkItems: 4,
+			MaxGeneratedWorkItemsArgument: "${maxItems}", MaxGeneratedWorkItemsArgumentOffset: 3,
 		},
+		Env:              map[string]string{"GREETING": "hello ${prompt}"},
+		StopWords:        []string{"${stopWord}"},
+		RuntimeStopWords: []string{"${runtimeStopWord}"},
+		Cron: &factorydefinitions.CronConfig{
+			Schedule: "${schedule}", Every: "${every}", Jitter: "${jitter}", ExpiryWindow: "${expiry}",
+		},
+		OperationBindings: []factorydefinitions.ModelOperationBinding{functionalExecutionCatalogOperationBinding()},
+		Inputs:            []factorydefinitions.IOConfig{functionalExecutionCatalogInput()},
+		Outputs:           []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "done"}},
+		OnContinue:        []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "continue"}},
+		OnRejection:       []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "rejected"}},
+		OnFailure:         []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "failed"}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{{
+			Label: "${label}", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "classified"}},
+		}},
+		ExpectedArtifacts: []factorydefinitions.ExpectedArtifactConfig{{
+			Name: "${artifact}", Pattern: "artifacts/${prompt}.txt", NonEmpty: true,
+		}},
+		Resources: []factorydefinitions.ResourceConfig{{
+			ID: "workstation-resource", Name: "workstation-model", Type: factorydefinitions.ResourceTypeModel,
+			Capacity: 1, Model: "model-a", Provider: "provider-a",
+		}},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type: factorydefinitions.GuardTypeVisitCount, Workstation: "${guardWorkstation}",
+			MaxVisits: 2, MaxVisitsArgument: "${maxVisits}",
+			MatchConfig: &factorydefinitions.GuardMatchConfig{InputKey: "${inputKey}"},
+		}},
+	}
+}
+
+func functionalExecutionCatalogOperationBinding() factorydefinitions.ModelOperationBinding {
+	return factorydefinitions.ModelOperationBinding{
+		Slot: "${slot}",
+		Selector: &factorydefinitions.ModelOperationBindingSelector{
+			Slot: "${slot}", Label: "${label}", Type: "${contentType}", Role: "${role}",
+		},
+		Config: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText, Text: "config ${prompt}", URL: "${url}",
+			File: "${contentFile}", Slot: "${slot}", Label: "${label}", Role: "${role}",
+			ContentType: "${contentType}", JSON: json.RawMessage(`{"answer":"${prompt}"}`),
+		}},
+		DefaultContent: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeJSON, Text: "default ${prompt}", JSON: json.RawMessage(`{"answer":"${prompt}"}`),
+		}},
+	}
+}
+
+func functionalExecutionCatalogInput() factorydefinitions.IOConfig {
+	return factorydefinitions.IOConfig{
+		WorkTypeName: "${workType}", StateName: "${state}",
+		Guard: &factorydefinitions.InputGuardConfig{
+			Type: factorydefinitions.GuardTypeMatchesFields, MatchInput: "${label}",
+			ParentInput: "${parent}", SpawnedBy: "${spawned}",
+		},
+	}
+}
+
+func functionalExecutionCatalogLogicalWorkstation() factorydefinitions.FactoryWorkstationConfig {
+	return factorydefinitions.FactoryWorkstationConfig{
+		ID: "logical-id", Name: "logical", Type: factorydefinitions.WorkstationTypeLogical,
+		Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "ready"}},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "${workType}", StateName: "done"}},
+	}
+}
+
+func functionalExecutionCatalogInvocation() factorydefinitions.InvocationDefinitionContext {
+	return factorydefinitions.InvocationDefinitionContext{
+		Arguments: functionalExecutionCatalogArguments(),
+		ReadFile: func(name string) ([]byte, error) {
+			if name != "payload.txt" {
+				return nil, fmt.Errorf("unexpected file %q", name)
+			}
+			return []byte("from-file"), nil
+		},
+	}
+}
+
+func functionalExecutionCatalogArguments() *work.InvocationArguments {
+	return &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"provider":         {Values: []string{"provider-a"}},
+		"model":            {Values: []string{"model-a"}},
+		"effort":           {Values: []string{"high"}},
+		"locality":         {Values: []string{"LOCAL"}},
+		"executor":         {Values: []string{"SCRIPT_WRAP"}},
+		"command":          {Values: []string{"you-worker"}},
+		"prompt":           {Values: []string{"hello"}},
+		"file":             {Values: []string{"payload.txt"}, ValueMode: work.InvocationParameterValueModeFileContents},
+		"timeout":          {Values: []string{"2s"}},
+		"stop":             {Values: []string{"<STOP>"}},
+		"runner":           {Values: []string{"codex"}},
+		"promptFile":       {Values: []string{"prompt.md"}},
+		"schema":           {Values: []string{"schema.json"}},
+		"contract":         {Values: []string{"contract.json"}},
+		"directory":        {Values: []string{"workspace"}},
+		"worktree":         {Values: []string{"tree"}},
+		"maxItems":         {Values: []string{"max-items"}},
+		"stopWord":         {Values: []string{"STOP"}},
+		"runtimeStopWord":  {Values: []string{"RUNTIME_STOP"}},
+		"schedule":         {Values: []string{"0 * * * *"}},
+		"every":            {Values: []string{"1h"}},
+		"jitter":           {Values: []string{"5m"}},
+		"expiry":           {Values: []string{"10m"}},
+		"slot":             {Values: []string{"prompt"}},
+		"label":            {Values: []string{"accepted"}},
+		"contentType":      {Values: []string{"TEXT"}},
+		"role":             {Values: []string{"user"}},
+		"url":              {Values: []string{"https://example.test/input"}},
+		"contentFile":      {Values: []string{"input.txt"}},
+		"json":             {Values: []string{`{"answer":"ok"}`}},
+		"workType":         {Values: []string{"task"}},
+		"state":            {Values: []string{"ready"}},
+		"parent":           {Values: []string{"parent-input"}},
+		"spawned":          {Values: []string{"source-work"}},
+		"artifact":         {Values: []string{"answer"}},
+		"guardWorkstation": {Values: []string{"run"}},
+		"maxVisits":        {Values: []string{"max-visits"}},
+		"inputKey":         {Values: []string{"input-key"}},
+	}}
+}
+
+func functionalExecutionCatalogReferences() factorydefinitions.ExecutionCatalogReferenceCatalog {
+	return factorydefinitions.ExecutionCatalogReferenceCatalog{
+		Runners:   map[string]struct{}{"codex": {}},
+		Providers: map[string]struct{}{"provider-a": {}},
+		Models:    map[string]struct{}{"model-a": {}},
 	}
 }
 
