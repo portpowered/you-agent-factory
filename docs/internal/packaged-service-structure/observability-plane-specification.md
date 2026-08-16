@@ -1,8 +1,8 @@
 # Observability Plane Packet Specification
 
-Status: Story 002 target contracts authored; current-tree inventory and target
-contract baseline are complete. Later stories add the post-BTRC-P6 packets to
-this same specification.
+Status: Story 003 post-BTRC-P6 strangler packet register authored; the current
+tree inventory and target-contract baseline are complete. Story 004 owns the
+final deletion, enforcement, verification, and delivery closure.
 
 This document is the authoritative starting point for a backend logs, metrics,
 and traces plane. This iteration is documentation-only. It does not add
@@ -634,3 +634,515 @@ specifies immutable context propagation and bounded metric joins. It leaves
 the current logger and metrics sink in place, adds no production source or
 dependency, and places all package/interface-adding implementation after
 BTRC P6. `make typecheck` passes on this checkout.
+
+## Post-BTRC-P6 implementation packet register (Story 003)
+
+This register is the implementation sequence for the target above. It is not
+permission to change this authoring branch's production tree. Every packet
+leaves `main` releasable, introduces a replacement before moving callers, and
+keeps the current logger, runtime log artifact, and JSONL metrics sink usable
+until a later packet proves their deletion condition.
+
+### Ordering gate and packet-wide rules
+
+The BTRC plan's P6 retirement packet is a hard prerequisite. `OBS-01` through
+`OBS-07` may be implemented only after BTRC P6, including its applicable
+P6-A–P6-D deletion slices, has merged. The implementation owner must rerun the
+caller audit from the then-current `main` before starting `OBS-01`; a missing
+or already-deleted BTRC surface is recorded as absent, never recreated. This
+avoids targeting the active secondary composition graph and makes the public
+post-P6 roots the only construction boundary.
+
+All seven packets add, change, or remove a package/interface surface and are
+therefore explicitly post-BTRC-P6 work. OpenTelemetry module changes, if
+needed, belong only in `OBS-02` or a later packet and must not be backported
+into the BTRC lane. No packet designs, implements, or reserves a resumption
+plane, resumption state, resumption API, or resumption migration seam.
+
+Every implementation packet consumes the post-P6 public service roots and
+`pkg/root.BuildProcess`/`pkg/wire` construction boundary. It must not import
+or reconstruct `internal/runtimeopening`, `internal/executionopening`,
+grouped service aliases, obsolete Wire providers, or any BTRC compatibility
+graph that P6 retired. A packet that discovers one of those paths as a
+remaining caller stops its deletion row, characterizes the behavior, and
+routes the caller through the named public successor before continuing.
+
+Each estimate below is bounded for one sitting review and is below roughly
+800 changed lines. If implementation crosses roughly 800 changed lines, or a
+reviewer cannot hold the caller set in one change, split before coding by
+signal or caller family. Both resulting slices must build and preserve the
+old path; a split may not introduce a second provider graph, an unowned
+compatibility package, or a later-packet dependency that restores behavior.
+
+### Current caller register for packet planning
+
+The baseline's 135 service files are only one part of the migration. The full
+direct-import measurement below prevents the packet list from silently
+leaving transport, Wire, test-support, or platform compatibility callers
+behind. Counts are files, not log calls; “production” excludes every
+`*_test.go`. The command groups the exact quoted `pkg/platform/logging`
+import-path matches already measured in the audit:
+
+```powershell
+$import = '"github.com/portpowered/infinite-you/pkg/platform/logging"'
+$files = @(rg -l $import --glob '*.go' cmd internal pkg)
+$files | ForEach-Object {
+  $parts = $_ -split '[\\/]'
+  if ($parts.Count -ge 2) { $parts[0] + '/' + $parts[1] } else { $parts[0] }
+} | Group-Object | Sort-Object Name | ForEach-Object {
+  "$($_.Name): $($_.Count)"
+}
+# Repeat the same command with --glob '!**/*_test.go' for production files.
+```
+
+| Direct-import family | All / production files | Migration owner | Packet |
+| --- | ---: | --- | --- |
+| `pkg/services` | 135 / 58 | Service roots and their private callers | `OBS-03`–`OBS-06` |
+| `pkg/wire` | 22 / 13 | Wire construction and runtime-scope adapters | `OBS-02`–`OBS-04` |
+| `pkg/transports` | 11 / 4 | Transport boundary callers | `OBS-05`–`OBS-06` |
+| `pkg/platform` | 5 / 4 | Legacy implementation/adapter internals | `OBS-02`, `OBS-07` |
+| `internal/testutil` | 3 / 2 | Test-support fixtures | `OBS-06` |
+| `cmd/loggingboundarycheck` | 2 / 1 | Static enforcement tool; not a runtime caller | `OBS-06`, `OBS-07` |
+| `cmd/pkgboundarycheck` | 2 / 0 | Test-only boundary fixture | `OBS-06` |
+| **Total** | **180 / 82** |  |  |
+
+The service-family rows in the baseline expand to 135 all / 58 production
+files: `factory_runtime` 30 / 10, `workers` 21 / 14, `providers` 20 / 4,
+`operator_settings` 14 / 4, `worker_sessions` 13 / 3, `recordings` 11 / 7,
+`chat_sessions` 9 / 4, `factory_definitions` 7 / 5,
+`factory_sessions` 3 / 3, `webhooks` 3 / 2, `events` 2 / 2, and `models`
+2 / 0. Those values use the service-only command in the audit and are
+rechecked before implementation because later source movement makes the
+original snapshot stale.
+
+### Packet sequence at a glance
+
+| Packet | Observable endpoint | Depends on | Rough size |
+| --- | --- | --- | ---: |
+| `OBS-01` | Immutable correlation and typed signals are capturable without changing product behavior. | BTRC P6 | 8–14 files / 250–500 lines |
+| `OBS-02` | One Wire/Initializer-owned provider can export or degrade without affecting a product operation. | BTRC P6, `OBS-01` | 18–30 files / 450–700 lines |
+| `OBS-03` | A stale Worker Session, executor-slot pressure, timeout, and terminal outcome are directly joinable. | BTRC P6, `OBS-02` | 12–20 files / 350–650 lines |
+| `OBS-04` | Direct and child worker/provider attempts carry safe identity through the daemon boundary. | BTRC P6, `OBS-03` | 16–26 files / 450–750 lines |
+| `OBS-05` | Factory Session, Work, recording, and asynchronous response signals share the same scope. | BTRC P6, `OBS-03`, `OBS-04` | 14–24 files / 400–700 lines |
+| `OBS-06` | Remaining service/transport callers use the replacement and the boundary checker prevents new legacy use. | BTRC P6, `OBS-05` | 18–30 files / 450–800 lines |
+| `OBS-07` | Legacy logger/metrics compatibility is deleted only after zero consumers and behavioral proof. | BTRC P6, `OBS-06` | 14–24 files / 300–650 lines |
+
+### OBS-01 — Correlation context and typed signal kernel
+
+#### Outcome and preserved behavior
+
+Add the policy-free kernel for immutable correlation scope, typed log records,
+metric descriptors/points, bounded diagnostic references, and context-first
+span handles under the public `pkg/platform` boundary. A deterministic
+in-memory provider and no-op/degraded provider make the contract observable
+without requiring a destination. Existing `pkg/platform/logging.Logger`,
+`RuntimeMetricsSink`, rolling files, and runtime artifact paths remain the
+working production path. No service caller changes in this packet.
+
+#### Build first and caller migration
+
+1. Re-audit BTRC P6 and freeze the public post-P6 owner roots before adding a
+   package or interface.
+2. Add the immutable scope, explicit field-state representation, allowlisted
+   safe scalar values, typed descriptors, and context attach/extract helpers.
+3. Add in-memory capture and no-op implementations before any production
+   caller is moved; test providers must expose emitted records, not internal
+   maps.
+4. Make the replacement canonical for new packet code. Existing callers keep
+   using the old facade until their named migration packet.
+
+| Caller family | Current behavior | Migration direction |
+| --- | --- | --- |
+| `pkg/platform` tests and adapter fixtures | Exercise logger, metric, rolling-file, and artifact mechanics independently. | Add contract-level capture tests beside existing mechanics; do not remove or bypass the existing sinks. |
+| `pkg/services`, `pkg/wire`, and `pkg/transports` | Use the current injected logger or runtime metric record path. | No production migration yet; later packets consume the new context-aware ports. |
+
+#### Strangler and deletion row
+
+There is no deletion in `OBS-01`. The successor is the typed platform kernel;
+the legacy logger and untyped JSONL metric sink remain available and receive
+no new design work beyond compatibility. This is the build-first replacement
+that makes later caller packets independently mergeable.
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Scope enrichment does not mutate a parent, lose cancellation, or invent an ID. | Platform unit tests attach, derive, cancel, and inspect known, not-applicable, not-yet-assigned, and unavailable fields. | `make pkg-boundary`, `make pkg-structure`, `make pkg-file-count`, and `make typecheck`; local platform unit tier. |
+| Safe records and metric schemas reject arbitrary payloads and unique metric dimensions. | In-memory capture tests assert redaction, fixed field budgets, bounded attributes, and explicit metric rejection. | `go vet` and focused `pkg/platform/...` tests; no source-inventory test. |
+| Trace/span handles have one terminal lifecycle. | In-memory span tests observe child identity, status/error mapping, cancellation, and idempotent/no-op behavior. | PR backend unit tier. |
+
+#### Size, ownership, dependency, and endpoint
+
+Platform observability/logging/metrics owners own the packet. It depends only
+on merged BTRC P6. If it exceeds roughly 800 lines, split correlation/context
+from signal descriptors/capture, with both slices retaining the old paths.
+The independently mergeable endpoint is a compiling, tested kernel and
+capture provider with no change to customer runtime behavior.
+
+### OBS-02 — Isolated provider and exporter lifecycle
+
+#### Outcome and preserved behavior
+
+Construct one observability provider through `pkg/wire`, activate and unwind
+it through `pkg/initializer`, and keep exporter, queue, flush, and shutdown
+failure isolated from Work, Factory Session, Worker Session, and attempt
+outcomes. OTLP configuration and OpenTelemetry module dependencies, if
+adopted by implementation, land here after BTRC P6. The local diagnostic
+writer may continue to use `rollingfile.Writer` and `runtimeartifact.Reserver`;
+those effects remain policy-free. Existing terminal/runtime log output and
+JSONL metrics remain observable during the bridge.
+
+#### Build first and caller migration
+
+1. Add explicit provider configuration, bounded queue/drop accounting, a
+   no-op default, in-memory exporter, and bounded flush/close ownership.
+2. Add the OTLP adapter behind the provider boundary; services do not import
+   an SDK or build OTLP payloads.
+3. Add Wire construction and Initializer lifecycle hooks, proving process
+   construction remains inert and startup failure unwinds acquired roles.
+4. Add a compatibility bridge that can dual-write a safe record to the new
+   provider and the current local sink. The bridge does not select service
+   policy or create a second composition graph.
+
+| Caller family | Current behavior | Migration direction |
+| --- | --- | --- |
+| `pkg/wire` (22 / 13 logging-import files) | Constructs injected loggers, runtime log owners, and metric owners. | Keep construction in Wire; inject the provider-owned narrow ports and retain legacy adapters until `OBS-07`. |
+| `pkg/initializer/runtimeapplication` and runtime artifact owners | Own activation, close, and local artifact diagnostics. | Own only provider lifecycle and bounded flush; preserve artifact ownership and primary-error cleanup semantics. |
+| `pkg/transports/cli/runconfig/config.go` | Directly imports the platform metrics configuration. | Carry explicit observability configuration to Wire; remove the direct metrics dependency only after the replacement is active. |
+| `pkg/platform/logging` and `pkg/platform/metrics` compatibility code | Opens local sinks and serializes legacy records. | Adapt behind the provider; do not delete local sinks in this packet. |
+
+#### Strangler and deletion row
+
+`BuildLogger`, runtime log opening, `RuntimeMetricsOpener`, and
+`RuntimeMetricsSink` are retained as compatibility paths. The named successor
+is the Wire/Initializer-owned provider plus its local diagnostic adapter. A
+later deletion row may remove only a compatibility constructor whose last
+caller has migrated and whose provider lifecycle guard is green.
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Provider construction is inert and lifecycle is owned once. | Root/lifecycle tests build without effects, activate once, close once, and join cleanup errors without masking the primary error. | `make logging-boundary-check`, `make pkg-boundary`, `make pkg-structure`, and `make typecheck`; local root/lifecycle tier. |
+| Export failure cannot change a product result. | In-memory/failed exporter tests observe a successful, failed, cancelled, and timed-out operation with the same product outcome and a bounded failure diagnostic. | `go vet`; focused platform/Wire/Initializer integration tier. |
+| Flush and queue behavior is bounded and visible. | Tests observe drop/overflow and flush timeout counters, close idempotence, and no write after close. | PR backend integration tier. |
+
+#### Size, ownership, dependency, and endpoint
+
+Platform implementation, Wire construction, and Initializer lifecycle owners
+share this packet. It depends on BTRC P6 and `OBS-01`; its module/dependency
+change is explicitly after BTRC P6. If it exceeds roughly 800 lines, split
+provider lifecycle from OTLP/local-diagnostic adapters, keeping the no-op
+provider and old sinks usable in each slice. The endpoint is an opt-in,
+failure-isolated provider on the canonical process graph.
+
+### OBS-03 — Worker Session age, slot, timeout, and terminal slice
+
+#### Outcome and preserved behavior
+
+This is the first behavior-delivering packet. `factory_runtime` and
+`worker_sessions` emit the direct evidence needed for the supplied incident:
+Worker Session age, executor-slot/in-flight pressure, timeout classification,
+and exactly one terminal outcome. A bounded metric series points to a
+diagnostic record, while logs and spans carry the full safe correlation set.
+The public Worker Session view, Factory Runtime transitions, cancellation, and
+existing local artifacts remain unchanged. The four-instrument manual join is
+replaced by one observable signal path; the historical incident date is not a
+retention or deletion rule.
+
+#### Build first and caller migration
+
+1. Characterize current Worker Session identity/state/result and Runtime
+   dispatch/timeout behavior at public roots using the existing tests.
+2. Attach immutable scope at Work/Factory Session/Worker Session admission and
+   extend it at stage, transition, dispatch, and attempt boundaries.
+3. Emit the new age, active, in-flight, timeout, and terminal signals beside
+   the old logger and `RuntimeMetricsSink`; prove both paths before switching
+   the migrated calls to the replacement as canonical.
+4. Move bounded production caller batches, then their tests and fixtures. Do
+   not remove the old adapter while any family still needs it.
+
+| Caller family | Current evidence | Migration direction |
+| --- | --- | --- |
+| `pkg/services/worker_sessions` (13 / 3) | Publication, supervision, process-exit, and lifecycle log consumers; public identity/state already exists. | Use the session root's context-aware log/span port; terminal and stale records must carry `worker_session_id`, Work, Factory Session, stage/transition, and attempt state. |
+| `pkg/services/factory_runtime` (30 / 10) | `internal/host/metrics.go`, dispatch/scheduling/lifecycle logging, and runtime metric projection. | Emit typed age, active, in-flight, timeout, and terminal points; keep domain `RuntimeMetricRecord` as a compatibility mapper until its final caller moves. |
+| `pkg/wire` runtime scope adapters | Opens runtime log/metric scopes for the above services. | Pass provider-owned ports and copied scopes; keep artifact paths and close behavior stable. |
+| Public runtime/Worker Session functional callers | Existing status, session, and throttle observability cells. | Extend public scenarios to observe emitted signals and the same Worker Session ID, not source topology. |
+
+#### Strangler and deletion row
+
+No old surface is deleted. `pkg/platform/logging.Logger`, the runtime log
+sink, `pkg/platform/metrics.RuntimeMetricsSink`, and the Factory Runtime
+metric projection remain the compatibility path while the new Worker Session
+signals are dual-emitted. The named successor is the typed provider and
+`factoryruntime`/`worker_sessions` root emission. Deletion is deferred to
+`OBS-07` until the last old caller is gone.
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Aged sessions are directly diagnosable. | A fake-clock/public-session scenario ages a non-terminal Worker Session beyond the configured timeout and observes `factory.worker_session.age`, its bounded diagnostic reference, matching log/span IDs, and the public stale state. | `make logging-boundary-check`, `make pkg-boundary`, `make pkg-structure`, and `make pkg-file-count`; local Runtime/Worker Session tier. |
+| Executor pressure and timeout do not strand or cross-talk lanes. | Concurrent public sessions observe `factory.dispatch.in_flight`, timeout/terminal records, one terminal classification per attempt, and no unrelated-lane termination. | `go test -race` on Runtime/Worker Session packages; PR backend functional tier. |
+| The daemon evidence is joinable and exporter failure is isolated. | Process-boundary evidence includes the Worker Session ID without raw payload/secret data; a failed exporter leaves the public result and cleanup unchanged. | `go vet` plus the existing root-process and runtime API functional lanes. |
+
+#### Size, ownership, dependency, and endpoint
+
+Factory Runtime and Worker Sessions own the behavior; platform and Wire own
+only the ports and construction already introduced. The packet depends on
+BTRC P6 and `OBS-02`, not on a later packet. If it exceeds roughly 800 lines,
+split Worker Session lifecycle from dispatch/timeout metrics, with each slice
+retaining the dual path and its direct behavioral guard. The endpoint is a
+public stale-session/slot/timeout scenario that an operator can join from one
+diagnostic reference.
+
+### OBS-04 — Worker/provider attempt and daemon-boundary slice
+
+#### Outcome and preserved behavior
+
+Direct, child, retry, provider, and external-process attempts carry safe
+attempt identity and parent/child span relationships through the Workers and
+Providers roots. Daemon stderr and provider diagnostics contain the same
+allowlisted Worker Session/attempt correlation without prompts, model output,
+credentials, or unbounded raw stderr. Existing retry, cancellation, timeout,
+worktree cleanup, provider selection, and terminal result behavior remain
+unchanged.
+
+#### Build first and caller migration
+
+1. Characterize direct/child attempt result, retry, cancellation, timeout, and
+   cleanup behavior through `workers.Service.Execute` and provider contracts.
+2. Add child-scope creation at the Workers root and provider execution
+   boundary; add the allowlisted process carrier and receiver mapping.
+3. Dual-emit attempt start/terminal, provider outcome, duration, and safe
+   process-boundary diagnostics while the old logger and metric sink remain.
+4. Migrate worker and provider caller batches, then remove no compatibility
+   path until all attempt tests observe the replacement.
+
+| Caller family | Current evidence | Migration direction |
+| --- | --- | --- |
+| `pkg/services/workers` (21 / 14) | Runner selection, command execution, worktree, direct/child, and workstation logs. | Use context-aware spans/logs around one attempt and preserve request-scoped scheduling/retry policy in Workers. |
+| `pkg/services/providers` (20 / 4) | Provider execution/adapter logs and normalized execution attempts. | Emit provider child spans and bounded outcome/duration metrics through the Providers root; keep selection and protocol policy in Providers. |
+| Worker/provider test fixtures and command-runner edges | Existing success/failure/timeout/cancellation behavior tests. | Capture emitted records at the public contract or edge; do not add source-scanning proof or a custom second provider graph. |
+
+#### Strangler and deletion row
+
+The existing logger and runtime metrics adapter remain dual-write consumers.
+The named successor is the Workers/Providers context boundary backed by the
+provider from `OBS-02`; old per-call variadic logging and `any` metric writes
+are not deleted until `OBS-07` proves zero consumers and checker closure.
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Attempts remain terminal exactly once. | Direct, child, retry, provider-failure, timeout, and cancellation tests observe one terminal outcome, distinct attempt IDs, and preserved result mapping. | `make logging-boundary-check`, `make pkg-boundary`, and `go vet`; local Workers/Providers tier. |
+| Process and provider joins are safe. | Command-runner/provider tests observe the same allowlisted scope in parent/child signals and prove redaction of payload, credentials, and raw unbounded stderr. | `go test -race` for attempt/cancellation paths; PR backend integration tier. |
+| External-effect cleanup is preserved. | Worktree/process cleanup tests run on success, cancellation, pre-start failure, timeout, and exporter failure. | Root-process and Linux functional coverage tiers. |
+
+#### Size, ownership, dependency, and endpoint
+
+Workers owns request-scoped execution and Providers owns provider execution;
+platform owns only signal mechanics. The packet depends on BTRC P6 and
+`OBS-03`. If it exceeds roughly 800 lines, split provider execution from
+external-process/child propagation, preserving the same attempt contract in
+both. The endpoint is direct and child execution with joinable, redacted
+terminal evidence.
+
+### OBS-05 — Factory Session, Work, recording, and response-boundary slice
+
+#### Outcome and preserved behavior
+
+Factory Session, Work admission/materialization, Recordings, Chat Sessions,
+and source-native Events carry one immutable scope across synchronous calls,
+goroutines, response streams, and process/provider handoffs. Live response
+events remain distinct from canonical Factory Event replay. Work ID, Factory
+Session ID, Worker Session ID, stage/transition, attempt, and instrumentation
+trace identity are joined with explicit absent state; unique IDs remain out
+of metric aggregation dimensions.
+
+#### Build first and caller migration
+
+1. Characterize public session open/invoke/control/result, Work admission and
+   lineage, recording/replay, response event ordering, and ACP delegation.
+2. Attach each identity only at its owning public root and pass derived
+   contexts through asynchronous handoffs; preserve cancellation and bounded
+   detached cleanup contexts.
+3. Dual-emit logs/spans and bounded diagnostic metric references at session,
+   Work, recording, and response boundaries.
+4. Migrate the service batches and their public tests; leave old sinks usable
+   for any family not yet moved.
+
+| Caller family | Current evidence | Migration direction |
+| --- | --- | --- |
+| `pkg/services/factory_sessions` (3 / 3) | Hosted runtime/session construction and lifecycle logs. | Enrich at Factory Session root; keep customer session identity separate from runtime artifact identity. |
+| `pkg/services/recordings` (11 / 7) | Recording, replay, worker capture, and artifact construction logs. | Correlate canonical history and artifacts without making Recordings own live runtime state or exporter policy. |
+| `pkg/services/chat_sessions` (9 / 4) and `events` (2 / 2) | ACP bridge, response stream, source-native event storage, and subscription logs. | Carry copied scope through turns, controls, subscriptions, and backpressure paths; keep event retention separate from Factory replay. |
+| `pkg/services/work` and transport boundaries | Work owns identity/lineage but is not a current direct logging-import family. | Attach Work ID at Work admission/materialization and let service roots consume the narrow port; do not add a speculative Work logging dependency. |
+
+#### Strangler and deletion row
+
+No session, Work, recording, or event surface is deleted here. Existing log
+and metric compatibility paths remain until all service families move. The
+named successor is the public Sessions/Work/Recordings/Chat Sessions boundary
+using `context.Context`, with canonical history still owned by Recordings and
+live response state still owned by Sessions/Events.
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Concurrent sessions and turns remain isolated. | Public root tests run two sessions/turns and assert distinct scopes, ordered response events, and unchanged terminal envelopes. | `make logging-boundary-check`, `make pkg-boundary`, `make api-smoke`; local Sessions/Events tier. |
+| Canonical replay and live response joining remain distinct. | Recording/replay tests observe canonical event order and response-stream cursors while emitted signals retain the same safe session/Work scope. | `go test -race`; PR backend integration and API contract tiers. |
+| ACP/child cancellation does not leak work or suppress terminal evidence. | ACP and session functional cells observe cancellation/close terminalization, one attempt terminal, and a bounded diagnostic record even when cleanup is detached. | Linux functional and pinned ACP tiers. |
+
+#### Size, ownership, dependency, and endpoint
+
+Factory Sessions, Work, Recordings, Chat Sessions, and Events own their public
+boundaries; no peer internal type crosses the platform port. The packet
+depends on BTRC P6, `OBS-03`, and `OBS-04`. If it exceeds roughly 800 lines,
+split Factory Session/Work from Recordings/Chat Sessions/Events, keeping each
+public stream and replay behavior independently releasable. The endpoint is a
+public concurrent-session and replay/response scenario with cross-signal
+correlation.
+
+### OBS-06 — Remaining service callers and enforcement ratchet
+
+#### Outcome and preserved behavior
+
+All remaining service and transport callers use the typed, context-aware
+replacement in bounded batches. The measured service denominator of 135 all /
+58 production files is exhausted without a big-bang rewrite, while the
+remaining platform compatibility implementation is intentionally retained
+for `OBS-07`. `cmd/loggingboundarycheck` is extended as the existing static
+gate: it rejects new legacy logging imports/construction outside a small,
+named compatibility allowlist and checks the migrated boundary shape. No new
+filesystem-scanning checker is introduced.
+
+#### Build first and caller migration
+
+1. Add checker fixtures for prohibited new legacy imports/calls and missing
+   context-aware boundaries; keep the checker itself outside the runtime
+   caller denominator.
+2. Migrate one service-family batch at a time, starting with families that
+   have no production callers, then the larger settings/definitions/transport
+   families. Each batch keeps a dual adapter until its behavioral tests pass.
+3. Migrate transport and test-support callers after their owning service
+   contract is canonical; remove only stale fixture imports, not behavioral
+   coverage.
+4. Shrink the compatibility allowlist to only the named platform/Wire
+   adapters needed by `OBS-07`; no new caller may land on the old path.
+
+| Caller family | All / production files | Migration direction |
+| --- | ---: | --- |
+| `factory_definitions` | 7 / 5 | Context-aware catalog/package/validation operation records; preserve package safety and invocation policy. |
+| `operator_settings` | 14 / 4 | Context-aware settings resolution and construction diagnostics; keep settings policy in its owner. |
+| `webhooks` | 3 / 2 | Context-aware delivery/retry outcome records without moving hosted-source policy into the platform. |
+| `models` | 2 / 0 | Update test-only transport/bootstrap fixtures; no production model caller is implied by the count. |
+| `pkg/transports` | 11 / 4 | Map protocol context at the public boundary and keep representation mapping free of signal policy. |
+| `internal/testutil` and `cmd/pkgboundarycheck` | 5 / 2 | Use capture providers or explicit test adapters; do not make tests preserve a deleted runtime path. |
+
+#### Strangler and deletion row
+
+`OBS-06` deletes no platform compatibility surface. It removes migrated
+service/transport imports and reduces the checker allowlist. The named
+successor for every moved caller is its service root plus the platform ports
+from `OBS-01`/`OBS-02`; the old `Logger`, runtime log sink, and metrics sink
+remain until `OBS-07` has a fresh zero-consumer audit.
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Moved service operations emit safe, correlated outcomes. | Service/root tests capture known and absent scopes, redaction, failure classification, and cancellation without inspecting source topology. | Extended `cmd/loggingboundarycheck`, `make pkg-boundary`, `make pkg-structure`, `make pkg-file-count`, and `make typecheck`; local service tier. |
+| Protocol and package boundaries remain stable. | API/CLI/transport contract cells observe unchanged envelopes, errors, streams, and terminal behavior. | `make api-smoke`, `go vet`, and PR `make verify-fast`. |
+| Migration is complete by behavior, not by a meta-test. | Representative operations from every family emit through the capture provider; source counts are audit evidence only. | Backend unit/integration and relevant functional tiers; no source, route, registration, docs-link, or asset-inventory product test. |
+
+#### Size, ownership, dependency, and endpoint
+
+Service owners, transport owners, and `cmd/loggingboundarycheck` own their
+parts; the platform does not absorb their policy. The packet depends on BTRC
+P6 and `OBS-05`. If it approaches roughly 800 lines, split by the listed
+caller families (services first, transports/test support second), with each
+slice keeping the old adapter and checker allowlist explicit. The endpoint is
+zero service/transport imports of the legacy caller API, with only named
+platform/Wire compatibility rows remaining for `OBS-07`.
+
+### OBS-07 — Legacy logger/metrics deletion and canonical-plane closure
+
+#### Outcome and preserved behavior
+
+After `OBS-06`, delete the old caller-facing logger and untyped metrics
+compatibility surfaces in separately reviewable logging and metrics slices.
+The result is one provider lifecycle, one typed signal boundary, and the
+existing policy-free rolling-file/runtime-artifact effects only where a
+canonical local diagnostic implementation still needs them. No deletion is
+claimed for a surface that still has a caller, and retained compatibility is
+recorded as retained rather than silently counted as removed.
+
+#### Build first and caller migration
+
+1. Re-run the exact import/symbol audit on the post-`OBS-06` head and list
+   every remaining legacy caller, including tests and compatibility adapters.
+2. Require the checker to pass with no unowned allowlist entry and require
+   each deletion row below to name its landed replacement and observable
+   zero-consumer condition.
+3. Delete the legacy logging API/constructor and its Wire adapters only after
+   logging callers are zero; separately delete the untyped file-metrics API
+   only after metric callers are zero. Keep each slice releasable.
+4. Re-run stale-session, attempt, session/replay, exporter-failure, lifecycle,
+   race, and local-artifact guards before closing the packet.
+
+| Caller/old surface | Previously landed replacement | Migration/deletion direction |
+| --- | --- | --- |
+| `pkg/platform/logging.Logger` variadic operations, `NoopLogger`, and legacy `BuildLogger` acquisition | `OBS-01` typed context logger and `OBS-02` provider/local adapter, exercised by `OBS-03`–`OBS-06` | Delete only after no production or test caller uses the old operations and the logging checker has no compatibility allowlist entry for them. |
+| `pkg/platform/metrics.RuntimeMetricsOpener`, `RuntimeMetricsSink`, and `WriteMetric(ctx, any)` | `OBS-01` typed meter/diagnostic point and `OBS-02` provider lifecycle, exercised by `OBS-03`–`OBS-06` | Delete only after exact direct imports and symbol references are zero and typed point/diagnostic atomicity is green. |
+| `pkg/wire` `runtimeLogSinkAdapter` and `runtimeMetricRecordWriterAdapter` | `OBS-02` provider-owned ports and lifecycle | Delete after Wire/root construction and close tests prove no adapter reference remains. |
+| Factory Runtime `RuntimeMetricRecord` compatibility projection | `OBS-01` typed metric point plus provider diagnostic reference | Delete or make private only after its last mapper/test caller moves; preserve all bounded runtime metric meanings in the typed descriptors. |
+| Metrics-specific legacy JSONL opener/path policy | `OBS-02` local diagnostic adapter using policy-free `rollingfile`/`runtimeartifact` effects | Delete only after local diagnostic output, rotation, close, and failure isolation are observed through the successor. |
+
+`pkg/platform/rollingfile.Writer` and `pkg/platform/runtimeartifact.Reserver`
+are explicitly retained policy-free effects when transcript or local
+diagnostic owners still use them. They are not reported as deleted by this
+packet. The logging-boundary checker itself is retained; only obsolete
+legacy allowlist entries and fixtures are removed.
+
+#### Strangler and deletion register
+
+| Removal | Owning packet | Zero-consumer/checker condition | Preserved observable behavior |
+| --- | --- | --- | --- |
+| Legacy logger interface, variadic call path, and direct constructor | `OBS-07L` logging deletion slice | Exact import and symbol audit is zero outside the new adapter; `cmd/loggingboundarycheck` passes with no legacy logger allowance. | Severity, safe fields, terminal/runtime destinations, and correlation remain observable through the typed logger. |
+| Untyped runtime metrics sink/opener and metrics-specific JSONL compatibility | `OBS-07M` metrics deletion slice | Exact import/symbol audit is zero; typed descriptor, aggregation, diagnostic-reference, rotation, and close tests pass. | Counter/gauge/histogram meanings, local diagnostics, bounded retention, and exporter isolation remain observable. |
+| Wire runtime log/metric adapters and stale compatibility fixtures | `OBS-07L` / `OBS-07M` | No root construction or test fixture references; root lifecycle and process behavior pass. | Inert construction, activation/unwind, cleanup, and runtime artifact diagnostics remain stable. |
+| Factory Runtime compatibility metric projection | `OBS-07M` | Last mapper/test caller is migrated and a typed descriptor preserves every retained measurement. | Queue, dispatch, provider, lifecycle, state, and in-flight observations remain joinable. |
+
+#### Behavioral guards and static gates
+
+| Behavior | Guard | Static gate / tier |
+| --- | --- | --- |
+| Incident diagnosis remains direct after deletion. | Public stale Worker Session, executor-slot, timeout, daemon-log, and terminal scenario observes one joined scope across log, metric diagnostic record, span, and public state. | `make logging-boundary-check`, `make pkg-boundary`, `make pkg-structure`, `make pkg-file-count`, `go vet`; local Runtime/Workers tier. |
+| Provider failure and lifecycle closure remain isolated. | Exporter failure, queue overflow, flush timeout, startup failure, cancellation, and close tests preserve product outcomes and cleanup. | `go test -race`, `make verify-fast`, and PR backend integration tier. |
+| Canonical local artifacts remain usable. | Runtime log/diagnostic path, rotation, permissions, retention, and post-close behavior are observed through the successor. | Focused platform/artifact tests and relevant functional runtime API tier. |
+| No old path survives invisibly. | Zero-consumer audit and checker output are reviewed alongside behavioral tests; no product acceptance relies on a source or route inventory meta-test. | Final PR static gates plus backend/functional evidence. |
+
+#### Size, ownership, dependency, and endpoint
+
+Platform logging/metrics, Wire, and the checker own this packet. It depends on
+BTRC P6 and the completed `OBS-01`–`OBS-06` sequence. If it exceeds roughly
+800 lines, split `OBS-07L` and `OBS-07M`; each must delete only its own zero-
+consumer surface and leave the other compatibility path usable. The
+independently mergeable endpoint is one canonical, typed provider plane with
+all old caller-facing surfaces either deleted under a named condition or
+explicitly retained as policy-free infrastructure.
+
+### Story 003 packet closure
+
+Story 003 is complete when `OBS-01` through `OBS-07` are an ordered,
+post-BTRC-P6 implementation sequence with observable endpoints, build-first
+replacement steps, bounded caller migrations, named deletion successors,
+static gates, behavioral tiers, dependency/ownership/sizing, and independent
+merge points. The sequence prioritizes stale Worker Session age,
+executor-slot pressure, timeout/terminal evidence, and cross-signal
+correlation before broad caller migration. It does not add production code or
+dependencies in this authoring lane, and it contains no resumption design or
+reserved resumption packet.
