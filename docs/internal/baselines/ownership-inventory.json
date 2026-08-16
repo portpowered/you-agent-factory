@@ -4057,6 +4057,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/internal/runtimeports",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/internal/scopedlisting",
       "disposition": "retain",
       "destination": "factory_sessions",
@@ -5383,12 +5389,24 @@
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/workers/internal/draftvalidation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/interface",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal",
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/prompting",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/workers/internal/service",
@@ -5400,18 +5418,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runners/agents",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/runners/inference",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -5519,12 +5525,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
       "disposition": "retain",
       "destination": "workers",
@@ -5555,12 +5555,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/executor/workstation",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
       "disposition": "retain",
       "destination": "workers",
@@ -5580,12 +5574,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "disposition": "retain",
-      "destination": "workers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/prompting",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"

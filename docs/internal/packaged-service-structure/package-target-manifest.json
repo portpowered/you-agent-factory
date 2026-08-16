@@ -480,7 +480,9 @@
     "pkg/services/workers",
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
+    "pkg/services/workers/internal/draftvalidation",
     "pkg/services/workers/internal/interface",
+    "pkg/services/workers/internal/prompting",
     "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/internal/inference",
@@ -500,7 +502,6 @@
     "pkg/services/workers/internal/services/runtime_assembly/internal/service",
     "pkg/services/workers/internal/services/runtime_assembly/wire",
     "pkg/services/workers/internal/services/workstations",
-    "pkg/services/workers/internal/services/workstations/draftvalidation",
     "pkg/services/workers/internal/services/workstations/envdiagnostics",
     "pkg/services/workers/internal/services/workstations/execution",
     "pkg/services/workers/internal/services/workstations/execution/recording",
@@ -510,7 +511,6 @@
     "pkg/services/workers/internal/services/workstations/internal/service",
     "pkg/services/workers/internal/services/workstations/invocation",
     "pkg/services/workers/internal/services/workstations/poolboundary",
-    "pkg/services/workers/internal/services/workstations/prompting",
     "pkg/services/workers/internal/services/workstations/skippermissions",
     "pkg/services/workers/internal/services/workstations/wire",
     "pkg/services/workers/internal/services/workstations/worktree",
@@ -2778,8 +2778,18 @@
       "destination": "workers/internal"
     },
     {
+      "packagePath": "pkg/services/workers/internal/draftvalidation",
+      "disposition": "retain",
+      "destination": "workers/internal"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/interface",
       "disposition": "move",
+      "destination": "workers/internal"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/prompting",
+      "disposition": "retain",
       "destination": "workers/internal"
     },
     {
@@ -2878,11 +2888,6 @@
       "destination": "workers/internal/services/workstations"
     },
     {
-      "packagePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
-      "disposition": "retain",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
       "packagePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
@@ -2924,11 +2929,6 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "disposition": "retain",
-      "destination": "workers/internal/services/workstations"
-    },
-    {
-      "packagePath": "pkg/services/workers/internal/services/workstations/prompting",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
     },

@@ -2835,7 +2835,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/draftvalidation",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/draftvalidation",
       "minimum": 0.00
     },
     {
@@ -2887,7 +2887,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting",
       "minimum": 23.80
     },
     {

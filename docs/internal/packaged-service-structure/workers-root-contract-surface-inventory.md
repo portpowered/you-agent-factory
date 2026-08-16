@@ -70,7 +70,7 @@ fold or delete them.
 | `model_invocation.go` | *(folded)* | Workstation pool contracts split to `workstation_contracts.go`; implementation under workstations during story 003. |
 | `opencode_agent_contract_test.go` | *(folded)* | Moved to `internal/services/runners/runner` with runner policy during story 002. |
 | `progress_observations.go` | keep | Provider-neutral progress fragments accepted by Factory Session response streams. |
-| `prompt_template_contracts.go` | keep | Prompt template contract types retained at root; implementation under `internal/services/workstations/prompting`. |
+| `prompt_template_contracts.go` | keep | Prompt template contract types retained at root; implementation under `internal/prompting`. |
 | `prompt_templates.go` | *(folded)* | Split to `prompt_template_contracts.go` + internal prompting during story 003. |
 | `provider_port.go` | keep | `Provider` inference port explicitly documented for cross-service consumers (for example Recordings replay). |
 | `provider_port_test.go` | keep | Root-contract characterization test for `provider_port.go`. |
