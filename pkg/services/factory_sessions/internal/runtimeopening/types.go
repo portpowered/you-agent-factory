@@ -33,6 +33,18 @@ type workerSessionsObservationProvider interface {
 	WorkerSessionsObservation() workersessions.ObservationService
 }
 
+type detachedOperationsProvider interface {
+	DetachedOperations() factorysessions.DetachedService
+}
+
+func detachedOperationsFromAssembly(assembly roles.RuntimeAssembly) factorysessions.DetachedService {
+	provider, ok := assembly.(detachedOperationsProvider)
+	if !ok {
+		return nil
+	}
+	return provider.DetachedOperations()
+}
+
 func historicalReplayRuntimeProducts(
 	logger *zap.Logger,
 	projection recordingreplay.RecordingReplayProjection,

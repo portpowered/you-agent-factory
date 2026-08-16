@@ -158,6 +158,10 @@ type RuntimeHTTPServices struct {
 	FactoryDefinitions interfaces.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    Service
+	// FactorySessionOperations is the process-root detached operation view.
+	// Runtime-bound legacy services remain available during the migration, while
+	// new consumers can route through the one root-owned capability.
+	FactorySessionOperations DetachedService
 	// LiveControl is the same runtime-bound Factory Sessions authority as
 	// FactorySessions, narrowed for clients that only manage live sessions.
 	// The broad root remains available here for stream, reconnect, invocation,

@@ -145,7 +145,17 @@ func NewService(
 
 // NewDetachedOperations binds the build-first Sessions operation view to the
 // already-composed root. It performs no child construction or lifecycle work.
-func NewDetachedOperations(owner factorysessions.Service) (factorysessions.DetachedService, error) {
+
+type detachedOperationsProvider interface {
+	DetachedOperations() factorysessions.DetachedService
+}
+
+func NewDetachedOperations(owner factorysessions.DetachedOperationsOwner) (factorysessions.DetachedService, error) {
+	if provider, ok := owner.(detachedOperationsProvider); ok {
+		if operations := provider.DetachedOperations(); operations != nil {
+			return operations, nil
+		}
+	}
 	return (&factorysessions.DetachedOperations{}).Bind(owner)
 }
 

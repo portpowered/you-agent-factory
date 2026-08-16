@@ -35,6 +35,9 @@ func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
 	if root == nil {
 		t.Fatal("NewRoot() returned nil root")
 	}
+	if root.DetachedOperations() == nil {
+		t.Fatal("NewRoot() did not publish detached operations")
+	}
 	if root.liveChangeCoordinator != coordinator {
 		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
 	}

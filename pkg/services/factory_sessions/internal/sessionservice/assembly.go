@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -46,6 +47,9 @@ type Assembly struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
+	detachedMu                   sync.RWMutex
+	detachedGateways             map[string]factorysessions.DetachedOperationsOwner
+	detachedGatewayOrder         []string
 }
 
 type streamManager interface {
@@ -101,6 +105,7 @@ func NewAssembly(
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
+		detachedGateways:             make(map[string]factorysessions.DetachedOperationsOwner),
 	}
 }
 
@@ -304,9 +309,10 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, err
 	}
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
+	a.registerDetachedGateway(sessionID, gateway)
 	// The per-runtime gateway is returned to the operation caller. The
-	// process-scoped root keeps its original stable service slot so concurrent
-	// session completions cannot replace or race the shared root.
+	// process-scoped assembly keeps its original stable service slot so
+	// concurrent session completions cannot replace or race the shared root.
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
 }
 

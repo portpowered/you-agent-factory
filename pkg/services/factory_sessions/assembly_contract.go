@@ -114,17 +114,50 @@ func (err *InvocationValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", err.Field, err.Message)
 }
 
-// DetachedOperations is a compatibility view over the existing Factory
-// Sessions Service. It owns no registry and constructs no child service; each
-// method translates a value-only request to the existing live or durable owner
-// operation and returns a detached projection.
+// DetachedOperationsOwner is the existing Factory Sessions operation surface
+// needed by the detached view. Keeping this smaller than Service lets the
+// process-scoped assembly route requests to the already-opened runtime gateway
+// without constructing another Service or exposing a runtime handle.
+type DetachedOperationsOwner interface {
+	StartAsync(context.Context, StartRequest) (AsyncStartResult, error)
+	StartSync(context.Context, StartRequest) (SyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, ResumeSessionRequest) (AsyncStartResult, error)
+	GetSession(context.Context, string) (SessionReadResult, error)
+	Pause(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Resume(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Terminate(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	Approve(context.Context, string, ApproveRequest) (LifecycleControlResult, error)
+	RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error)
+	InterruptDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
+	GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
+	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
+	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
+	ActivateNamedFactory(context.Context, string) error
+	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
+	ListFactorySessions(context.Context) ([]ReadProjection, error)
+	GetFactorySession(context.Context, string) (SessionProjection, error)
+	GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error)
+	GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error)
+	SubscribeFactoryResponseEvents(context.Context, ResponseEventSubscriptionRequest) (*ResponseEventCursor, error)
+	PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	ResumeLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error)
+	CloseFactorySession(context.Context, string) error
+}
+
+var _ DetachedOperationsOwner = (Service)(nil)
+
+// DetachedOperations is a compatibility view over an existing Factory
+// Sessions operation owner. It owns no registry and constructs no child
+// service; each method translates a value-only request to the existing live
+// or durable owner operation and returns a detached projection.
 type DetachedOperations struct {
-	owner Service
+	owner DetachedOperationsOwner
 }
 
 // Bind attaches the P4-A operation view to the already-composed Sessions root.
 // Binding is inert: it retains the owner and constructs no child service.
-func (operations *DetachedOperations) Bind(owner Service) (DetachedService, error) {
+func (operations *DetachedOperations) Bind(owner DetachedOperationsOwner) (DetachedService, error) {
 	if owner == nil {
 		return nil, ErrDetachedServiceUnavailable
 	}

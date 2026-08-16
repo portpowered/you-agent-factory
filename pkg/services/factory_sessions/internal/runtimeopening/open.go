@@ -416,6 +416,7 @@ func openRuntime(
 		cleanup.Close,
 		sessionID,
 	)
+	opened.application.HTTP.FactorySessionOperations = detachedOperationsFromAssembly(factorySessionsRuntimeAssembly)
 	opened.startup = startupRuntime
 	opened.replacement = runtimebuildService
 	opened.buildSpec = startupSpec
