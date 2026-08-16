@@ -24,7 +24,6 @@ type Root struct {
 }
 
 var _ factorysessions.Service = (*Root)(nil)
-var _ factorysessions.DetachedOperationsOwner = (*Root)(nil)
 var _ roles.RuntimeAssembly = (*Root)(nil)
 
 // NewRoot constructs the process-scoped Factory Sessions service without

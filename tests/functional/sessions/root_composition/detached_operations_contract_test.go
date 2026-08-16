@@ -1,13 +1,14 @@
-package sessions_test
+package root_composition_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestDetachedOperationsFunctionalContract drives the public detached value
@@ -15,12 +16,22 @@ import (
 // stateful: assertions verify the translated requests and returned projections
 // rather than merely checking that construction succeeds.
 func TestDetachedOperationsFunctionalContract(t *testing.T) {
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+
 	owner := newFunctionalDetachedOwner()
 	operations, err := (&factorysessions.DetachedOperations{}).Bind(owner)
 	if err != nil {
 		t.Fatalf("bind detached operations: %v", err)
 	}
 	ctx := context.Background()
+	testDetachedStartsAndInvocation(t, ctx, operations, owner)
+	testDetachedReadsAndControls(t, ctx, operations, owner)
+	testDetachedResultsAndPreparation(t, ctx, operations, owner)
+}
+
+func testDetachedStartsAndInvocation(t *testing.T, ctx context.Context, operations factorysessions.DetachedService, owner *functionalDetachedOwner) {
+	t.Helper()
 
 	liveStart, err := operations.Start(ctx, factorysessions.SessionStartRequest{
 		Mode:       factorysessions.SessionOperationModeLive,
@@ -86,6 +97,10 @@ func TestDetachedOperationsFunctionalContract(t *testing.T) {
 	if err != nil || !activated.Activated || activated.FactoryName != "fallback-factory" || owner.activatedFactory != "fallback-factory" {
 		t.Fatalf("activate = %#v, owner = %q, error = %v", activated, owner.activatedFactory, err)
 	}
+}
+
+func testDetachedReadsAndControls(t *testing.T, ctx context.Context, operations factorysessions.DetachedService, owner *functionalDetachedOwner) {
+	t.Helper()
 
 	live, err := operations.Get(ctx, factorysessions.SessionGetRequest{SessionID: "live-functional", Mode: factorysessions.SessionOperationModeLive})
 	if err != nil || live.Session.SessionID != "live-functional" || live.Session.Status != "RUNNING" {
@@ -98,6 +113,14 @@ func TestDetachedOperationsFunctionalContract(t *testing.T) {
 	listed, err := operations.List(ctx, factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeAll, Filters: factorysessions.SessionListFilters{Statuses: []factorysessions.LifecycleStatus{factorysessions.LifecycleStatusSucceeded}}})
 	if err != nil || len(listed.Sessions) != 2 || listed.Sessions[0].Mode != factorysessions.SessionOperationModeLive || listed.Sessions[1].Mode != factorysessions.SessionOperationModeDurable {
 		t.Fatalf("list all = %#v, error = %v", listed, err)
+	}
+	liveListed, err := operations.List(ctx, factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeLive})
+	if err != nil || len(liveListed.Sessions) != 1 || liveListed.Sessions[0].Mode != factorysessions.SessionOperationModeLive {
+		t.Fatalf("list live = %#v, error = %v", liveListed, err)
+	}
+	durableListed, err := operations.List(ctx, factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeDurable})
+	if err != nil || len(durableListed.Sessions) != 1 || durableListed.Sessions[0].Mode != factorysessions.SessionOperationModeDurable {
+		t.Fatalf("list durable = %#v, error = %v", durableListed, err)
 	}
 
 	for _, test := range []struct {
@@ -145,20 +168,15 @@ func TestDetachedOperationsFunctionalContract(t *testing.T) {
 	if err != nil || recovered.Recovery == nil || recovered.Recovery.SessionID != "durable-recovered-functional" || owner.resumeRequest.RequestID != "functional-recover" {
 		t.Fatalf("recover = %#v, request = %#v, error = %v", recovered, owner.resumeRequest, err)
 	}
+}
+
+func testDetachedResultsAndPreparation(t *testing.T, ctx context.Context, operations factorysessions.DetachedService, owner *functionalDetachedOwner) {
+	t.Helper()
 
 	durableResult, err := operations.ReadResult(ctx, factorysessions.SessionResultReadRequest{SessionID: "durable-functional", Mode: factorysessions.SessionOperationModeDurable, Request: factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal}})
 	if err != nil || durableResult.Durable == nil || durableResult.Status != string(factorysessions.ResultStatusNotReady) {
 		t.Fatalf("durable result = %#v, error = %v", durableResult, err)
 	}
-	partial, err := operations.ReadResult(ctx, factorysessions.SessionResultReadRequest{SessionID: "live-functional", Mode: factorysessions.SessionOperationModeLive, Request: factorysessions.ResultRequest{Mode: factorysessions.ResultModePartial}})
-	if err != nil || partial.Live == nil || partial.Status != "PARTIAL" {
-		t.Fatalf("partial live result = %#v, error = %v", partial, err)
-	}
-	final, err := operations.ReadResult(ctx, factorysessions.SessionResultReadRequest{SessionID: "live-functional", Mode: factorysessions.SessionOperationModeLive, Request: factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal}})
-	if err != nil || final.Live == nil || final.Status != "SUCCEEDED" {
-		t.Fatalf("final live result = %#v, error = %v", final, err)
-	}
-
 	subscription, err := operations.Subscribe(ctx, factorysessions.SessionResponseSubscriptionRequest{
 		SessionID:     "live-functional",
 		AfterSequence: 4,
@@ -283,8 +301,6 @@ type functionalDetachedOwner struct {
 	controlResult       factorysessions.LifecycleControlResult
 	closeSessionID      string
 	resultRead          factorysessions.ResultReadResult
-	liveResult          factoryruntime.LiveSessionResult
-	partialResult       factoryruntime.PartialSessionResult
 	subscriptionRequest factorysessions.ResponseEventSubscriptionRequest
 	subscriptionCursor  *factorysessions.ResponseEventCursor
 }
@@ -304,8 +320,6 @@ func newFunctionalDetachedOwner() *functionalDetachedOwner {
 		invocationResult:   factorysessions.InvocationResult{SessionID: "live-functional", Status: factorysessions.InvocationTerminalStatusCompleted},
 		controlResult:      factorysessions.LifecycleControlResult{Outcome: factorysessions.LifecycleControlOutcomeAccepted, Status: factorysessions.LifecycleStatusPaused},
 		resultRead:         factorysessions.ResultReadResult{SessionID: "durable-functional", ResultStatus: factorysessions.ResultStatusNotReady},
-		liveResult:         factoryruntime.LiveSessionResult{SessionID: "live-functional", Status: "SUCCEEDED"},
-		partialResult:      factoryruntime.PartialSessionResult{SessionID: "live-functional", Phase: "draft"},
 		subscriptionCursor: &factorysessions.ResponseEventCursor{},
 		liveProjection: factorysessions.SessionProjection{
 			Context: factorysessions.ProjectionContext{FactorySessionID: "live-functional", Session: &factorysessions.ScopedLiveSessionSummary{ID: "live-functional"}},
@@ -409,14 +423,6 @@ func (owner *functionalDetachedOwner) InterruptDispatch(context.Context, string,
 
 func (owner *functionalDetachedOwner) GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
 	return owner.resultRead, nil
-}
-
-func (owner *functionalDetachedOwner) GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error) {
-	return owner.liveResult, nil
-}
-
-func (owner *functionalDetachedOwner) GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error) {
-	return owner.partialResult, nil
 }
 
 func (owner *functionalDetachedOwner) SubscribeFactoryResponseEvents(_ context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {

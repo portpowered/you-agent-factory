@@ -150,7 +150,7 @@ type detachedOperationsProvider interface {
 	DetachedOperations() factorysessions.DetachedService
 }
 
-func NewDetachedOperations(owner factorysessions.DetachedOperationsOwner) (factorysessions.DetachedService, error) {
+func NewDetachedOperations(owner factorysessions.Service) (factorysessions.DetachedService, error) {
 	if provider, ok := owner.(detachedOperationsProvider); ok {
 		if operations := provider.DetachedOperations(); operations != nil {
 			return operations, nil
