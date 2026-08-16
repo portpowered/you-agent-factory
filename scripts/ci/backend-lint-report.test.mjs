@@ -55,6 +55,15 @@ function baselineTargets(overrides = {}) {
 	}));
 }
 
+function unallowlistedTarget(name, output) {
+	return {
+		name,
+		status: "fail",
+		durationMillis: 100,
+		output,
+	};
+}
+
 function runReporterCli(t, reportValue) {
 	const directory = mkdtempSync(join(tmpdir(), "backend-lint-report-test-"));
 	t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -102,32 +111,32 @@ test("all clean current-main checkers pass the baseline policy", () => {
 
 	assert.equal(summary.ok, true);
 	assert.equal(summary.failures.length, 0);
-	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 6);
+	assert.equal(summary.targets.filter((target) => target.policyStatus === "clean").length, 5);
 });
 
 test("a measured baseline failure is reported but allowed at its recorded count", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"ui-deadcode": {
+			deadcode: {
 				status: "fail",
-				output: "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 4\ncurrent findings: 4",
+				output: "Repository dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 580\ncurrent findings: 580",
 			},
 		}),
 	}));
 	const markdown = renderBackendLintSummary(summary);
 
 	assert.equal(summary.ok, true);
-	assert.equal(summary.targets.find((target) => target.name === "ui-deadcode").policyStatus, "allowed");
+	assert.equal(summary.targets.find((target) => target.name === "deadcode").policyStatus, "allowed");
 	assert.match(markdown, /Allowed baseline debt: `1` checker\(s\) within measured limits/);
-	assert.match(markdown, /\| ui-deadcode \| 4 \| 4 \| \+0 \| allowed \|/);
+	assert.match(markdown, /\| deadcode \| 580 \| 580 \| \+0 \| allowed \|/);
 });
 
 test("a measured failure below its baseline remains tolerated with a negative delta", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"ui-deadcode": {
+			deadcode: {
 				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 3",
+				output: "LINT_VIOLATION_COUNT: 579",
 			},
 		}),
 	}));
@@ -135,62 +144,55 @@ test("a measured failure below its baseline remains tolerated with a negative de
 	assert.equal(summary.ok, true);
 	assert.match(
 		renderBackendLintVerdict(summary),
-		/ui-deadcode: baseline 4 -> current 3 \(delta -1; allowed\)/,
+		/deadcode: baseline 580 -> current 579 \(delta -1; allowed\)/,
 	);
 });
 
-test("a single baseline rise is the authoritative failed verdict with signed counts", () => {
+test("an unallowlisted ui-deadcode failure is the authoritative failed verdict", () => {
 	const summary = summarizeBackendLintReport(report({
-		targets: baselineTargets({
-			"ui-deadcode": {
-				status: "fail",
-				output: "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 7",
-			},
-		}),
+		targets: [
+			...baselineTargets(),
+			unallowlistedTarget("ui-deadcode", "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 1"),
+		],
 	}));
 	const markdown = renderBackendLintSummary(summary);
 
 	assert.equal(summary.ok, false);
 	assert.match(markdown, /BACKEND LINT RATCHET FAILED/);
-	assert.match(markdown, /ui-deadcode: baseline 4 -> current 7 \(delta \+3; exceeded\)/);
+	assert.match(markdown, /ui-deadcode: baseline 0 -> current 1 \(delta \+1; new failure\)/);
+	assert.match(summary.failures.join("\n"), /ui-deadcode failed with 1 reported violation\(s\); no baseline allowance exists/);
 	assert.match(markdown, /raw `make lint` inventory.*not the gate result/);
 });
 
-test("multiple baseline rises are reported independently", () => {
-	const summary = summarizeBackendLintReport(report({
-		targets: baselineTargets({
-			"ui-deadcode": {
-				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 5",
-			},
-			"backend-size": {
-				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 3",
-			},
-		}),
-	}));
+test("multiple lint failures are reported independently", () => {
+	const targets = baselineTargets({
+		"backend-size": {
+			status: "fail",
+			output: "LINT_VIOLATION_COUNT: 3",
+		},
+	});
+	targets.push(unallowlistedTarget("ui-deadcode", "LINT_VIOLATION_COUNT: 5"));
+	const summary = summarizeBackendLintReport(report({ targets }));
 	const verdict = renderBackendLintVerdict(summary);
 
 	assert.equal(summary.ok, false);
-	assert.match(verdict, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
+	assert.match(verdict, /ui-deadcode: baseline 0 -> current 5 \(delta \+5; new failure\)/);
 	assert.match(verdict, /backend-size: baseline 2 -> current 3 \(delta \+1; exceeded\)/);
 });
 
-test("a positive ui-deadcode rise reports every bounded named addition", () => {
+test("an unallowlisted ui-deadcode failure reports every bounded named addition", () => {
 	const summary = summarizeBackendLintReport(report({
-		targets: baselineTargets({
-			"ui-deadcode": {
-				status: "fail",
-				output: [
-					"Frontend dead-code baseline drift detected.",
-					"New unused frontend code:",
-					"- ui/src/components/unused.ts export unusedExport",
-					"- ui/src/types/unused.ts type UnusedType",
-					"Current report written to bin/frontend-deadcode-current.json.",
-					"LINT_VIOLATION_COUNT: 6",
-				].join("\n"),
-			},
-		}),
+		targets: [
+			...baselineTargets(),
+			unallowlistedTarget("ui-deadcode", [
+				"Frontend dead-code baseline drift detected.",
+				"New unused frontend code:",
+				"- ui/src/components/unused.ts export unusedExport",
+				"- ui/src/types/unused.ts type UnusedType",
+				"Current report written to bin/frontend-deadcode-current.json.",
+				"LINT_VIOLATION_COUNT: 2",
+			].join("\n")),
+		],
 	}));
 	const verdict = renderBackendLintVerdict(summary);
 
@@ -198,7 +200,7 @@ test("a positive ui-deadcode rise reports every bounded named addition", () => {
 		{ file: "ui/src/components/unused.ts", kind: "export", name: "unusedExport" },
 		{ file: "ui/src/types/unused.ts", kind: "type", name: "UnusedType" },
 	]);
-	assert.match(verdict, /ui-deadcode: baseline 4 -> current 6 \(delta \+2; exceeded\)/);
+	assert.match(verdict, /ui-deadcode: baseline 0 -> current 2 \(delta \+2; new failure\)/);
 	assert.match(verdict, /Added named findings:/);
 	assert.match(verdict, /file: `ui\/src\/components\/unused\.ts`; kind: `export`; symbol: `unusedExport`/);
 	assert.match(verdict, /file: `ui\/src\/types\/unused\.ts`; kind: `type`; symbol: `UnusedType`/);
@@ -206,17 +208,15 @@ test("a positive ui-deadcode rise reports every bounded named addition", () => {
 
 test("a count-only rise remains actionable without invented findings", () => {
 	const summary = summarizeBackendLintReport(report({
-		targets: baselineTargets({
-			"ui-deadcode": {
-				status: "fail",
-				output: "Frontend dead-code baseline drift detected.\nLINT_VIOLATION_COUNT: 5",
-			},
-		}),
+		targets: [
+			...baselineTargets(),
+			unallowlistedTarget("ui-deadcode", "Frontend dead-code baseline drift detected.\nLINT_VIOLATION_COUNT: 1"),
+		],
 	}));
 	const verdict = renderBackendLintVerdict(summary);
 
 	assert.deepEqual(summary.targets.find((target) => target.name === "ui-deadcode").addedFindings, []);
-	assert.match(verdict, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
+	assert.match(verdict, /ui-deadcode: baseline 0 -> current 1 \(delta \+1; new failure\)/);
 	assert.doesNotMatch(verdict, /Added named findings/);
 });
 
@@ -244,9 +244,9 @@ test("added-finding extraction excludes removed entries and incomplete diagnosti
 test("a no-rise ratchet pass states the baseline rule and tolerated debt", () => {
 	const summary = summarizeBackendLintReport(report({
 		targets: baselineTargets({
-			"ui-deadcode": {
+			deadcode: {
 				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 4",
+				output: "LINT_VIOLATION_COUNT: 580",
 			},
 		}),
 	}));
@@ -255,7 +255,7 @@ test("a no-rise ratchet pass states the baseline rule and tolerated debt", () =>
 	assert.equal(summary.ok, true);
 	assert.match(verdict, /BACKEND LINT RATCHET PASSED/);
 	assert.match(verdict, /every observed target is at or below baseline/);
-	assert.match(verdict, /ui-deadcode: baseline 4 -> current 4 \(delta \+0; allowed\)/);
+	assert.match(verdict, /deadcode: baseline 580 -> current 580 \(delta \+0; allowed\)/);
 });
 
 test("the reporter CLI logs the authoritative verdict and exits with that decision", (t) => {
@@ -265,29 +265,25 @@ test("the reporter CLI logs the authoritative verdict and exits with that decisi
 	assert.match(passing.summary, /BACKEND LINT RATCHET PASSED/);
 
 	const failing = runReporterCli(t, report({
-		targets: baselineTargets({
-			"ui-deadcode": {
-				status: "fail",
-				output: "LINT_VIOLATION_COUNT: 5",
-			},
-		}),
+		targets: [
+			...baselineTargets(),
+			unallowlistedTarget("ui-deadcode", "LINT_VIOLATION_COUNT: 1"),
+		],
 	}));
 	assert.equal(failing.status, 1);
-	assert.match(failing.stdout, /ui-deadcode: baseline 4 -> current 5 \(delta \+1; exceeded\)/);
+	assert.match(failing.stdout, /ui-deadcode: baseline 0 -> current 1 \(delta \+1; new failure\)/);
 });
 
-test("baseline growth fails the gate instead of being hidden by an allowance", () => {
+test("a nonzero ui-deadcode result cannot be hidden by a removed allowance", () => {
 	const summary = summarizeBackendLintReport(report({
-		targets: baselineTargets({
-			"ui-deadcode": {
-				status: "fail",
-				output: "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 13\ncurrent findings: 13",
-			},
-		}),
+		targets: [
+			...baselineTargets(),
+			unallowlistedTarget("ui-deadcode", "Frontend dead-code baseline drift detected\nLINT_VIOLATION_COUNT: 13\ncurrent findings: 13"),
+		],
 	}));
 
 	assert.equal(summary.ok, false);
-	assert.match(summary.failures.join("\n"), /ui-deadcode reported 13 violation\(s\), exceeding its baseline allowance of 4/);
+	assert.match(summary.failures.join("\n"), /ui-deadcode failed with 13 reported violation\(s\); no baseline allowance exists/);
 });
 
 test("a newly failing clean checker is gated immediately", () => {
@@ -337,14 +333,14 @@ test("a missing allowed target is an explicit failed ratchet condition", () => {
 	}));
 	const incomplete = summarizeBackendLintReport(report({
 		targets: summary.targets
-			.filter((target) => target.name !== "ui-deadcode")
+			.filter((target) => target.name !== "deadcode")
 			.map(({ policyStatus, baselineViolationCount, allowance, ...target }) => target),
 	}));
 
 	assert.equal(incomplete.ok, false);
 	assert.match(
 		renderBackendLintVerdict(incomplete),
-		/ui-deadcode: baseline 4 -> current unknown \(delta unknown; not observed\)/,
+		/deadcode: baseline 580 -> current unknown \(delta unknown; not observed\)/,
 	);
 });
 
