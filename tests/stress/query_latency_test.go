@@ -27,13 +27,16 @@ const (
 	queryLatencyProbeCount = 14
 	queryLatencyTimeout    = 15 * time.Second
 	queryLatencyWait       = 10 * time.Second
+	queryLatencyMaxMedian  = 50 * time.Millisecond
+	queryLatencyMax        = 200 * time.Millisecond
 )
 
-// TestWorkAndWorkerSessionQueryLatencyMatrix records the unoptimized HTTP
-// read-path baseline across independent board-size and worker-load axes. The
-// test intentionally reports hard failures instead of asserting a latency
-// target; the follow-up responsiveness story turns this characterization into
-// a regression test after the owner of the measured bottleneck is corrected.
+const queryLatencyWorkListHeader = "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS"
+
+// TestWorkAndWorkerSessionQueryLatencyMatrix records the HTTP read-path
+// distributions across independent board-size and worker-load axes. The
+// incident-comparable cell is a regression gate for the corrected read path;
+// the remaining cells preserve the controlled matrix used for comparison.
 func TestWorkAndWorkerSessionQueryLatencyMatrix(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping query latency matrix in short mode")
@@ -69,20 +72,22 @@ func runQueryLatencyCell(t *testing.T, boardSize, workerLoad int) {
 		dispatchStarts = executor.waitForStarts(t, workerLoad)
 	}
 
-	workStats, workerSessionStats := runConcurrentQueryProbes(t, harness, queryLatencyProbeCount)
+	workStats, workerSessionStats, workServerStats, workerSessionServerStats := runConcurrentQueryProbes(t, harness, queryLatencyProbeCount)
 	dispatchStats := summarizeDispatchStartTimes(dispatchStarts, acceptedAt)
 	cliStats := queryStats{}
 	if boardSize == 52 && workerLoad == 27 {
-		cliStats = runWorkListCLIRoundTrips(t, harness, queryLatencyProbeCount)
+		cliStats = runWorkListCLIRoundTrips(t, harness, queryLatencyProbeCount, requests)
 	}
 
 	t.Logf(
-		"query latency matrix cell board_rows=%d worker_load=%d probes=%d %s %s %s cli_work_round_trip=%s submit_to_accept=%s",
+		"query latency matrix cell board_rows=%d worker_load=%d probes=%d %s %s server_work=%s server_worker_session=%s %s cli_work_round_trip=%s submit_to_accept=%s",
 		boardSize,
 		workerLoad,
 		queryLatencyProbeCount,
 		workStats,
 		workerSessionStats,
+		workServerStats,
+		workerSessionServerStats,
 		dispatchStats,
 		cliStats,
 		acceptedAt.Sub(submittedAt),
@@ -91,12 +96,16 @@ func runQueryLatencyCell(t *testing.T, boardSize, workerLoad int) {
 	executor.release()
 	harness.WaitForTerminalCount(boardSize, queryLatencyWait)
 	harness.Stop()
+	if boardSize == 52 && workerLoad == 27 {
+		assertIncidentCell(t, workStats, workerSessionStats, workServerStats, workerSessionServerStats, boardSize, workerLoad)
+	}
 }
 
 func runWorkListCLIRoundTrips(
 	t *testing.T,
 	harness *stressProcessHarness,
 	probeCount int,
+	requests []work.SubmitRequest,
 ) queryStats {
 	t.Helper()
 	probes := make([]queryProbe, 0, probeCount)
@@ -110,7 +119,7 @@ func runWorkListCLIRoundTrips(
 			var output bytes.Buffer
 			errOutput := io.Discard
 			err = process.Execute(root.Input{
-				Args:             []string{"you", "--server", harness.baseURL, "--json", "work", "list", "--max-results", "200"},
+				Args:             []string{"you", "--server", harness.baseURL, "work", "list", "--max-results", "200"},
 				Env:              os.Environ(),
 				Stdout:           &output,
 				Stderr:           errOutput,
@@ -118,12 +127,7 @@ func runWorkListCLIRoundTrips(
 				WorkingDirectory: workingDirectory,
 			})
 			if err == nil {
-				var response factoryapi.ListWorkResponse
-				err = json.Unmarshal(output.Bytes(), &response)
-				count = len(response.Results)
-				if err == nil && count != 52 {
-					err = fmt.Errorf("CLI returned %d Work rows, want 52", count)
-				}
+				count, err = validateWorkListCLIOutput(output.String(), requests)
 			}
 			if closeErr := process.Close(context.Background()); err == nil {
 				err = closeErr
@@ -133,6 +137,38 @@ func runWorkListCLIRoundTrips(
 		probes = append(probes, queryProbe{latency: time.Since(startedAt), count: count, err: err})
 	}
 	return summarizeQueryProbes(probes)
+}
+
+func validateWorkListCLIOutput(output string, requests []work.SubmitRequest) (int, error) {
+	lines := strings.Split(strings.TrimRight(output, "\r\n"), "\n")
+	if len(lines) == 0 || lines[0] != queryLatencyWorkListHeader {
+		return 0, fmt.Errorf("CLI Work header = %q, want %q", lines[0], queryLatencyWorkListHeader)
+	}
+	expectedIDs := make(map[string]struct{}, len(requests))
+	for _, request := range requests {
+		expectedIDs[request.WorkID] = struct{}{}
+	}
+	seenIDs := make(map[string]struct{}, len(expectedIDs))
+	for _, line := range lines[1:] {
+		if strings.HasPrefix(line, "  Artifacts:") {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != 7 {
+			return 0, fmt.Errorf("CLI Work row has %d TSV fields, want 7: %q", len(fields), line)
+		}
+		if _, ok := expectedIDs[fields[0]]; !ok {
+			return 0, fmt.Errorf("CLI returned unexpected Work ID %q", fields[0])
+		}
+		if _, duplicate := seenIDs[fields[0]]; duplicate {
+			return 0, fmt.Errorf("CLI returned duplicate Work ID %q", fields[0])
+		}
+		seenIDs[fields[0]] = struct{}{}
+	}
+	if len(seenIDs) != len(expectedIDs) {
+		return 0, fmt.Errorf("CLI returned %d Work rows, want %d", len(seenIDs), len(expectedIDs))
+	}
+	return len(seenIDs), nil
 }
 
 func queryLatencyRequests(boardSize, workerLoad int) []work.SubmitRequest {
@@ -164,6 +200,7 @@ type queryStats struct {
 	successes    int
 	hardFailures int
 	counts       map[int]int
+	samples      []time.Duration
 	median       time.Duration
 	max          time.Duration
 	firstError   string
@@ -171,10 +208,11 @@ type queryStats struct {
 
 func (s queryStats) String() string {
 	return fmt.Sprintf(
-		"success=%d hard_failures=%d rows=%s p50=%s max=%s first_error=%q",
+		"success=%d hard_failures=%d rows=%s samples=%s p50=%s max=%s first_error=%q",
 		s.successes,
 		s.hardFailures,
 		formatCountDistribution(s.counts),
+		formatDurationSamples(s.samples),
 		s.median,
 		s.max,
 		s.firstError,
@@ -185,7 +223,7 @@ func runConcurrentQueryProbes(
 	t *testing.T,
 	harness *stressProcessHarness,
 	probeCount int,
-) (queryStats, queryStats) {
+) (queryStats, queryStats, durationStats, durationStats) {
 	t.Helper()
 
 	workEndpoint := fmt.Sprintf(
@@ -228,7 +266,16 @@ func runConcurrentQueryProbes(
 	for probe := range workerSessionResults {
 		workerSessionProbes = append(workerSessionProbes, probe)
 	}
-	return summarizeQueryProbes(workProbes), summarizeQueryProbes(workerSessionProbes)
+	workServerSamples, workerSessionServerSamples := harness.serverTimings.take()
+	if len(workServerSamples) != probeCount || len(workerSessionServerSamples) != probeCount {
+		t.Fatalf(
+			"server query timing samples = Work %d, Worker Session %d; want %d each",
+			len(workServerSamples),
+			len(workerSessionServerSamples),
+			probeCount,
+		)
+	}
+	return summarizeQueryProbes(workProbes), summarizeQueryProbes(workerSessionProbes), summarizeDurations(workServerSamples), summarizeDurations(workerSessionServerSamples)
 }
 
 func probeListEndpoint(
@@ -282,7 +329,9 @@ func decodeWorkerSessionList(decoder *json.Decoder) (int, error) {
 func summarizeQueryProbes(probes []queryProbe) queryStats {
 	stats := queryStats{probes: len(probes), counts: make(map[int]int)}
 	durations := make([]time.Duration, 0, len(probes))
+	stats.samples = make([]time.Duration, 0, len(probes))
 	for _, probe := range probes {
+		stats.samples = append(stats.samples, probe.latency)
 		if probe.err != nil {
 			stats.hardFailures++
 			if stats.firstError == "" {
@@ -297,12 +346,90 @@ func summarizeQueryProbes(probes []queryProbe) queryStats {
 			stats.max = probe.latency
 		}
 	}
+	sort.Slice(stats.samples, func(i, j int) bool { return stats.samples[i] < stats.samples[j] })
 	if len(durations) == 0 {
 		return stats
 	}
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 	stats.median = durations[(len(durations)-1)/2]
 	return stats
+}
+
+func formatDurationSamples(samples []time.Duration) string {
+	if len(samples) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(samples))
+	for _, sample := range samples {
+		parts = append(parts, sample.String())
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
+type durationStats struct {
+	count   int
+	samples []time.Duration
+	median  time.Duration
+	max     time.Duration
+}
+
+func (s durationStats) String() string {
+	return fmt.Sprintf("count=%d samples=%s p50=%s max=%s", s.count, formatDurationSamples(s.samples), s.median, s.max)
+}
+
+func summarizeDurations(samples []time.Duration) durationStats {
+	sorted := append([]time.Duration(nil), samples...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	stats := durationStats{count: len(sorted), samples: sorted}
+	if len(sorted) == 0 {
+		return stats
+	}
+	stats.median = sorted[(len(sorted)-1)/2]
+	stats.max = sorted[len(sorted)-1]
+	return stats
+}
+
+func assertIncidentCell(t *testing.T, workStats, workerSessionStats queryStats, workServerStats, workerSessionServerStats durationStats, boardSize, workerLoad int) {
+	t.Helper()
+	queryStatsByName := map[string]queryStats{
+		"Work":           workStats,
+		"Worker Session": workerSessionStats,
+	}
+	expectedRows := map[string]int{"Work": boardSize, "Worker Session": workerLoad}
+	for name, stats := range queryStatsByName {
+		if stats.successes != queryLatencyProbeCount || stats.hardFailures != 0 {
+			t.Fatalf(
+				"incident cell %s probes = %d successes, %d hard failures; want %d successes and zero failures; stats=%s",
+				name,
+				stats.successes,
+				stats.hardFailures,
+				queryLatencyProbeCount,
+				stats,
+			)
+		}
+		if stats.counts[expectedRows[name]] != queryLatencyProbeCount {
+			t.Fatalf("incident cell %s row counts = %s, want %d rows in every probe", name, formatCountDistribution(stats.counts), expectedRows[name])
+		}
+	}
+	for name, stats := range map[string]durationStats{
+		"Work":           workServerStats,
+		"Worker Session": workerSessionServerStats,
+	} {
+		if stats.count != queryLatencyProbeCount {
+			t.Fatalf("incident cell %s server timing samples = %d, want %d; stats=%s", name, stats.count, queryLatencyProbeCount, stats)
+		}
+		if stats.median > queryLatencyMaxMedian || stats.max > queryLatencyMax {
+			t.Fatalf(
+				"incident cell %s server latency = p50 %s, max %s; want p50 <= %s and max <= %s; stats=%s",
+				name,
+				stats.median,
+				stats.max,
+				queryLatencyMaxMedian,
+				queryLatencyMax,
+				stats,
+			)
+		}
+	}
 }
 
 func formatCountDistribution(counts map[int]int) string {
