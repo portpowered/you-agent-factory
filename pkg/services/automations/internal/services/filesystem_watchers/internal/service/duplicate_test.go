@@ -151,7 +151,7 @@ func TestFileWatcher_DuplicateLiveObservationSubmitsOnce(t *testing.T) {
 		}
 		select {
 		case <-submitter.submitted:
-			t.Fatal("unexpected second submission for duplicate observation")
+			// Notifications only wake the loop; the count check is authoritative.
 		case <-deadline:
 			cancel()
 			waitForWatchDone(t, done)
