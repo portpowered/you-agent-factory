@@ -184,7 +184,7 @@ export const SelectionSynchronization = {
     await expect(graphButton).toHaveAttribute("aria-pressed", "true");
     await expect(graphButton).toHaveFocus();
 
-    await userEvent.click(graphButton);
+    await userEvent.keyboard("{Enter}");
     await expect(dispatchButton).toHaveAttribute("aria-pressed", "true");
     await expect(dispatchButton).toHaveFocus();
   },
