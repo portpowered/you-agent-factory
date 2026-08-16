@@ -226,7 +226,7 @@ describe("CurrentActivity node hover surfaces", () => {
 });
 
 describe("Active workstation work item rows", () => {
-  it("uses compact spacing on active workstation work item rows", () => {
+  it("uses compact spacing on up to two active workstation work item rows", () => {
     const activeWorkstation = renderWorkstationNode({
       active: true,
       executions: [
@@ -252,17 +252,6 @@ describe("Active workstation work item rows", () => {
             },
           ],
         },
-        {
-          dispatch_id: "dispatch-3",
-          started_at: "2026-06-09T00:00:00Z",
-          work_items: [
-            {
-              display_name: "Story Gamma",
-              work_id: "work-3",
-              work_type: "story",
-            },
-          ],
-        },
       ],
       onSelectWorkID: vi.fn(),
       selectedWorkID: "work-2",
@@ -271,7 +260,6 @@ describe("Active workstation work item rows", () => {
     const workItemButtons = [
       activeWorkstation.getByRole("button", { name: /Story Alpha/ }),
       activeWorkstation.getByRole("button", { name: /Story Beta/ }),
-      activeWorkstation.getByRole("button", { name: /Story Gamma/ }),
     ];
 
     workItemButtons.forEach((button) => {

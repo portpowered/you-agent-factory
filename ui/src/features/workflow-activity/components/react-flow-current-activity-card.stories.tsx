@@ -293,6 +293,30 @@ function expectFittedWorkstationDimensions(node: HTMLElement): void {
   expect(height).toBeGreaterThanOrEqual(156);
 }
 
+function expectWorkstationContentContained(node: HTMLElement): void {
+  const nodeBounds = node.getBoundingClientRect();
+  const contentElements = node.querySelectorAll<HTMLElement>(
+    [
+      "[data-workstation-title]",
+      "[data-workstation-runtime-label]",
+      "[data-workstation-scheduling-label]",
+      "[data-workstation-guard-card]",
+      "[data-workstation-work-progress]",
+      "[data-active-work-label]",
+      "[data-active-work-duration]",
+      "[data-graph-interaction-overlay]",
+    ].join(", "),
+  );
+
+  for (const element of contentElements) {
+    const bounds = element.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
+    expect(bounds.right).toBeLessThanOrEqual(nodeBounds.right);
+    expect(bounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
+    expect(bounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
+  }
+}
+
 function expectNoImplementationLabels(canvasElement: HTMLElement): void {
   const canvas = within(canvasElement);
 
@@ -658,9 +682,9 @@ export const WorkstationOneActive = {
   },
 };
 
-export const WorkstationFiveActive = {
+export const WorkstationTwoActive = {
   render: () => (
-    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(5)} />
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(2)} />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -674,15 +698,75 @@ export const WorkstationFiveActive = {
       await canvas.findByRole("button", { name: /Active Story 1/ }),
     ).toBeVisible();
     await expect(
-      await canvas.findByRole("button", { name: /Active Story 3/ }),
+      await canvas.findByRole("button", { name: /Active Story 2/ }),
     ).toBeVisible();
-    await expect(
-      canvas.queryByRole("button", { name: /Active Story 4/ }),
-    ).not.toBeInTheDocument();
+    expect(reviewNode.querySelector("[data-workstation-work-progress]")).toBe(
+      null,
+    );
+    expectWorkstationContentContained(reviewNode);
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const WorkstationThreeActive = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(3)} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const reviewButton = await canvas.findByRole("button", {
+      name: "Select Review workstation",
+    });
+    const reviewNode = workstationNode(reviewButton);
+    const count = within(reviewNode).getByRole("status", {
+      name: "3 active items",
+    });
+    const title = reviewNode.querySelector<HTMLElement>(
+      "[data-workstation-title]",
+    );
+
+    expectFixedWorkstationDimensions(reviewNode);
+    await expect(count).toBeVisible();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expect(
+      reviewNode.querySelector('[data-workstation-work-progress="dots"]'),
+    ).toBe(null);
+    expect(
+      reviewNode.querySelector('[data-workstation-work-progress="numeric"]'),
+    ).toBe(count);
+    const countFontSize = await count.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    const titleFontSize = await title?.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    expect(countFontSize).toBeGreaterThanOrEqual(titleFontSize ?? 0);
+    expectWorkstationContentContained(reviewNode);
+    await reviewButton.focus();
+    await expect(reviewButton).toHaveAttribute("aria-pressed", "false");
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const WorkstationFiveActive = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(5)} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const reviewButton = await canvas.findByRole("button", {
+      name: "Select Review workstation",
+    });
+    const reviewNode = workstationNode(reviewButton);
+
+    expectFixedWorkstationDimensions(reviewNode);
     await expect(
       within(reviewNode).getByLabelText("5 active items"),
     ).toBeVisible();
-    await expect(within(reviewNode).getByText("+2")).toBeVisible();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expectWorkstationContentContained(reviewNode);
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -700,12 +784,9 @@ export const HighOccupancyWorkstation = {
 
     expectFixedWorkstationDimensions(reviewNode);
     await expect(await canvas.findByLabelText("6 active items")).toBeVisible();
-    await expect(
-      await canvas.findByRole("button", { name: /Active Story 1/ }),
-    ).toBeVisible();
-    await expect(
-      canvas.queryByRole("button", { name: /Active Story 4/ }),
-    ).not.toBeInTheDocument();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expectWorkstationContentContained(reviewNode);
     await userEvent.click(reviewButton);
     await expect(reviewButton).toHaveAttribute("aria-pressed", "true");
   },

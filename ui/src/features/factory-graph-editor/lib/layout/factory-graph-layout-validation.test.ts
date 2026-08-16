@@ -299,7 +299,7 @@ describe("factory-graph-layout-validation", () => {
       {
         id: "workstation:draft",
         position: { x: 20, y: 40 },
-        size: { height: 196, width: 156 },
+        size: { height: 156, width: 156 },
       },
       {
         id: "worker:writer",

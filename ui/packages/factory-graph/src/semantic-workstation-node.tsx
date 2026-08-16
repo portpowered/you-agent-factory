@@ -13,6 +13,7 @@ import {
   factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
 import {
   factoryGraphActiveItemsLabel as activeItemsLabel,
   factoryGraphClassNames as classNames,
@@ -77,7 +78,7 @@ export type FactoryGraphWorkstationNode = Node<
   "workstation"
 >;
 
-const VISIBLE_WORK_ITEM_LIMIT = 3;
+const WORKSTATION_WORK_ITEM_MODE_MAXIMUM = 2;
 const WORKSTATION_HEADER_CLASS_NAME =
   "flex min-w-0 w-full flex-wrap items-start justify-between gap-1 overflow-hidden";
 
@@ -226,7 +227,11 @@ function ActiveContent({
   title: string;
   visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
-  const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
+  const progressMode = factoryGraphWorkProgressMode(
+    entries.length,
+    WORKSTATION_WORK_ITEM_MODE_MAXIMUM,
+  );
+  const visible = progressMode === "items" ? entries : [];
   const header = <Header presentation={presentation} title={title} />;
   return (
     <div
@@ -466,32 +471,14 @@ function Overflow({
   total: number;
   visible: number;
 }) {
-  const remaining = Math.max(0, total - visible);
-  if (!remaining) return null;
-  if (remaining > 10)
-    return (
-      <FactoryGraphWorkProgressMarker
-        ariaLabel={activeItemsLabel(total, locale)}
-        className="mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]"
-        count={total}
-        data-workstation-work-progress="numeric"
-        kind="numeric"
-      />
-    );
+  if (total <= visible) return null;
   return (
     <FactoryGraphWorkProgressMarker
       ariaLabel={activeItemsLabel(total, locale)}
-      className="mt-1 flex min-h-7 gap-1 rounded-lg px-2"
-      data-workstation-work-progress="dots"
-      dotClassName="h-1.5 w-1.5"
-      dotCount={remaining}
-      dotDataAttribute="data-workstation-work-progress-dot"
-      kind="dots"
-      suffix={
-        <span className="ml-1 font-mono text-[0.68rem] font-bold text-success">
-          +{remaining}
-        </span>
-      }
+      className="mt-1 flex min-h-7 w-full rounded-lg px-3 py-1 text-base"
+      count={total}
+      data-workstation-work-progress="numeric"
+      kind="numeric"
     />
   );
 }

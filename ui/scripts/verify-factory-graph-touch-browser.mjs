@@ -2,16 +2,23 @@ import { chromium } from "playwright";
 
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
-const storyURL = new URL(
-  "/iframe.html?id=agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning&viewMode=story",
-  storybookURL,
-).toString();
+const touchStoryID =
+  "agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning";
+const denseWorkStoryID =
+  "agent-factory-dashboard-react-flow-current-activity-card--workstation-three-active";
 
-async function openStory(browser, contextOptions) {
+function storyURL(storyID) {
+  return new URL(
+    `/iframe.html?id=${storyID}&viewMode=story`,
+    storybookURL,
+  ).toString();
+}
+
+async function openStory(browser, contextOptions, storyID = touchStoryID) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
-  await page.goto(storyURL, {
+  await page.goto(storyURL(storyID), {
     timeout: 60_000,
     waitUntil: "domcontentloaded",
   });
@@ -165,6 +172,95 @@ async function verifyMixedWorkstationSemantics(page) {
   }
 }
 
+async function verifyDenseActiveWork(page) {
+  const reviewButton = page.getByRole("button", {
+    name: "Select Review workstation",
+  });
+  await reviewButton.waitFor({ state: "visible" });
+  const reviewNode = reviewButton.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  const count = reviewNode.getByRole("status", { name: "3 active items" });
+  await count.waitFor({ state: "visible" });
+
+  const details = await reviewNode.evaluate((node) => {
+    const nodeBounds = node.getBoundingClientRect();
+    const title = node.querySelector("[data-workstation-title]");
+    const marker = node.querySelector(
+      '[data-workstation-work-progress="numeric"]',
+    );
+    const content = Array.from(
+      node.querySelectorAll(
+        [
+          "[data-workstation-title]",
+          "[data-workstation-runtime-label]",
+          "[data-workstation-scheduling-label]",
+          "[data-workstation-work-progress]",
+          "[data-graph-interaction-overlay]",
+        ].join(", "),
+      ),
+    );
+    const escaped = content
+      .map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          selector:
+            element.getAttribute("data-workstation-work-progress") ??
+            element.getAttribute("data-workstation-title") ??
+            element.tagName,
+          left: bounds.left < nodeBounds.left,
+          right: bounds.right > nodeBounds.right,
+          top: bounds.top < nodeBounds.top,
+          bottom: bounds.bottom > nodeBounds.bottom,
+        };
+      })
+      .filter(
+        (bounds) => bounds.left || bounds.right || bounds.top || bounds.bottom,
+      );
+
+    return {
+      countFontSize: marker
+        ? Number.parseFloat(getComputedStyle(marker).fontSize)
+        : Number.NaN,
+      titleFontSize: title
+        ? Number.parseFloat(getComputedStyle(title).fontSize)
+        : Number.NaN,
+      escaped,
+      hasLabels: Boolean(
+        node.querySelector(
+          "[data-active-work-label], [data-active-work-duration]",
+        ),
+      ),
+    };
+  });
+
+  if (details.hasLabels) {
+    throw new Error(
+      "Dense workstation rendered active-work names or durations",
+    );
+  }
+  if (details.escaped.length > 0) {
+    throw new Error(
+      `Dense workstation content escaped its node: ${JSON.stringify(details.escaped)}`,
+    );
+  }
+  if (
+    !Number.isFinite(details.countFontSize) ||
+    !Number.isFinite(details.titleFontSize) ||
+    details.countFontSize < details.titleFontSize
+  ) {
+    throw new Error(
+      `Dense workstation count was not title-sized: ${JSON.stringify(details)}`,
+    );
+  }
+  await reviewButton.focus();
+  if ((await reviewButton.getAttribute("aria-pressed")) !== "false") {
+    throw new Error(
+      "Dense workstation selection control was not keyboard-ready",
+    );
+  }
+}
+
 async function waitForAnimationFrame(page) {
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
@@ -310,6 +406,18 @@ async function verifyDesktopPaneSelectionDrag(browser) {
 
 const browser = await chromium.launch({ headless: true });
 try {
+  const denseStory = await openStory(
+    browser,
+    {
+      viewport: { height: 900, width: 1280 },
+    },
+    denseWorkStoryID,
+  );
+  try {
+    await verifyDenseActiveWork(denseStory.page);
+  } finally {
+    await denseStory.context.close();
+  }
   await verifyTouchGestures(browser);
   await verifyDesktopPaneSelectionDrag(browser);
   console.log(
