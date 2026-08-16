@@ -317,6 +317,247 @@ export async function waitForStableFactoryGraphViewport(
   return stableTransform;
 }
 
+/** Read the React Flow position encoded by a graph node's DOM transform. */
+export async function readFactoryGraphNodeFlowPosition(nodeLocator) {
+  return nodeLocator
+    .evaluate((element) => {
+      const flowNode =
+        element.classList.contains("react-flow__node") === true
+          ? element
+          : element.closest(".react-flow__node");
+      if (!flowNode) {
+        return null;
+      }
+
+      const transform =
+        flowNode.style.transform || window.getComputedStyle(flowNode).transform;
+      if (!transform || transform === "none") {
+        return null;
+      }
+
+      const translateMatch =
+        /translate(?:3d)?\(([-\d.]+)px,\s*([-\d.]+)px/.exec(transform);
+      if (translateMatch) {
+        return {
+          x: Number(translateMatch[1]),
+          y: Number(translateMatch[2]),
+        };
+      }
+
+      const matrixMatch = /matrix\(([^)]+)\)/.exec(transform);
+      if (matrixMatch) {
+        const values = matrixMatch[1]
+          .split(",")
+          .map((value) => Number.parseFloat(value.trim()));
+        if (values.length >= 6) {
+          return { x: values[4], y: values[5] };
+        }
+      }
+
+      return null;
+    })
+    .catch(() => null);
+}
+
+export function flowPositionDistance(left, right) {
+  if (!left || !right) {
+    return null;
+  }
+
+  return Math.max(Math.abs(left.x - right.x), Math.abs(left.y - right.y));
+}
+
+async function draggableFactoryGraphNodeStartPoint(nodeLocator, nodeLabel) {
+  const point = await nodeLocator.evaluate((element) => {
+    const flowNode =
+      element.classList.contains("react-flow__node") === true
+        ? element
+        : element.closest(".react-flow__node");
+    if (!flowNode) {
+      return null;
+    }
+
+    const flowNodeBox = flowNode.getBoundingClientRect();
+    const elementBox = element.getBoundingClientRect();
+    const candidates = [
+      { x: flowNodeBox.right - 4, y: flowNodeBox.top + flowNodeBox.height / 2 },
+      { x: flowNodeBox.left + 4, y: flowNodeBox.top + flowNodeBox.height / 2 },
+      {
+        x: flowNodeBox.left + flowNodeBox.width / 2,
+        y: flowNodeBox.top + 4,
+      },
+      {
+        x: flowNodeBox.left + flowNodeBox.width / 2,
+        y: flowNodeBox.bottom - 4,
+      },
+      { x: elementBox.right - 4, y: elementBox.top + elementBox.height / 2 },
+    ];
+
+    for (const candidate of candidates) {
+      const hit = document.elementFromPoint(candidate.x, candidate.y);
+      if (hit && flowNode.contains(hit) && !hit.closest(".nodrag")) {
+        return candidate;
+      }
+    }
+
+    return null;
+  });
+
+  if (!point) {
+    throw new Error(
+      `Expected a draggable surface inside ${nodeLabel}; all candidate points were nodrag controls.`,
+    );
+  }
+
+  return point;
+}
+
+const defaultDragAttemptCount = 2;
+const defaultDragSettleDelayMs = 50;
+
+async function dragFactoryGraphNodeAttempt(
+  page,
+  nodeLocator,
+  deltaX,
+  deltaY,
+  nodeLabel,
+  steps,
+  settleDelayMs,
+) {
+  const startPoint = await draggableFactoryGraphNodeStartPoint(
+    nodeLocator,
+    nodeLabel,
+  );
+  let pointerGestureStarted = false;
+  let midDragFlowPosition = null;
+
+  try {
+    await page.waitForTimeout(settleDelayMs);
+    await page.mouse.move(startPoint.x, startPoint.y);
+    pointerGestureStarted = true;
+    await page.mouse.down();
+    await page.waitForTimeout(settleDelayMs);
+    await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
+      steps,
+    });
+    await page.waitForTimeout(settleDelayMs);
+    midDragFlowPosition = await readFactoryGraphNodeFlowPosition(nodeLocator);
+  } finally {
+    if (pointerGestureStarted) {
+      await page.mouse.up().catch(() => {});
+    }
+  }
+
+  await page.waitForTimeout(settleDelayMs);
+  const postMouseUpFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+
+  return { midDragFlowPosition, postMouseUpFlowPosition };
+}
+
+/**
+ * Drag a graph node and verify that React Flow moved it during and after the
+ * pointer gesture. The tolerance is caller-provided because browser checks
+ * intentionally use different movement contracts. A failed displacement gets
+ * one bounded settle/retry before the measured failure is reported.
+ */
+export async function dragNodeByOffset(
+  page,
+  nodeLocator,
+  deltaX,
+  deltaY,
+  {
+    displacementTolerancePx,
+    maxAttempts = defaultDragAttemptCount,
+    nodeLabel = "graph node",
+    settleDelayMs = defaultDragSettleDelayMs,
+    steps = 16,
+  } = {},
+) {
+  if (!Number.isFinite(displacementTolerancePx)) {
+    throw new TypeError(
+      `A finite displacement tolerance is required to drag ${nodeLabel}.`,
+    );
+  }
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new TypeError(
+      `A positive integer attempt count is required to drag ${nodeLabel}.`,
+    );
+  }
+  if (!Number.isFinite(settleDelayMs) || settleDelayMs < 0) {
+    throw new TypeError(
+      `A non-negative settle delay is required to drag ${nodeLabel}.`,
+    );
+  }
+
+  await nodeLocator.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  await page.waitForTimeout(settleDelayMs);
+  const initialFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+
+  let latestObservation = {
+    midDragDistancePx: null,
+    midDragFlowPosition: null,
+    postMouseUpDistancePx: null,
+    postMouseUpFlowPosition: null,
+  };
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await nodeLocator.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    const { midDragFlowPosition, postMouseUpFlowPosition } =
+      await dragFactoryGraphNodeAttempt(
+        page,
+        nodeLocator,
+        deltaX,
+        deltaY,
+        nodeLabel,
+        steps,
+        settleDelayMs,
+      );
+    const midDragDistancePx = flowPositionDistance(
+      initialFlowPosition,
+      midDragFlowPosition,
+    );
+    const postMouseUpDistancePx = flowPositionDistance(
+      initialFlowPosition,
+      postMouseUpFlowPosition,
+    );
+    latestObservation = {
+      midDragDistancePx,
+      midDragFlowPosition,
+      postMouseUpDistancePx,
+      postMouseUpFlowPosition,
+    };
+
+    if (
+      midDragDistancePx !== null &&
+      midDragDistancePx > displacementTolerancePx &&
+      postMouseUpDistancePx !== null &&
+      postMouseUpDistancePx > displacementTolerancePx
+    ) {
+      return {
+        initialFlowPosition,
+        ...latestObservation,
+      };
+    }
+  }
+
+  throw new Error(
+    `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
+      {
+        attempts: maxAttempts,
+        initialFlowPosition,
+        ...latestObservation,
+      },
+    )}`,
+  );
+}
+
 function graphNodePlacementSamplesEqual(left, right) {
   if (!left || !right) {
     return false;

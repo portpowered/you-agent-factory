@@ -4,10 +4,13 @@ import { describe } from "vitest";
 
 import {
   browserScenarioTimeoutMs,
+  dragNodeByOffset,
   expectNoBrowserErrors,
   fillModelWorkerAddOperationDraft,
   fillWorkstationPromptBody,
+  flowPositionDistance,
   modelProviderOptionLabel,
+  readFactoryGraphNodeFlowPosition,
   resolvedDefaultFactorySessionID,
   selectLabeledComboboxOption,
   startFactoryApiServer,
@@ -165,6 +168,9 @@ const editableGraphFactoryReplayLines = [
 
 const flowPositionTolerancePx = 8;
 const persistedFlowPositionTolerancePx = 80;
+// The 120x80 gesture has a 120px max-axis displacement, preserving the
+// greater-than-80px persistence contract while keeping tolerance caller-scoped.
+const persistedNodeDragDelta = { x: 120, y: 80 };
 
 function flowPositionsMatchWithinTolerance(
   left,
@@ -177,14 +183,6 @@ function flowPositionsMatchWithinTolerance(
   }
 
   return distance <= tolerance;
-}
-
-function flowPositionDistance(left, right) {
-  if (!left || !right) {
-    return null;
-  }
-
-  return Math.max(Math.abs(left.x - right.x), Math.abs(left.y - right.y));
 }
 
 function boundingBoxesOverlap(left, right) {
@@ -330,93 +328,10 @@ async function addWorkstation(page, toolbar, { body, name }) {
   });
 }
 
-async function readNodeFlowPosition(page, nodeTestId) {
-  return page.evaluate((testId) => {
-    const element = document.querySelector(`[data-testid="${testId}"]`);
-    const reactFlowNode =
-      element?.classList.contains("react-flow__node") === true
-        ? element
-        : element?.closest(".react-flow__node");
-    if (!reactFlowNode) {
-      return null;
-    }
-
-    const transform =
-      reactFlowNode.style.transform ||
-      window.getComputedStyle(reactFlowNode).transform;
-    if (!transform || transform === "none") {
-      return null;
-    }
-
-    const translateMatch = /translate(?:3d)?\(([-\d.]+)px,\s*([-\d.]+)px/.exec(
-      transform,
-    );
-    if (translateMatch) {
-      return {
-        x: Number(translateMatch[1]),
-        y: Number(translateMatch[2]),
-      };
-    }
-
-    const matrixMatch = /matrix\(([^)]+)\)/.exec(transform);
-    if (matrixMatch) {
-      const values = matrixMatch[1]
-        .split(",")
-        .map((value) => Number.parseFloat(value.trim()));
-      if (values.length >= 6) {
-        return { x: values[4], y: values[5] };
-      }
-    }
-
-    return null;
-  }, nodeTestId);
-}
-
 function savedLayoutNodePosition(factory, nodeId) {
   return (
     factory?.layout?.nodes?.find((node) => node.id === nodeId)?.position ?? null
   );
-}
-
-async function draggableNodeStartPoint(page, nodeTestId, nodeBox) {
-  const point = await page.evaluate(
-    ({ box, testId }) => {
-      const target = [...document.querySelectorAll("[data-testid]")].find(
-        (element) => element.getAttribute("data-testid") === testId,
-      );
-      const flowNode = target?.closest(".react-flow__node");
-      if (!flowNode) {
-        throw new Error(`Expected React Flow node for ${testId}.`);
-      }
-
-      const rect = flowNode.getBoundingClientRect();
-      const candidates = [
-        { x: rect.right - 4, y: rect.top + rect.height / 2 },
-        { x: rect.left + 4, y: rect.top + rect.height / 2 },
-        { x: rect.left + rect.width / 2, y: rect.top + 4 },
-        { x: rect.left + rect.width / 2, y: rect.bottom - 4 },
-        { x: box.x + box.width - 4, y: box.y + box.height / 2 },
-      ];
-
-      for (const candidate of candidates) {
-        const hit = document.elementFromPoint(candidate.x, candidate.y);
-        if (hit && flowNode.contains(hit) && !hit.closest(".nodrag")) {
-          return candidate;
-        }
-      }
-
-      throw new Error(
-        `Expected a draggable surface inside ${testId}; all candidate points were nodrag controls.`,
-      );
-    },
-    { box: nodeBox, testId: nodeTestId },
-  );
-
-  if (!point) {
-    throw new Error(`Expected a draggable start point for ${nodeTestId}.`);
-  }
-
-  return point;
 }
 
 async function addResource(page, toolbar, { capacity = "1", name }) {
@@ -438,59 +353,6 @@ async function addResource(page, toolbar, { capacity = "1", name }) {
     state: "hidden",
     timeout: uiInteractionTimeoutMs,
   });
-}
-
-async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
-  const node = page.getByTestId(nodeTestId);
-  await node.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  const initialFlowPosition = await readNodeFlowPosition(page, nodeTestId);
-  const nodeBox = await node.boundingBox();
-  if (!nodeBox) {
-    throw new Error(`Expected bounding boxes for ${nodeTestId} drag.`);
-  }
-
-  const startPoint = await draggableNodeStartPoint(page, nodeTestId, nodeBox);
-  await page.mouse.move(startPoint.x, startPoint.y);
-  await page.mouse.down();
-  await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
-    steps: 16,
-  });
-  const midDragFlowPosition = await readNodeFlowPosition(page, nodeTestId);
-  await page.mouse.up();
-
-  const postMouseUpFlowPosition = await readNodeFlowPosition(page, nodeTestId);
-  const midDragDistancePx = flowPositionDistance(
-    initialFlowPosition,
-    midDragFlowPosition,
-  );
-  const postMouseUpDistancePx = flowPositionDistance(
-    initialFlowPosition,
-    postMouseUpFlowPosition,
-  );
-  if (
-    midDragDistancePx === null ||
-    midDragDistancePx <= persistedFlowPositionTolerancePx ||
-    postMouseUpDistancePx === null ||
-    postMouseUpDistancePx <= persistedFlowPositionTolerancePx
-  ) {
-    throw new Error(
-      `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
-        {
-          initialFlowPosition,
-          midDragFlowPosition,
-          midDragDistancePx,
-          postMouseUpFlowPosition,
-          postMouseUpDistancePx,
-        },
-      )}`,
-    );
-  }
-
-  return {
-    initialFlowPosition,
-    midDragFlowPosition,
-    postMouseUpFlowPosition,
-  };
 }
 
 async function beginSaveActivationTrace(page) {
@@ -1014,9 +876,8 @@ describe.concurrent("factory graph editor node placement browser integration", (
           isWithinViewportBounds(addedWorkstationCenter, viewportMetrics),
         ).toBe(true);
 
-        const flowPosition = await readNodeFlowPosition(
-          browserPage.page,
-          "rf__node-workstation:review",
+        const flowPosition = await readFactoryGraphNodeFlowPosition(
+          browserPage.page.getByTestId("rf__node-workstation:review"),
         );
         expect(flowPosition).not.toBeNull();
         expect(Number.isFinite(flowPosition.x)).toBe(true);
@@ -1130,9 +991,8 @@ describe.concurrent("factory graph editor node placement browser integration", (
           workstationTestId,
         );
 
-        const positionBeforeSave = await readNodeFlowPosition(
-          browserPage.page,
-          workstationTestId,
+        const positionBeforeSave = await readFactoryGraphNodeFlowPosition(
+          browserPage.page.getByTestId(workstationTestId),
         );
         expect(positionBeforeSave).not.toBeNull();
 
@@ -1208,9 +1068,13 @@ describe.concurrent("factory graph editor node placement browser integration", (
 
         const dragObservation = await dragNodeByOffset(
           browserPage.page,
-          resourceTestId,
-          120,
-          80,
+          browserPage.page.getByTestId(resourceTestId),
+          persistedNodeDragDelta.x,
+          persistedNodeDragDelta.y,
+          {
+            displacementTolerancePx: persistedFlowPositionTolerancePx,
+            nodeLabel: resourceTestId,
+          },
         );
         const {
           initialFlowPosition,
@@ -1276,9 +1140,8 @@ describe.concurrent("factory graph editor node placement browser integration", (
           { requireViewportVisibility: false },
         );
         await waitForFactoryGraphSelectionReady(browserPage.page);
-        const reloadedFlowPosition = await readNodeFlowPosition(
-          browserPage.page,
-          resourceTestId,
+        const reloadedFlowPosition = await readFactoryGraphNodeFlowPosition(
+          browserPage.page.getByTestId(resourceTestId),
         );
         expect(
           flowPositionsMatchWithinTolerance(
