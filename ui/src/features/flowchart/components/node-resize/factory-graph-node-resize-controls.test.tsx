@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,31 +7,36 @@ const { updateNodeInternals } = vi.hoisted(() => ({
   updateNodeInternals: vi.fn(),
 }));
 
-vi.mock("@xyflow/react", () => ({
-  NodeResizeControl: (props: {
-    onResizeEnd?: (
-      event: MouseEvent | TouchEvent,
-      dimensions: { height: number; width: number },
-    ) => void;
-    position: string;
-    style?: Record<string, string>;
-    variant?: string;
-  }) => (
-    <button
-      data-testid={`resize-${props.position}`}
-      data-variant={props.variant}
-      onClick={() =>
-        props.onResizeEnd?.(new MouseEvent("mouseup"), {
-          height: 240,
-          width: 280,
-        })
-      }
-      style={props.style}
-      type="button"
-    />
-  ),
-  useUpdateNodeInternals: () => updateNodeInternals,
-}));
+vi.mock("@xyflow/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@xyflow/react")>();
+
+  return {
+    ...actual,
+    NodeResizeControl: (props: {
+      onResizeEnd?: (
+        event: MouseEvent | TouchEvent,
+        dimensions: { height: number; width: number },
+      ) => void;
+      position: string;
+      style?: Record<string, string>;
+      variant?: string;
+    }) => (
+      <button
+        data-testid={`resize-${props.position}`}
+        data-variant={props.variant}
+        onClick={() =>
+          props.onResizeEnd?.(new MouseEvent("mouseup"), {
+            height: 240,
+            width: 280,
+          })
+        }
+        style={props.style}
+        type="button"
+      />
+    ),
+    useUpdateNodeInternals: () => updateNodeInternals,
+  };
+});
 
 import {
   FactoryGraphNodeResizeControls,

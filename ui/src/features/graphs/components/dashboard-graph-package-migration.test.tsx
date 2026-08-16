@@ -1,20 +1,25 @@
 import { render, screen } from "@testing-library/react";
-import { Position } from "@xyflow/react";
-import { describe, expect, it, vi } from "vitest";
+import { Position, ReactFlowProvider } from "@xyflow/react";
 
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
+import { describe, expect, it, vi } from "vitest";
 import { GraphViewportSurface } from "./dashboard-graph-viewport-surface";
 import { FACTORY_GRAPH_EDGE_TYPES } from "./factory-graph-edge";
 import { ActivityGraphNodeShell } from "./graph-node-shell";
 
-vi.mock("@xyflow/react", () => ({
-  BaseEdge: ({ path }: { path: string }) => (
-    <path data-testid="base-edge" d={path} />
-  ),
-  Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
-  Position: { Bottom: "bottom", Left: "left", Right: "right", Top: "top" },
-  getBezierPath: () => ["M0,0 L10,10", 5, 5],
-}));
+vi.mock("@xyflow/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@xyflow/react")>();
+
+  return {
+    ...actual,
+    BaseEdge: ({ path }: { path: string }) => (
+      <path data-testid="base-edge" d={path} />
+    ),
+    Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
+    Position: { Bottom: "bottom", Left: "left", Right: "right", Top: "top" },
+    getBezierPath: () => ["M0,0 L10,10", 5, 5],
+  };
+});
 
 describe("dashboard graph package migration", () => {
   it("renders migrated node shell handles and supports node button activation", () => {
@@ -49,19 +54,21 @@ describe("dashboard graph package migration", () => {
     const FactoryGraphEdge = FACTORY_GRAPH_EDGE_TYPES.factoryEditorEdge;
 
     const { container } = render(
-      <FactoryGraphEdge
-        data={{ label: "Continue" }}
-        id="edge-1"
-        selected={false}
-        source="node-a"
-        sourcePosition={Position.Right}
-        sourceX={0}
-        sourceY={0}
-        target="node-b"
-        targetPosition={Position.Left}
-        targetX={100}
-        targetY={0}
-      />,
+      <ReactFlowProvider>
+        <FactoryGraphEdge
+          data={{ label: "Continue" }}
+          id="edge-1"
+          selected={false}
+          source="node-a"
+          sourcePosition={Position.Right}
+          sourceX={0}
+          sourceY={0}
+          target="node-b"
+          targetPosition={Position.Left}
+          targetX={100}
+          targetY={0}
+        />
+      </ReactFlowProvider>,
     );
 
     expect(container.querySelector(".agent-factory-editor-edge")).toBeTruthy();
