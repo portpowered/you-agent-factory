@@ -32,10 +32,6 @@ type HTTPBinder struct {
 	content         work.ContentPreparation
 }
 
-type runtimeHTTPSubmitter interface {
-	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
-}
-
 type runtimeHTTPEventSubscriber interface {
 	SubscribeFactoryEvents(
 		context.Context,
@@ -63,9 +59,6 @@ func (binder *HTTPBinder) Bind(
 	if runtime == nil || definitions == nil || sessions == nil || liveControl == nil ||
 		binder == nil || binder.content == nil {
 		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: opened Factory Session roles are required")
-	}
-	if _, ok := runtime.(runtimeHTTPSubmitter); !ok {
-		return HTTPBinding{}, fmt.Errorf("bind HTTP mappings: Factory Runtime work submission is required")
 	}
 	if _, ok := runtime.(runtimeHTTPEventSubscriber); !ok {
 		// TODO(P5B): bind event reads from Recordings and remove this

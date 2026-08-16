@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,6 +31,7 @@ import (
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -39,9 +41,11 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
@@ -49,11 +53,15 @@ import (
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
+	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
@@ -719,6 +727,72 @@ func provideApplicationRuntimeAdapter(
 			Transport:     transport,
 			Visualization: visualization,
 		}, nil
+	}, nil
+}
+
+// provideHTTPRuntimeBinding is the single Wire-owned live HTTP composition
+// path. It builds each owner adapter for the opened runtime and hands the
+// generated route shell only those prebuilt adapters. The application role
+// invokes this function but does not construct or map any service itself.
+func provideHTTPRuntimeBinding(
+	mappings *mappingcomposition.HTTPBinder,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	modelsContent work.ContentPreparation,
+	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	sessionRequests factorysessionshttp.RequestPreparation,
+) (httpapplication.RuntimeBinding, error) {
+	if mappings == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil {
+		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
+	}
+	return func(opened httpapplication.Binding) (http.Handler, error) {
+		modelInvoker := opened.ModelInvoker
+		if modelInvoker == nil {
+			modelInvoker = opened.Workers
+		}
+		modelsAdapter := modelshttp.NewAdapter(opened.Models, modelInvoker, modelsContent, opened.ModelsScope)
+		modelsHandler := modelshttp.NewHandler(modelsAdapter, opened.Logger)
+		if modelsHandler == nil {
+			return nil, errors.New("bind HTTP runtime: Models service, invoker, content preparation, and logger are required")
+		}
+
+		mapped, err := mappings.Bind(opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions, opened.LiveControl)
+		if err != nil {
+			return nil, err
+		}
+		sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+			SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
+			Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
+			Sessions: mapped.Sessions, SessionEvents: opened.FactorySessions,
+			Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
+			FactoryValidation: validation, WorkflowPreview: opened.WorkflowPreview,
+			DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
+			DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
+			DurableLister:     opened.FactorySessions,
+			LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.LiveControl},
+			WorkerPrompts:     opened.WorkerPrompts, InvocationWorkType: invocationWorkType,
+			SessionRequests: sessionRequests,
+		}, opened.Logger)
+		workHandler := workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
+			_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
+			return err
+		}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(mapped.FactoryDefinitions, invocationWorkType))
+		factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
+			factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions}, opened.Logger,
+		)
+		var workerSessionsHandler *workersessionshttp.Handler
+		if opened.WorkerSessions != nil {
+			workerSessionsHandler = workersessionshttp.NewHandler(
+				workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
+					opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
+					opened.WorkerSessions, opened.WorkerSessions, opened.Work,
+				), opened.Logger,
+			)
+		}
+		return transporthttp.NewServer(
+			sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
+			factoryDefinitionsHandler, opened.Logger, workerSessionsHandler,
+		).Handler(), nil
 	}, nil
 }
 

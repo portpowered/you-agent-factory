@@ -48,6 +48,7 @@ var apiSet = wire.NewSet(
 	factorysessionmapping.NewLiveAPI,
 	factorysessionmapping.NewInvocationAPI,
 	mcpstdio.NewOpener,
+	provideHTTPRuntimeBinding,
 	httpapplication.NewHandler,
 )
 

@@ -3,42 +3,36 @@
 package application
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
-	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
-// Handler is the complete inert HTTP binding operation constructed by Wire.
-// Bind supplies the opened runtime roles to runtime-bound mapping and protocol
-// views before injecting those completed views into the top-level server.
+// RuntimeBinding is the Wire-owned operation that supplies opened owner roles
+// to the already-composed HTTP server shell. The application package only
+// invokes this operation; it does not construct service adapters or mappings.
+type RuntimeBinding func(Binding) (http.Handler, error)
+
+// Handler is the inert HTTP application role constructed by Wire. Runtime
+// owner-adapter construction stays in Wire, while this role retains the
+// standalone durable-execution compatibility entry point.
 type Handler struct {
-	mappings             *mappingcomposition.HTTPBinder
-	providerSessionsHTTP *providersessionshttp.Handler
-	modelsContent        work.ContentPreparation
-	validation           factorydefinitions.SubmittedDefinitionValidationOperation
-	invocationWorkType   factorydefinitions.InvocationWorkTypeService
-	contentStaging       work.ContentStagingService
-	requestPreparation   work.RequestPreparationService
-	sessionRequests      factorysessionshttp.RequestPreparation
+	runtimeBinding     RuntimeBinding
+	validation         factorydefinitions.SubmittedDefinitionValidationOperation
+	invocationWorkType factorydefinitions.InvocationWorkTypeService
+	sessionRequests    factorysessionshttp.RequestPreparation
 }
 
 // Binding is the transport-owned application role set. Factory Sessions
@@ -63,91 +57,26 @@ type Binding struct {
 }
 
 func NewHandler(
-	mappings *mappingcomposition.HTTPBinder,
-	providerSessionsHTTP *providersessionshttp.Handler,
-	modelsContent work.ContentPreparation,
+	runtimeBinding RuntimeBinding,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-	contentStaging work.ContentStagingService,
-	requestPreparation work.RequestPreparationService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 ) (*Handler, error) {
-	if mappings == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil ||
-		contentStaging == nil || requestPreparation == nil || sessionRequests == nil {
-		return nil, fmt.Errorf("construct HTTP handler: mappings, Provider Sessions handler, service handlers, validation, invocation work-type policy, Work operations, and Factory Session operations are required")
+	if runtimeBinding == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil {
+		return nil, fmt.Errorf("construct HTTP handler: runtime binding, validation, invocation work-type policy, and Factory Session request preparation are required")
 	}
 	return &Handler{
-		mappings: mappings, providerSessionsHTTP: providerSessionsHTTP,
-		modelsContent: modelsContent, validation: validation,
-		invocationWorkType: invocationWorkType,
-		contentStaging:     contentStaging, requestPreparation: requestPreparation,
+		runtimeBinding: runtimeBinding,
+		validation:     validation, invocationWorkType: invocationWorkType,
 		sessionRequests: sessionRequests,
 	}, nil
 }
 
 func (handler *Handler) Bind(opened Binding) (http.Handler, error) {
-	if handler == nil || handler.mappings == nil || handler.providerSessionsHTTP == nil || handler.modelsContent == nil {
-		return nil, fmt.Errorf("bind HTTP handler: process-scoped handler is required")
+	if handler == nil || handler.runtimeBinding == nil {
+		return nil, fmt.Errorf("bind HTTP handler: Wire runtime binding is required")
 	}
-	modelInvoker := opened.ModelInvoker
-	if modelInvoker == nil {
-		modelInvoker = opened.Workers
-	}
-	modelsAdapter := modelshttp.NewAdapter(
-		opened.Models,
-		modelInvoker,
-		handler.modelsContent,
-		opened.ModelsScope,
-	)
-	modelsHandler := modelshttp.NewHandler(modelsAdapter, opened.Logger)
-	if modelsHandler == nil {
-		return nil, fmt.Errorf("bind HTTP handler: Models service, invoker, content preparation, and logger are required")
-	}
-	mapped, err := handler.mappings.Bind(
-		opened.FactoryRuntime, opened.FactoryDefinitions, opened.FactorySessions, opened.LiveControl,
-	)
-	if err != nil {
-		return nil, err
-	}
-	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
-		Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
-		Sessions: mapped.Sessions, SessionEvents: opened.FactorySessions,
-		Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
-		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
-		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
-		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
-		DurableLister:      opened.FactorySessions,
-		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.LiveControl},
-		WorkerPrompts:      opened.WorkerPrompts,
-		InvocationWorkType: handler.invocationWorkType,
-		SessionRequests:    handler.sessionRequests,
-	}, opened.Logger)
-	workHandler := workhttp.NewAdapterWithSessionScope(opened.Work, func(ctx context.Context, sessionID string) error {
-		_, err := mapped.FactoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
-		return err
-	}).WithDefaultWorkTypeResolver(workhttp.NewDefaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType))
-	var workerSessionsHandler *workersessionshttp.Handler
-	if opened.WorkerSessions != nil {
-		workerSessionsHandler = workersessionshttp.NewHandler(
-			workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions, opened.Work),
-			opened.Logger,
-		)
-	}
-	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions},
-		opened.Logger,
-	)
-	server := transporthttp.NewServer(
-		sessionsHandler,
-		workHandler,
-		modelsHandler,
-		handler.providerSessionsHTTP,
-		factoryDefinitionsHandler,
-		opened.Logger,
-		workerSessionsHandler,
-	)
-	return server.Handler(), nil
+	return handler.runtimeBinding(opened)
 }
 
 // BindDurableExecution binds the same generated API and embedded dashboard

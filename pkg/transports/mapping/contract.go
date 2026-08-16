@@ -25,11 +25,9 @@ type FactorySaveAPI interface {
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
-// RuntimeAPI owns the compatibility unscoped runtime reads and work submission
-// operations retained by the HTTP routes. It is deliberately a detached
-// mapping contract rather than an embedding of the Factory Runtime host API.
+// RuntimeAPI owns the compatibility unscoped runtime reads retained by the
+// HTTP routes. Work admission is owned by the Work transport and root.
 type RuntimeAPI interface {
-	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
 }
