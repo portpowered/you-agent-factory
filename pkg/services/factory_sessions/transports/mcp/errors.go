@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -145,8 +147,17 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 }
 
 func readErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
+	if errors.Is(err, recordingmcp.ErrServiceUnavailable) {
+		return unavailableServiceErrorEnvelope()
+	}
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
+		errors.Is(err, recordings.ErrMissingRecordingTarget) ||
+		historicalQueryIs(err, recordings.HistoricalRecordingQueryErrorMissingHistory) {
 		return sessionNotFoundErrorEnvelope(sessionID)
+	}
+	if errors.Is(err, recordings.ErrPortableArtifactUnavailable) ||
+		historicalQueryIs(err, recordings.HistoricalRecordingQueryErrorUnavailable) {
+		return resultNotReadyErrorEnvelope(sessionID, nil)
 	}
 	return executionErrorEnvelope(err)
 }
@@ -185,10 +196,18 @@ func resultNotReadyErrorEnvelope(sessionID string, availability *factorysessione
 }
 
 func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
+	if errors.Is(err, recordingmcp.ErrServiceUnavailable) {
+		return unavailableServiceErrorEnvelope()
+	}
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
+		errors.Is(err, recordings.ErrMissingRecordingTarget) ||
+		historicalQueryIs(err, recordings.HistoricalRecordingQueryErrorMissingHistory) {
 		return sessionNotFoundErrorEnvelope(sessionID)
 	}
-	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) ||
+		errors.Is(err, recordings.ErrReconnectCursorNotFound) ||
+		errors.Is(err, recordings.ErrReconnectCursorExpired) ||
+		errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
 		return ToolErrorEnvelope{
 			Code:      errorCodeReconnectCursorNotFound,
 			Message:   errorMessageReconnectCursorNotFound,
@@ -199,7 +218,24 @@ func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
 			},
 		}
 	}
+	if errors.Is(err, recordings.ErrInvalidReconnectCursor) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeBadRequest,
+			Message:   "invalid event reconnect cursor",
+			Retryable: false,
+			SessionID: strings.TrimSpace(sessionID),
+		}
+	}
+	if errors.Is(err, recordings.ErrPortableArtifactUnavailable) ||
+		historicalQueryIs(err, recordings.HistoricalRecordingQueryErrorUnavailable) {
+		return resultNotReadyErrorEnvelope(sessionID, nil)
+	}
 	return executionErrorEnvelope(err)
+}
+
+func historicalQueryIs(err error, kind recordings.HistoricalRecordingQueryErrorKind) bool {
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	return errors.As(err, &historicalErr) && historicalErr.Kind == kind
 }
 
 func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
@@ -234,6 +270,13 @@ func executionErrorEnvelope(err error) ToolErrorEnvelope {
 			Details: map[string]any{
 				"field": validationErr.Field,
 			},
+		}
+	}
+	if errors.Is(err, recordings.ErrInvalidReconnectCursor) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeBadRequest,
+			Message:   "invalid event reconnect cursor",
+			Retryable: false,
 		}
 	}
 	if errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {

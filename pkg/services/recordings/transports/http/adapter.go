@@ -62,6 +62,34 @@ func NewAdapter(root recordings.Service) *Adapter {
 	return &Adapter{root: root}
 }
 
+// NewAdapterWithLegacyFallback binds the finalized Recordings path together
+// with a temporary live-session compatibility seam. Recordings remains the
+// first read for finalized sessions; the legacy capability is consulted only
+// when the owner reports that no portable artifact is available yet.
+func NewAdapterWithLegacyFallback(
+	root recordings.Service,
+	history LegacyHistory,
+	preparation LegacyRequestPreparation,
+	live LegacyLiveEvents,
+) *Adapter {
+	if root == nil {
+		return NewLegacyAdapterWithLive(history, preparation, live)
+	}
+	if isNilCompatibilityValue(history) {
+		history = nil
+	}
+	if isNilCompatibilityValue(preparation) {
+		preparation = nil
+	}
+	if isNilCompatibilityValue(live) {
+		live = nil
+	}
+	return &Adapter{
+		root: root, legacyHistory: history, legacyPreparation: preparation,
+		legacyLiveEvents: live,
+	}
+}
+
 // NewLegacyAdapter places the standalone durable compatibility path behind the
 // Recordings-owned HTTP adapter. It is used by direct JavaScript hosting and
 // narrow transport fakes; opened process runtimes use NewAdapter instead.

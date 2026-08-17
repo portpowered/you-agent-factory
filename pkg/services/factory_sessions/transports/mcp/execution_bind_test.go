@@ -12,6 +12,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 const internalLeakProbePath = "pkg/services/factory_sessions/internal/sessionstore"
@@ -78,47 +79,77 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalGetSessionTool(t *testing.
 	}
 }
 
-func TestBind_FakeExecutionRootInvokedThroughCanonicalListDispatchesTool(t *testing.T) {
+func TestBind_FakeRecordingsRootInvokedThroughCanonicalListDispatchesTool(t *testing.T) {
 	t.Parallel()
 
 	var invoked bool
-	fake := fakeExecutionRoot{
+	fake := fakeRecordingsInspectionRoot{
 		invoked: &invoked,
-		queryDispatches: func(_ context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
-			if request.SessionID != successSessionID {
-				t.Fatalf("sessionId = %q, want %q", request.SessionID, successSessionID)
+		queryHistorical: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			if request.Recording.RecordingID != recordings.RecordingID(successSessionID) ||
+				request.Recording.Scope.FactorySessionID != successSessionID {
+				t.Fatalf("historical request = %#v, want session scope", request)
 			}
-			if request.Filters.Phase != "execution" || request.Filters.Status != factorysessions.DispatchStatus("COMPLETED") {
-				t.Fatalf("filters = %#v, want execution/COMPLETED", request.Filters)
-			}
-			return factorysessions.ListDispatchesResult{
-				SessionID: successSessionID,
-				Dispatches: []factorysessions.DispatchSummary{{
-					ID:     "dispatch-001",
-					Phase:  "execution",
-					Status: factorysessions.DispatchStatus("COMPLETED"),
+			return recordings.HistoricalRecordingQueryResult{
+				Recording: request.Recording,
+				Dispatches: []recordings.HistoricalDispatch{{
+					ID: "dispatch-001", Status: recordings.FactoryDispatchStatusCompleted,
+					DispatchKind: recordings.FactoryDispatchKindPetriTransition,
 				}},
 			}, nil
 		},
 	}
 	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Execution: fake,
-		Prepare:   canonicalMCPRequestPreparation,
+		Execution:  fakeExecutionRoot{},
+		Recordings: fake,
+		Prepare:    canonicalMCPRequestPreparation,
 	})
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolListDispatches,
-		json.RawMessage(`{"sessionId":"`+successSessionID+`","phase":"execution","status":"COMPLETED"}`),
+		json.RawMessage(`{"sessionId":"`+successSessionID+`","status":"COMPLETED"}`),
 	)
 	if err != nil {
 		t.Fatalf("CallTool(list_dispatches) error = %v", err)
 	}
 	if !invoked {
-		t.Fatal("fake execution root was not invoked")
+		t.Fatal("fake recordings root was not invoked")
 	}
 	if !strings.Contains(string(raw), `"id":"dispatch-001"`) || !strings.Contains(string(raw), `"sessionId":"`+successSessionID+`"`) {
 		t.Fatalf("CallTool(list_dispatches) = %s, want encoded dispatch list", raw)
 	}
+}
+
+type fakeRecordingsInspectionRoot struct {
+	recordings.Service
+	invoked         *bool
+	queryHistorical func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+}
+
+func (fake fakeRecordingsInspectionRoot) QueryRecordingStatus(
+	request recordings.RecordingStatusRequest,
+) (recordings.RecordingStatusResult, error) {
+	if fake.invoked != nil {
+		*fake.invoked = true
+	}
+	return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+		RecordingID: request.RecordingID,
+		Artifact:    recordings.RecordingArtifactReference("artifact-001"),
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: string(request.RecordingID)},
+		State:       recordings.RecordingFinalized,
+	}}, nil
+}
+
+func (fake fakeRecordingsInspectionRoot) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	if fake.invoked != nil {
+		*fake.invoked = true
+	}
+	if fake.queryHistorical == nil {
+		return recordings.HistoricalRecordingQueryResult{}, errors.New("unexpected historical query")
+	}
+	return fake.queryHistorical(request)
 }
 
 func TestBind_ReadListToolsInvalidJSONDecodeReturnsBadRequestWithoutInvokingFakeRoot(t *testing.T) {

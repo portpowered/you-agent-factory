@@ -60,6 +60,7 @@ import (
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
@@ -628,7 +629,10 @@ func provideHTTPRuntimeBinding(
 		factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
 			factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions}, opened.Logger,
 		)
-		recordingsAdapter := recordingshttp.NewAdapter(opened.Recordings)
+		legacyDurable := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
+		recordingsAdapter := recordingshttp.NewAdapterWithLegacyFallback(
+			opened.Recordings, legacyDurable, sessionRequests, opened.FactorySessions,
+		)
 		var workerSessionsHandler *workersessionshttp.Handler
 		if opened.WorkerSessions != nil {
 			workerSessionsHandler = workersessionshttp.NewHandler(
@@ -674,7 +678,7 @@ func provideFixtureStdioApplicationBuilder(
 			if err := sessionCtx.Err(); err != nil {
 				return initializer.OpenedApplication{}, err
 			}
-			session, err := open(execution, prepare, workflowPreview, sessionInput, sessionOutput)
+			session, err := open(execution, nil, prepare, workflowPreview, sessionInput, sessionOutput)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}
@@ -708,7 +712,7 @@ func provideRuntimeStdioApplicationBuilder(
 				if err := sessionCtx.Err(); err != nil {
 					return initializer.OpenedApplication{}, err
 				}
-				session, err := open(opened.Execution, prepare, opened.WorkflowPreview, sessionInput, sessionOutput)
+				session, err := open(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview, sessionInput, sessionOutput)
 				if err != nil {
 					return initializer.OpenedApplication{}, err
 				}

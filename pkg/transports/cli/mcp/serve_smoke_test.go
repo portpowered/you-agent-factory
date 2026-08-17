@@ -95,6 +95,7 @@ func executeGeneratedMCPServe(
 		}
 		session, err := mcpstdio.Open(
 			service,
+			nil,
 			installSmokeRequestPreparation(),
 			installSmokeWorkflowDefinitions(),
 			intent.Stdin,

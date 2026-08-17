@@ -421,6 +421,7 @@ func openRuntime(
 	opened.sidecars = runtimeSidecars
 	opened.application.Resources.Clock = clock
 	opened.application.Recordings = recordingsService
+	opened.execution.Recordings = recordingsService
 	return opened, nil
 }
 

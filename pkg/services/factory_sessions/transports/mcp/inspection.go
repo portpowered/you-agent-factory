@@ -5,22 +5,20 @@ import (
 	"errors"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // ListDispatchesInput is the MCP request shape for you.factory_session.list_dispatches.
-type ListDispatchesInput struct {
-	SessionID string `json:"sessionId"`
-	Phase     string `json:"phase,omitempty"`
-	Status    string `json:"status,omitempty"`
-}
+type ListDispatchesInput = recordingmcp.FactorySessionListDispatchesInput
 
 // ListDispatches returns deterministic dispatch summaries for one Factory Session
-// through the you.factory_session.list_dispatches MCP tool.
+// through the you.factory_session.list_dispatches MCP tool. The canonical read
+// is owned by Recordings; the durable execution role is intentionally absent.
 func ListDispatches(
 	ctx context.Context,
-	service DurableExecution,
+	service recordingmcp.FactorySessionInspectionService,
 	input ListDispatchesInput,
 ) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 	if ctx == nil {
@@ -30,36 +28,23 @@ func ListDispatches(
 	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionDispatchesResponse](ctx); done {
 		return response
 	}
-	if service == nil {
-		envelope := unavailableServiceErrorEnvelope()
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
-	}
-
-	sessionID := input.SessionID
-	result, err := service.QueryDispatches(ctx, factorysessionexecution.DispatchQueryRequest{
-		SessionID: sessionID,
-		Filters: factorysessionexecution.DispatchFilters{
-			Phase: input.Phase, Status: factorysessionexecution.DispatchStatus(input.Status),
-		},
-	})
+	result, err := recordingmcp.ListFactorySessionDispatches(ctx, service, input)
 	if err != nil {
-		envelope := readErrorEnvelope(sessionID, err)
+		envelope := readErrorEnvelope(input.SessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
 	}
-	mapped := apifactorysession.ListDispatchesResponseToAPI(result)
-	return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Result: &mapped}
+	return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Result: &result}
 }
 
 // ListArtifactsInput is the MCP request shape for you.factory_session.list_artifacts.
-type ListArtifactsInput struct {
-	SessionID string `json:"sessionId"`
-}
+type ListArtifactsInput = recordingmcp.FactorySessionListArtifactsInput
 
 // ListArtifacts returns deterministic FactoryArtifact summaries for one Factory
-// Session through the you.factory_session.list_artifacts MCP tool.
+// Session through the you.factory_session.list_artifacts MCP tool. Recordings
+// owns the artifact and reconstructed-world-state reads.
 func ListArtifacts(
 	ctx context.Context,
-	service DurableExecution,
+	service recordingmcp.FactorySessionInspectionService,
 	input ListArtifactsInput,
 ) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
 	if ctx == nil {
@@ -69,38 +54,24 @@ func ListArtifacts(
 	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionArtifactsResponse](ctx); done {
 		return response
 	}
-	if service == nil {
-		envelope := unavailableServiceErrorEnvelope()
-		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
-	}
-
-	sessionID := input.SessionID
-	result, err := service.ListArtifacts(ctx, sessionID)
+	result, err := recordingmcp.ListFactorySessionArtifacts(ctx, service, input)
 	if err != nil {
-		envelope := readErrorEnvelope(sessionID, err)
+		envelope := readErrorEnvelope(input.SessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
 	}
-
-	mapped := apifactorysession.ListArtifactsResponseToAPI(result)
-	return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Result: &mapped}
+	return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Result: &result}
 }
 
 // ReadEventsInput is the MCP request shape for you.factory_session.read_events.
-type ReadEventsInput struct {
-	SessionID     string `json:"sessionId"`
-	AfterEventID  string `json:"afterEventId,omitempty"`
-	AfterSequence *int   `json:"afterSequence,omitempty"`
-}
+type ReadEventsInput = recordingmcp.FactorySessionReadEventsInput
 
 // ReadEventsResult is the MCP response shape for you.factory_session.read_events.
-type ReadEventsResult struct {
-	SessionID string                    `json:"sessionId"`
-	Events    []factoryapi.FactoryEvent `json:"events,omitempty"`
-}
+type ReadEventsResult = recordingmcp.FactorySessionReadEventsResult
 
 // ReadEvents returns ordered Factory Session event facts for reconnect and
-// inspection through the you.factory_session.read_events MCP tool.
-func ReadEvents(ctx context.Context, service DurableExecution, prepare RequestPreparation, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+// inspection through the you.factory_session.read_events MCP tool. Recordings
+// owns the canonical event subscription and reconnect cursor semantics.
+func ReadEvents(ctx context.Context, service recordingmcp.FactorySessionInspectionService, input ReadEventsInput) ToolResponse[ReadEventsResult] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -108,41 +79,12 @@ func ReadEvents(ctx context.Context, service DurableExecution, prepare RequestPr
 	if response, done := requestContextErrorResponse[ReadEventsResult](ctx); done {
 		return response
 	}
-	if service == nil {
-		envelope := unavailableServiceErrorEnvelope()
-		return ToolResponse[ReadEventsResult]{Error: &envelope}
-	}
-
-	params := factoryapi.GetEventsBySessionIdParams{}
-	if trimmed := input.AfterEventID; trimmed != "" {
-		afterEventID := factoryapi.AfterEventId(trimmed)
-		params.AfterEventId = &afterEventID
-	}
-	if input.AfterSequence != nil {
-		sequence := factoryapi.AfterSequence(*input.AfterSequence)
-		params.AfterSequence = &sequence
-	}
-	reconnect, err := apifactorysession.EventReconnectRequestFromAPI(params)
-	if err == nil {
-		reconnect, err = prepare.PrepareEventReconnect(reconnect)
-	}
+	result, err := recordingmcp.ReadFactorySessionEvents(ctx, service, input)
 	if err != nil {
-		envelope := requestValidationErrorEnvelope(err)
+		envelope := eventReadErrorEnvelope(input.SessionID, err)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
 	}
-
-	sessionID := input.SessionID
-	result, err := service.ReadEvents(ctx, sessionID, reconnect)
-	if err != nil {
-		envelope := eventReadErrorEnvelope(sessionID, err)
-		return ToolResponse[ReadEventsResult]{Error: &envelope}
-	}
-
-	mapped := ReadEventsResult{
-		SessionID: result.SessionID,
-		Events:    apifactorysession.EventReadResponseToAPI(result),
-	}
-	return ToolResponse[ReadEventsResult]{Result: &mapped}
+	return ToolResponse[ReadEventsResult]{Result: &result}
 }
 
 // ControlInput is the MCP request shape for you.factory_session.control.

@@ -44,6 +44,12 @@ func RootErrorResponse(err error, operation recordingsHTTPOperation) (int, facto
 				return badRequestErrorResponse("invalid historical recording request")
 			case recordings.HistoricalRecordingQueryErrorMissingHistory:
 				return notFoundErrorResponse("factory session history not found")
+			case recordings.HistoricalRecordingQueryErrorUnavailable:
+				return http.StatusConflict, factoryapi.ErrorResponse{
+					Message: "factory session history is not finalized",
+					Family:  factoryapi.ErrorFamilyConflict,
+					Code:    factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE,
+				}, true
 			}
 		}
 	}

@@ -590,6 +590,7 @@ func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 func TestToolOperationRejectsMissingContext(t *testing.T) {
 	operation := mcpfactorysession.BindToolOperation(
 		scriptedExecutionService{},
+		nil,
 		canonicalMCPRequestPreparation,
 		nil,
 	)
@@ -716,7 +717,11 @@ func (service scriptedExecutionService) Terminate(
 }
 
 func clientWithScript(service scriptedExecutionService) *testClient {
-	return newTestClientWithService(service, canonicalMCPRequestPreparation)
+	return newTestClientWithRecordings(
+		service,
+		canonicalMCPRequestPreparation,
+		newScriptedRecordingsRoot(service),
+	)
 }
 
 func runningAsyncStart() factorysessions.AsyncStartResult {

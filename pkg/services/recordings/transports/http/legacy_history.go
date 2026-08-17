@@ -24,6 +24,16 @@ func (a *Adapter) hasLegacyLiveEvents() bool {
 	return a != nil && a.legacyLiveEvents != nil
 }
 
+func isExpectedLiveFallback(err error) bool {
+	if errors.Is(err, recordings.ErrPortableArtifactUnavailable) ||
+		errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		return true
+	}
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	return errors.As(err, &historicalErr) &&
+		historicalErr.Kind == recordings.HistoricalRecordingQueryErrorUnavailable
+}
+
 func legacyEventReconnectCursor(params factoryapi.GetEventsBySessionIdParams) *interfaces.FactoryEventReconnectCursor {
 	if params.AfterEventId == nil && params.AfterSequence == nil {
 		return nil

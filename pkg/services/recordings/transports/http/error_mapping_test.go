@@ -92,6 +92,23 @@ func TestRootErrorResponse_MapsArtifactMissingTargetFailures(t *testing.T) {
 	}
 }
 
+func TestRootErrorResponse_MapsHistoricalUnavailableAsConflict(t *testing.T) {
+	t.Parallel()
+
+	err := &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorUnavailable,
+	}
+	status, response, ok := RootErrorResponse(err, recordingsHTTPOperationHistoricalRead)
+	if !ok {
+		t.Fatal("RootErrorResponse(unavailable history) = not handled, want typed conflict")
+	}
+	if status != http.StatusConflict ||
+		response.Family != factoryapi.ErrorFamilyConflict ||
+		response.Code != factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE {
+		t.Fatalf("RootErrorResponse(unavailable history) = %d %#v, want conflict projection-unavailable", status, response)
+	}
+}
+
 func TestRootErrorResponse_IgnoresCrossOperationTypedFailures(t *testing.T) {
 	t.Parallel()
 

@@ -8,6 +8,8 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 )
 
@@ -31,6 +33,7 @@ func (s *session) Run(ctx context.Context) error {
 
 type Opener func(
 	mcpfactorysession.DurableExecution,
+	recordings.Service,
 	mcpfactorysession.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
 	io.Reader,
@@ -43,6 +46,7 @@ func NewOpener() Opener { return Open }
 // role to an inert MCP protocol server.
 func Open(
 	execution mcpfactorysession.DurableExecution,
+	recordingsService recordings.Service,
 	prepare mcpfactorysession.RequestPreparation,
 	workflows factoryruntime.WorkflowPreviewOperation,
 	input io.Reader,
@@ -51,8 +55,12 @@ func Open(
 	if input == nil || output == nil {
 		return nil, fmt.Errorf("MCP stdio streams are required")
 	}
+	inspection := recordingmcp.FactorySessionInspectionService(recordingsService)
+	if inspection == nil {
+		inspection = recordingmcp.NewLegacyFactorySessionInspection(execution)
+	}
 	server, err := mcpserver.New(mcpserver.Options{
-		ToolOperation: mcpfactorysession.BindToolOperation(execution, prepare, workflows),
+		ToolOperation: mcpfactorysession.BindToolOperation(execution, inspection, prepare, workflows),
 	})
 	if err != nil {
 		return nil, err

@@ -38,6 +38,9 @@ func (a *Adapter) GetEventsBySessionId(
 		Params:             params,
 		StreamGenerationID: r.Header.Get(SessionEventStreamGenerationHeader),
 	}
+	if a.handleLegacyLiveFallbackEvents(w, r, input) {
+		return
+	}
 	if a.handleLegacyDurableEvents(w, r, input) {
 		return
 	}
@@ -61,6 +64,20 @@ func (a *Adapter) handleLegacyDurableEvents(
 	if !isDurableHistorySession(input.SessionID) || !a.hasLegacyHistory() {
 		return false
 	}
+	if a.root != nil {
+		_, err := a.historicalRecording(r.Context(), input.SessionID)
+		if err == nil || !isExpectedLiveFallback(err) {
+			return false
+		}
+	}
+	return a.serveLegacyDurableEvents(w, r, input)
+}
+
+func (a *Adapter) serveLegacyDurableEvents(
+	w http.ResponseWriter,
+	r *http.Request,
+	input EventSubscribeInput,
+) bool {
 	if requestsJSONEventRecoveryProbe(r) {
 		a.probeLegacyEventRecovery(w, r, input.SessionID, input.Params)
 		return true
@@ -77,6 +94,23 @@ func (a *Adapter) handleLegacyDurableEvents(
 	return true
 }
 
+func (a *Adapter) handleLegacyLiveFallbackEvents(
+	w http.ResponseWriter,
+	r *http.Request,
+	input EventSubscribeInput,
+) bool {
+	if !isDurableHistorySession(input.SessionID) || !a.hasLegacyLiveEvents() {
+		return false
+	}
+	if a.root != nil {
+		_, err := a.historicalRecording(r.Context(), input.SessionID)
+		if err == nil || !isExpectedLiveFallback(err) {
+			return false
+		}
+	}
+	return a.serveLegacyLiveEvents(w, r, input)
+}
+
 func (a *Adapter) handleLegacyLiveEvents(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -85,6 +119,14 @@ func (a *Adapter) handleLegacyLiveEvents(
 	if isDurableHistorySession(input.SessionID) || !a.hasLegacyLiveEvents() {
 		return false
 	}
+	return a.serveLegacyLiveEvents(w, r, input)
+}
+
+func (a *Adapter) serveLegacyLiveEvents(
+	w http.ResponseWriter,
+	r *http.Request,
+	input EventSubscribeInput,
+) bool {
 	if requestsJSONEventRecoveryProbe(r) {
 		a.probeLegacyLiveEventRecovery(w, r, input.SessionID, input.Params)
 		return true

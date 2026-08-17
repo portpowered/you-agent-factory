@@ -6,6 +6,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -16,11 +17,11 @@ type testClient struct {
 }
 
 func newTestClient() *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, nil)}
 }
 
 func newTestClientWithWorkflows(workflows factoryruntime.WorkflowPreviewOperation) *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, workflows)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, workflows)}
 }
 
 func newTestClientWithService(
@@ -32,7 +33,20 @@ func newTestClientWithService(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(service, prepare, workflow)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(service, nil, prepare, workflow)}
+}
+
+func newTestClientWithRecordings(
+	service mcpfactorysession.DurableExecution,
+	prepare mcpfactorysession.RequestPreparation,
+	recordingRoot recordings.Service,
+	workflows ...factoryruntime.WorkflowPreviewOperation,
+) *testClient {
+	var workflow factoryruntime.WorkflowPreviewOperation
+	if len(workflows) > 0 {
+		workflow = workflows[0]
+	}
+	return &testClient{call: mcpfactorysession.BindToolOperation(service, recordingRoot, prepare, workflow)}
 }
 
 func (c *testClient) CallTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {

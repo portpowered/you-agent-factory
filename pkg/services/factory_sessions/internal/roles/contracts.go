@@ -108,6 +108,7 @@ type OpenedInvocationRuntime struct {
 
 type OpenedExecutionRuntime struct {
 	Execution       durableexecution.Service
+	Recordings      recordings.Service
 	WorkflowPreview factoryruntime.WorkflowPreviewOperation
 	Resources       RuntimeResources
 }

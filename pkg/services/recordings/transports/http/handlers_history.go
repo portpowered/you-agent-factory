@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -66,28 +67,15 @@ func (a *Adapter) GetFactorySessionResults(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
-	if a.hasLegacyHistory() {
-		response, err := a.legacyResult(r.Context(), string(sessionID), params)
-		if shouldEndOnRequestContext(r.Context(), err) {
-			return
-		}
-		if err != nil {
-			a.writeLegacyError(w, err, "failed to get factory session result")
-			return
-		}
-		a.writeJSON(w, http.StatusOK, response)
-		return
-	}
-	result, err := a.historicalRecording(r.Context(), string(sessionID))
+	response, err, legacy := a.factorySessionResult(r.Context(), string(sessionID), params)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
-		a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
-		return
-	}
-	response, err := historicalResultResponse(result, string(sessionID), params)
-	if err != nil {
+		if legacy {
+			a.writeLegacyError(w, err, "failed to get factory session result")
+			return
+		}
 		a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
 		return
 	}
@@ -106,39 +94,19 @@ func (a *Adapter) ListFactorySessionDispatches(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
-	if a.hasLegacyHistory() {
-		response, err := a.legacyDispatches(r.Context(), string(sessionID), params)
-		if shouldEndOnRequestContext(r.Context(), err) {
-			return
-		}
-		if err != nil {
-			a.writeLegacyError(w, err, "failed to list factory session dispatches")
-			return
-		}
-		a.writeJSON(w, http.StatusOK, response)
-		return
-	}
-	result, err := a.historicalRecording(r.Context(), string(sessionID))
+	response, err, legacy := a.factorySessionDispatches(r.Context(), string(sessionID), params)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
+		if legacy {
+			a.writeLegacyError(w, err, "failed to list factory session dispatches")
+			return
+		}
 		a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
 		return
 	}
-	dispatches := make([]factorysessions.DispatchSummary, 0, len(result.Dispatches))
-	for _, dispatch := range result.Dispatches {
-		if params.Status != nil && string(*params.Status) != string(dispatch.Status) {
-			continue
-		}
-		dispatches = append(dispatches, factorysessions.DispatchSummary{
-			ID: dispatch.ID, Status: factorysessions.DispatchStatus(dispatch.Status),
-			DispatchKind: historicalDispatchKind(dispatch),
-		})
-	}
-	a.writeJSON(w, http.StatusOK, factorysessionmapping.ListDispatchesResponseToAPI(
-		factorysessions.ListDispatchesResult{SessionID: string(sessionID), Dispatches: dispatches},
-	))
+	a.writeJSON(w, http.StatusOK, response)
 }
 
 // GetFactorySessionDispatch serves one detached historical dispatch fact.
@@ -152,41 +120,108 @@ func (a *Adapter) GetFactorySessionDispatch(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
-	if a.hasLegacyHistory() {
-		response, err := a.legacyDispatch(r.Context(), string(sessionID), string(dispatchID))
-		if shouldEndOnRequestContext(r.Context(), err) {
-			return
-		}
-		if err != nil {
-			a.writeLegacyError(w, err, "failed to get factory session dispatch")
-			return
-		}
-		a.writeJSON(w, http.StatusOK, response)
-		return
-	}
-	result, err := a.historicalRecording(r.Context(), string(sessionID))
+	response, err, legacy := a.factorySessionDispatch(r.Context(), string(sessionID), string(dispatchID))
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
+		if legacy {
+			a.writeLegacyError(w, err, "failed to get factory session dispatch")
+			return
+		}
+		if errors.Is(err, factorysessions.ErrDispatchNotFound) {
+			a.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
+			return
+		}
 		a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
 		return
 	}
-	for _, dispatch := range result.Dispatches {
-		if dispatch.ID != string(dispatchID) {
+	a.writeJSON(w, http.StatusOK, response)
+}
+
+func (a *Adapter) factorySessionResult(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetFactorySessionResultsParams,
+) (factoryapi.FactorySessionResult, error, bool) {
+	if a.root == nil && a.hasLegacyHistory() {
+		result, err := a.legacyResult(ctx, sessionID, params)
+		return result, err, true
+	}
+	history, err := a.historicalRecording(ctx, sessionID)
+	if err != nil {
+		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
+			result, legacyErr := a.legacyResult(ctx, sessionID, params)
+			return result, legacyErr, true
+		}
+		return factoryapi.FactorySessionResult{}, err, false
+	}
+	result, err := historicalResultResponse(history, sessionID, params)
+	return result, err, false
+}
+
+func (a *Adapter) factorySessionDispatches(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.ListFactorySessionDispatchesParams,
+) (factoryapi.ListFactorySessionDispatchesResponse, error, bool) {
+	if a.root == nil && a.hasLegacyHistory() {
+		result, err := a.legacyDispatches(ctx, sessionID, params)
+		return result, err, true
+	}
+	history, err := a.historicalRecording(ctx, sessionID)
+	if err != nil {
+		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
+			result, legacyErr := a.legacyDispatches(ctx, sessionID, params)
+			return result, legacyErr, true
+		}
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err, false
+	}
+	dispatches := make([]factorysessions.DispatchSummary, 0, len(history.Dispatches))
+	for _, dispatch := range history.Dispatches {
+		if params.Status != nil && string(*params.Status) != string(dispatch.Status) {
 			continue
 		}
-		response := factorysessionmapping.DispatchDetailResponseToAPI(factorysessions.DispatchDetail{
+		dispatches = append(dispatches, factorysessions.DispatchSummary{
+			ID: dispatch.ID, Status: factorysessions.DispatchStatus(dispatch.Status),
+			DispatchKind: historicalDispatchKind(dispatch),
+		})
+	}
+	return factorysessionmapping.ListDispatchesResponseToAPI(
+		factorysessions.ListDispatchesResult{SessionID: sessionID, Dispatches: dispatches},
+	), nil, false
+}
+
+func (a *Adapter) factorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	dispatchID string,
+) (factoryapi.FactoryDispatch, error, bool) {
+	if a.root == nil && a.hasLegacyHistory() {
+		result, err := a.legacyDispatch(ctx, sessionID, dispatchID)
+		return result, err, true
+	}
+	history, err := a.historicalRecording(ctx, sessionID)
+	if err != nil {
+		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
+			result, legacyErr := a.legacyDispatch(ctx, sessionID, dispatchID)
+			return result, legacyErr, true
+		}
+		return factoryapi.FactoryDispatch{}, err, false
+	}
+	for _, dispatch := range history.Dispatches {
+		if dispatch.ID != dispatchID {
+			continue
+		}
+		return factorysessionmapping.DispatchDetailResponseToAPI(factorysessions.DispatchDetail{
 			DispatchSummary: factorysessions.DispatchSummary{
 				ID: dispatch.ID, Status: factorysessions.DispatchStatus(dispatch.Status),
 				DispatchKind: historicalDispatchKind(dispatch),
 			},
-			SessionID: string(sessionID), OrchestratorKind: historicalOrchestratorKind(dispatch),
-		})
-		a.writeJSON(w, http.StatusOK, response)
-		return
+			SessionID: sessionID, OrchestratorKind: historicalOrchestratorKind(dispatch),
+		}), nil, false
 	}
-	a.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
+	return factoryapi.FactoryDispatch{}, factorysessions.ErrDispatchNotFound, false
 }
 
 func historicalDispatchKind(dispatch recordings.HistoricalDispatch) string {

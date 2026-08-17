@@ -3,12 +3,16 @@ package factorysession_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -68,7 +72,12 @@ func TestMockClient_RuntimeService_DocumentedHostConversationUsesRegisteredTools
 			return factoryruntime.WorkflowPreview{Valid: true}
 		},
 	}
-	client := newTestClientWithService(service, canonicalMCPRequestPreparation, workflows)
+	client := newTestClientWithRecordings(
+		service,
+		canonicalMCPRequestPreparation,
+		newScriptedRecordingsRoot(service),
+		workflows,
+	)
 
 	assertDocumentedSourceValid(t, client)
 	started, err := client.StartAsync(context.Background(), runtimeBusyLoopAsyncRequest("req-host-demo-001"))
@@ -225,19 +234,11 @@ func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummari
 
 func TestMockClient_ListDispatches_FiltersAndRejectsInvalidStatus(t *testing.T) {
 	client := clientWithScript(scriptedExecutionService{
-		queryDispatches: func(_ context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
-			if request.SessionID != successSessionID {
-				t.Fatalf("query sessionID = %q", request.SessionID)
+		listDispatches: func(_ context.Context, sessionID string) (factorysessions.ListDispatchesResult, error) {
+			if sessionID != successSessionID {
+				t.Fatalf("list sessionID = %q", sessionID)
 			}
-			switch {
-			case request.Filters.Phase == "unknown" && request.Filters.Status == "COMPLETED":
-				return factorysessions.ListDispatchesResult{SessionID: successSessionID, Dispatches: []factorysessions.DispatchSummary{}}, nil
-			case request.Filters.Status == "BROKEN":
-				return factorysessions.ListDispatchesResult{}, &factorysessions.ExecutionValidationError{Field: "status", Message: "invalid status"}
-			default:
-				t.Fatalf("unexpected dispatch query = %#v", request)
-				return factorysessions.ListDispatchesResult{}, nil
-			}
+			return dispatchInspection(), nil
 		},
 	})
 	empty, err := client.ListDispatches(context.Background(), mcpfactorysession.ListDispatchesInput{
@@ -420,6 +421,194 @@ func artifactInspection() factorysessions.ListArtifactsResult {
 			DispatchID: pausedDispatchID,
 		}},
 	}
+}
+
+// scriptedRecordingsRoot adapts the existing observable MCP fixtures to the
+// Recordings owner contract. It intentionally implements only the operations
+// used by the three compatibility inspection tools and embeds the public root
+// service for the remaining detached operations.
+type scriptedRecordingsRoot struct {
+	recordings.Service
+	service scriptedExecutionService
+}
+
+func newScriptedRecordingsRoot(service scriptedExecutionService) recordings.Service {
+	return scriptedRecordingsRoot{service: service}
+}
+
+func (root scriptedRecordingsRoot) QueryRecordingStatus(
+	request recordings.RecordingStatusRequest,
+) (recordings.RecordingStatusResult, error) {
+	events, err := root.canonicalEvents(context.Background(), string(request.RecordingID))
+	if err != nil {
+		return recordings.RecordingStatusResult{}, err
+	}
+	status := recordings.RecordingStatusFacts{
+		RecordingID: request.RecordingID,
+		Artifact:    recordings.RecordingArtifactReference("artifact-" + string(request.RecordingID)),
+		Scope:       recordings.CanonicalEventScope{FactorySessionID: string(request.RecordingID)},
+		State:       recordings.RecordingFinalized,
+	}
+	if len(events) > 0 {
+		last := events[len(events)-1].Cursor
+		status.LastEvent = &last
+	}
+	return recordings.RecordingStatusResult{Status: status}, nil
+}
+
+func (root scriptedRecordingsRoot) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	if root.service.listDispatches == nil {
+		return recordings.HistoricalRecordingQueryResult{Recording: request.Recording}, nil
+	}
+	dispatches, err := root.service.listDispatches(context.Background(), string(request.Recording.RecordingID))
+	if err != nil {
+		return recordings.HistoricalRecordingQueryResult{}, err
+	}
+	result := recordings.HistoricalRecordingQueryResult{
+		Recording: request.Recording,
+		Status: recordings.RecordingStatusFacts{
+			RecordingID: request.Recording.RecordingID,
+			Artifact:    request.Recording.Artifact,
+			Scope:       request.Recording.Scope,
+			State:       recordings.RecordingFinalized,
+		},
+	}
+	for _, dispatch := range dispatches.Dispatches {
+		result.Dispatches = append(result.Dispatches, recordings.HistoricalDispatch{
+			ID: dispatch.ID, Status: recordings.FactoryDispatchStatus(dispatch.Status),
+			DispatchKind: recordings.FactoryDispatchKind(dispatch.DispatchKind),
+		})
+	}
+	return result, nil
+}
+
+func (root scriptedRecordingsRoot) BuildPortableArtifact(
+	request recordings.BuildPortableArtifactRequest,
+) (recordings.BuildPortableArtifactResult, error) {
+	if root.service.listArtifacts == nil {
+		return recordings.BuildPortableArtifactResult{}, errors.New("scripted artifact projection is unavailable")
+	}
+	return recordings.BuildPortableArtifactResult{Artifact: recordings.PortableArtifact{
+		SchemaVersion: recordings.PortableArtifactSchemaV1,
+		Summary: recordings.PortableArtifactSummary{
+			RecordingID: request.RecordingID,
+			Reference:   recordings.RecordingArtifactReference("artifact-" + string(request.RecordingID)),
+			Scope:       recordings.CanonicalEventScope{FactorySessionID: string(request.RecordingID)},
+			State:       recordings.RecordingFinalized,
+			Available:   true,
+		},
+	}}, nil
+}
+
+func (root scriptedRecordingsRoot) ReconstructWorldState(
+	request recordings.ReconstructWorldStateRequest,
+) (recordings.ReconstructWorldStateResult, error) {
+	if root.service.listArtifacts == nil {
+		return recordings.ReconstructWorldStateResult{}, errors.New("scripted artifact projection is unavailable")
+	}
+	artifacts, err := root.service.listArtifacts(context.Background(), request.Scope.FactorySessionID)
+	if err != nil {
+		return recordings.ReconstructWorldStateResult{}, err
+	}
+	states := make([]factorydefinitions.FactorySessionArtifactState, 0, len(artifacts.Artifacts))
+	for _, artifact := range artifacts.Artifacts {
+		states = append(states, factorydefinitions.FactorySessionArtifactState{
+			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
+			Label: artifact.Label, ContentHash: artifact.ContentHash,
+			SizeBytes: artifact.SizeBytes, CaptureMetadata: map[string]string{
+				"sourceDispatchId": artifact.DispatchID,
+			},
+		})
+	}
+	payload, err := json.Marshal(factorydefinitions.FactoryWorldState{Artifacts: states})
+	if err != nil {
+		return recordings.ReconstructWorldStateResult{}, err
+	}
+	return recordings.ReconstructWorldStateResult{
+		WorldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Scope:         request.Scope,
+			Payload:       string(payload),
+		},
+	}, nil
+}
+
+func (root scriptedRecordingsRoot) SubscribeFrom(
+	ctx context.Context,
+	request recordings.SubscribeRequest,
+) (recordings.SubscribeResult, error) {
+	events, err := root.canonicalEvents(ctx, request.Scope.FactorySessionID)
+	if err != nil {
+		return recordings.SubscribeResult{}, err
+	}
+	if request.Cursor != nil {
+		start := -1
+		for index, event := range events {
+			if event.Cursor == *request.Cursor {
+				start = index
+				break
+			}
+		}
+		if start < 0 {
+			return recordings.SubscribeResult{}, recordings.ErrReconnectCursorNotFound
+		}
+		events = events[start+1:]
+	}
+	return recordings.SubscribeResult{
+		RetainedEventCount: len(events),
+		Subscription: func(next context.Context) recordings.SubscriptionOutcome {
+			if len(events) == 0 {
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+			}
+			if err := next.Err(); err != nil {
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+			}
+			event := events[0]
+			events = events[1:]
+			return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event}
+		},
+	}, nil
+}
+
+func (root scriptedRecordingsRoot) canonicalEvents(ctx context.Context, sessionID string) ([]recordings.CanonicalEvent, error) {
+	if root.service.readEvents == nil {
+		return nil, nil
+	}
+	result, err := root.service.readEvents(ctx, sessionID, factorysessions.EventReconnectRequest{})
+	if err != nil {
+		return nil, err
+	}
+	events := make([]recordings.CanonicalEvent, 0, len(result.Events))
+	for _, raw := range result.Events {
+		var event factorydefinitions.FactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return nil, fmt.Errorf("decode scripted event: %w", err)
+		}
+		contextPayload, err := json.Marshal(event.Context)
+		if err != nil {
+			return nil, err
+		}
+		session := sessionID
+		if event.Context.SessionID != nil {
+			session = *event.Context.SessionID
+		}
+		sequence := recordings.CanonicalEventSequence(event.Context.Sequence)
+		events = append(events, recordings.CanonicalEvent{
+			ID: stringToCanonicalEventID(event.Id), Sequence: sequence,
+			FactoryTick: event.Context.Tick,
+			Scope:       recordings.CanonicalEventScope{FactorySessionID: session},
+			Cursor:      recordings.CanonicalEventCursor{StreamGenerationID: "scripted-generation", Sequence: sequence},
+			RecordedAt:  event.Context.EventTime, Kind: recordings.CanonicalEventKind(event.Type),
+			Payload: string(event.Payload), SourceContext: string(contextPayload),
+		})
+	}
+	return events, nil
+}
+
+func stringToCanonicalEventID(value string) recordings.CanonicalEventID {
+	return recordings.CanonicalEventID(value)
 }
 
 func startedAndProgressEvents(sessionID string) factorysessions.EventReadResult {

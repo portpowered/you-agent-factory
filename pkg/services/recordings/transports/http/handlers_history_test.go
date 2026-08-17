@@ -1,12 +1,15 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -85,6 +88,97 @@ func TestGetFactorySessionResults_DurableHistoryUsesHistoricalWorldState(t *test
 
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"sessionId":"`+sessionID+`"`) || !strings.Contains(recorder.Body.String(), `"resultStatus":"FINAL"`) {
 		t.Fatalf("response = %d %s, want historical final result", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestHistoricalAdapter_LiveResultFallsBackToFactorySessions(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-live-fallback-result-001"
+	legacyCalls := 0
+	historicalCalls := 0
+	adapter := NewAdapterWithLegacyFallback(
+		&rootFake{
+			queryRecordingStatus: func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+				return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+					RecordingID: recordings.RecordingID(sessionID),
+				}}, nil
+			},
+			queryHistoricalRecording: func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+				historicalCalls++
+				return recordings.HistoricalRecordingQueryResult{}, nil
+			},
+		},
+		&legacyHistoryFake{
+			result: func(context.Context, string, factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error) {
+				legacyCalls++
+				return factoryapi.FactorySessionResult{
+					SessionId: sessionID, ResultStatus: factoryapi.FactorySessionResultStatusNotReady,
+				}, nil
+			},
+		}, nil, nil,
+	)
+	recorder := httptest.NewRecorder()
+	adapter.GetFactorySessionResults(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/results", nil),
+		factoryapi.SessionID(sessionID), factoryapi.GetFactorySessionResultsParams{},
+	)
+
+	if recorder.Code != http.StatusOK ||
+		!strings.Contains(recorder.Body.String(), `"resultStatus":"NOT_READY"`) ||
+		legacyCalls != 1 || historicalCalls != 0 {
+		t.Fatalf("response = %d %s, legacyCalls=%d historicalCalls=%d, want live legacy result only", recorder.Code, recorder.Body.String(), legacyCalls, historicalCalls)
+	}
+}
+
+func TestHistoricalAdapter_LiveDispatchAndArtifactReadsFallbackToFactorySessions(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "dur-sess-live-fallback-inspection-001"
+	legacy := &legacyHistoryFake{
+		dispatches: func(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+			return factoryapi.ListFactorySessionDispatchesResponse{
+				SessionId: sessionID,
+				Dispatches: []factoryapi.FactorySessionDispatchSummary{{
+					Id: "dispatch-live-001", Status: factoryapi.FactoryDispatchStatusCOMPLETED,
+				}},
+			}, nil
+		},
+		artifacts: func(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+			return factoryapi.ListFactorySessionArtifactsResponse{
+				SessionId: sessionID,
+				Artifacts: []factoryapi.FactorySessionArtifactSummary{{Id: "artifact-live-001"}},
+			}, nil
+		},
+	}
+	root := &rootFake{
+		queryRecordingStatus: func(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+			return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
+				RecordingID: request.RecordingID,
+			}}, nil
+		},
+	}
+	adapter := NewAdapterWithLegacyFallback(root, legacy, nil, nil)
+
+	list := httptest.NewRecorder()
+	adapter.ListFactorySessionDispatches(
+		list,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
+		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
+	)
+	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"id":"dispatch-live-001"`) {
+		t.Fatalf("dispatch response = %d %s, want legacy live dispatch", list.Code, list.Body.String())
+	}
+
+	artifacts := httptest.NewRecorder()
+	adapter.ListFactorySessionArtifacts(
+		artifacts,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/artifacts", nil),
+		factoryapi.SessionID(sessionID),
+	)
+	if artifacts.Code != http.StatusOK || !strings.Contains(artifacts.Body.String(), `"id":"artifact-live-001"`) {
+		t.Fatalf("artifact response = %d %s, want legacy live artifacts", artifacts.Code, artifacts.Body.String())
 	}
 }
 
@@ -223,4 +317,39 @@ func historicalHTTPTestEvent(sessionID, id string, sequence int64) recordings.Ca
 		Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "history-http-generation", Sequence: recordings.CanonicalEventSequence(sequence)},
 		RecordedAt: time.Unix(1_700_000_000+sequence, 0).UTC(), Kind: "WORK_REQUEST", Payload: `{"workTypeId":"task"}`,
 	}
+}
+
+type legacyHistoryFake struct {
+	LegacyHistory
+	result     func(context.Context, string, factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error)
+	dispatches func(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	artifacts  func(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error)
+}
+
+func (fake *legacyHistoryFake) GetDurableFactorySessionResult(ctx context.Context, sessionID string, request factorysessions.ResultRequest) (factoryapi.FactorySessionResult, error) {
+	return fake.result(ctx, sessionID, request)
+}
+
+func (fake *legacyHistoryFake) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string, params factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	return fake.dispatches(ctx, sessionID, params)
+}
+
+func (fake *legacyHistoryFake) ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	return fake.artifacts(ctx, sessionID)
+}
+
+func (fake *legacyHistoryFake) ReadDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
+	return nil, nil
+}
+
+func (fake *legacyHistoryFake) ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error {
+	return nil
+}
+
+func (fake *legacyHistoryFake) GetDurableFactorySessionDispatch(context.Context, string, string) (factoryapi.FactoryDispatch, error) {
+	return factoryapi.FactoryDispatch{}, factorysessions.ErrDispatchNotFound
+}
+
+func (fake *legacyHistoryFake) GetDurableFactorySessionArtifact(context.Context, string, string) (factoryapi.FactorySessionArtifactDetail, error) {
+	return factoryapi.FactorySessionArtifactDetail{}, factorysessions.ErrArtifactNotFound
 }
