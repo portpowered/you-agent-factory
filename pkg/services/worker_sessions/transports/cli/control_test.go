@@ -215,6 +215,95 @@ func TestControlLocalNotFoundWithoutAFactoryServerStillReportsNotFound(t *testin
 	assertCLIErrorCode(t, err, "NOT_FOUND")
 }
 
+// Every CLI invocation carries a factory server address, because --server
+// always defaults to the shared local URI. Re-addressing a local miss must
+// therefore not turn the local owner's answer into a transport failure when
+// nothing is listening there: direct mode owns its own Worker Sessions, so an
+// unknown identity is still NOT_FOUND rather than FACTORY_UNREACHABLE.
+func TestControlLocalNotFoundKeepsNotFoundWhenTheDefaultServerIsUnreachable(t *testing.T) {
+	for _, action := range []workersessions.ControlAction{
+		workersessions.ControlActionCancel, workersessions.ControlActionTerminate,
+		workersessions.ControlActionPause, workersessions.ControlActionResume,
+	} {
+		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
+			local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+				action: workersessions.ErrSessionNotFound,
+			}}
+			var output bytes.Buffer
+			err := NewControl(testHTTPProtocol(t), local)(ControlConfig{
+				Context: context.Background(), Server: unreachableFactoryServer(t),
+				WorkerSessionID: "worker-1", Action: action,
+				OutputFormat: "json", Output: &output,
+			})
+			assertCLIErrorCode(t, err, "NOT_FOUND")
+			var payload struct {
+				Code string `json:"code"`
+			}
+			if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
+				t.Fatalf("decode control error: %v; output=%q", decodeErr, output.String())
+			}
+			if payload.Code != "NOT_FOUND" {
+				t.Fatalf("rendered control error code = %q, want NOT_FOUND", payload.Code)
+			}
+		})
+	}
+}
+
+// A factory server that answers has resolved the identity, so its refusal is
+// authoritative and must not be masked by the local root's missing session.
+func TestControlLocalNotFoundReportsTheAnsweringServerRefusal(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		code   string
+	}{
+		{name: "conflict", status: http.StatusConflict, code: "WORKER_SESSION_CONTROL_CONFLICT",
+			body: `{"message":"control conflicts with current state","code":"WORKER_SESSION_CONTROL_CONFLICT"}`},
+		{name: "unknown to the owner", status: http.StatusNotFound, code: "NOT_FOUND",
+			body: `{"message":"Worker Session not found","code":"NOT_FOUND"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+				workersessions.ControlActionCancel: workersessions.ErrSessionNotFound,
+			}}
+			serverCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				serverCalls++
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.status)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer server.Close()
+
+			var output bytes.Buffer
+			err := NewControl(testHTTPProtocol(t), local)(ControlConfig{
+				Context: context.Background(), Server: server.URL, WorkerSessionID: "worker-1",
+				Action: workersessions.ControlActionCancel, OutputFormat: "json", Output: &output,
+			})
+			assertCLIErrorCode(t, err, test.code)
+			if serverCalls != 1 {
+				t.Fatalf("server calls = %d, want exactly one re-addressed control", serverCalls)
+			}
+		})
+	}
+}
+
+// unreachableFactoryServer returns an address that accepted a listener and then
+// released it, so a dial is refused rather than answered. It stands in for the
+// ordinary direct-mode invocation, where --server defaults to the shared local
+// URI while no factory server is running.
+func unreachableFactoryServer(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("unreachable factory server received a control request")
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.Close()
+	return server.URL
+}
+
 // A local control failure that is not a missing session is the local root's
 // authoritative answer and must never be retried against the factory server.
 func TestControlLocalConflictIsNotReAddressedToTheFactoryServer(t *testing.T) {

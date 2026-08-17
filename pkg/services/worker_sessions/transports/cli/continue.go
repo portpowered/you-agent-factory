@@ -496,9 +496,19 @@ func controlWorkerSession(config ControlConfig) error {
 	return controlLocal(config, jsonOutput)
 }
 
-// controlOwnerAvailable reports whether the configured factory server can be
-// addressed for a Worker Session the in-process root does not own.
-func controlOwnerAvailable(config ControlConfig) bool {
+// errControlOwnerUnreachable marks a control request that never reached a
+// factory server. Reaching no server is not an answer about the addressed
+// Worker Session, so a re-addressed local miss keeps the local root's answer
+// instead of reporting the transport failure.
+var errControlOwnerUnreachable = errors.New("factory server is unreachable")
+
+// controlOwnerAddressable reports whether a factory server address exists to
+// re-address a Worker Session the in-process root does not own. Every CLI
+// invocation carries one, because --server defaults to the shared local URI,
+// so this only rules out a caller that supplied no protocol or address at all.
+// Whether a server is actually there is decided by the request outcome, not by
+// the presence of an address.
+func controlOwnerAddressable(config ControlConfig) bool {
 	return config.HTTP != nil && strings.TrimSpace(config.Server) != ""
 }
 
@@ -551,18 +561,35 @@ func validControlAction(action workersessions.ControlAction) bool {
 // answer about the session at all -- it only reports that this process never
 // ran it -- so continuing to its owner resolves the same identity rather than
 // substituting a different one.
+//
+// Re-addressing may only replace the local answer when a factory server
+// actually answered. --server always defaults to the shared local URI, so an
+// address exists even when nothing is listening there; a direct-mode process
+// owns its own Worker Sessions, and an unknown identity is genuinely NOT_FOUND
+// rather than a transport failure. When the re-addressed request reaches no
+// server, the local owner's answer therefore stands.
 func controlLocal(config ControlConfig, jsonOutput bool) error {
-	result, err := applyLocalControl(config)
-	if err == nil {
+	result, localErr := applyLocalControl(config)
+	if localErr == nil {
 		return writeControlResult(config, jsonOutput, controlResultFromService(result))
 	}
-	if !errors.Is(err, workersessions.ErrSessionNotFound) || !controlOwnerAvailable(config) {
-		return emitControlCLIError(config, jsonOutput, mapControlServiceError(err))
+	if !errors.Is(localErr, workersessions.ErrSessionNotFound) || !controlOwnerAddressable(config) {
+		return emitControlCLIError(config, jsonOutput, mapControlServiceError(localErr))
 	}
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
 		"worker sessions control request placement=local-miss action=%s workerSessionID=%s re-addressing=server",
 		config.Action, config.WorkerSessionID)
-	return controlRemote(config, jsonOutput)
+	remoteResult, remoteErr := requestRemoteControl(config)
+	if remoteErr == nil {
+		return writeControlResult(config, jsonOutput, remoteResult)
+	}
+	if errors.Is(remoteErr, errControlOwnerUnreachable) {
+		clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
+			"worker sessions control request placement=local-miss action=%s workerSessionID=%s owner=unreachable keeping=local-not-found",
+			config.Action, config.WorkerSessionID)
+		return emitControlCLIError(config, jsonOutput, mapControlServiceError(localErr))
+	}
+	return emitControlCLIError(config, jsonOutput, remoteErr)
 }
 
 func applyLocalControl(config ControlConfig) (workersessions.ControlResult, error) {
@@ -582,37 +609,50 @@ func applyLocalControl(config ControlConfig) (workersessions.ControlResult, erro
 }
 
 func controlRemote(config ControlConfig, jsonOutput bool) error {
+	result, err := requestRemoteControl(config)
+	if err != nil {
+		return emitControlCLIError(config, jsonOutput, err)
+	}
+	return writeControlResult(config, jsonOutput, result)
+}
+
+// requestRemoteControl applies one control through the factory server and
+// returns the server's snapshot or a classified failure. It reports rather
+// than renders the failure so a re-addressed local miss can tell an answering
+// server apart from one that was never reached.
+func requestRemoteControl(config ControlConfig) (factoryapi.WorkerSessionControlResponse, error) {
 	endpoint, err := controlEndpoint(config.Server, config.WorkerSessionID, config.Action)
 	if err != nil {
-		return emitControlCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_ENDPOINT_INVALID", "remote Worker Session control endpoint is invalid", err))
+		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_ENDPOINT_INVALID", "remote Worker Session control endpoint is invalid", err)
 	}
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
 		"worker sessions control request placement=remote action=%s endpointPath=%s workerSessionID=%s",
 		config.Action, endpoint.Path, config.WorkerSessionID)
 	request, err := http.NewRequestWithContext(config.Context, http.MethodPost, endpoint.String(), nil)
 	if err != nil {
-		return emitControlCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_ENDPOINT_INVALID", "failed to build remote Worker Session control request", err))
+		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_ENDPOINT_INVALID", "failed to build remote Worker Session control request", err)
 	}
 	request.Header.Set("Accept", "application/json")
 	response, requestErr := config.HTTP.Execute(request)
 	if requestErr != nil {
-		return emitControlCLIError(config, jsonOutput, remoteControlTransportError(config, requestErr))
+		return factoryapi.WorkerSessionControlResponse{}, remoteControlTransportError(config, requestErr)
 	}
 	if response.HTTP == nil {
-		return emitControlCLIError(config, jsonOutput, newCLIError("FACTORY_UNREACHABLE", "remote Worker Session control returned no HTTP response", nil))
+		return factoryapi.WorkerSessionControlResponse{}, newCLIError("FACTORY_UNREACHABLE",
+			"remote Worker Session control returned no HTTP response", errControlOwnerUnreachable)
 	}
 	defer response.HTTP.Body.Close()
 	if response.HTTP.StatusCode != http.StatusOK {
-		return emitControlCLIError(config, jsonOutput, remoteControlHTTPError(config.Action, response.HTTP))
+		return factoryapi.WorkerSessionControlResponse{}, remoteControlHTTPError(config.Action, response.HTTP)
 	}
 	var apiResult factoryapi.WorkerSessionControlResponse
 	if err := json.NewDecoder(response.HTTP.Body).Decode(&apiResult); err != nil {
-		return emitControlCLIError(config, jsonOutput, newCLIError("WORKER_SESSION_CONTROL_FAILED", "remote Worker Session control response is invalid", err))
+		return factoryapi.WorkerSessionControlResponse{}, newCLIError("WORKER_SESSION_CONTROL_FAILED", "remote Worker Session control response is invalid", err)
 	}
 	if err := validateRemoteControlResult(apiResult, config.WorkerSessionID, config.Action); err != nil {
-		return emitControlCLIError(config, jsonOutput, err)
+		return factoryapi.WorkerSessionControlResponse{}, err
 	}
-	return writeControlResult(config, jsonOutput, apiResult)
+	return apiResult, nil
 }
 
 func controlEndpoint(server, workerSessionID string, action workersessions.ControlAction) (*url.URL, error) {
@@ -696,7 +736,8 @@ func remoteControlTransportError(config ControlConfig, err error) error {
 		errors.Is(config.Context.Err(), context.Canceled) || errors.Is(config.Context.Err(), context.DeadlineExceeded) {
 		return newCLIError("WORKER_SESSION_CONTROL_INTERRUPTED", "remote Worker Session control was interrupted", err)
 	}
-	return newCLIError("FACTORY_UNREACHABLE", fmt.Sprintf("factory not reachable at %s", safeRemoteServer(config.Server)), err)
+	return newCLIError("FACTORY_UNREACHABLE", fmt.Sprintf("factory not reachable at %s", safeRemoteServer(config.Server)),
+		errors.Join(errControlOwnerUnreachable, err))
 }
 
 func remoteControlHTTPError(action workersessions.ControlAction, response *http.Response) error {

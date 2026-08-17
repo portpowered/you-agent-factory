@@ -294,8 +294,11 @@ Local placement is the default for all four controls, and a control is always
 resolved by the same stable Worker Session identity that `list`, `show`, `read`,
 and `stream` report. When the local placement does not own the addressed
 session, the control continues to the configured `--server`, which is where an
-observed session actually runs; without a reachable server it still reports the
-unknown session rather than a fabricated result. `--remote` sends the selected
+observed session actually runs. Only a server that answers replaces the local
+result: when no factory server is reachable at that address, the control still
+reports the unknown session rather than a transport failure, so a direct
+invocation that owns its own sessions keeps reporting an unknown identity as an
+unknown session. `--remote` sends the selected
 action only to the configured `--server`; a transport or control failure never
 falls back to local state. Outcomes are `APPLIED`, `NOOP`, `UNSUPPORTED`, or
 `FAILED`, with stable error classifications for invalid identity, unknown
