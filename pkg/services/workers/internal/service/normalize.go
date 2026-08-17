@@ -54,7 +54,7 @@ func (s *Service) normalizeSuccessfulResult(
 	case workers.ExecutionOutcomeFailed:
 		return result, errors.New("runner returned failed outcome")
 	case workers.ExecutionOutcomeRejected:
-		if s != nil && s.providerOverride != nil &&
+		if s != nil && providerOverrideApplies(&request, s.providerOverride) &&
 			resolveRunnerIdentity(request.Target) == runners.AgentIdentity &&
 			!usesACPProvider(request.Target.ExecutorProvider) &&
 			!hasProviderCompletionEvidence(runnerResult) {

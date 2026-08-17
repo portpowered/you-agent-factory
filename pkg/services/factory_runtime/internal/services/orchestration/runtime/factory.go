@@ -913,6 +913,16 @@ func (f *factoryImpl) SetProgressPublisher(publisher workers.ProgressPublisher) 
 	f.cfg.progressPublisher = publisher
 }
 
+// RuntimeProgressPublisher exposes the already-bound runtime observation
+// bridge to the Factory Sessions child Execute seam. The concrete publisher
+// remains runtime-owned; callers receive only its detached function value.
+func (f *factoryImpl) RuntimeProgressPublisher() workers.ProgressPublisher {
+	if f == nil || f.cfg == nil {
+		return nil
+	}
+	return f.cfg.progressPublisher
+}
+
 // SetMockWorkersConfig installs a cloned request-scoped testing override.
 func (f *factoryImpl) SetMockWorkersConfig(config *workers.MockWorkersConfig) {
 	if f == nil || f.cfg == nil {

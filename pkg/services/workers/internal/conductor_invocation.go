@@ -10,6 +10,8 @@ import (
 // NewConductorInvocationWithProgress is retained as a compatibility name for
 // direct Factory Session invocation. Provider routing now stays behind the
 // singular Providers root instead of sharing registry and conductor objects.
+// TODO(P6-C): retire this bridge after Runtime and Sessions use detached
+// Workers Execute requests directly.
 func NewConductorInvocationWithProgress(
 	providersService providers.Service,
 	commandRunner workers.CommandRunner,

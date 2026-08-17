@@ -10,7 +10,6 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewDurable constructs the runtime-backed durable execution capability while
@@ -79,7 +78,7 @@ func NewStandalone(
 	stores roles.RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	workerExecution factorysessionexecution.WorkerExecution,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -117,7 +116,7 @@ func NewStandalone(
 		execution, err := factorysessionexecution.NewJavaScriptExecutionService(
 			projectRoot,
 			childExecutorMode,
-			executor,
+			nil,
 			persistence,
 			clock,
 			syncWaits,
@@ -135,6 +134,9 @@ func NewStandalone(
 		)
 		if err != nil {
 			return nil, err
+		}
+		if runtime, ok := execution.(*factorysessionexecution.JavaScriptRuntimeService); ok {
+			runtime.SetDirectWorkerExecution(workerExecution)
 		}
 		return New(execution)
 	default:

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
 func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *testing.T) {
@@ -105,6 +103,149 @@ func TestExecuteScriptProcessFailureRemainsTerminal(t *testing.T) {
 	}
 	if result.Failure.Family != workers.WorkFailureFamilyTerminal || result.Failure.RetryHint {
 		t.Fatalf("script failure = %#v, want terminal non-retryable failure", result.Failure)
+	}
+}
+
+func TestExecuteFailureAndTimeoutEmitExactlyOneTerminalObservation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		runner       workers.Runner
+		timeout      time.Duration
+		wantFailure  workers.WorkFailureType
+		wantTerminal workers.ExecutionObservationKind
+	}{
+		{
+			name: "runner failure",
+			runner: &stubRunner{execute: func(
+				context.Context,
+				workers.RunnerExecutionRequest,
+			) (workers.RunnerExecutionResult, error) {
+				return workers.RunnerExecutionResult{}, errors.New("provider failed")
+			}},
+			wantFailure:  workers.WorkFailureTypeUnknown,
+			wantTerminal: workers.ExecutionObservationKindFailed,
+		},
+		{
+			name: "deadline",
+			runner: &stubRunner{execute: func(
+				ctx context.Context,
+				_ workers.RunnerExecutionRequest,
+			) (workers.RunnerExecutionResult, error) {
+				<-ctx.Done()
+				return workers.RunnerExecutionResult{}, ctx.Err()
+			}},
+			timeout:      50 * time.Millisecond,
+			wantFailure:  workers.WorkFailureTypeTimeout,
+			wantTerminal: workers.ExecutionObservationKindFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var observations []workers.ExecutionObservation
+			var observationsMu sync.Mutex
+			service := mustExecuteService(t, test.runner, func(
+				_ context.Context,
+				observation workers.ExecutionObservation,
+			) error {
+				observationsMu.Lock()
+				defer observationsMu.Unlock()
+				observations = append(observations, observation.Clone())
+				return nil
+			})
+
+			request := validExecuteRequest("dispatch-"+test.name, "attempt-"+test.name)
+			request.Target.Timeout = test.timeout
+			result, err := service.Execute(context.Background(), request)
+			if err != nil {
+				t.Fatalf("Execute() error = %v, want normalized result", err)
+			}
+			if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+				t.Fatalf("result = %#v, want failed result", result)
+			}
+			if result.Failure.Type != test.wantFailure {
+				t.Fatalf("failure = %#v, want type %q", result.Failure, test.wantFailure)
+			}
+
+			observationsMu.Lock()
+			defer observationsMu.Unlock()
+			if len(observations) != 2 {
+				t.Fatalf("observations = %#v, want one start and one terminal observation", observations)
+			}
+			if observations[0].Kind != workers.ExecutionObservationKindStarted ||
+				observations[1].Kind != test.wantTerminal {
+				t.Fatalf("observation kinds = %#v, want STARTED then %s", observations, test.wantTerminal)
+			}
+			if observations[1].Sequence != 2 ||
+				observations[1].Correlation != request.Correlation {
+				t.Fatalf("terminal observation = %#v, want sequence 2 with request correlation", observations[1])
+			}
+		})
+	}
+}
+
+func TestExecuteTimeoutReleasesRequestWorktreeBeforeTerminalObservation(t *testing.T) {
+	t.Parallel()
+
+	var eventsMu sync.Mutex
+	var events []string
+	appendEvent := func(event string) {
+		eventsMu.Lock()
+		defer eventsMu.Unlock()
+		events = append(events, event)
+	}
+	worktree := &recordingWorktree{
+		preparation: workers.FactoryWorktreePreparation{CheckoutPath: "C:/fixture/worktree"},
+		release: func(context.Context, workers.FactoryWorktreePreparation) error {
+			appendEvent("worktree-release")
+			return nil
+		},
+	}
+	service := mustExecuteServiceWithEdges(
+		t,
+		&stubRunner{execute: func(
+			ctx context.Context,
+			_ workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			<-ctx.Done()
+			return workers.RunnerExecutionResult{}, ctx.Err()
+		}},
+		func(_ context.Context, observation workers.ExecutionObservation) error {
+			appendEvent("observation-" + string(observation.Kind))
+			return nil
+		},
+		worktree,
+		worktree.Release,
+		nil,
+	)
+
+	request := validExecuteRequest("dispatch-timeout-cleanup", "attempt-timeout-cleanup")
+	request.Target.Timeout = 50 * time.Millisecond
+	request.Target.Workspace = workers.WorkspacePolicy{
+		PrepareWorktree:    true,
+		FactoryDirectory:   "C:/fixture",
+		CheckoutIdentifier: "attempt-timeout-cleanup",
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil ||
+		result.Failure.Type != workers.WorkFailureTypeTimeout {
+		t.Fatalf("result = %#v, want typed timeout failure", result)
+	}
+
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+	if got, want := events, []string{
+		"observation-STARTED",
+		"worktree-release",
+		"observation-FAILED",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("events = %#v, want %#v", got, want)
 	}
 }
 
@@ -722,169 +863,5 @@ func TestExecuteObservationSinkFailureDoesNotChangeResult(t *testing.T) {
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("observation sink calls = %d, want started and terminal", calls.Load())
-	}
-}
-
-func mustExecuteService(
-	t *testing.T,
-	runner workers.Runner,
-	observe workers.ObservationSink,
-) *executeservice.Service {
-	return mustExecuteServiceWithEdges(t, runner, observe, nil, nil, nil)
-}
-
-func mustExecuteServiceWithEdges(
-	t *testing.T,
-	runner workers.Runner,
-	observe workers.ObservationSink,
-	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles workers.TemporaryFileSystem,
-) *executeservice.Service {
-	t.Helper()
-	service, err := executeservice.New(
-		&staticRunners{runner: runner},
-		nil,
-		observe,
-		nil,
-		func() time.Time { return time.Unix(10, 0) },
-		worktree,
-		worktreeRelease,
-		temporaryFiles,
-	)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	return service
-}
-
-type recordingWorktree struct {
-	preparation workers.FactoryWorktreePreparation
-	release     func(context.Context, workers.FactoryWorktreePreparation) error
-}
-
-func (worktree *recordingWorktree) Prepare(
-	context.Context,
-	string,
-	string,
-) (workers.FactoryWorktreePreparation, error) {
-	return worktree.preparation, nil
-}
-
-func (worktree *recordingWorktree) Release(
-	ctx context.Context,
-	preparation workers.FactoryWorktreePreparation,
-) error {
-	if worktree.release == nil {
-		return nil
-	}
-	return worktree.release(ctx, preparation)
-}
-
-type recordingTemporaryFiles struct {
-	mu      sync.Mutex
-	next    int
-	removed []string
-	remove  func(string) error
-}
-
-func (files *recordingTemporaryFiles) CreateTemp(_, _ string) (workers.TemporaryFile, error) {
-	files.mu.Lock()
-	defer files.mu.Unlock()
-	files.next++
-	return &recordingTemporaryFile{name: "attempt-temp-" + strconv.Itoa(files.next)}, nil
-}
-
-func (files *recordingTemporaryFiles) Remove(path string) error {
-	files.mu.Lock()
-	files.removed = append(files.removed, path)
-	files.mu.Unlock()
-	if files.remove == nil {
-		return nil
-	}
-	return files.remove(path)
-}
-
-func (files *recordingTemporaryFiles) Removed() []string {
-	files.mu.Lock()
-	defer files.mu.Unlock()
-	return append([]string(nil), files.removed...)
-}
-
-type recordingTemporaryFile struct {
-	name string
-}
-
-func (file *recordingTemporaryFile) Name() string {
-	return file.name
-}
-
-func (*recordingTemporaryFile) WriteString(value string) (int, error) {
-	return len(value), nil
-}
-
-func (*recordingTemporaryFile) Close() error {
-	return nil
-}
-
-type stubRunner struct {
-	content string
-	execute func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
-}
-
-func (runner *stubRunner) Execute(
-	ctx context.Context,
-	request workers.RunnerExecutionRequest,
-) (workers.RunnerExecutionResult, error) {
-	if runner.execute != nil {
-		return runner.execute(ctx, request)
-	}
-	return workers.RunnerExecutionResult{Content: runner.content}, nil
-}
-
-type staticRunners struct {
-	runner workers.Runner
-}
-
-func (registry *staticRunners) Resolve(
-	request runners.ResolutionRequest,
-) (runners.Binding, error) {
-	return runners.Binding{
-		Identity: request.Identity,
-		Metadata: workers.RunnerMetadata{ID: request.Identity},
-		Runner:   registry.runner,
-	}, nil
-}
-
-func (registry *staticRunners) Execute(
-	ctx context.Context,
-	request runners.ExecuteRequest,
-) (runners.ExecuteResult, error) {
-	binding, err := registry.Resolve(runners.ResolutionRequest{
-		Identity:             request.Identity,
-		RequiredCapabilities: request.RequiredCapabilities,
-	})
-	if err != nil {
-		return runners.ExecuteResult{}, err
-	}
-	return binding.Runner.Execute(ctx, request.Attempt)
-}
-
-func validExecuteRequest(dispatchID, attemptID string) workers.ExecuteRequest {
-	return workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{
-			FactorySessionID: "session-1",
-			RuntimeID:        "runtime-1",
-			GenerationID:     "generation-1",
-			DispatchID:       dispatchID,
-			AttemptID:        attemptID,
-			RequestID:        "request-1",
-			TraceID:          "trace-1",
-		},
-		Target: workers.ExecutionTarget{
-			WorkerName:      "writer",
-			WorkstationName: "review",
-			RunnerID:        runners.ScriptIdentity,
-		},
 	}
 }

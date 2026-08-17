@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -385,13 +386,30 @@ func openRuntime(
 	if !ok {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not implement Factory Runtime root Service")
 	}
-	// A JavaScript workflow's children are Workers, and Workers are supervised
-	// by the runtime that owns this session's Worker Sessions service and
-	// canonical ledger. That runtime only exists here, after the execution
-	// service it must be handed to was already constructed. The eventual root
-	// activation operation must preserve this dependency ordering without
-	// publishing a second post-construction binding path.
+	// A JavaScript workflow's children are detached Workers. The Workers root is
+	// already composed before opening; Runtime contributes only the identity and
+	// resource-admission capability that the child request needs. The existing
+	// live-change Runtime bind remains separate and is not an execution route.
 	setWorkerInvoker(durableExecution.Service, rootRuntime)
+	var resourceLeaseAdmission factoryruntime.ResourceCapacityLeaseAdmission
+	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
+		resourceLeaseAdmission = admission
+	}
+	if err := setWorkerExecution(
+		sessionID,
+		durableExecution.Service,
+		workerService,
+		resourceLeaseAdmission,
+		configured.Runtime.RuntimeInstanceID,
+		startupRuntime.StreamGeneration(),
+		providerForDurable,
+		configured.Workers.MockWorkers,
+		providerCommandRunner,
+	); err != nil {
+		return runtimeProducts{}, err
+	}
+	setWorkerProgressPublisher(durableExecution.Service, runtimeProgressPublisher(startupRuntime))
+	setWorkerAttemptStarter(durableExecution.Service, runtimeWorkerAttemptStarter(startupRuntime))
 	opened := assembleRuntimeProducts(
 		factoryDefinitions,
 		service4,
@@ -560,4 +578,124 @@ func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
 		return
 	}
 	setter.SetWorkerInvoker(runtime)
+}
+
+// workerExecutionSetter is the narrow live-session child capability. The
+// Workers service is already composed by process Wire; only its Execute method
+// crosses into the child projection, while Runtime contributes the separate
+// resource-lease admission and identity metadata.
+type workerExecutionSetter interface {
+	SetWorkerExecution(
+		interface {
+			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+		},
+		factoryruntime.ResourceCapacityLeaseAdmission,
+		string,
+		string,
+		providers.Service,
+		*workers.MockWorkersConfig,
+		workers.CommandRunner,
+	)
+}
+
+func setWorkerExecution(
+	sessionID string,
+	execution any,
+	workerService workers.Service,
+	admission factoryruntime.ResourceCapacityLeaseAdmission,
+	runtimeID string,
+	generationID string,
+	providerOverride providers.Service,
+	mockWorkers *workers.MockWorkersConfig,
+	commandRunnerOverride workers.CommandRunner,
+) error {
+	setter, ok := execution.(workerExecutionSetter)
+	if !ok {
+		return fmt.Errorf(
+			"bind Workers Execute for Factory Session %q: live child execution setter is required",
+			strings.TrimSpace(sessionID),
+		)
+	}
+	if missingRuntimeOpeningDependency(workerService) {
+		return fmt.Errorf(
+			"bind Workers Execute for Factory Session %q: Workers service is required",
+			strings.TrimSpace(sessionID),
+		)
+	}
+	setter.SetWorkerExecution(workerService, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+	return nil
+}
+
+type runtimeProgressPublisherProvider interface {
+	RuntimeProgressPublisher() workers.ProgressPublisher
+}
+
+func runtimeProgressPublisher(runtime runtimeports.RuntimeInstance) workers.ProgressPublisher {
+	if runtime == nil {
+		return nil
+	}
+	if provider, ok := runtime.(runtimeProgressPublisherProvider); ok {
+		return provider.RuntimeProgressPublisher()
+	}
+	if service := runtime.RuntimeService(); service != nil {
+		if provider, ok := service.(runtimeProgressPublisherProvider); ok {
+			return provider.RuntimeProgressPublisher()
+		}
+	}
+	return nil
+}
+
+func setWorkerProgressPublisher(execution any, publisher workers.ProgressPublisher) {
+	if publisher == nil {
+		return
+	}
+	setter, ok := execution.(interface {
+		SetWorkerProgressPublisher(workers.ProgressPublisher)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerProgressPublisher(publisher)
+}
+
+type runtimeWorkerAttemptStarterProvider interface {
+	BeginWorkerAttempt(
+		context.Context,
+		workers.ExecuteRequest,
+	) (func(context.Context, workers.ExecuteResult, error) error, error)
+}
+
+func runtimeWorkerAttemptStarter(
+	runtime runtimeports.RuntimeInstance,
+) func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+	if runtime == nil {
+		return nil
+	}
+	if provider, ok := runtime.(runtimeWorkerAttemptStarterProvider); ok {
+		return provider.BeginWorkerAttempt
+	}
+	if service := runtime.RuntimeService(); service != nil {
+		if provider, ok := service.(runtimeWorkerAttemptStarterProvider); ok {
+			return provider.BeginWorkerAttempt
+		}
+	}
+	return nil
+}
+
+func setWorkerAttemptStarter(
+	execution any,
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) {
+	if starter == nil {
+		return
+	}
+	setter, ok := execution.(interface {
+		SetWorkerAttemptStarter(
+			func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+		)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerAttemptStarter(starter)
 }

@@ -23,67 +23,42 @@ func TestExecutionOpeningFactoryRolesNameWorkersRootContracts(t *testing.T) {
 
 	var (
 		_ StandaloneSessionExecutionFactory
-		_ WorkerInvocationFactory
 		_ WorkerInvocationWithProgressFactory
 	)
 
-	var _ *Factory = &Factory{
-		commandRunner: workersRootBindingProbeRunner{},
-		allocator:     &workers.MockPTYAllocator{},
-	}
+	var _ *Factory = &Factory{workerExecution: workersRootExecutionProbe{}}
 }
 
-type workersRootBindingProbeRunner struct{}
+type workersRootExecutionProbe struct{}
 
-func (workersRootBindingProbeRunner) Run(
+func (workersRootExecutionProbe) Execute(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	return workers.ExecuteResult{}, nil
 }
 
-type workersRootInvocationProbe struct{}
-
-func (workersRootInvocationProbe) Execute(
-	context.Context,
-	workers.InvocationInput,
-) (workers.InvocationResult, error) {
-	return workers.InvocationResult{}, nil
-}
-
-func TestBuildWithWorkerEffectsForwardsWorkersRootInvocationBindings(t *testing.T) {
+func TestBuildWithWorkerEffectsForwardsWorkersRootExecutionBinding(t *testing.T) {
 	t.Parallel()
 
-	ptyAllocator := &workers.MockPTYAllocator{}
-	commandRunner := workersRootBindingProbeRunner{}
-	var gotRunner workers.CommandRunner
-	var gotPTY workers.PTYAllocator
+	workerExecution := workersRootExecutionProbe{}
 
 	factory := &Factory{
+		workerExecution: workerExecution,
 		standalone: func(
 			_ factorysessions.ExecutionProvider,
 			_ string,
 			_ string,
 			_ string,
-			executor workers.InvocationExecutor,
+			execution WorkerExecution,
 			_ factory.Clock,
 		) (durableexecution.Service, error) {
-			if executor == nil {
-				t.Fatal("worker invocation executor is required for live child execution")
+			if execution != workerExecution {
+				t.Fatalf("Workers execution = %#v, want %#v", execution, workerExecution)
 			}
 			return nil, nil
 		},
-		invocation: func(
-			runner workers.CommandRunner,
-			pty workers.PTYAllocator,
-		) (workers.InvocationExecutor, error) {
-			gotRunner = runner
-			gotPTY = pty
-			return workersRootInvocationProbe{}, nil
-		},
-		resolveClock:  func(factory.Clock) factory.Clock { return nil },
-		commandRunner: commandRunner,
-		allocator:     ptyAllocator,
+		resolveClock: func(factory.Clock) factory.Clock { return nil },
 	}
 
 	_, err := factory.buildWithWorkerEffects(
@@ -95,11 +70,5 @@ func TestBuildWithWorkerEffectsForwardsWorkersRootInvocationBindings(t *testing.
 	)
 	if err != nil {
 		t.Fatalf("buildWithWorkerEffects() error = %v, want nil", err)
-	}
-	if gotRunner != commandRunner {
-		t.Fatalf("command runner = %#v, want %#v", gotRunner, commandRunner)
-	}
-	if gotPTY != ptyAllocator {
-		t.Fatalf("PTY allocator = %#v, want %#v", gotPTY, ptyAllocator)
 	}
 }

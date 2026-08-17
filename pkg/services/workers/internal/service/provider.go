@@ -22,22 +22,21 @@ func (s *Service) authorizeProviderTarget(
 	if identity != runners.AgentIdentity {
 		return nil
 	}
+	// A composed provider override is the execution authority for legacy
+	// provider work whose execution mechanism is blank or SCRIPT_WRAP. Named
+	// executor providers remain catalog-selected, even when a process-scoped
+	// compatibility edge is present; otherwise an unknown named provider could
+	// silently fall through to that edge.
+	if providerOverrideApplies(request, configuredProviderOverride(s)) {
+		return nil
+	}
 	if s == nil || s.providers == nil {
 		return fmt.Errorf(
 			"%w: Providers service is required for agent execution",
 			workers.ErrExecuteUnavailable,
 		)
 	}
-	raw := firstNonEmpty(
-		request.Target.Provider.ID,
-		request.Target.Provider.Alias,
-		request.Target.RunnerID,
-	)
-	if resume := request.Input.Resume; resume != nil {
-		if provider := strings.TrimSpace(resume.Provider); provider != "" {
-			raw = firstNonEmpty(raw, provider)
-		}
-	}
+	raw := providerTargetIdentity(request)
 	if strings.TrimSpace(raw) == "" {
 		return fmt.Errorf(
 			"%w: provider identity is required for agent execution",
@@ -83,6 +82,42 @@ func (s *Service) authorizeProviderTarget(
 		request.Target.RunnerID = runnerIDForProvider(resolved.ID)
 	}
 	return nil
+}
+
+func providerTargetIdentity(request *workers.ExecuteRequest) string {
+	if request == nil {
+		return ""
+	}
+	raw := firstNonEmpty(
+		request.Target.Provider.ID,
+		request.Target.Provider.Alias,
+		request.Target.RunnerID,
+	)
+	if resume := request.Input.Resume; resume != nil {
+		if provider := strings.TrimSpace(resume.Provider); provider != "" {
+			raw = firstNonEmpty(raw, provider)
+		}
+	}
+	return raw
+}
+
+func configuredProviderOverride(s *Service) providers.Service {
+	if s == nil {
+		return nil
+	}
+	return s.providerOverride
+}
+
+func providerOverrideApplies(
+	request *workers.ExecuteRequest,
+	serviceOverride providers.Service,
+) bool {
+	if request == nil ||
+		(request.Input.ProviderOverride == nil && serviceOverride == nil) {
+		return false
+	}
+	executorProvider := strings.TrimSpace(request.Target.ExecutorProvider)
+	return executorProvider == "" || strings.EqualFold(executorProvider, "SCRIPT_WRAP")
 }
 
 func validateProviderCapabilities(

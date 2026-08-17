@@ -12,8 +12,34 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// recordingRootBoundaryExecutor records Workers-root executor invocations so
-// boundary tests can prove Runtime does not invoke executors directly.
+// recordingRootExecutionService records the detached request at the Workers
+// root so the boundary test proves Runtime calls Service.Execute directly.
+type recordingRootExecutionService struct {
+	*testWorkstationBoundary
+	calls       atomic.Int32
+	lastRequest atomic.Value
+}
+
+func (service *recordingRootExecutionService) Execute(
+	_ context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	service.calls.Add(1)
+	service.lastRequest.Store(request)
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{
+			Primary: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "workers-root-boundary",
+			}},
+		},
+	}, nil
+}
+
+// recordingRootBoundaryExecutor remains for the pool-boundary compatibility
+// test below; Runtime's migrated path does not call this legacy executor.
 type recordingRootBoundaryExecutor struct {
 	calls          atomic.Int32
 	lastDispatchID atomic.Value
@@ -37,11 +63,13 @@ func (executor *recordingRootBoundaryExecutor) Execute(
 // Runtime-root PlanDispatch publication reaches the detached Workers Execute
 // boundary without Runtime invoking a WorkerExecutor directly.
 func TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary(t *testing.T) {
-	executor := &recordingRootBoundaryExecutor{}
+	service := &recordingRootExecutionService{
+		testWorkstationBoundary: &testWorkstationBoundary{},
+	}
 	runtime, err := newTestFactory(
 		withNet(buildSimpleNet()),
 		withInlineDispatch(),
-		withWorkerExecutor("mock", executor),
+		withWorkerService(service),
 		withLogger(logging.NoopLogger{}),
 	)
 	requireNoRootErr(t, err, "New")
@@ -66,15 +94,24 @@ func TestFactoryImpl_PlanDispatchExecutesThroughWorkersRootBoundary(t *testing.T
 	if planned.Outcome != factory.DispatchPlanOutcomeAccepted {
 		t.Fatalf("PlanDispatch outcome = %q, want ACCEPTED", planned.Outcome)
 	}
-	if executor.calls.Load() != 1 {
+	if service.calls.Load() != 1 {
 		t.Fatalf(
-			"Workers executor calls = %d, want 1 through Workers root boundary",
-			executor.calls.Load(),
+			"Workers Execute calls = %d, want 1 through Workers root boundary",
+			service.calls.Load(),
 		)
 	}
-	lastDispatchID, _ := executor.lastDispatchID.Load().(string)
-	if lastDispatchID != plan.DispatchID {
-		t.Fatalf("executed dispatch ID = %q, want %q", lastDispatchID, plan.DispatchID)
+	request, ok := service.lastRequest.Load().(workers.ExecuteRequest)
+	if !ok {
+		t.Fatal("Workers Execute request was not recorded")
+	}
+	if request.Correlation.DispatchID != plan.DispatchID {
+		t.Fatalf("executed dispatch correlation = %q, want %q", request.Correlation.DispatchID, plan.DispatchID)
+	}
+	if request.Target.WorkerType != plan.WorkerType {
+		t.Fatalf("executed worker type = %q, want %q", request.Target.WorkerType, plan.WorkerType)
+	}
+	if request.Target.WorkstationName != plan.WorkstationName {
+		t.Fatalf("executed workstation = %q, want %q", request.Target.WorkstationName, plan.WorkstationName)
 	}
 
 	accepted, err := impl.AcceptDispatchResult(ctx, factory.AcceptDispatchResultRequest{

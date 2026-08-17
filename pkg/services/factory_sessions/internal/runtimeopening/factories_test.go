@@ -33,6 +33,26 @@ type factoryDefinitionsConstructionStub struct {
 	factorydefinitions.Service
 }
 
+func TestSetWorkerExecutionRejectsMissingRequiredSetter(t *testing.T) {
+	workerService := &workerExecutionBindingWorkerService{Service: nil}
+	err := setWorkerExecution("session-42", struct{}{}, workerService, nil, "runtime-1", "generation-1", nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "session-42") || !strings.Contains(err.Error(), "setter is required") {
+		t.Fatalf("missing setter error = %v, want session and required setter", err)
+	}
+}
+
+func TestSetWorkerExecutionRejectsMissingWorkersService(t *testing.T) {
+	var setter struct{ workerExecutionSetter }
+	err := setWorkerExecution("session-43", setter, nil, nil, "runtime-1", "generation-1", nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "session-43") || !strings.Contains(err.Error(), "Workers service is required") {
+		t.Fatalf("missing Workers service error = %v, want session and required service", err)
+	}
+}
+
+type workerExecutionBindingWorkerService struct {
+	workers.Service
+}
+
 // runtimeOpeningFixture is test-only assembly syntax. Production callers use
 // the ten separate owner-port arguments exposed by NewFactory; keeping this
 // fixture aggregate local makes omission and identity cases concise without

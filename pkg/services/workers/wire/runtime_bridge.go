@@ -29,6 +29,8 @@ func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 	return modelrecording.Hooks()
 }
 
+// TODO(P6-C): retire the provider-backed compatibility constructors after the
+// Runtime and Sessions caller families use the canonical Execute boundary.
 // NewInvocation constructs the narrow direct-invocation role.
 func NewInvocation(
 	providersService providers.Service,

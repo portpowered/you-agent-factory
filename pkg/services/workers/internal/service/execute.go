@@ -208,7 +208,7 @@ func (s *Service) runRunner(
 			runErr = panicFailure(
 				recovered,
 				debug.Stack(),
-				providerOverride != nil && identity == runners.AgentIdentity,
+				providerOverrideApplies(&request, providerOverride) && identity == runners.AgentIdentity,
 			)
 		}
 	}()
@@ -229,7 +229,7 @@ func (s *Service) runRunner(
 	if request.Target.Tools.AgentLoop {
 		return s.runAgentLoop(ctx, request, identity, runnerRequest, providerOverride)
 	}
-	if providerOverride != nil && identity == runners.AgentIdentity &&
+	if providerOverrideApplies(&request, providerOverride) && identity == runners.AgentIdentity &&
 		!usesACPProvider(runnerRequest.ExecutorProvider) {
 		providerRunner := workerrecording.NewProviderRunner(
 			workerexecutor.RunnerFromProvider(providerOverride),

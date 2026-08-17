@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -259,6 +260,48 @@ func TestFactoryControls_EmptyCapturedTurnDoesNotCallWorkerSessions(t *testing.T
 	}
 	if got := service.callsSnapshot(); len(got) != 0 {
 		t.Fatalf("Worker Sessions calls = %#v, want none", got)
+	}
+}
+
+func TestFactoryControls_ReplayHistoryWinsOverLiveLedgerForCapturedTurn(t *testing.T) {
+	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{
+		{action: factory.WorkerSessionControlActionPause, id: "worker-replayed"}: {
+			result: workersessions.ControlResult{DispatchID: "dispatch-replayed", Outcome: workersessions.ControlOutcomeApplied},
+		},
+		{action: factory.WorkerSessionControlActionPause, id: "worker-live"}: {
+			result: workersessions.ControlResult{DispatchID: "dispatch-live", Outcome: workersessions.ControlOutcomeApplied},
+		},
+	})
+	factoryInstance, ledger, err := newTestFactoryWithScriptedLedger(
+		withNet(buildMoveControlNet()),
+		withInlineDispatch(),
+		withWorkerSessions(service),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ledger.Events = append(ledger.Events,
+		workerSessionAssociationEvent(t, 2, "live-association", "turn-replay", "worker-live"),
+	)
+	impl, ok := factoryInstance.(*factoryImpl)
+	if !ok {
+		t.Fatalf("factory type = %T, want *factoryImpl", factoryInstance)
+	}
+	impl.SetReplayEvents([]interfaces.FactoryEvent{
+		workerSessionAssociationEvent(t, 4, "replay-association", "turn-replay", "worker-replayed"),
+	})
+
+	paused, err := factoryInstance.(factory.Service).ControlPause(context.Background(), factory.PauseRequest{
+		TurnID: "turn-replay", ControlID: "pause-from-replay",
+	})
+	if err != nil {
+		t.Fatalf("ControlPause: %v", err)
+	}
+	if got, want := workerSessionIDsFromResults(paused.WorkerSessionControl.Children), []string{"worker-replayed"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("replayed Worker Session IDs = %v, want %v", got, want)
+	}
+	if got, want := service.callsSnapshot(), []workerSessionControlCall{{action: factory.WorkerSessionControlActionPause, id: "worker-replayed"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("control calls = %#v, want %#v", got, want)
 	}
 }
 

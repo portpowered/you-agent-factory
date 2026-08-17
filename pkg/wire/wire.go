@@ -271,9 +271,7 @@ var workerServiceSet = wire.NewSet(
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideWorkersFactoryDocsFileSystem,
-	provideWorkerInvocationFactory,
 	provideProviderFromCommandRunnerFactory,
-	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )
@@ -404,6 +402,7 @@ var BundleSet = wire.NewSet(
 	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.WorkerExecution), new(workers.Service)),
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,

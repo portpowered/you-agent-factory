@@ -54,7 +54,7 @@ func (f *factoryImpl) controlAssociatedWorkerSessions(
 		return newWorkerSessionControlNoOp(turnID, action)
 	}
 
-	captured := captureAssociatedWorkerSessionTargets(f.eventHistory, turnID)
+	captured := selectAssociatedWorkerSessionTargets(f.canonicalWorkerSessionControlEvents(), turnID)
 	result := fanOutWorkerSessionControl(ctx, f.cfg.workerSessions, captured, action, controlID)
 	f.workerSessionControlResults[key] = cloneWorkerSessionControlResult(result)
 	f.logWorkerSessionControlFanout(result)

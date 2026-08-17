@@ -13,6 +13,8 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
+// TODO(P6-C): retire the provider-backed compatibility invocation bridge after
+// Runtime and Sessions caller families pass detached values to Service.Execute.
 // NewInvocation constructs the narrow direct-invocation role used by
 // standalone Factory Session execution.
 func NewInvocation(

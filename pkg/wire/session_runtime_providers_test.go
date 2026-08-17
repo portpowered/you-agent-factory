@@ -682,53 +682,12 @@ func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing
 	}
 }
 
-func TestWorkerInvocationWithProgressFactoryConstructsExecutor(t *testing.T) {
-	runner := testutil.NewProviderCommandRunner()
-	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(edges)
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	allocator, err := provideAgyPTYAllocator(edges)
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	factory := provideWorkerInvocationWithProgressFactory(providersService, edges)
-	executor, err := factory(workers.AdaptCommandRunner(runner), allocator, nil)
-	if err != nil {
-		t.Fatalf("worker invocation factory() error = %v", err)
-	}
-	if executor == nil {
-		t.Fatal("worker invocation factory() = nil executor")
-	}
-}
-
 func TestWorkerProcessCompatibilityCallbacksRemainCallable(t *testing.T) {
 	if environment := provideWorkerProcessEnvironment()(); len(environment) == 0 {
 		t.Fatal("provideWorkerProcessEnvironment() returned an empty environment")
 	}
 	if directory, err := provideWorkerCurrentWorkingDirectory()(); err != nil || directory == "" {
 		t.Fatalf("provideWorkerCurrentWorkingDirectory() = %q, error %v", directory, err)
-	}
-}
-
-func TestCanonicalWorkerCompositionBindingsRemainConstructible(t *testing.T) {
-	providersService, err := provideProvidersService(serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideProvidersService() error = %v", err)
-	}
-	if registry, err := buildProviderRegistry(serviceedges.Edges{}, providersService); err != nil || registry == nil {
-		t.Fatalf("buildProviderRegistry() = registry %T, error %v", registry, err)
-	}
-
-	allocator, err := provideAgyPTYAllocator(serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
-	}
-	invocationFactory := provideWorkerInvocationFactory(providersService, serviceedges.Edges{})
-	executor, err := invocationFactory(workers.AdaptCommandRunner(testutil.NewProviderCommandRunner()), allocator)
-	if err != nil || executor == nil {
-		t.Fatalf("worker invocation factory() = executor %T, error %v", executor, err)
 	}
 }
 

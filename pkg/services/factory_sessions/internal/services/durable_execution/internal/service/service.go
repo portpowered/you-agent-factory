@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -59,6 +60,79 @@ func (s *Service) SetWorkerInvoker(runtime factoryruntime.Service) {
 		return
 	}
 	setter.SetWorkerInvoker(runtime)
+}
+
+// SetWorkerExecution forwards the narrow Workers Execute capability and the
+// Runtime-owned resource lease admission to the JavaScript child projection.
+// The underlying durable service may be fake or replay-backed; those services
+// do not implement this live-only capability and correctly ignore the bind.
+func (s *Service) SetWorkerExecution(
+	execution interface {
+		Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+	},
+	admission factoryruntime.ResourceCapacityLeaseAdmission,
+	runtimeID string,
+	generationID string,
+	providerOverride providers.Service,
+	mockWorkers *workers.MockWorkersConfig,
+	commandRunnerOverride workers.CommandRunner,
+) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetWorkerExecution(
+			interface {
+				Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+			},
+			factoryruntime.ResourceCapacityLeaseAdmission,
+			string,
+			string,
+			providers.Service,
+			*workers.MockWorkersConfig,
+			workers.CommandRunner,
+		)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerExecution(execution, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+}
+
+// SetWorkerProgressPublisher forwards the runtime-owned observation bridge to
+// the live JavaScript execution implementation when it supports the optional
+// child publication capability.
+func (s *Service) SetWorkerProgressPublisher(publisher workers.ProgressPublisher) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetWorkerProgressPublisher(workers.ProgressPublisher)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerProgressPublisher(publisher)
+}
+
+// SetWorkerAttemptStarter forwards the Runtime-owned Worker Session opening
+// boundary to the live JavaScript execution implementation when it supports
+// the optional direct Execute lifecycle capability.
+func (s *Service) SetWorkerAttemptStarter(
+	starter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetWorkerAttemptStarter(
+			func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
+		)
+	})
+	if !ok {
+		return
+	}
+	setter.SetWorkerAttemptStarter(starter)
 }
 
 // SubscribeResponseEvents forwards durable-session response-event subscriptions

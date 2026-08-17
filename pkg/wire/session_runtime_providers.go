@@ -692,13 +692,14 @@ func provideStandaloneSessionExecutionFactory(
 	sessionIDs factorysessions.SessionIDGenerator,
 	fixtureFiles factorysessionwire.ContractFixtureReader,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+	execution factorysessionwire.WorkerExecution,
 ) factorysessionwire.StandaloneSessionExecutionFactory {
 	return func(
 		provider factorysessions.ExecutionProvider,
 		projectRoot string,
 		fixtureCatalogPath string,
 		childExecutorMode string,
-		executor workers.InvocationExecutor,
+		workerExecution factorysessionwire.WorkerExecution,
 		clock factoryruntime.Clock,
 	) (factorysessionwire.DurableExecutionService, error) {
 		return factorysessionwire.NewStandaloneExecution(
@@ -707,7 +708,7 @@ func provideStandaloneSessionExecutionFactory(
 			stores,
 			fixtureCatalogPath,
 			childExecutorMode,
-			executor,
+			workerExecution,
 			clock,
 			syncWaits,
 			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
@@ -1031,74 +1032,6 @@ func provideWorkerCurrentWorkingDirectory() func() (string, error) {
 
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
 	return workerswire.NewMockCommandRunner
-}
-
-func provideWorkerInvocationWithProgressFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
-) factorysessionwire.WorkerInvocationWithProgressFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner, allocator workers.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-		return workerswire.NewInvocationWithProgress(
-			providersService, runner, commandClock, allocator, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
-		)
-	}
-}
-
-func provideWorkerInvocationFactory(
-	providersService providers.Service,
-	edges serviceedges.Edges,
-) factorysessionwire.WorkerInvocationFactory {
-	commandClock := edges.Clock
-	if commandClock == nil {
-		commandClock = platformclock.Real{}
-	}
-	resolveSymlinks := edges.WorkersResolveSymlinks
-	if resolveSymlinks == nil {
-		resolveSymlinks = filepath.EvalSymlinks
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	executableFiles := edges.WorkersExecutableFileReader
-	if executableFiles == nil {
-		executableFiles = platformfilesystem.Local{}
-	}
-	operatingSystem := resolveWorkersOperatingSystem(edges)
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner, allocator workers.PTYAllocator) (workers.InvocationExecutor, error) {
-		return workerswire.NewInvocation(
-			providersService, runner, commandClock, allocator, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
-		)
-	}
 }
 
 func provideConductorInvocationWithProgressFactory(

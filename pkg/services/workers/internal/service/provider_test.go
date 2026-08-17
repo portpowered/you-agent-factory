@@ -170,6 +170,20 @@ func TestAuthorizeProviderTargetDetachesProviderSelection(t *testing.T) {
 	})
 }
 
+func TestAuthorizeProviderTargetAcceptsInjectedProviderOverrideWithoutCatalogIdentity(t *testing.T) {
+	t.Parallel()
+
+	override := &providerAuthorizationFake{}
+	request := agentProviderRequest()
+	request.Input.ProviderOverride = override
+	if err := (&Service{}).authorizeProviderTarget(context.Background(), &request, runners.AgentIdentity); err != nil {
+		t.Fatalf("authorizeProviderTarget() error = %v, want injected override to bypass catalog lookup", err)
+	}
+	if request.Target.Provider.ID != "" || request.Target.Provider.Alias != "" || request.Target.RunnerID != runners.AgentIdentity {
+		t.Fatalf("authorized target = %#v, want the caller-selected target unchanged", request.Target)
+	}
+}
+
 func runAuthorizeProviderTargetCases(t *testing.T, tests []authorizeProviderTargetTestCase) {
 	t.Helper()
 	for _, test := range tests {

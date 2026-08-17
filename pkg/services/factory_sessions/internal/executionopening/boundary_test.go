@@ -1,7 +1,6 @@
 package executionopening
 
 import (
-	"context"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -13,7 +12,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -22,12 +20,6 @@ type executionOpeningFileSystemStub struct {
 	getwdError       error
 	foundPath        string
 	inspectedPaths   []string
-}
-
-type executionOpeningCommandRunner struct{}
-
-func (executionOpeningCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
 }
 
 func (stub *executionOpeningFileSystemStub) Getwd() (string, error) {
@@ -84,12 +76,8 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		executionOpeningCommandRunner{},
-		&workers.MockPTYAllocator{},
-		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (durableexecution.Service, error) {
-			return nil, nil
-		},
-		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		workersRootExecutionProbe{},
+		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
@@ -107,12 +95,8 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		executionOpeningCommandRunner{},
-		&workers.MockPTYAllocator{},
-		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (durableexecution.Service, error) {
-			return nil, nil
-		},
-		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		workersRootExecutionProbe{},
+		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },

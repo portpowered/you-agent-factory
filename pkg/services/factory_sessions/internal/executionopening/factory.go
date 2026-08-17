@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -18,22 +19,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// StandaloneSessionExecutionFactory and WorkerInvocationFactory are consumed
-// only by this Factory Session execution-opening operation. Wire supplies their
-// implementations; this package owns the exact signatures it invokes.
+// StandaloneSessionExecutionFactory is consumed only by this Factory Session
+// execution-opening operation. Wire supplies its implementation; this package
+// owns the exact signature it invokes.
+type WorkerExecution = factorysessionexecution.WorkerExecution
+
 type StandaloneSessionExecutionFactory = func(
 	factorysessions.ExecutionProvider,
 	string,
 	string,
 	string,
-	workers.InvocationExecutor,
+	WorkerExecution,
 	factory.Clock,
 ) (durableexecution.Service, error)
-
-type WorkerInvocationFactory = func(
-	workers.CommandRunner,
-	workers.PTYAllocator,
-) (workers.InvocationExecutor, error)
 
 type WorkerInvocationWithProgressFactory = func(
 	workers.CommandRunner,
@@ -43,25 +41,21 @@ type WorkerInvocationWithProgressFactory = func(
 
 // Factory owns provider selection and lazy runtime-backed execution scopes.
 type Factory struct {
-	runtimes      runtimeopening.ExecutionRuntimeOpening
-	commandRunner workers.CommandRunner
-	allocator     workers.PTYAllocator
-	standalone    StandaloneSessionExecutionFactory
-	invocation    WorkerInvocationFactory
-	resolveClock  factory.ClockResolver
-	artifactRoots factory.RuntimeArtifactRootResolver
-	paths         roles.ExecutionOpeningFileSystem
-	logger        *zap.Logger
+	runtimes        runtimeopening.ExecutionRuntimeOpening
+	workerExecution WorkerExecution
+	standalone      StandaloneSessionExecutionFactory
+	resolveClock    factory.ClockResolver
+	artifactRoots   factory.RuntimeArtifactRootResolver
+	paths           roles.ExecutionOpeningFileSystem
+	logger          *zap.Logger
 }
 
 var _ roles.StdioExecutionOpening = (*Factory)(nil)
 
 func NewFactory(
 	runtimes runtimeopening.ExecutionRuntimeOpening,
-	commandRunner workers.CommandRunner,
-	allocator workers.PTYAllocator,
+	workerExecution WorkerExecution,
 	build StandaloneSessionExecutionFactory,
-	invocation WorkerInvocationFactory,
 	resolveClock factory.ClockResolver,
 	artifactRoots factory.RuntimeArtifactRootResolver,
 	paths roles.ExecutionOpeningFileSystem,
@@ -73,14 +67,8 @@ func NewFactory(
 	if build == nil {
 		return nil, fmt.Errorf("standalone session execution factory is required")
 	}
-	if allocator == nil {
-		return nil, fmt.Errorf("Agy PTY allocator is required")
-	}
-	if commandRunner == nil {
-		return nil, fmt.Errorf("Worker command runner is required")
-	}
-	if invocation == nil {
-		return nil, fmt.Errorf("Worker invocation factory is required")
+	if workerExecution == nil {
+		return nil, fmt.Errorf("Workers Execute capability is required")
 	}
 	if resolveClock == nil {
 		return nil, fmt.Errorf("Factory Runtime clock resolver is required")
@@ -95,9 +83,8 @@ func NewFactory(
 		return nil, fmt.Errorf("runtime logger is required")
 	}
 	return &Factory{
-		runtimes: runtimes, commandRunner: commandRunner, allocator: allocator, standalone: build,
-		invocation: invocation, resolveClock: resolveClock, artifactRoots: artifactRoots, paths: paths,
-		logger: logger,
+		runtimes: runtimes, workerExecution: workerExecution, standalone: build,
+		resolveClock: resolveClock, artifactRoots: artifactRoots, paths: paths, logger: logger,
 	}, nil
 }
 
@@ -135,20 +122,12 @@ func (f *Factory) buildWithWorkerEffects(
 	if err != nil {
 		return nil, err
 	}
-	var workerInvocation workers.InvocationExecutor
-	if childExecutorMode == factorysessions.ChildExecutorModeLive {
-		invocation, invocationErr := f.invocation(f.commandRunner, f.allocator)
-		if invocationErr != nil {
-			return nil, invocationErr
-		}
-		workerInvocation = invocation
-	}
 	execution, err := f.standalone(
 		factorysessions.ExecutionProviderJavaScriptRuntime,
 		projectRoot,
 		"",
 		childExecutorMode,
-		workerInvocation,
+		f.workerExecution,
 		f.resolveClock(nil),
 	)
 	if err != nil {

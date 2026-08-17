@@ -12,7 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
 	"path/filepath"
@@ -723,4 +725,57 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 	records []factory.JavaScriptRuntimeRecord,
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
+}
+
+func newTerminalWorkersService(t *testing.T, provider providers.Service) WorkerExecution {
+	t.Helper()
+	return terminalWorkerService{provider: provider}
+}
+
+// terminalWorkerService is a service-root fake: the bridge test owns durable
+// response publication, while Workers-owned wire tests cover construction and
+// normalization of the real Execute implementation.
+type terminalWorkerService struct {
+	provider providers.Service
+}
+
+func (service terminalWorkerService) Execute(
+	ctx context.Context,
+	request workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
+	providerResult, err := service.provider.Execute(ctx, providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: request.Correlation.AttemptID,
+		Correlation: providers.ExecuteCorrelation{
+			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			GenerationID:     request.Correlation.GenerationID,
+			DispatchID:       request.Correlation.DispatchID,
+			AttemptID:        request.Correlation.AttemptID,
+			RequestID:        request.Correlation.RequestID,
+			TraceID:          request.Correlation.TraceID,
+		},
+		UserMessage: request.Target.Prompt.UserMessage,
+	})
+	result := workerexecution.ExecuteResult{Correlation: request.Correlation}
+	if err != nil {
+		outcome := workerexecution.ExecutionOutcomeFailed
+		failureType := workerexecution.WorkFailureTypeUnknown
+		if errors.Is(err, context.Canceled) {
+			outcome = workerexecution.ExecutionOutcomeCanceled
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			failureType = workerexecution.WorkFailureTypeTimeout
+		}
+		result.Outcome = outcome
+		result.Failure = &workerexecution.ExecutionFailure{
+			Type:    failureType,
+			Family:  workerexecution.WorkFailureFamilyTerminal,
+			Message: err.Error(),
+		}
+		return result, err
+	}
+	result.Outcome = workerexecution.ExecutionOutcomeAccepted
+	result.Output.Primary = []work.WorkContentPart{{Text: providerResult.Content}}
+	return result, nil
 }

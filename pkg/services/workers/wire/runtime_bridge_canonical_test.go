@@ -2,6 +2,8 @@ package wire
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -58,6 +60,208 @@ func TestCanonicalMockCommandRunnerUsesDetachedOverride(t *testing.T) {
 	if err != nil || !strings.Contains(string(result.Stdout), "ACCEPTED") {
 		t.Fatalf("Run(mock) = %#v, %v", result, err)
 	}
+}
+
+// TestCanonicalMockCommandRunnerStreamsDetachedOverrideOutput proves a
+// request-scoped mock override still reaches the streaming observer. Direct
+// Workers execution reads live output from this seam, so a mocked dispatch that
+// returned its result without republishing it would leave the caller with a
+// silent stream.
+func TestCanonicalMockCommandRunnerStreamsDetachedOverrideOutput(t *testing.T) {
+	t.Parallel()
+
+	runner := canonicalStreamingMockCommandRunner(t, canonicalCommandRunnerFunc(
+		func(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+			return workers.CommandResult{}, errors.New("next runner must not run when a detached override matches")
+		},
+	))
+	exitCode := 7
+	ctx := workerexecution.WithMockWorkersConfig(context.Background(), &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			RunType: workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stdout:   "override stdout",
+				Stderr:   "override stderr",
+				ExitCode: &exitCode,
+			},
+		}},
+	})
+
+	var chunks []recordedOutputChunk
+	result, err := runner.RunStreaming(ctx, workers.CommandRequest{Command: "review"}, recordOutputChunks(&chunks))
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if string(result.Stdout) != "override stdout" || string(result.Stderr) != "override stderr" {
+		t.Fatalf("RunStreaming() result = %#v", result)
+	}
+	if result.ExitCode != exitCode {
+		t.Fatalf("RunStreaming() exit code = %d, want %d", result.ExitCode, exitCode)
+	}
+	assertStreamedChunks(t, chunks, []recordedOutputChunk{
+		{stream: workers.OutputStreamStdout, chunk: "override stdout"},
+		{stream: workers.OutputStreamStderr, chunk: "override stderr"},
+	})
+}
+
+// TestCanonicalMockCommandRunnerDelegatesStreamingWithoutOverride proves the
+// decorator hands the observer to a streaming-capable edge instead of buffering
+// the command. Republishing the completed result here would duplicate every
+// chunk the edge already emitted.
+func TestCanonicalMockCommandRunnerDelegatesStreamingWithoutOverride(t *testing.T) {
+	t.Parallel()
+
+	runner := canonicalStreamingMockCommandRunner(t, streamingCanonicalCommandRunner{chunk: "live chunk"})
+
+	var chunks []recordedOutputChunk
+	result, err := runner.RunStreaming(
+		context.Background(),
+		workers.CommandRequest{Command: "codex"},
+		recordOutputChunks(&chunks),
+	)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if string(result.Stdout) != "streamed codex" {
+		t.Fatalf("RunStreaming() result = %#v", result)
+	}
+	assertStreamedChunks(t, chunks, []recordedOutputChunk{
+		{stream: workers.OutputStreamStdout, chunk: "live chunk"},
+	})
+}
+
+// TestCanonicalMockCommandRunnerPublishesCompletedOutputForBufferedEdge proves a
+// non-streaming edge still produces observable stdout and stderr, and that a
+// caller that supplies no observer is tolerated rather than panicking.
+func TestCanonicalMockCommandRunnerPublishesCompletedOutputForBufferedEdge(t *testing.T) {
+	t.Parallel()
+
+	runner := canonicalStreamingMockCommandRunner(t, canonicalCommandRunnerFunc(
+		func(_ context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
+			return workers.CommandResult{
+				Stdout: []byte("forwarded " + request.Command),
+				Stderr: []byte("forwarded diagnostics"),
+			}, nil
+		},
+	))
+
+	var chunks []recordedOutputChunk
+	result, err := runner.RunStreaming(
+		context.Background(),
+		workers.CommandRequest{Command: "codex"},
+		recordOutputChunks(&chunks),
+	)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if string(result.Stdout) != "forwarded codex" {
+		t.Fatalf("RunStreaming() result = %#v", result)
+	}
+	assertStreamedChunks(t, chunks, []recordedOutputChunk{
+		{stream: workers.OutputStreamStdout, chunk: "forwarded codex"},
+		{stream: workers.OutputStreamStderr, chunk: "forwarded diagnostics"},
+	})
+
+	if _, err = runner.RunStreaming(context.Background(), workers.CommandRequest{Command: "codex"}, nil); err != nil {
+		t.Fatalf("RunStreaming(no observer) error = %v", err)
+	}
+}
+
+// TestCanonicalMockCommandRunnerRestoresConfiguredExitCodeForLogging proves the
+// diagnostics seam reports the authored mock exit code even though a rejected
+// Codex turn returns a successful process result.
+func TestCanonicalMockCommandRunnerRestoresConfiguredExitCodeForLogging(t *testing.T) {
+	t.Parallel()
+
+	runner := canonicalStreamingMockCommandRunner(t, stubCanonicalCommandRunner{})
+	request := workers.CommandRequest{Command: "codex"}
+	executed := workers.CommandResult{Stdout: []byte(`{"type":"turn.failed"}`)}
+
+	unchanged := runner.CommandResultForLogging(context.Background(), request, executed)
+	if unchanged.ExitCode != 0 {
+		t.Fatalf("CommandResultForLogging(no override) exit code = %d, want 0", unchanged.ExitCode)
+	}
+
+	exitCode := 42
+	ctx := workerexecution.WithMockWorkersConfig(context.Background(), &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			RunType:      workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{ExitCode: &exitCode},
+		}},
+	})
+	logged := runner.CommandResultForLogging(ctx, request, executed)
+	if logged.ExitCode != exitCode {
+		t.Fatalf("CommandResultForLogging(override) exit code = %d, want %d", logged.ExitCode, exitCode)
+	}
+}
+
+// TestCanonicalMockCommandRunnerRequiresNextCommandRunner proves a missing
+// command edge fails loudly instead of reporting an empty successful dispatch.
+func TestCanonicalMockCommandRunnerRequiresNextCommandRunner(t *testing.T) {
+	t.Parallel()
+
+	runner := NewContextualMockWorkerCommandRunner(nil)
+	_, err := runner.Run(context.Background(), workers.CommandRequest{Command: "codex"})
+	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
+		t.Fatalf("Run(no next runner) error = %v, want a required-next-runner failure", err)
+	}
+}
+
+// canonicalStreamingCommandRunner is the contract Workers resolves from the
+// composed command edge at dispatch time: buffered execution, live streaming,
+// and diagnostics shaping.
+type canonicalStreamingCommandRunner interface {
+	workers.CommandRunner
+	RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
+	CommandResultForLogging(context.Context, workers.CommandRequest, workers.CommandResult) workers.CommandResult
+}
+
+func canonicalStreamingMockCommandRunner(t *testing.T, next workers.CommandRunner) canonicalStreamingCommandRunner {
+	t.Helper()
+
+	runner, ok := NewContextualMockWorkerCommandRunner(next).(canonicalStreamingCommandRunner)
+	if !ok {
+		t.Fatal("NewContextualMockWorkerCommandRunner() does not satisfy the canonical streaming command contract")
+	}
+	return runner
+}
+
+type recordedOutputChunk struct {
+	stream string
+	chunk  string
+}
+
+func recordOutputChunks(chunks *[]recordedOutputChunk) workers.OutputChunkObserver {
+	return func(stream string, chunk []byte) {
+		*chunks = append(*chunks, recordedOutputChunk{stream: stream, chunk: string(chunk)})
+	}
+}
+
+func assertStreamedChunks(t *testing.T, got, want []recordedOutputChunk) {
+	t.Helper()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("streamed chunks = %#v, want %#v", got, want)
+	}
+}
+
+type streamingCanonicalCommandRunner struct {
+	chunk string
+}
+
+func (streamingCanonicalCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{}, errors.New("streaming edge must not fall back to buffered Run")
+}
+
+func (runner streamingCanonicalCommandRunner) RunStreaming(
+	_ context.Context,
+	request workers.CommandRequest,
+	observer workers.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	if observer != nil {
+		observer(workers.OutputStreamStdout, []byte(runner.chunk))
+	}
+	return workers.CommandResult{Stdout: []byte("streamed " + request.Command)}, nil
 }
 
 type stubCanonicalCommandRunner struct{}
