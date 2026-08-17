@@ -55,7 +55,8 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 		t.Fatalf("construct events service: %v", err)
 	}
 	routes := make(chan string, 1)
-	workerService := localBoundaryWorkersService{routes: routes}
+	publishers := make(chan workers.ProgressPublisher, 1)
+	workerService := localBoundaryWorkersService{routes: routes, publishers: publishers}
 	boundary, err := provideLocalWorkerSessionsBoundary(
 		eventsService,
 		localBoundaryProviderSessions{},
@@ -99,12 +100,38 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 	case <-time.After(time.Second):
 		t.Fatal("provider invocation did not receive the admitted local dispatch")
 	}
+	select {
+	case publisher := <-publishers:
+		if publisher == nil {
+			t.Fatal("local Worker Sessions execution omitted the request-scoped progress publisher")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("local Worker Sessions execution did not receive the progress publisher")
+	}
+}
+
+func TestProvideLocalWorkerSessionsBoundaryRequiresWorkersService(t *testing.T) {
+	t.Parallel()
+
+	_, err := provideLocalWorkerSessionsBoundary(
+		nil,
+		nil,
+		logging.NoopLogger{},
+		nil,
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
+		t.Fatalf("provideLocalWorkerSessionsBoundary(nil Workers service) error = %v, want required-service diagnostic", err)
+	}
 }
 
 func TestLocalWorkerSessionsBoundaryRejectsControlsWhenServiceUnavailable(t *testing.T) {
 	t.Parallel()
 
 	boundary := &localWorkerSessionsBoundary{}
+	if _, err := boundary.Start(context.Background(), workersessions.StartRequest{}); err == nil {
+		t.Fatal("Start() error = nil, want unavailable local Worker Sessions service")
+	}
 	if _, err := boundary.Continue(context.Background(), workersessions.ContinueRequest{}); err == nil {
 		t.Fatal("Continue() error = nil, want unavailable local Worker Sessions service")
 	}
@@ -135,11 +162,15 @@ func TestLocalWorkerSessionsBoundaryRejectsControlsWhenServiceUnavailable(t *tes
 			}
 		})
 	}
+	if _, err := boundary.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{}); err == nil {
+		t.Fatal("StreamObservationsByWorkerSessionID() error = nil, want unavailable local Worker Sessions service")
+	}
 }
 
 type localBoundaryWorkersService struct {
 	workers.ModelInvoker
-	routes chan<- string
+	routes     chan<- string
+	publishers chan<- workers.ProgressPublisher
 }
 
 func (e localBoundaryWorkersService) Execute(
@@ -147,6 +178,9 @@ func (e localBoundaryWorkersService) Execute(
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
 	e.routes <- request.Target.WorkstationName
+	if e.publishers != nil {
+		e.publishers <- request.Input.ProgressPublisher
+	}
 	return workers.ExecuteResult{
 		Correlation: request.Correlation,
 		Outcome:     workers.ExecutionOutcomeAccepted,
