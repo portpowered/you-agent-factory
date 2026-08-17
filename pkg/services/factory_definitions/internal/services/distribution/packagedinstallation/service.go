@@ -378,45 +378,14 @@ func (service *Service) acquireStagingOwnership(
 			}
 			return nil, contention
 		}
-		if err := service.fileSystem.MkdirAll(rootDir, 0o755); err != nil {
-			return nil, service.installationFailure(backendScopeID, rootDir, name, "", ownerLivenessIndeterminate, err)
-		}
-		leasePath := stagingOwnershipPath(rootDir, name)
-		if err := service.directoryCreator(leasePath, 0o755); err != nil {
-			if errors.Is(err, fs.ErrExist) {
-				continue
-			}
-			return nil, service.installationFailure(backendScopeID, rootDir, name, leasePath, ownerLivenessIndeterminate, err)
-		}
-		owner, err := service.ownerProbe.Current()
+		lease, lost, err := service.publishOwnedStagingLease(backendScopeID, rootDir, name)
 		if err != nil {
-			_ = service.fileSystem.RemoveAll(leasePath)
-			return nil, service.installationFailure(backendScopeID, rootDir, name, leasePath, ownerLivenessIndeterminate, err)
+			return nil, err
 		}
-		if owner.PID <= 0 {
-			_ = service.fileSystem.RemoveAll(leasePath)
-			return nil, service.installationFailure(
-				backendScopeID,
-				rootDir,
-				name,
-				leasePath,
-				ownerLivenessIndeterminate,
-				fmt.Errorf("owner PID is invalid: %d", owner.PID),
-			)
+		if lost {
+			continue
 		}
-		if err := service.publishOwnerRecord(leasePath, owner); err != nil {
-			_ = service.fileSystem.RemoveAll(leasePath)
-			return nil, service.installationFailure(backendScopeID, rootDir, name, leasePath, ownerLivenessIndeterminate, err)
-		}
-		service.logOutcome(
-			backendScopeID,
-			name,
-			leasePath,
-			"acquired",
-			ownerLivenessActive,
-			owner.PID,
-		)
-		return &stagingLease{path: leasePath, root: rootDir, name: name, backendScopeID: backendScopeID, owner: owner}, nil
+		return lease, nil
 	}
 	return nil, service.installationContention(
 		backendScopeID,
@@ -582,7 +551,7 @@ func (service *Service) releaseStagingOwnership(lease *stagingLease) error {
 			fmt.Errorf("staging owner changed from PID %d to PID %d", lease.owner.PID, owner.PID),
 		)
 	}
-	if err := service.fileSystem.RemoveAll(lease.path); err != nil {
+	if err := service.retractStagingLease(lease.root, lease.path); err != nil {
 		return service.installationFailure(
 			lease.backendScopeID,
 			lease.root,
