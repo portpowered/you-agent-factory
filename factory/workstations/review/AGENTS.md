@@ -177,12 +177,18 @@ Write the review summary and acceptance-criteria checklist before the marker.
 Do not return a JSON decision envelope.
 
 The runtime scans your whole response for these markers, so emit exactly one of
-them and put it alone on the final line. Do not quote or mention the other
-markers anywhere in your summary text: a stray `<COMPLETE>` inside a checklist
-line can be read as approval-and-merge even when you meant to hold. `<COMPLETE>`
-takes precedence over `<CONTINUE>`, and a response carrying neither marker
-follows the rejection route — which is why `<REJECTED>` is a marker you write
-for the human reader rather than a separate runtime token.
+them and put it alone on the final line. `<COMPLETE>` takes precedence over
+`<CONTINUE>`, and a response carrying neither marker follows the rejection
+route — which is why `<REJECTED>` is a marker you write for the human reader
+rather than a separate runtime token.
+
+Because the scan is a plain substring match over the entire response, never
+write a routing marker anywhere except that final line. This matters most when
+you are reviewing a PR that is itself about routing markers: when a PRD
+criterion or a quoted diff contains one, paraphrase it by name — "the COMPLETE
+marker", "the CONTINUE marker" — instead of pasting the literal token into your
+summary or acceptance-criteria checklist. A stray literal `<COMPLETE>` in a
+checklist line is read as approval-and-merge even when you meant to hold.
 
 ## addenda
 
