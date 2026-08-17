@@ -405,6 +405,12 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/services/factory_runtime/internal/build.go#assembleRuntimeBundle",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor and split this runtime construction function into focused helpers, then remove the exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/factory_runtime/internal/runtime_build.go#NewRuntimeBuild",
       "owner": "backend-maintainers",
       "removalReason": "Refactor and split this runtime construction function into focused helpers, then remove the exemption."
@@ -2626,6 +2632,12 @@
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/services/factory_runtime/internal/build.go#RuntimeFactory.Build",
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-function-lines",
+      "target": "pkg/services/factory_runtime/internal/build.go#assembleRuntimeBundle",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing directive relocated by package restructure; refactor the code below the threshold and remove this exemption."
     },

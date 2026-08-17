@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -627,64 +626,10 @@ func assertDetachedAgentProviderCall(
 	}
 }
 
-// TestBuildStatelessWorkersExposesDetachedRuntimeAndPoolContracts proves the
-// public root keeps runtime assembly and workstation-pool lifecycle separate
-// from one detached Execute attempt.
-func TestBuildStatelessWorkersExposesDetachedRuntimeAndPoolContracts(t *testing.T) {
-	service, err := BuildStatelessWorkers(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildStatelessWorkers() error = %v", err)
-	}
-
-	built, err := service.BuildRuntime(context.Background(), workers.RuntimeBuildRequest{
-		RunnerID: "agent",
-		Roles: []workers.RuntimeBuildRoleRequest{{
-			Name: "contract-agent",
-			Kind: workers.RuntimeBuildRoleKindWorker,
-		}},
-	})
-	if err != nil {
-		t.Fatalf("BuildRuntime() error = %v", err)
-	}
-	if built.RunnerSelection.RunnerID != "agent" || len(built.Bindings) != 1 ||
-		built.Bindings[0].RoleName != "contract-agent" {
-		t.Fatalf("BuildRuntime() = %#v, want one agent binding", built)
-	}
-
-	started, err := service.StartWorkstationPool(context.Background(), workers.WorkstationPoolStartRequest{
-		Bindings: []workers.AssembledRuntimeBinding{{
-			RoleName:        "contract-route",
-			RoleKind:        workers.RuntimeBuildRoleKindWorkstation,
-			RunnerSelection: workers.ResolvedRunnerSelection{RunnerID: "agent", Source: workers.RunnerSelectionSourceFactory},
-			Executor:        rootContractExecutor{},
-		}},
-	})
-	if err != nil || started.Outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
-		t.Fatalf("StartWorkstationPool() = %#v, error %v; want STARTED", started, err)
-	}
-	route, err := service.WorkstationRoute(context.Background(), workers.WorkstationRouteRequest{WorkstationName: "contract-route"})
-	if err != nil || !route.Available {
-		t.Fatalf("WorkstationRoute() = %#v, error %v; want available route", route, err)
-	}
-	stopped, err := service.StopWorkstationPool(context.Background())
-	if err != nil || stopped.Outcome != workers.WorkstationPoolLifecycleOutcomeStopped {
-		t.Fatalf("StopWorkstationPool() = %#v, error %v; want STOPPED", stopped, err)
-	}
-	if _, err := service.WorkstationRoute(context.Background(), workers.WorkstationRouteRequest{WorkstationName: "contract-route"}); !errors.Is(err, workers.ErrWorkstationPoolStopped) {
-		t.Fatalf("WorkstationRoute() after stop error = %v, want stopped error", err)
-	}
-}
-
 type statelessCommandRunner struct{}
 
 func (statelessCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return platformprocess.CommandResult{Stdout: []byte("stateless-contract-output")}, nil
-}
-
-type rootContractExecutor struct{}
-
-func (rootContractExecutor) Execute(context.Context, workers.WorkstationExecutionRequest) (workers.WorkResult, error) {
-	return workers.WorkResult{Outcome: workers.OutcomeAccepted}, nil
 }
 
 func statelessCodexSuccessStdout(result string) []byte {

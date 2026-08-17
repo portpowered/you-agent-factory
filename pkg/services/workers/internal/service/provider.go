@@ -36,16 +36,7 @@ func (s *Service) authorizeProviderTarget(
 			workers.ErrExecuteUnavailable,
 		)
 	}
-	raw := firstNonEmpty(
-		request.Target.Provider.ID,
-		request.Target.Provider.Alias,
-		request.Target.RunnerID,
-	)
-	if resume := request.Input.Resume; resume != nil {
-		if provider := strings.TrimSpace(resume.Provider); provider != "" {
-			raw = firstNonEmpty(raw, provider)
-		}
-	}
+	raw := providerTargetIdentity(request)
 	if strings.TrimSpace(raw) == "" {
 		return fmt.Errorf(
 			"%w: provider identity is required for agent execution",
@@ -91,6 +82,23 @@ func (s *Service) authorizeProviderTarget(
 		request.Target.RunnerID = runnerIDForProvider(resolved.ID)
 	}
 	return nil
+}
+
+func providerTargetIdentity(request *workers.ExecuteRequest) string {
+	if request == nil {
+		return ""
+	}
+	raw := firstNonEmpty(
+		request.Target.Provider.ID,
+		request.Target.Provider.Alias,
+		request.Target.RunnerID,
+	)
+	if resume := request.Input.Resume; resume != nil {
+		if provider := strings.TrimSpace(resume.Provider); provider != "" {
+			raw = firstNonEmpty(raw, provider)
+		}
+	}
+	return raw
 }
 
 func configuredProviderOverride(s *Service) providers.Service {
