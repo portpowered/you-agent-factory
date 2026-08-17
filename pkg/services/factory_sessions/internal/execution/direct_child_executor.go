@@ -125,6 +125,28 @@ func newDirectChildExecutor(
 	}
 }
 
+// missingChildExecutor is returned when a live child composition was opened
+// without its required Workers Execute capability. Keeping this as an
+// explicit executor makes the wiring failure immediate and attributable to
+// the child session instead of constructing a nil-capability executor that
+// can leave a durable session waiting forever.
+type missingChildExecutor struct {
+	sessionID string
+}
+
+func (e missingChildExecutor) Execute(
+	ctx context.Context,
+	_ factory.JavaScriptChildExecutionRequest,
+) (factory.JavaScriptChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factory.JavaScriptChildExecutionResult{}, err
+	}
+	return factory.JavaScriptChildExecutionResult{}, fmt.Errorf(
+		"child session %q cannot execute: Workers Execute capability is required",
+		strings.TrimSpace(e.sessionID),
+	)
+}
+
 func (e *directChildExecutor) Execute(
 	ctx context.Context,
 	req factory.JavaScriptChildExecutionRequest,
@@ -406,13 +428,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		// moved to the standalone Workers binding. It is not part of the Wire
 		// production path and is the P6-C retirement survivor.
 		if s.directChildInvocation == nil {
-			return newDirectChildExecutor(
-				childSessionID,
-				nil,
-				records,
-				s.childValues,
-				s.projectRoot,
-			)
+			return missingChildExecutor{sessionID: childSessionID}
 		}
 		return newDirectChildExecutor(
 			childSessionID,

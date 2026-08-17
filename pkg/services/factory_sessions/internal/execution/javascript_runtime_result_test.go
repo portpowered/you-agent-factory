@@ -8,6 +8,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"strings"
 	"testing"
 	"time"
 )
@@ -881,6 +882,26 @@ func TestJavaScriptRuntimeService_StandaloneChildUsesInjectedWorkersExecute(t *t
 	}
 	if invoker.request.Target.WorkerName != "worker-a" {
 		t.Fatalf("standalone child worker name = %q, want worker-a", invoker.request.Target.WorkerName)
+	}
+}
+
+func TestLiveChildWithoutWorkersExecutionFailsWithChildSessionID(t *testing.T) {
+	service := &JavaScriptRuntimeService{
+		projectRoot: "/project",
+		childValues: childTestValues{},
+	}
+	hooks := service.childExecutorHooks(ChildExecutorModeLive, "parent-session")
+	if hooks.NewChildExecutor == nil {
+		t.Fatal("live child executor hook = nil")
+	}
+
+	_, err := hooks.NewChildExecutor(
+		"child-session-42",
+		newChildRecordSink(),
+		factory.DefaultJavaScriptPolicy(),
+	).Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
+	if err == nil || !strings.Contains(err.Error(), "child-session-42") || !strings.Contains(err.Error(), "Workers Execute capability is required") {
+		t.Fatalf("missing Workers Execute error = %v, want child session and capability", err)
 	}
 }
 

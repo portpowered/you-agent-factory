@@ -395,7 +395,8 @@ func openRuntime(
 	if admission, ok := rootRuntime.(factoryruntime.ResourceCapacityLeaseAdmission); ok {
 		resourceLeaseAdmission = admission
 	}
-	setWorkerExecution(
+	if err := setWorkerExecution(
+		sessionID,
 		durableExecution.Service,
 		workerService,
 		resourceLeaseAdmission,
@@ -404,7 +405,9 @@ func openRuntime(
 		providerForDurable,
 		configured.Workers.MockWorkers,
 		providerCommandRunner,
-	)
+	); err != nil {
+		return runtimeProducts{}, err
+	}
 	setWorkerProgressPublisher(durableExecution.Service, runtimeProgressPublisher(startupRuntime))
 	setWorkerAttemptStarter(durableExecution.Service, runtimeWorkerAttemptStarter(startupRuntime))
 	opened := assembleRuntimeProducts(
@@ -596,6 +599,7 @@ type workerExecutionSetter interface {
 }
 
 func setWorkerExecution(
+	sessionID string,
 	execution any,
 	workerService workers.Service,
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
@@ -604,12 +608,22 @@ func setWorkerExecution(
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunnerOverride workers.CommandRunner,
-) {
+) error {
 	setter, ok := execution.(workerExecutionSetter)
-	if !ok || workerService == nil {
-		return
+	if !ok {
+		return fmt.Errorf(
+			"bind Workers Execute for Factory Session %q: live child execution setter is required",
+			strings.TrimSpace(sessionID),
+		)
+	}
+	if missingRuntimeOpeningDependency(workerService) {
+		return fmt.Errorf(
+			"bind Workers Execute for Factory Session %q: Workers service is required",
+			strings.TrimSpace(sessionID),
+		)
 	}
 	setter.SetWorkerExecution(workerService, admission, runtimeID, generationID, providerOverride, mockWorkers, commandRunnerOverride)
+	return nil
 }
 
 type runtimeProgressPublisherProvider interface {
