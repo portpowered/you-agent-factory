@@ -131,7 +131,12 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 	if session == nil || runtimebinding.ServiceForSession(session) == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
-	return workRuntimeAdapter{sessionID: sessionID, runtime: runtimebinding.ServiceForSession(session)}, nil
+	ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
+	return workRuntimeAdapter{
+		sessionID: sessionID,
+		runtime:   runtimebinding.ServiceForSession(session),
+		ingress:   ingress,
+	}, nil
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
@@ -233,6 +238,7 @@ func (a *Assembly) Complete(
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
 		Factory:               startupRuntime.RuntimeService(),
+		WorkAndEventIngress:   runtimebinding.DeclaredWorkAndEventIngress(startupRuntime.RuntimeService()),
 		Clock:                 clock,
 		BackendScopeID:        startupRuntime.BackendScope(),
 		RuntimeConfig:         runtimeConfig,

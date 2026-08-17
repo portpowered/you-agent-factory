@@ -30,7 +30,7 @@ from external ones.
 | Opened HTTP service bags and Sessions application roles | **Retained with caller** | `RuntimeHTTPServices` has zero matches repo-wide and is already deleted. `factory_sessions/internal/roles` and `factory_sessions/wire/application_graph.go` are **not** residue: `pkg/wire` imports `factory_sessions/wire` (`pkg/wire/wire.go:18`, generated `pkg/wire/wire_gen.go:21`) and binds its runtime-opening contracts (`wire.go:402-404`, `wire_gen.go:1121`). `roles` has ~58 importers across Sessions. Canonical, load-bearing; no deletion. |
 | Sessions runtime compatibility | **Already deleted** | `ForRuntime` (word-boundary) and `BindWorkerInvoker` have zero matches repo-wide. Bare `ExecutionService` has no production declaration; the only matches are synthetic checker fixtures in `cmd/ownershipboundarycheck/main_test.go` and `owner_inventory_test.go`. |
 | Runtime legacy owner surface (`APIFactory`) | **Retained with caller** | `factoryruntime.APIFactory` is declared at `pkg/services/factory_runtime/interfaces.go:24`. Its sole non-test production reference is the interface embed at `pkg/services/factory_runtime/internal/host/engine.go:17`. Its two methods are still reached by the projection fallbacks in the next row, so it is retained until those callers move. |
-| Cross-owner projection fallbacks | **Retained with caller** | Both plan-named sites are live: `factory_visualization/internal/service/runtime_source.go:37` casts `runtime.Factory` to an anonymous `SubscribeFactoryEvents` interface (carrying a now-stale `TODO(P5B)`), and `work/internal/live_session_runtime.go:40` casts to `runtimeWorkSubmitter`. See the root-cause section below — the shape is wider than these two files. |
+| Cross-owner projection fallbacks | **Deleted in this packet** | Both plan-named sites are migrated: `factory_visualization/internal/service/runtime_source.go` and `work/internal/live_session_runtime.go` now read the declared `LiveRuntime.WorkAndEventIngress` capability instead of asserting one out of `runtime.Factory`. The sweep covered every sibling on the same carrier, not just the two named files; see the root-cause section below. |
 | Workers persistent execution graph | **Already deleted**, plus one row **deleted in this packet** and one **retained with caller** | `pkg/services/workers/internal/services/runtime_assembly` does not exist. `BuildRuntime`, `BuildRuntimeExecutors`, and `AssembledRuntimeBinding` match **only** in three `docs/**/*.md` plan files and have zero Go references. `WorkstationPool` has zero matches repo-wide. What remained was the provider-backed direct-invocation constructor family; see the Workers section below. |
 
 ## Sessions runtime-opening family is canonical, not a second graph
@@ -98,35 +98,65 @@ failed-assertion outcome, and an opened engine that cannot serve the two
 operations still fails activation, pinned by
 `TestRuntimeActivationRejectsEngineWithoutDeclaredWorkAndEventIngress`.
 
-**Retained with caller — the `LiveRuntime.Factory` carrier (9 sites).** These
-all cast a `factory.Service` obtained from `LiveRuntime.Factory` or the bound
-Runtime service, so they close only when `factoryruntime.Service` declares the
-two operations or each owner takes an injected port. Named successor:
-`factoryruntime.Service` detached values for Work submission and Recordings for
-canonical history.
+**Closed in this packet — the `LiveRuntime.Factory` carrier (9 sites).** Every
+one of these cast a `factory.Service` obtained from `LiveRuntime.Factory` or
+the bound Runtime service back up to the two operations. They are closed the
+same way the activation seam was: `factorysessions.LiveRuntime` now declares
 
-- `pkg/services/factory_sessions/internal/sessionservice/runtime_factory_state.go:33,53,206`
-- `pkg/services/factory_sessions/internal/sessionservice/runtime_sessions.go:58,98`
-- `pkg/services/factory_sessions/internal/sessionservice/runtime_gateway.go:55`
-- `pkg/services/factory_sessions/internal/sessionservice/work_runtime_adapter.go:43`
-- `pkg/services/work/internal/live_session_runtime.go:40`
-- `pkg/transports/mapping/runtime_api.go:45`
+```go
+WorkAndEventIngress factory.APIFactory
+```
 
-Two observations matter for whoever closes the remaining row. First,
-`factory_runtime/internal/root.go` already implements `SubmitWorkRequest` and
-`SubscribeFactoryEvents` canonically, so migrating callers needs an explicitly
-declared and injected owner port rather than new behavior — the
-`WorkAndEventIngress` value above is that port for the activation seam and is
-the pattern the remaining callers should follow. Second, `root.go` used to
-justify its bridge as retained "for the legacy HTTP mapping until that
-representation migrates" — that legacy HTTP mapping is exactly what P5B deleted
-(row 1 above), so the stale justification has been replaced with the actual
-retirement condition (`APIFactory` retires once Work admission owns the read).
+which Factory Sessions resolves once wherever it binds `Factory` — the three
+producer literals (`sessionservice/assembly.go`, `runtimebinding/binding.go`
+×2) and the one rebind site (`sessionservice/runtime_sessions.go`, which
+reassigns `runtime.Factory` when a session adopts a new binding; a stored port
+that ignored that site would go stale). Migrated sites:
 
-An existing characterization test already pins the legacy cast:
-`TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast` at
-`factory_visualization/runtime_observation_boundary_test.go:134`. It must be
-updated or retired together with the migration.
+- `pkg/services/factory_sessions/internal/sessionservice/runtime_factory_state.go` (3 sites)
+- `pkg/services/factory_sessions/internal/sessionservice/runtime_sessions.go` (2 sites)
+- `pkg/services/factory_sessions/internal/sessionservice/runtime_gateway.go`
+- `pkg/services/factory_sessions/internal/sessionservice/work_runtime_adapter.go`
+- `pkg/services/work/internal/live_session_runtime.go`, `work/internal/service.go`
+- `pkg/services/factory_visualization/internal/service/runtime_source.go`
+
+The private `runtimeWorkSubmitter` / `runtimeEventSubscriber` declarations in
+`sessionservice` and `work` are deleted, as is the anonymous-interface cast in
+Visualization. Cross-service peers cannot import the Sessions-internal
+`runtimebinding` package, so they read the public declared field directly; the
+Sessions-internal sites go through `WorkAndEventIngressForLiveRuntime` /
+`WorkAndEventIngressForService`, which sit beside the existing
+`LegacyObservationForService` and `LegacyEventSourceForService` resolvers and
+are now the single place the named `factory.APIFactory` contract is resolved.
+
+Behavior is preserved exactly: a runtime that does not serve the boundary
+yields the same "work submission is required" / "event subscription is
+required until Recordings migration" error the failed assertion produced.
+
+**Retained with caller — a different carrier.** `pkg/transports/mapping/runtime_api.go:45`
+still asserts `runtimeEventSubscriber`, but it is **not** on the `LiveRuntime`
+carrier: `NewRuntimeAPI` receives the Wire-published Runtime root
+(`pkg/wire/profiles.go:896` passes `opened.FactoryRuntime`), not a Factory
+Session's live runtime. Closing it requires the Runtime root to publish its own
+ingress, which is a Wire-composition change rather than a Sessions carrier
+change. Remaining caller: `pkg/wire/profiles.go:896`. Named successor:
+Recordings for canonical event history.
+
+`factoryruntime.APIFactory` therefore stays **retained with caller** — it is now
+the declared type of both `RuntimeActivation.WorkAndEventIngress` and
+`LiveRuntime.WorkAndEventIngress`, plus the embed at
+`factory_runtime/internal/host/engine.go:17`. It retires once Work admission
+owns submission and Recordings owns canonical event reads.
+
+The characterization test that pinned the legacy cast is retired and replaced.
+`TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast` became
+`TestRuntimeSubscribeUsesDeclaredWorkAndEventIngress`, and a new guard,
+`TestRuntimeSubscribeDoesNotRecoverIngressFromRuntimeValue`, pins that the
+fallback stays retired: its bound runtime value *does* serve
+`SubscribeFactoryEvents`, so the deleted assertion would have succeeded, and
+Visualization must still report the capability unavailable because no ingress
+was declared. `TestLiveSessionRuntimeResolverDoesNotRecoverSubmitterFromRuntimeValue`
+is the symmetric guard on the Work side.
 
 ## Workers direct-invocation constructor family
 

@@ -52,7 +52,7 @@ func (s *Service) SubscribeFactoryEventsForSession(
 	if err != nil {
 		return nil, err
 	}
-	legacyRuntime, ok := runtime.(runtimeEventSubscriber)
+	legacyRuntime, ok := runtimebinding.WorkAndEventIngressForService(runtime)
 	if !ok {
 		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}

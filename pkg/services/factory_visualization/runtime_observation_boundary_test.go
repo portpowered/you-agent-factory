@@ -3,6 +3,7 @@ package factory_visualization_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,7 +132,7 @@ func TestRuntimeObservationUnavailableRuntimeDoesNotCallObserve(t *testing.T) {
 	}
 }
 
-func TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast(t *testing.T) {
+func TestRuntimeSubscribeUsesDeclaredWorkAndEventIngress(t *testing.T) {
 	t.Parallel()
 
 	runtimeFactory := &sessionBoundRuntimeFactory{
@@ -141,7 +142,10 @@ func TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast(t *testing.T) {
 	}
 	reader := sessionRuntimeReaderStub{
 		withRuntimeRead: func(fn func(*factorysessions.LiveRuntime) error) error {
-			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
+			return fn(&factorysessions.LiveRuntime{
+				Factory:             runtimeFactory,
+				WorkAndEventIngress: runtimeFactory,
+			})
 		},
 	}
 	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
@@ -159,5 +163,44 @@ func TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast(t *testing.T) {
 	}
 	if len(runtimeFactory.observeRequests) != 0 {
 		t.Fatalf("observe calls during subscribe = %d, want 0", len(runtimeFactory.observeRequests))
+	}
+}
+
+// TestRuntimeSubscribeDoesNotRecoverIngressFromRuntimeValue is the guard that
+// the retired projection fallback stays retired. The bound runtime value here
+// does serve SubscribeFactoryEvents, so the legacy type assertion would have
+// succeeded; Visualization must instead report the capability as unavailable
+// because Factory Sessions declared no Work and event ingress for it.
+func TestRuntimeSubscribeDoesNotRecoverIngressFromRuntimeValue(t *testing.T) {
+	t.Parallel()
+
+	runtimeFactory := &sessionBoundRuntimeFactory{
+		stream: &factorydefinitions.FactoryEventStream{
+			Events: make(chan factorydefinitions.FactoryEvent),
+		},
+		subscribeHook: func() {
+			t.Error("SubscribeFactoryEvents reached the runtime value without a declared ingress")
+		},
+	}
+	reader := sessionRuntimeReaderStub{
+		withRuntimeRead: func(fn func(*factorysessions.LiveRuntime) error) error {
+			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
+		},
+	}
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
+
+	stream, err := source.SubscribeFactoryEvents(
+		context.Background(),
+		nil,
+		factorydefinitions.FactoryEventReconnectScope{},
+	)
+	if err == nil {
+		t.Fatal("SubscribeFactoryEvents error = nil, want event subscription unavailable")
+	}
+	if stream != nil {
+		t.Fatalf("SubscribeFactoryEvents stream = %#v, want nil", stream)
+	}
+	if !strings.Contains(err.Error(), "Factory Runtime event subscription is required") {
+		t.Fatalf("SubscribeFactoryEvents error = %v, want subscription-required error", err)
 	}
 }

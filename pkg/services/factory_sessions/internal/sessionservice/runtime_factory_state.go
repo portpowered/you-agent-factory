@@ -30,7 +30,7 @@ func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.Wo
 	var result work.WorkRequestSubmitResult
 	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
 		var submitErr error
-		submitter, ok := runtimebinding.ServiceForLiveRuntime(runtime).(runtimeWorkSubmitter)
+		submitter, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime)
 		if !ok {
 			return fmt.Errorf("Factory Runtime work submission is required")
 		}
@@ -50,7 +50,7 @@ func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect 
 	if runtime == nil {
 		return nil, fmt.Errorf("factory runtime is not available")
 	}
-	events, ok := runtime.(runtimeEventSubscriber)
+	events, ok := runtimebinding.WorkAndEventIngressForService(runtime)
 	if !ok {
 		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
@@ -203,7 +203,7 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	if target == nil {
 		return fmt.Errorf("factory runtime is not available")
 	}
-	submitter, ok := target.(runtimeWorkSubmitter)
+	submitter, ok := runtimebinding.WorkAndEventIngressForService(target)
 	if !ok {
 		return fmt.Errorf("Factory Runtime work submission is required")
 	}

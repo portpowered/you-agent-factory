@@ -22,26 +22,28 @@ func (r liveSessionRuntimeResolver) ResolveWorkRuntime(sessionID string) (work.R
 	if runtime == nil || runtime.Factory == nil {
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
-	return liveSessionRuntimeAdapter{runtime: runtime.Factory}, nil
+	return liveSessionRuntimeAdapter{
+		runtime: runtime.Factory,
+		ingress: runtime.WorkAndEventIngress,
+	}, nil
 }
 
 type liveSessionRuntimeAdapter struct {
 	runtime factory.Service
-}
-
-type runtimeWorkSubmitter interface {
-	SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+	// ingress is the Work-submission boundary Factory Sessions declares on the
+	// live runtime. Work reads the declared capability rather than recovering
+	// one from the runtime value.
+	ingress factory.APIFactory
 }
 
 func (a liveSessionRuntimeAdapter) SubmitWorkRequest(
 	ctx context.Context,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	submitter, ok := a.runtime.(runtimeWorkSubmitter)
-	if !ok {
+	if a.ingress == nil {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
-	return submitter.SubmitWorkRequest(ctx, request)
+	return a.ingress.SubmitWorkRequest(ctx, request)
 }
 
 func (a liveSessionRuntimeAdapter) MoveWork(

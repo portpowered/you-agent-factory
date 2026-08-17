@@ -41,6 +41,7 @@ func (fs *SessionRuntime) BindRuntime(sessionID string, binding factory.RuntimeB
 	return fs.sessionState.UpdateRuntime(sessionID, func(runtime *factorysessions.LiveRuntime) error {
 		runtime.Binding = binding
 		runtime.Factory = binding.Service()
+		runtime.WorkAndEventIngress = runtimebinding.DeclaredWorkAndEventIngress(runtime.Factory)
 		runtime.LiveChangeApplication = runtimebinding.NewLiveChangeApplication(runtime.Factory)
 		runtime.LiveChangeAdmission = runtimebinding.NewLiveChangeAdmission(runtime.Factory)
 		return nil
@@ -55,7 +56,7 @@ func (fs *SessionRuntime) SubmitWorkRequestForSession(ctx context.Context, sessi
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(runtimeWorkSubmitter)
+	legacyRuntime, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
 	if !ok {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
@@ -95,7 +96,7 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	legacyRuntime, ok := runtimebinding.ServiceForLiveRuntime(session.Runtime).(runtimeEventSubscriber)
+	legacyRuntime, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
 	if !ok {
 		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
