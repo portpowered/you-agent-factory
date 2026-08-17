@@ -91,9 +91,6 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProcessLifecycleFactory = processlifecycle.Factory
-	RuntimeHostService      = runtimehosting.Service
-
 	ApplicationRuntimeOpening              = runtimeopening.ApplicationRuntimeOpening
 	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
 	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
